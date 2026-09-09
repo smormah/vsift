@@ -26,12 +26,24 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Inspect local runtime dependencies without changing the machine.
-    Doctor(DoctorArguments),
+    /// Inspect and manage the local `VSift` setup.
+    Setup(SetupArguments),
 }
 
 #[derive(Args, Debug)]
-struct DoctorArguments {
+struct SetupArguments {
+    #[command(subcommand)]
+    command: SetupCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum SetupCommand {
+    /// Inspect local runtime dependencies without changing the machine.
+    Check(SetupCheckArguments),
+}
+
+#[derive(Args, Debug)]
+struct SetupCheckArguments {
     /// Emit the versioned machine-readable response contract.
     #[arg(long)]
     json: bool,
@@ -46,11 +58,13 @@ async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Doctor(arguments) => run_doctor(arguments).await,
+        Command::Setup(arguments) => match arguments.command {
+            SetupCommand::Check(arguments) => run_setup_check(arguments).await,
+        },
     }
 }
 
-async fn run_doctor(arguments: DoctorArguments) -> ExitCode {
+async fn run_setup_check(arguments: SetupCheckArguments) -> ExitCode {
     let probe = ProcessDependencyProbe::new(Duration::from_secs(arguments.timeout_seconds));
     let diagnosis = DiagnoseRuntime::new(probe).execute().await;
 
@@ -71,14 +85,14 @@ async fn run_doctor(arguments: DoctorArguments) -> ExitCode {
 }
 
 fn print_json(diagnosis: &RuntimeDiagnosis) -> Result<(), serde_json::Error> {
-    let response = DoctorResponse::from(diagnosis);
+    let response = SetupCheckResponse::from(diagnosis);
     let json = serde_json::to_string_pretty(&response)?;
     println!("{json}");
     Ok(())
 }
 
 fn print_human(diagnosis: &RuntimeDiagnosis) {
-    println!("VSift runtime diagnostics");
+    println!("VSift setup check");
     println!("Status: {}", diagnosis.readiness.identifier());
 
     for status in &diagnosis.dependencies {
@@ -91,7 +105,9 @@ fn print_human(diagnosis: &RuntimeDiagnosis) {
     }
 
     if diagnosis.readiness == RuntimeReadiness::Blocked {
-        println!("Run `vsift setup --plan` to review future managed-installation options.");
+        println!(
+            "Installation assistance is not available yet; install the missing media dependencies and run this check again."
+        );
     }
 }
 
@@ -105,37 +121,37 @@ fn human_state(state: &DependencyState) -> (&'static str, &str) {
 }
 
 #[derive(Serialize)]
-struct DoctorResponse {
+struct SetupCheckResponse {
     schema_version: &'static str,
     command: &'static str,
     status: &'static str,
-    dependencies: Vec<DoctorDependencyResponse>,
+    dependencies: Vec<SetupCheckDependencyResponse>,
 }
 
-impl From<&RuntimeDiagnosis> for DoctorResponse {
+impl From<&RuntimeDiagnosis> for SetupCheckResponse {
     fn from(diagnosis: &RuntimeDiagnosis) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
-            command: "doctor",
+            command: "setup.check",
             status: diagnosis.readiness.identifier(),
             dependencies: diagnosis
                 .dependencies
                 .iter()
-                .map(DoctorDependencyResponse::from)
+                .map(SetupCheckDependencyResponse::from)
                 .collect(),
         }
     }
 }
 
 #[derive(Serialize)]
-struct DoctorDependencyResponse {
+struct SetupCheckDependencyResponse {
     dependency: &'static str,
     capability: &'static str,
     status: &'static str,
     detail: Option<String>,
 }
 
-impl From<&DependencyStatus> for DoctorDependencyResponse {
+impl From<&DependencyStatus> for SetupCheckDependencyResponse {
     fn from(status: &DependencyStatus) -> Self {
         let detail = match &status.state {
             DependencyState::Available { version } => Some(version.clone()),

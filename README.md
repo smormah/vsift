@@ -20,8 +20,8 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 The first walking skeleton provides runtime diagnostics:
 
 ```console
-vsift doctor
-vsift doctor --json
+vsift setup check
+vsift setup check --json
 ```
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.

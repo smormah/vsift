@@ -9,6 +9,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Initial Rust workspace and architectural boundaries.
-- Read-only `vsift doctor` runtime diagnostic with versioned JSON output.
+- Read-only `vsift setup check` runtime diagnostic with versioned JSON output.
 - Contributor, security, governance, and automation foundations.
-
