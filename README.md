@@ -6,14 +6,18 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 
 > **Project status:** foundation stage. The command contracts and architecture are being established before the media pipeline is implemented.
 
+The [implementation blueprint](docs/planning/README.md) covers the proposed desktop
+and server-worker design, security review, test matrix and delivery work packets.
+It is awaiting planning review; only the setup diagnostic is implemented today.
+
 ## Principles
 
 - **Local first:** routine inspection does not require uploading recordings to a hosted service.
-- **Disposable by default:** one-off investigations expire unless the user explicitly retains an evidence bundle.
+- **Disposable by default:** planned investigation sessions expire unless explicitly retained; physical cleanup requires a subsequent invocation or host maintenance.
 - **Source grounded:** the original video and audio remain authoritative.
 - **Agent friendly:** commands provide stable, versioned JSON alongside readable terminal output.
 - **Provider neutral:** FFmpeg, transcription engines, OCR, and future integrations sit behind explicit boundaries.
-- **Secure by design:** external processes never run through a shell, downloads require integrity verification, and cleanup is constrained to VSift-owned paths.
+- **Security requirements:** shell-free processes, verified downloads, bounded execution and contained cleanup; see the [baseline review](docs/planning/baseline-review.md) for current implementation gaps.
 
 ## Current command
 

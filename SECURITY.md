@@ -2,6 +2,12 @@
 
 VSift processes untrusted media and invokes specialist native tools. Security reports are taken seriously.
 
+The current implementation is a setup diagnostic scaffold. The
+[baseline review](docs/planning/baseline-review.md) records its known hardening gaps;
+the [threat model](docs/planning/security-threat-model.md) and
+[verification plan](docs/planning/verification.md) define proposed release controls.
+These documents do not certify that the planned mitigations have shipped.
+
 ## Supported versions
 
 VSift has not published a stable release. Until then, security fixes are applied to the default branch only. A supported-version table will be introduced with the first stable release.
@@ -35,4 +41,3 @@ High-priority areas include:
 - malicious media exploiting VSift's own parsing or orchestration.
 
 Vulnerabilities in FFmpeg, Whisper, operating-system components, or other upstream software should also be reported to the relevant upstream project. Reports are still welcome when VSift can reduce exposure or improve isolation.
-
