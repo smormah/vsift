@@ -17,15 +17,15 @@ fn help_identifies_the_product() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn doctor_json_uses_the_versioned_contract() -> Result<(), Box<dyn std::error::Error>> {
+fn setup_check_json_uses_the_versioned_contract() -> Result<(), Box<dyn std::error::Error>> {
     let mut command = Command::cargo_bin("vsift")?;
 
     command
-        .args(["doctor", "--json", "--timeout-seconds", "1"])
+        .args(["setup", "check", "--json", "--timeout-seconds", "1"])
         .assert()
         .code(predicate::eq(0).or(predicate::eq(2)))
         .stdout(predicate::str::contains("\"schema_version\": \"1\""))
-        .stdout(predicate::str::contains("\"command\": \"doctor\""));
+        .stdout(predicate::str::contains("\"command\": \"setup.check\""));
 
     Ok(())
 }
