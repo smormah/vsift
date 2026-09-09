@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible problem in VSift
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include confidential recordings, transcripts, credentials, or sensitive paths. Report security vulnerabilities privately through the Security tab.
+
+  - type: input
+    id: version
+    attributes:
+      label: VSift version
+      placeholder: Output of `vsift --version`
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use synthetic or rights-safe media and redact personal paths.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste relevant `vsift doctor --json` output after removing sensitive paths or data.
+      render: json
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: I removed confidential media, transcripts, credentials, and sensitive paths.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+

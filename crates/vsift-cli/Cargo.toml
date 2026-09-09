@@ -1,0 +1,31 @@
+[package]
+name = "vsift-cli"
+description = "Agent-friendly command-line interface for VSift"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "vsift"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+vsift-application.workspace = true
+vsift-domain.workspace = true
+vsift-infrastructure.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+
+[lints]
+workspace = true
+

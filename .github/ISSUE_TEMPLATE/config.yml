@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/smormah/vsift/security/advisories/new
+    about: Report suspected vulnerabilities privately. Do not open a public issue.
+  - name: Support guidance
+    url: https://github.com/smormah/vsift/blob/main/SUPPORT.md
+    about: Review safe diagnostic and support guidance before opening an issue.
+
