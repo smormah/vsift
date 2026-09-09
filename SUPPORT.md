@@ -9,5 +9,6 @@ Before opening an issue:
 3. Remove secrets, personal information, transcripts, and sensitive file paths.
 4. Reproduce with synthetic or rights-safe media whenever possible.
 
-General troubleshooting and usage discussions may move to GitHub Discussions when that facility is enabled. Security concerns must follow [SECURITY.md](SECURITY.md).
-
+Use [GitHub Discussions](https://github.com/smormah/vsift/discussions) for general
+troubleshooting, usage questions, and early design conversations. Security concerns
+must follow [SECURITY.md](SECURITY.md).
