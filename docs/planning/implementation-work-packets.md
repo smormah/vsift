@@ -1,6 +1,7 @@
 # Implementation work packets
 
-Status: accepted sequence. P00 is active under issue #3. Tests reference
+Status: accepted sequence. P00 completed in PR #18 (`924f6c5`); P01 / issue #4 is
+next. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes
