@@ -1,0 +1,92 @@
+{
+  "schema_version": "1",
+  "release": "R0",
+  "objective": "Deliver an agent-operated local video evidence tool with a production-quality single-host worker core.",
+  "source_documents": [
+    "docs/planning/README.md",
+    "docs/planning/architecture-and-contracts.md",
+    "docs/planning/security-threat-model.md",
+    "docs/planning/verification.md",
+    "docs/planning/implementation-work-packets.md",
+    "docs/planning/support-and-resource-profiles.md",
+    "docs/planning/traceability.md",
+    "fixtures/corpus/manifest.schema.json",
+    "fixtures/corpus/manifest.json"
+  ],
+  "scope": {
+    "included": [
+      "local media and timestamped transcript input",
+      "disposable sessions and explicitly retained bundles",
+      "bounded single-host worker and batch execution",
+      "source-grounded frame audio crop and candidate retrieval",
+      "native binaries and thin npm distribution"
+    ],
+    "deferred": [
+      "OCR diarization embeddings and vision-generated captions",
+      "automatic scroll or pan stitching",
+      "cross-video catalogue and SQLite indexing",
+      "remote video acquisition and network APIs",
+      "MCP server distributed queue tenancy and cloud infrastructure"
+    ]
+  },
+  "invariants": [
+    { "id": "INV-01", "statement": "Source media is never modified or deleted by extraction repair rollback or cleanup." },
+    { "id": "INV-02", "statement": "A reported completed artifact exists validates and has recorded provenance." },
+    { "id": "INV-03", "statement": "Readers see a committed generation and partial output never appears complete." },
+    { "id": "INV-04", "statement": "Expiry never deletes a workspace held by an active reader or writer." },
+    { "id": "INV-05", "statement": "Cooperating processes using one root cannot bypass its admission limit." },
+    { "id": "INV-06", "statement": "Every loop queue output retry extraction request and download is bounded." },
+    { "id": "INV-07", "statement": "Untrusted evidence cannot select executables install dependencies or change policy." },
+    { "id": "INV-08", "statement": "Optional enrichment failure preserves useful evidence and reports missing coverage." },
+    { "id": "INV-09", "statement": "Durable acknowledgement follows the applicable storage commit." },
+    { "id": "INV-10", "statement": "Unsupported required guarantees fail closed and supported controls are reported." }
+  ],
+  "decisions": [
+    { "id": "DEC-01", "status": "accepted", "adr": "docs/decisions/0004-recoverable-worker-core.md" },
+    { "id": "DEC-02", "status": "accepted", "adr": "docs/decisions/0005-r0-scope-and-qualification-profiles.md" },
+    { "id": "DEC-03", "status": "accepted", "adr": "docs/decisions/0005-r0-scope-and-qualification-profiles.md" },
+    { "id": "DEC-04", "status": "accepted", "adr": "docs/decisions/0005-r0-scope-and-qualification-profiles.md" },
+    { "id": "DEC-05", "status": "accepted", "adr": "docs/decisions/0006-workspace-publication-and-durability.md" },
+    { "id": "DEC-06", "status": "accepted", "adr": "docs/decisions/0006-workspace-publication-and-durability.md" },
+    { "id": "DEC-07", "status": "accepted", "adr": "docs/decisions/0007-managed-runtime-provisioning.md" },
+    { "id": "DEC-08", "status": "accepted", "adr": "docs/decisions/0009-package-identity-and-distribution.md" },
+    { "id": "DEC-09", "status": "accepted", "adr": "docs/decisions/0008-cli-and-json-contract.md" },
+    { "id": "DEC-10", "status": "accepted", "adr": "docs/decisions/0008-cli-and-json-contract.md" },
+    { "id": "DEC-11", "status": "accepted", "adr": "docs/decisions/0005-r0-scope-and-qualification-profiles.md" },
+    { "id": "DEC-12", "status": "accepted", "adr": "docs/decisions/0005-r0-scope-and-qualification-profiles.md" },
+    { "id": "DEC-13", "status": "accepted", "adr": "docs/decisions/0006-workspace-publication-and-durability.md" }
+  ],
+  "requirements": [
+    { "id": "R-01", "packets": ["P04", "P07", "P08", "P09", "P12", "P14"], "tests": ["M", "T", "V", "A"], "fixtures": ["F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08", "F09", "F10", "F12"] },
+    { "id": "R-02", "packets": ["P01", "P14"], "tests": ["C-01..C-10"], "fixtures": ["F01"] },
+    { "id": "R-03", "packets": ["P02", "P06", "P14"], "tests": ["P", "D"], "fixtures": ["F01", "F08"] },
+    { "id": "R-04", "packets": ["P07", "P14"], "tests": ["T-01..T-06"], "fixtures": ["F08", "F09", "F10"] },
+    { "id": "R-05", "packets": ["P04", "P08", "P09", "P14"], "tests": ["M", "V"], "fixtures": ["F01", "F02", "F03", "F04", "F05", "F06", "F07", "F09"] },
+    { "id": "R-06", "packets": ["P01", "P04", "P07", "P08", "P09", "P14"], "tests": ["C-10", "M-05", "T", "V"], "fixtures": ["F02", "F03", "F04", "F05", "F06", "F07", "F08", "F09", "F10"] },
+    { "id": "R-07", "packets": ["P03", "P05", "P14"], "tests": ["S"], "fixtures": ["F01", "F05"] },
+    { "id": "R-08", "packets": ["P02", "P03", "P10", "P11", "P14"], "tests": ["P", "S", "X"], "fixtures": ["F01", "F05", "F11"] },
+    { "id": "R-09", "packets": ["P03", "P10", "P11", "P14"], "tests": ["S-07..S-12", "X-01..X-06"], "fixtures": ["F01", "F05", "F11"] },
+    { "id": "R-10", "packets": ["P03", "P10", "P11", "P14"], "tests": ["X-01..X-11"], "fixtures": ["F01", "F05", "F11"] },
+    { "id": "R-11", "packets": ["P02", "P03", "P04", "P11", "P14"], "tests": ["P-03..P-08", "M-02..M-03", "X-07..X-09"], "fixtures": ["F06", "F11"] },
+    { "id": "R-12", "packets": ["P01", "P11", "P14"], "tests": ["C", "O"], "fixtures": ["F01", "F05", "F11"] },
+    { "id": "R-13", "packets": ["P12", "P14"], "tests": ["A-01..A-07", "SEC-T02"], "fixtures": ["F03", "F04", "F05", "F06", "F07", "F08", "F12"] },
+    { "id": "R-14", "packets": ["P06", "P13", "P14"], "tests": ["D", "R-SEC01..R-SEC03"], "fixtures": ["F01"] }
+  ],
+  "packets": [
+    { "id": "P00", "status": "in_progress", "issue_url": "https://github.com/smormah/vsift/issues/3", "depends_on": [], "requirements": [], "tests": ["P00-GOVERNANCE"], "threats": [], "merge_commit": null, "verification": [] },
+    { "id": "P01", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/4", "depends_on": ["P00"], "requirements": ["R-02", "R-06", "R-12"], "tests": ["C-01..C-10"], "threats": ["SEC-01", "SEC-03", "SEC-16", "SEC-21"], "merge_commit": null, "verification": [] },
+    { "id": "P02", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/5", "depends_on": ["P01"], "requirements": ["R-03", "R-08", "R-11"], "tests": ["P-01..P-08", "C-05"], "threats": ["SEC-01..SEC-06", "SEC-20", "SEC-25"], "merge_commit": null, "verification": [] },
+    { "id": "P03", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/6", "depends_on": ["P01", "P02"], "requirements": ["R-07", "R-08", "R-09", "R-10", "R-11"], "tests": ["S-01..S-03", "S-07", "S-08", "S-12", "X-01..X-05"], "threats": ["SEC-07..SEC-11", "SEC-18", "SEC-24"], "merge_commit": null, "verification": [] },
+    { "id": "P04", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/7", "depends_on": ["P02", "P03"], "requirements": ["R-01", "R-05", "R-06", "R-11"], "tests": ["M-01..M-06", "V-01"], "threats": ["SEC-05", "SEC-06", "SEC-17"], "merge_commit": null, "verification": [] },
+    { "id": "P05", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/8", "depends_on": ["P03", "P04"], "requirements": ["R-07"], "tests": ["S-04..S-11"], "threats": ["SEC-07..SEC-10", "SEC-18"], "merge_commit": null, "verification": [] },
+    { "id": "P06", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/9", "depends_on": ["P02", "P03", "P04"], "requirements": ["R-03", "R-14"], "tests": ["D-01..D-10"], "threats": ["SEC-02", "SEC-12..SEC-15", "SEC-23"], "merge_commit": null, "verification": [] },
+    { "id": "P07", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/10", "depends_on": ["P04", "P05", "P06"], "requirements": ["R-01", "R-04", "R-06"], "tests": ["T-01..T-06"], "threats": ["SEC-05", "SEC-17", "SEC-18", "SEC-20"], "merge_commit": null, "verification": [] },
+    { "id": "P08", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/11", "depends_on": ["P04", "P05", "P07"], "requirements": ["R-01", "R-05", "R-06"], "tests": ["V-02..V-05", "C-03", "S-11"], "threats": ["SEC-05", "SEC-17", "SEC-18", "SEC-20"], "merge_commit": null, "verification": [] },
+    { "id": "P09", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/12", "depends_on": ["P04", "P05", "P08"], "requirements": ["R-01", "R-05", "R-06"], "tests": ["V-01", "V-06..V-08"], "threats": ["SEC-05", "SEC-07", "SEC-17", "SEC-18"], "merge_commit": null, "verification": [] },
+    { "id": "P10", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/13", "depends_on": ["P03", "P05", "P07", "P08", "P09"], "requirements": ["R-08", "R-09", "R-10"], "tests": ["X-01..X-06", "X-09", "X-10", "S-07", "S-08"], "threats": ["SEC-04", "SEC-09..SEC-11", "SEC-20", "SEC-24"], "merge_commit": null, "verification": [] },
+    { "id": "P11", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/14", "depends_on": ["P02", "P03", "P10"], "requirements": ["R-08", "R-09", "R-10", "R-11", "R-12"], "tests": ["X-07..X-11", "O-01..O-04", "SEC-T01"], "threats": ["SEC-04..SEC-06", "SEC-09..SEC-11", "SEC-19", "SEC-20", "SEC-24", "SEC-25"], "merge_commit": null, "verification": [] },
+    { "id": "P12", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/15", "depends_on": ["P06", "P07", "P08", "P09", "P10", "P11"], "requirements": ["R-01", "R-13"], "tests": ["A-01..A-07", "SEC-T02"], "threats": ["SEC-16..SEC-18"], "merge_commit": null, "verification": [] },
+    { "id": "P13", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/16", "depends_on": ["P06", "P11", "P12"], "requirements": ["R-14"], "tests": ["R-SEC01", "R-SEC02"], "threats": ["SEC-12", "SEC-22", "SEC-23"], "merge_commit": null, "verification": [] },
+    { "id": "P14", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/17", "depends_on": ["P00", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13"], "requirements": ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07", "R-08", "R-09", "R-10", "R-11", "R-12", "R-13", "R-14"], "tests": ["ALL-R0", "R-SEC03"], "threats": ["SEC-01..SEC-25"], "merge_commit": null, "verification": [] }
+  ]
+}

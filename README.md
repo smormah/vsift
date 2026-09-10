@@ -6,9 +6,10 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 
 > **Project status:** foundation stage. The command contracts and architecture are being established before the media pipeline is implemented.
 
-The [implementation blueprint](docs/planning/README.md) covers the proposed desktop
+The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.
-It is awaiting planning review; only the setup diagnostic is implemented today.
+The [delivery ledger](docs/planning/delivery-ledger.json) and CI governance check guard
+scope and completion evidence; only the setup diagnostic is implemented today.
 
 ## Principles
 

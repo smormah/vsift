@@ -1,8 +1,8 @@
 # VSift implementation blueprint
 
-Status: proposed implementation baseline for maintainer review. Date: 2026-09-09.
+Status: accepted R0 implementation baseline. Date: 2026-09-10.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
-This is a design and delivery plan; its proposed capabilities are not implemented.
+Its decisions are accepted through P00; planned capabilities are not implemented.
 
 ## Purpose and reading order
 
@@ -23,12 +23,12 @@ Read these documents together:
 5. [Implementation work packets](implementation-work-packets.md): ordered changes,
    dependencies, completion criteria, and review responsibilities.
 6. [Baseline review](baseline-review.md): observed gaps in the existing scaffold.
+7. [Delivery governance](delivery-governance.md), [traceability](traceability.md), and
+   [qualification profiles](support-and-resource-profiles.md): enforceable scope controls.
 
-The source code describes what exists. Accepted ADRs describe existing architectural
-decisions. This plan proposes additional contracts and release requirements; accepting
-them requires resolving the decision register below before dependent implementation.
-Existing ADRs remain intact. A reviewed design change gets a new ADR with links to
-any decision it supersedes.
+The source code describes what exists. Accepted ADRs and the machine-checked delivery
+ledger describe approved direction. Existing ADRs remain intact. A reviewed design
+change gets a new ADR with links to any decision it supersedes.
 
 ## Primary workflows
 
@@ -115,24 +115,23 @@ processing engine a usable server contract from the start.
 
 ## Decision register
 
-The proposals below make implementation planning concrete. They need acceptance or
-replacement at the planning checkpoint, not silent implementation as settled facts.
+P00 accepted these decisions on 2026-09-10. The linked ADRs are authoritative.
 
-| ID | Proposed default / question | Must resolve before |
+| ID | Accepted decision | ADR |
 | --- | --- | --- |
-| DEC-01 | R0 includes single-host worker execution and bounded batches; multi-tenant hosting remains external | P00 |
-| DEC-02 | Windows x64 on a supported Windows release, macOS arm64, Linux glibc x64; exact minimum versions from clean-image qualification | P02/P13 |
-| DEC-03 | CPU baseline whisper.cpp; propose multilingual base model after sample accuracy/latency evaluation; larger models optional | P06 |
-| DEC-04 | Desktop idle TTL 24 hours, absolute lifetime 7 days; retained work never auto-expires | P03 |
-| DEC-05 | Worker durable state must use an explicit workspace with a tested local filesystem | P03/P11 |
-| DEC-06 | Immutable artifacts + versioned manifest commit; single metadata writer per session | P03 |
-| DEC-07 | Dependency installs use approved pinned manifests in a per-user directory; no implicit elevation | P06 |
-| DEC-08 | npm name ownership must be verified; scoped fallback if unavailable; published executable remains vsift | P13 |
-| DEC-09 | Core namespace: setup, session, ingest, transcript, search, candidates, frame, audio, crop, bundle, job | P01 |
-| DEC-10 | JSON v1 setup contract kept compatible; new operations use a documented v1 envelope | P01 |
-| DEC-11 | Linux isolated worker qualification first; desktop confinement level is reported separately | P02/P11 |
-| DEC-12 | Do not require speech diarization, OCR, embeddings, or stitching in R0 | P00 |
-| DEC-13 | Validate native source-read and atomic-publish guarantees on each target; unsupported guarantees cause typed rejection | P03/P04 |
+| DEC-01 | R0 includes a bounded single-host worker core | [0004](../decisions/0004-recoverable-worker-core.md) |
+| DEC-02 | Qualify Windows 11 25H2 x64, macOS 15 arm64 and Ubuntu 24.04 x64 targets | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
+| DEC-03 | Evaluate CPU whisper.cpp multilingual base as the default candidate | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
+| DEC-04 | Desktop idle TTL 24 hours and absolute lifetime seven days | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
+| DEC-05 | Durable workers require an explicit qualified local workspace | [0006](../decisions/0006-workspace-publication-and-durability.md) |
+| DEC-06 | Publish immutable artifacts through versioned manifest generations | [0006](../decisions/0006-workspace-publication-and-durability.md) |
+| DEC-07 | Use explicit pinned per-user managed dependency plans | [0007](../decisions/0007-managed-runtime-provisioning.md) |
+| DEC-08 | Keep executable `vsift`; recheck unscoped npm name before release | [0009](../decisions/0009-package-identity-and-distribution.md) |
+| DEC-09 | Use the accepted R0 CLI namespace | [0008](../decisions/0008-cli-and-json-contract.md) |
+| DEC-10 | Preserve setup v1 and use typed v1 envelopes for new operations | [0008](../decisions/0008-cli-and-json-contract.md) |
+| DEC-11 | Qualify the strict Linux worker profile first | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
+| DEC-12 | Keep diarization, OCR, embeddings and stitching outside R0 | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
+| DEC-13 | Reject required filesystem/source guarantees that a target cannot prove | [0006](../decisions/0006-workspace-publication-and-durability.md) |
 
 Existing decisions retained: Rust core, npm as distribution, CLI primary surface,
 optional skill/MCP adapters, explicit persistence, source authority, and strict module
@@ -149,5 +148,5 @@ failure modes to the threat model and regression corpus in the same change. A
 security review has finite scope; record residual risks, review date, versions, and
 unsupported environments instead of claiming vulnerability-free software.
 
-Planning checkpoint: review the decisions above and the packet sequence before
-resuming feature implementation. This change adds planning records only.
+P00 establishes decisions, fixtures, traceability and anti-drift controls. Runtime
+implementation begins with P01 after P00 has a recorded merge and verification entry.

@@ -457,6 +457,14 @@ name = "vsift-domain"
 version = "0.1.0"
 
 [[package]]
+name = "vsift-governance"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "vsift-infrastructure"
 version = "0.1.0"
 dependencies = [

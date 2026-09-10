@@ -13,3 +13,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Contributor, security, governance, and automation foundations.
 - Detailed proposed implementation blueprint, source baseline review, threat model,
   verification matrix and work packets for desktop and server-worker execution.
+- Accepted R0 architecture decisions, qualification/resource profiles, synthetic
+  fixture truth, GitHub packet backlog and CI-enforced anti-drift delivery ledger.

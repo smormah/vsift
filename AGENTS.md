@@ -5,10 +5,10 @@ These rules apply to every change in this repository, including changes made by 
 ## Session handoff and implementation planning
 
 Before implementation, read `memory/TODO.md`, `memory/project_current_status.md`,
-the relevant packet in `docs/planning/implementation-work-packets.md`, and its linked
-contracts/tests. The blueprint is a proposal until its decisions are accepted;
-do not treat a documented future capability as implemented or approved by default.
-Keep runtime code changes paused at the recorded planning checkpoint.
+`docs/planning/delivery-ledger.json`, the relevant packet in
+`docs/planning/implementation-work-packets.md`, and its linked contracts/tests.
+Follow `docs/planning/delivery-governance.md`; do not treat a documented future
+capability as implemented. Work only on an active packet whose predecessors are complete.
 
 ## Product boundaries
 

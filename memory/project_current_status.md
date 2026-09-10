@@ -1,5 +1,17 @@
 # VSift current status
 
+## Active
+
+### 2026-09-10 — R0 decisions accepted; P00 implementation active
+
+The maintainer delegated implementation to the agent. DEC-01..13 are accepted through
+ADRs 0004-0009. P00 / issue #3 establishes Windows, macOS and strict Linux worker
+qualification targets, resource profiles, synthetic fixtures F01-F12, traceability,
+GitHub milestone/issues and a CI-validated delivery ledger. P01-P14 are issues #4-#17.
+
+The ledger remains authoritative: P00 is in progress until its protected merge hash
+and verification are recorded. No media runtime feature is implemented by this packet.
+
 ## Complete
 
 ### 2026-09-09 — Planning baseline prepared
@@ -12,9 +24,10 @@ Planning documents: [overview](../docs/planning/README.md),
 [packets](../docs/planning/implementation-work-packets.md),
 [current gaps](../docs/planning/baseline-review.md).
 
-The proposal includes R0 single-host worker use, cross-process admission, checkpoints,
+The accepted baseline includes R0 single-host worker use, cross-process admission,
+checkpoints,
 explicit durable state and bounded batch execution. Persistent cross-video indexing
-remains optional and deferred. ADR 0004 is proposed, not accepted. These capabilities
+remains optional and deferred. ADR 0004 is accepted. These capabilities
 are unimplemented. This documentation commit/PR is the provenance for this entry;
 add its merge hash when next updating the record.
 
@@ -35,6 +48,5 @@ See B-01..B-11; do not describe current code as production hardened.
 
 ## Next action
 
-Review and resolve the planning decision register with the maintainer, then execute
-accepted packets with linked tests and reviewed contracts. Do not infer implementation
-authorization solely from this proposal. Future sessions start with this file and TODO.
+Finish P00 through protected review and a record-only evidence update, then execute
+P01 / issue #4. Future sessions start with this file, TODO and the delivery ledger.

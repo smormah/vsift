@@ -4,6 +4,7 @@ members = [
   "crates/vsift-cli",
   "crates/vsift-domain",
   "crates/vsift-infrastructure",
+  "tools/vsift-governance",
 ]
 default-members = ["crates/vsift-cli"]
 resolver = "3"
