@@ -740,6 +740,8 @@ mod tests {
             .first_mut()
             .ok_or_else(|| io::Error::other("checked-in ledger has no packets"))?;
         packet.status = PacketStatus::Complete;
+        packet.merge_commit = None;
+        packet.verification.clear();
 
         let messages = validate(&ledger, &corpus, &root);
 

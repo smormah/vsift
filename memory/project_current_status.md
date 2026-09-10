@@ -1,18 +1,24 @@
 # VSift current status
 
-## Active
+## Next
 
-### 2026-09-10 — R0 decisions accepted; P00 implementation active
+### P01 — Public command and JSON contracts
 
-The maintainer delegated implementation to the agent. DEC-01..13 are accepted through
-ADRs 0004-0009. P00 / issue #3 establishes Windows, macOS and strict Linux worker
-qualification targets, resource profiles, synthetic fixtures F01-F12, traceability,
-GitHub milestone/issues and a CI-validated delivery ledger. P01-P14 are issues #4-#17.
-
-The ledger remains authoritative: P00 is in progress until its protected merge hash
-and verification are recorded. No media runtime feature is implemented by this packet.
+P01 / issue #4 is the earliest permitted packet. It defines typed command requests,
+JSON envelopes, exit codes and contract tests before process, storage or media work.
 
 ## Complete
+
+### 2026-09-10 — P00 decisions, corpus truth and delivery governance
+
+PR #18 merged as `924f6c52b018cf8f018568efd51a74cb6638b00e`. DEC-01..13
+are accepted through ADRs 0004-0009. P00 / issue #3 established qualification and
+resource profiles, F01-F12 declarative fixture truth, R0 traceability, milestone 1
+with issues #3-#17, and an executable delivery ledger. The Governance job passed and
+is now a required protected-main check alongside the existing quality/security gates.
+All required PR checks passed; the local workspace had 13 passing tests.
+
+No media runtime feature was implemented by P00. Fixture media generation remains P04.
 
 ### 2026-09-09 — Planning baseline prepared
 
@@ -48,5 +54,5 @@ See B-01..B-11; do not describe current code as production hardened.
 
 ## Next action
 
-Finish P00 through protected review and a record-only evidence update, then execute
-P01 / issue #4. Future sessions start with this file, TODO and the delivery ledger.
+Execute only P01 / issue #4. Future sessions start with this file, TODO and the
+delivery ledger, and must pass the Governance check before merge.

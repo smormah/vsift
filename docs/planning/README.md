@@ -148,5 +148,5 @@ failure modes to the threat model and regression corpus in the same change. A
 security review has finite scope; record residual risks, review date, versions, and
 unsupported environments instead of claiming vulnerability-free software.
 
-P00 establishes decisions, fixtures, traceability and anti-drift controls. Runtime
-implementation begins with P01 after P00 has a recorded merge and verification entry.
+P00 established decisions, fixture truth, traceability and anti-drift controls in
+PR #18 (`924f6c5`). Its evidence is recorded in the ledger; P01 / issue #4 is next.
