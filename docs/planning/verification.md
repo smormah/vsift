@@ -4,6 +4,10 @@ Status: incremental qualification. P01 implements C-01..C-10 contract/domain cov
 later suites remain planned until their owning packet runs them. Test IDs are stable references for work packets,
 threat controls and future issue/PR links; they are not claims of exhaustive security.
 
+P01 evidence: PR #20 / `3d7a7d2a53fd8e6d2025726d34c59e7603fc8e71` had
+64 passing local tests, and protected CI passed Governance, documentation, dependency
+policy/review, CodeQL/Rust analysis, and Quality on Ubuntu, Windows, and macOS.
+
 ## Test structure and evidence
 
 Domain unit tests assert invariants without I/O. Application tests use deterministic
