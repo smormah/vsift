@@ -1,0 +1,65 @@
+name: Implementation packet
+description: Define a bounded work packet from the accepted VSift delivery ledger
+title: "P__: "
+labels:
+  - packet
+  - r0
+body:
+  - type: input
+    id: packet
+    attributes:
+      label: Packet
+      description: Packet identifier from docs/planning/delivery-ledger.json.
+      placeholder: P01
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observable outcome
+      description: Describe the completed behavior a reviewer can verify.
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceability
+    attributes:
+      label: Traceability
+      description: List requirement, test, threat/finding, decision and predecessor IDs.
+      placeholder: |
+        Requirements: R-02
+        Tests: C-01 through C-10
+        Threats/findings: SEC-01, B-06
+        Decisions: ADR 0008
+        Predecessors: P00
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Included and excluded scope
+      description: Name the exact modules/contracts changed and features kept out.
+    validations:
+      required: true
+
+  - type: textarea
+    id: completion
+    attributes:
+      label: Completion evidence
+      description: List required tests, failure cases, documentation and release evidence.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: controls
+    attributes:
+      label: Anti-drift controls
+      options:
+        - label: The packet exists in the delivery ledger and all predecessors are complete.
+          required: true
+        - label: No deferred R1/R2 feature or broader permission is included.
+          required: true
+        - label: Contract, limit, persistence or authority changes will use an ADR and ledger update.
+          required: true

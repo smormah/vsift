@@ -1,7 +1,7 @@
 # Implementation work packets
 
-Status: proposed sequence. Do not begin feature work until the planning checkpoint in
-[the overview](README.md#decision-register). Tests reference [verification](verification.md).
+Status: accepted sequence. P00 is active under issue #3. Tests reference
+[verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes
 must not be hidden in a hardening PR.

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/smormah/vsift/fixtures/corpus/manifest.schema.json",
+  "title": "VSift synthetic corpus manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "corpus_id", "licence", "timeline_unit", "fixtures"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "corpus_id": { "const": "vsift-r0-synthetic" },
+    "licence": { "const": "MIT OR Apache-2.0" },
+    "timeline_unit": { "const": "microseconds" },
+    "fixtures": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/fixture" }
+    }
+  },
+  "$defs": {
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "slug", "purpose", "duration_us", "resolution", "audio", "events", "expected_terms", "tests"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^F(0[1-9]|1[0-2])$" },
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "purpose": { "type": "string", "minLength": 10 },
+        "duration_us": { "type": "integer", "minimum": 100000 },
+        "resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1, "maximum": 7680 },
+            "height": { "type": "integer", "minimum": 1, "maximum": 4320 }
+          }
+        },
+        "audio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "script"],
+          "properties": {
+            "mode": { "enum": ["none", "clean-synthetic", "noisy-synthetic", "offset-synthetic"] },
+            "script": { "type": "string" },
+            "offset_us": { "type": "integer" }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/event" }
+        },
+        "expected_terms": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "tests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[A-Z]+(?:-[A-Z]+)?-[0-9]{2}$" },
+          "uniqueItems": true
+        },
+        "variants": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "start_us", "end_us", "critical", "truth"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^F(0[1-9]|1[0-2])-E[0-9]{2}$" },
+        "kind": { "enum": ["stable", "change", "transient", "scroll", "speech", "malformed", "adversarial"] },
+        "start_us": { "type": "integer", "minimum": 0 },
+        "end_us": { "type": "integer", "minimum": 1 },
+        "critical": { "type": "boolean" },
+        "truth": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

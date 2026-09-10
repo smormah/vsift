@@ -16,6 +16,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  governance:
+    name: Governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate delivery ledger and fixture corpus
+        run: cargo run --locked -p vsift-governance -- check
+
   quality:
     name: Quality (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -57,4 +67,3 @@ jobs:
 
       - name: Build documentation
         run: cargo doc --workspace --no-deps --locked
-

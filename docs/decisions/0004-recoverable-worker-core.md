@@ -1,6 +1,6 @@
 # ADR 0004: Recoverable processing core for desktop and worker use
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-09
 - Extends: ADR 0002 and ADR 0003 without changing disposable desktop defaults
 
@@ -46,4 +46,6 @@ core without importing filesystem internals. The supported guarantee matrix can
 differ across desktop and strict worker profiles. No network daemon or persistent
 catalogue is introduced by this ADR.
 
-Acceptance depends on the planning decision register and P00/P03 feasibility evidence.
+P03 must still prove the proposed file publication and locking protocol on each
+qualified platform. If it cannot, a new ADR will select a narrower guarantee or a
+proven storage component; acceptance of this direction is not proof of feasibility.

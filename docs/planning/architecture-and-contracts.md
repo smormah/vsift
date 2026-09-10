@@ -1,6 +1,6 @@
 # Proposed architecture and public contracts
 
-Status: design proposal, not implemented. Requirement IDs refer to [the plan](README.md).
+Status: accepted R0 design, not implemented. Requirement IDs refer to [the plan](README.md).
 
 ## 1. Ownership and module boundaries
 
