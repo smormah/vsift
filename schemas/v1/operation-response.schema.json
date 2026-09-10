@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/operation-response.schema.json",
+  "title": "VSift operation terminal response v1",
+  "$ref": "#/$defs/operation",
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "command",
+        "operation_id",
+        "status",
+        "data",
+        "warnings",
+        "error",
+        "coverage",
+        "lifecycle"
+      ],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "command": {
+          "type": "string",
+          "pattern": "^[a-z]+(?:[.][a-z]+)?$",
+          "maxLength": 64
+        },
+        "operation_id": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" }
+          ]
+        },
+        "status": { "enum": ["complete", "partial", "failed", "cancelled"] },
+        "data": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "object" }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "maxLength": 1024 }
+        },
+        "error": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/error" }
+          ]
+        },
+        "coverage": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/coverage" }
+          ]
+        },
+        "lifecycle": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/lifecycle" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["failed", "cancelled"] } } },
+          "then": { "properties": { "error": { "$ref": "#/$defs/error" } } }
+        },
+        {
+          "if": { "properties": { "status": { "enum": ["complete", "partial"] } } },
+          "then": { "properties": { "error": { "type": "null" } } }
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable", "retry_after_ms", "affected_ids", "remediation"],
+      "properties": {
+        "code": {
+          "enum": [
+            "INTERNAL",
+            "INVALID_ARGUMENT",
+            "UNSUPPORTED_SCHEMA",
+            "MISSING_CAPABILITY",
+            "COMMAND_NOT_IMPLEMENTED",
+            "INVALID_SOURCE",
+            "BUSY",
+            "DEADLINE_EXCEEDED",
+            "RESOURCE_LIMIT",
+            "CANCELLED",
+            "STORAGE_IO",
+            "INTEGRITY_FAILURE"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "retryable": { "type": "boolean" },
+        "retry_after_ms": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1, "maximum": 86400000 }
+          ]
+        },
+        "affected_ids": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "maxLength": 80 }
+        },
+        "remediation": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/remediation" }
+        }
+      }
+    },
+    "remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "required_authority", "command"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "required_authority": { "enum": ["none", "user_confirmation", "administrator"] },
+        "command": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["executable", "arguments"],
+              "properties": {
+                "executable": { "type": "string", "minLength": 1, "maxLength": 4096 },
+                "arguments": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "items": { "type": "string", "maxLength": 4096 }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["truncated", "gaps", "reasons"],
+      "properties": {
+        "truncated": { "type": "boolean" },
+        "gaps": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "maxLength": 256 }
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "maxLength": 256 }
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "expires_at"],
+      "properties": {
+        "mode": { "enum": ["ephemeral", "retained", "durable_worker"] },
+        "expires_at": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date-time" }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -36,7 +36,7 @@ Direct native linking requires benchmark evidence and an accepted architecture d
 A child process alone does not provide filesystem/network isolation, resource caps
 or a complete descendant-cancellation guarantee. The current diagnostic scaffold
 does not implement those controls. See the [baseline review](planning/baseline-review.md)
-and [proposed process supervisor](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
+and [planned process supervisor](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
 
 ## Data lifecycle
 
@@ -69,7 +69,7 @@ functional release. A server supervisor would stage sources and manage its own q
 tenant authorization and durable remote result storage. Default desktop investigations
 remain disposable; cross-video indexing remains an explicit later capability.
 
-This extension is recorded in [proposed ADR 0004](decisions/0004-recoverable-worker-core.md).
+This extension is recorded in [accepted ADR 0004](decisions/0004-recoverable-worker-core.md).
 It is not an implemented durability or throughput guarantee.
 
 ## Public contracts
@@ -80,6 +80,10 @@ CLI commands expose two presentations of the same typed application result:
 - an explicit JSON mode with a schema version.
 
 JSON fields, error codes, exit codes, and evidence identifiers are public API. Changes require contract tests, documentation, and compatibility review.
+The published [v1 CLI contract](contracts/cli-v1.md) and
+[JSON schemas](../schemas/v1/README.md) define the P01 boundary. Only `setup check`
+currently reaches an application use case; the remaining parsed namespace fails with
+a typed not-implemented result until its owning packet ships.
 
 ## Error model
 

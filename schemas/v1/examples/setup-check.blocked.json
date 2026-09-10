@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "command": "setup.check",
+  "profile": "desktop",
+  "status": "blocked",
+  "dependencies": [
+    { "dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null },
+    { "dependency": "ffprobe", "capability": "media_processing", "status": "missing", "detail": null },
+    { "dependency": "whisper", "capability": "transcription", "status": "missing", "detail": null }
+  ]
+}

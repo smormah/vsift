@@ -1,0 +1,25 @@
+{
+  "schema_version": "1",
+  "event": "terminal",
+  "sequence": 0,
+  "command": "session.list",
+  "operation_id": null,
+  "result": {
+    "schema_version": "1",
+    "command": "session.list",
+    "operation_id": null,
+    "status": "failed",
+    "data": null,
+    "warnings": [],
+    "error": {
+      "code": "COMMAND_NOT_IMPLEMENTED",
+      "message": "This reserved R0 command is not implemented in the current build.",
+      "retryable": false,
+      "retry_after_ms": null,
+      "affected_ids": [],
+      "remediation": []
+    },
+    "coverage": null,
+    "lifecycle": null
+  }
+}

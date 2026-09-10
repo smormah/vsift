@@ -2,6 +2,27 @@
 
 #![forbid(unsafe_code)]
 
+mod evidence;
+mod failure;
+mod identity;
+mod job;
+mod pagination;
+mod timeline;
+
+pub use evidence::{
+    Confidence, ConfidenceError, ConfidenceOrigin, SpeakerLabel, SpeakerLabelError,
+};
+pub use failure::{FailureClass, FailureCode, OperationStatus};
+pub use identity::{
+    ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
+};
+pub use job::{JobState, JobTransitionError};
+pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
+pub use timeline::{
+    CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,
+    TimeConversionError, TimeRange, TimeRangeError,
+};
+
 /// A specialist runtime dependency that provides one of `VSift`'s capabilities.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimeDependency {
