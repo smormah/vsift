@@ -22,15 +22,21 @@ Dependencies may point only to the right in the diagram. Cross-crate access uses
 
 FFmpeg, FFprobe, `whisper.cpp`, OCR engines, and future local models are external providers. VSift invokes approved executables with explicit argument arrays and never through a command shell.
 
-This boundary provides:
+The boundary is intended to support the following capabilities as their adapters
+are implemented and qualified:
 
-- crash and resource isolation;
+- separate provider processes with explicitly configured resource and isolation controls;
 - provider replacement without domain changes;
 - bring-your-own and managed-runtime resolution;
 - simpler cross-platform builds and licensing analysis;
 - bounded execution, cancellation, and diagnostic capture.
 
 Direct native linking requires benchmark evidence and an accepted architecture decision record.
+
+A child process alone does not provide filesystem/network isolation, resource caps
+or a complete descendant-cancellation guarantee. The current diagnostic scaffold
+does not implement those controls. See the [baseline review](planning/baseline-review.md)
+and [proposed process supervisor](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
 
 ## Data lifecycle
 
@@ -50,6 +56,21 @@ ephemeral session
 ```
 
 A future persistent catalogue may index retained bundles through an application port. It is not part of the default desktop lifecycle.
+
+Expiry makes a temporary session eligible for cleanup. With no background process,
+physical cleanup runs during a later invocation or explicit host maintenance, not
+necessarily at the expiration instant.
+
+## Proposed worker execution extension
+
+The [implementation blueprint](planning/README.md) proposes single-host multiprocessing,
+bounded admission, checkpoint recovery and explicit durable workspaces in the first
+functional release. A server supervisor would stage sources and manage its own queue,
+tenant authorization and durable remote result storage. Default desktop investigations
+remain disposable; cross-video indexing remains an explicit later capability.
+
+This extension is recorded in [proposed ADR 0004](decisions/0004-recoverable-worker-core.md).
+It is not an implemented durability or throughput guarantee.
 
 ## Public contracts
 
@@ -77,4 +98,3 @@ The primary trust boundaries are:
 5. Automatic cleanup of temporary evidence.
 
 Each boundary requires validation, bounded resource use, typed failure, and tests before it is considered complete.
-

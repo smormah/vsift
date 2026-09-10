@@ -11,3 +11,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial Rust workspace and architectural boundaries.
 - Read-only `vsift setup check` runtime diagnostic with versioned JSON output.
 - Contributor, security, governance, and automation foundations.
+- Detailed proposed implementation blueprint, source baseline review, threat model,
+  verification matrix and work packets for desktop and server-worker execution.

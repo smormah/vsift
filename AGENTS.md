@@ -2,6 +2,14 @@
 
 These rules apply to every change in this repository, including changes made by AI coding agents.
 
+## Session handoff and implementation planning
+
+Before implementation, read `memory/TODO.md`, `memory/project_current_status.md`,
+the relevant packet in `docs/planning/implementation-work-packets.md`, and its linked
+contracts/tests. The blueprint is a proposal until its decisions are accepted;
+do not treat a documented future capability as implemented or approved by default.
+Keep runtime code changes paused at the recorded planning checkpoint.
+
 ## Product boundaries
 
 - VSift is local-first and provider-neutral.
@@ -57,5 +65,9 @@ Add tests at the lowest useful layer. Public CLI JSON changes require contract t
 
 Architecture, public behaviour, storage lifecycle, provider configuration, security assumptions, and contributor workflow changes must update the corresponding repository documentation and ADR in the same change.
 
-Do not leave unexplained TODO comments. Track deferred work in a GitHub issue and reference the issue from the code only when a local marker is necessary.
+Update the two project memory files with implementation progress, pending decisions,
+test evidence and known commit references in the same change. Findings close only
+with implementation and regression-test evidence. Preserve accepted ADRs; record
+superseding decisions explicitly.
 
+Do not leave unexplained TODO comments. Track deferred work in a GitHub issue and reference the issue from the code only when a local marker is necessary.
