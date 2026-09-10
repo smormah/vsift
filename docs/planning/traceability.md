@@ -25,6 +25,10 @@ the immutable project invariants. A requirement is complete only after every pri
 packet is complete and its release proof is attached. Packet completion cannot be
 inferred from code presence or an assistant's status message.
 
+P01 executable evidence is mapped case-by-case in the published
+[v1 CLI contract](../contracts/cli-v1.md). That evidence qualifies the public boundary,
+not the later media, storage, process, or worker implementations.
+
 ## Scope guardrails
 
 R0 owns local media input, disposable/retained workspaces, bounded single-host worker

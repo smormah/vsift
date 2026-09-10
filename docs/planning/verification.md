@@ -1,7 +1,7 @@
 # Verification and release qualification
 
-Status: planned tests and proposed gates; none of the new suites below have been run.
-The baseline has eight scaffold tests. Test IDs are stable references for work packets,
+Status: incremental qualification. P01 implements C-01..C-10 contract/domain coverage;
+later suites remain planned until their owning packet runs them. Test IDs are stable references for work packets,
 threat controls and future issue/PR links; they are not claims of exhaustive security.
 
 ## Test structure and evidence

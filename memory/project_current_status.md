@@ -1,11 +1,20 @@
 # VSift current status
 
-## Next
+## Active
 
 ### P01 — Public command and JSON contracts
 
-P01 / issue #4 is the earliest permitted packet. It defines typed command requests,
-JSON envelopes, exit codes and contract tests before process, storage or media work.
+P01 / issue #4 started from
+`018db55ea1212e80d5e7942fef759d812b7dad59`. It defines typed command requests,
+JSON envelopes, configuration precedence, exit codes and C-01..C-10 contract tests
+before process, storage or media work. P02+ behavior remains out of scope.
+
+Implementation on `feat/p01-public-contracts` now includes typed IDs, time/ranges,
+crops, cursors, confidence and job transitions; the full reserved R0 parser; bounded
+human/JSON/JSONL presentation; strict JSON input limits; immutable config precedence;
+and four published schemas with compatibility examples. `setup check` is the only
+executing operation. The local workspace passes 64 tests plus strict Clippy and
+dependency advisory/licence/source checks before protected review.
 
 ## Complete
 
@@ -34,8 +43,7 @@ The accepted baseline includes R0 single-host worker use, cross-process admissio
 checkpoints,
 explicit durable state and bounded batch execution. Persistent cross-video indexing
 remains optional and deferred. ADR 0004 is accepted. These capabilities
-are unimplemented. This documentation commit/PR is the provenance for this entry;
-add its merge hash when next updating the record.
+are unimplemented. The planning record merged through PR #2 as `e3f8569`.
 
 ### 2026-09-09 — Implemented scaffold
 
@@ -54,5 +62,5 @@ See B-01..B-11; do not describe current code as production hardened.
 
 ## Next action
 
-Execute only P01 / issue #4. Future sessions start with this file, TODO and the
-delivery ledger, and must pass the Governance check before merge.
+Finish P01 through protected review and a record-only evidence update. Do not begin
+P02 until the delivery ledger records P01 complete.

@@ -62,14 +62,16 @@ reproduction guarantees when tool versions match. ASR and accelerated inference 
 not be bit-identical across hardware: preserve lineage and outputs, and state that
 distinction explicitly.
 
-## 3. Public CLI proposal
+## 3. Public CLI contract
 
-Only `setup check` exists today. Other rows are proposed. Publish command-specific
-schemas, examples, errors, limits and capability requirements before implementation.
+P01 publishes the namespace and common v1 boundary. Only `setup check` executes today;
+every other row is reserved and returns `COMMAND_NOT_IMPLEMENTED` until its owning
+packet ships. The exact limits, compatibility rules, schemas, and implementation map
+are in the [v1 CLI contract](../contracts/cli-v1.md).
 
 | Command | Purpose / constraints |
 | --- | --- |
-| `setup check [--profile ...] --json` | Read-only capability detection; expensive smoke test requires an explicit option |
+| `setup check [--profile ...] [--timeout-seconds ...] --json` | Read-only capability detection; no installation or mutation |
 | `setup plan --profile ... --json` | Versions, provenance, download sizes, licences, disk needs, exact actions and plan digest |
 | `setup install --plan <file> --accept-plan <digest>` | Apply that validated plan; revalidate expiry and current state; never silently elevate |
 | `setup repair ...` | Produce/apply a repair plan; same installation contract, no recursive arbitrary deletion |
@@ -78,12 +80,12 @@ schemas, examples, errors, limits and capability requirements before implementat
 | `session list/status/close/renew` | Visible lifecycle and bounded storage reporting; close waits/rejects active work |
 | `session retain <id> --output <dir> [--include-source]` | Explicit export; distinguish evidence-only and source-inclusive bundle |
 | `session clean --expired [--dry-run]` | Bounded scan, claim and quarantine expired owned sessions; no arbitrary source deletion |
-| `transcript <session> --from ... --to ...` | Pageable timestamped text and alignment metadata |
+| `transcript get <session> --from ... --to ...` | Pageable timestamped text and alignment metadata |
 | `transcript retranscribe <session> --from ... --to ...` | New transcript revision; preserve previous citations |
 | `search <session> --query ...` | Literal/ranked transcript search; no raw regex or executable query input |
 | `candidates <session> --from ... --to ... --limit ...` | Bounded ordered cards, thumbnails optional, stable continuation cursor |
-| `frame <session> --at ...`, `neighbours <evidence>` | Source-grounded frame and bounded adjacent states |
-| `burst <session> --from ... --to ... --max-frames ...` | Finite count, dimensions and total-byte budget; actual timestamps |
+| `frame get <session> --at ...`, `frame neighbours <evidence>` | Source-grounded frame and bounded adjacent states |
+| `frame burst <session> --from ... --to ... --max-frames ...` | Finite count, dimensions and total-byte budget; actual timestamps |
 | `crop <evidence> --rect ...`, `audio <session> --from ... --to ...` | Bounded source-derived image/audio artifact with lineage |
 | `bundle validate <dir>` | Validate schema, contained paths, counts, sizes and hashes without executing embedded content |
 | `job run --request <file>`, `job batch --requests <file>` | Versioned noninteractive worker inputs; explicit workspace, finite concurrency and admission |
@@ -102,23 +104,23 @@ there is one terminal result with an operation ID. Diagnostics go to stderr. A
 broken output pipe triggers bounded cancellation and a documented I/O exit, not a
 panic. Data already committed is discoverable by operation ID after a lost response.
 
-Proposed new-operation envelope:
+Published new-operation envelope shape:
 
 ```json
 {
   "schema_version": "1",
   "command": "candidates",
-  "operation_id": "opaque-id",
+  "operation_id": "op_0123456789abcdef",
   "status": "complete",
   "data": {"items": [], "next_cursor": null},
   "warnings": [],
   "error": null,
-  "coverage": {"truncated": false},
+  "coverage": {"truncated": false, "gaps": [], "reasons": []},
   "lifecycle": {"mode": "ephemeral", "expires_at": "2026-09-10T12:00:00Z"}
 }
 ```
 
-This illustrates shape only; P01 publishes a complete schema and valid fixtures.
+The complete schema and valid fixtures are published under [`schemas/v1`](../../schemas/v1/README.md).
 Keep the existing setup v1 fields (`command: setup.check`, readiness status,
 dependencies) compatible. Schema versions govern payload shape; command versions,
 bundle versions and algorithm versions have separate compatibility policies. Unknown
@@ -128,7 +130,7 @@ Errors carry code, safe message, retryable flag, optional retry-after, affected 
 and structured remediation containing executable/argument arrays plus required
 authority. Never derive remediation commands from media text or provider stderr.
 
-Preserve current setup success/degraded exit 0 and blocked exit 2. Proposed other exits:
+Preserve current setup success/degraded exit 0 and blocked exit 2. Published exits:
 0 completed (warnings allowed); 1 unexpected internal failure; 2 usage/config or
 missing/incompatible capability; 3 invalid/unsupported source; 4 retryable busy or
 provider condition; 5 deadline/resource limit; 6 cancellation; 7 storage/integrity/I/O

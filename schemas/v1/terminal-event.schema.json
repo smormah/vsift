@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/terminal-event.schema.json",
+  "title": "VSift JSONL terminal event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event", "sequence", "command", "operation_id", "result"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "event": { "const": "terminal" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "command": {
+      "type": "string",
+      "pattern": "^[a-z]+(?:[.][a-z]+)?$",
+      "maxLength": 64
+    },
+    "operation_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" }
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "operation_id", "status", "data", "warnings", "error", "coverage", "lifecycle"],
+      "properties": {
+        "schema_version": {},
+        "command": {},
+        "operation_id": {},
+        "status": {},
+        "data": {},
+        "warnings": {},
+        "error": {},
+        "coverage": {},
+        "lifecycle": {}
+      }
+    }
+  }
+}

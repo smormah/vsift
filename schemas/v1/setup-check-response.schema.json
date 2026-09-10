@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup-check-response.schema.json",
+  "title": "VSift setup.check response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command", "profile", "status", "dependencies"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "command": { "const": "setup.check" },
+    "profile": { "enum": ["desktop", "worker"] },
+    "status": { "enum": ["ready", "degraded", "blocked"] },
+    "dependencies": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dependency", "capability", "status", "detail"],
+        "properties": {
+          "dependency": { "enum": ["ffmpeg", "ffprobe", "whisper"] },
+          "capability": { "enum": ["media_processing", "transcription"] },
+          "status": { "enum": ["available", "missing", "unhealthy", "timed_out"] },
+          "detail": {
+            "oneOf": [
+              { "type": "null" },
+              { "type": "string", "maxLength": 240 }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

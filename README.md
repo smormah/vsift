@@ -4,12 +4,14 @@ VSift gives AI coding agents local, structured access to the evidence inside tec
 
 The initial use case is a recorded QA walkthrough: VSift combines timestamped speech with relevant visual states so an agent can investigate the demonstrated problem without requiring the user to transcribe the recording or capture screenshots manually.
 
-> **Project status:** foundation stage. The command contracts and architecture are being established before the media pipeline is implemented.
+> **Project status:** contract stage. The v1 CLI/JSON boundary is published; the media
+> pipeline is not implemented yet.
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.
 The [delivery ledger](docs/planning/delivery-ledger.json) and CI governance check guard
-scope and completion evidence; only the setup diagnostic is implemented today.
+scope and completion evidence. See the [v1 CLI contract](docs/contracts/cli-v1.md) for
+the exact implemented-versus-reserved boundary.
 
 ## Principles
 
@@ -20,14 +22,20 @@ scope and completion evidence; only the setup diagnostic is implemented today.
 - **Provider neutral:** FFmpeg, transcription engines, OCR, and future integrations sit behind explicit boundaries.
 - **Security requirements:** shell-free processes, verified downloads, bounded execution and contained cleanup; see the [baseline review](docs/planning/baseline-review.md) for current implementation gaps.
 
-## Current command
+## Current behavior
 
 The first walking skeleton provides runtime diagnostics:
 
 ```console
 vsift setup check
 vsift setup check --json
+vsift setup check --events jsonl
 ```
+
+The full R0 command namespace is visible through `vsift --help` so integrations can
+target a stable grammar. Until its owning work packet ships, every other operation
+returns the typed `COMMAND_NOT_IMPLEMENTED` result and exit 2; no media or storage work
+is implied by successful argument parsing.
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.
 
