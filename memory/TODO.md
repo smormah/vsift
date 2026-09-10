@@ -2,16 +2,13 @@
 
 ## Current checkpoint
 
-2026-09-10: P01 / issue #4 is active from predecessor
-`018db55ea1212e80d5e7942fef759d812b7dad59`. Its scope is the typed public command,
-JSON, configuration, identifier, range, error and exit contracts plus C-01..C-10.
-The implementation now reserves the complete R0 namespace, publishes four v1 schemas
-and examples, and has deterministic domain/CLI/compatibility coverage. Only
-`setup check` performs work; later commands fail explicitly.
+2026-09-10: P01 / issue #4 completed through PR #20 at
+`3d7a7d2a53fd8e6d2025726d34c59e7603fc8e71`. P02 / issue #5 is the next
+eligible packet but has not started.
 
 ## Pending
 
-- Complete P01 through protected review and record its merge evidence before P02.
+- Start P02 only from a fresh branch based on the recorded P01 merge.
 - Resolve baseline findings B-01..B-11 through their mapped implementation packets.
 - Preserve optional SQLite indexing, enrichment and reconstruction as later packets
   P15..P20 unless scope is explicitly changed.
@@ -27,3 +24,7 @@ and examples, and has deterministic domain/CLI/compatibility coverage. Only
   established milestone 1 and issues #3-#17, froze F01-F12 declarative fixture truth,
   and added a machine-validated ledger plus a required protected-branch Governance
   check. All PR checks passed; the workspace had 13 passing tests.
+- 2026-09-10: P01 merged through PR #20 as `3d7a7d2`. It published the typed
+  R0 CLI/config/JSON boundary, four v1 schemas, domain value contracts, stable
+  errors/exits, bounded presentation and C-01..C-10 coverage. All protected checks
+  passed across Ubuntu, Windows and macOS; the local workspace had 64 passing tests.

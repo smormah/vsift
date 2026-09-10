@@ -149,4 +149,5 @@ security review has finite scope; record residual risks, review date, versions, 
 unsupported environments instead of claiming vulnerability-free software.
 
 P00 established decisions, fixture truth, traceability and anti-drift controls in
-PR #18 (`924f6c5`). Its evidence is recorded in the ledger; P01 / issue #4 is active.
+PR #20 (`3d7a7d2`) completed P01 through protected review. Its evidence is recorded
+in the ledger; P02 / issue #5 is next but has not started.

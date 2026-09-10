@@ -2,21 +2,24 @@
 
 ## Active
 
-### P01 — Public command and JSON contracts
-
-P01 / issue #4 started from
-`018db55ea1212e80d5e7942fef759d812b7dad59`. It defines typed command requests,
-JSON envelopes, configuration precedence, exit codes and C-01..C-10 contract tests
-before process, storage or media work. P02+ behavior remains out of scope.
-
-Implementation on `feat/p01-public-contracts` now includes typed IDs, time/ranges,
-crops, cursors, confidence and job transitions; the full reserved R0 parser; bounded
-human/JSON/JSONL presentation; strict JSON input limits; immutable config precedence;
-and four published schemas with compatibility examples. `setup check` is the only
-executing operation. The local workspace passes 64 tests plus strict Clippy and
-dependency advisory/licence/source checks before protected review.
+No implementation packet is active. P02 / issue #5 is next and must start from
+`3d7a7d2a53fd8e6d2025726d34c59e7603fc8e71` after this evidence update merges.
 
 ## Complete
+
+### 2026-09-10 — P01 public command and JSON contracts
+
+PR #20 squash-merged as `3d7a7d2a53fd8e6d2025726d34c59e7603fc8e71`.
+P01 published typed IDs, time/ranges, crops, cursors, confidence and job transitions;
+the full reserved R0 parser; bounded human/JSON/JSONL presentation; strict JSON input
+limits; immutable configuration precedence; and four v1 schemas with compatibility
+examples. C-01..C-10 are mapped to 64 passing local tests. Governance, documentation,
+dependency policy/review, CodeQL/Rust analysis and Quality on Ubuntu, Windows and
+macOS all passed.
+
+Only `setup check` executes. Other parsed commands return `COMMAND_NOT_IMPLEMENTED`;
+P01 does not claim process supervision, storage, media, provisioning, or worker
+behavior. SEC-01/03/16/21 residual controls remain with their later owning packets.
 
 ### 2026-09-10 — P00 decisions, corpus truth and delivery governance
 
@@ -57,10 +60,10 @@ PR #1 / `df85f70` renamed the public command to `vsift setup check`, with JSON o
 Only setup dependency probing is implemented. No ingestion, transcription, visual
 extraction, session storage, managed installation, queue, index, durable job or npm
 release exists yet. Inspection found unbounded pre-truncation process output, ambient
-executable discovery, incomplete process-tree cleanup and insufficient contract tests.
+executable discovery and incomplete process-tree cleanup.
 See B-01..B-11; do not describe current code as production hardened.
 
 ## Next action
 
-Finish P01 through protected review and a record-only evidence update. Do not begin
-P02 until the delivery ledger records P01 complete.
+P02 / issue #5 is next. Start it on a fresh branch from the completed P01 record and
+do not pull P03+ storage/media behavior into the process-supervision packet.

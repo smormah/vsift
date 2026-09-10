@@ -41,3 +41,11 @@ checks, but do not substantiate production resilience or media accuracy.
 
 The proposed plan must not be used as evidence that a mitigation has shipped. Each
 finding closes only with its implementation PR and regression test references.
+
+## 2026-09-10 P01 disposition
+
+PR #20 (`3d7a7d2a53fd8e6d2025726d34c59e7603fc8e71`) closed B-06 with an
+explicit bounded output/parse boundary and structural regression tests. It completed
+the P01 portion of B-05 (safe public rendering) and B-07 (deterministic semantic/schema
+CLI assertions). Provider-pipe bounding, executable isolation, and process deadline
+proof remain open under P02; those findings are not closed by the public contract.
