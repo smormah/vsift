@@ -157,12 +157,12 @@ remaining architectural choices.
 
 | Packet | Deliverable | Dependencies | Gate |
 | --- | --- | --- | --- |
-| P15 — R1 contracts and qualification corpus | Accept storage/orchestration/provider ADRs; version catalogue/enrichment/job contracts; add reconstruction, index, queue and load truth | P14 for implementation | R-15..R-20 map bidirectionally to fixtures, threats and tests; no unresolved decision affects P16+ |
-| P16 — Enrichment pipeline | Bounded VAD/OCR/diarization/embedding/tag providers and revisioned records | P15 | E-01..E-08; absence/failure preserves R0; model and licence inventory passes |
-| P17 — Source-grounded composition | Scroll/pan detection, alignment, provenance masks, confidence and refusal | P15/P16 and R0 P09 | RC-01..RC-08; labelled corpus gates; source-frame fallback always available |
-| P18 — Managed catalogue | Lifecycle commands/use cases, chosen embedded adapter, migrations, backup/restore, rebuild and deletion reconciliation | P15/P16 | I-01..I-12; explicit opt-in; corruption/concurrency/privacy campaigns pass |
-| P19 — Industrial worker plane | Durable delivery and artifact-store ports/adapters, leases/fencing, recovery, admission, operational surfaces and reference deployment | P15/P18 and R0 P11 | H-01..H-12 plus SEC-T03 where applicable; duplicate/partition/host-loss/load tests pass |
-| P20 — R1 qualification | Integrated compatibility, security, migration, disaster-recovery, load/soak/chaos and two-agent release evidence | P15..P19 | Q-01..Q-10; all R0 and R1 gates pass; public claims match measured profiles |
+| [P15 — R1 contracts and qualification corpus](https://github.com/smormah/vsift/issues/25) | Accept storage/orchestration/provider ADRs; version catalogue/enrichment/job contracts; add reconstruction, index, queue and load truth | P14 for implementation | R-15..R-20 map bidirectionally to fixtures, threats and tests; no unresolved decision affects P16+ |
+| [P16 — Enrichment pipeline](https://github.com/smormah/vsift/issues/26) | Bounded VAD/OCR/diarization/embedding/tag providers and revisioned records | P15 | E-01..E-08; absence/failure preserves R0; model and licence inventory passes |
+| [P17 — Source-grounded composition](https://github.com/smormah/vsift/issues/27) | Scroll/pan detection, alignment, provenance masks, confidence and refusal | P15/P16 and R0 P09 | RC-01..RC-08; labelled corpus gates; source-frame fallback always available |
+| [P18 — Managed catalogue](https://github.com/smormah/vsift/issues/28) | Lifecycle commands/use cases, chosen embedded adapter, migrations, backup/restore, rebuild and deletion reconciliation | P15/P16 | I-01..I-12; explicit opt-in; corruption/concurrency/privacy campaigns pass |
+| [P19 — Industrial worker plane](https://github.com/smormah/vsift/issues/29) | Durable delivery and artifact-store ports/adapters, leases/fencing, recovery, admission, operational surfaces and reference deployment | P15/P18 and R0 P11 | H-01..H-12 plus SEC-T03 where applicable; duplicate/partition/host-loss/load tests pass |
+| [P20 — R1 qualification](https://github.com/smormah/vsift/issues/30) | Integrated compatibility, security, migration, disaster-recovery, load/soak/chaos and two-agent release evidence | P15..P19 | Q-01..Q-10; all R0 and R1 gates pass; public claims match measured profiles |
 
 MCP is deliberately not a P15-P20 packet. It remains a thin optional R2 adapter over
 published use cases and cannot displace the CLI/skill as the primary integration.
@@ -259,4 +259,3 @@ and verification cost.
 5. Calibrate throughput, catalogue-size, recovery and resource targets on owned hosts.
 6. Decide whether any mutually untrusted tenancy is included; if so, SEC-T03 and a
    dedicated service threat model become release-blocking.
-

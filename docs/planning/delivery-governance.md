@@ -18,6 +18,9 @@ reserves R-15..R-20 and P15..P20 without activating them. P15 must create a sepa
 machine-readable R1 ledger and independent fixture truth before any P16+ implementation.
 Do not broaden the R0 ledger to make a future feature appear eligible, and do not use
 an R1 requirement to excuse a missing R0 end-to-end video investigation capability.
+Future packet issues #25 through #30 are grouped under the
+[R1 milestone](https://github.com/smormah/vsift/milestone/2); their existence does not
+make a packet active or satisfy its P14/P15 prerequisites.
 
 GitHub milestone `R0 — First functional release` contains issues #3 through #17.
 Each implementation PR cites one packet issue, requirements, tests, threats/findings,

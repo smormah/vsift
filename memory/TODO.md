@@ -34,7 +34,8 @@ feasibility evidence but did not complete P03. The R1 scope is being formalized 
   industrial worker growth and integrated qualification as R1 packets P15..P20 under
   ADR 0011 and `docs/planning/r1-industrial-capability-expansion.md`. SQLite remains
   only a candidate explicit single-node adapter. Do not start P15 implementation before
-  P14 or use R1 scope to expand the active P03 packet.
+  P14 or use R1 scope to expand the active P03 packet. GitHub milestone 2 contains
+  future issues #25 through #30.
 
 ## Completed
 
