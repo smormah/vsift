@@ -79,14 +79,22 @@ session-store initialization only after that guarantee check. Consequently, an
 explicit durable request cannot reach the mutating port while the R0 desktop adapter
 is qualified only for process-crash-consistent publication.
 
-The first internal filesystem adapter opens an existing explicit root read-only,
-validates its ownership/layout, and then performs authorized session initialization
-relative to the held directory capability. It uses no-follow opens, rejects multiply
-linked metadata/locks, serializes initialization with a stable OS lock, and installs
-a checksummed immutable generation-zero directory with a same-filesystem rename.
-It is not composed into the CLI. Root provisioning, Windows ACL qualification,
-arbitrary write/flush/rename crash recovery, read holds and admission remain P03 gates,
-so this is not yet a storage feature claim.
+The internal filesystem adapter provisions or opens an explicit private owned root,
+validates Unix owner/mode or the Windows DACL, and keeps all subsequent operations
+relative to held directory capabilities. It rejects traversal, reserved/ADS names,
+links at metadata and lock boundaries, and root-policy changes before mutation.
+Stable OS lock anchors implement immutable root-wide weighted admission, shared read
+and writer lifetime holds, exclusive cleanup coordination, and short metadata-writer
+transactions in the order admission -> lifetime -> writer.
+
+Initialization publishes generation zero atomically. Later publication requires the
+caller's expected generation, installs an immutable checksummed manifest, and replaces
+the commit pointer only after validation and file synchronization. Recovery verifies
+the bounded manifest chain, ignores unpublished attempts, and rejects corrupt, missing
+or future-version metadata. Fault and child-process tests cover every manifest/pointer
+write, flush and rename boundary. It is not composed into the CLI. The adapter reports
+process-crash-consistent ephemeral publication only; explicit durable requests fail
+before admission or mutation until P10/P11/P14 qualify Ubuntu/ext4 under ADR 0010.
 
 Expiry makes a temporary session eligible for cleanup. With no background process,
 physical cleanup runs during a later invocation or explicit host maintenance, not

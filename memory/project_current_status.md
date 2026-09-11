@@ -2,15 +2,21 @@
 
 ## Active
 
-P03 / issue #6 is active on protected main
-`3fd29247bb241e4aa6f5561e410a06ed5d1cf839`; P01/P02 are complete. PR #35
+P03 / issue #6 is active from protected-main predecessor `f03941a`; P01/P02 are
+complete. PR #35
 merged the first production P03 contracts. PR #36 merged an internal filesystem
 `SessionStore` that opens an existing explicit owned root, initializes a checksummed
 immutable generation zero through held-directory operations and a stable lock, and
 verifies state before idempotent reuse. It is not composed into the CLI; P03 remains
 incomplete. PR #38 (`3fd29247bb241e4aa6f5561e410a06ed5d1cf839`) corrected the
 parallel Windows test-root collision exposed by the PR #37 evidence rerun and
-consolidated that evidence so only one record advanced.
+consolidated that evidence so only one record advanced. The unmerged completion
+candidate adds owned root provisioning with Unix owner/mode and Windows DACL checks,
+root-wide weighted OS-lock admission, shared/exclusive lifetime holds, fenced later
+generations, bounded integrity-chain validation and process-crash recovery across all
+manifest/pointer write, flush and rename boundaries. It remains internal and preserves
+the durable pre-mutation rejection. P03 stays active until protected checks, merge,
+ledger evidence and issue closure complete.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for

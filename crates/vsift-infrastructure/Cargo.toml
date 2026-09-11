@@ -20,5 +20,12 @@ tokio.workspace = true
 vsift-application.workspace = true
 vsift-domain.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-acl.workspace = true
+
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
 [lints]
 workspace = true

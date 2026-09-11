@@ -114,6 +114,96 @@ pub struct InitializedSessionStorage {
     publication: PublicationGuarantee,
 }
 
+/// Optimistic token and idempotency identity for publishing one later manifest.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PublishSessionGenerationRequest {
+    session_id: SessionId,
+    operation_id: OperationId,
+    expected_generation: StorageGeneration,
+    durability: DurabilityRequirement,
+}
+
+/// Preflighted later-generation publication accepted by a [`SessionStore`].
+///
+/// Only [`PublishSessionGeneration`] constructs this value, keeping unsupported
+/// guarantees ahead of admission and mutation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthorizedSessionGenerationPublication {
+    session_id: SessionId,
+    operation_id: OperationId,
+    expected_generation: StorageGeneration,
+    durability: DurabilityRequirement,
+}
+
+impl AuthorizedSessionGenerationPublication {
+    /// Returns the target session.
+    #[must_use]
+    pub const fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    /// Returns the idempotency identity.
+    #[must_use]
+    pub const fn operation_id(&self) -> &OperationId {
+        &self.operation_id
+    }
+
+    /// Returns the optimistic generation token.
+    #[must_use]
+    pub const fn expected_generation(&self) -> StorageGeneration {
+        self.expected_generation
+    }
+
+    /// Returns the preflighted durability requirement.
+    #[must_use]
+    pub const fn durability(&self) -> DurabilityRequirement {
+        self.durability
+    }
+}
+
+impl PublishSessionGenerationRequest {
+    /// Creates a publication request. The store rejects stale generations and
+    /// conflicting reuse of an operation identifier.
+    #[must_use]
+    pub const fn new(
+        session_id: SessionId,
+        operation_id: OperationId,
+        expected_generation: StorageGeneration,
+        durability: DurabilityRequirement,
+    ) -> Self {
+        Self {
+            session_id,
+            operation_id,
+            expected_generation,
+            durability,
+        }
+    }
+
+    /// Returns the target session.
+    #[must_use]
+    pub const fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    /// Returns the stable idempotency identity.
+    #[must_use]
+    pub const fn operation_id(&self) -> &OperationId {
+        &self.operation_id
+    }
+
+    /// Returns the generation observed before the attempt began.
+    #[must_use]
+    pub const fn expected_generation(&self) -> StorageGeneration {
+        self.expected_generation
+    }
+
+    /// Returns the requested publication guarantee.
+    #[must_use]
+    pub const fn durability(&self) -> DurabilityRequirement {
+        self.durability
+    }
+}
+
 impl InitializedSessionStorage {
     /// Returns the initialized session.
     #[must_use]
@@ -156,6 +246,8 @@ pub enum SessionStorageError {
     StateConflict,
     /// Stored bytes or metadata failed integrity validation.
     IntegrityFailure,
+    /// Stored metadata uses a schema newer than this binary understands.
+    UnsupportedVersion,
     /// Filesystem permissions denied the contained operation.
     AccessDenied,
     /// A configured or host storage capacity boundary prevented the operation.
@@ -181,6 +273,9 @@ impl fmt::Display for SessionStorageError {
             Self::IntegrityFailure => {
                 formatter.write_str("session storage failed integrity validation")
             }
+            Self::UnsupportedVersion => {
+                formatter.write_str("session storage metadata version is unsupported")
+            }
             Self::AccessDenied => formatter.write_str("session storage access was denied"),
             Self::CapacityExhausted => formatter.write_str("session storage capacity is exhausted"),
             Self::Io => formatter.write_str("session storage I/O failed"),
@@ -200,11 +295,59 @@ pub trait SessionStore: Send + Sync {
         &self,
         request: AuthorizedSessionStorageInitialization,
     ) -> impl Future<Output = Result<StorageGeneration, SessionStorageError>> + Send;
+
+    /// Publishes one later generation after application guarantee preflight.
+    fn publish(
+        &self,
+        request: AuthorizedSessionGenerationPublication,
+    ) -> impl Future<Output = Result<StorageGeneration, SessionStorageError>> + Send;
 }
 
 /// Application boundary that rejects unsupported durability before storage mutation.
 pub struct InitializeSessionStorage<S> {
     store: S,
+}
+
+/// Application boundary for fenced later-generation publication.
+pub struct PublishSessionGeneration<S> {
+    store: S,
+}
+
+impl<S> PublishSessionGeneration<S>
+where
+    S: SessionStore,
+{
+    /// Creates the use case with its session-store dependency.
+    pub const fn new(store: S) -> Self {
+        Self { store }
+    }
+
+    /// Preflights durability before authorizing storage admission or mutation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unsupported-guarantee error before the mutating port is called,
+    /// or preserves the store's typed publication failure.
+    pub async fn execute(
+        &self,
+        request: PublishSessionGenerationRequest,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        let capabilities = self.store.capabilities();
+        if !capabilities.supports(request.durability) {
+            return Err(SessionStorageError::UnsupportedGuarantee {
+                requested: request.durability,
+                available: capabilities.publication(),
+            });
+        }
+        self.store
+            .publish(AuthorizedSessionGenerationPublication {
+                session_id: request.session_id,
+                operation_id: request.operation_id,
+                expected_generation: request.expected_generation,
+                durability: request.durability,
+            })
+            .await
+    }
 }
 
 impl<S> InitializeSessionStorage<S>
@@ -262,8 +405,9 @@ mod tests {
     };
 
     use super::{
-        AuthorizedSessionStorageInitialization, InitializeSessionStorage,
-        InitializeSessionStorageRequest, SessionStorageError, SessionStore, StorageCapabilities,
+        AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
+        InitializeSessionStorage, InitializeSessionStorageRequest, PublishSessionGeneration,
+        PublishSessionGenerationRequest, SessionStorageError, SessionStore, StorageCapabilities,
     };
     use vsift_domain::{
         DurabilityRequirement, OperationId, PublicationGuarantee, SessionId, StorageGeneration,
@@ -285,6 +429,14 @@ mod tests {
         fn initialize(
             &self,
             _request: AuthorizedSessionStorageInitialization,
+        ) -> impl Future<Output = Result<StorageGeneration, SessionStorageError>> + Send {
+            self.initialize_calls.fetch_add(1, Ordering::SeqCst);
+            ready(self.result)
+        }
+
+        fn publish(
+            &self,
+            _request: AuthorizedSessionGenerationPublication,
         ) -> impl Future<Output = Result<StorageGeneration, SessionStorageError>> + Send {
             self.initialize_calls.fetch_add(1, Ordering::SeqCst);
             ready(self.result)
@@ -360,6 +512,30 @@ mod tests {
             .await;
 
         assert_eq!(result, Err(SessionStorageError::AccessDenied));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn durable_later_publication_fails_before_the_mutating_port_is_called() -> TestResult {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let use_case = PublishSessionGeneration::new(FakeSessionStore {
+            capabilities: StorageCapabilities::new(PublicationGuarantee::ProcessCrashConsistent),
+            initialize_calls: Arc::clone(&calls),
+            result: Ok(StorageGeneration::from_value(1)),
+        });
+        let result = use_case
+            .execute(PublishSessionGenerationRequest::new(
+                SessionId::parse("ses_0123456789abcdef")?,
+                OperationId::parse("op_1111111111111111")?,
+                StorageGeneration::INITIAL,
+                DurabilityRequirement::Durable,
+            ))
+            .await;
+        assert!(matches!(
+            result,
+            Err(SessionStorageError::UnsupportedGuarantee { .. })
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
         Ok(())
     }
 }

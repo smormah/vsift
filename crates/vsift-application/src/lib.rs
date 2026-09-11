@@ -9,8 +9,9 @@ use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, Runti
 mod storage;
 
 pub use storage::{
-    AuthorizedSessionStorageInitialization, InitializeSessionStorage,
-    InitializeSessionStorageRequest, InitializedSessionStorage, SessionStorageError, SessionStore,
+    AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
+    InitializeSessionStorage, InitializeSessionStorageRequest, InitializedSessionStorage,
+    PublishSessionGeneration, PublishSessionGenerationRequest, SessionStorageError, SessionStore,
     StorageCapabilities,
 };
 

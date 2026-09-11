@@ -227,13 +227,21 @@ after the guarantee is satisfied. Storage generations are monotonic and fail on
 numeric exhaustion rather than wrapping. This establishes the fail-closed seam; it
 does not yet implement the filesystem transaction, artifact/job stores or admission.
 
-The next internal P03 increment opens an existing explicit owned root at one ambient
-authority boundary, validates its bounded ownership/layout metadata, and uses held
-directory capabilities thereafter. Authorized initialization uses stable lock anchors,
-no-follow opens, single-link metadata checks, immutable SHA-256 manifest verification
-and a same-filesystem directory rename. It is deliberately not composed into a command
-while root provisioning, Windows ACL qualification, arbitrary fault recovery, read
-holds and admission remain incomplete.
+The P03 filesystem adapter provisions or opens an explicit owned root at one ambient
+authority boundary, validates bounded ownership/layout metadata plus Unix owner/mode
+or a Windows DACL allowlist, and uses held directory capabilities thereafter. Stable
+single-link lock anchors provide immutable root-wide weighted admission and shared or
+exclusive lifetime coordination. Publication acquires admission, shared lifetime, then
+the short writer lock; it never waits for a resource while holding the writer lock.
+
+Authorized initialization installs generation zero with a same-filesystem directory
+rename. Later publication fences on the expected generation, writes and synchronizes
+an immutable manifest, renames it into the generation set, then writes, synchronizes
+and atomically replaces the pointer. Recovery verifies a bounded SHA-256-linked chain,
+ignores unpublished attempts and permits an identical operation to recover an already
+committed result. Missing, multiply linked, malformed, stale, conflicting or future
+metadata fails closed. This remains internal and is deliberately not composed into a
+command before P04/P05 supply source binding and lifecycle behavior.
 
 Durability modes:
 

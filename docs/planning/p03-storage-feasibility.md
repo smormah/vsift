@@ -2,9 +2,10 @@
 
 Date: 2026-09-11. Predecessor: `25c3aad01fc9e2fc391c5c016295df5aff61fbdd`.
 Issue: [#6](https://github.com/smormah/vsift/issues/6). Status: feasibility evidence
-recorded; [ADR 0010](../decisions/0010-storage-qualification-gate.md) accepts the
-narrower ephemeral desktop profile and permits P03 production implementation to
-resume. P03 remains in progress; durable enablement remains gated to P10/P11/P14.
+recorded and consumed by the P03 completion candidate;
+[ADR 0010](../decisions/0010-storage-qualification-gate.md) accepts the narrower
+ephemeral desktop profile. P03 awaits protected completion evidence; durable enablement
+remains gated to P10/P11/P14.
 
 ## Candidate dependency review
 
@@ -28,6 +29,20 @@ PR #36 also adds `sha2` 0.11.0 with default features disabled for immutable mani
 integrity. The RustCrypto repository is active, the crate declares MIT OR Apache-2.0,
 its Rust 1.85 MSRV is below VSift's 1.98 MSRV, and no network or native dependency is
 introduced. Cargo deny reports no advisory, licence, ban or source failure.
+
+The completion candidate adds Windows-only `windows-acl` 0.3.0 for read-only DACL
+enumeration and directly enables the already-transitive Rustix 1.1 `process` feature
+on Unix for current-UID comparison. `windows-acl` is MIT licensed, pure Rust at build
+time, and isolates Win32 unsafe calls outside VSift crates. Trail of Bits has not
+archived the repository, but maintenance is low (latest repository push observed
+2023-06-09); the latest published 0.3.0 remains the reviewed version. VSift uses only
+current-user SID resolution and DACL reads, rejects unreadable/null/unexpected allow
+entries, and performs no ACL mutation in production. The dependency adds the legacy
+`winapi`/`widestring` graph on Windows but no duplicate version reported by cargo-deny.
+Rustix is maintained by the Bytecode Alliance, MIT OR Apache-2.0 WITH LLVM-exception,
+and adds no locked package because cap-std already uses the same 1.1 line. Full
+workspace cargo-deny passes with development dependencies included; no advisory,
+package exception or source exception was added.
 
 The lockfile adds 34 development-only packages, including multiple versions of
 Windows support crates. No existing package version was upgraded. Initial
@@ -100,13 +115,16 @@ watchdog-bounded parent tests.
   primitive boundaries, not the future complete generation/ack protocol.
 
 All passing experiments are deliberately narrower than the full acceptance suites.
-Still unimplemented/unqualified after the first production increments: weighted global
-admission and policy transactions; every Windows reparse/junction/ADS/reserved-name
-case; Windows ACL/privacy validation; full source-change handling; later generation
-publication and future-version validation; write/flush/rename fault injection, disk
-exhaustion and cancellation; full concurrent stale-generation/idempotency races; owned cleanup;
-OS/storage crash/restart acknowledgement tests. S-01..S-03/S-07/S-08/S-12 and
-X-01..X-05 are **not complete**. SEC-07..SEC-11, SEC-18 and SEC-24 remain open.
+The first production increments had not implemented weighted admission, Windows ACL
+validation, later generations, read holds or full recovery. The completion candidate
+now supplies those P03-owned controls and exercises traversal/reserved/ADS/case forms,
+link identity, policy changes, typed capacity/access errors, stale/idempotent races,
+2/4/8-way writer coordination, cross-process holds/admission and all six
+manifest/pointer process-crash boundaries.
+S-03's media-source binding remains correctly owned by P04; P03 proves stable committed
+storage snapshots and fail-closed identity/integrity changes. P05 owns actual cleanup,
+and P10 owns cancellation-integrated stage recovery. OS/storage crash acknowledgement
+remains unqualified and durable requests remain disabled under ADR 0010.
 
 The blocking evidence gap for a strict durable claim is the required disposable
 OS/storage fault campaign.
