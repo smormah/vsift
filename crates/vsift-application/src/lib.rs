@@ -6,6 +6,14 @@ use std::future::Future;
 
 use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, RuntimeReadiness};
 
+mod storage;
+
+pub use storage::{
+    AuthorizedSessionStorageInitialization, InitializeSessionStorage,
+    InitializeSessionStorageRequest, InitializedSessionStorage, SessionStorageError, SessionStore,
+    StorageCapabilities,
+};
+
 /// Port used to inspect one specialist runtime dependency.
 pub trait DependencyProbe: Send + Sync {
     /// Inspects a dependency without modifying the local machine.
