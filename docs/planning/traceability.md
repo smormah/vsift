@@ -50,8 +50,8 @@ broken.
 
 ## Scope guardrails
 
-P03 is active under ADR 0010's narrower qualification profile. Its completion
-candidate implements the P03 portions of R-07..R-11: private owned roots,
+P03 completed in PR #42 (`3eef9b7`) under ADR 0010's narrower qualification profile.
+It implements the P03 portions of R-07..R-11: private owned roots,
 handle-relative metadata, stable locks, weighted admission, generation publication,
 read/cleanup holds and process-crash recovery. S-03 at this packet proves stable
 storage snapshots and detects identity/integrity changes; P04 still owns actual media

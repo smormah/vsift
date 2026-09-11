@@ -279,10 +279,10 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
-## 2026-09-11 P03 completion-candidate evidence
+## 2026-09-11 P03 completion evidence
 
-The internal P03 adapter now maps its packet suites as follows; protected three-OS
-results and the final merge hash remain required before the ledger advances:
+PR #42 squash-merged as `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f` after all
+protected checks passed. The internal P03 adapter maps its packet suites as follows:
 
 | Gate | Mechanical evidence |
 | --- | --- |
@@ -300,6 +300,17 @@ Typed access, capacity, contention, integrity, version and general I/O mappings 
 covered. Explicit durable initialization and later publication are both verified to
 fail before mutation. Process exit proves process-crash consistency only; ADR 0010's
 Ubuntu/ext4 OS/storage crash qualification remains P10/P11/P14 work.
+
+Local evidence was 128 passing tests, with three internal child entries intentionally
+ignored by the ordinary runner and launched by watchdog-bounded parent tests. Fmt,
+strict Clippy, warning-denied rustdoc, governance and cargo-deny passed. Protected
+Quality passed on Ubuntu, Windows and macOS; Governance, Documentation, strict-worker
+regression, Dependency policy/review, CodeQL and Rust analysis all passed.
+
+PR #43's first Windows evidence run exposed that the two in-process concurrency tests
+used a scheduler-yield count as an implicit timing budget. The follow-up uses an
+explicit five-second monotonic deadline with 10 ms retry intervals; both contention
+tests passed ten consecutive local runs before the full suite was rerun.
 
 ## 2026-09-11 P02 evidence
 

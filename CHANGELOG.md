@@ -23,12 +23,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   validates an existing owned root, serializes initialization with a stable OS lock,
   publishes an immutable checksummed generation zero, and verifies it before reuse.
   The adapter is not yet composed into a public command.
-- Completed the internal P03 storage/coordination implementation candidate with
+- Completed the internal P03 storage/coordination boundary in PR #42 with
   owned private-root provisioning, Unix owner/mode and Windows DACL validation,
   immutable root-wide weighted admission, shared/exclusive lifetime holds,
   generation-fenced publication, bounded integrity-chain recovery, and deterministic
   error/process-crash tests at every manifest and pointer boundary. Durable requests
-  remain rejected before mutation and no session command is exposed.
+  remain rejected before mutation and no session command is exposed. PR #43 also
+  makes concurrent lock-contention tests wait against a bounded monotonic deadline
+  instead of assuming a fixed number of scheduler yields.
 
 - Initial Rust workspace and architectural boundaries.
 - Read-only `vsift setup check` runtime diagnostic with versioned JSON output.

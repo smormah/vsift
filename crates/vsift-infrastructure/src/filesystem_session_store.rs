@@ -1374,7 +1374,7 @@ mod tests {
         path::{Path, PathBuf},
         process::{Command, Stdio},
         sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     use super::{
@@ -1994,13 +1994,17 @@ mod tests {
                 let operation = format!("op_{:016x}", index + 100);
                 let request = publication_request(&operation, 0, DurabilityRequirement::Ephemeral)
                     .map_err(|_| SessionStorageError::Io)?;
-                for _ in 0..100 {
+                let retry_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                loop {
                     match store.publish_generation(request.clone()).await {
-                        Err(SessionStorageError::Busy) => tokio::task::yield_now().await,
+                        Err(SessionStorageError::Busy)
+                            if tokio::time::Instant::now() < retry_deadline =>
+                        {
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
                         result => return result,
                     }
                 }
-                Err(SessionStorageError::Busy)
             }));
         }
         let mut successes = 0;
@@ -2031,7 +2035,8 @@ mod tests {
                 let store = FilesystemSessionStore::open_existing(path)
                     .map_err(|_| SessionStorageError::Io)?;
                 let use_case = InitializeSessionStorage::new(store);
-                for _ in 0..100 {
+                let retry_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                loop {
                     match use_case
                         .execute(
                             request(DurabilityRequirement::Ephemeral)
@@ -2039,11 +2044,14 @@ mod tests {
                         )
                         .await
                     {
-                        Err(SessionStorageError::Busy) => tokio::task::yield_now().await,
+                        Err(SessionStorageError::Busy)
+                            if tokio::time::Instant::now() < retry_deadline =>
+                        {
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
                         result => return result.map(|initialized| initialized.generation()),
                     }
                 }
-                Err(SessionStorageError::Busy)
             }));
         }
         for task in tasks {

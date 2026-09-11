@@ -69,8 +69,9 @@ durability promise. Ephemeral still means process-crash-consistent committed
 generations, not in-memory or disposable correctness. Explicit retention controls
 lifecycle, not disk-flush strength.
 
-P03 remains in progress until its production implementation and mapped tests pass;
-accepting this ADR is not completion evidence. The first eligible successor remains
-P04 only after P03 is merged complete. Durable worker requirements R-09/R-10 remain
-open through P10/P11/P14, and the release documentation must distinguish supported
-desktop sessions from the not-yet-qualified strict worker profile.
+Accepting this ADR was not completion evidence by itself. P03 subsequently completed
+its production implementation and mapped ephemeral-profile tests in PR #42
+(`3eef9b7`), making P04 eligible while it remains separately planned. Durable worker
+requirements R-09/R-10 remain open through P10/P11/P14, and release documentation
+must distinguish supported desktop sessions from the not-yet-qualified strict worker
+profile.

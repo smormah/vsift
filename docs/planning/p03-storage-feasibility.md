@@ -2,12 +2,12 @@
 
 Date: 2026-09-11. Predecessor: `25c3aad01fc9e2fc391c5c016295df5aff61fbdd`.
 Issue: [#6](https://github.com/smormah/vsift/issues/6). Status: feasibility evidence
-recorded and consumed by the P03 completion candidate;
+recorded and consumed by the P03 implementation merged in PR #42 (`3eef9b7`);
 [ADR 0010](../decisions/0010-storage-qualification-gate.md) accepts the narrower
-ephemeral desktop profile. P03 awaits protected completion evidence; durable enablement
-remains gated to P10/P11/P14.
+ephemeral desktop profile. P03 is complete; durable enablement remains gated to
+P10/P11/P14.
 
-## Candidate dependency review
+## Dependency review
 
 The standard library supplies safe file locks, synchronization and replacement,
 but no portable directory-relative no-follow interface. The spike pinned
@@ -116,8 +116,8 @@ watchdog-bounded parent tests.
 
 All passing experiments are deliberately narrower than the full acceptance suites.
 The first production increments had not implemented weighted admission, Windows ACL
-validation, later generations, read holds or full recovery. The completion candidate
-now supplies those P03-owned controls and exercises traversal/reserved/ADS/case forms,
+validation, later generations, read holds or full recovery. PR #42 supplies those
+P03-owned controls and exercises traversal/reserved/ADS/case forms,
 link identity, policy changes, typed capacity/access errors, stale/idempotent races,
 2/4/8-way writer coordination, cross-process holds/admission and all six
 manifest/pointer process-crash boundaries.
@@ -175,12 +175,11 @@ inspection found no registered Hyper-V VM and no QEMU, VirtualBox or VMware CLI;
 existing WSL distributions are not identified as disposable fault targets. No host
 or user VM was restarted, crashed or reconfigured.
 
-The spike security review found no additional issue in its test-only diff. PR #36 now
-uses the reviewed capability dependencies for the internal generation-zero initializer,
-but no P03 threat is closed by that increment alone. Admission, general publication,
-recovery, ACL and complete adversarial proof remain open; do not advance the ledger.
-P04 remains ineligible until P03 implementation and its revised ephemeral-profile
-gates are complete.
+At feasibility close, the spike security review found no additional issue in its
+test-only diff, but PR #36 alone did not close P03 threats. PR #42 subsequently added
+admission, general publication, recovery, ACL and adversarial coverage and passed the
+revised ephemeral-profile gates. P03 is complete and P04 is now eligible, but remains
+planned.
 
 ## Primary-source basis
 

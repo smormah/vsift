@@ -52,8 +52,8 @@ remain optional, explicit and independently qualified.
 
 P03's [filesystem feasibility record](p03-storage-feasibility.md) records native API
 experiments and missing OS/storage crash evidence. [ADR 0010](../decisions/0010-storage-qualification-gate.md)
-accepts ephemeral desktop qualification as the P03 target. The P03 completion
-candidate qualifies process-crash-consistent internal publication through native
+accepts ephemeral desktop qualification as the P03 target. PR #42 (`3eef9b7`)
+qualifies process-crash-consistent internal publication through native
 tests on each protected OS; it does not expose a user command or claim OS-crash
 durability. Strict durable acknowledgement remains disabled until the Ubuntu/ext4
 P10/P11/P14 crash campaign passes.

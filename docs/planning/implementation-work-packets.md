@@ -1,12 +1,11 @@
 # Implementation work packets
 
 Status: accepted R0 sequence with scoped R1 packets. P02 completed in PR #22
-(`4e9ef08`); P03 / issue #6 is active under accepted ADR 0010. Its feasibility
-evidence merged in PR #24 (`cbc531e`) without completing the packet. PR #35 merged
-the typed storage-guarantee contracts, and PR #36 merged the first internal filesystem
-session-store increment. The completion candidate adds the remaining private-root,
-coordination, admission, publication and recovery behavior and awaits protected-main
-verification. Tests reference [verification](verification.md), and CI
+(`4e9ef08`); P03 completed in PR #42 (`3eef9b7`) under accepted ADR 0010. Its
+feasibility evidence merged in PR #24 (`cbc531e`), PR #35 added typed guarantees,
+and PR #36 added the first internal filesystem-session increment. PR #42 completed
+private roots, coordination, admission, generation publication and recovery without
+exposing a session command. Tests reference [verification](verification.md), and CI
 enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes
