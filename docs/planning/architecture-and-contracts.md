@@ -227,6 +227,14 @@ after the guarantee is satisfied. Storage generations are monotonic and fail on
 numeric exhaustion rather than wrapping. This establishes the fail-closed seam; it
 does not yet implement the filesystem transaction, artifact/job stores or admission.
 
+The next internal P03 increment opens an existing explicit owned root at one ambient
+authority boundary, validates its bounded ownership/layout metadata, and uses held
+directory capabilities thereafter. Authorized initialization uses stable lock anchors,
+no-follow opens, single-link metadata checks, immutable SHA-256 manifest verification
+and a same-filesystem directory rename. It is deliberately not composed into a command
+while root provisioning, Windows ACL qualification, arbitrary fault recovery, read
+holds and admission remain incomplete.
+
 Durability modes:
 
 - `ephemeral`: process-crash-consistent publication, best-effort OS cache persistence;

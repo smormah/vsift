@@ -9,9 +9,10 @@ resume. P03 remains in progress; durable enablement remains gated to P10/P11/P14
 ## Candidate dependency review
 
 The standard library supplies safe file locks, synchronization and replacement,
-but no portable directory-relative no-follow interface. The spike pins
-`cap-std` and `cap-fs-ext` 4.0.3 as **development dependencies only** to evaluate
-those missing operations. No domain/application/CLI dependency is added.
+but no portable directory-relative no-follow interface. The spike pinned
+`cap-std` and `cap-fs-ext` 4.0.3 as development-only candidates to evaluate those
+missing operations. PR #36 promotes the same reviewed versions into the infrastructure
+adapter; no domain, application or CLI dependency is added.
 
 The Bytecode Alliance repository is active (not archived; latest push observed
 2026-08-20). Both packages declare MIT OR Apache-2.0 OR Apache-2.0 WITH
@@ -21,7 +22,12 @@ check. Default features select the standard synchronous interface. Transitive
 platform wrappers include `cap-primitives`, `rustix` and Windows `winx`/
 `windows-sys`; unsafe code stays in dependencies and requires candidate review,
 not a VSift lint exception. Cargo.lock fixes the full graph; cargo deny and
-dependency review are required before merging this investigation.
+dependency review remain required for every production adapter change.
+
+PR #36 also adds `sha2` 0.11.0 with default features disabled for immutable manifest
+integrity. The RustCrypto repository is active, the crate declares MIT OR Apache-2.0,
+its Rust 1.85 MSRV is below VSift's 1.98 MSRV, and no network or native dependency is
+introduced. Cargo deny reports no advisory, licence, ban or source failure.
 
 The lockfile adds 34 development-only packages, including multiple versions of
 Windows support crates. No existing package version was upgraded. Initial
@@ -94,11 +100,11 @@ watchdog-bounded parent tests.
   primitive boundaries, not the future complete generation/ack protocol.
 
 All passing experiments are deliberately narrower than the full acceptance suites.
-Still unimplemented/unqualified: production identity/ports/storage; weighted global
+Still unimplemented/unqualified after the first production increments: weighted global
 admission and policy transactions; every Windows reparse/junction/ADS/reserved-name
-case; ACL/privacy validation; full source-change handling; generation hashes and
-future-version validation; write/flush/rename fault injection, disk exhaustion and
-cancellation; full concurrent stale-generation/idempotency races; owned cleanup;
+case; Windows ACL/privacy validation; full source-change handling; later generation
+publication and future-version validation; write/flush/rename fault injection, disk
+exhaustion and cancellation; full concurrent stale-generation/idempotency races; owned cleanup;
 OS/storage crash/restart acknowledgement tests. S-01..S-03/S-07/S-08/S-12 and
 X-01..X-05 are **not complete**. SEC-07..SEC-11, SEC-18 and SEC-24 remain open.
 
@@ -151,11 +157,12 @@ inspection found no registered Hyper-V VM and no QEMU, VirtualBox or VMware CLI;
 existing WSL distributions are not identified as disposable fault targets. No host
 or user VM was restarted, crashed or reconfigured.
 
-The post-test security review found no additional issue in this test-only diff.
-R0 filesystem/admission/publication controls remain unimplemented; the passing spike
-and strengthened dependency check must not be used to close their threats or advance
-the ledger. ADR 0010 now permits the P03 adapter work only. P04 remains ineligible
-until P03 implementation and its revised ephemeral-profile gates are complete.
+The spike security review found no additional issue in its test-only diff. PR #36 now
+uses the reviewed capability dependencies for the internal generation-zero initializer,
+but no P03 threat is closed by that increment alone. Admission, general publication,
+recovery, ACL and complete adversarial proof remain open; do not advance the ledger.
+P04 remains ineligible until P03 implementation and its revised ephemeral-profile
+gates are complete.
 
 ## Primary-source basis
 

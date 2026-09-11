@@ -3,11 +3,12 @@
 ## Active
 
 P03 / issue #6 is active on protected main
-`b0d42e8cd6f051866f9a18da1d0d3e8a947b0f38`; P01/P02 are complete. PR #35
-(`162ac7a`) is in review with the first production P03 contracts. It separates
-requested durability from a qualified publication guarantee, prevents generation
-wraparound and proves unsupported durability fails before the mutating port is called.
-No filesystem adapter or storage command is exposed yet.
+`9ee3c048e1460008cd4f6c3e16dc23f78115ad0d`; P01/P02 are complete. PR #35
+merged the first production P03 contracts. PR #36 (`df1c233`) is in review with an
+internal filesystem `SessionStore` that opens an existing explicit owned root,
+initializes a checksummed immutable generation zero through held-directory operations
+and a stable lock, and verifies state before idempotent reuse. It is not composed into
+the CLI; P03 remains incomplete.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -150,8 +151,8 @@ hardened.
 
 ## Next action
 
-Merge the P03 storage-contract increment, then implement the capability-safe
-filesystem `SessionStore`: ephemeral NTFS/APFS publication, safe containment and
-stable locks, followed by admission. P03 remains in progress and P04 is ineligible
-until the complete adapter and mapped tests merge. Do not pull P04+ or P15+ behavior
-into P03. The Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.
+Merge the internal filesystem `SessionStore`, then implement owned root provisioning,
+Windows ACL qualification, arbitrary initialization fault recovery, stable read/write
+holds and admission. P03 remains in progress and P04 is ineligible until the complete
+adapter and mapped tests merge. Do not pull P04+ or P15+ behavior into P03. The
+Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.

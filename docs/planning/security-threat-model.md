@@ -92,6 +92,12 @@ requires durable requests to fail before mutation. See the
 evidence remains a SEC-24 blocker for Ubuntu/ext4 durable enablement in P10/P11/P14,
 not a released vulnerability or closure of SEC-07..SEC-11 and SEC-18.
 
+PR #36 partially implements the SEC-07/SEC-10 seams for internal session initialization:
+held-directory relative operations, no-follow opens, single-link checks, stable locks,
+bounded strict metadata parsing, immutable manifest hashing and verified idempotent
+reuse. It is not publicly composed, and the remaining ACL, fault-injection, recovery,
+read-hold and admission gates keep all mapped P03 threats open.
+
 No-shell execution addresses one injection route. It does not confine a vulnerable
 decoder. Unix process groups aid termination; Windows Job Objects group processes;
 neither should be presented as a complete filesystem/network security boundary.
