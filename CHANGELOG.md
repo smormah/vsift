@@ -22,3 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaced environment-dependent CLI assertions with deterministic contract,
   compatibility, boundary, and property tests. Reserved operations fail explicitly
   without claiming their later implementation.
+- Routed external setup probes through a shell-free process supervisor with canonical
+  executable provenance, an allowlisted environment, bounded concurrent output,
+  shared deadlines, caller cancellation, descendant cleanup, and truthful reporting
+  of process containment versus strict worker isolation.

@@ -1,21 +1,57 @@
-use std::{io, time::Duration};
+//! Runtime dependency probing through the secure process supervisor.
 
-use tokio::{process::Command, time::timeout};
+use std::{ffi::OsStr, time::Duration};
+
+use tokio::time::Instant;
 use vsift_application::DependencyProbe;
 use vsift_domain::{DependencyState, DependencyStatus, RuntimeDependency};
+
+use crate::{
+    ExecutableResolutionError, ExecutableResolver, ProcessCancellation, ProcessError,
+    ProcessRequest, ProcessSupervisor, ProcessWorkingDirectory, TerminationReason,
+};
 
 const MAX_DIAGNOSTIC_LENGTH: usize = 240;
 
 /// Probes approved runtime executables without invoking a command shell.
+///
+/// One instance represents one setup-check operation. Its deadline is shared across every
+/// dependency probe, preventing a sequence of slow providers from multiplying the caller's
+/// configured operation timeout.
 pub struct ProcessDependencyProbe {
-    timeout: Duration,
+    operation_deadline: Instant,
+    resolver: ExecutableResolver,
+    supervisor: ProcessSupervisor,
 }
 
 impl ProcessDependencyProbe {
-    /// Creates a probe with a bounded execution time for each dependency.
+    /// Creates a probe with one total deadline and a safely filtered snapshot of `PATH`.
     #[must_use]
-    pub const fn new(timeout: Duration) -> Self {
-        Self { timeout }
+    pub fn new(operation_timeout: Duration) -> Self {
+        Self::configured(
+            operation_timeout,
+            ExecutableResolver::from_current_path(),
+            ProcessSupervisor::default(),
+        )
+    }
+
+    /// Creates a probe with explicit resolution and supervision policies.
+    #[must_use]
+    pub fn configured(
+        operation_timeout: Duration,
+        resolver: ExecutableResolver,
+        supervisor: ProcessSupervisor,
+    ) -> Self {
+        let now = Instant::now();
+        let operation_deadline = match now.checked_add(operation_timeout) {
+            Some(deadline) => deadline,
+            None => now,
+        };
+        Self {
+            operation_deadline,
+            resolver,
+            supervisor,
+        }
     }
 }
 
@@ -28,12 +64,78 @@ impl Default for ProcessDependencyProbe {
 impl DependencyProbe for ProcessDependencyProbe {
     async fn probe(&self, dependency: RuntimeDependency) -> DependencyStatus {
         let specification = ProbeSpecification::for_dependency(dependency);
-        let state = probe_process(specification, self.timeout).await;
-
+        let state = self.probe_process(specification).await;
         DependencyStatus { dependency, state }
     }
 }
 
+impl ProcessDependencyProbe {
+    async fn probe_process(&self, specification: ProbeSpecification) -> DependencyState {
+        let executable = match self.resolver.resolve(OsStr::new(specification.executable)) {
+            Ok(executable) => executable,
+            Err(ExecutableResolutionError::NotFound) => return DependencyState::Missing,
+            Err(error) => {
+                return DependencyState::Unhealthy {
+                    message: truncate(&error.to_string()),
+                };
+            }
+        };
+        let Some(working_directory_path) = executable.path().parent() else {
+            return DependencyState::Unhealthy {
+                message: String::from("provider executable has no working directory"),
+            };
+        };
+        let working_directory = match ProcessWorkingDirectory::new(working_directory_path) {
+            Ok(directory) => directory,
+            Err(error) => {
+                return DependencyState::Unhealthy {
+                    message: truncate(&error.to_string()),
+                };
+            }
+        };
+        let Some(remaining) = self
+            .operation_deadline
+            .checked_duration_since(Instant::now())
+        else {
+            return DependencyState::TimedOut;
+        };
+        if remaining.is_zero() {
+            return DependencyState::TimedOut;
+        }
+        let request = match ProcessRequest::new(executable, working_directory, remaining) {
+            Ok(request) => request.with_arguments(specification.arguments.iter().copied()),
+            Err(error) => {
+                return DependencyState::Unhealthy {
+                    message: truncate(&error.to_string()),
+                };
+            }
+        };
+
+        match self
+            .supervisor
+            .run(request, ProcessCancellation::new())
+            .await
+        {
+            Ok(outcome) if outcome.termination == TerminationReason::Deadline => {
+                DependencyState::TimedOut
+            }
+            Ok(outcome) if outcome.status.success() => DependencyState::Available {
+                version: first_non_empty_line(&outcome.stdout.bytes, &outcome.stderr.bytes),
+            },
+            Ok(outcome) => DependencyState::Unhealthy {
+                message: process_failure_message(outcome.termination, outcome.status),
+            },
+            Err(ProcessError::Spawn(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                DependencyState::Missing
+            }
+            Err(error) => DependencyState::Unhealthy {
+                message: truncate(&error.to_string()),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 struct ProbeSpecification {
     executable: &'static str,
     arguments: &'static [&'static str],
@@ -58,22 +160,17 @@ impl ProbeSpecification {
     }
 }
 
-async fn probe_process(specification: ProbeSpecification, deadline: Duration) -> DependencyState {
-    let mut command = Command::new(specification.executable);
-    command.args(specification.arguments).kill_on_drop(true);
-
-    match timeout(deadline, command.output()).await {
-        Err(_) => DependencyState::TimedOut,
-        Ok(Err(error)) if error.kind() == io::ErrorKind::NotFound => DependencyState::Missing,
-        Ok(Err(error)) => DependencyState::Unhealthy {
-            message: truncate(&error.to_string()),
-        },
-        Ok(Ok(output)) if output.status.success() => DependencyState::Available {
-            version: first_non_empty_line(&output.stdout, &output.stderr),
-        },
-        Ok(Ok(output)) => DependencyState::Unhealthy {
-            message: truncate(&format!("process exited with {}", output.status)),
-        },
+fn process_failure_message(
+    termination: TerminationReason,
+    status: std::process::ExitStatus,
+) -> String {
+    match termination {
+        TerminationReason::OutputLimit(_) => {
+            String::from("provider output exceeded the diagnostic limit")
+        }
+        TerminationReason::Cancelled => String::from("provider probe was cancelled"),
+        TerminationReason::Deadline => String::from("provider probe exceeded its deadline"),
+        TerminationReason::Exited => truncate(&format!("process exited with {status}")),
     }
 }
 

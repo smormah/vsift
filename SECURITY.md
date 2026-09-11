@@ -2,8 +2,12 @@
 
 VSift processes untrusted media and invokes specialist native tools. Security reports are taken seriously.
 
-The current implementation is a setup diagnostic scaffold. The
-[baseline review](docs/planning/baseline-review.md) records its known hardening gaps;
+The only executable workflow remains the setup diagnostic. P02 routes its external
+provider probes through a bounded, shell-free process supervisor with explicit
+executable provenance and descendant lifecycle containment. This does not make an
+ambient executable trusted or turn desktop process containment into a filesystem,
+network, CPU, memory or PID sandbox. The
+[baseline review](docs/planning/baseline-review.md) records remaining hardening gaps;
 the [threat model](docs/planning/security-threat-model.md) and
 [verification plan](docs/planning/verification.md) define proposed release controls.
 These documents do not certify that the planned mitigations have shipped.

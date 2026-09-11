@@ -59,3 +59,11 @@ remain optional, explicit and independently qualified.
 
 Until those results exist, documentation must say “qualification target” rather than
 “supported platform” or “production ready.”
+
+P02 adds a PR qualification job for the strict-worker process boundary. It runs the
+process contract inside a read-only, networkless Ubuntu 24.04 container with explicit
+CPU, memory, swap and PID limits and no added capabilities. The test verifies that a
+new process group remains inside the worker cgroup, induces observable CPU throttling,
+reaches the PID ceiling and confirms that a bounded over-limit allocation cannot
+complete successfully. That proves the supervisor's strict-mode attestation and
+fail-closed split; it is not the full P11 worker or P14 release qualification.

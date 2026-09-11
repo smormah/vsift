@@ -282,6 +282,16 @@ tree termination; reap and observe completion before releasing leases. The direc
 child and descendants need OS containment. Tokio documents child drop/cleanup behavior
 but it is not a sandbox: [Tokio process](https://docs.rs/tokio/latest/tokio/process/).
 
+P02 implements this boundary with canonical executable and working-directory types,
+an empty-by-default child environment, null stdin, independently capped concurrent
+drains, a shared operation deadline, caller cancellation and an effective-control
+report. Windows uses a Job Object assigned during suspended creation; Unix uses a
+process group. The latter is lifecycle coordination rather than a security sandbox.
+Required strict-worker execution is accepted only with a trusted Linux-host report of
+inherited container/cgroup filesystem, network, CPU, memory and PID controls; otherwise
+the boundary returns `ISOLATION_UNAVAILABLE` before spawn. Managed executable identity,
+version compatibility and installation remain P06.
+
 Windows: qualified Job Object lifecycle without breakaway; account for nested jobs
 and process assignment races. Linux worker: inherited restricted cgroup/container
 with CPU/memory/PID limits and an external supervisor; process groups assist normal

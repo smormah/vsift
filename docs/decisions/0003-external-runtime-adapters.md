@@ -19,3 +19,21 @@ The initial adapters are FFmpeg, FFprobe, and a `whisper.cpp`-compatible CLI.
 - Process failures and timeouts become typed results.
 - Direct library integration remains possible if later benchmarks justify the additional coupling.
 
+## P02 implementation note — 2026-09-10
+
+The process adapter uses `process-wrap` 10 through its safe Tokio API. Only its Job
+Object, process-group, kill-on-drop and Tokio features are enabled. The crate is
+actively published under `MIT OR Apache-2.0`, declares Rust 1.87 (below VSift's 1.98
+baseline), and adds Rust-only platform dependencies rather than an external native
+build toolchain. `cargo deny check` accepts its advisories, licences and sources.
+
+Windows providers are assigned to a Job Object during suspended creation. Unix
+providers lead a process group. Both adapters enforce lifecycle cleanup, but a Unix
+process group is not a security sandbox: filesystem, network, CPU, memory and PID
+limits must be inherited from the qualified Linux worker host and reported separately.
+The supervisor fails closed when strict isolation is required but unavailable.
+
+Setup-time ambient discovery ignores relative, empty and current-directory `PATH`
+entries, resolves a canonical absolute regular file, clears the child environment and
+records ambient provenance. This is a bring-your-own diagnostic path, not verified
+managed identity; checksums, version compatibility and managed precedence remain P06.
