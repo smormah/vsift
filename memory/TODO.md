@@ -3,17 +3,17 @@
 ## Current checkpoint
 
 2026-09-11: P03 / issue #6 remains active on protected main
-`9ee3c048e1460008cd4f6c3e16dc23f78115ad0d`. PR #35 merged typed storage
-guarantees and the pre-mutation durability gate. PR #36 (`df1c233`) is in review with
-the first internal capability-scoped session initializer. P03 remains incomplete.
+`65fe00c3d43405a6ed5c8bda8ae50a2896e80d65`. PR #35 merged typed storage
+guarantees and the pre-mutation durability gate; PR #36 merged the first internal
+capability-scoped session initializer. P03 remains incomplete.
 
 ## Pending
 
 - Implement and prove P03 handle-relative containment, stable locks, admission and
   process-crash-consistent ephemeral publication before completing the packet.
-- Merge PR #36, then add owned root provisioning/Windows ACL qualification and the
-  arbitrary fault-boundary recovery harness. Do not expose session CLI behavior or
-  introduce artifact/job ports before their first concrete P03 consumer.
+- Add owned root provisioning/Windows ACL qualification and the arbitrary
+  fault-boundary recovery harness. Do not expose session CLI behavior or introduce
+  artifact/job ports before their first concrete P03 consumer.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.
@@ -42,6 +42,13 @@ the first internal capability-scoped session initializer. P03 remains incomplete
 
 ## Completed
 
+- 2026-09-11: P03 implementation increments PR #35
+  (`9ee3c048e1460008cd4f6c3e16dc23f78115ad0d`) and PR #36
+  (`65fe00c3d43405a6ed5c8bda8ae50a2896e80d65`) established typed storage
+  guarantees plus the internal capability-scoped generation-zero initializer. The
+  second increment passed 105 local tests and all protected cross-platform/security
+  checks after its Unix lint regression was corrected. These increments do not
+  complete P03 or expose a storage/session command.
 - 2026-09-11: the narrower P03 storage qualification profile merged through PR #33
   as `c2b3829d77279a32b3487ab1170f820f1d68eeb5`. ADR 0010 permits
   process-crash-consistent ephemeral desktop publication, keeps explicit durable
