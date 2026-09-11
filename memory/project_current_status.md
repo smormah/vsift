@@ -3,10 +3,10 @@
 ## Active
 
 P03 / issue #6 is active on protected main
-`20675dee4e0fc9547ac98385b1aaf489142a851f`; P01/P02 are complete. PR #24 merged
-P03's bounded feasibility evidence but did not complete the packet. ADR 0010 acceptance
-is in progress in PR #33 (`47f65e3`) so the production adapter can resume against an
-honest ephemeral desktop guarantee.
+`c2b3829d77279a32b3487ab1170f820f1d68eeb5`; P01/P02 are complete. PR #24 merged
+P03's bounded feasibility evidence but did not complete the packet. PR #33 accepted
+ADR 0010's narrower profile, so the production adapter can resume against an honest
+ephemeral desktop guarantee.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -39,6 +39,18 @@ probes resolve default-handle synchronization failures. Exact OS versions and th
 remaining OS/storage crash gate are recorded; P03 is not complete.
 
 ## Complete
+
+### 2026-09-11 — P03 storage qualification profile
+
+PR #33 squash-merged as `c2b3829d77279a32b3487ab1170f820f1d68eeb5`.
+ADR 0010 permits P03 to implement process-crash-consistent ephemeral publication on
+Windows/NTFS and macOS/APFS. Retention may preserve an ephemeral workspace from VSift
+cleanup, but does not upgrade its durability guarantee. Explicit durable requests must
+fail before mutation until P10/P11/P14 complete the owned Ubuntu 24.04/ext4 OS/storage
+crash campaign and enable the strict worker profile.
+
+This is a qualification decision, not P03 completion. All protected checks passed;
+local evidence was 92 passing tests plus fmt, strict Clippy, governance and diff checks.
 
 ### 2026-09-11 — R1 industrial capability scope
 
@@ -137,8 +149,8 @@ hardened.
 
 ## Next action
 
-Merge the ADR 0010 profile decision, then resume only P03 storage/coordination
-implementation: ephemeral NTFS/APFS publication, safe containment/locks/admission,
-and fail-closed durable requests. P03 remains in progress and P04 is ineligible until
-that implementation and its mapped tests merge. Do not pull P04+ or P15+ behavior into
-P03. The Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.
+Resume only P03 storage/coordination implementation: ephemeral NTFS/APFS publication,
+safe containment/locks/admission, and fail-closed durable requests. P03 remains in
+progress and P04 is ineligible until that implementation and its mapped tests merge.
+Do not pull P04+ or P15+ behavior into P03. The Ubuntu/ext4 OS/storage crash campaign
+remains mandatory in P10/P11/P14.
