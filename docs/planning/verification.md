@@ -260,9 +260,13 @@ CI tiers:
 1. Every PR: fmt, strict Clippy, deterministic unit/property/contract tests, architecture
    dependency checks, schema/link checks, three-platform builds, dependency review,
    CodeQL and applicable fixture tests. Sensitive tests use no production credentials.
-2. Nightly: longer fuzzing, fault campaigns, fresh dependency provisioning,
+2. Major checkpoint, manually invoked: the cumulative
+   [end-to-end test spine](e2e-test-spine.md) with every production stage implemented
+   so far. It may use local models and sizeable synthetic media and is not required on
+   every PR or hosted CI run.
+3. Nightly: longer fuzzing, fault campaigns, fresh dependency provisioning,
    concurrency/soak, offline/proxy and native provider compatibility.
-3. Release candidate: supported OS/architecture/filesystem matrix; clean npm/native
+4. Release candidate: supported OS/architecture/filesystem matrix; clean npm/native
    install with no Rust; upgrade/rollback/uninstall; CPU reference benchmarks; strict
    worker isolation; explicit durable recovery; agent qualification; SBOM/provenance.
 

@@ -3,7 +3,7 @@
 Status: accepted R0 sequence with scoped R1 packets. P02 completed in PR #22
 (`4e9ef08`); P03 / issue #6 is active under accepted ADR 0010. Its feasibility
 evidence merged in PR #24 (`cbc531e`) without completing the packet. PR #35 merged
-the typed storage-guarantee contracts, and PR #36 is the first internal filesystem
+the typed storage-guarantee contracts, and PR #36 merged the first internal filesystem
 session-store increment. Tests reference [verification](verification.md), and CI
 enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
@@ -56,6 +56,12 @@ The sequence is intentionally conservative for implementation handoffs. Some wor
 can later proceed concurrently when contracts are stable (for example transcription
 and candidate extraction), using isolated branches and explicit integration ownership.
 No concurrent work is required or authorized by this document itself.
+
+Beginning with P04, each packet also extends the cumulative
+[end-to-end test spine](e2e-test-spine.md). The harness starts as a deterministic,
+opt-in mechanical journey and gains real components as their owning packets become
+eligible. P12 attaches named agent-client trials; P14 performs release qualification.
+This cross-packet test work does not authorize implementing a later packet early.
 
 ## R0 packets
 

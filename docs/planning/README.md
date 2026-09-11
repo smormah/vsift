@@ -3,9 +3,9 @@
 Status: accepted R0 implementation baseline with a scoped R1 expansion. Date: 2026-09-11.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
 Its decisions are accepted through P00. P01 and P02 are complete. P03 is active:
-its typed storage-guarantee contracts are merged and its first internal filesystem
-session-store increment is in review. Public storage/session behavior and the complete
-coordination/recovery proof remain unimplemented.
+its typed storage-guarantee contracts and first internal filesystem session-store
+increment are merged. Public storage/session behavior and the complete coordination/
+recovery proof remain unimplemented.
 
 ## Purpose and reading order
 
@@ -23,12 +23,14 @@ Read these documents together:
 3. [Threat model](security-threat-model.md): attack surfaces, controls, residual risks.
 4. [Verification specification](verification.md): fixtures, test cases, failure injection,
    agent evaluation, benchmarks, and release gates.
-5. [Implementation work packets](implementation-work-packets.md): ordered changes,
+5. [Incremental E2E test spine](e2e-test-spine.md): the cumulative mechanical and
+   agent journeys each implementation packet must extend.
+6. [Implementation work packets](implementation-work-packets.md): ordered changes,
    dependencies, completion criteria, and review responsibilities.
-6. [R1 industrial capability expansion](r1-industrial-capability-expansion.md):
+7. [R1 industrial capability expansion](r1-industrial-capability-expansion.md):
    managed indexing, enrichment, reconstruction and operated worker growth.
-7. [Baseline review](baseline-review.md): observed gaps in the existing scaffold.
-8. [Delivery governance](delivery-governance.md), [traceability](traceability.md), and
+8. [Baseline review](baseline-review.md): observed gaps in the existing scaffold.
+9. [Delivery governance](delivery-governance.md), [traceability](traceability.md), and
    [qualification profiles](support-and-resource-profiles.md): enforceable scope controls.
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
