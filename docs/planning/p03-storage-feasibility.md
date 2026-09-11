@@ -123,22 +123,36 @@ update script in this repository; none was invented.
 
 ## Native CI evidence
 
-Initial spike revision `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24:
-[CI run 34585026670](https://github.com/smormah/vsift/actions/runs/34585026670)
+Probe revision `a262fa9bbabb4bebc6ebde581204c4dbe0a8186d`, PR #24:
+[CI run 34585520298](https://github.com/smormah/vsift/actions/runs/34585520298)
 passed all three Quality jobs, documentation, governance and the strict-worker
-regression job. Security run 34585026624 and CodeQL run 34585026669 passed.
+regression job. [Security run 34585520299](https://github.com/smormah/vsift/actions/runs/34585520299)
+passed the strengthened dependency policy and dependency review. Ten storage
+experiments pass on each platform, with the internal child entry ignored by the
+normal runner and invoked explicitly by parent tests. The original spike
+`5f15c7730607570663d739b7a4dd70a03947e500` also passed its required checks in
+CI run 34585026670, Security run 34585026624 and CodeQL run 34585026669.
 
 | Host / filesystem | Primitive result | Qualification limit |
 | --- | --- | --- |
 | Local Windows 11 Pro 26200 / NTFS | Ten probes pass; default directory flush error 5, writable handle flush succeeds | No OS/storage fault campaign |
-| Hosted Windows Server 2025 build 26100 | Same ten observations as local Windows | Filesystem logging needs a corrected PowerShell formatter; not the Windows 11 target |
-| Hosted macOS 26.6.2 build 25G83 arm64 / APFS | Nine probes pass; default directory sync succeeds | Not the macOS 15 target; no OS/storage fault campaign |
-| Hosted Linux kernel 6.17.0-1022-azure x64 / ext4 (`commit=30`) | Nine probes pass; default capability directory sync returns EBADF (9) | O_PATH handle needs readable relative reopen; no OS/storage fault campaign |
+| Hosted Windows Server 2025 build 26100 / NTFS | Ten probes pass; writable directory flush succeeds | Not the Windows 11 target; no OS/storage fault campaign |
+| Hosted macOS 26.6.2 build 25G83 arm64 / APFS | Ten probes pass; default and relative-readable directory sync succeed | Not the macOS 15 target; no OS/storage fault campaign |
+| Hosted Ubuntu 24.04.5 LTS, kernel 6.17.0-1022-azure x64 / ext4 (`commit=30`) | Ten probes pass; default capability directory sync returns EBADF (9), relative-readable reopen sync succeeds | No OS/storage fault campaign |
 
-The next revision adds a Unix relative-readable-directory flush probe, explicit
-Linux OS-version logging and corrected Windows filesystem logging. API handle
-failures must be investigated before declaring a filesystem unsupported. No
-ordinary hosted-runner success qualifies the exact ADR 0005 platform profiles.
+API handle failures must be investigated before declaring a filesystem unsupported.
+These results establish usable safe API candidates on each observed filesystem;
+they do not establish the storage ordering contract after OS failure. No ordinary
+hosted-runner success qualifies the exact ADR 0005 platform profiles. Local
+inspection found no registered Hyper-V VM and no QEMU, VirtualBox or VMware CLI;
+existing WSL distributions are not identified as disposable fault targets. No host
+or user VM was restarted, crashed or reconfigured.
+
+The post-test security review found no additional issue in this test-only diff.
+R0 filesystem/admission/publication controls remain unimplemented; the passing
+spike and the strengthened dependency check must not be used to close their
+threats or advance the ledger. The next action is qualification-environment/design
+acceptance, not P04 implementation.
 
 ## Primary-source basis
 

@@ -20,6 +20,11 @@ checks pass (92 tests, fmt, strict clippy, governance and warning-denied rustdoc
 Post-test security review found cargo-deny's dev-only licence/duplicate checks
 were off by default; they are now explicit, including a recorded MIT-0 review for
 the already-locked P01 test dependency. No advisory or per-package exception added.
+Follow-up `a262fa9bbabb4bebc6ebde581204c4dbe0a8186d` passed ten storage experiments
+on each of NTFS, APFS and ext4 (CI run 34585520298); dependency policy/review passed
+with development auditing enabled (run 34585520299). Safe writable/readable handle
+probes resolve default-handle synchronization failures. Exact OS versions and the
+remaining OS/storage crash gate are recorded; P03 is not complete.
 
 ## Complete
 
