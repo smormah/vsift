@@ -2,21 +2,11 @@
 
 ## Active
 
-P03 / issue #6 is active from protected-main predecessor `f03941a`; P01/P02 are
-complete. PR #35
-merged the first production P03 contracts. PR #36 merged an internal filesystem
-`SessionStore` that opens an existing explicit owned root, initializes a checksummed
-immutable generation zero through held-directory operations and a stable lock, and
-verifies state before idempotent reuse. It is not composed into the CLI; P03 remains
-incomplete. PR #38 (`3fd29247bb241e4aa6f5561e410a06ed5d1cf839`) corrected the
-parallel Windows test-root collision exposed by the PR #37 evidence rerun and
-consolidated that evidence so only one record advanced. The unmerged completion
-candidate adds owned root provisioning with Unix owner/mode and Windows DACL checks,
-root-wide weighted OS-lock admission, shared/exclusive lifetime holds, fenced later
-generations, bounded integrity-chain validation and process-crash recovery across all
-manifest/pointer write, flush and rename boundaries. It remains internal and preserves
-the durable pre-mutation rejection. P03 stays active until protected checks, merge,
-ledger evidence and issue closure complete.
+P03's implementation completed through protected PR #42 as
+`3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`; this evidence-only follow-up records
+the ledger and handoff state, and issue #6 is closed. The filesystem `SessionStore`
+remains internal and explicit durable requests still fail before mutation. P04 is the
+next eligible packet but remains planned and no storage/session command is exposed.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -52,9 +42,34 @@ Follow-up `a262fa9bbabb4bebc6ebde581204c4dbe0a8186d` passed ten storage experime
 on each of NTFS, APFS and ext4 (CI run 34585520298); dependency policy/review passed
 with development auditing enabled (run 34585520299). Safe writable/readable handle
 probes resolve default-handle synchronization failures. Exact OS versions and the
-remaining OS/storage crash gate are recorded; P03 is not complete.
+remaining OS/storage crash gate are recorded. That gate is P10/P11/P14 work and does
+not invalidate P03's completed ephemeral profile.
 
 ## Complete
+
+### 2026-09-11 — P03 ephemeral storage and coordination
+
+PR #42 squash-merged as `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`.
+P03 now provides owned private-root provisioning, Unix owner/mode and Windows DACL
+validation, immutable weighted admission, shared/exclusive cross-process lifetime
+holds, writer fencing, monotonic immutable generations, a bounded SHA-256-linked
+manifest chain, typed integrity/version/access/capacity failures and deterministic
+recovery at every manifest/pointer write, flush and rename boundary. Same-operation
+retry is idempotent, stale generations conflict, and unpublished attempts are ignored.
+
+Local evidence is 128 passing tests, with three internal child entries intentionally
+ignored by the ordinary runner and launched by watchdog-bounded parents, plus fmt,
+strict Clippy, warning-denied rustdoc, governance and cargo-deny. Protected Quality
+passed on Ubuntu, Windows and macOS; Governance, Documentation, strict-worker,
+Dependency policy/review, CodeQL and Rust analysis passed. The completed profile is
+process-crash-consistent ephemeral desktop storage only. Strict Ubuntu/ext4
+OS/storage crash durability remains P10/P11/P14 work and durable requests remain
+fail-closed.
+
+PR #43's first Windows evidence run exposed that two lock-contention tests treated
+100 scheduler yields as a timing budget. They now retry `Busy` against a five-second
+monotonic deadline with 10 ms intervals. Both passed ten consecutive targeted runs,
+then the full 128-test local suite and strict Clippy passed again.
 
 ### 2026-09-11 — P03 storage contract and initializer increments
 
@@ -71,8 +86,9 @@ Ubuntu after a Unix-only needless-return lint was found and corrected. A later W
 run exposed time-only fixture-root naming as intermittently non-unique under parallel
 tests; PR #38 added a process-local monotonic discriminator and an identical-timestamp
 regression test. The corrected suite passes 106 local tests and every protected job.
-P03 remains active: root provisioning/Windows ACL qualification, arbitrary fault
-recovery, later generation publication, read/write holds and admission are not complete.
+At that increment, P03 remained active: root provisioning/Windows ACL qualification,
+arbitrary fault recovery, later generation publication, read/write holds and admission
+were not yet complete. PR #42 subsequently completed them as recorded above.
 
 ### 2026-09-11 — P03 storage qualification profile
 
@@ -183,8 +199,5 @@ hardened.
 
 ## Next action
 
-Merge the internal filesystem `SessionStore`, then implement owned root provisioning,
-Windows ACL qualification, arbitrary initialization fault recovery, stable read/write
-holds and admission. P03 remains in progress and P04 is ineligible until the complete
-adapter and mapped tests merge. Do not pull P04+ or P15+ behavior into P03. The
-Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.
+Start P04 only through its governed packet workflow. Do not pull P05+ or P15+ behavior
+into P04. The Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.

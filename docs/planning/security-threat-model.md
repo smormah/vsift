@@ -92,8 +92,8 @@ requires durable requests to fail before mutation. See the
 evidence remains a SEC-24 blocker for Ubuntu/ext4 durable enablement in P10/P11/P14,
 not a released vulnerability or closure of SEC-07..SEC-11 and SEC-18.
 
-PR #36 established the SEC-07/SEC-10 initialization seam. The P03 completion candidate
-adds owned-root provisioning, Unix ownership/mode and Windows DACL validation,
+PR #36 established the SEC-07/SEC-10 initialization seam. PR #42 (`3eef9b7`) adds
+owned-root provisioning, Unix ownership/mode and Windows DACL validation,
 handle-relative operations, no-follow/single-link checks, immutable weighted-admission
 slots, shared/exclusive lifetime holds, writer fencing, bounded linked-manifest
 integrity, future-version rejection and deterministic error/process-kill recovery at

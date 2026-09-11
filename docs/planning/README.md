@@ -2,10 +2,10 @@
 
 Status: accepted R0 implementation baseline with a scoped R1 expansion. Date: 2026-09-11.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
-Its decisions are accepted through P00. P01 and P02 are complete. P03 is active:
-its typed contracts and initializer are merged, and its private-root, stable-lock,
-weighted-admission, later-generation publication and recovery completion candidate
-awaits protected review. No public storage/session command is exposed.
+Its decisions are accepted through P00. P01, P02 and P03 are complete. P03's internal
+private-root, stable-lock, weighted-admission, later-generation publication and
+process-crash recovery boundary merged in PR #42 (`3eef9b7`). No public
+storage/session command is exposed; P04 is the next eligible packet.
 
 ## Purpose and reading order
 

@@ -2,18 +2,15 @@
 
 ## Current checkpoint
 
-2026-09-11: P03 / issue #6 remains active from protected-main predecessor
-`f03941a`. PR #35 merged typed storage
-guarantees and the pre-mutation durability gate; PR #36 merged the first internal
-capability-scoped session initializer. PR #38 corrected the parallel Windows test-root
-collision exposed by PR #37 and consolidated the merge evidence. The completion
-candidate now implements private provisioning/ACL checks, admission, lifetime holds,
-later generations and boundary recovery; protected review and merge evidence remain.
+2026-09-11: P03's implementation completed through protected PR #42 as
+`3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`. Its private provisioning and ACL
+checks, weighted admission, lifetime holds, fenced generations and process-crash
+recovery remain internal; no storage/session command is exposed. This evidence-only
+follow-up records the completed ledger state; issue #6 is closed. P04 is now the next
+eligible packet but remains planned.
 
 ## Pending
 
-- Merge the P03 completion candidate through protected checks, then record its merge
-  hash/evidence in the ledger and close issue #6. Do not expose session CLI behavior.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.
@@ -29,7 +26,8 @@ later generations and boundary recovery; protected review and merge evidence rem
   `a262fa9bbabb4bebc6ebde581204c4dbe0a8186d` passed ten storage experiments each
   on NTFS, APFS and ext4 in CI run 34585520298; strengthened dependency checks pass
   in run 34585520299. Exact environments and the unresolved OS/storage crash gate
-  are recorded in the P03 feasibility document. P03 remains incomplete.
+  are recorded in the P03 feasibility document. P03's narrower ephemeral profile is
+  complete; this durable qualification remains P10/P11/P14 work.
 - Preserve the complete R0 local-video-to-grounded-handoff journey. It must pass with
   supplied-transcript and local-ASR paths through named Codex and Claude Code clients;
   do not defer product usefulness to R1.
@@ -45,6 +43,22 @@ later generations and boundary recovery; protected review and merge evidence rem
   future issues #25 through #30.
 
 ## Completed
+
+- 2026-09-11: P03 completed in protected PR #42 as
+  `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`. It added owned private-root
+  provisioning, Unix owner/mode and Windows DACL validation, immutable root-wide
+  weighted admission, cross-process shared/exclusive lifetime coordination, fenced
+  immutable generation publication, bounded linked-manifest verification and recovery
+  at every manifest/pointer write, flush and rename boundary. Durable initialization
+  and publication fail before mutation. The local workspace passed 128 tests (three
+  child-process entries intentionally ignored and launched by parent tests), fmt,
+  strict Clippy, rustdoc, governance and cargo-deny. All protected three-OS quality,
+  governance/documentation, strict-worker, dependency and CodeQL/Rust checks passed.
+  The adapter remains internal, strict OS/storage crash durability remains assigned to
+  P10/P11/P14, and P04 remains planned until separately started.
+  PR #43's first Windows run also exposed a timing-only concurrency-test weakness;
+  its bounded monotonic retry fix passed ten consecutive targeted runs and the full
+  local gate set before protected checks were rerun.
 
 - 2026-09-11: P03 implementation increments PR #35
   (`9ee3c048e1460008cd4f6c3e16dc23f78115ad0d`) and PR #36
