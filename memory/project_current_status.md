@@ -3,13 +3,14 @@
 ## Active
 
 P03 / issue #6 is active on protected main
-`65fe00c3d43405a6ed5c8bda8ae50a2896e80d65`; P01/P02 are complete. PR #35
+`3fd29247bb241e4aa6f5561e410a06ed5d1cf839`; P01/P02 are complete. PR #35
 merged the first production P03 contracts. PR #36 merged an internal filesystem
 `SessionStore` that opens an existing explicit owned root, initializes a checksummed
 immutable generation zero through held-directory operations and a stable lock, and
 verifies state before idempotent reuse. It is not composed into the CLI; P03 remains
-incomplete. PR #38 corrects the parallel Windows test-root collision exposed by the
-PR #37 evidence rerun and consolidates that evidence so only one record advances.
+incomplete. PR #38 (`3fd29247bb241e4aa6f5561e410a06ed5d1cf839`) corrected the
+parallel Windows test-root collision exposed by the PR #37 evidence rerun and
+consolidated that evidence so only one record advanced.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -56,10 +57,10 @@ Local evidence is 105 passing tests plus fmt, strict Clippy, governance, warning
 rustdoc and dependency policy. PR #36 passed every protected job on Windows, macOS and
 Ubuntu after a Unix-only needless-return lint was found and corrected. A later Windows
 run exposed time-only fixture-root naming as intermittently non-unique under parallel
-tests; PR #38 adds a process-local monotonic discriminator and an identical-timestamp
-regression test. P03 remains active: root provisioning/Windows ACL qualification,
-arbitrary fault recovery, later generation publication, read/write holds and admission
-are not complete.
+tests; PR #38 added a process-local monotonic discriminator and an identical-timestamp
+regression test. The corrected suite passes 106 local tests and every protected job.
+P03 remains active: root provisioning/Windows ACL qualification, arbitrary fault
+recovery, later generation publication, read/write holds and admission are not complete.
 
 ### 2026-09-11 — P03 storage qualification profile
 
