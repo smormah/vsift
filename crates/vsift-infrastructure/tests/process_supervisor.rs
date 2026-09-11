@@ -184,18 +184,17 @@ fn fixture_pid_pressure() -> Result<(), Box<dyn Error>> {
     let mut children = Vec::new();
     let mut limit_observed = false;
     for _ in 0..128 {
-        match Command::new(sleep)
+        if let Ok(child) = Command::new(sleep)
             .arg("60")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
         {
-            Ok(child) => children.push(child),
-            Err(_) => {
-                limit_observed = true;
-                break;
-            }
+            children.push(child);
+        } else {
+            limit_observed = true;
+            break;
         }
     }
 
