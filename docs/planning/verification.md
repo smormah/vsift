@@ -83,8 +83,11 @@ alone does not run arbitrary long processing.
 P03's [feasibility spike](p03-storage-feasibility.md) runs bounded native API
 experiments in `crates/vsift-infrastructure/tests/storage_feasibility.rs`.
 Windows default read-only directory flush fails, while explicit writable-directory
-flush succeeds. Both are observations, never a passing P03 durability gate.
-The full S/X suites below remain planned; CI records native filesystem identity.
+flush succeeds. Both are observations, never durable qualification. ADR 0010 now
+allows P03 to qualify process-crash-consistent ephemeral desktop publication while
+durable requests fail before mutation. The full mapped P03 S/X cases still apply;
+CI records native filesystem identity. P10/P11/P14 own the later Ubuntu/ext4
+OS/storage crash evidence required to enable strict worker durability.
 
 | ID | Cases | Expected assertion |
 | --- | --- | --- |
@@ -106,7 +109,9 @@ process, kill before and after that boundary; restart using the same root, then
 validate every committed generation and sentinel outside the root. Repeat under
 concurrency. Process-kill testing proves process recovery, not power-loss durability.
 Qualify power-loss claims with disposable VM/storage fault tests that interrupt the
-OS/storage path, checking actual post-restart disk contents.
+OS/storage path, checking actual post-restart disk contents. Under ADR 0010 the first
+campaign is required for Ubuntu 24.04/ext4 before P10/P11 can enable durable mode;
+NTFS/APFS R0 desktop qualification remains ephemeral.
 
 ## 4. Media, transcript and visual accuracy
 

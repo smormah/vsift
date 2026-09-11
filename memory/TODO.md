@@ -2,21 +2,21 @@
 
 ## Current checkpoint
 
-2026-09-11: P03 / issue #6 remains active at its ADR 0006 feasibility gate on
-protected main `0cfdb407f805282995f326ca93c99bc7170eda04`. PR #24 merged the bounded
-feasibility evidence but did not complete P03. PR #31 accepted the R1 scope and ADR
-0011 as `0cfdb407f805282995f326ca93c99bc7170eda04`; it authorizes no P15+ runtime work.
+2026-09-11: P03 / issue #6 remains active on protected main
+`20675dee4e0fc9547ac98385b1aaf489142a851f`. The narrower storage-profile decision
+is being accepted in PR #33 from `47f65e3`: ephemeral NTFS/APFS P03 work may proceed,
+while strict Ubuntu/ext4 durability remains disabled until P10/P11/P14.
 
 ## Pending
 
-- Prove P03 handle-relative containment, stable locks and publication/flush behavior
-  before expanding the filesystem adapter; record any failed feasibility gate.
+- Implement and prove P03 handle-relative containment, stable locks, admission and
+  process-crash-consistent ephemeral publication before completing the packet.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.
-  Production expansion remains gated. Review `docs/planning/p03-storage-feasibility.md`
-  and proposed ADR 0010; supply disposable native fault environments or accept a
-  narrower qualification plan before resuming.
+  ADR 0010 accepts the narrower desktop profile; do not treat this as durable evidence.
+  Supply an owned disposable Ubuntu/ext4 fault environment before P10/P11 durable
+  enablement and keep explicit durable requests fail-closed until then.
 - Resolve baseline findings B-01..B-11 through their mapped implementation packets.
 - P03 spike implementation: `5f15c7730607570663d739b7a4dd70a03947e500`, merged
   through PR #24 as `cbc531e80761078354be0b9942c52f00ddac05b0`.

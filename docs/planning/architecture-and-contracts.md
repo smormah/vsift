@@ -228,11 +228,14 @@ Durability modes:
   atomic publication, and persist required metadata before success. Failure to
   satisfy platform guarantees returns an error; no silent downgrade.
 
-The platform adapter must demonstrate the exact ordering on NTFS, APFS and a qualified
-Linux local filesystem, including atomic replacement and file/directory flush behavior.
-Rust exposes synchronization and rename operations, but portability does not itself
-establish identical crash guarantees. See [Rust File](https://doc.rust-lang.org/std/fs/struct.File.html)
-and [rename](https://doc.rust-lang.org/std/fs/fn.rename.html).
+The platform adapter must demonstrate process-crash-consistent publication on the
+qualified desktop NTFS/APFS profiles. Strict durable acknowledgement is enabled only
+after the Ubuntu 24.04/ext4 publication ordering passes an owned disposable OS/storage
+crash campaign in P10/P11/P14. Rust exposes synchronization and rename operations, but
+portability does not itself establish identical crash guarantees. See
+[ADR 0010](../decisions/0010-storage-qualification-gate.md),
+[Rust File](https://doc.rust-lang.org/std/fs/struct.File.html) and
+[rename](https://doc.rust-lang.org/std/fs/fn.rename.html).
 
 Recovery chooses a verified committed generation, checks referenced objects, ignores
 unpublished attempts, and returns interrupted stages to resumable state. Do not infer

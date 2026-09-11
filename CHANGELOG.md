@@ -13,8 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   industrial worker growth and integrated qualification in P15-P20. R0 now has an
   explicit two-agent end-to-end release gate and MCP remains a later adapter.
 - P03 native filesystem/lock feasibility experiments and a recorded OS/storage
-  crash-qualification blocker. Production storage remains gated; proposed ADR 0010
-  records a narrower qualification option without accepting it.
+  crash-qualification blocker. ADR 0010 now accepts ephemeral NTFS/APFS desktop
+  qualification for P03 and defers strict Ubuntu/ext4 durable enablement to the
+  P10/P11/P14 fault campaign.
 
 - Initial Rust workspace and architectural boundaries.
 - Read-only `vsift setup check` runtime diagnostic with versioned JSON output.

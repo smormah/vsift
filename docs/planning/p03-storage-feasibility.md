@@ -1,9 +1,10 @@
 # P03 storage feasibility record
 
 Date: 2026-09-11. Predecessor: `25c3aad01fc9e2fc391c5c016295df5aff61fbdd`.
-Issue: [#6](https://github.com/smormah/vsift/issues/6). Status: durability
-qualification gate unmet; production expansion stopped. P03 remains in progress. Proposed
-[ADR 0010](../decisions/0010-storage-qualification-gate.md) requires design acceptance.
+Issue: [#6](https://github.com/smormah/vsift/issues/6). Status: feasibility evidence
+recorded; [ADR 0010](../decisions/0010-storage-qualification-gate.md) accepts the
+narrower ephemeral desktop profile and permits P03 production implementation to
+resume. P03 remains in progress; durable enablement remains gated to P10/P11/P14.
 
 ## Candidate dependency review
 
@@ -101,13 +102,15 @@ cancellation; full concurrent stale-generation/idempotency races; owned cleanup;
 OS/storage crash/restart acknowledgement tests. S-01..S-03/S-07/S-08/S-12 and
 X-01..X-05 are **not complete**. SEC-07..SEC-11, SEC-18 and SEC-24 remain open.
 
-The blocking evidence gap is the required disposable OS/storage fault campaign.
+The blocking evidence gap for a strict durable claim is the required disposable
+OS/storage fault campaign.
 No such harness is configured in the repository or this task. The local Windows
 workstation must not be crashed for a probe, and ordinary GitHub hosted jobs do
 not provide restart/recovery control over their underlying storage. An owned
 disposable environment and reviewed publication/ack protocol are needed. The
-proposed narrower profile is an option if those environments cannot be supplied,
-not a conclusion that Windows or macOS cannot implement safe storage.
+accepted narrower profile uses ephemeral NTFS/APFS qualification for P03 and defers
+Ubuntu/ext4 durable enablement to P10/P11/P14. This is not a conclusion that Windows
+or macOS cannot implement safe durable storage in a later profile.
 
 ## Local validation and security review
 
@@ -149,10 +152,10 @@ existing WSL distributions are not identified as disposable fault targets. No ho
 or user VM was restarted, crashed or reconfigured.
 
 The post-test security review found no additional issue in this test-only diff.
-R0 filesystem/admission/publication controls remain unimplemented; the passing
-spike and the strengthened dependency check must not be used to close their
-threats or advance the ledger. The next action is qualification-environment/design
-acceptance, not P04 implementation.
+R0 filesystem/admission/publication controls remain unimplemented; the passing spike
+and strengthened dependency check must not be used to close their threats or advance
+the ledger. ADR 0010 now permits the P03 adapter work only. P04 remains ineligible
+until P03 implementation and its revised ephemeral-profile gates are complete.
 
 ## Primary-source basis
 

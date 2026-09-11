@@ -7,9 +7,9 @@ Date: 2026-09-10.
 
 | Profile | Target | Filesystem | Required qualification |
 | --- | --- | --- | --- |
-| Desktop Windows | Windows 11 25H2 x64, `x86_64-pc-windows-msvc` | Local NTFS | CLI, setup, sessions, native provider lifecycle, cancellation and crash recovery |
-| Desktop macOS | macOS 15 arm64, `aarch64-apple-darwin` | Local APFS | Same desktop behavior; report available process/resource confinement |
-| Strict worker Linux | Ubuntu 24.04 LTS x86-64, `x86_64-unknown-linux-gnu` | Local ext4 | Headless job/batch, cgroup-v2/container limits, durable recovery and shutdown |
+| Desktop Windows | Windows 11 25H2 x64, `x86_64-pc-windows-msvc` | Local NTFS | CLI, setup, ephemeral sessions, native provider lifecycle, cancellation and process-crash recovery |
+| Desktop macOS | macOS 15 arm64, `aarch64-apple-darwin` | Local APFS | Same ephemeral desktop behavior; report available process/resource confinement |
+| Strict worker Linux | Ubuntu 24.04 LTS x86-64, `x86_64-unknown-linux-gnu` | Local ext4 | Headless job/batch, cgroup-v2/container limits, durable recovery and shutdown after P10/P11 fault qualification |
 
 Windows and macOS worker use may be qualified later, but R0 makes no strict-worker
 claim for them. Linux desktop use and other distributions may work without an R0
@@ -50,10 +50,11 @@ remain optional, explicit and independently qualified.
 
 ## Evidence required to claim support
 
-P03's [filesystem feasibility record](p03-storage-feasibility.md) records native
-API experiments and missing OS/storage crash evidence. None of these storage profiles is qualified.
-Proposed ADR 0010 would narrow durable qualification, but is not accepted; this
-matrix and ADRs 0005/0006 remain the current targets.
+P03's [filesystem feasibility record](p03-storage-feasibility.md) records native API
+experiments and missing OS/storage crash evidence. [ADR 0010](../decisions/0010-storage-qualification-gate.md)
+accepts ephemeral desktop qualification as the P03 target. No storage profile is
+qualified merely by that decision. Strict durable acknowledgement remains disabled
+until the Ubuntu/ext4 P10/P11/P14 crash campaign passes.
 
 - Fresh-machine installation without Rust, upgrade, rollback and uninstall.
 - All deterministic PR checks plus platform process/filesystem conformance tests.

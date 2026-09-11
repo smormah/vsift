@@ -148,7 +148,7 @@ P00 accepted these decisions on 2026-09-10. The linked ADRs are authoritative.
 | DEC-02 | Qualify Windows 11 25H2 x64, macOS 15 arm64 and Ubuntu 24.04 x64 targets | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
 | DEC-03 | Evaluate CPU whisper.cpp multilingual base as the default candidate | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
 | DEC-04 | Desktop idle TTL 24 hours and absolute lifetime seven days | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
-| DEC-05 | Durable workers require an explicit qualified local workspace | [0006](../decisions/0006-workspace-publication-and-durability.md) |
+| DEC-05 | Durable workers require an explicit qualified local workspace; R0 enablement is Ubuntu/ext4 only after P10/P11 qualification | [0010](../decisions/0010-storage-qualification-gate.md) |
 | DEC-06 | Publish immutable artifacts through versioned manifest generations | [0006](../decisions/0006-workspace-publication-and-durability.md) |
 | DEC-07 | Use explicit pinned per-user managed dependency plans | [0007](../decisions/0007-managed-runtime-provisioning.md) |
 | DEC-08 | Keep executable `vsift`; recheck unscoped npm name before release | [0009](../decisions/0009-package-identity-and-distribution.md) |
@@ -156,7 +156,7 @@ P00 accepted these decisions on 2026-09-10. The linked ADRs are authoritative.
 | DEC-10 | Preserve setup v1 and use typed v1 envelopes for new operations | [0008](../decisions/0008-cli-and-json-contract.md) |
 | DEC-11 | Qualify the strict Linux worker profile first | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
 | DEC-12 | Keep diarization, OCR, embeddings and stitching outside R0 | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
-| DEC-13 | Reject required filesystem/source guarantees that a target cannot prove | [0006](../decisions/0006-workspace-publication-and-durability.md) |
+| DEC-13 | Reject required filesystem/source guarantees that a target cannot prove; never downgrade durable requests | [0010](../decisions/0010-storage-qualification-gate.md) |
 
 Existing decisions retained: Rust core, npm as distribution, CLI primary surface,
 optional skill/MCP adapters, explicit persistence, source authority, and strict module
@@ -181,6 +181,7 @@ unsupported environments instead of claiming vulnerability-free software.
 P00 established decisions, fixture truth, traceability and anti-drift controls in
 PR #18 (`924f6c5`); PR #20 (`3d7a7d2`) completed P01; and PR #22 (`4e9ef08`)
 completed P02 through protected review. P03 feasibility evidence merged through
-PR #24 (`cbc531e`), but P03 remains active at the unresolved OS/storage crash
-qualification gate. Their evidence and limitations are recorded in the ledger and
-the [P03 feasibility record](p03-storage-feasibility.md).
+PR #24 (`cbc531e`). ADR 0010 accepts the narrower ephemeral desktop profile, so P03
+production implementation may resume while strict durable enablement remains assigned
+to P10/P11/P14. The evidence and limitations are recorded in the ledger and the
+[P03 feasibility record](p03-storage-feasibility.md).
