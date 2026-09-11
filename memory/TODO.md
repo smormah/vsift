@@ -3,9 +3,9 @@
 ## Current checkpoint
 
 2026-09-11: P03 / issue #6 remains active on protected main
-`20675dee4e0fc9547ac98385b1aaf489142a851f`. The narrower storage-profile decision
-is being accepted in PR #33 from `47f65e3`: ephemeral NTFS/APFS P03 work may proceed,
-while strict Ubuntu/ext4 durability remains disabled until P10/P11/P14.
+`c2b3829d77279a32b3487ab1170f820f1d68eeb5`. PR #33 accepted the narrower
+storage profile: ephemeral NTFS/APFS P03 work may proceed, while strict Ubuntu/ext4
+durability remains disabled until P10/P11/P14.
 
 ## Pending
 
@@ -39,6 +39,11 @@ while strict Ubuntu/ext4 durability remains disabled until P10/P11/P14.
 
 ## Completed
 
+- 2026-09-11: the narrower P03 storage qualification profile merged through PR #33
+  as `c2b3829d77279a32b3487ab1170f820f1d68eeb5`. ADR 0010 permits
+  process-crash-consistent ephemeral desktop publication, keeps explicit durable
+  requests fail-closed, and assigns strict Ubuntu/ext4 durability qualification to
+  P10/P11/P14. P03 implementation remains pending.
 - 2026-09-11: the R1 managed industrial capability expansion merged through PR #31
   as `0cfdb407f805282995f326ca93c99bc7170eda04`. ADR 0011 preserves a complete R0
   video-to-grounded-handoff release gate and reserves R1 requirements R-15..R-20,
