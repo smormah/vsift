@@ -3,16 +3,16 @@
 ## Active
 
 P03 / issue #6 is active at the storage feasibility gate on protected main
-`cbc531e80761078354be0b9942c52f00ddac05b0`; P01/P02 are complete. PR #24 merged
+`0cfdb407f805282995f326ca93c99bc7170eda04`; P01/P02 are complete. PR #24 merged
 P03's bounded feasibility evidence but did not complete the packet. Adapter expansion
 is conditional on ADR 0006's native containment/lock/flush evidence.
 
-The R1 managed industrial capability boundary is being recorded on
-`docs/r1-industrial-capability-scope` in PR #31. Planning commits `63aec84` and
-`56555bd` accept ADR 0011, reserve P15-P20 for contracts/corpus, enrichment,
-source-grounded composition, managed catalogue, industrial worker plane and integrated
-qualification, and create milestone 2 with issues #25-#30. This is roadmap work only:
-P15+ implementation remains ineligible until P14 and P15's decision/fixture/ledger gate.
+The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
+(`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
+contracts/corpus, enrichment, source-grounded composition, managed catalogue,
+industrial worker plane and integrated qualification, with milestone 2 and issues
+#25-#30. This is roadmap work only: P15+ implementation remains ineligible until P14
+and P15's decision/fixture/ledger gate.
 R0 issues #15 and #17 now include the named two-client, supplied-transcript and
 local-ASR end-to-end release evidence required by A-08/A-09.
 
@@ -36,6 +36,23 @@ probes resolve default-handle synchronization failures. Exact OS versions and th
 remaining OS/storage crash gate are recorded; P03 is not complete.
 
 ## Complete
+
+### 2026-09-11 — R1 industrial capability scope
+
+PR #31 squash-merged as `0cfdb407f805282995f326ca93c99bc7170eda04`.
+ADR 0011 makes R1 the explicit managed industrial expansion while keeping R0 a fully
+functional local-video investigation. R0 now requires supplied-transcript and local-ASR
+paths through named Codex and Claude Code clients; a scaffold-only, transcript-only or
+frame-only build cannot qualify. R1 requirements R-15..R-20 and packets P15..P20 own
+optional enrichment, source-grounded reconstruction, explicit managed catalogue,
+industrial worker growth and integrated production qualification. SQLite remains a
+candidate single-node adapter; MCP and public hostile multi-tenancy remain R2.
+
+Milestone 2 and issues #25-#30 preserve the future work. R0 issues #15/#17 carry the
+new A-08/A-09 end-to-end gate. All PR checks passed across three OS quality jobs,
+governance, documentation, strict-worker boundary, dependency policy/review, Rust
+analysis and CodeQL. Local evidence was 92 passing tests plus fmt, strict Clippy,
+governance, warning-denied rustdoc and diff checks.
 
 ### 2026-09-11 — P02 secure process execution
 
