@@ -34,6 +34,10 @@ collision exposed by PR #37 and consolidated the merge evidence. P03 remains inc
 - Preserve the complete R0 local-video-to-grounded-handoff journey. It must pass with
   supplied-transcript and local-ASR paths through named Codex and Claude Code clients;
   do not defer product usefulness to R1.
+- Track the cumulative opt-in E2E spine in `docs/planning/e2e-test-spine.md` and issue
+  #40. P04 must bootstrap the real-media mechanical runner; every P04-P13 packet must
+  attach its production stage or explicitly record why none applies. Do not postpone
+  mechanical integration until P12/P14 or treat the planned framework as a passing run.
 - Preserve managed indexing, optional enrichment, source-grounded reconstruction,
   industrial worker growth and integrated qualification as R1 packets P15..P20 under
   ADR 0011 and `docs/planning/r1-industrial-capability-expansion.md`. SQLite remains

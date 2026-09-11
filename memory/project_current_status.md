@@ -31,6 +31,12 @@ Ubuntu/ext4 durability proof and
 enablement to P10/P11/P14; durable requests must fail before mutation until then.
 No storage operation is exposed yet.
 
+The incremental R0 E2E spine is tracked in `docs/planning/e2e-test-spine.md` and issue
+#40. P04 will bootstrap the executable real-media runner, P07 will attach both
+transcript paths, P09 will complete the mechanical video-to-evidence journey, and P12
+will add named Codex/Claude trials. It is opt-in at major checkpoints and mandatory at
+release; the planning framework is not implementation evidence.
+
 Spike commit: `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24. Local Windows
 checks pass (92 tests, fmt, strict clippy, governance and warning-denied rustdoc).
 Post-test security review found cargo-deny's dev-only licence/duplicate checks
