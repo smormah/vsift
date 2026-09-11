@@ -3,14 +3,17 @@
 ## Current checkpoint
 
 2026-09-11: P03 / issue #6 remains active on protected main
-`c2b3829d77279a32b3487ab1170f820f1d68eeb5`. PR #33 accepted the narrower
-storage profile: ephemeral NTFS/APFS P03 work may proceed, while strict Ubuntu/ext4
-durability remains disabled until P10/P11/P14.
+`b0d42e8cd6f051866f9a18da1d0d3e8a947b0f38`. PR #35 (`162ac7a`) is the first
+implementation increment: typed storage guarantees, non-wrapping generations and a
+pre-mutation durability gate. Filesystem publication, locks and admission remain next.
 
 ## Pending
 
 - Implement and prove P03 handle-relative containment, stable locks, admission and
   process-crash-consistent ephemeral publication before completing the packet.
+- Merge PR #35, then implement the capability-safe filesystem session-store adapter.
+  Do not expose session CLI behavior or introduce artifact/job ports before their
+  first concrete P03 consumer.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.

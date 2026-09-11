@@ -220,6 +220,13 @@ atomically replace the commit pointer on the same filesystem. Read snapshots und
 a lifetime hold. Retain prior committed generation until recovery validation and
 reader release permit reclamation. Never replace the lock anchor itself.
 
+The first P03 contract increment represents the requested durability separately from
+the strongest publication guarantee qualified for an adapter. Application preflight
+constructs the authorization value accepted by the mutating `SessionStore` port only
+after the guarantee is satisfied. Storage generations are monotonic and fail on
+numeric exhaustion rather than wrapping. This establishes the fail-closed seam; it
+does not yet implement the filesystem transaction, artifact/job stores or admission.
+
 Durability modes:
 
 - `ephemeral`: process-crash-consistent publication, best-effort OS cache persistence;
