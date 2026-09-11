@@ -8,10 +8,11 @@ P03's bounded feasibility evidence but did not complete the packet. Adapter expa
 is conditional on ADR 0006's native containment/lock/flush evidence.
 
 The R1 managed industrial capability boundary is being recorded on
-`docs/r1-industrial-capability-scope`. ADR 0011 reserves P15-P20 for contracts/corpus,
-enrichment, source-grounded composition, managed catalogue, industrial worker plane
-and integrated qualification. This is roadmap work only: P15+ implementation remains
-ineligible until P14 and P15's decision/fixture/ledger gate.
+`docs/r1-industrial-capability-scope` in PR #31. Planning commits `63aec84` and
+`56555bd` accept ADR 0011, reserve P15-P20 for contracts/corpus, enrichment,
+source-grounded composition, managed catalogue, industrial worker plane and integrated
+qualification, and create milestone 2 with issues #25-#30. This is roadmap work only:
+P15+ implementation remains ineligible until P14 and P15's decision/fixture/ledger gate.
 
 FS-01: OS/storage crash qualification is absent. The default NTFS read-only
 directory handle fails synchronization (OS error 5); an explicit safe writable

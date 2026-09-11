@@ -5,7 +5,8 @@
 2026-09-11: P03 / issue #6 remains active at its ADR 0006 feasibility gate on
 protected main `cbc531e80761078354be0b9942c52f00ddac05b0`. PR #24 merged the bounded
 feasibility evidence but did not complete P03. The R1 scope is being formalized on
-`docs/r1-industrial-capability-scope`; it authorizes no P15+ runtime work.
+`docs/r1-industrial-capability-scope` in PR #31 (`63aec84`, `56555bd`); it authorizes
+no P15+ runtime work.
 
 ## Pending
 
