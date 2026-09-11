@@ -2,8 +2,12 @@
 
 ## Active
 
-No implementation packet is active. P02 / issue #5 is next and must start from
-`3d7a7d2a53fd8e6d2025726d34c59e7603fc8e71` after this evidence update merges.
+P02 / issue #5 is active on `feat/p02-secure-process-supervisor`, based on
+`cedbb63ad1ddc69bb1bbb405b424da67494ce990`. Work is limited to the secure process
+supervisor and provider-resolution boundary: explicit invocation, trusted executable
+selection, bounded streams, cancellation/deadline escalation, descendant containment
+and honest effective-control reporting. P03+ storage/media behavior remains out of
+scope.
 
 ## Complete
 
@@ -65,5 +69,5 @@ See B-01..B-11; do not describe current code as production hardened.
 
 ## Next action
 
-P02 / issue #5 is next. Start it on a fresh branch from the completed P01 record and
-do not pull P03+ storage/media behavior into the process-supervision packet.
+Complete P02 / issue #5 through protected review. Preserve P03+ storage/media behavior
+as later work and record P-01..P-08 plus C-05 verification in the delivery ledger.

@@ -496,6 +496,9 @@ const fn safe_message(code: FailureCode) -> &'static str {
         FailureCode::InvalidArgument => "The command line arguments are invalid.",
         FailureCode::UnsupportedSchema => "The request schema version is unsupported.",
         FailureCode::MissingCapability => "A required local capability is unavailable.",
+        FailureCode::IsolationUnavailable => {
+            "The host cannot provide the required process isolation."
+        }
         FailureCode::CommandNotImplemented => {
             "This reserved R0 command is not implemented in the current build."
         }

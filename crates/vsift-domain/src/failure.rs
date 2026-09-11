@@ -30,6 +30,8 @@ pub enum FailureCode {
     UnsupportedSchema,
     /// A required runtime capability is missing or incompatible.
     MissingCapability,
+    /// The host cannot provide a required process or worker isolation boundary.
+    IsolationUnavailable,
     /// The command is reserved by R0 but its implementation packet is incomplete.
     CommandNotImplemented,
     /// Source bytes or media structure are invalid or unsupported.
@@ -57,6 +59,7 @@ impl FailureCode {
             Self::InvalidArgument => "INVALID_ARGUMENT",
             Self::UnsupportedSchema => "UNSUPPORTED_SCHEMA",
             Self::MissingCapability => "MISSING_CAPABILITY",
+            Self::IsolationUnavailable => "ISOLATION_UNAVAILABLE",
             Self::CommandNotImplemented => "COMMAND_NOT_IMPLEMENTED",
             Self::InvalidSource => "INVALID_SOURCE",
             Self::Busy => "BUSY",
@@ -76,6 +79,7 @@ impl FailureCode {
             Self::InvalidArgument
             | Self::UnsupportedSchema
             | Self::MissingCapability
+            | Self::IsolationUnavailable
             | Self::CommandNotImplemented => FailureClass::UsageOrCapability,
             Self::InvalidSource => FailureClass::Source,
             Self::Busy => FailureClass::Retryable,
@@ -128,6 +132,10 @@ mod tests {
             FailureCode::InvalidArgument.class(),
             FailureClass::UsageOrCapability
         );
+        assert_eq!(
+            FailureCode::IsolationUnavailable.identifier(),
+            "ISOLATION_UNAVAILABLE"
+        );
         assert_eq!(FailureCode::InvalidSource.class(), FailureClass::Source);
         assert_eq!(FailureCode::Busy.class(), FailureClass::Retryable);
         assert_eq!(FailureCode::DeadlineExceeded.class(), FailureClass::Limit);
@@ -144,6 +152,7 @@ mod tests {
             FailureCode::InvalidArgument,
             FailureCode::UnsupportedSchema,
             FailureCode::MissingCapability,
+            FailureCode::IsolationUnavailable,
             FailureCode::CommandNotImplemented,
             FailureCode::InvalidSource,
             FailureCode::DeadlineExceeded,

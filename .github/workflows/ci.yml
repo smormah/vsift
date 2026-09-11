@@ -67,3 +67,37 @@ jobs:
 
       - name: Build documentation
         run: cargo doc --workspace --no-deps --locked
+
+  strict-worker-boundary:
+    name: Strict worker boundary (Ubuntu 24.04)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build process qualification fixture
+        run: cargo test --locked -p vsift-infrastructure --test process_supervisor --no-run
+
+      - name: Verify inherited container and cgroup controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_binary="$(find target/debug/deps -maxdepth 1 -type f -name 'process_supervisor-*' -perm -111 | head -n 1)"
+          test -n "${test_binary}"
+          docker run --rm \
+            --network none \
+            --read-only \
+            --pids-limit 64 \
+            --memory 512m \
+            --memory-swap 512m \
+            --cpus 1 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --user 65534:65534 \
+            --env VSIFT_STRICT_WORKER_TEST=1 \
+            --volume "${PWD}:/workspace:ro" \
+            --workdir /workspace \
+            ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61 \
+            "/workspace/${test_binary}" \
+            --exact p08_qualified_linux_host_reports_inherited_kernel_controls \
+            --nocapture --test-threads=1

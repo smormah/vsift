@@ -2,13 +2,16 @@
 
 ## Current checkpoint
 
-2026-09-10: P01 / issue #4 completed through PR #20 at
-`3d7a7d2a53fd8e6d2025726d34c59e7603fc8e71`. P02 / issue #5 is the next
-eligible packet but has not started.
+2026-09-10: P02 / issue #5 is active on branch
+`feat/p02-secure-process-supervisor`, based on the completed P01 record at
+`cedbb63ad1ddc69bb1bbb405b424da67494ce990`. Its scope is the secure process
+supervisor, trusted provider resolution, bounded pipes, lifecycle containment and
+truthful effective-control reporting.
 
 ## Pending
 
-- Start P02 only from a fresh branch based on the recorded P01 merge.
+- Complete P02 through protected review with P-01..P-08 and C-05 evidence.
+- Keep P03+ storage, media and provisioning behavior outside this packet.
 - Resolve baseline findings B-01..B-11 through their mapped implementation packets.
 - Preserve optional SQLite indexing, enrichment and reconstruction as later packets
   P15..P20 unless scope is explicitly changed.

@@ -10,10 +10,10 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+process-wrap.workspace = true
 tokio.workspace = true
 vsift-application.workspace = true
 vsift-domain.workspace = true
 
 [lints]
 workspace = true
-

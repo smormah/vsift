@@ -22,21 +22,33 @@ Dependencies may point only to the right in the diagram. Cross-crate access uses
 
 FFmpeg, FFprobe, `whisper.cpp`, OCR engines, and future local models are external providers. VSift invokes approved executables with explicit argument arrays and never through a command shell.
 
-The boundary is intended to support the following capabilities as their adapters
+The P02 process boundary implements:
+
+- canonical absolute executable selection with explicit provenance;
+- exact argument arrays, null stdin, a canonical working directory and a cleared,
+  explicitly allowlisted child environment;
+- independent concurrent stdout/stderr drains capped at 64 KiB per stream;
+- one operation deadline, caller cancellation, graceful/forced escalation and final reap;
+- Windows Job Object or Unix process-group descendant lifecycle containment; and
+- an effective-control report that distinguishes process containment from inherited
+  strict Linux worker isolation.
+
+The boundary is intended to support these additional capabilities as later adapters
 are implemented and qualified:
 
-- separate provider processes with explicitly configured resource and isolation controls;
-- provider replacement without domain changes;
-- bring-your-own and managed-runtime resolution;
+- managed-runtime identity verification and compatibility policy;
 - simpler cross-platform builds and licensing analysis;
-- bounded execution, cancellation, and diagnostic capture.
+- per-stage provider contracts and strict worker-host integration.
 
 Direct native linking requires benchmark evidence and an accepted architecture decision record.
 
-A child process alone does not provide filesystem/network isolation, resource caps
-or a complete descendant-cancellation guarantee. The current diagnostic scaffold
-does not implement those controls. See the [baseline review](planning/baseline-review.md)
-and [planned process supervisor](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
+A child process or Unix process group alone does not provide filesystem/network
+isolation or kernel CPU/memory/PID caps. Required strict-worker isolation therefore
+fails with `ISOLATION_UNAVAILABLE` unless a trusted Linux host attests inherited
+container/cgroup controls. Ambient `PATH` discovery remains bring-your-own,
+unverified provenance until P06 adds managed identity and compatibility policy.
+See the [baseline review](planning/baseline-review.md) and
+[process contract](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
 
 ## Data lifecycle
 

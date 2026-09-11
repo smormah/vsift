@@ -78,6 +78,12 @@ Desktop profiles enumerate effective controls. If the caller requests strict
 containment and the OS adapter cannot provide it, return ISOLATION_UNAVAILABLE.
 Do not silently equate a memory estimate or timeout with a kernel-enforced cap.
 Qualification evidence must cover nested Windows jobs and Linux container limits.
+P02 reports Windows Job Object and Unix process-group lifecycle containment separately
+from inherited hard isolation. Ambient provider discovery is explicitly unverified
+bring-your-own provenance; P06 owns managed identity and version trust. The strict
+Linux CI profile supplies read-only filesystem, no-network, CPU, memory and PID
+controls externally and exercises group escape plus bounded resource pressure, while
+ordinary desktop probes make no such claim.
 Provider versions remain in the vulnerability inventory even though they run outside
 the Rust process. Security fixes can revoke a managed version for new jobs, with a
 documented handling policy for already running jobs.

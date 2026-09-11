@@ -68,7 +68,10 @@ Before adding a crate, review:
 
 Commit `Cargo.lock` because VSift is an application. Dependency changes must pass `cargo deny check` in CI.
 
+P02 uses `process-wrap` 10 for safe cross-platform access to Windows Job Objects and
+Unix process groups. Its enabled features, MSRV, transitive footprint and isolation
+limitations are recorded in [ADR 0003](decisions/0003-external-runtime-adapters.md).
+
 ## Documentation
 
 Public behaviour belongs in the README or command documentation. Architectural decisions belong in `docs/decisions`. Security assumptions belong in `SECURITY.md` and the relevant design document.
-

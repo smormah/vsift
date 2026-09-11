@@ -2,7 +2,8 @@
 
 Status: accepted R0 implementation baseline. Date: 2026-09-10.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
-Its decisions are accepted through P00; planned capabilities are not implemented.
+Its decisions are accepted through P00. P01 is complete and P02 is active; later
+planned capabilities are not implemented.
 
 ## Purpose and reading order
 
@@ -150,4 +151,5 @@ unsupported environments instead of claiming vulnerability-free software.
 
 P00 established decisions, fixture truth, traceability and anti-drift controls in
 PR #20 (`3d7a7d2`) completed P01 through protected review. Its evidence is recorded
-in the ledger; P02 / issue #5 is next but has not started.
+in the ledger; P02 / issue #5 is active on `feat/p02-secure-process-supervisor` from
+the completed P01 record `cedbb63`.

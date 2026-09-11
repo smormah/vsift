@@ -95,7 +95,7 @@ against `operation-response.schema.json`.
 | ---: | --- | --- |
 | 0 | complete or supported partial/degraded result | none |
 | 1 | unexpected internal failure | `INTERNAL` |
-| 2 | usage, unsupported schema, or missing capability | `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `COMMAND_NOT_IMPLEMENTED` |
+| 2 | usage, unsupported schema, missing capability, or unavailable isolation | `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED` |
 | 3 | invalid or unsupported source | `INVALID_SOURCE` |
 | 4 | retryable condition | `BUSY` |
 | 5 | deadline or resource limit | `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT` |
