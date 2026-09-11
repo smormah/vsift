@@ -13,6 +13,8 @@ The R1 managed industrial capability boundary is being recorded on
 source-grounded composition, managed catalogue, industrial worker plane and integrated
 qualification, and create milestone 2 with issues #25-#30. This is roadmap work only:
 P15+ implementation remains ineligible until P14 and P15's decision/fixture/ledger gate.
+R0 issues #15 and #17 now include the named two-client, supplied-transcript and
+local-ASR end-to-end release evidence required by A-08/A-09.
 
 FS-01: OS/storage crash qualification is absent. The default NTFS read-only
 directory handle fails synchronization (OS error 5); an explicit safe writable
