@@ -13,3 +13,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0007: Managed runtime provisioning](0007-managed-runtime-provisioning.md)
 - [0008: CLI namespace and JSON contract](0008-cli-and-json-contract.md)
 - [0009: Package identity and distribution](0009-package-identity-and-distribution.md)
+- [0010: Storage qualification gate — proposed, not accepted](0010-storage-qualification-gate.md)

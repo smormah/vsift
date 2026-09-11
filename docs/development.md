@@ -74,4 +74,13 @@ limitations are recorded in [ADR 0003](decisions/0003-external-runtime-adapters.
 
 ## Documentation
 
+P03's development-only cap-std/cap-fs-ext 4.0.3 candidates and their review are in
+the [storage feasibility record](planning/p03-storage-feasibility.md). Reproduce
+the bounded probe with `cargo test --locked -p vsift-infrastructure --test
+storage_feasibility -- --nocapture`. Report filesystem identity with the result;
+these observations do not enable a storage adapter or qualify durable publication.
+`deny.toml` explicitly includes development dependencies in licence and duplicate
+checks; cargo-deny otherwise omits them from these checks by default. Keep the
+explicit settings when evaluating future test-only platform wrappers.
+
 Public behaviour belongs in the README or command documentation. Architectural decisions belong in `docs/decisions`. Security assumptions belong in `SECURITY.md` and the relevant design document.

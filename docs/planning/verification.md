@@ -80,6 +80,12 @@ alone does not run arbitrary long processing.
 
 ## 3. Files, sessions, retention and crash consistency
 
+P03's [feasibility spike](p03-storage-feasibility.md) runs bounded native API
+experiments in `crates/vsift-infrastructure/tests/storage_feasibility.rs`.
+Windows default read-only directory flush fails, while explicit writable-directory
+flush succeeds. Both are observations, never a passing P03 durability gate.
+The full S/X suites below remain planned; CI records native filesystem identity.
+
 | ID | Cases | Expected assertion |
 | --- | --- | --- |
 | S-01 | Unix/Windows traversal forms, lookalike prefix, case-insensitive collision, reserved name, ADS | Outside sentinel files remain byte-identical |

@@ -48,6 +48,7 @@ capability as implemented. Work only on an active packet whose predecessors are 
 - Downloads require HTTPS, pinned provenance, cryptographic integrity verification, bounded sizes, and safe extraction.
 - Do not log secrets, full sensitive transcripts, or unnecessary absolute user paths.
 - New dependencies require a clear need, compatible licence, active maintenance assessment, and `cargo deny` review.
+- Dependency licence and duplicate-version review includes development-only feasibility candidates; preserve `licenses.include-dev` and `bans.multiple-versions-include-dev` in `deny.toml`.
 
 ## Quality gates
 

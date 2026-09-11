@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P03 native filesystem/lock feasibility experiments and a recorded OS/storage
+  crash-qualification blocker. Production storage remains gated; proposed ADR 0010
+  records a narrower qualification option without accepting it.
+
 - Initial Rust workspace and architectural boundaries.
 - Read-only `vsift setup check` runtime diagnostic with versioned JSON output.
 - Contributor, security, governance, and automation foundations.

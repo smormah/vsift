@@ -2,8 +2,29 @@
 
 ## Active
 
-No implementation packet is active. P03 / issue #6 is next and must start from the
-completed P02 evidence record after it merges.
+P03 / issue #6 is active at the storage feasibility gate on
+`codex/p03-storage-feasibility`. The clean predecessor is protected-main P02 evidence
+commit `25c3aad01fc9e2fc391c5c016295df5aff61fbdd`; P01/P02 are complete.
+Adapter expansion is conditional on ADR 0006's native containment/lock/flush evidence.
+
+FS-01: OS/storage crash qualification is absent. The default NTFS read-only
+directory handle fails synchronization (OS error 5); an explicit safe writable
+directory handle succeeds. That resolves the API-access issue, not durability
+qualification. Production adapter expansion is gated. The development-only native
+spike records primitive containment, lock and process-kill observations, not P03
+completion. See `docs/planning/p03-storage-feasibility.md` and proposed ADR 0010.
+Accepted decisions/profile targets remain unchanged; no storage operation is exposed.
+
+Spike commit: `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24. Local Windows
+checks pass (92 tests, fmt, strict clippy, governance and warning-denied rustdoc).
+Post-test security review found cargo-deny's dev-only licence/duplicate checks
+were off by default; they are now explicit, including a recorded MIT-0 review for
+the already-locked P01 test dependency. No advisory or per-package exception added.
+Follow-up `a262fa9bbabb4bebc6ebde581204c4dbe0a8186d` passed ten storage experiments
+on each of NTFS, APFS and ext4 (CI run 34585520298); dependency policy/review passed
+with development auditing enabled (run 34585520299). Safe writable/readable handle
+probes resolve default-handle synchronization failures. Exact OS versions and the
+remaining OS/storage crash gate are recorded; P03 is not complete.
 
 ## Complete
 
@@ -87,5 +108,6 @@ hardened.
 
 ## Next action
 
-P03 / issue #6 is next. Implement only storage and coordination from its accepted
-packet; do not pull P04+ media or P05+ session behavior forward.
+Resolve P03 / issue #6's failed feasibility gate through explicit design acceptance
+and qualified crash evidence. P03 remains in progress; no successor is eligible.
+Do not pull P04+ media or P05+ session behavior forward.

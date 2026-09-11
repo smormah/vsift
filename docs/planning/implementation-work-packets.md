@@ -1,7 +1,7 @@
 # Implementation work packets
 
 Status: accepted sequence. P02 completed in PR #22 (`4e9ef08`); P03 / issue #6 is
-next and has not started. Tests reference
+active at its ADR 0006 feasibility gate from `25c3aad`. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes

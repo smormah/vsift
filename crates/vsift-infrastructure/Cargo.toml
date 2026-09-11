@@ -15,5 +15,10 @@ tokio.workspace = true
 vsift-application.workspace = true
 vsift-domain.workspace = true
 
+[dev-dependencies]
+# Feasibility candidates only; qualification does not enable production storage.
+cap-fs-ext = "=4.0.3"
+cap-std = "=4.0.3"
+
 [lints]
 workspace = true
