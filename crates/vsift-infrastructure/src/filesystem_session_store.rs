@@ -539,16 +539,15 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     fn create_private_directory(path: &Path) -> std::io::Result<()> {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            return fs::DirBuilder::new().mode(0o700).create(path);
-        }
-        #[cfg(windows)]
-        {
-            fs::DirBuilder::new().create(path)
-        }
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new().mode(0o700).create(path)
+    }
+
+    #[cfg(windows)]
+    fn create_private_directory(path: &Path) -> std::io::Result<()> {
+        fs::DirBuilder::new().create(path)
     }
 
     fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
