@@ -1,4 +1,4 @@
-# R0 delivery traceability
+# R0 delivery and R1 scope traceability
 
 Status: accepted scope mapping. The machine-readable source is
 [`delivery-ledger.json`](delivery-ledger.json); CI validates its structural invariants.
@@ -17,7 +17,7 @@ Status: accepted scope mapping. The machine-readable source is
 | R-10 durable worker workspace | P03, P10, P11 | X-01..X-11 | F01, F05, F11 |
 | R-11 resource budgets | P02, P04, P11 | P-03..P-08, M-02..M-03, X-07..X-09 | F06, F11 |
 | R-12 headless observability | P01, P11 | C, O | F01, F05, F11 |
-| R-13 agent skill/handoff | P12 | A-01..A-07, SEC-T02 | F03-F08, F12 |
+| R-13 agent skill/handoff | P12 | A-01..A-09, SEC-T02 | F01, F03-F10, F12 |
 | R-14 distribution/provenance | P06, P13, P14 | D, R-SEC01..03 | F01 |
 
 The ledger also records decision status, packet dependencies, issue/PR evidence and
@@ -28,6 +28,25 @@ inferred from code presence or an assistant's status message.
 P01 executable evidence is mapped case-by-case in the published
 [v1 CLI contract](../contracts/cli-v1.md). That evidence qualifies the public boundary,
 not the later media, storage, process, or worker implementations.
+
+## R1 scoped mapping
+
+R1 implementation is not active. The detailed mapping is frozen for P15 review in the
+[industrial capability expansion](r1-industrial-capability-expansion.md); P15 must add
+its own machine-readable ledger and independent fixture truth before P16 begins.
+
+| Requirement | Primary packets | Test groups |
+| --- | --- | --- |
+| R-15 optional bounded enrichment | P15, P16, P20 | E-01..E-08, Q-07/Q-08 |
+| R-16 source-grounded composition | P15, P17, P20 | RC-01..RC-08, Q-01/Q-05 |
+| R-17 explicit managed catalogue | P15, P18, P20 | I-01..I-12, Q-05/Q-06/Q-09 |
+| R-18 industrial job control | P15, P19, P20 | H-01..H-12, Q-03..Q-06 |
+| R-19 production operations/security | P15, P19, P20 | H-08..H-12, Q-03..Q-10 |
+| R-20 two-agent R0 parity | P15, P20 | A-01..A-09, Q-01/Q-02 |
+
+P20 also reruns every applicable R0 test group. R1 cannot close a requirement by
+testing only its new adapter while the underlying video investigation lifecycle is
+broken.
 
 ## Scope guardrails
 
@@ -42,6 +61,7 @@ embeddings, model-generated frame captions, automatic stitching, cross-video cat
 SQLite, remote URLs, HTTP/MCP servers, tenancy and cloud selection. An excluded item
 needs an explicit scope ADR and ledger change before implementation.
 
-When a proposed change cannot cite an R0 requirement and packet, place it in the R1/R2
-backlog rather than expanding an active packet. A security or correctness fix may be
-accepted immediately but still needs a mapped threat/finding and regression proof.
+When a proposed change cannot cite an R0 requirement and packet, map it to the scoped
+R1 document or the R2 backlog rather than expanding an active packet. R1 scope is not
+permission to pull P15+ implementation ahead of P14. A security or correctness fix may
+be accepted immediately but still needs a mapped threat/finding and regression proof.

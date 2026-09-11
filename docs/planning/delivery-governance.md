@@ -13,6 +13,15 @@ ordering and completion evidence. A packet marked complete requires a full merge
 commit and nonempty verification record. The checker deliberately fixes the R0
 objective; changing it requires an explicit reviewed code, ledger and ADR change.
 
+The [R1 industrial capability expansion](r1-industrial-capability-expansion.md)
+reserves R-15..R-20 and P15..P20 without activating them. P15 must create a separate
+machine-readable R1 ledger and independent fixture truth before any P16+ implementation.
+Do not broaden the R0 ledger to make a future feature appear eligible, and do not use
+an R1 requirement to excuse a missing R0 end-to-end video investigation capability.
+Future packet issues #25 through #30 are grouped under the
+[R1 milestone](https://github.com/smormah/vsift/milestone/2); their existence does not
+make a packet active or satisfy its P14/P15 prerequisites.
+
 GitHub milestone `R0 — First functional release` contains issues #3 through #17.
 Each implementation PR cites one packet issue, requirements, tests, threats/findings,
 predecessors and exclusions. Protected main, CODEOWNERS, required CI/security checks
@@ -41,6 +50,8 @@ and the Governance check prevent an unattended task from merging around the ledg
    the merge hash if the implementation PR could not know it in advance.
 10. Stop at packet completion or a documented blocker. Do not automatically advance
     into the next packet merely because time or model context remains.
+11. R0 release evidence must include the complete video-to-grounded-handoff journey
+    through the two named independent agent clients; component tests cannot substitute.
 
 ## Drift response
 

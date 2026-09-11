@@ -13,6 +13,15 @@ The [delivery ledger](docs/planning/delivery-ledger.json) and CI governance chec
 scope and completion evidence. See the [v1 CLI contract](docs/contracts/cli-v1.md) for
 the exact implemented-versus-reserved boundary.
 
+R0 is intended to be a complete product journey: a compatible coding agent receives a
+local video, obtains or imports a timestamped transcript, retrieves relevant visual
+evidence and produces a grounded handoff without manual audio extraction or screenshot
+collection. Release qualification will exercise that flow through named OpenAI Codex
+and Claude Code clients with local shell and image access. The scoped
+[R1 industrial expansion](docs/planning/r1-industrial-capability-expansion.md) adds
+managed cross-video indexing, enrichment, reconstruction and operated worker growth;
+it is not required to make the first release useful.
+
 ## Principles
 
 - **Local first:** routine inspection does not require uploading recordings to a hosted service.

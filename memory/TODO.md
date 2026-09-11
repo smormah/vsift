@@ -2,10 +2,11 @@
 
 ## Current checkpoint
 
-2026-09-11: P03 / issue #6 is active at its ADR 0006 feasibility gate on
-`codex/p03-storage-feasibility`, starting from clean protected main
-`25c3aad01fc9e2fc391c5c016295df5aff61fbdd`. P01/P02 are complete; P02 implementation
-is `4e9ef08df1e53019df7645edb0e493628a3e401a`.
+2026-09-11: P03 / issue #6 remains active at its ADR 0006 feasibility gate on
+protected main `cbc531e80761078354be0b9942c52f00ddac05b0`. PR #24 merged the bounded
+feasibility evidence but did not complete P03. The R1 scope is being formalized on
+`docs/r1-industrial-capability-scope` in PR #31 (`63aec84`, `56555bd`); it authorizes
+no P15+ runtime work.
 
 ## Pending
 
@@ -18,7 +19,8 @@ is `4e9ef08df1e53019df7645edb0e493628a3e401a`.
   and proposed ADR 0010; supply disposable native fault environments or accept a
   narrower qualification plan before resuming.
 - Resolve baseline findings B-01..B-11 through their mapped implementation packets.
-- P03 spike implementation: `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24.
+- P03 spike implementation: `5f15c7730607570663d739b7a4dd70a03947e500`, merged
+  through PR #24 as `cbc531e80761078354be0b9942c52f00ddac05b0`.
   Local Windows validation: 92 tests, fmt, strict clippy, governance and rustdoc pass.
   Security review enabled cargo-deny's development licence/duplicate checks and
   recorded the existing borrow-or-share MIT-0 licence review. Follow-up
@@ -26,8 +28,15 @@ is `4e9ef08df1e53019df7645edb0e493628a3e401a`.
   on NTFS, APFS and ext4 in CI run 34585520298; strengthened dependency checks pass
   in run 34585520299. Exact environments and the unresolved OS/storage crash gate
   are recorded in the P03 feasibility document. P03 remains incomplete.
-- Preserve optional SQLite indexing, enrichment and reconstruction as later packets
-  P15..P20 unless scope is explicitly changed.
+- Preserve the complete R0 local-video-to-grounded-handoff journey. It must pass with
+  supplied-transcript and local-ASR paths through named Codex and Claude Code clients;
+  do not defer product usefulness to R1.
+- Preserve managed indexing, optional enrichment, source-grounded reconstruction,
+  industrial worker growth and integrated qualification as R1 packets P15..P20 under
+  ADR 0011 and `docs/planning/r1-industrial-capability-expansion.md`. SQLite remains
+  only a candidate explicit single-node adapter. Do not start P15 implementation before
+  P14 or use R1 scope to expand the active P03 packet. GitHub milestone 2 contains
+  future issues #25 through #30.
 
 ## Completed
 

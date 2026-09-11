@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Accepted ADR 0011 and scoped R1 as the managed industrial capability expansion:
+  optional enrichment, source-grounded composition, explicit catalogue lifecycle,
+  industrial worker growth and integrated qualification in P15-P20. R0 now has an
+  explicit two-agent end-to-end release gate and MCP remains a later adapter.
 - P03 native filesystem/lock feasibility experiments and a recorded OS/storage
   crash-qualification blocker. Production storage remains gated; proposed ADR 0010
   records a narrower qualification option without accepting it.

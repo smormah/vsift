@@ -1,7 +1,8 @@
 # Implementation work packets
 
-Status: accepted sequence. P02 completed in PR #22 (`4e9ef08`); P03 / issue #6 is
-active at its ADR 0006 feasibility gate from `25c3aad`. Tests reference
+Status: accepted R0 sequence with scoped R1 packets. P02 completed in PR #22
+(`4e9ef08`); P03 / issue #6 is active at its ADR 0006 feasibility gate. Its
+feasibility evidence merged in PR #24 (`cbc531e`) without completing the packet. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes
@@ -70,7 +71,7 @@ No concurrent work is required or authorized by this document itself.
 | P09 — Evidence navigation | Exact frames, neighbours, bursts, source audio ranges, native crops, artifact reuse and lineage | P04/P05/P08 | V-01/V-06..08; identical request reuses compatible evidence; requested/actual time and dimensions visible |
 | P10 — Recovery integration | Stage checkpoints, operation-key handling, interrupted-job discovery/resume, cancellation/commit ordering and retry policy | P03/P05/P07/P08/P09 | X-01..06/X-09/X-10, S-07/S-08; fault campaign demonstrates no lost acknowledged durable evidence |
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualified, repeated external-delivery simulation passes |
-| P12 — Agent skill | Generic procedure, model budgets, host image capability check, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..07; named compact-model trials meet agreed gates; no tool permission expansion; no embedded processing logic |
+| P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic |
 | P13 — Distribution | Native artifacts and thin npm launcher; architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs | P06/P11/P12 | Fresh OS install without Rust; offline/script-disabled recovery; signal/exit forwarding; R-SEC01/R-SEC02 |
 | P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
 
@@ -134,20 +135,26 @@ No application logic in npm scripts. Test spaces/Unicode, unsupported architectu
 optional dependencies omitted, offline execution, broken binary, Ctrl-C and clean
 uninstall. The launcher and artifacts have matching versions and verified provenance.
 
-## R1/R2 extension plan
+## R1 industrial capability expansion
+
+R1 is the managed, industrial expansion of the complete R0 product. Its authoritative
+scope, invariants, test identifiers and open decisions are in
+[`r1-industrial-capability-expansion.md`](r1-industrial-capability-expansion.md).
+Scoping may continue now; implementation remains gated by P14 and the P15 decision
+packet.
 
 | Packet | Deliverable | Prerequisite and gate |
 | --- | --- | --- |
-| P15 — OCR/VAD | Optional provider adapters with bounded results, timestamp/region mapping and model provenance | P14; critical number/text accuracy, no OCR-required core path, model resource/licence tests |
-| P16 — Embeddings and small vision tags | Versioned enrichment records, opt-in model setup, per-session semantic retrieval | P14/P15; retrieval recall/cost baseline, downgrade behavior, model upgrade/reindex policy |
-| P17 — Scroll composition | Geometric overlap/motion estimation, stable-state alignment, provenance masks, refused uncertain joins | P09/P15; labelled scrolling corpus with sticky headers/zoom; no invented pixels/cells; source-frame fallback |
-| P18 — Persistent index | Explicit managed catalogue lifecycle, typed ingest/upsert/delete/rebuild contract; optional SQLite adapter | P14; schema migrations, backup/restore, stale source/tombstone/privacy policy, concurrent reader/writer tests |
-| P19 — Distributed host | Durable queue/object store, tenant auth, scoped quotas, leases/fencing, dead-letter handling, remote recovery | P11/P18; service threat model, host-loss/network-partition/duplicate delivery tests, tenant isolation |
-| P20 — MCP adapter | Tool discovery and image delivery over the same use cases | P14; transport authentication/security and CLI-equivalent behavior; no forked business logic |
+| P15 — R1 contracts and qualification corpus | Accept catalogue/orchestration/provider decisions; version enrichment, catalogue and industrial job contracts; add independent reconstruction/index/queue/load truth | P14 before implementation; R-15..R-20 map bidirectionally to fixtures, threats and tests; unresolved architectural choices block P16+ |
+| P16 — Enrichment pipeline | Optional bounded VAD/OCR/diarization/embedding/tag adapters with versioned records, timestamp/region mapping, confidence and model provenance | P15; E-01..E-08; critical text/number accuracy, absence/failure downgrade, resource/licence and upgrade/reindex gates |
+| P17 — Source-grounded composition | Scroll/pan detection, overlap/motion estimation, stable-state alignment, provenance masks and refused uncertain joins | P15/P16 and R0 P09; RC-01..RC-08; sticky-header/zoom/repeated-row corpus; no invented pixels/cells; source-frame fallback |
+| P18 — Managed catalogue | Explicit create/inspect/import/remove/rebuild/backup/restore lifecycle; chosen embedded adapter behind an application port | P15/P16; I-01..I-12; opt-in only, schema migration, corruption, stale source/tombstone/privacy and concurrent reader/writer gates |
+| P19 — Industrial worker plane | Durable-delivery and artifact-store adapters; leases/fencing, recovery, admission, backpressure, operational surfaces and reference deployment | P15/P18 and R0 P11; H-01..H-12; host-loss/network-partition/duplicate delivery, auth scope and load gates |
+| P20 — R1 qualification | Full R0 regression plus integrated security, migration, disaster recovery, load/soak/chaos and two-agent release evidence | P15..P19; Q-01..Q-10 and all R0/R1 gates; claims restricted to measured profiles |
 
-No automatic extension is authorized by listing it. Each extension has its own scope
-decision and fixtures. SQLite is a possible local catalogue backend, not an implicit
-choice for a distributed service or default desktop state.
+SQLite is a possible embedded single-node catalogue adapter, not the domain contract,
+a distributed coordination mechanism or default desktop state. MCP is no longer an
+R1 packet: it remains a later optional adapter over the same published use cases.
 
 ## Definition of done for every implementation PR
 
