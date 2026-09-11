@@ -5,8 +5,8 @@
 P03 / issue #6 is active on protected main
 `20675dee4e0fc9547ac98385b1aaf489142a851f`; P01/P02 are complete. PR #24 merged
 P03's bounded feasibility evidence but did not complete the packet. ADR 0010 acceptance
-is in progress on `docs/accept-p03-storage-profile` so the production adapter can
-resume against an honest ephemeral desktop guarantee.
+is in progress in PR #33 (`47f65e3`) so the production adapter can resume against an
+honest ephemeral desktop guarantee.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for

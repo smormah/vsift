@@ -4,8 +4,8 @@
 
 2026-09-11: P03 / issue #6 remains active on protected main
 `20675dee4e0fc9547ac98385b1aaf489142a851f`. The narrower storage-profile decision
-is being accepted on `docs/accept-p03-storage-profile`: ephemeral NTFS/APFS P03 work
-may proceed, while strict Ubuntu/ext4 durability remains disabled until P10/P11/P14.
+is being accepted in PR #33 from `47f65e3`: ephemeral NTFS/APFS P03 work may proceed,
+while strict Ubuntu/ext4 durability remains disabled until P10/P11/P14.
 
 ## Pending
 
