@@ -3,17 +3,17 @@
 ## Current checkpoint
 
 2026-09-11: P03 / issue #6 remains active on protected main
-`b0d42e8cd6f051866f9a18da1d0d3e8a947b0f38`. PR #35 (`162ac7a`) is the first
-implementation increment: typed storage guarantees, non-wrapping generations and a
-pre-mutation durability gate. Filesystem publication, locks and admission remain next.
+`9ee3c048e1460008cd4f6c3e16dc23f78115ad0d`. PR #35 merged typed storage
+guarantees and the pre-mutation durability gate. PR #36 (`df1c233`) is in review with
+the first internal capability-scoped session initializer. P03 remains incomplete.
 
 ## Pending
 
 - Implement and prove P03 handle-relative containment, stable locks, admission and
   process-crash-consistent ephemeral publication before completing the packet.
-- Merge PR #35, then implement the capability-safe filesystem session-store adapter.
-  Do not expose session CLI behavior or introduce artifact/job ports before their
-  first concrete P03 consumer.
+- Merge PR #36, then add owned root provisioning/Windows ACL qualification and the
+  arbitrary fault-boundary recovery harness. Do not expose session CLI behavior or
+  introduce artifact/job ports before their first concrete P03 consumer.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.

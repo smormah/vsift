@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Began P03 implementation with typed durability requirements, qualified publication
   guarantees, non-wrapping storage generations, and an application gate that rejects
   unsupported durable requests before invoking the mutating session-store port.
+- Added the first internal capability-scoped filesystem session-store adapter: it
+  validates an existing owned root, serializes initialization with a stable OS lock,
+  publishes an immutable checksummed generation zero, and verifies it before reuse.
+  The adapter is not yet composed into a public command.
 
 - Initial Rust workspace and architectural boundaries.
 - Read-only `vsift setup check` runtime diagnostic with versioned JSON output.
