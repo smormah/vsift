@@ -50,6 +50,11 @@ remain optional, explicit and independently qualified.
 
 ## Evidence required to claim support
 
+P03's [filesystem feasibility record](p03-storage-feasibility.md) records native
+API experiments and missing OS/storage crash evidence. None of these storage profiles is qualified.
+Proposed ADR 0010 would narrow durable qualification, but is not accepted; this
+matrix and ADRs 0005/0006 remain the current targets.
+
 - Fresh-machine installation without Rust, upgrade, rollback and uninstall.
 - All deterministic PR checks plus platform process/filesystem conformance tests.
 - Crash injection and source-preservation proof on the named filesystem.

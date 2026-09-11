@@ -51,7 +51,28 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked -- --nocapture
+
+      - name: Record storage probe filesystem (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          uname -a
+          findmnt --target /tmp --output SOURCE,FSTYPE,OPTIONS
+
+      - name: Record storage probe filesystem (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sw_vers
+          uname -m
+          df "$TMPDIR"
+          diskutil info "$(df "$TMPDIR" | tail -n 1 | awk '{print $1}')"
+
+      - name: Record storage probe filesystem (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber
+          Get-Volume -FilePath $env:TEMP | Select-Object DriveLetter,FileSystemType,HealthStatus
 
       - name: Build release binary
         run: cargo build --workspace --release --locked

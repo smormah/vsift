@@ -2,8 +2,18 @@
 
 ## Active
 
-No implementation packet is active. P03 / issue #6 is next and must start from the
-completed P02 evidence record after it merges.
+P03 / issue #6 is active at the storage feasibility gate on
+`codex/p03-storage-feasibility`. The clean predecessor is protected-main P02 evidence
+commit `25c3aad01fc9e2fc391c5c016295df5aff61fbdd`; P01/P02 are complete.
+Adapter expansion is conditional on ADR 0006's native containment/lock/flush evidence.
+
+FS-01: OS/storage crash qualification is absent. The default NTFS read-only
+directory handle fails synchronization (OS error 5); an explicit safe writable
+directory handle succeeds. That resolves the API-access issue, not durability
+qualification. Production adapter expansion is gated. The development-only native
+spike records primitive containment, lock and process-kill observations, not P03
+completion. See `docs/planning/p03-storage-feasibility.md` and proposed ADR 0010.
+Accepted decisions/profile targets remain unchanged; no storage operation is exposed.
 
 ## Complete
 
@@ -87,5 +97,6 @@ hardened.
 
 ## Next action
 
-P03 / issue #6 is next. Implement only storage and coordination from its accepted
-packet; do not pull P04+ media or P05+ session behavior forward.
+Resolve P03 / issue #6's failed feasibility gate through explicit design acceptance
+and qualified crash evidence. P03 remains in progress; no successor is eligible.
+Do not pull P04+ media or P05+ session behavior forward.

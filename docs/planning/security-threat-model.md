@@ -63,6 +63,14 @@ corresponding supported deployment profile. Each row references the verification
 
 ## Process isolation profile
 
+P03 qualification finding FS-01: the required OS/storage crash campaign is absent.
+The Windows default read-only directory-flush error is resolved in an API probe
+by requesting write access; that success does not qualify publication ordering.
+Production storage expansion is stopped at ADR 0006's evidence gate. See the
+[evidence and unclosed controls](p03-storage-feasibility.md). This is a SEC-24
+qualification blocker, not a released vulnerability or closure of SEC-07..SEC-11
+and SEC-18. Proposed ADR 0010 requires explicit design acceptance.
+
 No-shell execution addresses one injection route. It does not confine a vulnerable
 decoder. Unix process groups aid termination; Windows Job Objects group processes;
 neither should be presented as a complete filesystem/network security boundary.

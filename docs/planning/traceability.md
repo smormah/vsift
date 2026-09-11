@@ -31,6 +31,11 @@ not the later media, storage, process, or worker implementations.
 
 ## Scope guardrails
 
+P03 is active but blocked at its durability qualification gate. Its
+[native API experiments and open suite coverage](p03-storage-feasibility.md) provide
+partial evidence for R-07..R-11 only. They close neither B-10 nor SEC-07..SEC-11,
+SEC-18 or SEC-24. Proposed ADR 0010 does not change accepted scope until approved.
+
 R0 owns local media input, disposable/retained workspaces, bounded single-host worker
 execution, evidence retrieval and native/npm distribution. It excludes OCR,
 embeddings, model-generated frame captions, automatic stitching, cross-video catalogue,

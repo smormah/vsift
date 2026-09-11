@@ -2,13 +2,21 @@
 
 ## Current checkpoint
 
-2026-09-11: P02 / issue #5 completed through PR #22 at
-`4e9ef08df1e53019df7645edb0e493628a3e401a`. P03 / issue #6 is the next eligible
-packet but has not started.
+2026-09-11: P03 / issue #6 is active at its ADR 0006 feasibility gate on
+`codex/p03-storage-feasibility`, starting from clean protected main
+`25c3aad01fc9e2fc391c5c016295df5aff61fbdd`. P01/P02 are complete; P02 implementation
+is `4e9ef08df1e53019df7645edb0e493628a3e401a`.
 
 ## Pending
 
-- Start P03 only from a fresh branch after this P02 evidence record merges.
+- Prove P03 handle-relative containment, stable locks and publication/flush behavior
+  before expanding the filesystem adapter; record any failed feasibility gate.
+- FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
+  read-only directory handle fails synchronization; a safe writable-directory
+  handle succeeds. Do not misreport this as Windows durability being impossible.
+  Production expansion remains gated. Review `docs/planning/p03-storage-feasibility.md`
+  and proposed ADR 0010; supply disposable native fault environments or accept a
+  narrower qualification plan before resuming.
 - Resolve baseline findings B-01..B-11 through their mapped implementation packets.
 - Preserve optional SQLite indexing, enrichment and reconstruction as later packets
   P15..P20 unless scope is explicitly changed.
