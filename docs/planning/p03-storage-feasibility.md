@@ -24,8 +24,20 @@ dependency review are required before merging this investigation.
 
 The lockfile adds 34 development-only packages, including multiple versions of
 Windows support crates. No existing package version was upgraded. Initial
-`cargo deny check` passed advisories, bans, licences and sources; its existing
-`syn` duplicate-version warning remains. Policy and exceptions are unchanged.
+`cargo deny check` passed advisories, bans, licences and sources. Post-test review
+found that cargo-deny 0.20.2 omits development-only licences and duplicate-version
+checks by default, even though it gathers those packages for advisory/source
+checks. P03 explicitly enables `licenses.include-dev` and
+`bans.multiple-versions-include-dev` in deny.toml
+so the candidate licence review is executable. This exposes the already-locked
+P01 test dependency `borrow-or-share` 0.2.4 (through jsonschema/fluent-uri), whose
+MIT-0 licence was previously outside the default check. Its packaged LICENSE was
+reviewed against [SPDX MIT-0](https://spdx.org/licenses/MIT-0.html): the permissive
+MIT grant without the attribution condition is compatible with this dual-licensed
+project. MIT-0 is explicitly added to the allowed licence list on that basis;
+no package exception or advisory ignore is added. Duplicate-version warnings
+remain warnings under existing policy, including the candidate Windows wrappers
+and io-lifetimes versions. Development dependency auditing is now stricter.
 
 Review scope: directory opening, no-follow extension, relative rename, file flush,
 and Windows directory share flags. This is not approval of the dependency as a
@@ -101,13 +113,32 @@ not a conclusion that Windows or macOS cannot implement safe storage.
 
 `cargo fmt --all --check`, strict workspace/all-target/all-feature clippy,
 `cargo test --workspace --locked` (92 passing, one internal child fixture ignored),
-governance validation and warning-denied rustdoc passed. Cargo deny passed without
-new exceptions. A separate post-test source/diff review checked dependency scope,
+governance validation and warning-denied rustdoc passed. A separate post-test source/diff review checked dependency scope,
 fixture ownership, exact nonrecursive cleanup, child watchdog/reaping, no source
 media access, and the separation between API observation and qualification. It
-corrected the initial overstatement of the Windows default-handle error. No
+corrected the initial overstatement of the Windows default-handle error and enabled
+the missing development licence/duplicate checks with the review recorded above. No
 production security finding is closed. There is no AI-trust checksum manifest or
 update script in this repository; none was invented.
+
+## Native CI evidence
+
+Initial spike revision `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24:
+[CI run 34585026670](https://github.com/smormah/vsift/actions/runs/34585026670)
+passed all three Quality jobs, documentation, governance and the strict-worker
+regression job. Security run 34585026624 and CodeQL run 34585026669 passed.
+
+| Host / filesystem | Primitive result | Qualification limit |
+| --- | --- | --- |
+| Local Windows 11 Pro 26200 / NTFS | Ten probes pass; default directory flush error 5, writable handle flush succeeds | No OS/storage fault campaign |
+| Hosted Windows Server 2025 build 26100 | Same ten observations as local Windows | Filesystem logging needs a corrected PowerShell formatter; not the Windows 11 target |
+| Hosted macOS 26.6.2 build 25G83 arm64 / APFS | Nine probes pass; default directory sync succeeds | Not the macOS 15 target; no OS/storage fault campaign |
+| Hosted Linux kernel 6.17.0-1022-azure x64 / ext4 (`commit=30`) | Nine probes pass; default capability directory sync returns EBADF (9) | O_PATH handle needs readable relative reopen; no OS/storage fault campaign |
+
+The next revision adds a Unix relative-readable-directory flush probe, explicit
+Linux OS-version logging and corrected Windows filesystem logging. API handle
+failures must be investigated before declaring a filesystem unsupported. No
+ordinary hosted-runner success qualifies the exact ADR 0005 platform profiles.
 
 ## Primary-source basis
 

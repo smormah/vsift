@@ -57,7 +57,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           uname -a
-          findmnt --target /tmp --output SOURCE,FSTYPE,OPTIONS
+          cat /etc/os-release
+          findmnt --target "${TMPDIR:-/tmp}" --output SOURCE,FSTYPE,OPTIONS
 
       - name: Record storage probe filesystem (macOS)
         if: runner.os == 'macOS'
@@ -71,8 +72,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber
-          Get-Volume -FilePath $env:TEMP | Select-Object DriveLetter,FileSystemType,HealthStatus
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber | ConvertTo-Json -Compress
+          Get-Volume -FilePath $env:TEMP | Select-Object DriveLetter,FileSystemType,HealthStatus | ConvertTo-Json -Compress
 
       - name: Build release binary
         run: cargo build --workspace --release --locked

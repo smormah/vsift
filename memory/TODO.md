@@ -18,6 +18,11 @@ is `4e9ef08df1e53019df7645edb0e493628a3e401a`.
   and proposed ADR 0010; supply disposable native fault environments or accept a
   narrower qualification plan before resuming.
 - Resolve baseline findings B-01..B-11 through their mapped implementation packets.
+- P03 spike implementation: `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24.
+  Local Windows validation: 92 tests, fmt, strict clippy, governance and rustdoc pass.
+  Security review enabled cargo-deny's development licence/duplicate checks and
+  recorded the existing borrow-or-share MIT-0 licence review. Native CI evidence
+  and the unresolved OS/storage crash gate belong in the P03 feasibility record.
 - Preserve optional SQLite indexing, enrichment and reconstruction as later packets
   P15..P20 unless scope is explicitly changed.
 

@@ -79,5 +79,8 @@ the [storage feasibility record](planning/p03-storage-feasibility.md). Reproduce
 the bounded probe with `cargo test --locked -p vsift-infrastructure --test
 storage_feasibility -- --nocapture`. Report filesystem identity with the result;
 these observations do not enable a storage adapter or qualify durable publication.
+`deny.toml` explicitly includes development dependencies in licence and duplicate
+checks; cargo-deny otherwise omits them from these checks by default. Keep the
+explicit settings when evaluating future test-only platform wrappers.
 
 Public behaviour belongs in the README or command documentation. Architectural decisions belong in `docs/decisions`. Security assumptions belong in `SECURITY.md` and the relevant design document.

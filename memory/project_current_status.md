@@ -15,6 +15,12 @@ spike records primitive containment, lock and process-kill observations, not P03
 completion. See `docs/planning/p03-storage-feasibility.md` and proposed ADR 0010.
 Accepted decisions/profile targets remain unchanged; no storage operation is exposed.
 
+Spike commit: `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24. Local Windows
+checks pass (92 tests, fmt, strict clippy, governance and warning-denied rustdoc).
+Post-test security review found cargo-deny's dev-only licence/duplicate checks
+were off by default; they are now explicit, including a recorded MIT-0 review for
+the already-locked P01 test dependency. No advisory or per-package exception added.
+
 ## Complete
 
 ### 2026-09-11 — P02 secure process execution

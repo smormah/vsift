@@ -190,6 +190,18 @@ fn s07_probe_windows_directory_write_access() -> TestResult {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn s07_probe_relative_readable_directory_flush() -> TestResult {
+    let fixture = Fixture::new("readable-directory")?;
+    let dir = fixture.dir()?;
+    // Linux capability directory handles can be O_PATH descriptors, which cannot
+    // fsync. Reopen "." relative to that held directory with actual read access.
+    dir.open(".")?.sync_all()?;
+    println!("P03_RELATIVE_READABLE_DIRECTORY_SYNC=ok; publication remains unqualified");
+    Ok(())
+}
+
 #[test]
 fn s01_probe_relative_escape_denied() -> TestResult {
     let fixture = Fixture::new("escape")?;
