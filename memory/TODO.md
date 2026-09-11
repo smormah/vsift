@@ -3,10 +3,9 @@
 ## Current checkpoint
 
 2026-09-11: P03 / issue #6 remains active at its ADR 0006 feasibility gate on
-protected main `cbc531e80761078354be0b9942c52f00ddac05b0`. PR #24 merged the bounded
-feasibility evidence but did not complete P03. The R1 scope is being formalized on
-`docs/r1-industrial-capability-scope` in PR #31 (`63aec84`, `56555bd`); it authorizes
-no P15+ runtime work.
+protected main `0cfdb407f805282995f326ca93c99bc7170eda04`. PR #24 merged the bounded
+feasibility evidence but did not complete P03. PR #31 accepted the R1 scope and ADR
+0011 as `0cfdb407f805282995f326ca93c99bc7170eda04`; it authorizes no P15+ runtime work.
 
 ## Pending
 
@@ -40,6 +39,11 @@ no P15+ runtime work.
 
 ## Completed
 
+- 2026-09-11: the R1 managed industrial capability expansion merged through PR #31
+  as `0cfdb407f805282995f326ca93c99bc7170eda04`. ADR 0011 preserves a complete R0
+  video-to-grounded-handoff release gate and reserves R1 requirements R-15..R-20,
+  packets P15..P20, threats SEC-26..SEC-35 and E/RC/I/H/Q tests. Milestone 2 and
+  issues #25-#30 hold future R1 work; R0 issues #15/#17 carry the two-agent gate.
 - 2026-09-09: foundation and GitHub governance published in `5289a2b`; support channel
   update in `d7a459e`.
 - 2026-09-09: setup command rename merged through PR #1 as `df85f70`.
