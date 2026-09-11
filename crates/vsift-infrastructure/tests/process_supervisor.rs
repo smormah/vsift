@@ -35,6 +35,7 @@ fn process_fixture() -> Result<(), Box<dyn Error>> {
         "both-flood" => fixture_both_floods(),
         "exact-over" => {
             io::stdout().write_all(&vec![b'x'; 1025])?;
+            std::thread::sleep(Duration::from_secs(60));
             Ok(())
         }
         "invalid-bytes" => {
@@ -84,22 +85,20 @@ fn fixture_inspect() -> Result<(), Box<dyn Error>> {
 
 fn fixture_flood(stream: OutputStream) -> Result<(), Box<dyn Error>> {
     let bytes = vec![b'x'; 8 * 1024];
-    for _ in 0..64 {
+    loop {
         match stream {
             OutputStream::Stdout => io::stdout().write_all(&bytes)?,
             OutputStream::Stderr => io::stderr().write_all(&bytes)?,
         }
     }
-    Ok(())
 }
 
 fn fixture_both_floods() -> Result<(), Box<dyn Error>> {
     let bytes = vec![b'x'; 8 * 1024];
-    for _ in 0..64 {
+    loop {
         io::stdout().write_all(&bytes)?;
         io::stderr().write_all(&bytes)?;
     }
-    Ok(())
 }
 
 #[derive(Clone, Copy)]
