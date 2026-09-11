@@ -2,19 +2,18 @@
 
 ## Current checkpoint
 
-2026-09-11: P03 / issue #6 remains active on protected main
-`3fd29247bb241e4aa6f5561e410a06ed5d1cf839`. PR #35 merged typed storage
+2026-09-11: P03 / issue #6 remains active from protected-main predecessor
+`f03941a`. PR #35 merged typed storage
 guarantees and the pre-mutation durability gate; PR #36 merged the first internal
 capability-scoped session initializer. PR #38 corrected the parallel Windows test-root
-collision exposed by PR #37 and consolidated the merge evidence. P03 remains incomplete.
+collision exposed by PR #37 and consolidated the merge evidence. The completion
+candidate now implements private provisioning/ACL checks, admission, lifetime holds,
+later generations and boundary recovery; protected review and merge evidence remain.
 
 ## Pending
 
-- Implement and prove P03 handle-relative containment, stable locks, admission and
-  process-crash-consistent ephemeral publication before completing the packet.
-- Add owned root provisioning/Windows ACL qualification and the arbitrary
-  fault-boundary recovery harness. Do not expose session CLI behavior or introduce
-  artifact/job ports before their first concrete P03 consumer.
+- Merge the P03 completion candidate through protected checks, then record its merge
+  hash/evidence in the ledger and close issue #6. Do not expose session CLI behavior.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.

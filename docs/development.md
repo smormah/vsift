@@ -74,11 +74,16 @@ limitations are recorded in [ADR 0003](decisions/0003-external-runtime-adapters.
 
 ## Documentation
 
-P03's development-only cap-std/cap-fs-ext 4.0.3 candidates and their review are in
+P03's cap-std/cap-fs-ext 4.0.3 storage dependencies and their review are in
 the [storage feasibility record](planning/p03-storage-feasibility.md). Reproduce
 the bounded probe with `cargo test --locked -p vsift-infrastructure --test
 storage_feasibility -- --nocapture`. Report filesystem identity with the result;
-these observations do not enable a storage adapter or qualify durable publication.
+these observations qualify API behavior, not durable publication. The production
+adapter also uses the already-transitive Rustix 1.1 process feature on Unix to verify
+root ownership, and Windows-only `windows-acl` 0.3.0 for read-only DACL inspection.
+The latter is MIT licensed and unarchived but has low maintenance activity (last push
+2023-06-09); its narrow use is isolated behind `cfg(windows)`, cargo-deny reports no
+advisory, and replacement remains appropriate if a maintained safe DACL reader appears.
 `deny.toml` explicitly includes development dependencies in licence and duplicate
 checks; cargo-deny otherwise omits them from these checks by default. Keep the
 explicit settings when evaluating future test-only platform wrappers.

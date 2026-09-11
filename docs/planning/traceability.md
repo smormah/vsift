@@ -50,12 +50,14 @@ broken.
 
 ## Scope guardrails
 
-P03 is active under ADR 0010's narrower qualification profile. Its
-[native API experiments and open suite coverage](p03-storage-feasibility.md) provide
-partial evidence for R-07..R-11 only. They close neither B-10 nor SEC-07..SEC-11,
-SEC-18 or SEC-24. P03 must implement and qualify ephemeral desktop publication while
-durable requests fail before mutation; P10/P11/P14 retain the Ubuntu/ext4 durability
-and strict-worker release proof.
+P03 is active under ADR 0010's narrower qualification profile. Its completion
+candidate implements the P03 portions of R-07..R-11: private owned roots,
+handle-relative metadata, stable locks, weighted admission, generation publication,
+read/cleanup holds and process-crash recovery. S-03 at this packet proves stable
+storage snapshots and detects identity/integrity changes; P04 still owns actual media
+source binding and staging. P05 owns lifecycle deletion, while P10/P11/P14 retain
+durable stage acknowledgement, the Ubuntu/ext4 OS/storage campaign and strict-worker
+release proof. Explicit durable requests continue to fail before mutation.
 
 R0 owns local media input, disposable/retained workspaces, bounded single-host worker
 execution, evidence retrieval and native/npm distribution. It excludes OCR,

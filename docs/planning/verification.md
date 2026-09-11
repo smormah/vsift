@@ -279,6 +279,28 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
+## 2026-09-11 P03 completion-candidate evidence
+
+The internal P03 adapter now maps its packet suites as follows; protected three-OS
+results and the final merge hash remain required before the ledger advances:
+
+| Gate | Mechanical evidence |
+| --- | --- |
+| S-01/S-02 | Absolute owned-root selection rejects traversal, reserved names, ADS and case collisions; capability-relative no-follow opens plus single-link checks cover root/session/metadata substitution, with the earlier native junction/symlink probes retained |
+| S-03 | Read holds retain a verified immutable generation across pointer replacement and integrity changes fail closed; P04 still owns actual media source binding/staging |
+| S-07/S-08 | Injected failure and child-process exit at manifest write/flush/rename and pointer write/flush/rename preserve a valid old/new commit; missing, truncated, changed-checksum and future-version metadata fail explicitly |
+| S-12 | Provisioning verifies Unix owner/mode or Windows DACL allow entries; root policy is immutable, revalidated before mutation, and stable lock anchors are single-link files |
+| X-01/X-02 | Every publication boundary restarts and retries with the same operation; a commit followed by lost response returns the existing compatible generation |
+| X-03/X-04 | Concurrent compatible initialization is idempotent; 2/4/8 writer races publish once or return typed conflict; independent readers see valid snapshots |
+| X-05 | Shared lifetime owners exclude cleanup across processes, survive idle time, and release only when the owning process exits; exclusive lifetime ownership blocks publication |
+
+Root-wide admission uses immutable OS-locked slots and is tested between independent
+processes, including weighted exhaustion and release after forced process termination.
+Typed access, capacity, contention, integrity, version and general I/O mappings are
+covered. Explicit durable initialization and later publication are both verified to
+fail before mutation. Process exit proves process-crash consistency only; ADR 0010's
+Ubuntu/ext4 OS/storage crash qualification remains P10/P11/P14 work.
+
 ## 2026-09-11 P02 evidence
 
 PR #22 (`4e9ef08df1e53019df7645edb0e493628a3e401a`) passed P-01..P-08
