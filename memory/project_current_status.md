@@ -8,7 +8,8 @@ merged the first production P03 contracts. PR #36 merged an internal filesystem
 `SessionStore` that opens an existing explicit owned root, initializes a checksummed
 immutable generation zero through held-directory operations and a stable lock, and
 verifies state before idempotent reuse. It is not composed into the CLI; P03 remains
-incomplete.
+incomplete. PR #38 corrects the parallel Windows test-root collision exposed by the
+PR #37 evidence rerun and consolidates that evidence so only one record advances.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -53,9 +54,12 @@ OS locking, bounded strict metadata and SHA-256 verification before idempotent r
 
 Local evidence is 105 passing tests plus fmt, strict Clippy, governance, warning-denied
 rustdoc and dependency policy. PR #36 passed every protected job on Windows, macOS and
-Ubuntu after a Unix-only needless-return lint was found and corrected. P03 remains
-active: root provisioning/Windows ACL qualification, arbitrary fault recovery, later
-generation publication, read/write holds and admission are not complete.
+Ubuntu after a Unix-only needless-return lint was found and corrected. A later Windows
+run exposed time-only fixture-root naming as intermittently non-unique under parallel
+tests; PR #38 adds a process-local monotonic discriminator and an identical-timestamp
+regression test. P03 remains active: root provisioning/Windows ACL qualification,
+arbitrary fault recovery, later generation publication, read/write holds and admission
+are not complete.
 
 ### 2026-09-11 — P03 storage qualification profile
 

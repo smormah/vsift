@@ -5,7 +5,9 @@
 2026-09-11: P03 / issue #6 remains active on protected main
 `65fe00c3d43405a6ed5c8bda8ae50a2896e80d65`. PR #35 merged typed storage
 guarantees and the pre-mutation durability gate; PR #36 merged the first internal
-capability-scoped session initializer. P03 remains incomplete.
+capability-scoped session initializer. PR #38 corrects the parallel Windows test-root
+collision exposed by PR #37 and carries the consolidated merge evidence. P03 remains
+incomplete.
 
 ## Pending
 
@@ -47,8 +49,10 @@ capability-scoped session initializer. P03 remains incomplete.
   (`65fe00c3d43405a6ed5c8bda8ae50a2896e80d65`) established typed storage
   guarantees plus the internal capability-scoped generation-zero initializer. The
   second increment passed 105 local tests and all protected cross-platform/security
-  checks after its Unix lint regression was corrected. These increments do not
-  complete P03 or expose a storage/session command.
+  checks after its Unix lint regression was corrected. A later Windows run exposed
+  time-only temporary-root naming as intermittently non-unique under parallel tests;
+  PR #38 adds a process-local sequence and a same-timestamp regression test. These
+  increments do not complete P03 or expose a storage/session command.
 - 2026-09-11: the narrower P03 storage qualification profile merged through PR #33
   as `c2b3829d77279a32b3487ab1170f820f1d68eeb5`. ADR 0010 permits
   process-crash-consistent ephemeral desktop publication, keeps explicit durable
