@@ -30,6 +30,11 @@ also record CPU/RAM/GPU, storage, driver versions and warm/cold cache condition.
 Fixtures have ownership/licence metadata; no real meeting, credential or private repo
 enters a public fixture or CI log.
 
+Parallel filesystem tests must not derive temporary-root identity from wall-clock time
+alone. Windows clock resolution can return the same timestamp to concurrent tests;
+fixture roots therefore combine process identity with a process-local monotonic
+sequence. Tests that intentionally share a root must do so explicitly.
+
 ## 1. Contract and domain cases
 
 | ID | Cases | Expected assertion |

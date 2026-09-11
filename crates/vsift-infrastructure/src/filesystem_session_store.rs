@@ -470,6 +470,7 @@ mod tests {
         fs::{self, File as StdFile},
         io::Write,
         path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -484,6 +485,8 @@ mod tests {
 
     type TestResult = Result<(), Box<dyn Error>>;
 
+    static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
     struct Fixture {
         path: PathBuf,
     }
@@ -491,8 +494,8 @@ mod tests {
     impl Fixture {
         fn new() -> Result<Self, Box<dyn Error>> {
             let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-            let path = std::env::temp_dir()
-                .join(format!("vsift-p03-store-{}-{stamp}", std::process::id()));
+            let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = fixture_path(stamp, sequence);
             create_private_directory(&path)?;
             create_private_directory(&path.join(COORDINATION_DIRECTORY))?;
             create_private_directory(&path.join(SESSIONS_DIRECTORY))?;
@@ -506,6 +509,13 @@ mod tests {
             )?;
             Ok(Self { path })
         }
+    }
+
+    fn fixture_path(stamp: u128, sequence: u64) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "vsift-p03-store-{}-{stamp}-{sequence}",
+            std::process::id()
+        ))
     }
 
     impl Drop for Fixture {
@@ -568,6 +578,11 @@ mod tests {
             OperationId::parse("op_0123456789abcdef")?,
             durability,
         ))
+    }
+
+    #[test]
+    fn fixture_paths_are_distinct_when_timestamps_match() {
+        assert_ne!(fixture_path(42, 0), fixture_path(42, 1));
     }
 
     #[test]

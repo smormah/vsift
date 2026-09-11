@@ -3,12 +3,13 @@
 ## Active
 
 P03 / issue #6 is active on protected main
-`9ee3c048e1460008cd4f6c3e16dc23f78115ad0d`; P01/P02 are complete. PR #35
-merged the first production P03 contracts. PR #36 (`df1c233`) is in review with an
-internal filesystem `SessionStore` that opens an existing explicit owned root,
-initializes a checksummed immutable generation zero through held-directory operations
-and a stable lock, and verifies state before idempotent reuse. It is not composed into
-the CLI; P03 remains incomplete.
+`65fe00c3d43405a6ed5c8bda8ae50a2896e80d65`; P01/P02 are complete. PR #35
+merged the first production P03 contracts. PR #36 merged an internal filesystem
+`SessionStore` that opens an existing explicit owned root, initializes a checksummed
+immutable generation zero through held-directory operations and a stable lock, and
+verifies state before idempotent reuse. It is not composed into the CLI; P03 remains
+incomplete. PR #38 corrects the parallel Windows test-root collision exposed by the
+PR #37 evidence rerun and consolidates that evidence so only one record advances.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -41,6 +42,24 @@ probes resolve default-handle synchronization failures. Exact OS versions and th
 remaining OS/storage crash gate are recorded; P03 is not complete.
 
 ## Complete
+
+### 2026-09-11 — P03 storage contract and initializer increments
+
+PR #35 squash-merged as `9ee3c048e1460008cd4f6c3e16dc23f78115ad0d`; PR #36
+squash-merged as `65fe00c3d43405a6ed5c8bda8ae50a2896e80d65`. These focused
+increments establish the durability preflight, non-wrapping generations, typed storage
+failures and the first internal capability-scoped generation-zero initializer. The
+adapter uses held-directory relative operations, no-follow/single-link checks, stable
+OS locking, bounded strict metadata and SHA-256 verification before idempotent reuse.
+
+Local evidence is 105 passing tests plus fmt, strict Clippy, governance, warning-denied
+rustdoc and dependency policy. PR #36 passed every protected job on Windows, macOS and
+Ubuntu after a Unix-only needless-return lint was found and corrected. A later Windows
+run exposed time-only fixture-root naming as intermittently non-unique under parallel
+tests; PR #38 adds a process-local monotonic discriminator and an identical-timestamp
+regression test. P03 remains active: root provisioning/Windows ACL qualification,
+arbitrary fault recovery, later generation publication, read/write holds and admission
+are not complete.
 
 ### 2026-09-11 — P03 storage qualification profile
 
