@@ -588,6 +588,23 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn ownership_marker_cannot_be_an_external_hard_link() -> TestResult {
+        let fixture = Fixture::new()?;
+        let outside = Fixture::new()?;
+        let marker = fixture.path.join(OWNERSHIP_FILE);
+        let outside_marker = outside.path.join(OWNERSHIP_FILE);
+        let expected = fs::read(&outside_marker)?;
+        fs::remove_file(&marker)?;
+        fs::hard_link(&outside_marker, &marker)?;
+
+        let result = FilesystemSessionStore::open_existing(&fixture.path);
+
+        assert_eq!(result.err(), Some(SessionStoreOpenError::InvalidOwnership));
+        assert_eq!(fs::read(outside_marker)?, expected);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn durable_initialization_fails_without_creating_session_state() -> TestResult {
         let fixture = Fixture::new()?;
@@ -634,6 +651,32 @@ mod tests {
             .join("ses_0123456789abcdef");
         assert!(session.join(CURRENT_FILE).is_file());
         assert!(session.join(GENERATIONS_DIRECTORY).join("0.json").is_file());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn live_initialization_lock_returns_busy_without_mutation() -> TestResult {
+        let fixture = Fixture::new()?;
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        let initialization_lock = StdFile::options().read(true).write(true).open(
+            fixture
+                .path
+                .join(COORDINATION_DIRECTORY)
+                .join(INITIALIZATION_LOCK),
+        )?;
+        initialization_lock.try_lock()?;
+        let use_case = InitializeSessionStorage::new(store);
+
+        let result = use_case
+            .execute(request(DurabilityRequirement::Ephemeral)?)
+            .await;
+
+        initialization_lock.unlock()?;
+        assert_eq!(result, Err(SessionStorageError::Busy));
+        assert_eq!(
+            fs::read_dir(fixture.path.join(SESSIONS_DIRECTORY))?.count(),
+            0
+        );
         Ok(())
     }
 
