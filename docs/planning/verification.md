@@ -246,3 +246,16 @@ in supported paths; every mandatory control has a regression test; docs and actu
 capabilities agree; unsupported platforms fail clearly; no credential/private-data
 fixtures; clean rollback and source-preservation tests; reproducible operator runbook.
 Coverage percentages supplement these checks but never replace behavioral assertions.
+
+## 2026-09-11 P02 evidence
+
+PR #22 (`4e9ef08df1e53019df7645edb0e493628a3e401a`) passed P-01..P-08
+and the process-side C-05 controls. The local Windows workspace passed 82 tests.
+Protected CI passed strict Clippy, tests and release builds on Ubuntu, Windows and
+macOS; documentation with warnings denied; governance; dependency policy/review;
+CodeQL; and Rust analysis. The strict Ubuntu 24.04 container independently passed
+read-only/no-network checks, process-group escape containment, observable CPU
+throttling, PID exhaustion and over-limit memory allocation containment.
+
+This evidence qualifies P02's process boundary, not the later managed provider,
+storage, media, session or worker-host packets and not the complete R0 release.

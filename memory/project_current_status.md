@@ -2,14 +2,31 @@
 
 ## Active
 
-P02 / issue #5 is active on `feat/p02-secure-process-supervisor`, based on
-`cedbb63ad1ddc69bb1bbb405b424da67494ce990`. Work is limited to the secure process
-supervisor and provider-resolution boundary: explicit invocation, trusted executable
-selection, bounded streams, cancellation/deadline escalation, descendant containment
-and honest effective-control reporting. P03+ storage/media behavior remains out of
-scope.
+No implementation packet is active. P03 / issue #6 is next and must start from the
+completed P02 evidence record after it merges.
 
 ## Complete
+
+### 2026-09-11 — P02 secure process execution
+
+PR #22 squash-merged as `4e9ef08df1e53019df7645edb0e493628a3e401a`.
+P02 added canonical absolute provider resolution with explicit provenance; exact argv,
+null stdin, canonical cwd and an empty-by-default environment; independent capped
+stdout/stderr drains; one operation deadline and sticky caller cancellation; graceful
+and forced cleanup through Windows Job Objects or Unix process groups; and an
+effective-control report that separates lifecycle containment from hard isolation.
+Strict mode fails before spawn without a qualified Linux worker boundary.
+
+P-01..P-08 and C-05 are covered by 82 passing local Windows tests and protected
+Quality checks on Ubuntu, Windows and macOS. The strict Ubuntu container additionally
+passed read-only/no-network, process-group escape, CPU throttling, PID ceiling and
+memory-limit checks. Governance, documentation, dependency policy/review, CodeQL and
+Rust analysis passed.
+
+Only setup dependency probing uses the boundary today. Managed runtime identity and
+compatibility remain P06; durable coordination is P03/P10/P11; the worker host is P11.
+Desktop process containment is not represented as a filesystem, network or resource
+sandbox.
 
 ### 2026-09-10 — P01 public command and JSON contracts
 
@@ -61,13 +78,14 @@ PR #1 / `df85f70` renamed the public command to `vsift setup check`, with JSON o
 
 ## Implemented versus planned
 
-Only setup dependency probing is implemented. No ingestion, transcription, visual
-extraction, session storage, managed installation, queue, index, durable job or npm
-release exists yet. Inspection found unbounded pre-truncation process output, ambient
-executable discovery and incomplete process-tree cleanup.
-See B-01..B-11; do not describe current code as production hardened.
+Only setup dependency probing is executable, now through the P02 supervisor. No
+ingestion, transcription, visual extraction, session storage, managed installation,
+queue, index, durable job or npm release exists yet. Ambient PATH remains a disclosed
+bring-your-own fallback; managed identity/version trust is unimplemented.
+See the dated B-01..B-11 dispositions; do not describe current code as production
+hardened.
 
 ## Next action
 
-Complete P02 / issue #5 through protected review. Preserve P03+ storage/media behavior
-as later work and record P-01..P-08 plus C-05 verification in the delivery ledger.
+P03 / issue #6 is next. Implement only storage and coordination from its accepted
+packet; do not pull P04+ media or P05+ session behavior forward.

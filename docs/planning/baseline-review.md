@@ -49,3 +49,20 @@ explicit bounded output/parse boundary and structural regression tests. It compl
 the P01 portion of B-05 (safe public rendering) and B-07 (deterministic semantic/schema
 CLI assertions). Provider-pipe bounding, executable isolation, and process deadline
 proof remain open under P02; those findings are not closed by the public contract.
+
+## 2026-09-11 P02 disposition
+
+PR #22 (`4e9ef08df1e53019df7645edb0e493628a3e401a`) closed B-01, B-03,
+B-05, B-07 and B-08 for the implemented process boundary. Its regression suite covers
+bounded concurrent streams, exact argv and environment policy, one overall deadline,
+sticky cancellation, spawn failure, descendant cleanup, and truthful effective
+controls on Ubuntu, Windows and macOS. A separate strict Ubuntu container check covers
+process-group escape plus CPU, memory and PID pressure.
+
+P02 completed the mechanical portion of B-02: every selected executable becomes a
+canonical absolute regular-file path with recorded explicit, managed or ambient
+provenance; current-directory/relative PATH entries, inherited environment and an
+implicit cwd are rejected. Ambient PATH remains a disclosed bring-your-own fallback,
+not verified identity, so B-02's managed trust portion remains with B-04 under P06.
+P02 also corrected B-09's process-versus-sandbox claim and added fail-closed strict
+isolation; the complete worker-host qualification remains P11/P14.
