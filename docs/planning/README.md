@@ -2,8 +2,9 @@
 
 Status: accepted R0 implementation baseline with a scoped R1 expansion. Date: 2026-09-11.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
-Its decisions are accepted through P00. P01 and P02 are complete; later planned
-capabilities are not implemented.
+Its decisions are accepted through P00. P01 and P02 are complete. P03 is active and
+its first typed storage-guarantee contract slice is in review; the filesystem and
+coordination adapters remain unimplemented.
 
 ## Purpose and reading order
 

@@ -3,10 +3,11 @@
 ## Active
 
 P03 / issue #6 is active on protected main
-`c2b3829d77279a32b3487ab1170f820f1d68eeb5`; P01/P02 are complete. PR #24 merged
-P03's bounded feasibility evidence but did not complete the packet. PR #33 accepted
-ADR 0010's narrower profile, so the production adapter can resume against an honest
-ephemeral desktop guarantee.
+`b0d42e8cd6f051866f9a18da1d0d3e8a947b0f38`; P01/P02 are complete. PR #35
+(`162ac7a`) is in review with the first production P03 contracts. It separates
+requested durability from a qualified publication guarantee, prevents generation
+wraparound and proves unsupported durability fails before the mutating port is called.
+No filesystem adapter or storage command is exposed yet.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -149,8 +150,8 @@ hardened.
 
 ## Next action
 
-Resume only P03 storage/coordination implementation: ephemeral NTFS/APFS publication,
-safe containment/locks/admission, and fail-closed durable requests. P03 remains in
-progress and P04 is ineligible until that implementation and its mapped tests merge.
-Do not pull P04+ or P15+ behavior into P03. The Ubuntu/ext4 OS/storage crash campaign
-remains mandatory in P10/P11/P14.
+Merge the P03 storage-contract increment, then implement the capability-safe
+filesystem `SessionStore`: ephemeral NTFS/APFS publication, safe containment and
+stable locks, followed by admission. P03 remains in progress and P04 is ineligible
+until the complete adapter and mapped tests merge. Do not pull P04+ or P15+ behavior
+into P03. The Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.

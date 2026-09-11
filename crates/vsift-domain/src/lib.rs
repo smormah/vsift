@@ -7,6 +7,7 @@ mod failure;
 mod identity;
 mod job;
 mod pagination;
+mod storage;
 mod timeline;
 
 pub use evidence::{
@@ -18,6 +19,9 @@ pub use identity::{
 };
 pub use job::{JobState, JobTransitionError};
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
+pub use storage::{
+    DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
+};
 pub use timeline::{
     CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,
     TimeConversionError, TimeRange, TimeRangeError,

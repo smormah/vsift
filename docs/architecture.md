@@ -72,6 +72,15 @@ port. It is never part of the default desktop lifecycle, and an embedded databas
 adapter does not become the domain model or a distributed work queue. See the
 [R1 industrial capability expansion](planning/r1-industrial-capability-expansion.md).
 
+P03 now defines the first storage boundary without exposing a session command. The
+domain distinguishes a caller's `ephemeral` or `durable` requirement from the
+publication guarantee qualified for an adapter. The application authorizes a
+session-store initialization only after that guarantee check. Consequently, an
+explicit durable request cannot reach the mutating port while the R0 desktop adapter
+is qualified only for process-crash-consistent publication. The contained filesystem
+adapter, immutable manifest publication and OS-lock implementation remain pending
+within P03; this contract slice is not a storage feature claim.
+
 Expiry makes a temporary session eligible for cleanup. With no background process,
 physical cleanup runs during a later invocation or explicit host maintenance, not
 necessarily at the expiration instant.

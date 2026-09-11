@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   crash-qualification blocker. ADR 0010 now accepts ephemeral NTFS/APFS desktop
   qualification for P03 and defers strict Ubuntu/ext4 durable enablement to the
   P10/P11/P14 fault campaign.
+- Began P03 implementation with typed durability requirements, qualified publication
+  guarantees, non-wrapping storage generations, and an application gate that rejects
+  unsupported durable requests before invoking the mutating session-store port.
 
 - Initial Rust workspace and architectural boundaries.
 - Read-only `vsift setup check` runtime diagnostic with versioned JSON output.
