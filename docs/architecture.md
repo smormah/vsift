@@ -67,7 +67,10 @@ ephemeral session
           `-- explicitly retained as a portable bundle
 ```
 
-A future persistent catalogue may index retained bundles through an application port. It is not part of the default desktop lifecycle.
+The scoped R1 persistent catalogue indexes retained bundles through an application
+port. It is never part of the default desktop lifecycle, and an embedded database
+adapter does not become the domain model or a distributed work queue. See the
+[R1 industrial capability expansion](planning/r1-industrial-capability-expansion.md).
 
 Expiry makes a temporary session eligible for cleanup. With no background process,
 physical cleanup runs during a later invocation or explicit host maintenance, not
@@ -79,7 +82,7 @@ The [implementation blueprint](planning/README.md) proposes single-host multipro
 bounded admission, checkpoint recovery and explicit durable workspaces in the first
 functional release. A server supervisor would stage sources and manage its own queue,
 tenant authorization and durable remote result storage. Default desktop investigations
-remain disposable; cross-video indexing remains an explicit later capability.
+remain disposable; cross-video indexing remains an explicit R1 capability.
 
 This extension is recorded in [accepted ADR 0004](decisions/0004-recoverable-worker-core.md).
 It is not an implemented durability or throughput guarantee.

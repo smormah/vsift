@@ -1,6 +1,6 @@
 # VSift implementation blueprint
 
-Status: accepted R0 implementation baseline. Date: 2026-09-10.
+Status: accepted R0 implementation baseline with a scoped R1 expansion. Date: 2026-09-11.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
 Its decisions are accepted through P00. P01 and P02 are complete; later planned
 capabilities are not implemented.
@@ -23,8 +23,10 @@ Read these documents together:
    agent evaluation, benchmarks, and release gates.
 5. [Implementation work packets](implementation-work-packets.md): ordered changes,
    dependencies, completion criteria, and review responsibilities.
-6. [Baseline review](baseline-review.md): observed gaps in the existing scaffold.
-7. [Delivery governance](delivery-governance.md), [traceability](traceability.md), and
+6. [R1 industrial capability expansion](r1-industrial-capability-expansion.md):
+   managed indexing, enrichment, reconstruction and operated worker growth.
+7. [Baseline review](baseline-review.md): observed gaps in the existing scaffold.
+8. [Delivery governance](delivery-governance.md), [traceability](traceability.md), and
    [qualification profiles](support-and-resource-profiles.md): enforceable scope controls.
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
@@ -38,6 +40,12 @@ assistant. The assistant checks prerequisites, opens a temporary session, import
 creates a transcript, finds relevant spans, requests candidate frames, refines the
 time range or crop, and cites the resulting evidence in its code investigation. It
 closes the session or explicitly retains a bundle.
+
+That entire journey is the R0 product, not an architectural demonstration deferred
+to R1. Release qualification runs it against real fixture videos through named OpenAI
+Codex and Claude Code clients (or documented equivalent successors) with local shell
+and image access. A general web chat without a local execution bridge is not claimed
+to invoke the CLI. VSift itself remains independent of a hosted-model API.
 
 Worker: a trusted supervisor stages an immutable input and invokes the same engine
 non-interactively under a resource budget. VSift commits validated artifacts to an
@@ -70,16 +78,32 @@ R1 means the next planned extension; R2 means a larger service integration.
 | R-12 | Headless operation, structured logs, stable metrics/events for a supervisor | R0 | O and worker tests |
 | R-13 | Agent skill, conservative context budget, evidence-backed QA handoff | R0 | A evaluation suite |
 | R-14 | npm distribution and native binaries with provenance and supported-target tests | R0 | release qualification |
-| R-15 | OCR, embeddings, VAD enrichment, small optional vision models | R1 | task-specific accuracy and resource evaluations |
-| R-16 | Reliable scroll/pan composition with refusal and source-frame fallback | R1 | reconstruction ground truth |
-| R-17 | Durable cross-video index, including optional SQLite adapter | R1/R2 | index consumer contract and rebuild tests |
-| R-18 | Distributed queue service, tenancy, auth, quotas, remote object store | R2 | service threat model, failover and isolation tests |
-| R-19 | Optional MCP adapter over published use cases | R1/R2 | adapter conformance tests |
+| R-15 | Optional bounded VAD/OCR/diarization/embedding/visual-tag enrichment | R1 | enrichment accuracy, resource, provenance and absence/failure evaluations |
+| R-16 | Reliable scroll/pan composition with refusal and source-frame fallback | R1 | reconstruction ground truth and pixel provenance |
+| R-17 | Explicit managed cross-video catalogue, including a qualified embedded adapter | R1 | lifecycle, migration, backup/restore, rebuild and privacy tests |
+| R-18 | Industrial job control for repeated and horizontally scalable worker execution | R1 | lease/fencing, duplicate delivery, partition, host-loss and backpressure tests |
+| R-19 | Production operations and security for qualified R1 deployment profiles | R1 | auth, observability, upgrade, disaster recovery, load/soak/chaos and runbooks |
+| R-20 | Preserve the complete R0 workflow through two independent coding-agent clients | R1 | named Codex and Claude Code end-to-end regression evidence |
 
 R0 preserves scrolling sequences and supports detailed manual agent navigation. It
 does not promise a stitched spreadsheet. OCR is useful but is not a condition for
 the core image-reading workflow; a client with no image-reading capability must
 report that limitation. R1 capabilities must not become mandatory runtime downloads.
+The detailed R1 boundary, P15-P20 graph and verification identifiers are defined in
+the [industrial capability expansion](r1-industrial-capability-expansion.md). MCP and
+public multi-tenant service ingress remain R2 concerns rather than displacing the
+CLI/skill from the primary integration path.
+
+### What fully functional means in R0
+
+R0 is releasable only when a compatible coding agent can start with a local video and
+finish with a timestamped transcript and source-grounded visual evidence without the
+user manually extracting audio, transcribing it, or taking screenshots. Both the
+provided-transcript and local-ASR paths must pass. Missing dependencies produce an
+actionable setup plan and require explicit installation authority. Evidence references
+remain resolvable after bounded paging/refinement, and session cleanup versus retention
+is explicit. The agent may honestly report insufficient evidence; a scaffold-only,
+transcript-only, or screenshot-only flow is not a functional R0 release.
 
 ### What server readiness means in R0
 
@@ -138,6 +162,11 @@ Existing decisions retained: Rust core, npm as distribution, CLI primary surface
 optional skill/MCP adapters, explicit persistence, source authority, and strict module
 boundaries. No new paid inference provider is required.
 
+[ADR 0011](../decisions/0011-r1-industrial-capability-expansion.md) accepts the release
+boundary for the managed industrial expansion: R0 must already be functionally complete;
+R1 owns P15-P20; MCP and public hostile multi-tenancy remain R2 by default. It does not
+select the pending R1 backends/providers or resolve P03's storage qualification gate.
+
 ## Completion and change control
 
 The first iteration is complete only when all R0 requirements map to passing tests,
@@ -151,5 +180,7 @@ unsupported environments instead of claiming vulnerability-free software.
 
 P00 established decisions, fixture truth, traceability and anti-drift controls in
 PR #18 (`924f6c5`); PR #20 (`3d7a7d2`) completed P01; and PR #22 (`4e9ef08`)
-completed P02 through protected review. Their evidence is recorded in the ledger;
-P03 / issue #6 is next but has not started.
+completed P02 through protected review. P03 feasibility evidence merged through
+PR #24 (`cbc531e`), but P03 remains active at the unresolved OS/storage crash
+qualification gate. Their evidence and limitations are recorded in the ledger and
+the [P03 feasibility record](p03-storage-feasibility.md).

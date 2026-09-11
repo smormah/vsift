@@ -59,7 +59,8 @@ matrix and ADRs 0005/0006 remain the current targets.
 - All deterministic PR checks plus platform process/filesystem conformance tests.
 - Crash injection and source-preservation proof on the named filesystem.
 - Resource overload, cancellation, descendant cleanup and handle-leak tests.
-- End-to-end fixture corpus accuracy and named compact-agent evaluation.
+- End-to-end fixture corpus accuracy, compact-agent evaluation, and the complete
+  video-to-grounded-handoff lifecycle through named Codex and Claude Code clients.
 - Release artifact provenance, inventory, notices and unresolved finding review.
 
 Until those results exist, documentation must say “qualification target” rather than
@@ -72,3 +73,12 @@ new process group remains inside the worker cgroup, induces observable CPU throt
 reaches the PID ceiling and confirms that a bounded over-limit allocation cannot
 complete successfully. That proves the supervisor's strict-mode attestation and
 fail-closed split; it is not the full P11 worker or P14 release qualification.
+
+## R1 profile planning
+
+R1 adds an explicitly managed embedded-node profile and an industrial worker-plane
+profile; it does not change desktop defaults. P15 must name their exact OS, filesystem,
+catalogue, queue/object-store topology, isolation boundary and reference hardware before
+implementation. Throughput, recovery time, recovery point and catalogue-size claims
+remain unset until measured. See the
+[R1 industrial capability expansion](r1-industrial-capability-expansion.md).

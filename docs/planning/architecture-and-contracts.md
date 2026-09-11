@@ -401,6 +401,14 @@ delete/tombstone events within their own transaction model. An index can be rebu
 from retained bundles; it does not alter authoritative evidence. Remote adapters
 must add scoped authorization, consistency and deletion semantics before release.
 
+R1 makes this extension explicit through a `CataloguePort`, not through database
+types in domain records. A possible SQLite adapter is limited to an explicitly created
+single-node catalogue. It is neither a cross-process work queue nor a distributed
+coordination strategy, and ordinary desktop ingestion must not create or update it.
+Industrial delivery, remote artifact storage and catalogue persistence are separate
+ports so each can be replaced and qualified without changing media or evidence logic.
+See the [R1 industrial capability expansion](r1-industrial-capability-expansion.md).
+
 Observability: correlated job/attempt/operation IDs, stage duration, admission wait,
 bytes processed, queue depth, resource caps, retries, cancellations, provider versions
 and failure codes. Export bounded structured events without transcript text, source

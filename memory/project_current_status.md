@@ -2,10 +2,16 @@
 
 ## Active
 
-P03 / issue #6 is active at the storage feasibility gate on
-`codex/p03-storage-feasibility`. The clean predecessor is protected-main P02 evidence
-commit `25c3aad01fc9e2fc391c5c016295df5aff61fbdd`; P01/P02 are complete.
-Adapter expansion is conditional on ADR 0006's native containment/lock/flush evidence.
+P03 / issue #6 is active at the storage feasibility gate on protected main
+`cbc531e80761078354be0b9942c52f00ddac05b0`; P01/P02 are complete. PR #24 merged
+P03's bounded feasibility evidence but did not complete the packet. Adapter expansion
+is conditional on ADR 0006's native containment/lock/flush evidence.
+
+The R1 managed industrial capability boundary is being recorded on
+`docs/r1-industrial-capability-scope`. ADR 0011 reserves P15-P20 for contracts/corpus,
+enrichment, source-grounded composition, managed catalogue, industrial worker plane
+and integrated qualification. This is roadmap work only: P15+ implementation remains
+ineligible until P14 and P15's decision/fixture/ledger gate.
 
 FS-01: OS/storage crash qualification is absent. The default NTFS read-only
 directory handle fails synchronization (OS error 5); an explicit safe writable
@@ -110,4 +116,6 @@ hardened.
 
 Resolve P03 / issue #6's failed feasibility gate through explicit design acceptance
 and qualified crash evidence. P03 remains in progress; no successor is eligible.
-Do not pull P04+ media or P05+ session behavior forward.
+Review the R1 scope separately, but do not pull P04+ or P15+ behavior into P03. R0
+must still ship the complete agent-operated video, transcript and visual-evidence
+lifecycle; the industrial expansion cannot be used to defer that outcome.

@@ -61,6 +61,26 @@ corresponding supported deployment profile. Each row references the verification
 | SEC-24 P1 | OS crash/disk loss contradicts claimed durable completion | Qualify fsync/publication sequence; explicit durability level; fail on flush error; external durable storage for host-loss recovery | X-01/X-10 |
 | SEC-25 P0 | Leaked secrets inherited by ffmpeg/ML subprocess | Allowlisted env/handles; stdin policy; no credential-bearing CLI args; restricted worker mounts/network | P-02, SEC-T01 |
 
+### R1 managed and industrial expansion threats
+
+These threats are scoped now so R1 cannot acquire persistence, models or remote worker
+integration without their control cost. They are not claims that those capabilities
+exist. The authoritative R1 boundary and test groups are in the
+[industrial capability expansion](r1-industrial-capability-expansion.md).
+
+| ID | Abuse case | Required control | Verification |
+| --- | --- | --- | --- |
+| SEC-26 P0 | One-off desktop evidence is silently enrolled in a persistent catalogue | Explicit catalogue selection and visible lifecycle; default ingest remains disposable | I-11, Q-01/Q-02 |
+| SEC-27 P0 | Stale index, lost tombstone or partial erasure exposes deleted evidence | Transactional lifecycle events, bounded reconciliation, rebuild and erasure report | I-04..I-07, Q-09 |
+| SEC-28 P0 | Poisoned OCR, tags or embeddings steer ranking or agent actions | Treat enrichment as untrusted hints; preserve source references and capability/coverage disclosure | E-01..E-08, Q-07 |
+| SEC-29 P0 | Scroll/pan composition fabricates, duplicates or hides visible facts | Per-region source provenance, qualified thresholds, explicit gaps and refusal | RC-01..RC-08 |
+| SEC-30 P0 | Queue replay, expired lease or stale worker publishes conflicting results | Request digest, attempt identity, fencing token and immutable idempotent commit | H-01..H-07 |
+| SEC-31 P0 | Remote integration leaks credentials or reaches request-selected storage/URLs | Scoped workload identity, configured endpoints, sanitized transport and no request-selected credentials | H-06/H-09, Q-07 |
+| SEC-32 P0 | Search cardinality, index growth or enrichment work exhausts service resources | Quotas, admission, bounded scans/pages/labels, cancellation and measured saturation | E-08, I-10, H-08, Q-03/Q-04 |
+| SEC-33 P0 | Backup, restore or migration leaks or corrupts retained evidence | Scoped encrypted storage policy, integrity/version checks, atomic migration and recovery rehearsal | I-08/I-09/I-12, Q-06/Q-09 |
+| SEC-34 P0 | Caller accesses another job or tenant by guessing an identifier | Authenticate and authorize every operation; separate storage scopes; opaque IDs are not authorization | H-09/H-10, SEC-T03 |
+| SEC-35 P0 | Metrics, traces or operator logs disclose paths, transcript text or secrets | Allowlisted low-cardinality attributes, bounded exporters and sentinel redaction tests | H-08..H-12, Q-07/Q-09 |
+
 ## Process isolation profile
 
 P03 qualification finding FS-01: the required OS/storage crash campaign is absent.

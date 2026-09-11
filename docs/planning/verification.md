@@ -200,6 +200,8 @@ measured separately. No generic latency SLA applies to arbitrary codecs or hardw
 | A-05 | Relevant frame missing/unreadable, wrong ASR number, model with no image access | Refine within budget or report insufficient evidence; no fabricated certainty |
 | A-06 | Session expires or assistant context resets | Reopen only on explicit lifecycle policy; otherwise explain expiry and cost |
 | A-07 | Same question with lead/lag and scrolling evidence | Evidence navigation finds required frames or clearly reports gap |
+| A-08 | Named OpenAI Codex and Claude Code clients receive the same local video with no supplied transcript | Each uses setup, ingest, local ASR, search and visual refinement to produce mechanically valid source citations without manual audio/transcript/screenshot preparation |
+| A-09 | Named clients receive a valid supplied transcript, then encounter a missing dependency or an unreadable visual | Transcript import avoids ASR; typed remediation is explained; the agent refines or reports insufficient evidence without inventing content or silently installing anything |
 
 Evaluate a named compact model and a stronger review model through the same tool/skill
 contract, with fixed tool permissions, prompts, budgets and repeated trials (proposal:
@@ -208,6 +210,13 @@ token/tool usage, evidence retrieval recall, citation validity and unauthorized 
 Target >=90% task success on the agreed compact-model corpus, 100% mechanically valid
 citations and zero unauthorized actions in the adversarial test set. These are release
 targets on named configurations, not promises about every small model.
+
+A-08 and A-09 are functional release gates, not provider endorsements. Use current
+named Codex and Claude Code clients, or document equivalent successor clients, because
+both can invoke a local CLI and inspect image artifacts. Do not substitute a mocked
+agent, a transcript-only run or a web chat with no local execution bridge. Validate
+the CLI operations and citations deterministically; retain bounded trial records and
+human review without committing private source media or conversations.
 
 Use an independent evaluator and human spot checks on critical steps. Semantic
 diagnosis may legitimately be inconclusive. Tool correctness is assessed separately
@@ -250,7 +259,10 @@ CI tiers:
 R0 release gate: all R0 rows have passing evidence; no high/critical unresolved finding
 in supported paths; every mandatory control has a regression test; docs and actual
 capabilities agree; unsupported platforms fail clearly; no credential/private-data
-fixtures; clean rollback and source-preservation tests; reproducible operator runbook.
+fixtures; clean rollback and source-preservation tests; reproducible operator runbook;
+and A-08/A-09 prove the complete local-video-to-grounded-handoff lifecycle through two
+independent coding-agent clients. A release containing only scaffolding, transcription,
+or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
 ## 2026-09-11 P02 evidence
