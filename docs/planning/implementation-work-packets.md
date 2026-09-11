@@ -1,7 +1,7 @@
 # Implementation work packets
 
-Status: accepted sequence. P01 completed in PR #20 (`3d7a7d2`); P02 / issue #5 is
-active on `feat/p02-secure-process-supervisor` from `cedbb63`. Tests reference
+Status: accepted sequence. P02 completed in PR #22 (`4e9ef08`); P03 / issue #6 is
+next and has not started. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes

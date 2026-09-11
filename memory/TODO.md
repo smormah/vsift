@@ -2,16 +2,13 @@
 
 ## Current checkpoint
 
-2026-09-10: P02 / issue #5 is active on branch
-`feat/p02-secure-process-supervisor`, based on the completed P01 record at
-`cedbb63ad1ddc69bb1bbb405b424da67494ce990`. Its scope is the secure process
-supervisor, trusted provider resolution, bounded pipes, lifecycle containment and
-truthful effective-control reporting.
+2026-09-11: P02 / issue #5 completed through PR #22 at
+`4e9ef08df1e53019df7645edb0e493628a3e401a`. P03 / issue #6 is the next eligible
+packet but has not started.
 
 ## Pending
 
-- Complete P02 through protected review with P-01..P-08 and C-05 evidence.
-- Keep P03+ storage, media and provisioning behavior outside this packet.
+- Start P03 only from a fresh branch after this P02 evidence record merges.
 - Resolve baseline findings B-01..B-11 through their mapped implementation packets.
 - Preserve optional SQLite indexing, enrichment and reconstruction as later packets
   P15..P20 unless scope is explicitly changed.
@@ -31,3 +28,8 @@ truthful effective-control reporting.
   R0 CLI/config/JSON boundary, four v1 schemas, domain value contracts, stable
   errors/exits, bounded presentation and C-01..C-10 coverage. All protected checks
   passed across Ubuntu, Windows and macOS; the local workspace had 64 passing tests.
+- 2026-09-11: P02 merged through PR #22 as `4e9ef08`. It added canonical provider
+  resolution, shell-free process supervision, bounded concurrent pipes, one operation
+  deadline, sticky cancellation, Windows Job Object/Unix process-group cleanup, and
+  honest strict-isolation reporting. P-01..P-08 and C-05 passed across protected
+  three-OS and strict Linux checks; the local Windows workspace had 82 passing tests.
