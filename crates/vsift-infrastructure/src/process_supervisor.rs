@@ -800,10 +800,10 @@ async fn terminate_and_reap(
     #[cfg(unix)]
     {
         const SIGTERM: i32 = 15;
-        if child.signal(SIGTERM).is_ok() {
-            if let Ok(result) = timeout(policy.graceful_shutdown, child.wait()).await {
-                return result.map_err(ProcessError::Wait);
-            }
+        if child.signal(SIGTERM).is_ok()
+            && let Ok(result) = timeout(policy.graceful_shutdown, child.wait()).await
+        {
+            return result.map_err(ProcessError::Wait);
         }
     }
 
