@@ -2,10 +2,11 @@
 
 ## Active
 
-P03 / issue #6 is active at the storage feasibility gate on protected main
-`0cfdb407f805282995f326ca93c99bc7170eda04`; P01/P02 are complete. PR #24 merged
-P03's bounded feasibility evidence but did not complete the packet. Adapter expansion
-is conditional on ADR 0006's native containment/lock/flush evidence.
+P03 / issue #6 is active on protected main
+`20675dee4e0fc9547ac98385b1aaf489142a851f`; P01/P02 are complete. PR #24 merged
+P03's bounded feasibility evidence but did not complete the packet. ADR 0010 acceptance
+is in progress on `docs/accept-p03-storage-profile` so the production adapter can
+resume against an honest ephemeral desktop guarantee.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -19,10 +20,12 @@ local-ASR end-to-end release evidence required by A-08/A-09.
 FS-01: OS/storage crash qualification is absent. The default NTFS read-only
 directory handle fails synchronization (OS error 5); an explicit safe writable
 directory handle succeeds. That resolves the API-access issue, not durability
-qualification. Production adapter expansion is gated. The development-only native
-spike records primitive containment, lock and process-kill observations, not P03
-completion. See `docs/planning/p03-storage-feasibility.md` and proposed ADR 0010.
-Accepted decisions/profile targets remain unchanged; no storage operation is exposed.
+qualification. Strict durable enablement remains gated, while ephemeral adapter work
+may resume. The development-only native spike records primitive containment, lock and
+process-kill observations, not P03 completion. Accepted ADR 0010 assigns strict
+Ubuntu/ext4 durability proof and
+enablement to P10/P11/P14; durable requests must fail before mutation until then.
+No storage operation is exposed yet.
 
 Spike commit: `5f15c7730607570663d739b7a4dd70a03947e500`, PR #24. Local Windows
 checks pass (92 tests, fmt, strict clippy, governance and warning-denied rustdoc).
@@ -134,8 +137,8 @@ hardened.
 
 ## Next action
 
-Resolve P03 / issue #6's failed feasibility gate through explicit design acceptance
-and qualified crash evidence. P03 remains in progress; no successor is eligible.
-Review the R1 scope separately, but do not pull P04+ or P15+ behavior into P03. R0
-must still ship the complete agent-operated video, transcript and visual-evidence
-lifecycle; the industrial expansion cannot be used to defer that outcome.
+Merge the ADR 0010 profile decision, then resume only P03 storage/coordination
+implementation: ephemeral NTFS/APFS publication, safe containment/locks/admission,
+and fail-closed durable requests. P03 remains in progress and P04 is ineligible until
+that implementation and its mapped tests merge. Do not pull P04+ or P15+ behavior into
+P03. The Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.

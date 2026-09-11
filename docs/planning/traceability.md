@@ -50,10 +50,12 @@ broken.
 
 ## Scope guardrails
 
-P03 is active but blocked at its durability qualification gate. Its
+P03 is active under ADR 0010's narrower qualification profile. Its
 [native API experiments and open suite coverage](p03-storage-feasibility.md) provide
 partial evidence for R-07..R-11 only. They close neither B-10 nor SEC-07..SEC-11,
-SEC-18 or SEC-24. Proposed ADR 0010 does not change accepted scope until approved.
+SEC-18 or SEC-24. P03 must implement and qualify ephemeral desktop publication while
+durable requests fail before mutation; P10/P11/P14 retain the Ubuntu/ext4 durability
+and strict-worker release proof.
 
 R0 owns local media input, disposable/retained workspaces, bounded single-host worker
 execution, evidence retrieval and native/npm distribution. It excludes OCR,

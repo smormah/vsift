@@ -86,10 +86,11 @@ exist. The authoritative R1 boundary and test groups are in the
 P03 qualification finding FS-01: the required OS/storage crash campaign is absent.
 The Windows default read-only directory-flush error is resolved in an API probe
 by requesting write access; that success does not qualify publication ordering.
-Production storage expansion is stopped at ADR 0006's evidence gate. See the
-[evidence and unclosed controls](p03-storage-feasibility.md). This is a SEC-24
-qualification blocker, not a released vulnerability or closure of SEC-07..SEC-11
-and SEC-18. Proposed ADR 0010 requires explicit design acceptance.
+ADR 0010 permits P03 production expansion only for ephemeral desktop publication and
+requires durable requests to fail before mutation. See the
+[evidence and unclosed controls](p03-storage-feasibility.md). Missing OS/storage crash
+evidence remains a SEC-24 blocker for Ubuntu/ext4 durable enablement in P10/P11/P14,
+not a released vulnerability or closure of SEC-07..SEC-11 and SEC-18.
 
 No-shell execution addresses one injection route. It does not confine a vulnerable
 decoder. Unix process groups aid termination; Windows Job Objects group processes;

@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-09-11
 - Extends: ADR 0002, ADR 0004 and ADR 0005
-- Does not resolve: ADR 0010 or the P15 catalogue/orchestration/provider choices
+- Does not resolve: the P15 catalogue/orchestration/provider choices
 
 ## Context
 
@@ -53,4 +53,3 @@ R0 functional and security regression suite.
   same application contracts and cannot fork business logic.
 - This ADR changes release ownership only. It does not claim R0 or R1 implementation,
   accept a storage backend, or supply the missing P03 crash evidence.
-

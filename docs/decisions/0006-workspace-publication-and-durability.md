@@ -1,8 +1,9 @@
 # ADR 0006: Workspace publication and durability
 
-- Status: Accepted
+- Status: Accepted — cross-platform durable target partially superseded by ADR 0010
 - Date: 2026-09-10
-- Resolves: DEC-05, DEC-06, DEC-13
+- Resolves: DEC-06
+- DEC-05 and DEC-13 now resolve through ADR 0010
 
 ## Context
 
@@ -28,6 +29,8 @@ target, the operation returns a typed unsupported-guarantee error.
 ## Consequences
 
 P03 begins with a feasibility gate for NTFS, APFS and ext4 locking/publication behavior.
-Failure triggers a replacement ADR considering a narrower profile or proven embedded
-storage. Network filesystems and host/disk loss are outside R0's local durability claim.
-A future catalogue consumes retained bundles rather than sharing this internal layout.
+[ADR 0010](0010-storage-qualification-gate.md) accepts ephemeral desktop qualification
+on NTFS/APFS and moves strict durable enablement to the Ubuntu/ext4 worker qualification
+in P10/P11/P14. Network filesystems and host/disk loss are outside R0's local durability
+claim. A future catalogue consumes retained bundles rather than sharing this internal
+layout.

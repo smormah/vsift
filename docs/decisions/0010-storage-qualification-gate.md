@@ -1,8 +1,8 @@
 # ADR 0010: Narrow storage qualification after the P03 feasibility gate
 
-- Status: Proposed — requires maintainer design acceptance; not in force
+- Status: Accepted
 - Date: 2026-09-11
-- Would partially supersede: ADR 0006's cross-platform durable publication target
+- Partially supersedes: ADR 0006's cross-platform durable publication target
 - Tracking: [P03 / issue #6](https://github.com/smormah/vsift/issues/6)
 
 ## Context and measured finding
@@ -24,41 +24,53 @@ an owned restartable storage-fault harness. API success and process-kill experim
 cannot substitute for that evidence. Production adapter expansion stops at this
 unmet gate; safe cross-platform implementation has not been shown impossible.
 
-## Proposed decision
+## Decision
 
-If three-platform crash qualification cannot be supplied for P03, keep
-Windows/NTFS and macOS/APFS as desktop **ephemeral** storage qualification
-targets. Permit future durable worker qualification only on Ubuntu 24.04/ext4,
-conditional on a reviewed ordering and disposable OS/storage crash campaign.
-Explicit durable requests on unqualified profiles must return a typed
-unsupported-guarantee error before mutation; never downgrade to ephemeral.
+Keep Windows/NTFS and macOS/APFS as desktop **ephemeral** storage qualification
+targets for R0. A retained bundle is explicitly preserved from VSift cleanup but
+does not acquire a strict OS-crash durability claim merely because it is retained.
+Its result reports the effective publication guarantee.
 
-This proposal does not approve even ephemeral support today. The complete P03
-path, permissions, admission, integrity, reader/writer and process-crash tests
-remain required before that implementation ships. Durable acknowledgements remain
-disabled everywhere until the full qualification evidence exists.
+Qualify R0 durable worker acknowledgement only on Ubuntu 24.04/ext4, conditional on
+a reviewed publication ordering and an owned disposable OS/storage crash campaign.
+Until that campaign passes, durable operations remain disabled on every profile.
+Explicit durable requests return a typed unsupported-guarantee error before mutation;
+VSift never silently downgrades them to ephemeral.
+
+P03 may now implement the safe storage/coordination boundary and qualify ephemeral
+publication on the desktop targets. P03 completion still requires its complete path,
+permissions, admission, integrity, reader/writer and process-crash suites. It exposes
+the durable contract only as a fail-closed unsupported capability. P10, P11 and P14
+own the later Ubuntu/ext4 OS/storage crash qualification and durable enablement; R0
+cannot release the strict-worker profile before that evidence passes.
 
 Preserve explicit retention intent, source preservation, immutable generations,
 stable OS lock anchors, private roots and disposable desktop defaults. Retained
 exports on a profile without durable publication need a separately accepted
 contract stating their actual guarantee; P05 must not silently promise durability.
-No SQLite/catalogue, server host or P04+ feature is introduced.
+No SQLite/catalogue, server host or P04+ feature is introduced by this decision.
 
-## Alternatives and acceptance requirements
+## Alternatives considered
 
-1. **Preferred if the environments are available:** retain ADR 0006 unchanged,
-   supply owned disposable fault-test environments, and qualify the writable
-   Windows directory barrier plus APFS/ext4 sequences. Investigate a vetted safe
-   replacement wrapper if the crash campaign fails. Do not treat a successful
-   ordinary rename or a generic file write-through flag as that proof.
+1. Retain ADR 0006's three-platform durable target and block all later packets until
+   three owned fault environments exist. Rejected because desktop ephemeral sessions
+   do not require that guarantee and the block prevents the functional R0 journey.
+   Windows/APFS durable profiles may still be added later through independent evidence.
 2. Evaluate a proven embedded storage component scoped to an explicitly requested
    workspace. It must still solve contained artifact access, lifecycle and
    publication ordering; a metadata database alone does not make external files
-   durable. This needs its own dependency, licence and scope review.
+   durable. Deferred unless the narrow file protocol fails its remaining P03 tests;
+   adoption needs its own dependency, licence and scope review.
 
-Maintainer acceptance must select the narrower profile above or an alternative,
-identify an owned disposable crash-test environment, and update DEC-05/06/13,
-the ledger, support profiles and affected contracts together. Until that explicit
-acceptance, ADR 0006 remains authoritative, P03 remains in progress with a failed
-qualification gate, and P04+ remain ineligible. Merging this proposal as a record
-does not accept it or mark P03 complete.
+## Consequences
+
+The product can advance toward a useful desktop R0 without making an unproved
+durability promise. Ephemeral still means process-crash-consistent committed
+generations, not in-memory or disposable correctness. Explicit retention controls
+lifecycle, not disk-flush strength.
+
+P03 remains in progress until its production implementation and mapped tests pass;
+accepting this ADR is not completion evidence. The first eligible successor remains
+P04 only after P03 is merged complete. Durable worker requirements R-09/R-10 remain
+open through P10/P11/P14, and the release documentation must distinguish supported
+desktop sessions from the not-yet-qualified strict worker profile.
