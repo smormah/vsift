@@ -2,11 +2,12 @@
 
 Status: accepted R0 implementation baseline with a scoped R1 expansion. Date: 2026-09-11.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
-Its decisions are accepted through P00. P01, P02 and P03 are complete. P03's internal
+Its decisions are accepted through P00. P01, P02, P03 and P04 are complete. P03's internal
 private-root, stable-lock, weighted-admission, later-generation publication and
 process-crash recovery boundary merged in PR #42 (`3eef9b7`). No public
-storage/session command is exposed; P04 is in implementation review with an internal
-[source/media qualification record](p04-media-qualification.md).
+storage/session command is exposed. P04's internal source/media boundary merged in
+PR #44 (`4fc859b`); its [qualification record](p04-media-qualification.md) records
+the checkpoint. P05 is the next eligible packet.
 
 ## Purpose and reading order
 

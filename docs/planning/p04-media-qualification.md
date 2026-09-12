@@ -1,6 +1,7 @@
 # P04 source and media qualification record
 
-Status: implementation under review. Predecessor: protected main
+Status: complete in protected PR #44, merge
+`4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. Predecessor: protected main
 `67bfe1438ad4e3a586aff5b6ae0a61710c340861` (P02/P03 complete).
 Issue: [#7](https://github.com/smormah/vsift/issues/7).
 Decision: [ADR 0012](../decisions/0012-p04-source-media-profile.md).

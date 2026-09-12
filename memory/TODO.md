@@ -2,13 +2,10 @@
 
 ## Current checkpoint
 
-2026-09-12: P04 source/media primitives are implemented on branch
-`codex/p04-source-media` from protected main `67bfe1438ad4e3a586aff5b6ae0a61710c340861`.
-The internal no-follow snapshot, typed FFprobe/FFmpeg adapter, deterministic fixture
-generator/independent verifier and opt-in cumulative E2E checkpoint are under review.
-ADR 0012 records the narrow local desktop profile and residual decoder isolation
-limits. The ledger remains `in_progress` until protected merge and a following
-evidence record supply the merge hash. Issue #7 remains open; no P05 stage is claimed.
+2026-09-12: P04 source/media primitives completed through protected PR #44 as
+`4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. This evidence-only follow-up
+records its completed ledger status and final test evidence. Issue #7 is closed after
+this record merges. P05 is next eligible; no P05 lifecycle stage is implemented.
 
 2026-09-11: P03's implementation completed through protected PR #42 as
 `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`. Its private provisioning and ACL
@@ -52,6 +49,20 @@ eligible packet but remains planned.
   future issues #25 through #30.
 
 ## Completed
+
+- 2026-09-12: P04 merged through protected PR #44 as
+  `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. Internal no-follow source
+  snapshots, typed restricted FFprobe/FFmpeg metadata/frame/audio operations,
+  deterministic project-owned fixtures, independent pixel/timestamp verification and
+  the opt-in seven-scenario real-media checkpoint landed. Local fmt, strict Clippy,
+  workspace tests, warning-denied rustdoc, governance and cargo-deny passed. The
+  generator reproduced the same provenance SHA-256 on a second same-build run; the
+  verifier checked 11 source clips and seven malformed variants. Protected Quality
+  passed on Ubuntu, Windows and macOS; Governance, Documentation, strict-worker,
+  dependency policy/review, CodeQL and Rust analysis passed. Native FFmpeg 9.0 on
+  Windows/NTFS is development evidence, not a release support claim. ADR 0012
+  records the remaining desktop decoder isolation limits; P05-P14 and the complete
+  E2E journey remain `not_implemented` at this checkpoint.
 
 - 2026-09-11: P03 completed in protected PR #42 as
   `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`. It added owned private-root
