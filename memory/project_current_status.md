@@ -2,14 +2,11 @@
 
 ## Active
 
-P05 issue #8 is in progress from protected main `8741f57dfc5b45c8cb4d3f1f7791d0f1d143c627`.
-Implementation commit `1238580a6a86a433019fb2ecabfeec3eef56ea43` opens disposable source-bound sessions, commits
-renew/close/artifacts through P03 generations, keeps a bounded root-local
-registration index for list/cleanup, and validates explicit evidence-only or
-source-inclusive retained bundles. Local cross-process and native
-FFmpeg/FFprobe P05 checkpoint tests pass. Protected checks, merge and ledger
-completion evidence are pending; P05 is not complete and P06 is not eligible.
-Strict durable requests still fail before mutation.
+No implementation packet is active. P05 merged through protected PR #46 as
+`c3f9313f8df0871d17ab80ad5bb142be6421b36f`; this evidence-only follow-up
+records its complete ledger status. Issue #8 closes after the follow-up merges.
+P06 is next eligible and remains planned. Strict durable requests still fail
+before mutation.
 
 At the earlier P04 checkpoint, protected PR #44 merged as
 `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`; it made P05 eligible.
@@ -58,6 +55,23 @@ remaining OS/storage crash gate are recorded. That gate is P10/P11/P14 work and 
 not invalidate P03's completed ephemeral profile.
 
 ## Complete
+
+### 2026-09-12 — P05 session lifecycle and retained bundles
+
+P05 opened disposable source-bound sessions, committed renew/close/artifacts
+through P03 generations, added bounded root-local registration for
+list/cleanup, and validated explicit evidence-only or source-inclusive
+retained bundles. Implementation commit
+`1238580a6a86a433019fb2ecabfeec3eef56ea43` plus fixture correction
+`8e7232c86d1d324b8ccd7e8e5ba271d813544ee5` merged as
+`c3f9313f8df0871d17ab80ad5bb142be6421b36f`. Local cross-process,
+source-preservation, full workspace, warning-denied docs, governance and
+dependency checks passed. The native Windows FFmpeg/FFprobe 9.0 P05 checkpoint
+passed as development evidence. Protected Quality passed on Ubuntu, Windows and
+macOS; Governance, Documentation, strict-worker, dependency policy/review,
+CodeQL and Rust analysis passed. ADR 0013 retains process-crash-consistent
+publication and the incomplete-export limit; P10/P11/P14 still own strict
+OS/storage-crash qualification.
 
 ### 2026-09-12 — P04 source and media primitives
 
@@ -219,14 +233,16 @@ PR #1 / `df85f70` renamed the public command to `vsift setup check`, with JSON o
 
 ## Implemented versus planned
 
-Only setup dependency probing is executable, now through the P02 supervisor. No
-ingestion, transcription, visual extraction, session storage, managed installation,
-queue, index, durable job or npm release exists yet. Ambient PATH remains a disclosed
-bring-your-own fallback; managed identity/version trust is unimplemented.
-See the dated B-01..B-11 dispositions; do not describe current code as production
-hardened.
+`setup check`, foreground source-bound `ingest`, session lifecycle commands and
+`bundle validate` are executable. P04's restricted FFprobe/FFmpeg source and
+frame/audio primitives are internal; the public transcription, search,
+navigation, managed installation, queue, durable job and npm release remain
+future packets. Ambient PATH remains a disclosed bring-your-own fallback;
+managed identity/version trust is unimplemented. See the dated B-01..B-11
+dispositions; do not describe current code as production hardened.
 
 ## Next action
 
-Start P04 only through its governed packet workflow. Do not pull P05+ or P15+ behavior
-into P04. The Ubuntu/ext4 OS/storage crash campaign remains mandatory in P10/P11/P14.
+Close issue #8 after this evidence follow-up merges. P06 is the next eligible
+packet but requires its own governed start. The Ubuntu/ext4 OS/storage crash
+campaign remains mandatory in P10/P11/P14.

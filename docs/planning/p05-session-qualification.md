@@ -1,8 +1,8 @@
 # P05 disposable-session and bundle qualification
 
-Status: implementation review in progress. This record describes the P05 branch;
-the [delivery ledger](delivery-ledger.json) remains authoritative for protected
-completion.
+Status: completed through protected [PR #46](https://github.com/smormah/vsift/pull/46)
+as `c3f9313f8df0871d17ab80ad5bb142be6421b36f`. The
+[delivery ledger](delivery-ledger.json) records protected completion evidence.
 
 ## Implemented boundary
 
@@ -71,6 +71,15 @@ environment/tool versions, authorization and coverage gaps. The run was on a
 dirty pre-merge checkout; its filesystem was uninspected, so it is development
 evidence only. P06-P14 and the complete video-to-grounded-handoff journey
 remain `not_implemented`.
+
+Protected PR #46 passed [three-OS Quality, Governance, Documentation and the
+strict-worker boundary](https://github.com/smormah/vsift/actions/runs/34712764817),
+[dependency policy/review](https://github.com/smormah/vsift/actions/runs/34712764852),
+and [CodeQL Rust analysis](https://github.com/smormah/vsift/actions/runs/34712764819).
+The first macOS and Windows runs exposed parallel fixture-root collisions;
+commit `8e7232c86d1d324b8ccd7e8e5ba271d813544ee5` fixed them before the
+passing protected rerun. The protected jobs do not promote the local opt-in
+checkpoint to complete end-to-end or strict durable evidence.
 
 Dependency review: `getrandom` 0.3.4 was already present in the lockfile and is
 used directly for unpredictable session/operation IDs. `time` 0.3.55 supplies
