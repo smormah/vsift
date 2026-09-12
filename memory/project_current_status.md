@@ -2,11 +2,16 @@
 
 ## Active
 
+P06 source review (2026-09-12) found no reviewed immutable per-target provider/model
+catalog. Upstream FFmpeg supplies source only; whisper.cpp v1.9.4 has no release
+assets and v1.9.2 has no macOS CLI archive. See
+`docs/planning/p06-provisioning-source-review.md`. P06 remains planned, and no
+managed-install or D-suite evidence is claimed. Issue #9 remains open.
+
 No implementation packet is active. P05 merged through protected PR #46 as
-`c3f9313f8df0871d17ab80ad5bb142be6421b36f`; this evidence-only follow-up
-records its complete ledger status. Issue #8 closes after the follow-up merges.
-P06 is next eligible and remains planned. Strict durable requests still fail
-before mutation.
+`c3f9313f8df0871d17ab80ad5bb142be6421b36f`, its evidence follow-up merged,
+and issue #8 closed. P06 is next eligible but remains planned at this source gate.
+Strict durable requests still fail before mutation.
 
 At the earlier P04 checkpoint, protected PR #44 merged as
 `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`; it made P05 eligible.
@@ -243,6 +248,7 @@ dispositions; do not describe current code as production hardened.
 
 ## Next action
 
-Close issue #8 after this evidence follow-up merges. P06 is the next eligible
-packet but requires its own governed start. The Ubuntu/ext4 OS/storage crash
-campaign remains mandatory in P10/P11/P14.
+Review the P06 provider/model source matrix and target-specific managed-install
+boundary, then implement and qualify P06 under issue #9. Keep the ledger planned
+and issue open until D-01..D-10, E2E and protected checks pass. The Ubuntu/ext4
+OS/storage crash campaign remains mandatory in P10/P11/P14.
