@@ -404,6 +404,15 @@ releases and models; a working `--help` is insufficient.
 
 ## 10. Worker and indexing extension contracts
 
+P04 implements the internal source/media edge under [ADR 0012](../decisions/0012-p04-source-media-profile.md):
+a no-follow local source snapshot in a private P03 session, SHA-256 source identity,
+typed stream selection and restricted FFprobe/FFmpeg operations. The media adapter
+reports observed frame/audio PTS rather than inferring it from a request. It accepts
+only local MP4/Matroska container bytes and the provider `file` protocol; MOV external
+references are disabled. This is not yet a public CLI operation or a P05 session
+lifecycle. See the [qualification record](p04-media-qualification.md) for limits and
+test coverage.
+
 `JobRequest` includes schema version, external correlation/idempotency key, immutable
 source binding, requested stages, workspace/lifecycle, resource policy reference,
 deadline and desired bundle location. It cannot specify arbitrary executable paths,

@@ -2,8 +2,10 @@
 
 This directory defines the public, rights-safe ground truth used to qualify the media
 pipeline and agent workflow. `manifest.json` is the reviewed truth source;
-`manifest.schema.json` validates its structure. Fixture media will be generated from
-deterministic project-owned recipes during P04, then its hashes will be recorded here.
+`manifest.schema.json` validates its structure. P04 fixture media is generated from
+deterministic project-owned recipes in `tools/generate_p04_fixtures.py`; generated
+hashes and command provenance are recorded in `generated/provenance.json`. Run the
+independent `tools/verify_p04_fixtures.py` before using generated media as evidence.
 
 The manifest deliberately separates expected evidence from future selection code.
 An implementation may not generate expected timestamps by asking its own algorithm
@@ -22,6 +24,10 @@ Rules:
 - F12 contains synthetic prompt-injection text; it is test data, never an instruction.
 - Every expected event uses integer microseconds on the normalized presentation timeline.
 
-P00 defines truth. P04 implements the deterministic generator and independently checks
-the produced timestamps/pixels. P07 adds speech artifacts. P08/P12 use the frozen
-corpus for measured retrieval and agent evaluation.
+P00 defines truth. P04 generates F01-F10/F12 visual media, F11 malformed variants,
+tone-based audio sentinels and rotated/audio-track variants. The verifier independently
+checks generated hashes, timestamps and selected decoded pixels. The source recipes
+are reproducible with the same FFmpeg build; `generated/provenance.json` records that
+build's version and hash. P07 adds speech artifacts matching the frozen scripts.
+P08/P12 use the frozen corpus for measured retrieval and agent evaluation. See the
+[P04 qualification record](../../docs/planning/p04-media-qualification.md).

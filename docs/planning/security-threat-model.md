@@ -167,6 +167,15 @@ one successful defense does not prove universal safety. See [OWASP prompt inject
 
 ## Residual risks and response
 
+P04 applies SEC-05/SEC-06/SEC-17 controls at the internal media edge: held no-follow
+source staging, byte-identified snapshots, forced local demuxers/protocol, disabled
+MOV external references, bounded probe/extraction and actual presentation timestamps.
+The provider remains a native process with filesystem access in the desktop profile;
+these controls do not constitute a filesystem sandbox or a whole-process memory cap.
+P11/P14 retain strict decoder isolation and malicious-media release qualification.
+See [ADR 0012](../decisions/0012-p04-source-media-profile.md) and the
+[P04 qualification record](p04-media-qualification.md).
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.

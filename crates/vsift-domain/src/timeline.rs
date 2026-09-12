@@ -107,6 +107,15 @@ impl FrameDimensions {
     pub const fn height(self) -> u32 {
         self.height
     }
+
+    /// Swaps positive dimensions for a quarter-turn display orientation.
+    #[must_use]
+    pub const fn quarter_turn(self) -> Self {
+        Self {
+            width: self.height,
+            height: self.width,
+        }
+    }
 }
 
 /// Pixel rectangle in an orientation-correct displayed source frame.

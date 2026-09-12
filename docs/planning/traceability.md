@@ -54,8 +54,8 @@ P03 completed in PR #42 (`3eef9b7`) under ADR 0010's narrower qualification prof
 It implements the P03 portions of R-07..R-11: private owned roots,
 handle-relative metadata, stable locks, weighted admission, generation publication,
 read/cleanup holds and process-crash recovery. S-03 at this packet proves stable
-storage snapshots and detects identity/integrity changes; P04 still owns actual media
-source binding and staging. P05 owns lifecycle deletion, while P10/P11/P14 retain
+storage snapshots and detects identity/integrity changes; P04 implements actual media
+source binding and staging under ADR 0012. P05 owns lifecycle deletion, while P10/P11/P14 retain
 durable stage acknowledgement, the Ubuntu/ext4 OS/storage campaign and strict-worker
 release proof. Explicit durable requests continue to fail before mutation.
 

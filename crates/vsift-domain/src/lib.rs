@@ -6,6 +6,7 @@ mod evidence;
 mod failure;
 mod identity;
 mod job;
+mod media;
 mod pagination;
 mod storage;
 mod timeline;
@@ -18,6 +19,10 @@ pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
 };
 pub use job::{JobState, JobTransitionError};
+pub use media::{
+    DisplayRotation, MediaDecodeSupport, MediaDescription, MediaSelection, MediaSelectionError,
+    MediaStream, MediaStreamKind,
+};
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,

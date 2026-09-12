@@ -5,7 +5,8 @@ Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
 Its decisions are accepted through P00. P01, P02 and P03 are complete. P03's internal
 private-root, stable-lock, weighted-admission, later-generation publication and
 process-crash recovery boundary merged in PR #42 (`3eef9b7`). No public
-storage/session command is exposed; P04 is the next eligible packet.
+storage/session command is exposed; P04 is in implementation review with an internal
+[source/media qualification record](p04-media-qualification.md).
 
 ## Purpose and reading order
 

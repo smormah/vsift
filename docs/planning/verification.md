@@ -287,7 +287,7 @@ protected checks passed. The internal P03 adapter maps its packet suites as foll
 | Gate | Mechanical evidence |
 | --- | --- |
 | S-01/S-02 | Absolute owned-root selection rejects traversal, reserved names, ADS and case collisions; capability-relative no-follow opens plus single-link checks cover root/session/metadata substitution, with the earlier native junction/symlink probes retained |
-| S-03 | Read holds retain a verified immutable generation across pointer replacement and integrity changes fail closed; P04 still owns actual media source binding/staging |
+| S-03 | Read holds retain a verified immutable generation across pointer replacement and integrity changes fail closed; P04 now binds and stages actual media inside that held session |
 | S-07/S-08 | Injected failure and child-process exit at manifest write/flush/rename and pointer write/flush/rename preserve a valid old/new commit; missing, truncated, changed-checksum and future-version metadata fail explicitly |
 | S-12 | Provisioning verifies Unix owner/mode or Windows DACL allow entries; root policy is immutable, revalidated before mutation, and stable lock anchors are single-link files |
 | X-01/X-02 | Every publication boundary restarts and retries with the same operation; a commit followed by lost response returns the existing compatible generation |
@@ -312,7 +312,17 @@ used a scheduler-yield count as an implicit timing budget. The follow-up uses an
 explicit five-second monotonic deadline with 10 ms retry intervals; both contention
 tests passed ten consecutive local runs before the full suite was rerun.
 
+## 2026-09-12 P04 source/media checkpoint
+
+P04's [qualification record](p04-media-qualification.md) maps M-01..M-06 and V-01 to
+source/parser tests, independently verified project-owned fixtures and an opt-in real
+FFprobe/FFmpeg checkpoint. The checkpoint reports source/media stages separately and
+keeps the complete journey `not_implemented`; it does not qualify P05-P14 or a release
+platform. The generated fixture provenance and separate pixel/timestamp verification
+records are under `fixtures/corpus/generated/`.
+
 ## 2026-09-11 P02 evidence
+
 
 PR #22 (`4e9ef08df1e53019df7645edb0e493628a3e401a`) passed P-01..P-08
 and the process-side C-05 controls. The local Windows workspace passed 82 tests.
