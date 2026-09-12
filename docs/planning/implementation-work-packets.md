@@ -1,10 +1,11 @@
 # Implementation work packets
 
-Status: accepted R0 sequence with scoped R1 packets. P04 completed in protected
-PR #44 (`4fc859b`); its [qualification record](p04-media-qualification.md) describes
-the internal boundary and evidence. P05 is active under issue #8; its
-[qualification record](p05-session-qualification.md) describes the implementation
-under review, without claiming protected completion. P02 completed in PR #22
+Status: accepted R0 sequence with scoped R1 packets; R0 P06 dependency scope
+revised by ADR 0014. P04 completed in protected PR #44 (`4fc859b`); its
+[qualification record](p04-media-qualification.md) describes the internal boundary
+and evidence. P05 completed in protected PR #46 (`c3f9313`); its
+[qualification record](p05-session-qualification.md) records the evidence.
+P02 completed in PR #22
 (`4e9ef08`); P03 completed in PR #42 (`3eef9b7`) under accepted ADR 0010. Its
 feasibility evidence merged in PR #24 (`cbc531e`), PR #35 added typed guarantees,
 and PR #36 added the first internal filesystem-session increment. PR #42 completed
@@ -46,7 +47,7 @@ P00 decisions + fixtures
   -> P03 storage/locking feasibility and implementation
   -> P04 source/media primitives
   -> P05 session lifecycle and bundle export
-  -> P06 setup provisioning
+  -> P06 BYO dependency readiness
   -> P07 transcription
   -> P08 candidates and search
   -> P09 retrieval and source reinspection
@@ -78,7 +79,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P03 — Storage and coordination | Domain source/job/session IDs; application storage ports; safe filesystem adapter, stable OS locks, admission slots, generation commit and read holds; durable mode fails closed | P01/P02 | S-01..03/S-07/S-08/S-12, X-01..05; ADR 0010 ephemeral desktop profile passes; no strict durable claim or unsafe shortcut |
 | P04 — Source and media primitives | Source binding/staging; FFprobe parsing; source timeline; FFmpeg audio/frame operations; provider conformance registry | P02/P03 | M-01..06, V-01; bounded operations with source identity, actual times and allowed protocol policy |
 | P05 — Session lifecycle | Open/status/renew/close/clean, expiry, source-inclusive/evidence-only retain, bundle validation, private permissions | P03/P04 | S-04..11; no source deletion, active-session GC race, explicit persistence and restart semantics |
-| P06 — Dependency setup | Setup check/plan/install/repair/configure/list/remove/rollback; pinned provider/model manifests; download transport/stager/activation | P02/P03/P04 | D-01..10; fresh-machine and offline BYO flows; no automatic install or elevation; B-04 closed |
+| P06 — BYO dependency readiness | Capability-specific `setup check`, explicit user-installed executable/model selection, qualified compatibility and bounded smoke tests, typed operation preflight and manual remediation; no installer or network transport | P02/P03/P04 | D-01..10; fresh-machine, installed-off-PATH, supplied-transcript and offline flows; B-04 closes only with compatibility evidence |
 | P07 — Transcription | SRT/VTT import and alignment, PCM chunks, whisper.cpp adapter, transcript revisions, bounded records | P04/P05/P06 | T-01..06; measured default model profile; imports avoid unnecessary ASR; chunk seams verified |
 | P08 — Candidate/search index | Streaming visual signal extraction, periodic coverage, dedupe with time preservation, local transcript search, cursor paging | P04/P05/P07 | V-02..05, C-03, S-11; fixture recall report and honest gap metadata |
 | P09 — Evidence navigation | Exact frames, neighbours, bursts, source audio ranges, native crops, artifact reuse and lineage | P04/P05/P08 | V-01/V-06..08; identical request reuses compatible evidence; requested/actual time and dimensions visible |
@@ -108,15 +109,22 @@ an untrusted working directory. Log only safe effective settings. Media text can
 set config. Worker requests select approved provider/policy IDs rather than executable
 paths. Define unknown-key/version rejection and secret handling before a config command.
 
-### P06 provisioning details
+### P06 BYO dependency details
 
-Split implementation into read-only resolution, plan generation, bounded verified
-download, safe extraction, compatibility smoke test, activation, repair/rollback and
-uninstall. Each substep has an independent failure fixture. Pin manifests and retain
-provenance; active sessions reference immutable runtime/model versions. Updates must
-not replace binaries under running jobs. Test resumable downloads with changed
-content and failed activation. Package/model redistribution review precedes hosting
-artifacts; do not promise one-click installation for an unqualified target.
+[ADR 0014](../decisions/0014-r0-bring-your-own-dependencies.md) replaces managed
+provisioning for R0. Resolve an explicitly selected canonical absolute executable
+before a filtered `PATH` candidate; select a local model explicitly for ASR. Keep
+the selected provider/model identity and capability report with the operation so a
+later replacement cannot silently masquerade as the checked tool. Version/target
+checks and bounded real-operation probes must test the adapter contract, not just
+`--help`. Desktop BYO provenance is not verified publisher identity. Strict workers
+require host-approved identities and read-only mounts. Preflight only capabilities
+needed by the requested workflow, before media-stage mutation; a supplied transcript
+does not require Whisper or model weights. Missing, incompatible or unhealthy tools
+produce typed, bounded, agent-readable manual guidance with no installer authority.
+Tests must prove setup and media operations do not fetch, install, elevate or modify
+user-managed provider files. Script-installed tools outside `PATH` are first-class.
+Previously reserved installer commands remain unimplemented and are outside R0.
 
 ### P11 operator deliverables
 

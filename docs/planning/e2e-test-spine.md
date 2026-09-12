@@ -36,7 +36,7 @@ agent cannot satisfy those trials.
 | --- | --- | --- |
 | P04 | Generate the approved synthetic media; bind its identity; run real FFprobe and bounded FFmpeg frame/audio operations | Video-to-timestamped-media artifacts |
 | P05 | Open a disposable session, publish artifacts, and prove explicit retain/cleanup behavior | Repeatable session-scoped media run |
-| P06 | Check real dependency readiness and exercise typed, permission-respecting remediation | Fresh/BYO dependency run |
+| P06 | Check real BYO dependency readiness, explicit off-PATH selection, and typed manual remediation with no install/network side effect | Fresh/BYO dependency run |
 | P07 | Attach supplied-transcript and local-ASR paths to the same fixture truth | Video-to-timestamped-transcript run |
 | P08 | Produce bounded visual candidates and transcript search results with coverage metadata | Video-to-searchable-candidates run |
 | P09 | Refine exact frames, neighbours, crops and audio; validate requested versus actual timestamps and lineage | Complete mechanical video-to-evidence run |
@@ -83,9 +83,8 @@ seven source/media scenarios. See the [P04](p04-media-qualification.md) and
 - Local reports go beneath ignored `.vsift/e2e-runs/<run-id>/`. Evidence promoted for
   review contains hashes, summaries and redacted diagnostics, not unrestricted model
   conversations or media.
-- Missing dependencies produce `blocked` with typed remediation. The harness never
-  downloads, installs, changes policy or expands agent permissions without explicit
-  authorization.
+- Missing dependencies produce `blocked` with typed manual remediation. The R0
+  harness never downloads, installs, changes policy or expands agent permissions.
 
 ## Evidence record
 

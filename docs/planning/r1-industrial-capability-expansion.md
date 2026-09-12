@@ -13,7 +13,8 @@ worker integration surface without changing the default disposable desktop workf
 R1 is an expansion of a working product, not the point at which VSift first becomes
 useful. R0 must already prove this complete user journey on a real local recording:
 
-1. A coding agent with local command execution checks or plans dependencies.
+1. A coding agent with local command execution checks user-installed dependencies
+   and reports manual setup guidance when one is missing.
 2. The agent ingests a supplied video into a disposable session.
 3. VSift imports a matching transcript or produces a timestamped local transcript.
 4. The agent searches speech and navigates bounded visual candidates.

@@ -27,12 +27,14 @@
       "disposable sessions and explicitly retained bundles",
       "bounded single-host worker and batch execution",
       "source-grounded frame audio crop and candidate retrieval",
+      "bring-your-own media and speech dependency readiness",
       "native binaries and thin npm distribution"
     ],
     "deferred": [
       "OCR diarization embeddings and vision-generated captions",
       "automatic scroll or pan stitching",
       "cross-video catalogue and SQLite indexing",
+      "managed provider and model download installation update and removal",
       "remote video acquisition and network APIs",
       "industrial delivery queue remote object storage and managed catalogue host",
       "public multi-tenant service MCP adapter and cloud control plane"
@@ -44,7 +46,7 @@
     { "id": "INV-03", "statement": "Readers see a committed generation and partial output never appears complete." },
     { "id": "INV-04", "statement": "Expiry never deletes a workspace held by an active reader or writer." },
     { "id": "INV-05", "statement": "Cooperating processes using one root cannot bypass its admission limit." },
-    { "id": "INV-06", "statement": "Every loop queue output retry extraction request and download is bounded." },
+    { "id": "INV-06", "statement": "Every loop queue output retry extraction request and compatibility probe is bounded." },
     { "id": "INV-07", "statement": "Untrusted evidence cannot select executables install dependencies or change policy." },
     { "id": "INV-08", "statement": "Optional enrichment failure preserves useful evidence and reports missing coverage." },
     { "id": "INV-09", "statement": "Durable acknowledgement follows the applicable storage commit." },
@@ -57,7 +59,7 @@
     { "id": "DEC-04", "status": "accepted", "adr": "docs/decisions/0005-r0-scope-and-qualification-profiles.md" },
     { "id": "DEC-05", "status": "accepted", "adr": "docs/decisions/0010-storage-qualification-gate.md" },
     { "id": "DEC-06", "status": "accepted", "adr": "docs/decisions/0006-workspace-publication-and-durability.md" },
-    { "id": "DEC-07", "status": "accepted", "adr": "docs/decisions/0007-managed-runtime-provisioning.md" },
+    { "id": "DEC-07", "status": "accepted", "adr": "docs/decisions/0014-r0-bring-your-own-dependencies.md" },
     { "id": "DEC-08", "status": "accepted", "adr": "docs/decisions/0009-package-identity-and-distribution.md" },
     { "id": "DEC-09", "status": "accepted", "adr": "docs/decisions/0008-cli-and-json-contract.md" },
     { "id": "DEC-10", "status": "accepted", "adr": "docs/decisions/0008-cli-and-json-contract.md" },
@@ -88,14 +90,14 @@
     { "id": "P03", "status": "complete", "issue_url": "https://github.com/smormah/vsift/issues/6", "depends_on": ["P01", "P02"], "requirements": ["R-07", "R-08", "R-09", "R-10", "R-11"], "tests": ["S-01..S-03", "S-07", "S-08", "S-12", "X-01..X-05"], "threats": ["SEC-07..SEC-11", "SEC-18", "SEC-24"], "merge_commit": "3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f", "verification": ["PR #42 squash-merged through protected main", "128 local workspace tests passed with three internal child entries intentionally ignored", "Quality passed on Ubuntu, Windows and macOS", "Manifest and pointer write flush rename boundaries passed injected-fault and abrupt-process recovery", "Cross-process weighted admission and shared/exclusive lifetime coordination passed", "Explicit durable initialization and publication failed before mutation", "Governance, documentation, dependency policy and dependency review passed", "CodeQL and Rust analysis passed"] },
     { "id": "P04", "status": "complete", "issue_url": "https://github.com/smormah/vsift/issues/7", "depends_on": ["P02", "P03"], "requirements": ["R-01", "R-05", "R-06", "R-11"], "tests": ["M-01..M-06", "V-01"], "threats": ["SEC-05", "SEC-06", "SEC-17"], "merge_commit": "4fc859b3344bd47c254dd9da9cac72f5ad3d61d5", "verification": ["PR #44 squash-merged through protected main", "Local fmt, strict Clippy, workspace tests, warning-denied rustdoc, governance and cargo-deny passed", "Independent fixture verifier checked 11 source clips and 7 malformed variants; same-build generator rerun preserved provenance SHA-256", "Opt-in native FFmpeg 9.0 Windows/NTFS P04 checkpoint passed seven real-media scenarios while the complete journey remained not_implemented", "Quality passed on Ubuntu, Windows and macOS", "Governance, Documentation, strict-worker boundary, dependency policy/review, CodeQL and Rust analysis passed"] },
     { "id": "P05", "status": "complete", "issue_url": "https://github.com/smormah/vsift/issues/8", "depends_on": ["P03", "P04"], "requirements": ["R-07"], "tests": ["S-04..S-11"], "threats": ["SEC-07..SEC-10", "SEC-18"], "merge_commit": "c3f9313f8df0871d17ab80ad5bb142be6421b36f", "verification": ["PR #46 squash-merged through protected main", "Local fmt, strict Clippy, workspace tests, warning-denied rustdoc, governance and cargo-deny passed", "Opt-in native FFmpeg/FFprobe 9.0 Windows P05 checkpoint passed on F01 with retained bundle modes and original preservation; dirty/uninspected development environment recorded", "Cross-process active-reader and suspended-opener cleanup races, bounded index, corrupt metadata, hard-link, source-preservation and bundle validation regressions passed", "Quality passed on Ubuntu, Windows and macOS", "Governance, Documentation, strict-worker boundary, dependency policy/review, CodeQL and Rust analysis passed"] },
-    { "id": "P06", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/9", "depends_on": ["P02", "P03", "P04"], "requirements": ["R-03", "R-14"], "tests": ["D-01..D-10"], "threats": ["SEC-02", "SEC-12..SEC-15", "SEC-23"], "merge_commit": null, "verification": [] },
+    { "id": "P06", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/9", "depends_on": ["P02", "P03", "P04"], "requirements": ["R-03", "R-14"], "tests": ["D-01..D-10"], "threats": ["SEC-02", "SEC-12"], "merge_commit": null, "verification": [] },
     { "id": "P07", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/10", "depends_on": ["P04", "P05", "P06"], "requirements": ["R-01", "R-04", "R-06"], "tests": ["T-01..T-06"], "threats": ["SEC-05", "SEC-17", "SEC-18", "SEC-20"], "merge_commit": null, "verification": [] },
     { "id": "P08", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/11", "depends_on": ["P04", "P05", "P07"], "requirements": ["R-01", "R-05", "R-06"], "tests": ["V-02..V-05", "C-03", "S-11"], "threats": ["SEC-05", "SEC-17", "SEC-18", "SEC-20"], "merge_commit": null, "verification": [] },
     { "id": "P09", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/12", "depends_on": ["P04", "P05", "P08"], "requirements": ["R-01", "R-05", "R-06"], "tests": ["V-01", "V-06..V-08"], "threats": ["SEC-05", "SEC-07", "SEC-17", "SEC-18"], "merge_commit": null, "verification": [] },
     { "id": "P10", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/13", "depends_on": ["P03", "P05", "P07", "P08", "P09"], "requirements": ["R-08", "R-09", "R-10"], "tests": ["X-01..X-06", "X-09", "X-10", "S-07", "S-08"], "threats": ["SEC-04", "SEC-09..SEC-11", "SEC-20", "SEC-24"], "merge_commit": null, "verification": [] },
     { "id": "P11", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/14", "depends_on": ["P02", "P03", "P10"], "requirements": ["R-08", "R-09", "R-10", "R-11", "R-12"], "tests": ["X-07..X-11", "O-01..O-04", "SEC-T01"], "threats": ["SEC-04..SEC-06", "SEC-09..SEC-11", "SEC-19", "SEC-20", "SEC-24", "SEC-25"], "merge_commit": null, "verification": [] },
     { "id": "P12", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/15", "depends_on": ["P06", "P07", "P08", "P09", "P10", "P11"], "requirements": ["R-01", "R-13"], "tests": ["A-01..A-09", "SEC-T02"], "threats": ["SEC-16..SEC-18"], "merge_commit": null, "verification": [] },
-    { "id": "P13", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/16", "depends_on": ["P06", "P11", "P12"], "requirements": ["R-14"], "tests": ["R-SEC01", "R-SEC02"], "threats": ["SEC-12", "SEC-22", "SEC-23"], "merge_commit": null, "verification": [] },
-    { "id": "P14", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/17", "depends_on": ["P00", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13"], "requirements": ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07", "R-08", "R-09", "R-10", "R-11", "R-12", "R-13", "R-14"], "tests": ["ALL-R0", "R-SEC03"], "threats": ["SEC-01..SEC-25"], "merge_commit": null, "verification": [] }
+    { "id": "P13", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/16", "depends_on": ["P06", "P11", "P12"], "requirements": ["R-14"], "tests": ["R-SEC01", "R-SEC02"], "threats": ["SEC-22", "SEC-23"], "merge_commit": null, "verification": [] },
+    { "id": "P14", "status": "planned", "issue_url": "https://github.com/smormah/vsift/issues/17", "depends_on": ["P00", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13"], "requirements": ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07", "R-08", "R-09", "R-10", "R-11", "R-12", "R-13", "R-14"], "tests": ["ALL-R0", "R-SEC03"], "threats": ["SEC-01..SEC-12", "SEC-16..SEC-25"], "merge_commit": null, "verification": [] }
   ]
 }

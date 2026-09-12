@@ -30,7 +30,7 @@ it is not required to make the first release useful.
 - **Source grounded:** the original video and audio remain authoritative.
 - **Agent friendly:** commands provide stable, versioned JSON alongside readable terminal output.
 - **Provider neutral:** FFmpeg, transcription engines, OCR, and future integrations sit behind explicit boundaries.
-- **Security requirements:** shell-free processes, verified downloads, bounded execution and contained cleanup; see the [baseline review](docs/planning/baseline-review.md) for current implementation gaps.
+- **Security requirements:** shell-free processes, explicit BYO dependency trust, bounded execution and contained cleanup; see the [baseline review](docs/planning/baseline-review.md) for current implementation gaps.
 
 ## Current behavior
 
@@ -49,10 +49,15 @@ vsift session clean --expired --dry-run --json
 The full R0 command namespace is visible through `vsift --help` so integrations can
 target a stable grammar. `session status/renew/close/retain/clean` and
 `bundle validate` are also operational. Transcription, candidate search,
-retrieval and setup installation still return `COMMAND_NOT_IMPLEMENTED` until
-their owning packets ship.
+retrieval and setup configuration still return `COMMAND_NOT_IMPLEMENTED` until
+their owning packets ship. The reserved setup installer commands are outside R0.
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.
+R0 uses tools installed by the user; VSift will diagnose missing capabilities and
+support explicit paths for tools installed outside `PATH`. It will not package,
+download or install FFmpeg, FFprobe, whisper.cpp or model weights. Today,
+`setup check` only probes executables on `PATH`; full compatibility, model and
+manual-remediation checks are still P06 work.
 
 ## Architecture
 

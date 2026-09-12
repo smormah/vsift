@@ -2,12 +2,12 @@
 
 Status: accepted R0 implementation baseline with a scoped R1 expansion. Date: 2026-09-11.
 Reviewed source revision: `df85f7065915145ab8b75b89756f0fa1e341a5f1`.
-Its decisions are accepted through P00. P01, P02, P03 and P04 are complete. P03's internal
-private-root, stable-lock, weighted-admission, later-generation publication and
-process-crash recovery boundary merged in PR #42 (`3eef9b7`). No public
-storage/session command is exposed. P04's internal source/media boundary merged in
-PR #44 (`4fc859b`); its [qualification record](p04-media-qualification.md) records
-the checkpoint. P05 is the next eligible packet.
+Its decisions are accepted through P00 and revised by ADR 0014. P01-P05 are
+complete. P03's internal private-root, stable-lock, weighted-admission,
+later-generation publication and process-crash recovery boundary merged in PR #42
+(`3eef9b7`). P04's internal source/media boundary merged in PR #44 (`4fc859b`);
+P05's public disposable-session lifecycle merged in PR #46 (`c3f9313`). P06 is
+the next eligible packet, respecified as BYO readiness.
 
 ## Purpose and reading order
 
@@ -72,7 +72,7 @@ R1 means the next planned extension; R2 means a larger service integration.
 | --- | --- | --- | --- |
 | R-01 | Local input, timestamped speech and visual evidence, repeated agent inspection | R0 | QA fixture end-to-end scenarios |
 | R-02 | CLI first, versioned JSON, actionable typed failures, bounded pages | R0 | C test suite |
-| R-03 | Setup checks, explicit installation plan/apply, BYO tools and models, offline use | R0 | D test suite and fresh-machine install |
+| R-03 | BYO executable/model selection, capability-specific readiness, actionable offline remediation; no VSift-managed installation | R0 | D test suite and fresh-machine/BYO checks |
 | R-04 | Existing timestamped transcript or local whisper.cpp transcription | R0 | T test suite |
 | R-05 | Candidates, source frame, neighbours, bursts, native-resolution crops, audio ranges | R0 | V test suite |
 | R-06 | Source identity, actual timestamps, transformation lineage, explicit uncertainty | R0 | M/P/V suites |
@@ -105,9 +105,9 @@ CLI/skill from the primary integration path.
 R0 is releasable only when a compatible coding agent can start with a local video and
 finish with a timestamped transcript and source-grounded visual evidence without the
 user manually extracting audio, transcribing it, or taking screenshots. Both the
-provided-transcript and local-ASR paths must pass. Missing dependencies produce an
-actionable setup plan and require explicit installation authority. Evidence references
-remain resolvable after bounded paging/refinement, and session cleanup versus retention
+provided-transcript and local-ASR paths must pass. Missing dependencies produce
+actionable, machine-readable manual setup guidance and no automatic installation.
+Evidence references remain resolvable after bounded paging/refinement, and session cleanup versus retention
 is explicit. The agent may honestly report insufficient evidence; a scaffold-only,
 transcript-only, or screenshot-only flow is not a functional R0 release.
 
@@ -138,7 +138,7 @@ processing engine a usable server contract from the start.
 3. Readers see a committed generation; partial output never masquerades as complete.
 4. Expiry does not authorize deleting a workspace actively held by a reader or writer.
 5. No number of cooperating processes using one state root can bypass its admission limit.
-6. Every loop, queue, provider output, retry, extraction request, and download is bounded.
+6. Every loop, queue, provider output, retry, extraction request, and compatibility probe is bounded.
 7. Untrusted evidence cannot select executables, install dependencies, or change policy.
 8. Optional enrichment failure preserves useful evidence and reports the missing coverage.
 9. Durable acknowledgement follows the applicable storage commit, never precedes it.
@@ -156,7 +156,7 @@ P00 accepted these decisions on 2026-09-10. The linked ADRs are authoritative.
 | DEC-04 | Desktop idle TTL 24 hours and absolute lifetime seven days | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
 | DEC-05 | Durable workers require an explicit qualified local workspace; R0 enablement is Ubuntu/ext4 only after P10/P11 qualification | [0010](../decisions/0010-storage-qualification-gate.md) |
 | DEC-06 | Publish immutable artifacts through versioned manifest generations | [0006](../decisions/0006-workspace-publication-and-durability.md) |
-| DEC-07 | Use explicit pinned per-user managed dependency plans | [0007](../decisions/0007-managed-runtime-provisioning.md) |
+| DEC-07 | Use user-installed dependencies with explicit selection and read-only readiness checks in R0; defer managed installation | [0014](../decisions/0014-r0-bring-your-own-dependencies.md) |
 | DEC-08 | Keep executable `vsift`; recheck unscoped npm name before release | [0009](../decisions/0009-package-identity-and-distribution.md) |
 | DEC-09 | Use the accepted R0 CLI namespace | [0008](../decisions/0008-cli-and-json-contract.md) |
 | DEC-10 | Preserve setup v1 and use typed v1 envelopes for new operations | [0008](../decisions/0008-cli-and-json-contract.md) |

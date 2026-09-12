@@ -15,16 +15,16 @@ provider, logging, or network dependencies.
 | --- | --- | --- |
 | Domain | source, timeline, evidence, session, job, policy | Validated IDs, ranges, lifecycle transitions, provenance, admission policy values |
 | Application | setup, ingest, retrieve, export, recover, run_job | Orchestration, authorization-policy checks, operation outcomes, cancellation flow |
-| Infrastructure | process, filesystem, runtime_registry, ffmpeg, whisper, serialization, telemetry | OS APIs, provider adapters, byte formats, physical storage, transport |
+| Infrastructure | process, filesystem, runtime_resolver, ffmpeg, whisper, serialization, telemetry | OS APIs, BYO provider resolution/adapters, byte formats, physical storage, transport |
 | CLI host | commands, config, output, composition | Parse and validate requests, compose adapters, select presentation, return exit status |
 | Future hosts | worker service, MCP, index consumer | Adapt external requests to published use cases; never import infrastructure internals |
 
 Application ports are deliberately narrow: `SourceReader`, `MediaProbe`,
 `AudioExtractor`, `FrameExtractor`, `Transcriber`, `SessionStore`, `ArtifactStore`,
-`JobStore`, `AdmissionController`, `RuntimeResolver`, `RuntimeInstaller`, `Clock`,
+`JobStore`, `AdmissionController`, `RuntimeResolver`, `Clock`,
 `OperationEvents`. Introduce each with its first consumer and conformance tests.
-The infrastructure `ProcessSupervisor` is shared by provider adapters and installation
-smoke tests. Domain and application never construct FFmpeg arguments.
+The infrastructure `ProcessSupervisor` is shared by provider adapters and bounded
+compatibility probes. Domain and application never construct FFmpeg arguments.
 
 Published operations return typed results. Expected errors preserve codes and
 retryability; diagnostic causes stay in infrastructure. No public service locator,
@@ -74,10 +74,8 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 | Command | Purpose / constraints |
 | --- | --- |
 | `setup check [--profile ...] [--timeout-seconds ...] --json` | Read-only capability detection; no installation or mutation |
-| `setup plan --profile ... --json` | Versions, provenance, download sizes, licences, disk needs, exact actions and plan digest |
-| `setup install --plan <file> --accept-plan <digest>` | Apply that validated plan; revalidate expiry and current state; never silently elevate |
-| `setup repair ...` | Produce/apply a repair plan; same installation contract, no recursive arbitrary deletion |
-| `setup list`, `setup remove`, `setup rollback`, `setup configure` | Managed versions and user-supplied registrations; live jobs pin immutable versions |
+| `setup configure ...` | Explicitly select a user-installed executable and, for ASR, a local model; never installs or downloads |
+| `setup plan/install/repair/list/remove/rollback` | Published parser reservations only; not implemented or required in R0 |
 | `ingest <local-file> [--transcript ...] --json` | Foreground session preparation with checkpoints, explicit source/durability policy |
 | `session list/status/close/renew` | Visible lifecycle and bounded storage reporting; close waits/rejects active work |
 | `session retain <id> --output <dir> [--include-source]` | Explicit export; distinguish evidence-only and source-inclusive bundle |
@@ -157,8 +155,8 @@ retrieval, worker persistence and managed catalogue behavior remain future
 packets.
 
 Proposed default ephemeral root: private per-user application cache, not the current
-working directory. Root registration/configuration and runtime/model installations
-are persistent and disclosed separately from media evidence. Session roots are
+working directory. Explicit BYO configuration is persistent and disclosed separately
+from media evidence; VSift never installs the selected runtime/model in R0. Session roots are
 enumerable and include expiry, bytes, active operations and cleanup eligibility.
 
 Idle TTL proposal: 24 hours, hard maximum seven days. Active command holds protect
@@ -326,8 +324,9 @@ report. Windows uses a Job Object assigned during suspended creation; Unix uses 
 process group. The latter is lifecycle coordination rather than a security sandbox.
 Required strict-worker execution is accepted only with a trusted Linux-host report of
 inherited container/cgroup filesystem, network, CPU, memory and PID controls; otherwise
-the boundary returns `ISOLATION_UNAVAILABLE` before spawn. Managed executable identity,
-version compatibility and installation remain P06.
+the boundary returns `ISOLATION_UNAVAILABLE` before spawn. BYO executable/model
+selection and tested compatibility remain P06. Managed installation is outside R0
+under ADR 0014.
 
 Windows: qualified Job Object lifecycle without breakaway; account for nested jobs
 and process assignment races. Linux worker: inherited restricted cgroup/container

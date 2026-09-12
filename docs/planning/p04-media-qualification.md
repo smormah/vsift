@@ -105,5 +105,5 @@ The native FFmpeg 9.0 Windows/NTFS checkpoint is development evidence, not a
 cross-platform release support claim. Ordinary protected Quality jobs exercise
 source/parser contracts on Windows, macOS and Ubuntu; P14 still owns the full
 supported-profile media, malicious-decoder, fault and soak matrix. P05 will link
-source snapshots into a real session lifecycle. P06 will qualify managed provider
-builds. P07 adds speech, and P08/P09 add candidate search/reinspection.
+source snapshots into a real session lifecycle. P06 will qualify BYO provider
+readiness under ADR 0014. P07 adds speech, and P08/P09 add candidate search/reinspection.

@@ -2,9 +2,17 @@
 
 ## Active
 
+R0 dependency scope is being revised on 2026-09-13 under ADR 0014: P06 will
+qualify user-installed FFmpeg/FFprobe and optional whisper.cpp/model, including
+explicit off-PATH selection, compatibility probes and typed manual remediation.
+VSift-managed dependency downloads, installation, repair, rollback and removal
+are outside R0. This is a planning/contract change, not P06 implementation or
+release support. It has no merge commit yet; ledger P06 remains planned. The
+earlier P06 installer-source gate is superseded only after protected review.
+
 No implementation packet is active. P05 merged through protected PR #46 as
-`c3f9313f8df0871d17ab80ad5bb142be6421b36f`; this evidence-only follow-up
-records its complete ledger status. Issue #8 closes after the follow-up merges.
+`c3f9313f8df0871d17ab80ad5bb142be6421b36f`; the evidence-only follow-up
+merged as `777bc3e` and issue #8 is closed.
 P06 is next eligible and remains planned. Strict durable requests still fail
 before mutation.
 
@@ -178,8 +186,8 @@ passed read-only/no-network, process-group escape, CPU throttling, PID ceiling a
 memory-limit checks. Governance, documentation, dependency policy/review, CodeQL and
 Rust analysis passed.
 
-Only setup dependency probing uses the boundary today. Managed runtime identity and
-compatibility remain P06; durable coordination is P03/P10/P11; the worker host is P11.
+Only setup dependency probing uses the boundary today. BYO runtime compatibility
+and trust reporting remain P06; durable coordination is P03/P10/P11; the worker host is P11.
 Desktop process containment is not represented as a filesystem, network or resource
 sandbox.
 
@@ -236,13 +244,14 @@ PR #1 / `df85f70` renamed the public command to `vsift setup check`, with JSON o
 `setup check`, foreground source-bound `ingest`, session lifecycle commands and
 `bundle validate` are executable. P04's restricted FFprobe/FFmpeg source and
 frame/audio primitives are internal; the public transcription, search,
-navigation, managed installation, queue, durable job and npm release remain
-future packets. Ambient PATH remains a disclosed bring-your-own fallback;
-managed identity/version trust is unimplemented. See the dated B-01..B-11
+navigation, BYO compatibility, queue, durable job and npm release remain
+future packets. Managed installation is outside R0. Ambient PATH remains a
+disclosed bring-your-own fallback; qualified identity/version compatibility is
+unimplemented. See the dated B-01..B-11
 dispositions; do not describe current code as production hardened.
 
 ## Next action
 
-Close issue #8 after this evidence follow-up merges. P06 is the next eligible
-packet but requires its own governed start. The Ubuntu/ext4 OS/storage crash
+P06 is the next eligible packet but requires its own governed start. The
+Ubuntu/ext4 OS/storage crash
 campaign remains mandatory in P10/P11/P14.

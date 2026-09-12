@@ -63,6 +63,7 @@ P02 completed the mechanical portion of B-02: every selected executable becomes 
 canonical absolute regular-file path with recorded explicit, managed or ambient
 provenance; current-directory/relative PATH entries, inherited environment and an
 implicit cwd are rejected. Ambient PATH remains a disclosed bring-your-own fallback,
-not verified identity, so B-02's managed trust portion remains with B-04 under P06.
+not verified identity, so B-02's BYO compatibility/trust-reporting portion remains
+with B-04 under P06. ADR 0014 defers managed installation beyond R0.
 P02 also corrected B-09's process-versus-sandbox claim and added fail-closed strict
 isolation; the complete worker-host qualification remains P11/P14.

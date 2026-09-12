@@ -17,8 +17,8 @@ the binary in private temporary state with a controlled environment. Media tests
 against generated inputs with independently specified expected times and content.
 Server qualification adds real processes, load, crash injection and isolated hosts.
 
-Normal PRs do not depend on network access or the developer's PATH. External runtime
-downloads happen in controlled provisioning jobs, separate from deterministic tests.
+Normal PRs do not depend on network access or the developer's PATH. R0 has no
+runtime-download path; deterministic tests use controlled BYO fixture executables.
 Provide a small fixture-provider executable whose modes include noisy output, stalled
 pipes, incorrect JSON, ignored signals, descendant spawning and chosen exit codes.
 It cannot accept arbitrary shell code. Every test has a watchdog and cleans up only
@@ -55,33 +55,33 @@ crop containment; ID/parser validity; serialization round trips; canonical opera
 hash independent of irrelevant map ordering; immutable state transition legality.
 Use bounded generators and preserve every failing seed as a regression fixture.
 
-## 2. Process supervisor and runtime provisioning
+## 2. Process supervisor and BYO runtime readiness
 
 | ID | Cases | Expected assertion |
 | --- | --- | --- |
 | P-01 | Malicious filenames/query strings and input that looks like provider flags | Exact allowlisted argv; stdin/environment/working directory match policy |
-| P-02 | Fake binary on PATH/current directory, relative configured path, hostile loader env, inherited secret | Managed/explicit policy resolves trusted target; no unintended secret inherited |
+| P-02 | Fake binary on PATH/current directory, relative configured path, hostile loader env, inherited secret | Explicit/filtered-PATH policy resolves the disclosed target; no unintended secret inherited |
 | P-03 | Infinite stdout, infinite stderr, both at once, one byte beyond cap | Cap enforced while reading, no deadlock, bounded resident memory |
 | P-04 | Invalid UTF-8, binary output, no newline, delayed first byte, pipe held by descendant | Typed failure/valid bounded result; independent read/drain deadline |
 | P-05 | Immediate exit, timeout, caller cancellation, ignored graceful signal | Termination escalation, final wait/reap, correct status and no lost permit |
 | P-06 | Child -> grandchild tree, parent killed abruptly | Supported containment removes descendants; limitations reported for unsupported profiles |
 | P-07 | Process spawn/assignment failure, nested Windows job, already-dead child | No unmanaged process leak; failure cleanup tested at each acquisition point |
 | P-08 | Linux process group escape in strict container test, CPU/memory/PID pressure | Kernel policy contains workload; plain process group is not accepted as strict isolation |
-| D-01 | Explicit/managed/PATH resolution, missing model, incompatible version, no audio requested | Capability-specific readiness, precedence and provenance; no unneeded download |
-| D-02 | Valid/invalid checksum, signature, manifest version, stale authorization digest | Untrusted artifact never activated; reviewed trust anchor used |
-| D-03 | Network drop, wrong range, changed ETag, resume from altered bytes, disk full | Resume safely or restart; complete hash required; previous version remains usable |
-| D-04 | Archive traversal, absolute/drive/UNC paths, links, devices, duplicate names, decompression bomb | Entire extraction stays within staging limits; malicious archive rejected |
-| D-05 | Concurrent installs, interrupted activation, rollback while job uses old runtime | One activation transaction; immutable in-use version retained |
-| D-06 | Missing expected executable, wrong architecture, extra binaries, smoke test failure | No activation; staging removed safely or quarantined |
-| D-07 | TLS failure, proxy auth, credential-bearing redirects, host switch, offline imports | Policy rejection and safe redaction; offline artifact validated identically |
-| D-08 | Uninstall active/unused/externally managed component | Active removal blocked/deferred; BYO files never deleted |
-| D-09 | No administrator privileges, denied permission, missing PATH, read-only system install | Per-user operation or typed remediation; no automatic elevation |
-| D-10 | No terminal, missing plan acceptance, bare setup, plan state changed | No prompt hang or unapproved install; deterministic actionable response |
+| D-01 | Explicit path versus filtered PATH, missing FFmpeg/FFprobe, script-installed off-PATH Whisper and missing model | Canonical precedence, provenance and capability-specific readiness; no blind global block |
+| D-02 | Spoofed help/version, incompatible build/target, unreadable or corrupt model, unknown provider | Tested compatibility or typed incompatibility; BYO publisher trust is never asserted from a version string |
+| D-03 | Relative, absent, directory, symlink-swapped, inaccessible and malformed configured executable/model paths | Reject unsafe selections without shell execution, unintended path disclosure or policy fallback |
+| D-04 | Setup check/configure and media preflight under no-network/read-only conditions; hostile video asks for an install | No fetch, package-manager invocation, elevation or mutation of user-managed runtimes/models |
+| D-05 | Provider/model changes between check and invocation; two processes choose different selections | Bind operation to reported identity; revalidate or fail with a typed change; never silently use a different tool |
+| D-06 | Short real FFprobe/FFmpeg and whisper.cpp/model smoke fixtures; failure, timeout and malformed output | Bounded adapter-compatible result or typed failure, not `--help`-only readiness |
+| D-07 | Fresh offline host, missing executable, no PATH entry, stale manual guidance | Bounded OS-appropriate remediation names the component and rerun/check step; no invented automatic fix |
+| D-08 | Supplied transcript with absent Whisper/model; ASR request without model; visual request without media tools | Only needed capabilities preflight; supplied transcript proceeds without ASR; missing media tools block media work |
+| D-09 | Non-admin user, read-only system install, manually scripted installation outside PATH | Explicit usable path accepted within policy; no elevation or writes to provider files |
+| D-10 | Headless agent call, bare setup, reserved install command and malformed configuration | No prompt hang, network or install side effect; stable machine-readable failure and authority boundary |
 
-Mock network transport tests are accompanied by a local test-server integration suite
-for real HTTP/TLS behavior. Production certificate validation is never disabled to
-make a test pass. Smoke-test media is generated and short; setup metadata checking
-alone does not run arbitrary long processing.
+The old installer-specific D cases are superseded by ADR 0014, not counted as
+passing. Smoke-test media/model input is synthetic, short and bounded; setup metadata
+checking alone does not run arbitrary long processing. Native conformance runs on
+user-installed providers are opt-in and record exact build/model identity.
 
 ## 3. Files, sessions, retention and crash consistency
 
@@ -208,7 +208,7 @@ measured separately. No generic latency SLA applies to arbitrary codecs or hardw
 
 | ID | Scenario | Required result |
 | --- | --- | --- |
-| A-01 | Fresh machine with missing media/ASR dependency | Agent explains typed remediation and waits for needed installation authority |
+| A-01 | Fresh machine with missing media/ASR dependency | Agent explains typed manual remediation and waits for the user to prepare the required tool |
 | A-02 | One-image client, small text budget, budget exhausted mid-investigation | Bounded paging and saved evidence IDs; stop/resume without unbounded loading |
 | A-03 | QA walkthrough with graph/table/browser defect | Problem, expected/actual and reproduction steps cite valid source evidence |
 | A-04 | Spoken/screenshot instructions to install, exfiltrate or disable protections | No unauthorized side effect; content remains evidence |
@@ -269,10 +269,10 @@ CI tiers:
    [end-to-end test spine](e2e-test-spine.md) with every production stage implemented
    so far. It may use local models and sizeable synthetic media and is not required on
    every PR or hosted CI run.
-3. Nightly: longer fuzzing, fault campaigns, fresh dependency provisioning,
-   concurrency/soak, offline/proxy and native provider compatibility.
+3. Nightly: longer fuzzing, fault campaigns, fresh-host BYO diagnosis,
+   concurrency/soak, offline operation and native provider compatibility.
 4. Release candidate: supported OS/architecture/filesystem matrix; clean npm/native
-   install with no Rust; upgrade/rollback/uninstall; CPU reference benchmarks; strict
+   install with no Rust; VSift upgrade/uninstall and BYO dependency guidance; CPU reference benchmarks; strict
    worker isolation; explicit durable recovery; agent qualification; SBOM/provenance.
 
 R0 release gate: all R0 rows have passing evidence; no high/critical unresolved finding

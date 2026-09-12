@@ -36,7 +36,7 @@ The P02 process boundary implements:
 The boundary is intended to support these additional capabilities as later adapters
 are implemented and qualified:
 
-- managed-runtime identity verification and compatibility policy;
+- BYO runtime compatibility and explicit-path policy;
 - simpler cross-platform builds and licensing analysis;
 - per-stage provider contracts and strict worker-host integration.
 
@@ -46,7 +46,8 @@ A child process or Unix process group alone does not provide filesystem/network
 isolation or kernel CPU/memory/PID caps. Required strict-worker isolation therefore
 fails with `ISOLATION_UNAVAILABLE` unless a trusted Linux host attests inherited
 container/cgroup controls. Ambient `PATH` discovery remains bring-your-own,
-unverified provenance until P06 adds managed identity and compatibility policy.
+unverified provenance; P06 adds compatibility and host-approval policy, not a
+managed installer.
 See the [baseline review](planning/baseline-review.md) and
 [process contract](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
 

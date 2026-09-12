@@ -1,6 +1,6 @@
 # ADR 0007: Managed runtime provisioning
 
-- Status: Accepted
+- Status: Superseded for R0 by [ADR 0014](0014-r0-bring-your-own-dependencies.md)
 - Date: 2026-09-10
 - Resolves: DEC-07
 

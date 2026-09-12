@@ -15,7 +15,8 @@ workspace; otherwise P05 uses the per-user application cache.
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
 | `setup check` | Read-only dependency diagnosis | Implemented |
-| `setup plan/install/repair/list/remove/rollback/configure` | Explicit managed dependency lifecycle | P06 |
+| `setup configure` | Explicit selection of user-installed executables/models; no installation | P06 |
+| `setup plan/install/repair/list/remove/rollback` | Historical parser reservations; return `COMMAND_NOT_IMPLEMENTED` | Deferred beyond R0 |
 | `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get/retranscribe` | Timestamped transcript evidence | P07 |
@@ -193,8 +194,15 @@ Effective configuration is immutable for one operation. Precedence is:
 P01 implements this resolver but does not load configuration files; `setup check`
 currently supplies only explicit flags and defaults. Project-local configuration is
 never discovered from the current directory. P06 will add explicit selected/user
-configuration loading under this frozen precedence and strict
+BYO executable/model configuration under this frozen precedence and strict
 [`config.schema.json`](../../schemas/v1/config.schema.json).
+
+The current `setup check` is only a PATH/version-help diagnostic: it does not
+validate a Whisper model or establish real operation compatibility. P06 must add
+capability-specific preflight and typed manual remediation. A transcript-import path
+must not require the speech engine. Reserved installer verbs have no R0 authority;
+neither setup nor an agent may fetch or install a dependency in R0. See
+[ADR 0014](../decisions/0014-r0-bring-your-own-dependencies.md).
 
 Unknown schema majors are rejected. Request/config documents are strict and reject
 unknown or missing fields, invalid enums, more than 1,048,576 input bytes, and nesting

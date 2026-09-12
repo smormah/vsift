@@ -7,7 +7,7 @@ Status: accepted scope mapping. The machine-readable source is
 | --- | --- | --- | --- |
 | R-01 agent video investigation | P04, P07-P09, P12 | M, T, V, A | F01-F10, F12 |
 | R-02 stable CLI/JSON | P01 | C-01..C-10 | F01 |
-| R-03 dependency lifecycle | P02, P06 | P, D | F01, F08 |
+| R-03 BYO dependency readiness | P02, P06 | P, D | F01, F08 |
 | R-04 transcript import/local ASR | P07 | T-01..T-06 | F08-F10 |
 | R-05 source visual/audio retrieval | P04, P08, P09 | M, V | F01-F07, F09 |
 | R-06 provenance and uncertainty | P01, P04, P07-P09 | C-10, M-05, T, V | F02-F10 |

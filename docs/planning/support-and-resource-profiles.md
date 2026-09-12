@@ -42,8 +42,8 @@ raising a hard limit requires security and capacity review plus an ADR update.
 
 ## Speech profile
 
-The initial candidate is a pinned CPU whisper.cpp runtime with the multilingual `base`
-model. P07 measures word error rate, critical identifiers/numbers, latency and memory
+The initial candidate is a qualified user-installed CPU whisper.cpp runtime with the
+multilingual `base` model. P07 measures word error rate, critical identifiers/numbers, latency and memory
 against F08 and the wider corpus. It becomes the default only if the recorded gates
 pass. Imported transcripts avoid the model entirely. GPU and larger model profiles
 remain optional, explicit and independently qualified.
@@ -58,7 +58,8 @@ tests on each protected OS; it does not expose a user command or claim OS-crash
 durability. Strict durable acknowledgement remains disabled until the Ubuntu/ext4
 P10/P11/P14 crash campaign passes.
 
-- Fresh-machine installation without Rust, upgrade, rollback and uninstall.
+- Fresh VSift installation without Rust, VSift upgrade/uninstall, and BYO
+  dependency selection/guidance on a fresh machine.
 - All deterministic PR checks plus platform process/filesystem conformance tests.
 - Crash injection and source-preservation proof on the named filesystem.
 - Resource overload, cancellation, descendant cleanup and handle-leak tests.

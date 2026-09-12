@@ -2,12 +2,20 @@
 
 ## Current checkpoint
 
+2026-09-13: R0 dependency scope is being revised under ADR 0014 from managed
+installation to bring-your-own readiness. P06 remains planned and unimplemented;
+its D-01..D-10 acceptance cases now target explicit off-PATH executable/model
+selection, real compatibility checks, capability-specific preflight, and typed
+manual remediation with no VSift download/install. The prior P06 source-catalogue
+gate is no longer an R0 prerequisite. This scope record has no implementation or
+merge commit yet; keep the P06 issue and ledger planned until a protected merge.
+
 2026-09-12: P05 implementation from protected main
 `8741f57dfc5b45c8cb4d3f1f7791d0f1d143c627` merged through protected PR #46 as
 `c3f9313f8df0871d17ab80ad5bb142be6421b36f`. The ledger now records
 completion and the passed three-OS quality, governance, documentation,
-security and local checkpoint evidence. This evidence follow-up must merge
-before issue #8 closes. P06 is the next eligible packet and remains planned.
+security and local checkpoint evidence. The evidence follow-up merged as
+`777bc3e`; issue #8 is closed. P06 is the next eligible packet and remains planned.
 
 2026-09-12: P04 source/media primitives completed through protected PR #44 as
 `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. This evidence-only follow-up
@@ -23,8 +31,14 @@ eligible packet but remains planned.
 
 ## Pending
 
-- Merge the P05 evidence-only ledger/memory update through protected checks,
-  then close issue #8. Do not begin P06 implementation in this session.
+- Review and merge the ADR 0014 BYO-first R0 rescope through protected checks;
+  update issue #9 and close/supersede the installer-source draft PR #48. Do not
+  claim P06 implementation from this planning change.
+- P06 must prove FFmpeg/FFprobe readiness and a user-installed whisper.cpp plus
+  model selected from an explicit path or qualified PATH candidate. Supplied
+  transcript workflows skip ASR requirements. Script-installed off-PATH tools are
+  a first-class test case; missing dependencies yield typed manual guidance.
+
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.
