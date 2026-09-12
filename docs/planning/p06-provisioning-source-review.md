@@ -42,6 +42,9 @@ interchangeable upstream binary channel:
    activation boundary. No implementation status or issue closure is warranted
    before those tests and protected checks pass.
 
-The safe interim user path is an explicit local provider installation followed by
-`setup check`, with PATH provenance disclosed as unverified. This is existing P02
-behavior, not P06 completion or a fresh-machine managed-install claim.
+ADR 0014 now makes manual/BYO guidance an R0 fallback whenever a qualified
+managed install is unavailable or fails. This does not turn the current PATH
+probe into a completed setup journey. The safe interim user path remains an
+explicit local provider installation followed by `setup check`, with PATH
+provenance disclosed as unverified. This is existing P02 behavior, not P06
+completion or a fresh-machine managed-install claim.

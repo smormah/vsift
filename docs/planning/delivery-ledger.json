@@ -27,6 +27,7 @@
       "disposable sessions and explicitly retained bundles",
       "bounded single-host worker and batch execution",
       "source-grounded frame audio crop and candidate retrieval",
+      "detect install or guide setup of missing media and speech dependencies",
       "native binaries and thin npm distribution"
     ],
     "deferred": [
@@ -57,7 +58,7 @@
     { "id": "DEC-04", "status": "accepted", "adr": "docs/decisions/0005-r0-scope-and-qualification-profiles.md" },
     { "id": "DEC-05", "status": "accepted", "adr": "docs/decisions/0010-storage-qualification-gate.md" },
     { "id": "DEC-06", "status": "accepted", "adr": "docs/decisions/0006-workspace-publication-and-durability.md" },
-    { "id": "DEC-07", "status": "accepted", "adr": "docs/decisions/0007-managed-runtime-provisioning.md" },
+    { "id": "DEC-07", "status": "accepted", "adr": "docs/decisions/0014-progressive-dependency-setup.md" },
     { "id": "DEC-08", "status": "accepted", "adr": "docs/decisions/0009-package-identity-and-distribution.md" },
     { "id": "DEC-09", "status": "accepted", "adr": "docs/decisions/0008-cli-and-json-contract.md" },
     { "id": "DEC-10", "status": "accepted", "adr": "docs/decisions/0008-cli-and-json-contract.md" },

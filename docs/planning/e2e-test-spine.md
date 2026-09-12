@@ -36,7 +36,7 @@ agent cannot satisfy those trials.
 | --- | --- | --- |
 | P04 | Generate the approved synthetic media; bind its identity; run real FFprobe and bounded FFmpeg frame/audio operations | Video-to-timestamped-media artifacts |
 | P05 | Open a disposable session, publish artifacts, and prove explicit retain/cleanup behavior | Repeatable session-scoped media run |
-| P06 | Check real dependency readiness and exercise typed, permission-respecting remediation | Fresh/BYO dependency run |
+| P06 | Check preinstalled/partial/off-PATH tools, perform one qualified explicit managed install, and exercise typed manual recovery on denied/offline/unqualified paths without agent overreach | Fresh/BYO/managed dependency run |
 | P07 | Attach supplied-transcript and local-ASR paths to the same fixture truth | Video-to-timestamped-transcript run |
 | P08 | Produce bounded visual candidates and transcript search results with coverage metadata | Video-to-searchable-candidates run |
 | P09 | Refine exact frames, neighbours, crops and audio; validate requested versus actual timestamps and lineage | Complete mechanical video-to-evidence run |

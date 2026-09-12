@@ -53,6 +53,13 @@ retrieval and setup installation still return `COMMAND_NOT_IMPLEMENTED` until
 their owning packets ship.
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.
+R0 setup will first detect user-installed tools, then offer an explicitly approved,
+verified install where that component/target is qualified. If installation cannot
+be done safely or lacks permission, VSift must explain the manual install or
+explicit-path alternative. No dependency download is triggered by `npm install`,
+ordinary video inspection or an AI assistant acting without separate authority.
+Today, only the basic read-only `setup check` probe is implemented; plans,
+installation, compatibility checks and manual remediation remain P06 work.
 
 ## Architecture
 

@@ -2,6 +2,16 @@
 
 ## Active
 
+2026-09-13 R0 setup clarification: ADR 0014 requires detection of existing
+tools, explicit reviewed plan/install for eligible missing dependencies, and
+typed manual/BYO guidance on unavailable, denied, offline or failed installs.
+The agent may explain but not silently install or elevate. Script-installed
+off-PATH tools are a first-class selection case. PR #49's BYO-only rescope
+closed without merge; P06 source review PR #48 reopened, with its immutable
+per-target catalogue gate still unresolved. Issue #9 reflects the corrected
+journey. P06 remains planned and no new setup functionality is implemented.
+
+
 P06 source review (2026-09-12) found no reviewed immutable per-target provider/model
 catalog. Upstream FFmpeg supplies source only; whisper.cpp v1.9.4 has no release
 assets and v1.9.2 has no macOS CLI archive. See

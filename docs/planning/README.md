@@ -73,7 +73,7 @@ R1 means the next planned extension; R2 means a larger service integration.
 | --- | --- | --- | --- |
 | R-01 | Local input, timestamped speech and visual evidence, repeated agent inspection | R0 | QA fixture end-to-end scenarios |
 | R-02 | CLI first, versioned JSON, actionable typed failures, bounded pages | R0 | C test suite |
-| R-03 | Setup checks, explicit installation plan/apply, BYO tools and models, offline use | R0 | D test suite and fresh-machine install |
+| R-03 | Detect suitable preinstalled tools, explicitly plan/install qualified missing dependencies, and always guide manual/BYO recovery when installation is unavailable or fails | R0 | D suite, fresh/partial/off-PATH and denied/offline setup journeys |
 | R-04 | Existing timestamped transcript or local whisper.cpp transcription | R0 | T test suite |
 | R-05 | Candidates, source frame, neighbours, bursts, native-resolution crops, audio ranges | R0 | V test suite |
 | R-06 | Source identity, actual timestamps, transformation lineage, explicit uncertainty | R0 | M/P/V suites |
@@ -107,7 +107,9 @@ R0 is releasable only when a compatible coding agent can start with a local vide
 finish with a timestamped transcript and source-grounded visual evidence without the
 user manually extracting audio, transcribing it, or taking screenshots. Both the
 provided-transcript and local-ASR paths must pass. Missing dependencies produce an
-actionable setup plan and require explicit installation authority. Evidence references
+actionable setup plan when a qualified installer exists, or typed manual guidance
+when it does not or cannot complete. Installation requires separate explicit user
+authority; an agent's video-inspection request is not that authority. Evidence references
 remain resolvable after bounded paging/refinement, and session cleanup versus retention
 is explicit. The agent may honestly report insufficient evidence; a scaffold-only,
 transcript-only, or screenshot-only flow is not a functional R0 release.
@@ -157,7 +159,7 @@ P00 accepted these decisions on 2026-09-10. The linked ADRs are authoritative.
 | DEC-04 | Desktop idle TTL 24 hours and absolute lifetime seven days | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |
 | DEC-05 | Durable workers require an explicit qualified local workspace; R0 enablement is Ubuntu/ext4 only after P10/P11 qualification | [0010](../decisions/0010-storage-qualification-gate.md) |
 | DEC-06 | Publish immutable artifacts through versioned manifest generations | [0006](../decisions/0006-workspace-publication-and-durability.md) |
-| DEC-07 | Use explicit pinned per-user managed dependency plans | [0007](../decisions/0007-managed-runtime-provisioning.md) |
+| DEC-07 | Detect existing tools, explicitly install reviewed missing ones, and guide manual recovery on every target | [0014](../decisions/0014-progressive-dependency-setup.md), refining [0007](../decisions/0007-managed-runtime-provisioning.md) |
 | DEC-08 | Keep executable `vsift`; recheck unscoped npm name before release | [0009](../decisions/0009-package-identity-and-distribution.md) |
 | DEC-09 | Use the accepted R0 CLI namespace | [0008](../decisions/0008-cli-and-json-contract.md) |
 | DEC-10 | Preserve setup v1 and use typed v1 envelopes for new operations | [0008](../decisions/0008-cli-and-json-contract.md) |

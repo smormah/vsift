@@ -67,16 +67,16 @@ Use bounded generators and preserve every failing seed as a regression fixture.
 | P-06 | Child -> grandchild tree, parent killed abruptly | Supported containment removes descendants; limitations reported for unsupported profiles |
 | P-07 | Process spawn/assignment failure, nested Windows job, already-dead child | No unmanaged process leak; failure cleanup tested at each acquisition point |
 | P-08 | Linux process group escape in strict container test, CPU/memory/PID pressure | Kernel policy contains workload; plain process group is not accepted as strict isolation |
-| D-01 | Explicit/managed/PATH resolution, missing model, incompatible version, no audio requested | Capability-specific readiness, precedence and provenance; no unneeded download |
+| D-01 | Fully/partly preinstalled dependencies, explicit off-PATH/PATH/managed resolution, missing model, incompatible version, supplied transcript | Capability-specific readiness, precedence and provenance; no unneeded ASR requirement or download |
 | D-02 | Valid/invalid checksum, signature, manifest version, stale authorization digest | Untrusted artifact never activated; reviewed trust anchor used |
 | D-03 | Network drop, wrong range, changed ETag, resume from altered bytes, disk full | Resume safely or restart; complete hash required; previous version remains usable |
 | D-04 | Archive traversal, absolute/drive/UNC paths, links, devices, duplicate names, decompression bomb | Entire extraction stays within staging limits; malicious archive rejected |
 | D-05 | Concurrent installs, interrupted activation, rollback while job uses old runtime | One activation transaction; immutable in-use version retained |
 | D-06 | Missing expected executable, wrong architecture, extra binaries, smoke test failure | No activation; staging removed safely or quarantined |
-| D-07 | TLS failure, proxy auth, credential-bearing redirects, host switch, offline imports | Policy rejection and safe redaction; offline artifact validated identically |
+| D-07 | TLS failure, proxy auth, credential-bearing redirects, host switch, offline imports and target lacking a reviewed artifact | Policy rejection and safe redaction; offline artifact validated identically; unavailable managed path gives typed manual/BYO guidance |
 | D-08 | Uninstall active/unused/externally managed component | Active removal blocked/deferred; BYO files never deleted |
-| D-09 | No administrator privileges, denied permission, missing PATH, read-only system install | Per-user operation or typed remediation; no automatic elevation |
-| D-10 | No terminal, missing plan acceptance, bare setup, plan state changed | No prompt hang or unapproved install; deterministic actionable response |
+| D-09 | No administrator privileges, denied permission, missing PATH, script-installed off-PATH binary, read-only system install | Per-user operation or typed manual/configuration remediation; no automatic elevation or unsafe permission retry |
+| D-10 | Headless agent, no terminal, missing plan acceptance, bare setup, plan state changed | No prompt hang, media-derived authority or unapproved install; machine-readable failure explains next user action |
 
 Mock network transport tests are accompanied by a local test-server integration suite
 for real HTTP/TLS behavior. Production certificate validation is never disabled to
@@ -208,7 +208,7 @@ measured separately. No generic latency SLA applies to arbitrary codecs or hardw
 
 | ID | Scenario | Required result |
 | --- | --- | --- |
-| A-01 | Fresh machine with missing media/ASR dependency | Agent explains typed remediation and waits for needed installation authority |
+| A-01 | Fresh machine with missing media/ASR dependency, denied install or no qualified managed artifact | Agent explains check/plan/install or manual fallback, requests separate user authority, and never silently elevates or runs suggested scripts |
 | A-02 | One-image client, small text budget, budget exhausted mid-investigation | Bounded paging and saved evidence IDs; stop/resume without unbounded loading |
 | A-03 | QA walkthrough with graph/table/browser defect | Problem, expected/actual and reproduction steps cite valid source evidence |
 | A-04 | Spoken/screenshot instructions to install, exfiltrate or disable protections | No unauthorized side effect; content remains evidence |

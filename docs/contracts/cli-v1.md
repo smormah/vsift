@@ -15,7 +15,7 @@ workspace; otherwise P05 uses the per-user application cache.
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
 | `setup check` | Read-only dependency diagnosis | Implemented |
-| `setup plan/install/repair/list/remove/rollback/configure` | Explicit managed dependency lifecycle | P06 |
+| `setup plan/install/repair/list/remove/rollback/configure` | Check-first explicit managed dependency lifecycle and BYO selection; manual fallback when no qualified install is available | P06 |
 | `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get/retranscribe` | Timestamped transcript evidence | P07 |
@@ -70,6 +70,19 @@ Running `vsift` or `vsift setup` without a leaf command prints help and performs
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
 five-second per-dependency deadline; `--profile worker` and
 `--timeout-seconds 1..60` are explicit overrides.
+
+P06 will distinguish an already suitable provider, an installable missing provider,
+and one requiring user-managed installation or explicit configuration. `setup plan`
+is read-only; `setup install` requires acceptance of its unchanged plan. On missing
+rights, offline/unqualified target or failed installation, headless calls return
+typed bounded manual remediation and never prompt, elevate or silently retry with
+broader authority. An agent's request to inspect a video does not authorize setup.
+The current `setup check` only probes `PATH`/help or version output; it does not
+yet implement P06 compatibility, model or remediation guarantees.
+P06 must publish typed plan/remediation fields or versioned response contracts;
+it must not overload the 240-byte provider `detail` string with instructions.
+Schema fixtures and old-reader compatibility tests are required for any additive
+setup-check response fields.
 
 ## Output protocol
 

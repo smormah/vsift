@@ -2,6 +2,16 @@
 
 ## Current checkpoint
 
+2026-09-13: The maintainer confirmed the R0 setup journey in ADR 0014:
+detect existing/partly installed components first, explicitly plan/install
+reviewed missing ones, and always provide typed manual/BYO guidance if managed
+installation is unavailable, denied or fails. Script-installed off-PATH tools
+must be selectable. Agents need rich remediation but cannot infer install
+authority from video inspection. The BYO-only proposal PR #49 closed unmerged;
+the P06 source-review draft PR #48 was reopened. P06 remains planned, with its
+immutable provider/model catalogue still a gate for each managed target. This
+record changes acceptance, not runtime behavior; no implementation merge yet.
+
 2026-09-12: P06 source review started from protected main
 `777bc3e56788d43cd9a647dba54c287390c2998d`; P05's evidence follow-up is
 merged and issue #8 is closed. A reviewed cross-target provider/model artifact
@@ -28,6 +38,14 @@ follow-up records the completed ledger state; issue #6 is closed. P04 is now the
 eligible packet but remains planned.
 
 ## Pending
+
+- Merge the ADR 0014 progressive-setup clarification through protected checks
+  without claiming P06 completion. Issue #9 now describes detect/install/guide.
+- Resolve PR #48's reviewed per-target FFmpeg/FFprobe, whisper.cpp and model
+  source matrix before managed activation. Qualify at least one complete
+  managed-install target; on every named R0 target, test the typed manual/BYO
+  fallback, permission denial and off-PATH selection. D-01..D-10 and the P06
+  E2E stage remain pending.
 
 - P06 source gate (2026-09-12): select and review immutable per-target
   FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model artifacts before
