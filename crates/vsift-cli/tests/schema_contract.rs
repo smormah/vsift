@@ -88,7 +88,7 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     );
 
     let operation = Command::cargo_bin("vsift")?
-        .args(["session", "list", "--json"])
+        .args(["setup", "plan", "--profile", "desktop", "--json"])
         .output()?;
     assert_eq!(
         serde_json::from_slice::<Value>(&operation.stdout)?,
@@ -96,7 +96,7 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     );
 
     let event = Command::cargo_bin("vsift")?
-        .args(["session", "list", "--events", "jsonl"])
+        .args(["setup", "plan", "--profile", "desktop", "--events", "jsonl"])
         .output()?;
     assert_eq!(
         serde_json::from_slice::<Value>(&event.stdout)?,

@@ -1,6 +1,8 @@
 # Proposed architecture and public contracts
 
-Status: accepted R0 design, not implemented. Requirement IDs refer to [the plan](README.md).
+Status: accepted R0 design, implemented only through P05. Requirement IDs refer
+to [the plan](README.md); later sections still describe future work unless
+the [delivery ledger](delivery-ledger.json) marks their packet complete.
 
 ## 1. Ownership and module boundaries
 
@@ -144,6 +146,15 @@ local CLI with no authorization boundary; future remote hosts bind cursors to ca
 scope and provide integrity protection. Stable pages operate on immutable generations.
 
 ## 4. Session lifecycle and privacy
+
+P05 implements the ephemeral foreground subset here: 24-hour idle expiry with
+a seven-day hard cap, held-lock close/cleanup coordination, a bounded root-local
+session index, explicit evidence-only/source-inclusive bundles and data-only
+validation. The exact shipped boundary and limitations are in the
+[P05 qualification record](p05-session-qualification.md) and
+[ADR 0013](../decisions/0013-retained-bundle-publication.md). P07+ preparing,
+retrieval, worker persistence and managed catalogue behavior remain future
+packets.
 
 Proposed default ephemeral root: private per-user application cache, not the current
 working directory. Root registration/configuration and runtime/model installations

@@ -100,11 +100,11 @@ fn setup_check_json_is_structural_and_environment_independent()
 #[test]
 fn reserved_operations_fail_without_claiming_implementation()
 -> Result<(), Box<dyn std::error::Error>> {
-    let output = run(&["session", "list", "--json"])?;
+    let output = run(&["setup", "plan", "--profile", "desktop", "--json"])?;
     let value = parse_stdout(&output)?;
 
     assert_eq!(output.status.code(), Some(2));
-    assert_eq!(value["command"], "session.list");
+    assert_eq!(value["command"], "setup.plan");
     assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
     assert_eq!(value["data"], Value::Null);
     Ok(())

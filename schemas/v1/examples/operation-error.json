@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "command": "session.list",
+  "command": "setup.plan",
   "operation_id": null,
   "status": "failed",
   "data": null,

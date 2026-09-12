@@ -72,7 +72,8 @@ port. It is never part of the default desktop lifecycle, and an embedded databas
 adapter does not become the domain model or a distributed work queue. See the
 [R1 industrial capability expansion](planning/r1-industrial-capability-expansion.md).
 
-P03 now defines the first storage boundary without exposing a session command. The
+P03 defines the storage boundary; P05 composes its ephemeral profile into the
+foreground CLI. The
 domain distinguishes a caller's `ephemeral` or `durable` requirement from the
 publication guarantee qualified for an adapter. The application authorizes a
 session-store initialization only after that guarantee check. Consequently, an
@@ -92,13 +93,21 @@ caller's expected generation, installs an immutable checksummed manifest, and re
 the commit pointer only after validation and file synchronization. Recovery verifies
 the bounded manifest chain, ignores unpublished attempts, and rejects corrupt, missing
 or future-version metadata. Fault and child-process tests cover every manifest/pointer
-write, flush and rename boundary. It is not composed into the CLI. The adapter reports
+write, flush and rename boundary. The adapter reports
 process-crash-consistent ephemeral publication only; explicit durable requests fail
 before admission or mutation until P10/P11/P14 qualify Ubuntu/ext4 under ADR 0010.
 
-Expiry makes a temporary session eligible for cleanup. With no background process,
-physical cleanup runs during a later invocation or explicit host maintenance, not
-necessarily at the expiration instant.
+P05 registers each new session in a bounded root-local hash index before source
+staging. A held marker lock protects an opener across processes. Source binding,
+renewal, close and artifact publication extend the same immutable manifest chain.
+Each list/clean page inspects at most one 256-entry bucket. Cleanup claims an
+exclusive lifetime lock, validates the contained owned tree, quarantines it,
+and removes it without touching the original or a retained export. Expiry makes
+a temporary session eligible for cleanup; with no background process, physical
+cleanup requires a later explicit clean invocation and does not occur at the
+expiration instant. The [P05 qualification record](planning/p05-session-qualification.md)
+and [ADR 0013](decisions/0013-retained-bundle-publication.md) specify bundle
+portability and the unchanged publication guarantee.
 
 ## Proposed worker execution extension
 
@@ -120,9 +129,10 @@ CLI commands expose two presentations of the same typed application result:
 
 JSON fields, error codes, exit codes, and evidence identifiers are public API. Changes require contract tests, documentation, and compatibility review.
 The published [v1 CLI contract](contracts/cli-v1.md) and
-[JSON schemas](../schemas/v1/README.md) define the P01 boundary. Only `setup check`
-currently reaches an application use case; the remaining parsed namespace fails with
-a typed not-implemented result until its owning packet ships.
+[JSON schemas](../schemas/v1/README.md) define the v1 boundary. `setup check`,
+foreground `ingest`, the P05 `session` lifecycle and `bundle validate` are
+operational; remaining commands fail with a typed not-implemented result until
+their owning packets ship.
 
 ## Error model
 

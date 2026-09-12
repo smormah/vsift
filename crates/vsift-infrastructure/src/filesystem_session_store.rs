@@ -15,12 +15,18 @@ use vsift_application::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
     PublishSessionGenerationRequest, SessionStorageError, SessionStore, StorageCapabilities,
 };
-use vsift_domain::{OperationId, PublicationGuarantee, SessionId, StorageGeneration};
+use vsift_domain::{
+    OperationId, PublicationGuarantee, SessionArtifactKind, SessionId, SessionLifetime,
+    SessionPhase, SourceId, StorageGeneration,
+};
+
+use crate::SourceSnapshot;
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
 const OWNERSHIP_FILE: &str = "ownership.json";
 const COORDINATION_DIRECTORY: &str = "coordination";
 const SESSIONS_DIRECTORY: &str = "sessions";
+const SESSION_INDEX_DIRECTORY: &str = "session-index";
 const INITIALIZATION_LOCK: &str = "session-initialize.lock";
 const CURRENT_FILE: &str = "current.json";
 const GENERATIONS_DIRECTORY: &str = "generations";
@@ -33,6 +39,7 @@ const STORAGE_LAYOUT_VERSION: u16 = 1;
 const MAX_ADMISSION_CAPACITY: u16 = 64;
 const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
 const MAX_GENERATIONS_PER_SESSION: u64 = 4_096;
+const HEX: &[u8; 16] = b"0123456789abcdef";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PublicationBoundary {
@@ -131,7 +138,1014 @@ pub struct ExclusiveSessionLifetimeHold {
     _lifetime_lock: fs::File,
 }
 
+/// Verified committed lifecycle state for one disposable session.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SessionStatus {
+    session_id: SessionId,
+    source_id: SourceId,
+    source_bytes: u64,
+    phase: SessionPhase,
+    lifetime: SessionLifetime,
+    generation: StorageGeneration,
+    artifact_count: usize,
+    artifact_bytes: u64,
+}
+
+/// Explicit portability requested for a user-selected retained bundle.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BundleSourcePolicy {
+    /// Export evidence metadata only; matching original media is needed later.
+    EvidenceOnly,
+    /// Copy and verify the private source snapshot into the bundle.
+    IncludeSource,
+}
+
+/// A validated, explicitly retained data-only bundle.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BundleStatus {
+    session_id: SessionId,
+    source_id: SourceId,
+    source_bytes: u64,
+    source_policy: BundleSourcePolicy,
+    artifact_count: usize,
+    artifact_bytes: u64,
+}
+
+/// Result of examining one positively identified disposable session for cleanup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CleanOutcome {
+    /// The session remains open and within its expiry.
+    Ineligible,
+    /// A dry run found a closed, expired, or abandoned session.
+    Eligible,
+    /// A claimed owned session was quarantined and removed.
+    Removed,
+}
+
+/// Stable held registration while a source is staged and activated.
+///
+/// A cleaner cannot classify a suspended opener as abandoned merely from its
+/// registration timestamp; this OS lock remains authoritative until drop/crash.
+pub struct SessionRegistration {
+    _marker_lock: fs::File,
+}
+
+/// One bounded page from a fixed index bucket, with no media or transcript data.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SessionIndexPage {
+    session_ids: Vec<SessionId>,
+    next_bucket: Option<u16>,
+}
+
+impl SessionIndexPage {
+    /// Positively registered session IDs in this bucket.
+    #[must_use]
+    pub fn session_ids(&self) -> &[SessionId] {
+        &self.session_ids
+    }
+
+    /// Cursor to the next bounded bucket, if any.
+    #[must_use]
+    pub const fn next_bucket(&self) -> Option<u16> {
+        self.next_bucket
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SessionIndexMarker {
+    schema_version: u16,
+    session_id: String,
+    operation_id: String,
+    registered_at_unix_seconds: u64,
+}
+
+impl MetadataVersion for SessionIndexMarker {
+    fn schema_version(&self) -> u16 {
+        self.schema_version
+    }
+}
+
+impl BundleStatus {
+    /// Session from which the bundle originated.
+    #[must_use]
+    pub const fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    /// Hash of the source required for later re-extraction.
+    #[must_use]
+    pub const fn source_id(&self) -> &SourceId {
+        &self.source_id
+    }
+
+    /// Size of the required source.
+    #[must_use]
+    pub const fn source_bytes(&self) -> u64 {
+        self.source_bytes
+    }
+
+    /// Whether source bytes were included.
+    #[must_use]
+    pub const fn source_policy(&self) -> BundleSourcePolicy {
+        self.source_policy
+    }
+
+    /// Number of validated evidence artifacts.
+    #[must_use]
+    pub const fn artifact_count(&self) -> usize {
+        self.artifact_count
+    }
+
+    /// Total validated evidence bytes.
+    #[must_use]
+    pub const fn artifact_bytes(&self) -> u64 {
+        self.artifact_bytes
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct BundleManifest {
+    schema_version: u16,
+    format: String,
+    session_id: String,
+    source_id: String,
+    source_bytes: u64,
+    source_included: bool,
+    publication: String,
+    artifacts: Vec<StoredArtifact>,
+}
+
+impl MetadataVersion for BundleManifest {
+    fn schema_version(&self) -> u16 {
+        self.schema_version
+    }
+}
+
+impl SessionStatus {
+    /// Session described by this committed generation.
+    #[must_use]
+    pub const fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    /// Hash identity of the private source copy.
+    #[must_use]
+    pub const fn source_id(&self) -> &SourceId {
+        &self.source_id
+    }
+
+    /// Original source byte count; no content is returned.
+    #[must_use]
+    pub const fn source_bytes(&self) -> u64 {
+        self.source_bytes
+    }
+
+    /// Committed open or closed phase.
+    #[must_use]
+    pub const fn phase(&self) -> SessionPhase {
+        self.phase
+    }
+
+    /// Validated expiry policy for this session.
+    #[must_use]
+    pub const fn lifetime(&self) -> SessionLifetime {
+        self.lifetime
+    }
+
+    /// Generation used for optimistic later mutations.
+    #[must_use]
+    pub const fn generation(&self) -> StorageGeneration {
+        self.generation
+    }
+
+    /// Number of committed evidence artifacts.
+    #[must_use]
+    pub const fn artifact_count(&self) -> usize {
+        self.artifact_count
+    }
+
+    /// Total committed evidence bytes, excluding the source.
+    #[must_use]
+    pub const fn artifact_bytes(&self) -> u64 {
+        self.artifact_bytes
+    }
+}
+
+enum LifecycleUpdate {
+    Keep,
+    Activate {
+        source_id: String,
+        source_name: String,
+        source_bytes: u64,
+        now: u64,
+    },
+    Renew {
+        now: u64,
+    },
+    Close,
+    AddArtifact {
+        artifact: StoredArtifact,
+        now: u64,
+    },
+}
+
 impl FilesystemSessionStore {
+    /// Registers a new disposable session before initialization and source I/O.
+    ///
+    /// A SHA-256 bucket index caps each scan at 256 markers. The held marker lock
+    /// prevents expiry cleanup of a suspended or slow opener across processes.
+    /// An interrupted open remains registered for bounded later cleanup.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate IDs, malformed index entries, contention, and a full bucket.
+    pub fn register_session(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        now_unix_seconds: u64,
+    ) -> Result<SessionRegistration, SessionStorageError> {
+        self.revalidate_root()?;
+        let initialization_lock = self.try_root_initialization_lock()?;
+        if !self
+            .root
+            .try_exists(SESSION_INDEX_DIRECTORY)
+            .map_err(map_storage_io)?
+        {
+            create_private_child_directory(&self.root, Path::new(SESSION_INDEX_DIRECTORY))
+                .map_err(map_storage_io)?;
+        }
+        let index = self
+            .root
+            .open_dir_nofollow(SESSION_INDEX_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let bucket_name = session_bucket(session_id);
+        if !index.try_exists(&bucket_name).map_err(map_storage_io)? {
+            create_private_child_directory(&index, Path::new(&bucket_name))
+                .map_err(map_storage_io)?;
+        }
+        let bucket = index
+            .open_dir_nofollow(&bucket_name)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let mut count = 0_u16;
+        for entry in bucket.entries().map_err(map_storage_io)? {
+            let entry = entry.map_err(map_storage_io)?;
+            count = count
+                .checked_add(1)
+                .ok_or(SessionStorageError::CapacityExhausted)?;
+            if count >= 256 {
+                return Err(SessionStorageError::CapacityExhausted);
+            }
+            let name = entry.file_name();
+            let name = name.to_str().ok_or(SessionStorageError::IntegrityFailure)?;
+            SessionId::parse(name).map_err(|_| SessionStorageError::IntegrityFailure)?;
+        }
+        let marker = SessionIndexMarker {
+            schema_version: STORAGE_SCHEMA_VERSION,
+            session_id: session_id.as_str().to_owned(),
+            operation_id: operation_id.as_str().to_owned(),
+            registered_at_unix_seconds: now_unix_seconds,
+        };
+        let bytes = serde_json::to_vec(&marker).map_err(|_| SessionStorageError::Io)?;
+        create_regular_file(&bucket, session_id.as_str(), &bytes).map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                SessionStorageError::StateConflict
+            } else {
+                map_storage_io(error)
+            }
+        })?;
+        let marker_lock = open_regular_file(&bucket, session_id.as_str(), true)
+            .map_err(map_storage_io)?
+            .into_std();
+        marker_lock.try_lock_shared().map_err(map_lock_error)?;
+        drop(initialization_lock);
+        Ok(SessionRegistration {
+            _marker_lock: marker_lock,
+        })
+    }
+
+    /// Scans one fixed hash bucket without loading the entire root.
+    ///
+    /// Every registered session appears in exactly one bucket. At most 256 markers
+    /// are inspected, and the next bucket is an explicit continuation cursor.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an invalid cursor or malformed ownership marker.
+    pub fn scan_session_bucket(
+        &self,
+        bucket: u16,
+    ) -> Result<SessionIndexPage, SessionStorageError> {
+        if bucket > 255 {
+            return Err(SessionStorageError::StateConflict);
+        }
+        self.revalidate_root()?;
+        let _initialization_lock = self.try_root_initialization_lock()?;
+        let next_bucket = if bucket == 255 {
+            None
+        } else {
+            Some(bucket + 1)
+        };
+        if !self
+            .root
+            .try_exists(SESSION_INDEX_DIRECTORY)
+            .map_err(map_storage_io)?
+        {
+            return Ok(SessionIndexPage {
+                session_ids: Vec::new(),
+                next_bucket,
+            });
+        }
+        let index = self
+            .root
+            .open_dir_nofollow(SESSION_INDEX_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let name = format!("{bucket:02x}");
+        if !index.try_exists(&name).map_err(map_storage_io)? {
+            return Ok(SessionIndexPage {
+                session_ids: Vec::new(),
+                next_bucket,
+            });
+        }
+        let directory = index
+            .open_dir_nofollow(&name)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let mut session_ids = Vec::new();
+        for entry in directory.entries().map_err(map_storage_io)? {
+            let entry = entry.map_err(map_storage_io)?;
+            if session_ids.len() >= 256 {
+                return Err(SessionStorageError::CapacityExhausted);
+            }
+            let name = entry.file_name();
+            let name = name.to_str().ok_or(SessionStorageError::IntegrityFailure)?;
+            let session_id =
+                SessionId::parse(name).map_err(|_| SessionStorageError::IntegrityFailure)?;
+            if session_bucket(&session_id) != format!("{bucket:02x}") {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            let marker = read_versioned_json_file::<SessionIndexMarker>(&directory, name)?;
+            if marker.session_id != name || OperationId::parse(&marker.operation_id).is_err() {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            session_ids.push(session_id);
+        }
+        session_ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        Ok(SessionIndexPage {
+            session_ids,
+            next_bucket,
+        })
+    }
+
+    /// Publishes one bounded P04 media result as immutable session evidence.
+    ///
+    /// The artifact is installed by digest before its manifest generation commits.
+    /// A failed publication can leave an unreferenced owned file, which is never
+    /// reported as evidence and is removed with the disposable session.
+    ///
+    /// # Errors
+    ///
+    /// Rejects closed/expired sessions, stale generations, invalid byte budgets,
+    /// contention, or a changed content-addressed artifact.
+    pub fn publish_artifact(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        kind: SessionArtifactKind,
+        bytes: &[u8],
+        now_unix_seconds: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        let max = match kind {
+            SessionArtifactKind::FramePng => crate::MAX_FRAME_BYTES,
+            SessionArtifactKind::AudioPcm => crate::MAX_AUDIO_BYTES,
+        };
+        if bytes.is_empty() || bytes.len() > max {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        self.revalidate_root()?;
+        let _admission = acquire_admission(&self.root, self.admission_capacity, 1)?;
+        let coordination = self
+            .root
+            .open_dir_nofollow(COORDINATION_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let lifetime = open_session_lock(&coordination, session_id, "lifetime")?;
+        lifetime.try_lock_shared().map_err(map_lock_error)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let digest = sha256_hex(bytes);
+        let name = format!("artifact-{digest}.{}", kind.extension());
+        let artifacts = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        match create_regular_file(&artifacts, &name, bytes) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                let existing = open_regular_file(&artifacts, &name, false)
+                    .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                if hash_bounded(
+                    existing,
+                    u64::try_from(bytes.len())
+                        .map_err(|_| SessionStorageError::CapacityExhausted)?,
+                )? != digest
+                {
+                    return Err(SessionStorageError::IntegrityFailure);
+                }
+            }
+            Err(error) => return Err(map_storage_io(error)),
+        }
+        let writer = open_session_lock(&coordination, session_id, "writer")?;
+        writer.try_lock().map_err(map_lock_error)?;
+        let request = PublishSessionGenerationRequest::new(
+            session_id.clone(),
+            operation_id.clone(),
+            expected_generation,
+            vsift_domain::DurabilityRequirement::Ephemeral,
+        );
+        publish_generation_while_locked(
+            &self.root,
+            &request,
+            LifecycleUpdate::AddArtifact {
+                artifact: StoredArtifact {
+                    kind: StoredArtifactKind::from_domain(kind),
+                    name,
+                    sha256: digest,
+                    bytes: u64::try_from(bytes.len())
+                        .map_err(|_| SessionStorageError::CapacityExhausted)?,
+                },
+                now: now_unix_seconds,
+            },
+            None,
+        )
+    }
+
+    /// Claims and cleans one session only after verifying its ownership and state.
+    ///
+    /// An initial generation without a source binding is abandoned only after
+    /// the same idle interval. A held lifetime lock always wins over timestamps.
+    ///
+    /// # Errors
+    ///
+    /// Busy, corrupt, future-version, or inaccessible sessions are never removed.
+    pub fn clean_session(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+        dry_run: bool,
+    ) -> Result<CleanOutcome, SessionStorageError> {
+        let index_claim = self.claim_registration(session_id)?;
+        self.revalidate_root()?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let quarantine_name = format!(".quarantine-{}", session_id.as_str());
+        let existing_quarantine = sessions
+            .try_exists(&quarantine_name)
+            .map_err(map_storage_io)?;
+        if !existing_quarantine
+            && !sessions
+                .try_exists(session_id.as_str())
+                .map_err(map_storage_io)?
+        {
+            let Some((bucket, _marker_lock, marker)) = index_claim else {
+                return Err(SessionStorageError::IntegrityFailure);
+            };
+            if now_unix_seconds.saturating_sub(marker.registered_at_unix_seconds)
+                < SessionLifetime::IDLE_SECONDS
+            {
+                return Ok(CleanOutcome::Ineligible);
+            }
+            if dry_run {
+                return Ok(CleanOutcome::Eligible);
+            }
+            bucket
+                .remove_file(session_id.as_str())
+                .map_err(map_storage_io)?;
+            return Ok(CleanOutcome::Removed);
+        }
+        let _hold = self.try_acquire_exclusive_lifetime(session_id)?;
+        let selected_name = if existing_quarantine {
+            quarantine_name.as_str()
+        } else {
+            session_id.as_str()
+        };
+        let session = sessions
+            .open_dir_nofollow(selected_name)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let eligible = if existing_quarantine {
+            true
+        } else if let Some(record) = committed.manifest.lifecycle {
+            let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+            status.phase() == SessionPhase::Closed || status.lifetime().expired(now_unix_seconds)
+        } else {
+            if committed.manifest.generation != 0 {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            let generations = session
+                .open_dir_nofollow(GENERATIONS_DIRECTORY)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let initial = open_regular_file(&generations, INITIAL_GENERATION_FILE, false)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let modified = initial
+                .metadata()
+                .map_err(map_storage_io)?
+                .modified()
+                .map_err(map_storage_io)?
+                .into_std()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?
+                .as_secs();
+            now_unix_seconds.saturating_sub(modified) >= SessionLifetime::IDLE_SECONDS
+        };
+        if !eligible {
+            return Ok(CleanOutcome::Ineligible);
+        }
+        if dry_run {
+            return Ok(CleanOutcome::Eligible);
+        }
+        let mut budget = CleanupBudget::default();
+        validate_owned_tree(&session, 0, &mut budget)?;
+        drop(session);
+        if !existing_quarantine {
+            if sessions
+                .try_exists(&quarantine_name)
+                .map_err(map_storage_io)?
+            {
+                return Err(SessionStorageError::StateConflict);
+            }
+            sessions
+                .rename(session_id.as_str(), &sessions, &quarantine_name)
+                .map_err(map_storage_io)?;
+        }
+        sessions
+            .remove_dir_all(&quarantine_name)
+            .map_err(map_storage_io)?;
+        if let Some((bucket, _marker_lock, _marker)) = index_claim {
+            bucket
+                .remove_file(session_id.as_str())
+                .map_err(map_storage_io)?;
+        }
+        Ok(CleanOutcome::Removed)
+    }
+
+    fn claim_registration(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<(Dir, fs::File, SessionIndexMarker)>, SessionStorageError> {
+        let _initialization_lock = self.try_root_initialization_lock()?;
+        if !self
+            .root
+            .try_exists(SESSION_INDEX_DIRECTORY)
+            .map_err(map_storage_io)?
+        {
+            return Ok(None);
+        }
+        let index = self
+            .root
+            .open_dir_nofollow(SESSION_INDEX_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let bucket_name = session_bucket(session_id);
+        if !index.try_exists(&bucket_name).map_err(map_storage_io)? {
+            return Ok(None);
+        }
+        let bucket = index
+            .open_dir_nofollow(&bucket_name)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        if !bucket
+            .try_exists(session_id.as_str())
+            .map_err(map_storage_io)?
+        {
+            return Ok(None);
+        }
+        let marker_lock = open_regular_file(&bucket, session_id.as_str(), true)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?
+            .into_std();
+        let marker = read_versioned_json_file::<SessionIndexMarker>(&bucket, session_id.as_str())?;
+        marker_lock.try_lock().map_err(map_lock_error)?;
+        if marker.session_id != session_id.as_str()
+            || OperationId::parse(&marker.operation_id).is_err()
+        {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        Ok(Some((bucket, marker_lock, marker)))
+    }
+
+    fn try_root_initialization_lock(&self) -> Result<fs::File, SessionStorageError> {
+        let coordination = self
+            .root
+            .open_dir_nofollow(COORDINATION_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let lock = open_regular_file(&coordination, INITIALIZATION_LOCK, true)
+            .map_err(map_storage_io)?
+            .into_std();
+        lock.try_lock().map_err(map_lock_error)?;
+        Ok(lock)
+    }
+
+    /// Explicitly exports one committed session to a new private data-only directory.
+    ///
+    /// The destination is created exclusively and is never selected for automatic
+    /// cleanup. The manifest is written last: interrupted output remains visibly
+    /// incomplete and cannot validate as a retained bundle.
+    ///
+    /// # Errors
+    ///
+    /// Existing destinations conflict; invalid source bytes, metadata, permissions,
+    /// or output paths fail without changing the original media.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep the export validation and commit ordering visible together"
+    )]
+    pub fn retain_bundle(
+        &self,
+        session_id: &SessionId,
+        output_path: &Path,
+        source_policy: BundleSourcePolicy,
+    ) -> Result<BundleStatus, SessionStorageError> {
+        validate_root_selection(output_path).map_err(map_open_error)?;
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+
+        let parent_path = output_path
+            .parent()
+            .ok_or(SessionStorageError::AccessDenied)?;
+        let name = output_path
+            .file_name()
+            .ok_or(SessionStorageError::AccessDenied)?;
+        let canonical_parent = fs::canonicalize(parent_path).map_err(map_storage_io)?;
+        let parent = Dir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
+            .map_err(map_storage_io)?;
+        create_private_child_directory(&parent, Path::new(name)).map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                SessionStorageError::StateConflict
+            } else {
+                map_storage_io(error)
+            }
+        })?;
+        let bundle = parent
+            .open_dir_nofollow(Path::new(name))
+            .map_err(map_storage_io)?;
+        if let Err(error) = validate_platform_root_permissions(output_path, &bundle) {
+            drop(bundle);
+            let _ = parent.remove_dir(Path::new(name));
+            return Err(map_open_error(error));
+        }
+        let bundle = parent
+            .open_dir_nofollow(Path::new(name))
+            .map_err(map_storage_io)?;
+        let manifest = BundleManifest {
+            schema_version: 1,
+            format: "vsift.bundle".to_owned(),
+            session_id: session_id.as_str().to_owned(),
+            source_id: status.source_id().as_str().to_owned(),
+            source_bytes: status.source_bytes(),
+            source_included: source_policy == BundleSourcePolicy::IncludeSource,
+            publication: PublicationGuarantee::ProcessCrashConsistent
+                .identifier()
+                .to_owned(),
+            artifacts: record.artifacts.clone(),
+        };
+        let artifacts = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let source = open_regular_file(&artifacts, &record.source_name, false)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let source_digest = hash_bounded(source, status.source_bytes())?;
+        if source_digest
+            != status
+                .source_id()
+                .as_str()
+                .trim_start_matches("src_sha256_")
+        {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        for artifact in &record.artifacts {
+            validate_artifact_record(artifact)?;
+            let input = open_regular_file(&artifacts, &artifact.name, false)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let mut target_options = OpenOptions::new();
+            target_options
+                .write(true)
+                .create_new(true)
+                .follow(FollowSymlinks::No);
+            let mut target = bundle
+                .open_with(&artifact.name, &target_options)
+                .map_err(map_storage_io)?;
+            let observed = copy_and_hash_bounded(input, &mut target, artifact.bytes)?;
+            if observed != artifact.sha256 {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            target.sync_all().map_err(map_storage_io)?;
+        }
+        if source_policy == BundleSourcePolicy::IncludeSource {
+            let source = open_regular_file(&artifacts, &record.source_name, false)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let mut target_options = OpenOptions::new();
+            target_options
+                .write(true)
+                .create_new(true)
+                .follow(FollowSymlinks::No);
+            let mut target = bundle
+                .open_with("source.media", &target_options)
+                .map_err(map_storage_io)?;
+            let observed = copy_and_hash_bounded(source, &mut target, status.source_bytes())?;
+            if observed
+                != status
+                    .source_id()
+                    .as_str()
+                    .trim_start_matches("src_sha256_")
+            {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            target.sync_all().map_err(map_storage_io)?;
+        }
+        let bytes = serde_json::to_vec(&manifest).map_err(|_| SessionStorageError::Io)?;
+        create_regular_file(&bundle, "bundle.json", &bytes).map_err(map_storage_io)?;
+        let observed_parent = fs::canonicalize(parent_path).map_err(map_storage_io)?;
+        if observed_parent != canonical_parent {
+            return Err(SessionStorageError::AccessDenied);
+        }
+        Self::validate_bundle(output_path)
+    }
+
+    /// Validates a selected retained directory as bounded data without executing it.
+    ///
+    /// # Errors
+    ///
+    /// Rejects future versions, unexpected entries, links, size changes, and hash
+    /// mismatches. Evidence-only bundles disclose the matching source requirement.
+    pub fn validate_bundle(path: &Path) -> Result<BundleStatus, SessionStorageError> {
+        validate_root_selection(path).map_err(map_open_error)?;
+        let metadata = fs::symlink_metadata(path).map_err(map_storage_io)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        let parent_path = path.parent().ok_or(SessionStorageError::AccessDenied)?;
+        let name = path.file_name().ok_or(SessionStorageError::AccessDenied)?;
+        let parent = Dir::open_ambient_dir(parent_path, cap_std::ambient_authority())
+            .map_err(map_storage_io)?;
+        let bundle = parent
+            .open_dir_nofollow(Path::new(name))
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
+        validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
+        let manifest = read_versioned_json_file::<BundleManifest>(&bundle, "bundle.json")?;
+        if manifest.format != "vsift.bundle"
+            || manifest.publication != PublicationGuarantee::ProcessCrashConsistent.identifier()
+            || manifest.source_bytes == 0
+            || manifest.source_bytes > crate::MAX_SOURCE_BYTES
+        {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        let session_id = SessionId::parse(&manifest.session_id)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let source_id = SourceId::parse(&manifest.source_id)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        if manifest.artifacts.len() > 256 {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        let expected_entries = 1 + manifest.artifacts.len() + usize::from(manifest.source_included);
+        let mut entries = 0_usize;
+        for entry in bundle.entries().map_err(map_storage_io)? {
+            let entry = entry.map_err(map_storage_io)?;
+            let name = entry.file_name();
+            if name != "bundle.json"
+                && !(manifest.source_included && name == "source.media")
+                && !manifest
+                    .artifacts
+                    .iter()
+                    .any(|artifact| name.to_str() == Some(artifact.name.as_str()))
+            {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            entries = entries
+                .checked_add(1)
+                .ok_or(SessionStorageError::CapacityExhausted)?;
+            if entries > expected_entries {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+        }
+        if entries != expected_entries {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        if manifest.source_included {
+            let source = open_regular_file(&bundle, "source.media", false)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let digest = hash_bounded(source, manifest.source_bytes)?;
+            if digest != source_id.as_str().trim_start_matches("src_sha256_") {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+        }
+        let mut artifact_bytes = 0_u64;
+        for artifact in &manifest.artifacts {
+            validate_artifact_record(artifact)?;
+            let file = open_regular_file(&bundle, &artifact.name, false)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            if hash_bounded(file, artifact.bytes)? != artifact.sha256 {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            artifact_bytes = artifact_bytes
+                .checked_add(artifact.bytes)
+                .ok_or(SessionStorageError::CapacityExhausted)?;
+        }
+        if artifact_bytes > 10 * 1024 * 1024 * 1024 {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        Ok(BundleStatus {
+            session_id,
+            source_id,
+            source_bytes: manifest.source_bytes,
+            source_policy: if manifest.source_included {
+                BundleSourcePolicy::IncludeSource
+            } else {
+                BundleSourcePolicy::EvidenceOnly
+            },
+            artifact_count: manifest.artifacts.len(),
+            artifact_bytes,
+        })
+    }
+
+    /// Binds a verified private source to an initialized ephemeral session.
+    ///
+    /// The snapshot's shared hold protects it from cleanup until the generation
+    /// commits. Explicit durable publication still requires the application
+    /// preflight and is not available through this desktop-only operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed source, conflict, capacity, or storage failure.
+    pub fn activate_source(
+        &self,
+        snapshot: &SourceSnapshot,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        now_unix_seconds: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        snapshot
+            .verify()
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        self.revalidate_root()?;
+        let request = PublishSessionGenerationRequest::new(
+            snapshot.session_id().clone(),
+            operation_id.clone(),
+            expected_generation,
+            vsift_domain::DurabilityRequirement::Ephemeral,
+        );
+        publish_generation_with_update(
+            &self.root,
+            self.admission_capacity,
+            &request,
+            LifecycleUpdate::Activate {
+                source_id: snapshot.id().as_str().to_owned(),
+                source_name: snapshot.file_name().to_owned(),
+                source_bytes: snapshot.bytes(),
+                now: now_unix_seconds,
+            },
+            false,
+        )
+    }
+
+    /// Reads one committed lifecycle after verifying the root and manifest chain.
+    ///
+    /// # Errors
+    ///
+    /// Orphaned initializations and corrupt lifecycle metadata fail closed.
+    pub fn session_status(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<SessionStatus, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let lifecycle = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        lifecycle.to_status(session_id.clone(), committed.manifest.generation)
+    }
+
+    /// Reads a listed registration without hiding committed integrity failures.
+    ///
+    /// A marker without an initialized/activated session is reported as pending;
+    /// corrupt committed metadata remains a typed failure for the listing caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed permission, contention, version, or integrity failure.
+    pub fn indexed_session_status(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Option<SessionStatus>, SessionStorageError> {
+        self.revalidate_root()?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        if !sessions
+            .try_exists(session_id.as_str())
+            .map_err(map_storage_io)?
+        {
+            return Ok(None);
+        }
+        match self.session_status(session_id) {
+            Ok(status) => Ok(Some(status)),
+            Err(SessionStorageError::StateConflict) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Extends an unexpired open session within its original seven-day cap.
+    ///
+    /// # Errors
+    ///
+    /// Active holds return busy; expired, closed, or stale generations conflict.
+    pub fn renew_session(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        now_unix_seconds: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.revalidate_root()?;
+        let request = PublishSessionGenerationRequest::new(
+            session_id.clone(),
+            operation_id.clone(),
+            expected_generation,
+            vsift_domain::DurabilityRequirement::Ephemeral,
+        );
+        publish_generation_with_update(
+            &self.root,
+            self.admission_capacity,
+            &request,
+            LifecycleUpdate::Renew {
+                now: now_unix_seconds,
+            },
+            true,
+        )
+    }
+
+    /// Closes a session after claiming its exclusive lifetime lock.
+    ///
+    /// # Errors
+    ///
+    /// Active work returns busy; stale or already closed sessions conflict.
+    pub fn close_session(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.revalidate_root()?;
+        let request = PublishSessionGenerationRequest::new(
+            session_id.clone(),
+            operation_id.clone(),
+            expected_generation,
+            vsift_domain::DurabilityRequirement::Ephemeral,
+        );
+        publish_generation_with_update(
+            &self.root,
+            self.admission_capacity,
+            &request,
+            LifecycleUpdate::Close,
+            true,
+        )
+    }
+
     /// Opens the existing artifact directory under a verified session and lifetime hold.
     /// The returned capability is for internal media staging; P05 owns publication.
     pub(crate) fn source_artifact_directory(
@@ -146,6 +1160,17 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(map_storage_io)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        if let Some(record) = committed.manifest.lifecycle {
+            let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| SessionStorageError::Io)?
+                .as_secs();
+            if status.phase() != SessionPhase::Open || status.lifetime().expired(now) {
+                return Err(SessionStorageError::StateConflict);
+            }
+        }
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
             .map_err(map_storage_io)?;
@@ -727,15 +1752,197 @@ fn publish_generation(
     let writer = open_session_lock(&coordination, request.session_id(), "writer")?;
     writer.try_lock().map_err(map_lock_error)?;
 
-    let result = publish_generation_while_locked(root, request, fault);
+    let result = publish_generation_while_locked(root, request, LifecycleUpdate::Keep, fault);
     drop(writer);
     drop(lifetime);
     result
 }
 
+fn publish_generation_with_update(
+    root: &Dir,
+    capacity: u16,
+    request: &PublishSessionGenerationRequest,
+    update: LifecycleUpdate,
+    exclusive_lifetime: bool,
+) -> Result<StorageGeneration, SessionStorageError> {
+    let _admission = acquire_admission(root, capacity, 1)?;
+    let coordination = root
+        .open_dir_nofollow(COORDINATION_DIRECTORY)
+        .map_err(map_storage_io)?;
+    let lifetime = open_session_lock(&coordination, request.session_id(), "lifetime")?;
+    if exclusive_lifetime {
+        lifetime.try_lock().map_err(map_lock_error)?;
+    } else {
+        lifetime.try_lock_shared().map_err(map_lock_error)?;
+    }
+    let writer = open_session_lock(&coordination, request.session_id(), "writer")?;
+    writer.try_lock().map_err(map_lock_error)?;
+    let result = publish_generation_while_locked(root, request, update, None);
+    drop(writer);
+    drop(lifetime);
+    result
+}
+
+fn update_lifecycle(
+    current: Option<StoredLifecycle>,
+    update: LifecycleUpdate,
+) -> Result<Option<StoredLifecycle>, SessionStorageError> {
+    match update {
+        LifecycleUpdate::Keep => Ok(current),
+        LifecycleUpdate::Activate {
+            source_id,
+            source_name,
+            source_bytes,
+            now,
+        } => {
+            if current.is_some() || source_bytes == 0 || source_bytes > crate::MAX_SOURCE_BYTES {
+                return Err(SessionStorageError::StateConflict);
+            }
+            validate_source_record(&source_id, &source_name, source_bytes)?;
+            let lifetime =
+                SessionLifetime::open(now).map_err(|_| SessionStorageError::StateConflict)?;
+            Ok(Some(StoredLifecycle {
+                phase: StoredSessionPhase::Open,
+                opened_at_unix_seconds: lifetime.opened_at_unix_seconds(),
+                expires_at_unix_seconds: lifetime.expires_at_unix_seconds(),
+                source_id,
+                source_name,
+                source_bytes,
+                artifacts: Vec::new(),
+            }))
+        }
+        LifecycleUpdate::Renew { now } => {
+            let mut record = current.ok_or(SessionStorageError::StateConflict)?;
+            if !matches!(record.phase, StoredSessionPhase::Open) {
+                return Err(SessionStorageError::StateConflict);
+            }
+            let lifetime = record.validated_lifetime()?;
+            let renewed = lifetime
+                .renew(now)
+                .map_err(|_| SessionStorageError::StateConflict)?;
+            record.expires_at_unix_seconds = renewed.expires_at_unix_seconds();
+            Ok(Some(record))
+        }
+        LifecycleUpdate::Close => {
+            let mut record = current.ok_or(SessionStorageError::StateConflict)?;
+            record.validated_lifetime()?;
+            if !matches!(record.phase, StoredSessionPhase::Open) {
+                return Err(SessionStorageError::StateConflict);
+            }
+            record.phase = StoredSessionPhase::Closed;
+            Ok(Some(record))
+        }
+        LifecycleUpdate::AddArtifact { artifact, now } => {
+            let mut record = current.ok_or(SessionStorageError::StateConflict)?;
+            let lifetime = record.validated_lifetime()?;
+            if !matches!(record.phase, StoredSessionPhase::Open) || lifetime.expired(now) {
+                return Err(SessionStorageError::StateConflict);
+            }
+            validate_artifact_record(&artifact)?;
+            if record.artifacts.len() >= 256
+                || record
+                    .artifacts
+                    .iter()
+                    .any(|existing| existing.name == artifact.name)
+            {
+                return Err(SessionStorageError::CapacityExhausted);
+            }
+            let total = record
+                .artifacts
+                .iter()
+                .try_fold(artifact.bytes, |sum, item| sum.checked_add(item.bytes))
+                .ok_or(SessionStorageError::CapacityExhausted)?;
+            if total > 10 * 1024 * 1024 * 1024 {
+                return Err(SessionStorageError::CapacityExhausted);
+            }
+            record.artifacts.push(artifact);
+            Ok(Some(record))
+        }
+    }
+}
+
+fn validate_artifact_record(artifact: &StoredArtifact) -> Result<(), SessionStorageError> {
+    let max = match artifact.kind {
+        StoredArtifactKind::FramePng => crate::MAX_FRAME_BYTES,
+        StoredArtifactKind::AudioPcm => crate::MAX_AUDIO_BYTES,
+    };
+    if !is_canonical_sha256(&artifact.sha256)
+        || artifact.bytes == 0
+        || artifact.bytes
+            > u64::try_from(max).map_err(|_| SessionStorageError::CapacityExhausted)?
+        || artifact.name != format!("artifact-{}.{}", artifact.sha256, artifact.kind.extension())
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(())
+}
+
+fn validate_source_record(
+    source_id: &str,
+    source_name: &str,
+    source_bytes: u64,
+) -> Result<SourceId, SessionStorageError> {
+    let source_id =
+        SourceId::parse(source_id).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let operation = source_name
+        .strip_prefix("source-")
+        .and_then(|value| value.strip_suffix(".media"))
+        .ok_or(SessionStorageError::IntegrityFailure)?;
+    OperationId::parse(operation).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    if source_bytes == 0 || source_bytes > crate::MAX_SOURCE_BYTES {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(source_id)
+}
+
+impl StoredLifecycle {
+    fn validated_lifetime(&self) -> Result<SessionLifetime, SessionStorageError> {
+        SessionLifetime::from_record(self.opened_at_unix_seconds, self.expires_at_unix_seconds)
+            .map_err(|_| SessionStorageError::IntegrityFailure)
+    }
+
+    fn to_status(
+        &self,
+        session_id: SessionId,
+        generation: u64,
+    ) -> Result<SessionStatus, SessionStorageError> {
+        let lifetime = self.validated_lifetime()?;
+        let source_id =
+            validate_source_record(&self.source_id, &self.source_name, self.source_bytes)?;
+        let phase = match self.phase {
+            StoredSessionPhase::Open => SessionPhase::Open,
+            StoredSessionPhase::Closed => SessionPhase::Closed,
+        };
+        if self.artifacts.len() > 256 {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        let mut artifact_bytes = 0_u64;
+        for artifact in &self.artifacts {
+            validate_artifact_record(artifact)?;
+            artifact_bytes = artifact_bytes
+                .checked_add(artifact.bytes)
+                .ok_or(SessionStorageError::CapacityExhausted)?;
+        }
+        if artifact_bytes > 10 * 1024 * 1024 * 1024 {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        Ok(SessionStatus {
+            session_id,
+            source_id,
+            source_bytes: self.source_bytes,
+            phase,
+            lifetime,
+            generation: StorageGeneration::from_value(generation),
+            artifact_count: self.artifacts.len(),
+            artifact_bytes,
+        })
+    }
+}
+
 fn publish_generation_while_locked(
     root: &Dir,
     request: &PublishSessionGenerationRequest,
+    update: LifecycleUpdate,
     fault: Option<PublicationBoundary>,
 ) -> Result<StorageGeneration, SessionStorageError> {
     let sessions = root
@@ -766,12 +1973,14 @@ fn publish_generation_while_locked(
     if next.value() >= MAX_GENERATIONS_PER_SESSION {
         return Err(SessionStorageError::CapacityExhausted);
     }
+    let lifecycle = update_lifecycle(current.manifest.lifecycle, update)?;
     let manifest = GenerationManifest {
         schema_version: STORAGE_SCHEMA_VERSION,
         session_id: request.session_id().as_str().to_owned(),
         operation_id: request.operation_id().as_str().to_owned(),
         generation: next.value(),
         previous_manifest_sha256: Some(current.digest),
+        lifecycle,
     };
     let bytes = serde_json::to_vec(&manifest).map_err(|_| SessionStorageError::Io)?;
     let generations = session
@@ -1198,6 +2407,7 @@ fn create_initial_attempt(
         operation_id: request.operation_id().as_str().to_owned(),
         generation: StorageGeneration::INITIAL.value(),
         previous_manifest_sha256: None,
+        lifecycle: None,
     };
     let manifest_bytes = serde_json::to_vec(&manifest).map_err(|_| SessionStorageError::Io)?;
     let generations = attempt
@@ -1343,6 +2553,107 @@ fn sha256_hex(bytes: &[u8]) -> String {
     encoded
 }
 
+fn session_bucket(session_id: &SessionId) -> String {
+    let digest = Sha256::digest(session_id.as_str().as_bytes());
+    format!("{:02x}", digest[0])
+}
+
+fn copy_and_hash_bounded(
+    mut source: File,
+    destination: &mut impl Write,
+    expected_bytes: u64,
+) -> Result<String, SessionStorageError> {
+    let started = std::time::Instant::now();
+    let metadata = source.metadata().map_err(map_storage_io)?;
+    if !metadata.is_file() || metadata.len() != expected_bytes || !has_one_link(&metadata) {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut total = 0_u64;
+    loop {
+        if started.elapsed() > crate::MAX_SOURCE_READ_DURATION {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        let count = source.read(&mut buffer).map_err(map_storage_io)?;
+        if count == 0 {
+            break;
+        }
+        total = total
+            .checked_add(u64::try_from(count).map_err(|_| SessionStorageError::CapacityExhausted)?)
+            .ok_or(SessionStorageError::CapacityExhausted)?;
+        if total > expected_bytes {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        destination
+            .write_all(&buffer[..count])
+            .map_err(map_storage_io)?;
+        hasher.update(&buffer[..count]);
+    }
+    if total != expected_bytes {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let mut digest = String::with_capacity(64);
+    for byte in hasher.finalize() {
+        digest.push(char::from(HEX[usize::from(byte >> 4)]));
+        digest.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    Ok(digest)
+}
+
+fn hash_bounded(source: File, expected_bytes: u64) -> Result<String, SessionStorageError> {
+    copy_and_hash_bounded(source, &mut io::sink(), expected_bytes)
+}
+
+#[derive(Default)]
+struct CleanupBudget {
+    entries: u32,
+    bytes: u64,
+}
+
+fn validate_owned_tree(
+    directory: &Dir,
+    depth: u8,
+    budget: &mut CleanupBudget,
+) -> Result<(), SessionStorageError> {
+    if depth > 5 {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    for entry in directory.entries().map_err(map_storage_io)? {
+        let entry = entry.map_err(map_storage_io)?;
+        budget.entries = budget
+            .entries
+            .checked_add(1)
+            .ok_or(SessionStorageError::CapacityExhausted)?;
+        if budget.entries > 100_000 {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        let name = entry.file_name();
+        let kind = entry.file_type().map_err(map_storage_io)?;
+        if kind.is_dir() {
+            let child = directory
+                .open_dir_nofollow(Path::new(&name))
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            validate_owned_tree(&child, depth + 1, budget)?;
+        } else if kind.is_file() {
+            let name = name.to_str().ok_or(SessionStorageError::IntegrityFailure)?;
+            let file = open_regular_file(directory, name, false)
+                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let metadata = file.metadata().map_err(map_storage_io)?;
+            budget.bytes = budget
+                .bytes
+                .checked_add(metadata.len())
+                .ok_or(SessionStorageError::CapacityExhausted)?;
+            if budget.bytes > 30 * 1024 * 1024 * 1024 {
+                return Err(SessionStorageError::CapacityExhausted);
+            }
+        } else {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+    }
+    Ok(())
+}
+
 fn is_canonical_sha256(value: &str) -> bool {
     value.len() == 64
         && value
@@ -1367,6 +2678,60 @@ struct GenerationManifest {
     operation_id: String,
     generation: u64,
     previous_manifest_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lifecycle: Option<StoredLifecycle>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredLifecycle {
+    phase: StoredSessionPhase,
+    opened_at_unix_seconds: u64,
+    expires_at_unix_seconds: u64,
+    source_id: String,
+    source_name: String,
+    source_bytes: u64,
+    #[serde(default)]
+    artifacts: Vec<StoredArtifact>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredArtifact {
+    kind: StoredArtifactKind,
+    name: String,
+    sha256: String,
+    bytes: u64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredArtifactKind {
+    FramePng,
+    AudioPcm,
+}
+
+impl StoredArtifactKind {
+    fn from_domain(kind: SessionArtifactKind) -> Self {
+        match kind {
+            SessionArtifactKind::FramePng => Self::FramePng,
+            SessionArtifactKind::AudioPcm => Self::AudioPcm,
+        }
+    }
+
+    fn extension(self) -> &'static str {
+        match self {
+            Self::FramePng => "png",
+            Self::AudioPcm => "pcm",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredSessionPhase {
+    Open,
+    Closed,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -6,7 +6,13 @@ use std::future::Future;
 
 use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, RuntimeReadiness};
 
+mod session;
 mod storage;
+
+pub use session::{
+    ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
+    StagedSessionSource,
+};
 
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

@@ -52,17 +52,25 @@ component integration test remains necessary even when the cumulative journey pa
 
 ## Execution model
 
-The P04 executable checkpoint is:
+The P04 source/media checkpoint remains:
 
 ```console
 cargo test -p vsift-infrastructure --locked --test p04_media_e2e -- --ignored --nocapture
 ```
 
-It exercises real FFprobe/FFmpeg operations on project-owned media, records a bounded
-JSON report under `.vsift/e2e-runs/<run-id>/report.json`, and leaves P05-P14 and the
-complete journey `not_implemented`. See the
-[P04 qualification record](p04-media-qualification.md) for scenarios, effective
-budgets and evidence. The following rules apply:
+P05 adds a cumulative source/media-to-disposable-session checkpoint:
+
+```console
+cargo test -p vsift-infrastructure --locked --test p05_session_e2e -- --ignored --nocapture
+```
+
+It uses project-owned F01 media, real FFprobe/FFmpeg operations, committed
+frame/audio artifacts, evidence-only and source-inclusive retained bundles,
+explicit close/cleanup and source-preservation checks. It records a bounded
+JSON report under `.vsift/e2e-runs/<run-id>/report.json` and leaves P06-P14
+and the complete journey `not_implemented`. The P04 checkpoint still covers
+seven source/media scenarios. See the [P04](p04-media-qualification.md) and
+[P05](p05-session-qualification.md) qualification records. The following rules apply:
 
 - It is opt-in during ordinary development and is run after substantial vertical
   increments. It is not an every-PR or mandatory hosted-CI job.

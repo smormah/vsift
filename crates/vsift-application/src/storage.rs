@@ -303,6 +303,26 @@ pub trait SessionStore: Send + Sync {
     ) -> impl Future<Output = Result<StorageGeneration, SessionStorageError>> + Send;
 }
 
+impl<T: SessionStore + ?Sized> SessionStore for &T {
+    fn capabilities(&self) -> StorageCapabilities {
+        (**self).capabilities()
+    }
+
+    fn initialize(
+        &self,
+        request: AuthorizedSessionStorageInitialization,
+    ) -> impl Future<Output = Result<StorageGeneration, SessionStorageError>> + Send {
+        (**self).initialize(request)
+    }
+
+    fn publish(
+        &self,
+        request: AuthorizedSessionGenerationPublication,
+    ) -> impl Future<Output = Result<StorageGeneration, SessionStorageError>> + Send {
+        (**self).publish(request)
+    }
+}
+
 /// Application boundary that rejects unsupported durability before storage mutation.
 pub struct InitializeSessionStorage<S> {
     store: S,

@@ -1,26 +1,70 @@
 # CLI and JSON contract v1
 
-Status: published contract boundary. The only operational use case in P01 is
-`vsift setup check`; all other commands below are reserved and return
-`COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a command does not claim its media,
-storage, provisioning, or worker behavior is implemented.
+Status: published v1 boundary. `setup check`, foreground `ingest`, the P05
+`session` lifecycle and `bundle validate` are operational. Other commands below
+remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
+command does not claim its media, provisioning, or worker behavior is implemented.
 
 ## Command namespace
 
 Global output options are `--json` for one terminal JSON document and
 `--events jsonl` for a JSON Lines stream. They are mutually exclusive.
+`--session-root <absolute-dir>` explicitly selects a private disposable
+workspace; otherwise P05 uses the per-user application cache.
 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
 | `setup check` | Read-only dependency diagnosis | Implemented |
 | `setup plan/install/repair/list/remove/rollback/configure` | Explicit managed dependency lifecycle | P06 |
-| `ingest` | Create a local investigation session | P04/P05 |
-| `session list/status/close/renew/retain/clean` | Session and retention lifecycle | P05 |
+| `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
+| `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get/retranscribe` | Timestamped transcript evidence | P07 |
 | `search`, `candidates` | Bounded text and visual-candidate retrieval | P08 |
 | `frame get/neighbours/burst`, `audio`, `crop` | Source-grounded evidence extraction | P09 |
-| `bundle validate` | Bounded data-only bundle validation | P05 |
+| `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job run/batch/status/resume/cancel` | Recoverable worker operations | P10/P11 |
+
+### P05 disposable sessions and bundles
+
+```console
+vsift ingest ./recording.mp4 --json
+vsift session list --json
+vsift session status ses_0123456789abcdef --json
+vsift session renew ses_0123456789abcdef --json
+vsift session retain ses_0123456789abcdef --output ./evidence --json
+vsift session retain ses_0123456789abcdef --output ./portable --include-source --json
+vsift bundle validate ./portable --json
+vsift session close ses_0123456789abcdef --json
+vsift session clean --expired --dry-run --json
+vsift session clean --expired --json
+```
+
+`ingest` stages and hashes one local source, returning its session/source IDs,
+source bytes, committed generation, `process_crash_consistent` publication and
+an RFC 3339 expiry. It does not start FFmpeg, setup, transcription or indexing.
+`ingest --transcript` remains a P07 reservation and fails before mutation.
+Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
+days from open. Close and cleanup return busy while active work holds the
+session. Expiry becomes visible at the wall-clock boundary, but physical
+cleanup requires a later `clean` invocation; no daemon or secure deletion is
+promised.
+
+`session list [--cursor 0..255]` and `session clean --expired
+[--cursor 0..255] [--dry-run]` return one bounded hash-bucket page at a time.
+`next_cursor` continues the scan; repeat until it is null. A page has at most
+256 registrations. An initializing registration is visible as such. A corrupt
+or busy item is reported with an item error and a partial page rather than
+silently omitted or used as deletion authority.
+
+`retain` requires a new absolute output directory and never overwrites one.
+The output is owner-private and stays outside automatic cleanup. Both bundle
+forms contain committed artifact bytes and a bounded v1 `bundle.json` written
+last. Evidence-only exports omit the source and state that matching original
+bytes are required for later re-extraction. `--include-source` copies and
+verifies the private snapshot; it never moves or deletes the original. An
+interrupted export can leave an incomplete private selected directory, which
+`bundle validate` rejects. The retained lifecycle does not upgrade the
+qualified publication guarantee; see [ADR 0013](../decisions/0013-retained-bundle-publication.md).
 
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
@@ -29,7 +73,8 @@ five-second per-dependency deadline; `--profile worker` and
 
 ## Output protocol
 
-Human output is concise terminal text on stdout. In `--json` mode stdout contains
+Human output is readable terminal text on stdout (P05 session operations use
+indented JSON). In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.

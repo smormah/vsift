@@ -2,11 +2,11 @@
   "schema_version": "1",
   "event": "terminal",
   "sequence": 0,
-  "command": "session.list",
+  "command": "setup.plan",
   "operation_id": null,
   "result": {
     "schema_version": "1",
-    "command": "session.list",
+    "command": "setup.plan",
     "operation_id": null,
     "status": "failed",
     "data": null,
