@@ -1,8 +1,8 @@
 # Implementation work packets
 
-Status: accepted R0 sequence with scoped R1 packets. P04 is in implementation
-review; its [qualification record](p04-media-qualification.md) describes the internal
-boundary and current evidence. P02 completed in PR #22
+Status: accepted R0 sequence with scoped R1 packets. P04 completed in protected
+PR #44 (`4fc859b`); its [qualification record](p04-media-qualification.md) describes
+the internal boundary and evidence. P05 is next eligible. P02 completed in PR #22
 (`4e9ef08`); P03 completed in PR #42 (`3eef9b7`) under accepted ADR 0010. Its
 feasibility evidence merged in PR #24 (`cbc531e`), PR #35 added typed guarantees,
 and PR #36 added the first internal filesystem-session increment. PR #42 completed

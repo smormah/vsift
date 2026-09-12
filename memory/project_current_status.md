@@ -2,16 +2,9 @@
 
 ## Active
 
-P04 is under implementation review on branch `codex/p04-source-media` from protected
-main `67bfe1438ad4e3a586aff5b6ae0a61710c340861`. Internal source staging and
-restricted FFprobe/FFmpeg metadata, exact-frame and audio operations are implemented.
-Project-owned F01-F10/F12 media and F11 parser/malformed variants have reproducible
-provenance and independent decoded-pixel/timestamp verification. The opt-in P04 E2E
-checkpoint runs real native providers and reports P05-P14 and the complete journey as
-`not_implemented`. ADR 0012 and `docs/planning/p04-media-qualification.md` define the
-desktop security/resource profile and remaining P11/P14 isolation work. Ledger status
-is `in_progress`; protected CI, merge hash and final evidence remain pending. Issue #7
-stays open until then.
+P04 merged through protected PR #44 as `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`.
+The ledger completion evidence is recorded in this follow-up. Issue #7 closes when
+that record merges. P05 is next eligible, but its lifecycle has not started.
 
 P03's implementation completed through protected PR #42 as
 `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`; this evidence-only follow-up records
@@ -57,6 +50,23 @@ remaining OS/storage crash gate are recorded. That gate is P10/P11/P14 work and 
 not invalidate P03's completed ephemeral profile.
 
 ## Complete
+
+### 2026-09-12 — P04 source and media primitives
+
+PR #44 squash-merged as `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. P04 adds
+an internal held no-follow private source snapshot with SHA-256 identity and a
+restricted, bounded FFprobe/FFmpeg adapter. Typed metadata includes selected stream
+indexes, orientation, codec support and normalized timeline origin. Frame and audio
+results preserve observed PTS and displayed dimensions. Project-owned F01-F10/F12
+media and F11 malformed/parser variants carry same-build reproducible provenance;
+an independent verifier checks 11 clips, seven malformed variants, timestamps and
+selected pixels. The opt-in real-media checkpoint passed seven scenarios on native
+FFmpeg 9.0 Windows/NTFS and reports P05-P14 plus the complete journey as
+`not_implemented`. Local fmt, strict Clippy, workspace tests, warning-denied rustdoc,
+governance and cargo-deny passed. Protected Quality passed on Ubuntu, Windows and
+macOS; Governance, Documentation, strict-worker, dependency policy/review, CodeQL
+and Rust analysis passed. ADR 0012 records desktop decoder isolation limits and
+P11/P14 qualification ownership. No public media/session command was added.
 
 ### 2026-09-11 — P03 ephemeral storage and coordination
 
