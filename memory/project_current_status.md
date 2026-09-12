@@ -3,7 +3,7 @@
 ## Active
 
 P05 issue #8 is in progress from protected main `8741f57dfc5b45c8cb4d3f1f7791d0f1d143c627`.
-The implementation branch opens disposable source-bound sessions, commits
+Implementation commit `1238580a6a86a433019fb2ecabfeec3eef56ea43` opens disposable source-bound sessions, commits
 renew/close/artifacts through P03 generations, keeps a bounded root-local
 registration index for list/cleanup, and validates explicit evidence-only or
 source-inclusive retained bundles. Local cross-process and native
@@ -11,9 +11,8 @@ FFmpeg/FFprobe P05 checkpoint tests pass. Protected checks, merge and ledger
 completion evidence are pending; P05 is not complete and P06 is not eligible.
 Strict durable requests still fail before mutation.
 
-P04 merged through protected PR #44 as `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`.
-The ledger completion evidence is recorded in this follow-up. Issue #7 closes when
-that record merges. P05 is next eligible, but its lifecycle has not started.
+At the earlier P04 checkpoint, protected PR #44 merged as
+`4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`; it made P05 eligible.
 
 P03's implementation completed through protected PR #42 as
 `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`; this evidence-only follow-up records
