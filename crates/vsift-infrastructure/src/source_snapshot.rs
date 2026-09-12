@@ -11,10 +11,12 @@ use std::{
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, File, OpenOptions};
 use sha2::{Digest, Sha256};
-use vsift_application::SessionStorageError;
+use vsift_application::{
+    ForegroundSessionPort, OpenSessionError, SessionStorageError, StagedSessionSource,
+};
 use vsift_domain::{OperationId, SessionId, SourceId};
 
-use crate::{FilesystemSessionStore, SessionReadHold};
+use crate::{FilesystemSessionStore, SessionReadHold, SessionRegistration};
 
 /// Maximum source size in the accepted desktop profile.
 pub const MAX_SOURCE_BYTES: u64 = 20 * 1024 * 1024 * 1024;
@@ -44,6 +46,7 @@ impl SourceContainer {
 
 /// An immutable-by-contract private copy tied to a held session lifetime.
 pub struct SourceSnapshot {
+    session_id: SessionId,
     id: SourceId,
     bytes: u64,
     container: SourceContainer,
@@ -104,6 +107,7 @@ impl SourceSnapshot {
         };
         drop(output);
         Ok(Self {
+            session_id: session_id.clone(),
             id,
             bytes,
             container,
@@ -118,6 +122,16 @@ impl SourceSnapshot {
     #[must_use]
     pub fn id(&self) -> &SourceId {
         &self.id
+    }
+
+    /// Session whose shared lifetime hold protects this private copy.
+    #[must_use]
+    pub fn session_id(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    pub(crate) fn file_name(&self) -> &str {
+        &self.file_name
     }
 
     /// Size of the staged source.
@@ -177,6 +191,67 @@ impl SourceSnapshot {
             Err(SourceError::UnsupportedContainer) => Ok(true),
             Err(error) => Err(error),
         }
+    }
+}
+
+impl StagedSessionSource for SourceSnapshot {
+    fn source_id(&self) -> &SourceId {
+        self.id()
+    }
+
+    fn source_bytes(&self) -> u64 {
+        self.bytes()
+    }
+}
+
+impl ForegroundSessionPort for FilesystemSessionStore {
+    type Registration = SessionRegistration;
+    type Snapshot = SourceSnapshot;
+
+    fn register(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        now_unix_seconds: u64,
+    ) -> Result<Self::Registration, OpenSessionError> {
+        self.register_session(session_id, operation_id, now_unix_seconds)
+            .map_err(OpenSessionError::Storage)
+    }
+
+    fn stage_source(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        source: &Path,
+    ) -> Result<Self::Snapshot, OpenSessionError> {
+        SourceSnapshot::stage(self, session_id, operation_id, source).map_err(|error| match error {
+            SourceError::Storage(storage) => OpenSessionError::Storage(storage),
+            SourceError::Io(_) => OpenSessionError::SourceIo,
+            SourceError::InvalidPath
+            | SourceError::NotRegularFile
+            | SourceError::TooLarge
+            | SourceError::Deadline
+            | SourceError::UnsupportedContainer
+            | SourceError::ChangedDuringStage
+            | SourceError::SnapshotChanged
+            | SourceError::IdentityFailure => OpenSessionError::InvalidSource,
+        })
+    }
+
+    fn activate(
+        &self,
+        snapshot: &Self::Snapshot,
+        operation_id: &OperationId,
+        expected_generation: vsift_domain::StorageGeneration,
+        now_unix_seconds: u64,
+    ) -> Result<vsift_domain::StorageGeneration, OpenSessionError> {
+        self.activate_source(
+            snapshot,
+            operation_id,
+            expected_generation,
+            now_unix_seconds,
+        )
+        .map_err(OpenSessionError::Storage)
     }
 }
 

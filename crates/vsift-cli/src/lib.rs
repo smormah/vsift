@@ -6,12 +6,13 @@ mod command;
 mod config;
 mod json_input;
 mod output;
+mod session;
 mod setup;
 
 use std::{ffi::OsString, io, io::Write, process::ExitCode};
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
-use command::{Cli, Command, EventFormat, SetupCommand};
+use command::{BundleCommand, Cli, Command, EventFormat, SetupCommand};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{OperationResponse, OutputMode, OutputWriter, ProcessExit, TerminalEventResponse};
 use vsift_domain::FailureCode;
@@ -28,6 +29,10 @@ pub async fn run() -> ExitCode {
     ExitCode::from(status.code())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep top-level command composition in one exhaustive dispatch"
+)]
 async fn execute_with<Arguments, Argument, StandardOutput, StandardError>(
     arguments: Arguments,
     standard_output: StandardOutput,
@@ -75,6 +80,7 @@ where
     let Some(command) = cli.command else {
         return write_root_help(&mut writer);
     };
+    let explicit_session_root = cli.session_root;
     match command {
         Command::Setup(arguments) => match arguments.command {
             Some(SetupCommand::Check(arguments)) => {
@@ -118,6 +124,22 @@ where
                 )
             }
         },
+        Command::Ingest(arguments) => {
+            let result = session::ingest(arguments, explicit_session_root.as_deref()).await;
+            write_session_result(&mut writer, mode, "ingest", result)
+        }
+        Command::Session(arguments) => {
+            let operation = arguments.operation_name();
+            let result =
+                session::execute_session(arguments.command, explicit_session_root.as_deref());
+            write_session_result(&mut writer, mode, operation, result)
+        }
+        Command::Bundle(arguments) => match arguments.command {
+            BundleCommand::Validate(arguments) => {
+                let result = session::validate_bundle(&arguments.directory);
+                write_session_result(&mut writer, mode, "bundle.validate", result)
+            }
+        },
         command => write_failure(
             &mut writer,
             mode,
@@ -125,6 +147,40 @@ where
             FailureCode::CommandNotImplemented,
             None,
         ),
+    }
+}
+
+fn write_session_result<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    mode: OutputMode,
+    command: &'static str,
+    result: Result<OperationResponse<serde_json::Value>, FailureCode>,
+) -> ProcessExit
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    let response = match result {
+        Ok(response) => response,
+        Err(code) => return write_failure(writer, mode, command, code, None),
+    };
+    let write = match mode {
+        OutputMode::Json => writer.write_json(&response),
+        OutputMode::JsonLines => writer.write_json(&TerminalEventResponse::new(response)),
+        OutputMode::Human => match serde_json::to_string_pretty(&response) {
+            Ok(mut text) => {
+                text.push('\n');
+                writer.write_trusted_stdout(&text)
+            }
+            Err(_) => return write_failure(writer, mode, command, FailureCode::Internal, None),
+        },
+    };
+    match write {
+        Ok(()) => ProcessExit::Success,
+        Err(error) => {
+            writer.write_safe_diagnostic(&error.to_string());
+            ProcessExit::StorageOrIo
+        }
     }
 }
 
@@ -272,7 +328,7 @@ mod tests {
         let mut stderr = Vec::new();
 
         let exit = execute_with(
-            ["vsift", "session", "list", "--json"],
+            ["vsift", "setup", "plan", "--profile", "desktop", "--json"],
             &mut stdout,
             &mut stderr,
         )
@@ -280,7 +336,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
 
         assert_eq!(exit, ProcessExit::UsageOrCapability);
-        assert_eq!(value["command"], "session.list");
+        assert_eq!(value["command"], "setup.plan");
         assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
         assert!(stderr.is_empty());
         Ok(())

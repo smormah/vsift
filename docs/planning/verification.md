@@ -104,9 +104,14 @@ OS/storage crash evidence required to enable strict worker durability.
 | S-06 | Close, expiry, abandoned session, corrupt ownership, retained bundle | Only owned eligible temporary artifacts removed; logs disclose no sensitive content |
 | S-07 | Fail write, flush, rename, pointer update, short write, full disk, denied permission | No acknowledged partial artifact; valid prior generation recoverable |
 | S-08 | Truncated manifest/record, wrong checksum, missing artifact, future format | Explicit integrity/version failure; no silent acceptance or guessed reconstruction |
-| S-09 | Export into existing directory, cross-volume export, interrupted export, malicious imported manifest | Staged validated commit or intact prior destination; no code execution |
+| S-09 | Export into existing directory, cross-volume export, interrupted export, malicious imported manifest | Existing destination stays intact; a new interrupted private export fails validation under ADR 0013; no code execution |
 | S-10 | Include/exclude source, moved bundle, missing original, duplicate operation | Portability capability disclosed; hashes validate; re-extraction requires correct source |
 | S-11 | Large session count, long transcript pages, bounded GC scan | No whole-root/whole-corpus load; scan respects budget and continuation |
+
+P05's implemented lifecycle and bundle evidence for S-04..S-11 is recorded in
+the [P05 qualification record](p05-session-qualification.md). S-11's long
+transcript paging remains P07/P08 work because P05 publishes no transcript
+records; the P05 assertion is the bounded session-index/GC scan and cursor.
 | S-12 | Root policy change under load, root permissions, stable lock anchors | No parallel admission bypass or lock inode replacement |
 
 Crash-injection protocol: enumerate each write/flush/publish/ack boundary. In a child

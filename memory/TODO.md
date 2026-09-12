@@ -2,10 +2,19 @@
 
 ## Current checkpoint
 
+2026-09-12: P05 issue #8 is active from protected main `8741f57dfc5b45c8cb4d3f1f7791d0f1d143c627`.
+Implementation commit `1238580a6a86a433019fb2ecabfeec3eef56ea43` contains foreground source-bound ephemeral opens,
+typed committed lifecycle transitions, a bounded disposable-session index,
+artifact publication, explicit retained bundles and cleanup. The local
+cross-process/source-preservation and opt-in native FFmpeg/FFprobe P05
+checkpoint pass, but protected review/merge evidence is pending. Keep P05
+`in_progress` in the ledger and issue #8 open until that evidence lands.
+P06 remains ineligible.
+
 2026-09-12: P04 source/media primitives completed through protected PR #44 as
 `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. This evidence-only follow-up
-records its completed ledger status and final test evidence. Issue #7 is closed after
-this record merges. P05 is next eligible; no P05 lifecycle stage is implemented.
+records its completed ledger status and final test evidence. Issue #7 closed after
+that record merged, making P05 eligible at this checkpoint.
 
 2026-09-11: P03's implementation completed through protected PR #42 as
 `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`. Its private provisioning and ACL
@@ -16,6 +25,10 @@ eligible packet but remains planned.
 
 ## Pending
 
+- Complete P05 protected three-OS quality/security checks, dependency review,
+  warning-denied docs, governance and the final local gate set. After the
+  implementation PR merges, record its full merge hash and CI evidence in a
+  follow-up protected ledger/memory update; close issue #8 only then.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.

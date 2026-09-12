@@ -17,8 +17,9 @@ pub use ffmpeg_media::{
     MAX_FRAME_BYTES, MAX_PROBE_BYTES, MediaError, MediaProviderConformance,
 };
 pub use filesystem_session_store::{
-    ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemSessionStore,
-    SessionReadHold, SessionStoreOpenError,
+    BundleSourcePolicy, BundleStatus, CleanOutcome, ExclusiveSessionLifetimeHold,
+    FilesystemAdmissionPermit, FilesystemSessionStore, SessionIndexPage, SessionReadHold,
+    SessionRegistration, SessionStatus, SessionStoreOpenError,
 };
 pub use process_dependency_probe::ProcessDependencyProbe;
 pub use process_supervisor::{

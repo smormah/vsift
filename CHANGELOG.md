@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P05 foreground disposable `ingest`, session list/status/renew/close/clean,
+  explicit evidence-only or source-inclusive retain, and data-only bundle
+  validation. Source and frame/audio artifacts use P03's private
+  capability-scoped generations; a bounded index and held OS locks protect
+  active or abandoned sessions during cleanup. Retained output reports
+  process-crash-consistent publication under ADR 0013. The opt-in P05
+  checkpoint runs real media through artifact publication, both export modes
+  and source-preserving cleanup.
 - P04 internal source snapshot and bounded FFprobe/FFmpeg media adapter with typed
   stream metadata, actual frame/audio timestamps, source identity and an opt-in
   real-media checkpoint. Project-owned synthetic fixtures include VFR, rotation,

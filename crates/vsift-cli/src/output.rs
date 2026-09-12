@@ -146,6 +146,24 @@ pub(crate) struct LifecycleResponse {
     expires_at: Option<String>,
 }
 
+impl LifecycleResponse {
+    /// Disposable session with an explicit RFC 3339 expiry.
+    pub(crate) fn ephemeral(expires_at: String) -> Self {
+        Self {
+            mode: "ephemeral",
+            expires_at: Some(expires_at),
+        }
+    }
+
+    /// Explicitly retained bundle outside automatic session cleanup.
+    pub(crate) const fn retained() -> Self {
+        Self {
+            mode: "retained",
+            expires_at: None,
+        }
+    }
+}
+
 /// Complete terminal result for new R0 operations.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct OperationResponse<T>
@@ -164,6 +182,11 @@ where
 }
 
 impl OperationResponse<serde_json::Value> {
+    /// Attaches a truthful lifecycle capability to a completed result.
+    pub(crate) fn with_lifecycle(mut self, lifecycle: LifecycleResponse) -> Self {
+        self.lifecycle = Some(lifecycle);
+        self
+    }
     /// Creates a successful terminal response for typed serializable data.
     pub(crate) fn complete<T>(command: &'static str, data: &T) -> Result<Self, serde_json::Error>
     where
@@ -180,6 +203,21 @@ impl OperationResponse<serde_json::Value> {
             coverage: None,
             lifecycle: None,
         })
+    }
+
+    /// Creates an honest page with useful items and one or more item failures.
+    pub(crate) fn partial<T>(
+        command: &'static str,
+        data: &T,
+        warning: &'static str,
+    ) -> Result<Self, serde_json::Error>
+    where
+        T: Serialize,
+    {
+        let mut response = Self::complete(command, data)?;
+        response.status = OperationStatus::Partial.identifier();
+        response.warnings.push(warning.to_owned());
+        Ok(response)
     }
 
     /// Creates a terminal error response when no operation was admitted.

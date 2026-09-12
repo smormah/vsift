@@ -97,8 +97,10 @@ owned-root provisioning, Unix ownership/mode and Windows DACL validation,
 handle-relative operations, no-follow/single-link checks, immutable weighted-admission
 slots, shared/exclusive lifetime holds, writer fencing, bounded linked-manifest
 integrity, future-version rejection and deterministic error/process-kill recovery at
-every manifest/pointer write, flush and rename boundary. It is not publicly composed.
-P04/P05 still own media-source binding and lifecycle cleanup; P10/P11/P14 still own
+every manifest/pointer write, flush and rename boundary. P04 source binding is
+complete. P05 adds the public ephemeral lifecycle, private retained export,
+bounded session index, held-lock cleanup and source-preservation regressions;
+see its [qualification record](p05-session-qualification.md). P10/P11/P14 still own
 durable stage acknowledgement and SEC-24's Ubuntu/ext4 OS/storage evidence.
 
 No-shell execution addresses one injection route. It does not confine a vulnerable

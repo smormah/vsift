@@ -22,6 +22,10 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_enum)]
     pub events: Option<EventFormat>,
 
+    /// Explicit private disposable-session root; defaults to the per-user cache.
+    #[arg(long, global = true)]
+    pub session_root: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -220,9 +224,9 @@ pub(crate) struct SessionArguments {
 }
 
 impl SessionArguments {
-    const fn operation_name(&self) -> &'static str {
+    pub(crate) const fn operation_name(&self) -> &'static str {
         match self.command {
-            SessionCommand::List => "session.list",
+            SessionCommand::List(_) => "session.list",
             SessionCommand::Status(_) => "session.status",
             SessionCommand::Close(_) => "session.close",
             SessionCommand::Renew(_) => "session.renew",
@@ -236,7 +240,7 @@ impl SessionArguments {
 #[derive(Debug, Subcommand)]
 pub(crate) enum SessionCommand {
     /// List bounded session summaries.
-    List,
+    List(SessionScanArguments),
     /// Read one session's status.
     Status(SessionIdentityArguments),
     /// Close one session after active work settles.
@@ -247,6 +251,14 @@ pub(crate) enum SessionCommand {
     Retain(SessionRetainArguments),
     /// Find or remove expired owned sessions.
     Clean(SessionCleanArguments),
+}
+
+/// One bounded bucket from the disposable-session index.
+#[derive(Args, Debug)]
+pub(crate) struct SessionScanArguments {
+    /// Continuation bucket returned by the previous page, 0 through 255.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(0..=255))]
+    pub cursor: Option<u16>,
 }
 
 /// One validated session identifier.
@@ -278,6 +290,9 @@ pub(crate) struct SessionCleanArguments {
     /// Report eligible sessions without deleting them.
     #[arg(long)]
     pub dry_run: bool,
+    /// Continuation bucket returned by the previous cleanup page.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(0..=255))]
+    pub cursor: Option<u16>,
 }
 
 /// Transcript namespace arguments.

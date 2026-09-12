@@ -6,6 +6,7 @@ use std::{
     ffi::OsStr,
     fs,
     path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -17,10 +18,16 @@ type TestResult = Result<(), Box<dyn Error>>;
 
 struct OwnedRoot(PathBuf);
 
+static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
+
 impl OwnedRoot {
     fn create() -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let path = env::temp_dir().join(format!("vsift-p04-source-{}-{stamp}", std::process::id()));
+        let sequence = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
+        let path = env::temp_dir().join(format!(
+            "vsift-p04-source-{}-{stamp}-{sequence}",
+            std::process::id()
+        ));
         fs::create_dir(&path)?;
         Ok(Self(path))
     }
