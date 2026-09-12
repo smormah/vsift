@@ -80,7 +80,8 @@ pub enum HostIsolation {
 /// Immutable limits applied to every process run by one supervisor.
 #[derive(Clone, Copy, Debug)]
 pub struct SupervisorPolicy {
-    stream_limit: NonZeroUsize,
+    stdout_limit: NonZeroUsize,
+    stderr_limit: NonZeroUsize,
     graceful_shutdown: Duration,
     forced_shutdown: Duration,
 }
@@ -94,7 +95,8 @@ impl SupervisorPolicy {
         forced_shutdown: Duration,
     ) -> Self {
         Self {
-            stream_limit,
+            stdout_limit: stream_limit,
+            stderr_limit: stream_limit,
             graceful_shutdown,
             forced_shutdown,
         }
@@ -103,7 +105,15 @@ impl SupervisorPolicy {
     /// Returns the maximum retained bytes for each output stream.
     #[must_use]
     pub const fn stream_limit(self) -> NonZeroUsize {
-        self.stream_limit
+        self.stdout_limit
+    }
+
+    /// Sets independent structured-output and diagnostic limits.
+    #[must_use]
+    pub const fn with_stream_limits(mut self, stdout: NonZeroUsize, stderr: NonZeroUsize) -> Self {
+        self.stdout_limit = stdout;
+        self.stderr_limit = stderr;
+        self
     }
 }
 
@@ -322,8 +332,10 @@ pub struct EffectiveControls {
     pub process_containment: ProcessContainment,
     /// Hard isolation inherited from the trusted worker host.
     pub hard_isolation: HardIsolation,
-    /// Per-stream retained-byte limit.
+    /// Standard-output retained-byte limit.
     pub stream_limit: usize,
+    /// Standard-error diagnostic retained-byte limit.
+    pub stderr_limit: usize,
     /// Whether stdin was explicitly connected to the null device.
     pub null_stdin: ControlStatus,
     /// Whether the inherited environment was cleared before adding allowlisted entries.
@@ -391,7 +403,8 @@ impl ProcessSupervisor {
             executable_provenance: request.executable.provenance(),
             process_containment: platform_containment(),
             hard_isolation,
-            stream_limit: self.policy.stream_limit.get(),
+            stream_limit: self.policy.stdout_limit.get(),
+            stderr_limit: self.policy.stderr_limit.get(),
             null_stdin: ControlStatus::Applied,
             cleared_environment: ControlStatus::Applied,
             explicit_working_directory: ControlStatus::Applied,
@@ -408,7 +421,11 @@ impl ProcessSupervisor {
         let deadline = Instant::now()
             .checked_add(request.deadline)
             .ok_or(ProcessError::DeadlineOutOfRange)?;
-        let mut spawned = spawn_process(request, self.policy.stream_limit.get())?;
+        let mut spawned = spawn_process(
+            request,
+            self.policy.stdout_limit.get(),
+            self.policy.stderr_limit.get(),
+        )?;
         let mut captures = StreamCaptures::default();
 
         let trigger = wait_for_trigger(
@@ -481,7 +498,8 @@ struct SpawnedProcess {
 
 fn spawn_process(
     request: ProcessRequest,
-    stream_limit: usize,
+    stdout_limit: usize,
+    stderr_limit: usize,
 ) -> Result<SpawnedProcess, ProcessError> {
     let ProcessRequest {
         executable,
@@ -519,13 +537,13 @@ fn spawn_process(
     drains.spawn(drain_stream(
         OutputStream::Stdout,
         stdout,
-        stream_limit,
+        stdout_limit,
         signal_sender.clone(),
     ));
     drains.spawn(drain_stream(
         OutputStream::Stderr,
         stderr,
-        stream_limit,
+        stderr_limit,
         signal_sender,
     ));
     Ok(SpawnedProcess {

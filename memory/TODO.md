@@ -2,6 +2,14 @@
 
 ## Current checkpoint
 
+2026-09-12: P04 source/media primitives are implemented on branch
+`codex/p04-source-media` from protected main `67bfe1438ad4e3a586aff5b6ae0a61710c340861`.
+The internal no-follow snapshot, typed FFprobe/FFmpeg adapter, deterministic fixture
+generator/independent verifier and opt-in cumulative E2E checkpoint are under review.
+ADR 0012 records the narrow local desktop profile and residual decoder isolation
+limits. The ledger remains `in_progress` until protected merge and a following
+evidence record supply the merge hash. Issue #7 remains open; no P05 stage is claimed.
+
 2026-09-11: P03's implementation completed through protected PR #42 as
 `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`. Its private provisioning and ACL
 checks, weighted admission, lifetime holds, fenced generations and process-crash
@@ -32,9 +40,10 @@ eligible packet but remains planned.
   supplied-transcript and local-ASR paths through named Codex and Claude Code clients;
   do not defer product usefulness to R1.
 - Track the cumulative opt-in E2E spine in `docs/planning/e2e-test-spine.md` and issue
-  #40. P04 must bootstrap the real-media mechanical runner; every P04-P13 packet must
-  attach its production stage or explicitly record why none applies. Do not postpone
-  mechanical integration until P12/P14 or treat the planned framework as a passing run.
+  #40. P04 has bootstrapped its real-media checkpoint, with P05-P14 and the complete
+  journey explicitly `not_implemented`. Every later packet must attach its production
+  stage or explicitly record why none applies; P12/P14 cannot substitute for missing
+  earlier integration.
 - Preserve managed indexing, optional enrichment, source-grounded reconstruction,
   industrial worker growth and integrated qualification as R1 packets P15..P20 under
   ADR 0011 and `docs/planning/r1-industrial-capability-expansion.md`. SQLite remains

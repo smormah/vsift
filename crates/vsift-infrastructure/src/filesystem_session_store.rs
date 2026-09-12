@@ -132,6 +132,30 @@ pub struct ExclusiveSessionLifetimeHold {
 }
 
 impl FilesystemSessionStore {
+    /// Opens the existing artifact directory under a verified session and lifetime hold.
+    /// The returned capability is for internal media staging; P05 owns publication.
+    pub(crate) fn source_artifact_directory(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<(Dir, PathBuf, SessionReadHold), SessionStorageError> {
+        let hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(map_storage_io)?;
+        let artifacts = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let path = self
+            .root_path
+            .join(SESSIONS_DIRECTORY)
+            .join(session_id.as_str())
+            .join(ARTIFACTS_DIRECTORY);
+        Ok((artifacts, path, hold))
+    }
     /// Provisions a root with the reviewed desktop admission default.
     ///
     /// # Errors

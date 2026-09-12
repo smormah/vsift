@@ -2,11 +2,22 @@
 
 ## Active
 
+P04 is under implementation review on branch `codex/p04-source-media` from protected
+main `67bfe1438ad4e3a586aff5b6ae0a61710c340861`. Internal source staging and
+restricted FFprobe/FFmpeg metadata, exact-frame and audio operations are implemented.
+Project-owned F01-F10/F12 media and F11 parser/malformed variants have reproducible
+provenance and independent decoded-pixel/timestamp verification. The opt-in P04 E2E
+checkpoint runs real native providers and reports P05-P14 and the complete journey as
+`not_implemented`. ADR 0012 and `docs/planning/p04-media-qualification.md` define the
+desktop security/resource profile and remaining P11/P14 isolation work. Ledger status
+is `in_progress`; protected CI, merge hash and final evidence remain pending. Issue #7
+stays open until then.
+
 P03's implementation completed through protected PR #42 as
 `3eef9b7ac3bcfe092d82137ccf2aa9aa084aca4f`; this evidence-only follow-up records
 the ledger and handoff state, and issue #6 is closed. The filesystem `SessionStore`
-remains internal and explicit durable requests still fail before mutation. P04 is the
-next eligible packet but remains planned and no storage/session command is exposed.
+remains internal and explicit durable requests still fail before mutation. No
+storage/session command is exposed.
 
 The R1 managed industrial capability boundary is accepted in ADR 0011 and PR #31
 (`0cfdb407f805282995f326ca93c99bc7170eda04`). It reserves P15-P20 for
@@ -28,7 +39,7 @@ enablement to P10/P11/P14; durable requests must fail before mutation until then
 No storage operation is exposed yet.
 
 The incremental R0 E2E spine is tracked in `docs/planning/e2e-test-spine.md` and issue
-#40. P04 will bootstrap the executable real-media runner, P07 will attach both
+#40. P04 bootstraps the executable real-media runner, P07 will attach both
 transcript paths, P09 will complete the mechanical video-to-evidence journey, and P12
 will add named Codex/Claude trials. It is opt-in at major checkpoints and mandatory at
 release; the planning framework is not implementation evidence.

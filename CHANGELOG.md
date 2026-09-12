@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P04 internal source snapshot and bounded FFprobe/FFmpeg media adapter with typed
+  stream metadata, actual frame/audio timestamps, source identity and an opt-in
+  real-media checkpoint. Project-owned synthetic fixtures include VFR, rotation,
+  audio-track and malformed variants with independent provenance verification.
 - Accepted ADR 0011 and scoped R1 as the managed industrial capability expansion:
   optional enrichment, source-grounded composition, explicit catalogue lifecycle,
   industrial worker growth and integrated qualification in P15-P20. R0 now has an

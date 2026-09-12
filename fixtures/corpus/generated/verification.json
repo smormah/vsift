@@ -1,0 +1,136 @@
+{
+  "verifier": "tools/verify_p04_fixtures.py v1",
+  "status": "passed",
+  "manifest_sha256": "dfae6419dba8b8bbbf00e18185c7580e1a9b935a61e9abbb82c9c549481e8187",
+  "checks": [
+    {
+      "fixture": "F01",
+      "sha256": "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+      "frames": 120,
+      "duration_us": 6000000,
+      "origin_us": 0,
+      "dimensions": [
+        1280,
+        720
+      ]
+    },
+    {
+      "fixture": "F02",
+      "sha256": "aec1a03817bbe77366bd29ca7b8254537de50b6f941b0b262fadd82cb652ea60",
+      "frames": 240,
+      "duration_us": 12000000,
+      "origin_us": 0,
+      "dimensions": [
+        1280,
+        720
+      ]
+    },
+    {
+      "fixture": "F03",
+      "sha256": "37326240115a45113cc88eb295caf40ede28a9a972616dbba62c380be4135a61",
+      "frames": 180,
+      "duration_us": 9000000,
+      "origin_us": 0,
+      "dimensions": [
+        1440,
+        900
+      ]
+    },
+    {
+      "fixture": "F04",
+      "sha256": "3d8cbbec222f4d8881783dcf6355b55cf3b78b58440d084ee07d12e24578c1a9",
+      "frames": 280,
+      "duration_us": 14000000,
+      "origin_us": 0,
+      "dimensions": [
+        1440,
+        900
+      ]
+    },
+    {
+      "fixture": "F05",
+      "sha256": "966a445f7ed5549133a13ed1c6d0c586ad34c111c3d5010b02399fc97651ab2c",
+      "frames": 400,
+      "duration_us": 20000000,
+      "origin_us": 0,
+      "dimensions": [
+        1440,
+        900
+      ]
+    },
+    {
+      "fixture": "F06",
+      "sha256": "ac42e788ee8a00d4ccc80b73a06c6abd9390993d6ee7dff0c9d569da7b3566dc",
+      "frames": 200,
+      "duration_us": 10000000,
+      "origin_us": 0,
+      "dimensions": [
+        1280,
+        720
+      ]
+    },
+    {
+      "fixture": "F07",
+      "sha256": "4d1258fca8e780f80c8a30273192ac3195a8871672ab60bc316974edea30085f",
+      "frames": 200,
+      "duration_us": 10000000,
+      "origin_us": 0,
+      "dimensions": [
+        1920,
+        1080
+      ]
+    },
+    {
+      "fixture": "F08",
+      "sha256": "01e745543d24adfef9f19ccf4493154e2aaa455bc6979985384d353627011467",
+      "frames": 360,
+      "duration_us": 18000000,
+      "origin_us": 0,
+      "dimensions": [
+        1280,
+        720
+      ]
+    },
+    {
+      "fixture": "F09",
+      "sha256": "d0fe289091848dcbd164cd014ebac712a4d09fbfae69d280daf2df0e1639de60",
+      "frames": 38,
+      "duration_us": 12000000,
+      "origin_us": 2000000,
+      "dimensions": [
+        1280,
+        720
+      ]
+    },
+    {
+      "fixture": "F10",
+      "sha256": "d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+      "frames": 240,
+      "duration_us": 12000000,
+      "origin_us": 0,
+      "dimensions": [
+        1280,
+        720
+      ]
+    },
+    {
+      "fixture": "F12",
+      "sha256": "e9792651e7086174d238906db9e4bdb5c4fd3678ed92ad819a1b76bc51da48ea",
+      "frames": 240,
+      "duration_us": 12000000,
+      "origin_us": 0,
+      "dimensions": [
+        1440,
+        900
+      ]
+    }
+  ],
+  "pixel_checks": [
+    "F02 repeated A/B/A",
+    "F03 G18 fill",
+    "F06 500 ms tooltip",
+    "F09 3.25 s marker"
+  ],
+  "F11_variant_hashes_verified": 7,
+  "media_variant_hashes_verified": 3
+}

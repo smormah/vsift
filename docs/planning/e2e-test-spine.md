@@ -1,7 +1,7 @@
 # Incremental end-to-end test spine
 
-Status: accepted test-development framework; no executable end-to-end runner exists
-yet. Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
+Status: P04 real-media checkpoint implemented; the complete journey remains
+`not_implemented`. Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
 ## Purpose
 
@@ -52,10 +52,17 @@ component integration test remains necessary even when the cumulative journey pa
 
 ## Execution model
 
-The first executable harness belongs to P04, when deterministic media and real media
-operations exist. Its exact command and typed report contract are defined in that
-packet rather than prematurely freezing an empty CLI. The following rules already
-apply:
+The P04 executable checkpoint is:
+
+```console
+cargo test -p vsift-infrastructure --locked --test p04_media_e2e -- --ignored --nocapture
+```
+
+It exercises real FFprobe/FFmpeg operations on project-owned media, records a bounded
+JSON report under `.vsift/e2e-runs/<run-id>/report.json`, and leaves P05-P14 and the
+complete journey `not_implemented`. See the
+[P04 qualification record](p04-media-qualification.md) for scenarios, effective
+budgets and evidence. The following rules apply:
 
 - It is opt-in during ordinary development and is run after substantial vertical
   increments. It is not an every-PR or mandatory hosted-CI job.

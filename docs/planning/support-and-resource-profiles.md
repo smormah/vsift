@@ -77,7 +77,15 @@ reaches the PID ceiling and confirms that a bounded over-limit allocation cannot
 complete successfully. That proves the supervisor's strict-mode attestation and
 fail-closed split; it is not the full P11 worker or P14 release qualification.
 
+P04's internal desktop media profile is fixed in [ADR 0012](../decisions/0012-p04-source-media-profile.md)
+and the [qualification record](p04-media-qualification.md): 20 GiB/600 s source
+staging, four-hour/32-stream/16-megapixel probe, 15- or 30-second provider deadlines,
+bounded stdout/stderr and a ten-second mono PCM maximum. The native Windows/NTFS
+real-media run is development evidence only; P14 owns supported-platform and strict
+malicious-decoder qualification.
+
 ## R1 profile planning
+
 
 R1 adds an explicitly managed embedded-node profile and an industrial worker-plane
 profile; it does not change desktop defaults. P15 must name their exact OS, filesystem,

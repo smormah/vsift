@@ -8,6 +8,7 @@
 /coverage/
 *.profraw
 *.profdata
+__pycache__/
 
 # Environment and secrets
 .env
@@ -27,4 +28,3 @@ Desktop.ini
 *.tmp
 *.temp
 *.log
-
