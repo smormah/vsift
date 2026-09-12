@@ -141,3 +141,37 @@ fn disposable_open_status_export_close_and_cleanup_survive_process_restarts() ->
     assert!(evidence.join("bundle.json").exists());
     Ok(())
 }
+
+#[test]
+fn reserved_transcription_and_invalid_bundle_fail_with_typed_v1_results_without_mutation()
+-> TestResult {
+    let temp = OwnedRoot::new()?;
+    let root = temp.0.join("private sessions");
+    let source = temp.0.join("original.mp4");
+    fs::write(&source, b"\0\0\0\x18ftypisomsource-content")?;
+
+    let reserved = Command::cargo_bin("vsift")?
+        .arg("--session-root")
+        .arg(&root)
+        .arg("ingest")
+        .arg(&source)
+        .args(["--transcript", "auto", "--json"])
+        .output()?;
+    assert_eq!(reserved.status.code(), Some(2));
+    let reserved: Value = serde_json::from_slice(&reserved.stdout)?;
+    assert_eq!(reserved["command"], "ingest");
+    assert_eq!(reserved["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
+    assert!(!root.exists());
+
+    let invalid = Command::cargo_bin("vsift")?
+        .args(["bundle", "validate"])
+        .arg(temp.0.join("missing-bundle"))
+        .arg("--json")
+        .output()?;
+    assert!(!invalid.status.success());
+    let invalid: Value = serde_json::from_slice(&invalid.stdout)?;
+    assert_eq!(invalid["command"], "bundle.validate");
+    assert!(invalid["error"]["code"].is_string());
+    assert_eq!(fs::read(&source)?, b"\0\0\0\x18ftypisomsource-content");
+    Ok(())
+}
