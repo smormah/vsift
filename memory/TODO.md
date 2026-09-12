@@ -8,9 +8,11 @@ reviewed missing ones, and always provide typed manual/BYO guidance if managed
 installation is unavailable, denied or fails. Script-installed off-PATH tools
 must be selectable. Agents need rich remediation but cannot infer install
 authority from video inspection. The BYO-only proposal PR #49 closed unmerged;
-the P06 source-review draft PR #48 was reopened. P06 remains planned, with its
-immutable provider/model catalogue still a gate for each managed target. This
-record changes acceptance, not runtime behavior; no implementation merge yet.
+P06 source-review PR #48 was carried forward and closed as superseded by PR #50.
+The source assessment and clarification commits are `b1c271d` and `6ab6ef3` on
+that review branch. P06 remains planned, with its immutable provider/model
+catalogue still a gate for each managed target. This changes acceptance, not
+runtime behavior; no protected merge or implementation evidence yet.
 
 2026-09-12: P06 source review started from protected main
 `777bc3e56788d43cd9a647dba54c287390c2998d`; P05's evidence follow-up is
