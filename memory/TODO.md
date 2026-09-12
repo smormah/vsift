@@ -2,14 +2,12 @@
 
 ## Current checkpoint
 
-2026-09-12: P05 issue #8 is active from protected main `8741f57dfc5b45c8cb4d3f1f7791d0f1d143c627`.
-Implementation commit `1238580a6a86a433019fb2ecabfeec3eef56ea43` contains foreground source-bound ephemeral opens,
-typed committed lifecycle transitions, a bounded disposable-session index,
-artifact publication, explicit retained bundles and cleanup. The local
-cross-process/source-preservation and opt-in native FFmpeg/FFprobe P05
-checkpoint pass, but protected review/merge evidence is pending. Keep P05
-`in_progress` in the ledger and issue #8 open until that evidence lands.
-P06 remains ineligible.
+2026-09-12: P05 implementation from protected main
+`8741f57dfc5b45c8cb4d3f1f7791d0f1d143c627` merged through protected PR #46 as
+`c3f9313f8df0871d17ab80ad5bb142be6421b36f`. The ledger now records
+completion and the passed three-OS quality, governance, documentation,
+security and local checkpoint evidence. This evidence follow-up must merge
+before issue #8 closes. P06 is the next eligible packet and remains planned.
 
 2026-09-12: P04 source/media primitives completed through protected PR #44 as
 `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. This evidence-only follow-up
@@ -25,10 +23,8 @@ eligible packet but remains planned.
 
 ## Pending
 
-- Complete P05 protected three-OS quality/security checks, dependency review,
-  warning-denied docs, governance and the final local gate set. After the
-  implementation PR merges, record its full merge hash and CI evidence in a
-  follow-up protected ledger/memory update; close issue #8 only then.
+- Merge the P05 evidence-only ledger/memory update through protected checks,
+  then close issue #8. Do not begin P06 implementation in this session.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.
@@ -50,7 +46,7 @@ eligible packet but remains planned.
   supplied-transcript and local-ASR paths through named Codex and Claude Code clients;
   do not defer product usefulness to R1.
 - Track the cumulative opt-in E2E spine in `docs/planning/e2e-test-spine.md` and issue
-  #40. P04 has bootstrapped its real-media checkpoint, with P05-P14 and the complete
+  #40. P04 and P05 have real-media checkpoints, with P06-P14 and the complete
   journey explicitly `not_implemented`. Every later packet must attach its production
   stage or explicitly record why none applies; P12/P14 cannot substitute for missing
   earlier integration.
@@ -62,6 +58,16 @@ eligible packet but remains planned.
   future issues #25 through #30.
 
 ## Completed
+
+- 2026-09-12: P05 implementation commit
+  `1238580a6a86a433019fb2ecabfeec3eef56ea43` and fixture correction
+  `8e7232c86d1d324b8ccd7e8e5ba271d813544ee5` merged through protected
+  PR #46 as `c3f9313f8df0871d17ab80ad5bb142be6421b36f`.
+  Foreground ephemeral ingestion, typed lifecycle, bounded list/cleanup,
+  source-safe retention and data-only bundle validation passed local gates,
+  native FFmpeg/FFprobe P05 checkpoint, three-OS Quality, Governance,
+  Documentation, strict-worker, dependency policy/review, CodeQL and Rust
+  analysis. The bundle publication limit is recorded in ADR 0013.
 
 - 2026-09-12: P04 merged through protected PR #44 as
   `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. Internal no-follow source
