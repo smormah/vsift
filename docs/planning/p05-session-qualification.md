@@ -101,3 +101,8 @@ pre-existing dependency-tree cases.
 - Desktop provider isolation retains the [ADR 0012](../decisions/0012-p04-source-media-profile.md)
   limits. A local same-user attacker who can rewrite private state is outside
   the desktop trust boundary.
+
+Hosted macOS and Windows runners exposed a test-fixture collision: wall-clock
+nanoseconds alone did not distinguish parallel roots within one process. The
+P04/P05 temporary fixtures now add a process-local atomic sequence; no
+production session identity depends on wall-clock resolution.

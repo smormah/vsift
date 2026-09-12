@@ -5,6 +5,7 @@ use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -15,10 +16,16 @@ type TestResult = Result<(), Box<dyn Error>>;
 
 struct OwnedRoot(PathBuf);
 
+static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
+
 impl OwnedRoot {
     fn new() -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let path = env::temp_dir().join(format!("vsift-p05-cli-{}-{stamp}", std::process::id()));
+        let sequence = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
+        let path = env::temp_dir().join(format!(
+            "vsift-p05-cli-{}-{stamp}-{sequence}",
+            std::process::id()
+        ));
         fs::create_dir(&path)?;
         Ok(Self(path))
     }

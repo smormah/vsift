@@ -6,7 +6,10 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{Arc, Barrier},
+    sync::{
+        Arc, Barrier,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -97,10 +100,16 @@ fn lifecycle_child_holds_lock() -> TestResult {
 
 struct OwnedRoot(PathBuf);
 
+static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
+
 impl OwnedRoot {
     fn new() -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let path = env::temp_dir().join(format!("vsift-p05-test-{}-{stamp}", std::process::id()));
+        let sequence = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
+        let path = env::temp_dir().join(format!(
+            "vsift-p05-test-{}-{stamp}-{sequence}",
+            std::process::id()
+        ));
         fs::create_dir(&path)?;
         Ok(Self(path))
     }
