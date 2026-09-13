@@ -1,0 +1,24 @@
+name: P06 Windows candidate smoke
+
+on:
+  workflow_dispatch:
+
+# This opt-in job executes reviewed third-party candidates on an ephemeral runner.
+# It must not receive a repository token or secrets usable by those processes.
+permissions: {}
+
+jobs:
+  candidate-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out synthetic fixture and qualification script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test candidate archive guardrails
+        run: python -m unittest discover -s tools -p test_p06_windows_candidate_smoke.py
+
+      - name: Run pinned candidate compatibility smoke
+        run: python tools/p06_windows_candidate_smoke.py

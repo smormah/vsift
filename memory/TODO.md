@@ -2,6 +2,12 @@
 
 ## Current checkpoint
 
+2026-09-13: An opt-in disposable Windows candidate smoke (`a0fe266`) is
+being prepared for
+the pinned P06 FFmpeg/FFprobe/whisper.cpp/model set. It is not an accepted
+installer catalogue, transcript-accuracy test or P06 E2E completion. Local
+archive guardrail tests pass; hosted run and protected merge evidence pending.
+
 2026-09-13: P06 read-only detection/guidance increment merged through protected
 [PR #53](https://github.com/smormah/vsift/pull/53) as
 `0f0156bd62ac6777fcb1f412968df6eda977158e`. Windows, macOS and Ubuntu
@@ -76,6 +82,10 @@ eligible packet but remains planned.
   every named R0 target. See `docs/planning/p06-provisioning-source-review.md`.
   P06 remains planned; D-01..D-10, its E2E stage, ledger completion and issue #9
   closure remain pending.
+- P06 candidate smoke: dispatch the isolated Windows job after protected merge;
+  review verified downloads, model-backed inference, bounded behavior and runner
+  identity. Its tone-only fixture cannot qualify transcription accuracy. Do not
+  accept a managed catalogue until legal/notices and full installer/E2E gates pass.
 - P06 next increments: validate FFmpeg/FFprobe/whisper.cpp behavior and model
   selection rather than accepting help/version alone; add persistent explicit
   BYO selection through the reserved configure boundary; qualify source catalog,
