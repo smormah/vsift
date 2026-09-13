@@ -3,14 +3,15 @@
 ## Current checkpoint
 
 2026-09-13: P06 has begun on `codex/p06-detection-guidance` from protected main
-`3c3c93f236b8c34491295fb05a52a2b162e8b1ee`. The first read-only increment
+`3c3c93f236b8c34491295fb05a52a2b162e8b1ee` (implementation commit
+`3a1da55`). The first read-only increment
 adds per-call absolute FFmpeg/FFprobe/Whisper selection, truthful executable-only
 scope and typed manual/BYO remediation. It does not persist selections, validate
 provider/model compatibility or authorize downloads. P06 remains planned in the
 delivery ledger until its complete D-suite, one reviewed managed target and E2E
 checkpoint merge. Local fmt, strict Clippy, workspace tests, warning-denied
 rustdoc, governance, diff check and cargo-deny passed; protected PR evidence
-and commit reference to follow.
+and merge reference to follow.
 
 2026-09-13: The maintainer confirmed the R0 setup journey in ADR 0014:
 detect existing/partly installed components first, explicitly plan/install
