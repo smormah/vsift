@@ -285,6 +285,14 @@ fn registration_scan_and_abandoned_cleanup_respect_the_live_lock() -> TestResult
         &OperationId::parse("op_bbbbbbbbbbbbbbbb")?,
         1_000,
     )?;
+    let root_lock = fs::File::options()
+        .read(true)
+        .write(true)
+        .open(workspace.join("coordination/session-initialize.lock"))?;
+    root_lock
+        .try_lock()
+        .map_err(|error| format!("registration retained the root lock: {error:?}"))?;
+    root_lock.unlock()?;
     let mut found = false;
     for bucket in 0..=255 {
         let page = store

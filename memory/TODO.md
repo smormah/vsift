@@ -2,6 +2,13 @@
 
 ## Current checkpoint
 
+2026-09-13: P05 issue #51 is being addressed separately from P06 after the
+same immediate post-registration Ubuntu `scan 0: Busy` appeared in P06 PR #57.
+The proposed narrow fix (`3968866`) explicitly releases the root initialization lock
+before registration returns its held marker. Local targeted and full workspace
+tests pass; protected three-OS checks and 100-run opt-in Ubuntu stress are
+pending. This is not yet a closed root-cause finding or a merged fix.
+
 2026-09-13: Protected PR #55 merged the opt-in disposable Windows candidate
 smoke (`a0fe266`, merge `1c805c1`). Hosted
 [run 34737109736](https://github.com/smormah/vsift/actions/runs/34737109736)
@@ -75,7 +82,10 @@ eligible packet but remains planned.
   `registration_scan_and_abandoned_cleanup_respect_the_live_lock` when its
   first bucket scan returned `Busy` after registration. Investigate root-lock
   lifetime versus test timing with repeatable Ubuntu evidence; do not relax
-  the scan guarantee or count a green rerun as a root-cause fix.
+  the scan guarantee or count a green rerun as a root-cause fix. The same
+  assertion failed in PR #57 CI run 34737696705. A separate explicit-unlock
+  fix and retained-handle regression are in progress; cross-OS/stress evidence
+  and a root-cause disposition remain pending.
 - P06 source gate (2026-09-12): select and review immutable per-target
   FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model artifacts before
   managed download/activation. The current source matrix cannot justify a

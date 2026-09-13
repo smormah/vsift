@@ -115,3 +115,24 @@ Hosted macOS and Windows runners exposed a test-fixture collision: wall-clock
 nanoseconds alone did not distinguish parallel roots within one process. The
 P04/P05 temporary fixtures now add a process-local atomic sequence; no
 production session identity depends on wall-clock resolution.
+
+## 2026-09-13 registration-lock follow-up (#51)
+
+Ubuntu Quality on docs-only PR #50 and unrelated P06 source PR #57 reported
+`scan 0: Busy` in `registration_scan_and_abandoned_cleanup_respect_the_live_lock`
+immediately after `register_session` returned. The `Busy` route in this scan
+is the root initialization file lock, not the deliberately held session marker
+lock. Registration formerly relied on dropping its root file handle to release
+the lock. [Rust's file-lock contract](https://doc.rust-lang.org/std/fs/struct.File.html#method.unlock)
+permits a duplicated/inherited descriptor to prolong that lock until every
+copy closes; the CI trace does not identify whether that exact mechanism or
+another transient holder caused the observed contention.
+
+The scoped fix explicitly unlocks the root file after the marker lock is held
+and before registration returns. A regression test keeps a duplicated root
+handle alive and verifies the explicit release allows a separate contender;
+the lifecycle test directly checks the root lock is available before its first
+bucket scan. A separate opt-in Ubuntu workflow repeats the registration/scan/
+cleanup scenario 100 times. This is a proposed fix until protected cross-OS
+checks and the hosted stress run pass; a green rerun alone will not be cited as
+proof of the exact original holder.

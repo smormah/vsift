@@ -420,6 +420,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?
             .into_std();
         marker_lock.try_lock_shared().map_err(map_lock_error)?;
+        release_root_initialization_lock(&initialization_lock)?;
         drop(initialization_lock);
         Ok(SessionRegistration {
             _marker_lock: marker_lock,
@@ -2520,6 +2521,13 @@ fn map_lock_error(error: fs::TryLockError) -> SessionStorageError {
     }
 }
 
+fn release_root_initialization_lock(lock: &fs::File) -> Result<(), SessionStorageError> {
+    // Closing one descriptor does not guarantee release if a duplicate survives.
+    // Registration must release this short-lived root lock before returning the
+    // deliberately long-lived marker lock to its caller.
+    lock.unlock().map_err(map_storage_io)
+}
+
 #[allow(
     clippy::needless_pass_by_value,
     reason = "Result::map_err requires ownership of the source error"
@@ -2771,6 +2779,7 @@ mod tests {
         FilesystemSessionStore, GENERATIONS_DIRECTORY, INITIALIZATION_LOCK, OWNERSHIP_FILE,
         PublicationBoundary, SESSIONS_DIRECTORY, SessionStoreOpenError, admission_slot_name,
         map_storage_io, publication_boundary_name, publish_generation,
+        release_root_initialization_lock,
     };
     use vsift_application::{
         InitializeSessionStorage, InitializeSessionStorageRequest, PublishSessionGeneration,
@@ -3018,6 +3027,29 @@ mod tests {
             fs::read_dir(fixture.path.join(SESSIONS_DIRECTORY))?.count(),
             0
         );
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_root_release_survives_a_duplicated_descriptor() -> TestResult {
+        let fixture = Fixture::new()?;
+        let path = fixture
+            .path
+            .join(COORDINATION_DIRECTORY)
+            .join(INITIALIZATION_LOCK);
+        let lock = StdFile::options().read(true).write(true).open(&path)?;
+        lock.try_lock()?;
+        let duplicate = lock.try_clone()?;
+        let contender = StdFile::options().read(true).write(true).open(&path)?;
+        assert!(matches!(
+            contender.try_lock(),
+            Err(fs::TryLockError::WouldBlock)
+        ));
+
+        release_root_initialization_lock(&lock)?;
+        contender.try_lock()?;
+        contender.unlock()?;
+        drop(duplicate);
         Ok(())
     }
 
