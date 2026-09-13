@@ -4,7 +4,7 @@
 
 2026-09-13: P05 issue #51 is being addressed separately from P06 after the
 same immediate post-registration Ubuntu `scan 0: Busy` appeared in P06 PR #57.
-The proposed narrow fix explicitly releases the root initialization lock
+The proposed narrow fix (`3968866`) explicitly releases the root initialization lock
 before registration returns its held marker. Local targeted and full workspace
 tests pass; protected three-OS checks and 100-run opt-in Ubuntu stress are
 pending. This is not yet a closed root-cause finding or a merged fix.

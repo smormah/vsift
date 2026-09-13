@@ -4,7 +4,7 @@
 
 2026-09-13: P06 PR #57 is blocked by the pre-existing Ubuntu P05 issue #51:
 CI run 34737696705 reproduced `scan 0: Busy` after registration. A separate
-P05 follow-up explicitly unlocks the short-lived root initialization file
+P05 follow-up (`3968866`) explicitly unlocks the short-lived root initialization file
 before returning the held registration marker. Local targeted and full tests
 pass, but protected checks and opt-in 100-run Ubuntu stress are pending. The
 trace identifies root-lock contention; it does not prove the exact holder.
