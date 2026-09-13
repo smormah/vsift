@@ -10,6 +10,8 @@
     "command": { "const": "setup.check" },
     "profile": { "enum": ["desktop", "worker"] },
     "status": { "enum": ["ready", "degraded", "blocked"] },
+    "verification_scope": { "const": "executable_probe_only" },
+    "local_asr_model": { "const": "not_checked" },
     "dependencies": {
       "type": "array",
       "minItems": 3,
@@ -22,6 +24,25 @@
           "dependency": { "enum": ["ffmpeg", "ffprobe", "whisper"] },
           "capability": { "enum": ["media_processing", "transcription"] },
           "status": { "enum": ["available", "missing", "unhealthy", "timed_out"] },
+          "lookup": { "enum": ["explicit_path", "filtered_path"] },
+          "validation": { "enum": ["executable_probe_only", "not_validated"] },
+          "remediation": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["reason", "managed_install", "required_authority", "next_step", "explicit_path_option"],
+                "properties": {
+                  "reason": { "enum": ["missing", "unhealthy", "timed_out"] },
+                  "managed_install": { "const": "unavailable_unqualified" },
+                  "required_authority": { "const": "user" },
+                  "next_step": { "type": "string", "maxLength": 240 },
+                  "explicit_path_option": { "enum": ["--ffmpeg", "--ffprobe", "--whisper"] }
+                }
+              }
+            ]
+          },
           "detail": {
             "oneOf": [
               { "type": "null" },

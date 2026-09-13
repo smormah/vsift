@@ -21,7 +21,7 @@ pub use filesystem_session_store::{
     FilesystemAdmissionPermit, FilesystemSessionStore, SessionIndexPage, SessionReadHold,
     SessionRegistration, SessionStatus, SessionStoreOpenError,
 };
-pub use process_dependency_probe::ProcessDependencyProbe;
+pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{
     CapturedOutput, ControlStatus, DEFAULT_STREAM_LIMIT, EffectiveControls, HardIsolation,
     HostIsolation, IsolationRequirement, OutputStream, ProcessCancellation, ProcessContainment,

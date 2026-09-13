@@ -88,11 +88,110 @@ fn setup_check_json_is_structural_and_environment_independent()
     assert_eq!(value["schema_version"], "1");
     assert_eq!(value["command"], "setup.check");
     assert_eq!(value["status"], "blocked");
+    assert_eq!(value["verification_scope"], "executable_probe_only");
+    assert_eq!(value["local_asr_model"], "not_checked");
     let dependencies = value["dependencies"].as_array();
     assert_eq!(dependencies.map(Vec::len), Some(3));
     if let Some(dependencies) = dependencies {
         assert!(dependencies.iter().all(|item| item["status"] == "missing"));
+        assert!(
+            dependencies
+                .iter()
+                .all(|item| item["lookup"] == "filtered_path")
+        );
+        assert!(
+            dependencies
+                .iter()
+                .all(|item| item["remediation"]["required_authority"] == "user")
+        );
     }
+    assert!(output.stderr.is_empty());
+    Ok(())
+}
+
+#[test]
+fn off_path_whisper_is_selectable_without_installing_or_disclosing_its_path()
+-> Result<(), Box<dyn std::error::Error>> {
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let output = Command::cargo_bin("vsift")?
+        .args([
+            "setup",
+            "check",
+            "--json",
+            "--timeout-seconds",
+            "5",
+            "--whisper",
+        ])
+        .arg(&binary)
+        .env("PATH", "")
+        .output()?;
+    let value = parse_stdout(&output)?;
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(value["dependencies"][2]["status"], "available");
+    assert_eq!(value["dependencies"][2]["lookup"], "explicit_path");
+    assert_eq!(
+        value["dependencies"][2]["validation"],
+        "executable_probe_only"
+    );
+    assert_eq!(value["dependencies"][2]["remediation"], Value::Null);
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains(&binary.to_string_lossy().to_string())
+    );
+    Ok(())
+}
+
+#[test]
+fn invalid_explicit_selection_does_not_fall_back_to_path() -> Result<(), Box<dyn std::error::Error>>
+{
+    let output = run(&["setup", "check", "--json", "--whisper", "relative-whisper"])?;
+    let value = parse_stdout(&output)?;
+
+    assert_eq!(value["dependencies"][2]["lookup"], "explicit_path");
+    assert_eq!(value["dependencies"][2]["status"], "unhealthy");
+    assert_eq!(
+        value["dependencies"][2]["remediation"]["reason"],
+        "unhealthy"
+    );
+    assert_eq!(
+        value["dependencies"][2]["remediation"]["managed_install"],
+        "unavailable_unqualified"
+    );
+    Ok(())
+}
+
+#[test]
+fn headless_setup_check_jsonl_returns_one_bounded_terminal_remediation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = Command::cargo_bin("vsift")?
+        .args([
+            "setup",
+            "check",
+            "--events",
+            "jsonl",
+            "--timeout-seconds",
+            "1",
+        ])
+        .env("PATH", "")
+        .output()?;
+    let lines: Vec<&[u8]> = output
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .collect();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(lines.len(), 1);
+    let event: Value = serde_json::from_slice(lines[0])?;
+    assert_eq!(event["event"], "terminal");
+    assert_eq!(
+        event["result"]["data"]["verification_scope"],
+        "executable_probe_only"
+    );
+    assert_eq!(
+        event["result"]["data"]["dependencies"][0]["remediation"]["required_authority"],
+        "user"
+    );
     assert!(output.stderr.is_empty());
     Ok(())
 }

@@ -2,6 +2,16 @@
 
 ## Active
 
+2026-09-13 P06 kickoff: `codex/p06-detection-guidance` starts from protected
+main `3c3c93f236b8c34491295fb05a52a2b162e8b1ee`. It adds read-only
+absolute executable selection for this check, structured manual/BYO remediation
+and an explicit `executable_probe_only`/model-not-checked warning in v1 JSON.
+These are partial P06 changes, not a claim of compatibility, persistent config,
+managed installation or a complete local-ASR path. The source trust catalogue
+and D-02..D-10/E2E gates remain open; P06 ledger status stays planned. Local
+fmt, strict Clippy, workspace tests, warning-denied rustdoc, governance, diff
+check and cargo-deny pass. Protected PR evidence and commit reference pending.
+
 2026-09-13 R0 setup clarification: ADR 0014 requires detection of existing
 tools, explicit reviewed plan/install for eligible missing dependencies, and
 typed manual/BYO guidance on unavailable, denied, offline or failed installs.

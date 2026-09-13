@@ -119,7 +119,7 @@ pub enum DependencyState {
 }
 
 impl DependencyState {
-    /// Reports whether the dependency is ready for use.
+    /// Reports whether the initial executable probe succeeded, not full compatibility.
     #[must_use]
     pub const fn is_available(&self) -> bool {
         matches!(self, Self::Available { .. })
@@ -149,11 +149,11 @@ pub struct DependencyStatus {
 /// Aggregate readiness of the local `VSift` runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimeReadiness {
-    /// Media processing and local transcription are available.
+    /// Media and transcription executable probes passed; model compatibility is unverified.
     Ready,
-    /// Core media processing is available, but an optional capability is missing.
+    /// Media executable probes passed, but the transcription executable probe did not.
     Degraded,
-    /// Core media processing is unavailable.
+    /// At least one core media executable probe did not pass.
     Blocked,
 }
 

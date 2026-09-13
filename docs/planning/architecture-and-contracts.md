@@ -66,14 +66,15 @@ distinction explicitly.
 
 ## 3. Public CLI contract
 
-P01 publishes the namespace and common v1 boundary. Only `setup check` executes today;
+P01 publishes the namespace and common v1 boundary. `setup check` executes a
+read-only executable probe with explicit off-PATH selection and manual guidance;
 every other row is reserved and returns `COMMAND_NOT_IMPLEMENTED` until its owning
 packet ships. The exact limits, compatibility rules, schemas, and implementation map
 are in the [v1 CLI contract](../contracts/cli-v1.md).
 
 | Command | Purpose / constraints |
 | --- | --- |
-| `setup check [--profile ...] [--timeout-seconds ...] --json` | Read-only capability detection including existing BYO/managed state; no installation or mutation |
+| `setup check [--profile ...] [--timeout-seconds ...] [--ffmpeg ABS] [--ffprobe ABS] [--whisper ABS] --json` | Read-only executable probing with per-call explicit BYO selection and typed manual guidance; compatibility, model and managed state remain unverified |
 | `setup plan --profile ... --json` | Plan only missing or explicitly selected qualified components; versions, provenance, sizes, licences, permissions, exact actions and digest; typed manual guidance if no qualified install exists |
 | `setup install --plan <file> --accept-plan <digest>` | Apply only that validated plan; revalidate expiry and current state; no silent elevation; typed manual fallback on failure |
 | `setup repair ...` | Produce/apply a repair plan; same installation contract, no recursive arbitrary deletion |

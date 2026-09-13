@@ -31,7 +31,7 @@ pub trait DependencyProbe: Send + Sync {
 /// Complete result of the read-only runtime diagnostic.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeDiagnosis {
-    /// Aggregate ability of `VSift` to process a video locally.
+    /// Aggregate executable-probe result, not full provider/model compatibility.
     pub readiness: RuntimeReadiness,
     /// Individual dependency results in stable display order.
     pub dependencies: Vec<DependencyStatus>,

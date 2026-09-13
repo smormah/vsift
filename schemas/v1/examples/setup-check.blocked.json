@@ -3,9 +3,11 @@
   "command": "setup.check",
   "profile": "desktop",
   "status": "blocked",
+  "verification_scope": "executable_probe_only",
+  "local_asr_model": "not_checked",
   "dependencies": [
-    { "dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null },
-    { "dependency": "ffprobe", "capability": "media_processing", "status": "missing", "detail": null },
-    { "dependency": "whisper", "capability": "transcription", "status": "missing", "detail": null }
+    { "dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "missing", "managed_install": "unavailable_unqualified", "required_authority": "user", "next_step": "Install or locate a trusted FFmpeg executable, then rerun setup check.", "explicit_path_option": "--ffmpeg" } },
+    { "dependency": "ffprobe", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "missing", "managed_install": "unavailable_unqualified", "required_authority": "user", "next_step": "Install or locate a trusted FFprobe executable, then rerun setup check.", "explicit_path_option": "--ffprobe" } },
+    { "dependency": "whisper", "capability": "transcription", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": { "reason": "missing", "managed_install": "unavailable_unqualified", "required_authority": "user", "next_step": "Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR.", "explicit_path_option": "--whisper" } }
   ]
 }

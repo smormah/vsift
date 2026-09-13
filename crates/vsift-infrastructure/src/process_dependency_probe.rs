@@ -1,6 +1,6 @@
 //! Runtime dependency probing through the secure process supervisor.
 
-use std::{ffi::OsStr, time::Duration};
+use std::{ffi::OsStr, path::PathBuf, time::Duration};
 
 use tokio::time::Instant;
 use vsift_application::DependencyProbe;
@@ -9,9 +9,35 @@ use vsift_domain::{DependencyState, DependencyStatus, RuntimeDependency};
 use crate::{
     ExecutableResolutionError, ExecutableResolver, ProcessCancellation, ProcessError,
     ProcessRequest, ProcessSupervisor, ProcessWorkingDirectory, TerminationReason,
+    TrustedExecutable,
 };
 
 const MAX_DIAGNOSTIC_LENGTH: usize = 240;
+
+/// Explicit executable selections for one read-only diagnostic operation.
+///
+/// These paths are never persisted or inferred from an untrusted project directory.
+#[derive(Clone, Debug, Default)]
+pub struct ExplicitProbePaths {
+    /// Absolute path to an existing `FFmpeg` executable, if selected.
+    pub ffmpeg: Option<PathBuf>,
+    /// Absolute path to an existing `FFprobe` executable, if selected.
+    pub ffprobe: Option<PathBuf>,
+    /// Absolute path to an existing whisper.cpp CLI executable, if selected.
+    pub whisper: Option<PathBuf>,
+}
+
+impl ExplicitProbePaths {
+    /// Returns the selected path for one dependency without falling back to `PATH`.
+    #[must_use]
+    pub fn for_dependency(&self, dependency: RuntimeDependency) -> Option<&PathBuf> {
+        match dependency {
+            RuntimeDependency::Ffmpeg => self.ffmpeg.as_ref(),
+            RuntimeDependency::Ffprobe => self.ffprobe.as_ref(),
+            RuntimeDependency::Whisper => self.whisper.as_ref(),
+        }
+    }
+}
 
 /// Probes approved runtime executables without invoking a command shell.
 ///
@@ -22,16 +48,27 @@ pub struct ProcessDependencyProbe {
     operation_deadline: Instant,
     resolver: ExecutableResolver,
     supervisor: ProcessSupervisor,
+    explicit_paths: ExplicitProbePaths,
 }
 
 impl ProcessDependencyProbe {
     /// Creates a probe with one total deadline and a safely filtered snapshot of `PATH`.
     #[must_use]
     pub fn new(operation_timeout: Duration) -> Self {
-        Self::configured(
+        Self::with_explicit_paths(operation_timeout, ExplicitProbePaths::default())
+    }
+
+    /// Creates a probe with explicit-path selections ahead of filtered `PATH` lookup.
+    #[must_use]
+    pub fn with_explicit_paths(
+        operation_timeout: Duration,
+        explicit_paths: ExplicitProbePaths,
+    ) -> Self {
+        Self::configured_with_explicit_paths(
             operation_timeout,
             ExecutableResolver::from_current_path(),
             ProcessSupervisor::default(),
+            explicit_paths,
         )
     }
 
@@ -42,6 +79,22 @@ impl ProcessDependencyProbe {
         resolver: ExecutableResolver,
         supervisor: ProcessSupervisor,
     ) -> Self {
+        Self::configured_with_explicit_paths(
+            operation_timeout,
+            resolver,
+            supervisor,
+            ExplicitProbePaths::default(),
+        )
+    }
+
+    /// Creates a probe with explicit paths and injected process policies for tests/hosts.
+    #[must_use]
+    pub fn configured_with_explicit_paths(
+        operation_timeout: Duration,
+        resolver: ExecutableResolver,
+        supervisor: ProcessSupervisor,
+        explicit_paths: ExplicitProbePaths,
+    ) -> Self {
         let now = Instant::now();
         let operation_deadline = match now.checked_add(operation_timeout) {
             Some(deadline) => deadline,
@@ -51,6 +104,7 @@ impl ProcessDependencyProbe {
             operation_deadline,
             resolver,
             supervisor,
+            explicit_paths,
         }
     }
 }
@@ -64,14 +118,22 @@ impl Default for ProcessDependencyProbe {
 impl DependencyProbe for ProcessDependencyProbe {
     async fn probe(&self, dependency: RuntimeDependency) -> DependencyStatus {
         let specification = ProbeSpecification::for_dependency(dependency);
-        let state = self.probe_process(specification).await;
+        let state = self.probe_process(dependency, specification).await;
         DependencyStatus { dependency, state }
     }
 }
 
 impl ProcessDependencyProbe {
-    async fn probe_process(&self, specification: ProbeSpecification) -> DependencyState {
-        let executable = match self.resolver.resolve(OsStr::new(specification.executable)) {
+    async fn probe_process(
+        &self,
+        dependency: RuntimeDependency,
+        specification: ProbeSpecification,
+    ) -> DependencyState {
+        let resolution = self.explicit_paths.for_dependency(dependency).map_or_else(
+            || self.resolver.resolve(OsStr::new(specification.executable)),
+            TrustedExecutable::explicit,
+        );
+        let executable = match resolution {
             Ok(executable) => executable,
             Err(ExecutableResolutionError::NotFound) => return DependencyState::Missing,
             Err(error) => {
