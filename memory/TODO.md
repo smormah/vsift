@@ -10,6 +10,10 @@ compatibility, exact link-safe layout, notices and production installer gates
 remain open. P06 is still planned.
 An opt-in credential-free Ubuntu 24.04 candidate smoke and four local archive
 guardrail tests are prepared; hosted execution and review are pending.
+The [hosted Ubuntu run 34782768288](https://github.com/smormah/vsift/actions/runs/34782768288)
+passed on Ubuntu 24.04.5 x64 with pinned archive/model hashes, non-link
+selected-file layout, F01 media operations and model-backed tone inference.
+It does not qualify speech accuracy, resource use or the production installer.
 
 2026-09-13: The maintainer clarified P06's intended download posture: an
 explicitly accepted plan fetches a reviewed pinned provider artifact directly
