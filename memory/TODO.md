@@ -2,6 +2,13 @@
 
 ## Current checkpoint
 
+2026-09-13: The maintainer clarified P06's intended download posture: an
+explicitly accepted plan fetches a reviewed pinned provider artifact directly
+from its publisher on the user's machine, not through a VSift mirror/proxy.
+"Latest" is only a candidate for later catalogue review, never an unreviewed
+runtime choice. ADR 0014 and the source review now record this; licence/notice,
+expiry, compatibility and installer gates remain open, and P06 stays planned.
+
 2026-09-13: P05 issue #51's lock-lifetime fix merged through protected PR #58 as
 `9f86ff1` after the three-OS quality and security checks passed. The opt-in
 [100-run Ubuntu stress](https://github.com/smormah/vsift/actions/runs/34756593985)
