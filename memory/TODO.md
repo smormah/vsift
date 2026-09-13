@@ -2,6 +2,15 @@
 
 ## Current checkpoint
 
+2026-09-13: P06 read-only detection/guidance increment merged through protected
+[PR #53](https://github.com/smormah/vsift/pull/53) as
+`0f0156bd62ac6777fcb1f412968df6eda977158e`. Windows, macOS and Ubuntu
+Quality, Governance, Documentation, strict worker, dependency policy/review,
+CodeQL and Rust analysis passed. A Windows x64 artifact candidate review now
+records checked FFmpeg/whisper archive hashes and a pinned multilingual `base`
+model LFS pointer, but remains unqualified pending licence/notice and isolated
+compatibility gates. No installer ran and P06 is not complete.
+
 2026-09-13: P06 has begun on `codex/p06-detection-guidance` from protected main
 `3c3c93f236b8c34491295fb05a52a2b162e8b1ee` (implementation commit
 `3a1da55`). The first read-only increment
