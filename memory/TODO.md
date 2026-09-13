@@ -2,6 +2,15 @@
 
 ## Current checkpoint
 
+2026-09-13: A read-only Ubuntu x64 P06 candidate review independently verified
+the publisher archive hashes and selected files for the retained month-end
+BtbN FFmpeg build and upstream whisper.cpp v1.9.2 CLI. The whisper archive
+contains eight links; no binary ran on the maintainer desktop. Hosted
+compatibility, exact link-safe layout, notices and production installer gates
+remain open. P06 is still planned.
+An opt-in credential-free Ubuntu 24.04 candidate smoke and four local archive
+guardrail tests are prepared; hosted execution and review are pending.
+
 2026-09-13: The maintainer clarified P06's intended download posture: an
 explicitly accepted plan fetches a reviewed pinned provider artifact directly
 from its publisher on the user's machine, not through a VSift mirror/proxy.

@@ -35,6 +35,12 @@ passed on Windows Server 2025. The publisher retains month-end builds for two
 years, not indefinitely. Real-speech/resource/Windows 11 qualification,
 binary notices and maintained replacement policy remain unqualified.
 
+An [Ubuntu x64 candidate inventory](p06-ubuntu-artifact-candidate.md) now records
+the month-end BtbN LGPL archive and upstream whisper.cpp v1.9.2 Ubuntu CLI
+archive hashes and selected-file inventory. Its whisper archive contains eight
+symlinks, so safe non-link extraction and compatibility on a hosted Ubuntu 24.04
+runner remain open. It is not an accepted catalogue or installer evidence.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 
