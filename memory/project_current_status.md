@@ -9,7 +9,9 @@ integrity, FFmpeg/FFprobe F01 operations and whisper.cpp model-backed inference
 on Windows Server 2025 x64. The harness is not called by the CLI and F01 is
 tone-only. Real-speech accuracy, Windows 11, resource/containment,
 legal/notice, managed installer and P06 E2E gates remain open. P06 stays
-planned and P07/P08 remain ineligible.
+planned and P07/P08 remain ineligible. The selected BtbN daily FFmpeg asset
+also has a 14-build retention window; successful download is not a durable
+catalogue source.
 
 2026-09-13: The first P06 implementation increment merged via protected PR #53
 as `0f0156bd62ac6777fcb1f412968df6eda977158e`; all required platform,

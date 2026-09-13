@@ -88,6 +88,10 @@ eligible packet but remains planned.
   transcription on an owned fixture once P07 supplies speech, then qualify
   Windows 11 desktop separately. Tone-only runner evidence does not accept a
   managed catalogue; legal/notices and full installer/E2E gates remain open.
+- P06 source availability: the reviewed 2026-09-09 BtbN FFmpeg daily asset is
+  subject to its 14-build retention policy; its successful hosted smoke does
+  not make it a durable installer source. Select a retained replacement or
+  governed artifact strategy, with legal/source/notice review, before activation.
 - P06 next increments: validate FFmpeg/FFprobe/whisper.cpp behavior and model
   selection rather than accepting help/version alone; add persistent explicit
   BYO selection through the reserved configure boundary; qualify source catalog,

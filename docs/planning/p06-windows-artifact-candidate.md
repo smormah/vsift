@@ -4,6 +4,13 @@ Date: 2026-09-13. Target: Windows 11 x64 desktop. This is a read-only source and
 archive-inventory review, **not** an accepted installer catalogue or permission to
 activate downloads. P06 and its source gate remain open.
 
+Availability risk: the selected 2026-09-09 BtbN asset is a *daily* build, not a
+month-end retained build. Its [pinned source retention policy](https://github.com/BtbN/FFmpeg-Builds/blob/847e5e1cacc2945ac46528d34d754bd36051680c/README.md#release-retention-policy)
+keeps only the last 14 daily builds and month-end builds for two years. The
+candidate URL may disappear; a temporary successful download is not a durable
+managed-install source. Before accepting a catalogue, choose and review a
+retained/maintained source with an explicit expiry and replacement policy.
+
 ## Candidate origins and archived integrity
 
 | Component | Immutable source selection | Bytes | Archived SHA-256 | Licence observation |
@@ -71,7 +78,8 @@ must be confirmed by a controlled compatibility test, not assumed from `--help`.
    reject traversal, duplicate names, links, devices and non-whitelisted files.
    Independently test corrupt archive, wrong architecture and missing file cases.
 4. Document where the MIT and LGPL notices/source offers accompany the installed
-   versions. Define revocation and retention of this pinned candidate. The other
+   versions. Resolve the daily-build retention risk and define revocation and
+   replacement of this pinned candidate. The other
    named R0 targets still require manual/BYO guidance unless separately qualified.
 
 Until these gates and installer D-01..D-10 pass, `setup plan`/`setup install`

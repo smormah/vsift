@@ -22,7 +22,11 @@ notices, real-speech/resource/desktop qualification, installer hardening and
 the other named targets' fallback behavior remain open. Its opt-in Windows
 Server 2025 tone-audio compatibility smoke passed in
 [run 34737109736](https://github.com/smormah/vsift/actions/runs/34737109736);
-that run did not establish transcript accuracy or Windows 11 support.
+that run did not establish transcript accuracy or Windows 11 support. BtbN's
+[pinned retention policy](https://github.com/BtbN/FFmpeg-Builds/blob/847e5e1cacc2945ac46528d34d754bd36051680c/README.md#release-retention-policy)
+keeps only the last 14 daily builds, so the selected 2026-09-09 asset is not
+a dependable long-lived installer source. Its expiry/replacement path also
+needs a reviewed decision before catalogue acceptance.
 
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
