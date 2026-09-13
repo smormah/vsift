@@ -15,6 +15,12 @@ executable selection alongside filtered `PATH` and typed manual guidance, but
 reports `executable_probe_only` and does not check the model. The other setup
 commands explicitly return `COMMAND_NOT_IMPLEMENTED`.
 
+The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
+now records exact observed archive hashes, selected-file inventories and one
+model LFS pointer. It is not an accepted catalogue: binary-specific licence
+notices, controlled compatibility smoke tests, installer hardening and the other
+named targets' fallback behavior remain open.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 

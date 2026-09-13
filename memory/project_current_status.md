@@ -2,6 +2,14 @@
 
 ## Active
 
+2026-09-13: The first P06 implementation increment merged via protected PR #53
+as `0f0156bd62ac6777fcb1f412968df6eda977158e`; all required platform,
+governance, documentation, dependency and security checks passed. A candidate
+Windows x64 source set has exact observed FFmpeg/whisper archive hashes and a
+pinned `base` model LFS pointer, but binary licence/notice and controlled smoke
+tests remain before any accepted managed-install catalogue (`2256582`). No dependency was
+installed. P06 stays planned in the ledger, so P07/P08 remain ineligible.
+
 2026-09-13 P06 kickoff: `codex/p06-detection-guidance` starts from protected
 main `3c3c93f236b8c34491295fb05a52a2b162e8b1ee` (implementation commit
 `3a1da55`). It adds read-only
