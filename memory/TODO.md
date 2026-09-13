@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-2026-09-13: An opt-in disposable Windows candidate smoke is being prepared for
+2026-09-13: An opt-in disposable Windows candidate smoke (`a0fe266`) is
+being prepared for
 the pinned P06 FFmpeg/FFprobe/whisper.cpp/model set. It is not an accepted
 installer catalogue, transcript-accuracy test or P06 E2E completion. Local
 archive guardrail tests pass; hosted run and protected merge evidence pending.
