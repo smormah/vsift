@@ -29,8 +29,10 @@ a dependable long-lived installer source. Its expiry/replacement path also
 needs a reviewed decision before catalogue acceptance.
 
 A [2026-08-31 month-end BtbN alternative](p06-windows-artifact-candidate.md#month-end-replacement-under-review)
-has a verified archive and selected-file inventory. The publisher retains
-month-end builds for two years, not indefinitely. Its own hosted compatibility,
+has a verified archive and selected-file inventory. Its
+[hosted tone-audio compatibility run](https://github.com/smormah/vsift/actions/runs/34756838957)
+passed on Windows Server 2025. The publisher retains month-end builds for two
+years, not indefinitely. Real-speech/resource/Windows 11 qualification,
 binary notices and maintained replacement policy remain unqualified.
 
 The missing catalog is material because the listed sources do not form one

@@ -133,6 +133,10 @@ and before registration returns. A regression test keeps a duplicated root
 handle alive and verifies the explicit release allows a separate contender;
 the lifecycle test directly checks the root lock is available before its first
 bucket scan. A separate opt-in Ubuntu workflow repeats the registration/scan/
-cleanup scenario 100 times. This is a proposed fix until protected cross-OS
-checks and the hosted stress run pass; a green rerun alone will not be cited as
-proof of the exact original holder.
+cleanup scenario 100 times. Protected [PR #58](https://github.com/smormah/vsift/pull/58)
+merged as `9f86ff1` after Ubuntu, macOS and Windows Quality and security checks
+passed. The [opt-in 100-run Ubuntu stress](https://github.com/smormah/vsift/actions/runs/34756593985)
+passed, and the previously affected P06 PR #57 passed Ubuntu Quality after
+including the fix. This verifies the intended explicit lock lifetime and
+mitigates the observed failure; it does not prove which process or descriptor
+held the lock in the original failed CI run.

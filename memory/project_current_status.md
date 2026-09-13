@@ -2,13 +2,17 @@
 
 ## Active
 
-2026-09-13: P06 PR #57 is blocked by the pre-existing Ubuntu P05 issue #51:
-CI run 34737696705 reproduced `scan 0: Busy` after registration. A separate
-P05 follow-up (`3968866`) explicitly unlocks the short-lived root initialization file
-before returning the held registration marker. Local targeted and full tests
-pass, but protected checks and opt-in 100-run Ubuntu stress are pending. The
-trace identifies root-lock contention; it does not prove the exact holder.
-Do not merge PR #57 or start P07/P08 around this failure.
+2026-09-13: The P05 issue #51 lock-lifetime fix merged through protected PR #58
+as `9f86ff1`; supported OS, governance, dependency and security checks passed.
+The [100-run Ubuntu stress](https://github.com/smormah/vsift/actions/runs/34756593985)
+passed. The exact original CI lock holder remains unproven, but the root
+initialization lock now has an explicit release and regressions assert immediate
+availability. P06 retained-source PR #57 passed protected checks and merged as
+`b7e88af`. Its [Windows Server 2025 smoke](https://github.com/smormah/vsift/actions/runs/34756838957)
+passed pinned download integrity, F01 extraction and model-backed inference.
+P06 remains planned: this test contains no speech, does not qualify Windows 11
+or legal notices and does not implement the managed installer or D/E2E gates.
+P07/P08 remain ineligible.
 
 2026-09-13: The opt-in Windows candidate-smoke harness (`a0fe266`) merged
 through protected PR #55 as `1c805c11519ec43ad91cc6beb18d8d39c40ee495`.
@@ -17,17 +21,18 @@ integrity, FFmpeg/FFprobe F01 operations and whisper.cpp model-backed inference
 on Windows Server 2025 x64. The harness is not called by the CLI and F01 is
 tone-only. Real-speech accuracy, Windows 11, resource/containment,
 legal/notice, managed installer and P06 E2E gates remain open. P06 stays
-planned and P07/P08 remain ineligible. The selected BtbN daily FFmpeg asset
-also has a 14-build retention window; successful download is not a durable
-catalogue source.
+planned and P07/P08 remain ineligible. This original BtbN daily FFmpeg asset
+had a 14-build retention window and was superseded for candidate testing by
+the 2026-08-31 month-end asset; neither is an accepted installer source.
 
 2026-09-13: A BtbN 2026-08-31 month-end Windows x64 LGPL archive was
 downloaded for read-only inventory review. Its 147,007,942-byte SHA-256
 `2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56`
 matches the release asset API; selected FFmpeg/FFprobe/licence file hashes
-are recorded in the P06 candidate document. The opt-in runner is being
-repointed to this retained candidate in `b379116`; no binary was executed locally, no
-managed installer is available and P06 remains planned.
+are recorded in the P06 candidate document. PR #57 subsequently repointed the
+opt-in runner to this retained candidate and passed hosted tone-audio smoke.
+No binary was executed on the maintainer desktop, no managed installer is
+available and P06 remains planned.
 
 2026-09-13: The first P06 implementation increment merged via protected PR #53
 as `0f0156bd62ac6777fcb1f412968df6eda977158e`; all required platform,
@@ -125,6 +130,18 @@ remaining OS/storage crash gate are recorded. That gate is P10/P11/P14 work and 
 not invalidate P03's completed ephemeral profile.
 
 ## Complete
+
+### 2026-09-13 — P05 lock follow-up and P06 retained-source review increments
+
+Protected PR #58 merged the explicit root initialization lock release and
+regressions as `9f86ff1`. Three-OS Quality and the
+[100-run Ubuntu stress](https://github.com/smormah/vsift/actions/runs/34756593985)
+passed. Protected PR #57 merged the retained month-end FFmpeg candidate
+review as `b7e88af`; its
+[Windows Server 2025 smoke](https://github.com/smormah/vsift/actions/runs/34756838957)
+passed pinned hash checks and F01 FFprobe/FFmpeg/whisper.cpp compatibility.
+Neither tone-audio inference nor source retention qualifies the installer or
+completes P06. The exact historical lock holder remains unknown.
 
 ### 2026-09-12 — P05 session lifecycle and retained bundles
 

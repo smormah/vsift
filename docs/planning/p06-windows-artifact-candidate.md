@@ -30,10 +30,19 @@ were hashed from the verified archive without executing them:
 | `bin/ffmpeg.exe` | 114,400,768 | `63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6` |
 | `bin/ffprobe.exe` | 114,198,528 | `1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879` |
 
-The proposed opt-in runner revision pins this month-end candidate rather than the daily
-asset. It still needs its own hosted compatibility run, binary notice/source
-review, expiry/update policy and production installer controls. Retention is
-not a signature, a licence clearance or a promise of permanent availability.
+The opt-in runner now pins this month-end candidate rather than the daily
+asset. Protected [PR #57](https://github.com/smormah/vsift/pull/57) merged as
+`b7e88af` after the supported OS, governance, dependency and security checks
+passed. Its [hosted compatibility run 34756838957](https://github.com/smormah/vsift/actions/runs/34756838957)
+passed on Windows Server 2025 build 26100 x64. The runner verified the archive,
+whisper.cpp archive and model hashes, selected-file inventory, FFprobe F01
+inspection, FFmpeg audio extraction and whisper.cpp model-loaded inference.
+The selected executables reported `n9.0.1-11-ge47273f4d9-20260831`.
+Six negative archive guardrail tests passed. This is a tone-audio compatibility
+smoke, not a real-speech accuracy test, Windows 11 qualification, accepted
+installer catalogue or full P06 E2E. Binary notice/source review, expiry and
+replacement policy and production installer controls remain open. Retention
+is not a signature, a licence clearance or a promise of permanent availability.
 
 ## Initial daily candidate origins and archived integrity
 
