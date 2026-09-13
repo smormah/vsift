@@ -2,12 +2,16 @@
 
 ## Current checkpoint
 
-2026-09-13: P05 issue #51 is being addressed separately from P06 after the
-same immediate post-registration Ubuntu `scan 0: Busy` appeared in P06 PR #57.
-The proposed narrow fix (`3968866`) explicitly releases the root initialization lock
-before registration returns its held marker. Local targeted and full workspace
-tests pass; protected three-OS checks and 100-run opt-in Ubuntu stress are
-pending. This is not yet a closed root-cause finding or a merged fix.
+2026-09-13: P05 issue #51's lock-lifetime fix merged through protected PR #58 as
+`9f86ff1` after the three-OS quality and security checks passed. The opt-in
+[100-run Ubuntu stress](https://github.com/smormah/vsift/actions/runs/34756593985)
+passed. The precise original CI lock holder was not captured; the explicit
+root-lock release and regressions mitigate the observed `scan 0: Busy`.
+P06 retained-source PR #57 then passed protected checks and merged as `b7e88af`.
+Its [hosted Windows candidate smoke](https://github.com/smormah/vsift/actions/runs/34756838957)
+passed exact hashes, FFprobe/FFmpeg F01 operations and whisper.cpp model loading
+on Windows Server 2025. This is not installer, real-speech, Windows 11 or P06
+E2E qualification. P06 remains planned and P07/P08 remain ineligible.
 
 2026-09-13: Protected PR #55 merged the opt-in disposable Windows candidate
 smoke (`a0fe266`, merge `1c805c1`). Hosted
@@ -78,14 +82,6 @@ eligible packet but remains planned.
 
 ## Pending
 
-- P05 qualification follow-up #51: Ubuntu Quality on docs-only PR #50 failed
-  `registration_scan_and_abandoned_cleanup_respect_the_live_lock` when its
-  first bucket scan returned `Busy` after registration. Investigate root-lock
-  lifetime versus test timing with repeatable Ubuntu evidence; do not relax
-  the scan guarantee or count a green rerun as a root-cause fix. The same
-  assertion failed in PR #57 CI run 34737696705. A separate explicit-unlock
-  fix and retained-handle regression are in progress; cross-OS/stress evidence
-  and a root-cause disposition remain pending.
 - P06 source gate (2026-09-12): select and review immutable per-target
   FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model artifacts before
   managed download/activation. The current source matrix cannot justify a
@@ -102,10 +98,11 @@ eligible packet but remains planned.
   subject to its 14-build retention policy; its successful hosted smoke does
   not make it a durable installer source. Select a retained replacement or
   governed artifact strategy, with legal/source/notice review, before activation.
-  A 2026-08-31 month-end alternative (`b379116`) has a verified archive/inventory candidate
-  and is being hosted-smoked; do not promote it to a trust anchor yet.
-- P06 next increments: validate FFmpeg/FFprobe/whisper.cpp behavior and model
-  selection rather than accepting help/version alone; add persistent explicit
+  A 2026-08-31 month-end alternative (PR #57, `b7e88af`) passed its hosted
+  tone-audio compatibility smoke, but has only two-year publisher retention;
+  do not promote it to a trust anchor before the remaining gates.
+- P06 next increments: validate real-speech behavior, resource use and model
+  selection rather than accepting tone-audio inference alone; add persistent explicit
   BYO selection through the reserved configure boundary; qualify source catalog,
   then implement explicit plan/install/repair/remove with atomic rollback and
   native three-OS failure/E2E evidence. Do not mark probe-only success as ASR
@@ -143,6 +140,16 @@ eligible packet but remains planned.
   future issues #25 through #30.
 
 ## Completed
+
+- 2026-09-13: P05 registration-lock follow-up #51 merged through protected
+  PR #58 as `9f86ff1`, with explicit root-lock release, duplicate-handle
+  regression, three-OS Quality and
+  [100-run Ubuntu stress](https://github.com/smormah/vsift/actions/runs/34756593985).
+  The original holder remains unproven. P06 retained Windows source review
+  PR #57 merged as `b7e88af`; the
+  [hosted candidate smoke](https://github.com/smormah/vsift/actions/runs/34756838957)
+  passed hash verification, F01 media extraction and model-backed inference.
+  These are qualification increments, not P06 completion.
 
 - 2026-09-13: ADR 0014's detect → explicit install → manual guide R0 setup
   contract and the P06 provider/model source assessment merged through protected
