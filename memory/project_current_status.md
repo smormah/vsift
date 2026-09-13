@@ -2,6 +2,15 @@
 
 ## Active
 
+2026-09-13: An opt-in Windows candidate-smoke workflow and bounded Python
+qualification harness are in progress. The harness downloads only the exact
+reviewed archive/model bytes, validates selected ZIP entries and hashes, then
+tests FFmpeg/FFprobe operations and whisper.cpp model loading against synthetic
+F01 tone audio on a disposable runner. Negative archive tests pass locally;
+hosted execution is pending. The harness is not called by the CLI and does not
+close transcript accuracy, legal/notice, installer or P06 E2E gates. P06 stays
+planned and P07/P08 remain ineligible.
+
 2026-09-13: The first P06 implementation increment merged via protected PR #53
 as `0f0156bd62ac6777fcb1f412968df6eda977158e`; all required platform,
 governance, documentation, dependency and security checks passed. A candidate

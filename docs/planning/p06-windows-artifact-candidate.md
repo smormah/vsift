@@ -76,3 +76,20 @@ must be confirmed by a controlled compatibility test, not assumed from `--help`.
 
 Until these gates and installer D-01..D-10 pass, `setup plan`/`setup install`
 remain unavailable and this candidate is **not** an accepted trust anchor.
+
+## Opt-in candidate compatibility experiment
+
+`P06 Windows candidate smoke` is a manual `workflow_dispatch` job. Its
+candidate-only script at `tools/p06_windows_candidate_smoke.py` repeats the
+reviewed hashes, limits download and ZIP processing, and runs the three pinned
+components against project-owned F01 media on a disposable Windows runner.
+The workflow requests no repository permissions and does not persist checkout
+credentials. It receives no repository secrets. Its output must be reviewed
+before any catalogue decision; merely adding the job is not a passed test.
+
+F01 currently has tone audio, not spoken words. This experiment can establish
+binary loading, media extraction and model-backed inference, but **cannot**
+establish transcript accuracy or fulfil P06's full E2E stage. P07's speech
+fixture, the legal/notice review, production installer safeguards and desktop
+target qualification remain separate gates. The qualification script is not
+invoked by `vsift setup` and must never be promoted into the installer.
