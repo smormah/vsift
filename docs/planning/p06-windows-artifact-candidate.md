@@ -4,14 +4,38 @@ Date: 2026-09-13. Target: Windows 11 x64 desktop. This is a read-only source and
 archive-inventory review, **not** an accepted installer catalogue or permission to
 activate downloads. P06 and its source gate remain open.
 
-Availability risk: the selected 2026-09-09 BtbN asset is a *daily* build, not a
+Availability risk: the initially selected 2026-09-09 BtbN asset is a *daily* build, not a
 month-end retained build. Its [pinned source retention policy](https://github.com/BtbN/FFmpeg-Builds/blob/847e5e1cacc2945ac46528d34d754bd36051680c/README.md#release-retention-policy)
 keeps only the last 14 daily builds and month-end builds for two years. The
 candidate URL may disappear; a temporary successful download is not a durable
 managed-install source. Before accepting a catalogue, choose and review a
 retained/maintained source with an explicit expiry and replacement policy.
 
-## Candidate origins and archived integrity
+### Month-end replacement under review
+
+The [2026-08-31 BtbN release](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-31-13-27)
+is a month-end build covered by the publisher's two-year retention policy
+(subject to that publisher continuing the policy). Its tag resolves to commit
+`8267213e26c1031621e6e1210fe3aa4867214f6a`. The exact Windows x64 LGPL
+archive `ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip` is 147,007,942
+bytes, with independently recalculated SHA-256
+`2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56`,
+matching the GitHub release asset digest. Its 48 ZIP entries total 358,125,718
+expanded bytes. The three selected files under the single version-named root
+were hashed from the verified archive without executing them:
+
+| Relative file | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `LICENSE.txt` | 7,651 | `da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768` |
+| `bin/ffmpeg.exe` | 114,400,768 | `63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6` |
+| `bin/ffprobe.exe` | 114,198,528 | `1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879` |
+
+The proposed opt-in runner revision pins this month-end candidate rather than the daily
+asset. It still needs its own hosted compatibility run, binary notice/source
+review, expiry/update policy and production installer controls. Retention is
+not a signature, a licence clearance or a promise of permanent availability.
+
+## Initial daily candidate origins and archived integrity
 
 | Component | Immutable source selection | Bytes | Archived SHA-256 | Licence observation |
 | --- | --- | ---: | --- | --- |
@@ -102,7 +126,8 @@ fixture, the legal/notice review, production installer safeguards and desktop
 target qualification remain separate gates. The qualification script is not
 invoked by `vsift setup` and must never be promoted into the installer.
 
-Protected [PR #55](https://github.com/smormah/vsift/pull/55) merged the opt-in
+Protected [PR #55](https://github.com/smormah/vsift/pull/55) merged the initial
+daily-asset opt-in
 runner as `1c805c11519ec43ad91cc6beb18d8d39c40ee495`, after Windows,
 macOS and Ubuntu Quality, Governance, Documentation, strict-worker, dependency
 policy/review and CodeQL/Rust checks passed. The manually dispatched

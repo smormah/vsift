@@ -2,7 +2,7 @@
 
 The selected hashes are repeated from the reviewed candidate record deliberately:
 the script fails closed on changed network bytes and extracts only known files.
-It runs solely on an ephemeral Windows qualification runner without a GitHub token.
+The workflow passes no repository secrets or checkout credentials to the process.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ import zipfile
 
 FFMPEG_URL = (
     "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-    "autobuild-2026-09-09-14-51/"
-    "ffmpeg-n9.0.1-27-g9b0578816c-win64-lgpl-9.0.zip"
+    "autobuild-2026-08-31-13-27/"
+    "ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip"
 )
 WHISPER_URL = (
     "https://github.com/ggml-org/whisper.cpp/releases/download/"
@@ -39,8 +39,8 @@ MODEL_URL = (
 ARCHIVES = {
     "ffmpeg": (
         FFMPEG_URL,
-        170_475_591,
-        "1f20ec59455ddec021598fae3f8bd37a7bbd6b8647faaa10cf77688e70970563",
+        147_007_942,
+        "2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56",
     ),
     "whisper": (
         WHISPER_URL,
@@ -52,8 +52,8 @@ MODEL_SIZE = 147_951_465
 MODEL_HASH = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
 FFMPEG_FILES = {
     "LICENSE.txt": (7_651, "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"),
-    "bin/ffmpeg.exe": (132_656_640, "c09c9818d91357e6c8ecbba6d832377ca309690dda35baac6019e716070bd934"),
-    "bin/ffprobe.exe": (132_456_960, "02739830b1ffeb4a8357de1b069cbee81df1c9654ede15a35d53069f7a372291"),
+    "bin/ffmpeg.exe": (114_400_768, "63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6"),
+    "bin/ffprobe.exe": (114_198_528, "1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879"),
 }
 WHISPER_FILES = {
     "whisper-cli.exe": (479_232, "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d"),
