@@ -14,9 +14,10 @@ use crate::{
 
 const MAX_DIAGNOSTIC_LENGTH: usize = 240;
 
-/// Explicit executable selections for one read-only diagnostic operation.
+/// Explicit executable selections resolved for one read-only diagnostic operation.
 ///
-/// These paths are never persisted or inferred from an untrusted project directory.
+/// The caller may combine per-call paths with validated private per-user configuration.
+/// Paths are never inferred from an untrusted project directory.
 #[derive(Clone, Debug, Default)]
 pub struct ExplicitProbePaths {
     /// Absolute path to an existing `FFmpeg` executable, if selected.

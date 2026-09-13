@@ -2,6 +2,13 @@
 
 ## Active
 
+2026-09-13: P06 persistent BYO executable registration is underway from
+protected main `4c8dc36`. This increment selects private per-user canonical
+paths and leaves model compatibility, managed installation and D/E2E gates open.
+The ledger remains planned; P07/P08 remain ineligible.
+Local fmt, strict Clippy, workspace tests, warning-denied rustdoc, governance,
+cargo-deny and diff check pass; protected PR evidence is pending.
+
 2026-09-13: Read-only P06 Ubuntu x64 candidate inventory from direct publisher
 downloads is in `docs/planning/p06-ubuntu-artifact-candidate.md`. The verified
 whisper.cpp archive contains eight symlinks; safe materialization and hosted

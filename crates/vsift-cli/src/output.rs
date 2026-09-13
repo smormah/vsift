@@ -296,6 +296,7 @@ impl SetupCheckResponse {
         diagnosis: &RuntimeDiagnosis,
         profile: ExecutionProfile,
         selections: &ExplicitProbePaths,
+        per_call: &ExplicitProbePaths,
     ) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
@@ -307,7 +308,7 @@ impl SetupCheckResponse {
             dependencies: diagnosis
                 .dependencies
                 .iter()
-                .map(|status| SetupCheckDependencyResponse::new(status, selections))
+                .map(|status| SetupCheckDependencyResponse::new(status, selections, per_call))
                 .collect(),
         }
     }
@@ -334,7 +335,11 @@ struct SetupRemediationResponse {
 }
 
 impl SetupCheckDependencyResponse {
-    fn new(status: &DependencyStatus, selections: &ExplicitProbePaths) -> Self {
+    fn new(
+        status: &DependencyStatus,
+        selections: &ExplicitProbePaths,
+        per_call: &ExplicitProbePaths,
+    ) -> Self {
         let detail = match &status.state {
             DependencyState::Available { version } => {
                 Some(sanitize_untrusted_text(version, MAX_PROVIDER_DETAIL_BYTES))
@@ -347,8 +352,10 @@ impl SetupCheckDependencyResponse {
             capability: status.dependency.capability().identifier(),
             status: status.state.identifier(),
             detail,
-            lookup: if selections.for_dependency(status.dependency).is_some() {
+            lookup: if per_call.for_dependency(status.dependency).is_some() {
                 "explicit_path"
+            } else if selections.for_dependency(status.dependency).is_some() {
+                "configured_user_path"
             } else {
                 "filtered_path"
             },

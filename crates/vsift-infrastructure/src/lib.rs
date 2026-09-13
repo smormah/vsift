@@ -8,6 +8,7 @@ mod filesystem_session_store;
 mod process_dependency_probe;
 mod process_supervisor;
 mod source_snapshot;
+mod user_dependency_config;
 
 pub use executable::{
     ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
@@ -31,3 +32,4 @@ pub use process_supervisor::{
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
 };
+pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};

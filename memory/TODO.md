@@ -2,6 +2,15 @@
 
 ## Current checkpoint
 
+2026-09-13: P06 persistent BYO executable registration is being implemented
+from protected main `4c8dc36` on `codex/p06-persistent-byo`. It stores canonical
+per-user FFmpeg/FFprobe/whisper.cpp paths without executing them; `setup check`
+probes selected paths with per-call precedence. Model persistence, compatibility,
+managed installation, D-01..D-10 and P06 E2E remain open. Local and protected
+validation/merge references will be added when available. Local fmt, strict
+Clippy, workspace tests, warning-denied rustdoc, governance, cargo-deny and
+diff check pass; protected review is pending.
+
 2026-09-13: A read-only Ubuntu x64 P06 candidate review independently verified
 the publisher archive hashes and selected files for the retained month-end
 BtbN FFmpeg build and upstream whisper.cpp v1.9.2 CLI. The whisper archive

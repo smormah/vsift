@@ -24,7 +24,7 @@
           "dependency": { "enum": ["ffmpeg", "ffprobe", "whisper"] },
           "capability": { "enum": ["media_processing", "transcription"] },
           "status": { "enum": ["available", "missing", "unhealthy", "timed_out"] },
-          "lookup": { "enum": ["explicit_path", "filtered_path"] },
+          "lookup": { "enum": ["explicit_path", "configured_user_path", "filtered_path"] },
           "validation": { "enum": ["executable_probe_only", "not_validated"] },
           "remediation": {
             "oneOf": [

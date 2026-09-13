@@ -2,9 +2,44 @@
 
 use assert_cmd::Command;
 use serde_json::Value;
+use std::{
+    fmt::Write as _,
+    path::{Path, PathBuf},
+};
+
+fn isolated_config_base() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let mut random = [0_u8; 16];
+    getrandom::fill(&mut random).map_err(|_| std::io::Error::other("random source failed"))?;
+    let mut suffix = String::with_capacity(32);
+    for byte in random {
+        write!(&mut suffix, "{byte:02x}")?;
+    }
+    Ok(std::env::temp_dir().join(format!("vsift-cli-config-test-{suffix}")))
+}
+
+fn with_config_base<'a>(command: &'a mut Command, base: &Path) -> &'a mut Command {
+    command
+        .env("LOCALAPPDATA", base)
+        .env("XDG_CONFIG_HOME", base)
+        .env("HOME", base)
+}
+
+fn config_root(base: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        base.join("Library/Application Support/vsift")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        base.join("vsift")
+    }
+}
 
 fn run(arguments: &[&str]) -> Result<std::process::Output, Box<dyn std::error::Error>> {
-    Ok(Command::cargo_bin("vsift")?.args(arguments).output()?)
+    let base = isolated_config_base()?;
+    Ok(with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(arguments)
+        .output()?)
 }
 
 fn parse_stdout(output: &std::process::Output) -> Result<Value, Box<dyn std::error::Error>> {
@@ -78,7 +113,8 @@ fn json_parse_failures_have_one_complete_machine_result() -> Result<(), Box<dyn 
 #[test]
 fn setup_check_json_is_structural_and_environment_independent()
 -> Result<(), Box<dyn std::error::Error>> {
-    let output = Command::cargo_bin("vsift")?
+    let base = isolated_config_base()?;
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
         .args(["setup", "check", "--json", "--timeout-seconds", "1"])
         .env("PATH", "")
         .output()?;
@@ -113,7 +149,8 @@ fn setup_check_json_is_structural_and_environment_independent()
 fn off_path_whisper_is_selectable_without_installing_or_disclosing_its_path()
 -> Result<(), Box<dyn std::error::Error>> {
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
-    let output = Command::cargo_bin("vsift")?
+    let base = isolated_config_base()?;
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
         .args([
             "setup",
             "check",
@@ -163,7 +200,8 @@ fn invalid_explicit_selection_does_not_fall_back_to_path() -> Result<(), Box<dyn
 #[test]
 fn headless_setup_check_jsonl_returns_one_bounded_terminal_remediation()
 -> Result<(), Box<dyn std::error::Error>> {
-    let output = Command::cargo_bin("vsift")?
+    let base = isolated_config_base()?;
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
         .args([
             "setup",
             "check",
@@ -193,6 +231,99 @@ fn headless_setup_check_jsonl_returns_one_bounded_terminal_remediation()
         "user"
     );
     assert!(output.stderr.is_empty());
+    Ok(())
+}
+
+#[test]
+fn configured_off_path_selection_persists_and_per_call_path_overrides_it()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "configure", "whisper", "--executable"])
+        .arg(&binary)
+        .arg("--json")
+        .output()?;
+    let configured_value = parse_stdout(&configured)?;
+    assert!(configured.status.success());
+    assert_eq!(configured_value["data"]["source"], "configured_user_path");
+    assert_eq!(
+        configured_value["data"]["validation"],
+        "canonical_file_only"
+    );
+    assert!(
+        !String::from_utf8_lossy(&configured.stdout)
+            .contains(&binary.to_string_lossy().to_string())
+    );
+
+    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "check", "--json"])
+        .env("PATH", "")
+        .output()?;
+    let checked_value = parse_stdout(&checked)?;
+    assert_eq!(
+        checked_value["dependencies"][2]["lookup"],
+        "configured_user_path"
+    );
+    assert_eq!(checked_value["dependencies"][2]["status"], "available");
+
+    let overridden = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "check", "--json", "--whisper", "relative-whisper"])
+        .env("PATH", "")
+        .output()?;
+    let overridden_value = parse_stdout(&overridden)?;
+    assert_eq!(
+        overridden_value["dependencies"][2]["lookup"],
+        "explicit_path"
+    );
+    assert_eq!(overridden_value["dependencies"][2]["status"], "unhealthy");
+    std::fs::remove_dir_all(&base)?;
+    Ok(())
+}
+
+#[test]
+fn invalid_configure_path_has_no_persistent_side_effect() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base = isolated_config_base()?;
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args([
+            "setup",
+            "configure",
+            "ffmpeg",
+            "--executable",
+            "relative",
+            "--json",
+        ])
+        .output()?;
+    let value = parse_stdout(&output)?;
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert!(!base.exists());
+    Ok(())
+}
+
+#[test]
+fn corrupt_user_config_fails_closed_without_an_ambient_probe()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "configure", "whisper", "--executable"])
+        .arg(&binary)
+        .arg("--json")
+        .output()?;
+    assert!(configured.status.success());
+    std::fs::write(
+        config_root(&base).join("dependencies-v1.json"),
+        br#"{"schema_version":1,"unknown":true}"#,
+    )?;
+    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "check", "--json"])
+        .env("PATH", "")
+        .output()?;
+    let value = parse_stdout(&checked)?;
+    assert_eq!(value["error"]["code"], "INTEGRITY_FAILURE");
+    assert!(value["data"].is_null());
+    std::fs::remove_dir_all(&base)?;
     Ok(())
 }
 

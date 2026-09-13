@@ -87,3 +87,14 @@ through the explicit BYO path; a user-supplied URL or checksum cannot authorize
 managed installation. Licence disclosure tells the user what they are choosing;
 it does not claim legal clearance or waive the source/notice review required by
 ADR 0007. Direct-origin downloading does not itself make VSift a binary host.
+
+## 2026-09-13 implementation note: persistent BYO selection
+
+`setup configure` records only canonical absolute paths to user-managed FFmpeg,
+FFprobe and whisper.cpp executables in a versioned, private per-user configuration
+file. Registration does not execute the tool, validate a model, establish provider
+compatibility or authorize managed installation. `setup check` resolves a per-call
+path before the stored selection, then filtered `PATH`, and probes the selected
+file afresh. Invalid/unknown configuration fails closed without silently falling
+back to ambient tools. Model selection and managed-version precedence remain P06
+work.
