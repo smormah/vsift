@@ -102,6 +102,8 @@ eligible packet but remains planned.
   subject to its 14-build retention policy; its successful hosted smoke does
   not make it a durable installer source. Select a retained replacement or
   governed artifact strategy, with legal/source/notice review, before activation.
+  A 2026-08-31 month-end alternative (`b379116`) has a verified archive/inventory candidate
+  and is being hosted-smoked; do not promote it to a trust anchor yet.
 - P06 next increments: validate FFmpeg/FFprobe/whisper.cpp behavior and model
   selection rather than accepting help/version alone; add persistent explicit
   BYO selection through the reserved configure boundary; qualify source catalog,

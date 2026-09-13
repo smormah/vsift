@@ -28,6 +28,11 @@ keeps only the last 14 daily builds, so the selected 2026-09-09 asset is not
 a dependable long-lived installer source. Its expiry/replacement path also
 needs a reviewed decision before catalogue acceptance.
 
+A [2026-08-31 month-end BtbN alternative](p06-windows-artifact-candidate.md#month-end-replacement-under-review)
+has a verified archive and selected-file inventory. The publisher retains
+month-end builds for two years, not indefinitely. Its own hosted compatibility,
+binary notices and maintained replacement policy remain unqualified.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 

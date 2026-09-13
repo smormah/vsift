@@ -21,6 +21,14 @@ planned and P07/P08 remain ineligible. The selected BtbN daily FFmpeg asset
 also has a 14-build retention window; successful download is not a durable
 catalogue source.
 
+2026-09-13: A BtbN 2026-08-31 month-end Windows x64 LGPL archive was
+downloaded for read-only inventory review. Its 147,007,942-byte SHA-256
+`2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56`
+matches the release asset API; selected FFmpeg/FFprobe/licence file hashes
+are recorded in the P06 candidate document. The opt-in runner is being
+repointed to this retained candidate in `b379116`; no binary was executed locally, no
+managed installer is available and P06 remains planned.
+
 2026-09-13: The first P06 implementation increment merged via protected PR #53
 as `0f0156bd62ac6777fcb1f412968df6eda977158e`; all required platform,
 governance, documentation, dependency and security checks passed. A candidate
