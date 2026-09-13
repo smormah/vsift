@@ -8,8 +8,9 @@ typed manual/BYO guidance on unavailable, denied, offline or failed installs.
 The agent may explain but not silently install or elevate. Script-installed
 off-PATH tools are a first-class selection case. PR #49's BYO-only rescope
 closed without merge; the PR #48 source assessment was carried forward and
-closed as superseded by PR #50. Its commits `b1c271d` and `6ab6ef3` await
-protected review. The immutable per-target catalogue gate remains unresolved;
+closed as superseded by PR #50. Its commits `b1c271d` and `6ab6ef3` merged
+through protected checks as `52127e0e68171395fd8ec97f5604edeea5045b65`.
+The immutable per-target catalogue gate remains unresolved;
 issue #9 reflects the corrected journey. P06 remains planned and no new setup
 functionality is implemented.
 
@@ -17,10 +18,8 @@ Protected Ubuntu Quality on docs-only PR #50 failed the existing P05
 `registration_scan_and_abandoned_cleanup_respect_the_live_lock` test: the first
 bucket scan returned `Busy` after registration. Issue #51 tracks reproduction
 and lock-lifetime diagnosis; the test has not been changed. Windows/macOS
-Quality and the other completed PR checks passed at this checkpoint, while
-Rust analysis was pending. Do not interpret an eventual green rerun as root
-cause or merge PR #50 with required checks red.
-
+Quality and the other protected checks passed on the latest commit, including
+Ubuntu. That green run does not establish root cause for the earlier failure.
 
 P06 source review (2026-09-12) found no reviewed immutable per-target provider/model
 catalog. Upstream FFmpeg supplies source only; whisper.cpp v1.9.4 has no release

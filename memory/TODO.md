@@ -9,10 +9,11 @@ installation is unavailable, denied or fails. Script-installed off-PATH tools
 must be selectable. Agents need rich remediation but cannot infer install
 authority from video inspection. The BYO-only proposal PR #49 closed unmerged;
 P06 source-review PR #48 was carried forward and closed as superseded by PR #50.
-The source assessment and clarification commits are `b1c271d` and `6ab6ef3` on
-that review branch. P06 remains planned, with its immutable provider/model
-catalogue still a gate for each managed target. This changes acceptance, not
-runtime behavior; no protected merge or implementation evidence yet.
+The source assessment and clarification commits `b1c271d` and `6ab6ef3`
+merged through protected PR #50 as
+`52127e0e68171395fd8ec97f5604edeea5045b65`. P06 remains planned, with
+its immutable provider/model catalogue still a gate for each managed target.
+This changes acceptance, not runtime behavior.
 
 2026-09-12: P06 source review started from protected main
 `777bc3e56788d43cd9a647dba54c287390c2998d`; P05's evidence follow-up is
@@ -46,18 +47,12 @@ eligible packet but remains planned.
   first bucket scan returned `Busy` after registration. Investigate root-lock
   lifetime versus test timing with repeatable Ubuntu evidence; do not relax
   the scan guarantee or count a green rerun as a root-cause fix.
-- Merge the ADR 0014 progressive-setup clarification through protected checks
-  without claiming P06 completion. Issue #9 now describes detect/install/guide.
-- Resolve PR #48's reviewed per-target FFmpeg/FFprobe, whisper.cpp and model
-  source matrix before managed activation. Qualify at least one complete
-  managed-install target; on every named R0 target, test the typed manual/BYO
-  fallback, permission denial and off-PATH selection. D-01..D-10 and the P06
-  E2E stage remain pending.
-
 - P06 source gate (2026-09-12): select and review immutable per-target
   FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model artifacts before
   managed download/activation. The current source matrix cannot justify a
-  three-target installer. See `docs/planning/p06-provisioning-source-review.md`.
+  three-target installer. Qualify at least one complete managed-install target;
+  test typed manual/BYO fallback, permission denial and off-PATH selection on
+  every named R0 target. See `docs/planning/p06-provisioning-source-review.md`.
   P06 remains planned; D-01..D-10, its E2E stage, ledger completion and issue #9
   closure remain pending.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
@@ -93,6 +88,16 @@ eligible packet but remains planned.
   future issues #25 through #30.
 
 ## Completed
+
+- 2026-09-13: ADR 0014's detect → explicit install → manual guide R0 setup
+  contract and the P06 provider/model source assessment merged through protected
+  PR #50 as `52127e0e68171395fd8ec97f5604edeea5045b65` (branch commits
+  `b1c271d`, `6ab6ef3`). Local fmt, strict Clippy, workspace tests, rustdoc,
+  governance and diff checks passed. Latest protected Quality passed on Windows,
+  macOS and Ubuntu; Governance, Documentation, strict-worker, dependency
+  policy/review, CodeQL and Rust analysis passed. An earlier Ubuntu attempt
+  failed the existing P05 registration scan with `Busy`; issue #51 preserves
+  that unresolved investigation. P06 is not implemented by this record.
 
 - 2026-09-12: P05 implementation commit
   `1238580a6a86a433019fb2ecabfeec3eef56ea43` and fixture correction
