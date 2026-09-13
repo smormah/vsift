@@ -2,6 +2,15 @@
 
 ## Active
 
+2026-09-13: Read-only P06 Ubuntu x64 candidate inventory from direct publisher
+downloads is in `docs/planning/p06-ubuntu-artifact-candidate.md`. The verified
+whisper.cpp archive contains eight symlinks; safe materialization and hosted
+model-backed compatibility remain unproven. No managed catalogue or installer
+has been accepted. P06 remains planned.
+The opt-in hosted Ubuntu candidate runner is prepared with selected-file hashes,
+non-link alias materialization and four passing local archive guardrails; its
+hosted result remains pending.
+
 2026-09-13: P06 direct-origin clarification: managed downloads are intended to
 come from the publisher's HTTPS release origin on the user's machine after
 separate acceptance of a plan selecting reviewed pinned bytes. VSift does not

@@ -1,0 +1,23 @@
+name: P06 Ubuntu candidate smoke
+
+on:
+  workflow_dispatch:
+
+# Candidate bytes run only on a disposable host without repository credentials.
+permissions: {}
+
+jobs:
+  candidate-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out synthetic fixture and qualification script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test candidate archive guardrails
+        run: python -m unittest discover -s tools -p test_p06_ubuntu_candidate_smoke.py
+
+      - name: Run pinned Ubuntu candidate compatibility smoke
+        run: python tools/p06_ubuntu_candidate_smoke.py
