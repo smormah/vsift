@@ -41,6 +41,11 @@ eligible packet but remains planned.
 
 ## Pending
 
+- P05 qualification follow-up #51: Ubuntu Quality on docs-only PR #50 failed
+  `registration_scan_and_abandoned_cleanup_respect_the_live_lock` when its
+  first bucket scan returned `Busy` after registration. Investigate root-lock
+  lifetime versus test timing with repeatable Ubuntu evidence; do not relax
+  the scan guarantee or count a green rerun as a root-cause fix.
 - Merge the ADR 0014 progressive-setup clarification through protected checks
   without claiming P06 completion. Issue #9 now describes detect/install/guide.
 - Resolve PR #48's reviewed per-target FFmpeg/FFprobe, whisper.cpp and model

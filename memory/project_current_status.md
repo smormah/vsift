@@ -13,6 +13,14 @@ protected review. The immutable per-target catalogue gate remains unresolved;
 issue #9 reflects the corrected journey. P06 remains planned and no new setup
 functionality is implemented.
 
+Protected Ubuntu Quality on docs-only PR #50 failed the existing P05
+`registration_scan_and_abandoned_cleanup_respect_the_live_lock` test: the first
+bucket scan returned `Busy` after registration. Issue #51 tracks reproduction
+and lock-lifetime diagnosis; the test has not been changed. Windows/macOS
+Quality and the other completed PR checks passed at this checkpoint, while
+Rust analysis was pending. Do not interpret an eventual green rerun as root
+cause or merge PR #50 with required checks red.
+
 
 P06 source review (2026-09-12) found no reviewed immutable per-target provider/model
 catalog. Upstream FFmpeg supplies source only; whisper.cpp v1.9.4 has no release
