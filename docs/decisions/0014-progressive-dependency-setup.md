@@ -68,3 +68,22 @@ profiles, regardless of how their user prepared the dependencies.
   effects. The A-01/A-08/A-09 agent tests must exercise the same authority boundary.
 - P06 remains planned until the source catalogue, implementation, regression tests
   and protected checks pass. This ADR records product behavior, not completion.
+
+## 2026-09-13 clarification: direct-origin managed downloads
+
+The managed path selects a reviewed, compatible artifact version and downloads it
+on the user's machine from the publisher's HTTPS release origin. VSift does not
+host, mirror or proxy provider binaries. A redirect needed by the publisher's
+release service is part of the reviewed origin policy, not permission to follow
+arbitrary hosts. The plan shows the exact version, origin, digest, compressed and
+installed sizes, licence, notices/source location, destination and expiry or
+replacement policy before separate user acceptance.
+
+"Latest" and "last stable" are discovery candidates, not installation trust
+anchors. A newly published version cannot enter a plan until its exact bytes,
+licence/notices, inventory and compatibility have been reviewed and pinned in a
+new catalogue revision. The user may instead select an existing local executable
+through the explicit BYO path; a user-supplied URL or checksum cannot authorize
+managed installation. Licence disclosure tells the user what they are choosing;
+it does not claim legal clearance or waive the source/notice review required by
+ADR 0007. Direct-origin downloading does not itself make VSift a binary host.

@@ -71,3 +71,21 @@ provider installation followed by `setup check`, with an absolute `--ffmpeg`,
 `--ffprobe` or `--whisper` selection when the tool is off-PATH. The diagnostic
 reports lookup route and its unverified scope, not managed identity,
 compatibility or a fresh-machine install claim. P06 remains incomplete.
+
+## 2026-09-13 direct-origin clarification
+
+The accepted setup design downloads a pinned, qualified artifact directly from
+its publisher to the user's machine after separate plan acceptance. VSift does
+not mirror or proxy the provider binary. The reviewed catalogue, rather than a
+live "latest" response or user-entered URL/checksum, selects the bytes. Upgrades
+require a new review and pin; the month-end BtbN candidate's two-year retention
+requires an expiry and replacement policy. Plans disclose the component licence,
+notices/source location and trust limits so the user can make an informed choice.
+
+This narrows the distribution posture but does not remove the binary-specific
+licence/notice review in item 3 above. FFmpeg's published checklist primarily
+addresses linking and distributing FFmpeg libraries; VSift invokes a separate
+executable and does not bundle it with its own release. The applicable notices
+for the exact selected build still need to be recorded without asserting that
+direct download constitutes legal clearance. Windows Server tone-audio smoke
+still does not qualify Windows 11 or real-speech behavior.

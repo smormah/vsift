@@ -2,6 +2,13 @@
 
 ## Active
 
+2026-09-13: P06 direct-origin clarification: managed downloads are intended to
+come from the publisher's HTTPS release origin on the user's machine after
+separate acceptance of a plan selecting reviewed pinned bytes. VSift does not
+mirror or proxy provider binaries. Upgrades require a new catalogue review.
+The exact build's notices/source, expiry, compatibility and installer evidence
+are still pending; P06 remains planned and P07/P08 remain ineligible.
+
 2026-09-13: The P05 issue #51 lock-lifetime fix merged through protected PR #58
 as `9f86ff1`; supported OS, governance, dependency and security checks passed.
 The [100-run Ubuntu stress](https://github.com/smormah/vsift/actions/runs/34756593985)
