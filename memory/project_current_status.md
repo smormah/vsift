@@ -18,7 +18,7 @@ downloaded for read-only inventory review. Its 147,007,942-byte SHA-256
 `2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56`
 matches the release asset API; selected FFmpeg/FFprobe/licence file hashes
 are recorded in the P06 candidate document. The opt-in runner is being
-repointed to this retained candidate; no binary was executed locally, no
+repointed to this retained candidate in `b379116`; no binary was executed locally, no
 managed installer is available and P06 remains planned.
 
 2026-09-13: The first P06 implementation increment merged via protected PR #53
