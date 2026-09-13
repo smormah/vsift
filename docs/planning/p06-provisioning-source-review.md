@@ -18,8 +18,11 @@ commands explicitly return `COMMAND_NOT_IMPLEMENTED`.
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
 model LFS pointer. It is not an accepted catalogue: binary-specific licence
-notices, controlled compatibility smoke tests, installer hardening and the other
-named targets' fallback behavior remain open.
+notices, real-speech/resource/desktop qualification, installer hardening and
+the other named targets' fallback behavior remain open. Its opt-in Windows
+Server 2025 tone-audio compatibility smoke passed in
+[run 34737109736](https://github.com/smormah/vsift/actions/runs/34737109736);
+that run did not establish transcript accuracy or Windows 11 support.
 
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:

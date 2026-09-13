@@ -2,14 +2,13 @@
 
 ## Active
 
-2026-09-13: An opt-in Windows candidate-smoke workflow and bounded Python
-qualification harness are in progress. The harness downloads only the exact
-reviewed archive/model bytes, validates selected ZIP entries and hashes, then
-tests FFmpeg/FFprobe operations and whisper.cpp model loading against synthetic
-F01 tone audio on a disposable runner. Negative archive tests pass locally;
-hosted execution is pending (implementation commit `a0fe266`). The harness is
-not called by the CLI and does not
-close transcript accuracy, legal/notice, installer or P06 E2E gates. P06 stays
+2026-09-13: The opt-in Windows candidate-smoke harness (`a0fe266`) merged
+through protected PR #55 as `1c805c11519ec43ad91cc6beb18d8d39c40ee495`.
+Hosted run 34737109736 passed exact archive/model hashes, selected ZIP file
+integrity, FFmpeg/FFprobe F01 operations and whisper.cpp model-backed inference
+on Windows Server 2025 x64. The harness is not called by the CLI and F01 is
+tone-only. Real-speech accuracy, Windows 11, resource/containment,
+legal/notice, managed installer and P06 E2E gates remain open. P06 stays
 planned and P07/P08 remain ineligible.
 
 2026-09-13: The first P06 implementation increment merged via protected PR #53
