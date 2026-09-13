@@ -10,6 +10,10 @@ has been accepted. P06 remains planned.
 The opt-in hosted Ubuntu candidate runner is prepared with selected-file hashes,
 non-link alias materialization and four passing local archive guardrails; its
 hosted result remains pending.
+The [hosted run 34782768288](https://github.com/smormah/vsift/actions/runs/34782768288)
+subsequently passed on Ubuntu 24.04.5 x64 after protected PR #61 merged as
+`a9ecd1b`. This is bounded tone-audio candidate evidence, not an accepted
+catalogue, speech-accuracy finding or P06 E2E completion.
 
 2026-09-13: P06 direct-origin clarification: managed downloads are intended to
 come from the publisher's HTTPS release origin on the user's machine after

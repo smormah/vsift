@@ -64,6 +64,25 @@ permissions or persisted checkout credentials. The script repeats the independen
 recorded archive/model hashes, checks archive budgets and paths, extracts only the
 selected regular files, materializes reviewed SONAME aliases as regular copies,
 and runs FFprobe, FFmpeg and whisper.cpp against owned F01 tone media. Four local
-archive guardrail tests and read-only selected-file extraction passed. The hosted
-run has not yet passed; the script is not the production installer and does not
-prove real-speech accuracy or resource suitability.
+archive guardrail tests and read-only selected-file extraction passed. The script
+is not the production installer and does not prove real-speech accuracy or
+resource suitability.
+
+Protected [PR #61](https://github.com/smormah/vsift/pull/61) merged this
+candidate runner as `a9ecd1b` after Ubuntu, Windows and macOS Quality,
+Governance, Documentation, strict-worker, dependency policy/review and
+CodeQL/Rust checks passed. The opt-in [hosted run 34782768288](https://github.com/smormah/vsift/actions/runs/34782768288)
+passed on Ubuntu 24.04.5 x64, glibc 2.39, kernel
+`6.17.0-1022-azure`, runner image `20260907.300.1`. It verified both archive
+hashes and downloaded model hash, selected-file hashes, non-link alias layout,
+FFprobe F01 inspection, FFmpeg 16 kHz mono audio extraction and whisper.cpp
+model-backed inference. Four archive guardrail tests passed in the same job.
+The FFmpeg and FFprobe executables reported
+`n9.0.1-11-ge47273f4d9-20260831`.
+
+This is candidate compatibility evidence only. F01 audio is a tone, so the run
+cannot measure speech accuracy. It did not measure peak resources, run the Rust
+installer, qualify arbitrary Ubuntu desktop configurations, resolve binary
+notices or close D-01..D-10 and the P06 E2E stage. The link-copy layout needs a
+full required-library inventory and production extraction tests before it can
+become an accepted catalogue entry.

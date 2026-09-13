@@ -38,8 +38,14 @@ binary notices and maintained replacement policy remain unqualified.
 An [Ubuntu x64 candidate inventory](p06-ubuntu-artifact-candidate.md) now records
 the month-end BtbN LGPL archive and upstream whisper.cpp v1.9.2 Ubuntu CLI
 archive hashes and selected-file inventory. Its whisper archive contains eight
-symlinks, so safe non-link extraction and compatibility on a hosted Ubuntu 24.04
-runner remain open. It is not an accepted catalogue or installer evidence.
+symlinks, so safe non-link extraction requires explicit review. It is not an
+accepted catalogue or installer evidence.
+
+The candidate's [hosted Ubuntu run 34782768288](https://github.com/smormah/vsift/actions/runs/34782768288)
+subsequently passed pinned hashes, non-link selected-file layout, F01 media
+operations and model-backed tone-audio inference. Resource, speech accuracy,
+notices, production installer and D/E2E gates remain open. This does not promote
+the Python qualification harness into the Rust installer.
 
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
