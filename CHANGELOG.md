@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Registration explicitly releases its short-lived root initialization lock
+  before returning the long-lived marker hold, preventing a duplicated file
+  descriptor from prolonging root contention during an immediate bucket scan.
+
 ### Added
 
 - P05 foreground disposable `ingest`, session list/status/renew/close/clean,

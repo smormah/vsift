@@ -1,0 +1,28 @@
+name: P05 registration lock stress
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repeat-ubuntu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build lifecycle test once
+        run: cargo test --locked -p vsift-infrastructure --test p05_lifecycle --no-run
+
+      - name: Repeat immediate root-lock release and live-marker scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          for run in $(seq 1 100); do
+            cargo test --locked --quiet -p vsift-infrastructure --test p05_lifecycle \
+              -- --exact registration_scan_and_abandoned_cleanup_respect_the_live_lock
+          done
+          echo "100 immediate registration/scan/cleanup runs passed"

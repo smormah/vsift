@@ -2,6 +2,14 @@
 
 ## Active
 
+2026-09-13: P06 PR #57 is blocked by the pre-existing Ubuntu P05 issue #51:
+CI run 34737696705 reproduced `scan 0: Busy` after registration. A separate
+P05 follow-up (`3968866`) explicitly unlocks the short-lived root initialization file
+before returning the held registration marker. Local targeted and full tests
+pass, but protected checks and opt-in 100-run Ubuntu stress are pending. The
+trace identifies root-lock contention; it does not prove the exact holder.
+Do not merge PR #57 or start P07/P08 around this failure.
+
 2026-09-13: The opt-in Windows candidate-smoke harness (`a0fe266`) merged
 through protected PR #55 as `1c805c11519ec43ad91cc6beb18d8d39c40ee495`.
 Hosted run 34737109736 passed exact archive/model hashes, selected ZIP file
