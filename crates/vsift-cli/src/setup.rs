@@ -4,12 +4,13 @@ use std::io::Write;
 
 use vsift_application::{DependencyProbe, DiagnoseRuntime, RuntimeDiagnosis};
 use vsift_domain::{DependencyState, RuntimeReadiness};
+use vsift_infrastructure::ExplicitProbePaths;
 
 use crate::{
     command::ExecutionProfile,
     output::{
         OperationResponse, OutputMode, OutputWriter, ProcessExit, SetupCheckResponse,
-        TerminalEventResponse, sanitize_untrusted_text, setup_exit,
+        TerminalEventResponse, explicit_path_option, sanitize_untrusted_text, setup_exit,
     },
 };
 
@@ -18,6 +19,7 @@ pub(crate) async fn run_setup_check<P, StandardOutput, StandardError>(
     probe: P,
     profile: ExecutionProfile,
     mode: OutputMode,
+    selections: &ExplicitProbePaths,
     writer: &mut OutputWriter<StandardOutput, StandardError>,
 ) -> ProcessExit
 where
@@ -26,9 +28,11 @@ where
     StandardError: Write,
 {
     let diagnosis = DiagnoseRuntime::new(probe).execute().await;
-    let response = SetupCheckResponse::new(&diagnosis, profile);
+    let response = SetupCheckResponse::new(&diagnosis, profile, selections);
     let output_result = match mode {
-        OutputMode::Human => writer.write_trusted_stdout(&human_result(&diagnosis, profile)),
+        OutputMode::Human => {
+            writer.write_trusted_stdout(&human_result(&diagnosis, profile, selections))
+        }
         OutputMode::Json => writer.write_json(&response),
         OutputMode::JsonLines => OperationResponse::complete("setup.check", &response)
             .map(TerminalEventResponse::new)
@@ -44,14 +48,21 @@ where
     setup_exit(diagnosis.readiness)
 }
 
-fn human_result(diagnosis: &RuntimeDiagnosis, profile: ExecutionProfile) -> String {
+fn human_result(
+    diagnosis: &RuntimeDiagnosis,
+    profile: ExecutionProfile,
+    selections: &ExplicitProbePaths,
+) -> String {
     let mut result = format!(
         "VSift setup check\nProfile: {}\nStatus: {}\n",
         profile.identifier(),
         diagnosis.readiness.identifier()
     );
     for status in &diagnosis.dependencies {
-        let (marker, detail) = human_state(&status.state);
+        let (marker, detail) = human_state(
+            &status.state,
+            selections.for_dependency(status.dependency).is_some(),
+        );
         result.push('[');
         result.push_str(marker);
         result.push_str("] ");
@@ -61,19 +72,30 @@ fn human_result(diagnosis: &RuntimeDiagnosis, profile: ExecutionProfile) -> Stri
         result.push_str("): ");
         result.push_str(&detail);
         result.push('\n');
+        if !status.state.is_available() {
+            result.push_str("  Install or locate this trusted tool, then rerun setup check with its absolute path using ");
+            result.push_str(explicit_path_option(status.dependency));
+            result.push_str(". Managed installation is not yet qualified for this target.\n");
+        }
     }
     if diagnosis.readiness == RuntimeReadiness::Blocked {
-        result.push_str(
-            "Installation assistance is not available yet; install the missing media dependencies and run this check again.\n",
-        );
+        result.push_str("Media executable probes are blocked until FFmpeg and FFprobe respond.\n");
     }
+    result.push_str("This check only probes executable responses; it does not validate provider compatibility or a local ASR model. A supplied transcript can avoid local ASR.\n");
     result
 }
 
-fn human_state(state: &DependencyState) -> (&'static str, String) {
+fn human_state(state: &DependencyState, explicit: bool) -> (&'static str, String) {
     match state {
         DependencyState::Available { version } => ("ok", sanitize_untrusted_text(version, 240)),
-        DependencyState::Missing => ("missing", String::from("not found on PATH")),
+        DependencyState::Missing => (
+            "missing",
+            String::from(if explicit {
+                "explicit path not found"
+            } else {
+                "not found on PATH"
+            }),
+        ),
         DependencyState::Unhealthy { .. } => ("unhealthy", String::from("dependency probe failed")),
         DependencyState::TimedOut => ("timeout", String::from("probe exceeded its deadline")),
     }
@@ -85,6 +107,7 @@ mod tests {
 
     use vsift_application::DependencyProbe;
     use vsift_domain::{DependencyState, DependencyStatus, RuntimeDependency};
+    use vsift_infrastructure::ExplicitProbePaths;
 
     use super::run_setup_check;
     use crate::{
@@ -151,6 +174,7 @@ mod tests {
                 FixedProbe { state },
                 ExecutionProfile::Desktop,
                 OutputMode::Json,
+                &ExplicitProbePaths::default(),
                 &mut writer,
             )
             .await;
@@ -169,6 +193,7 @@ mod tests {
             },
             ExecutionProfile::Desktop,
             OutputMode::Json,
+            &ExplicitProbePaths::default(),
             &mut writer,
         )
         .await;
@@ -193,6 +218,7 @@ mod tests {
             },
             ExecutionProfile::Desktop,
             OutputMode::Human,
+            &ExplicitProbePaths::default(),
             &mut writer,
         )
         .await;

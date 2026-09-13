@@ -10,7 +10,9 @@ ADR 0007 requires an immutable, reviewed trust anchor before a plan may authoriz
 download or activation. The repository has no selected artifact catalog for
 FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model: no exact per-target
 URLs, archived digests, publisher identity, expected file inventory, binary licences,
-or compatibility baseline. `setup check` still observes PATH only. The other setup
+or compatibility baseline. The first P06 increment supports per-call absolute
+executable selection alongside filtered `PATH` and typed manual guidance, but
+reports `executable_probe_only` and does not check the model. The other setup
 commands explicitly return `COMMAND_NOT_IMPLEMENTED`.
 
 The missing catalog is material because the listed sources do not form one
@@ -43,8 +45,9 @@ interchangeable upstream binary channel:
    before those tests and protected checks pass.
 
 ADR 0014 now makes manual/BYO guidance an R0 fallback whenever a qualified
-managed install is unavailable or fails. This does not turn the current PATH
-probe into a completed setup journey. The safe interim user path remains an
-explicit local provider installation followed by `setup check`, with PATH
-provenance disclosed as unverified. This is existing P02 behavior, not P06
-completion or a fresh-machine managed-install claim.
+managed install is unavailable or fails. The read-only executable probe is not
+a completed setup journey. The safe interim path remains an explicit local
+provider installation followed by `setup check`, with an absolute `--ffmpeg`,
+`--ffprobe` or `--whisper` selection when the tool is off-PATH. The diagnostic
+reports lookup route and its unverified scope, not managed identity,
+compatibility or a fresh-machine install claim. P06 remains incomplete.

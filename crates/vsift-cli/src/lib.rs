@@ -16,7 +16,7 @@ use command::{BundleCommand, Cli, Command, EventFormat, SetupCommand};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{OperationResponse, OutputMode, OutputWriter, ProcessExit, TerminalEventResponse};
 use vsift_domain::FailureCode;
-use vsift_infrastructure::ProcessDependencyProbe;
+use vsift_infrastructure::{ExplicitProbePaths, ProcessDependencyProbe};
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
 pub async fn run() -> ExitCode {
@@ -106,8 +106,16 @@ where
                         );
                     }
                 };
-                let probe = ProcessDependencyProbe::new(config.probe_timeout);
-                setup::run_setup_check(probe, config.profile, mode, &mut writer).await
+                let selections = ExplicitProbePaths {
+                    ffmpeg: arguments.ffmpeg,
+                    ffprobe: arguments.ffprobe,
+                    whisper: arguments.whisper,
+                };
+                let probe = ProcessDependencyProbe::with_explicit_paths(
+                    config.probe_timeout,
+                    selections.clone(),
+                );
+                setup::run_setup_check(probe, config.profile, mode, &selections, &mut writer).await
             }
             None => write_setup_help(&mut writer),
             Some(unimplemented) => {

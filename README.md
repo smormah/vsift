@@ -41,6 +41,7 @@ source-bound session:
 vsift setup check
 vsift setup check --json
 vsift setup check --events jsonl
+vsift setup check --whisper "C:\\path\\to\\whisper-cli.exe" --json
 vsift ingest ./recording.mp4 --json
 vsift session list --json
 vsift session clean --expired --dry-run --json
@@ -58,8 +59,12 @@ verified install where that component/target is qualified. If installation canno
 be done safely or lacks permission, VSift must explain the manual install or
 explicit-path alternative. No dependency download is triggered by `npm install`,
 ordinary video inspection or an AI assistant acting without separate authority.
-Today, only the basic read-only `setup check` probe is implemented; plans,
-installation, compatibility checks and manual remediation remain P06 work.
+Today, `setup check` can select existing executables by absolute path and returns
+typed manual guidance for missing or unhealthy tools. Its `ready` status means
+the executable probes passed; it does not yet verify compatibility or model
+weights. The flags are per-invocation, not saved configuration. Managed plans and
+installation remain gated by reviewed, pinned artifacts; no target is qualified
+yet. A supplied transcript avoids the local Whisper/model requirement.
 
 ## Architecture
 

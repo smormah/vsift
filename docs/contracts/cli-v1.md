@@ -68,8 +68,10 @@ qualified publication guarantee; see [ADR 0013](../decisions/0013-retained-bundl
 
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
-five-second per-dependency deadline; `--profile worker` and
-`--timeout-seconds 1..60` are explicit overrides.
+five-second total operation deadline; `--profile worker` and
+`--timeout-seconds 1..60` are explicit overrides. `--ffmpeg`, `--ffprobe` and
+`--whisper` select existing absolute executables for this check only. An invalid
+explicit selection does not fall back to `PATH` or persist configuration.
 
 P06 will distinguish an already suitable provider, an installable missing provider,
 and one requiring user-managed installation or explicit configuration. `setup plan`
@@ -77,12 +79,16 @@ is read-only; `setup install` requires acceptance of its unchanged plan. On miss
 rights, offline/unqualified target or failed installation, headless calls return
 typed bounded manual remediation and never prompt, elevate or silently retry with
 broader authority. An agent's request to inspect a video does not authorize setup.
-The current `setup check` only probes `PATH`/help or version output; it does not
-yet implement P06 compatibility, model or remediation guarantees.
-P06 must publish typed plan/remediation fields or versioned response contracts;
-it must not overload the 240-byte provider `detail` string with instructions.
-Schema fixtures and old-reader compatibility tests are required for any additive
-setup-check response fields.
+The first P06 increment checks explicit paths or filtered `PATH` and provides
+typed manual/BYO remediation for missing, unhealthy and timed-out tools. No
+managed target is qualified yet, so `managed_install` reports
+`unavailable_unqualified`; it is never an offer to download. The legacy aggregate
+`status` reflects only executable probe results. `verification_scope` is
+`executable_probe_only`, and `local_asr_model` is `not_checked`: a successful
+`--version`/`--help` response does **not** prove provider compatibility or a
+working transcription model. Those checks, persistent selection and verified
+managed installation remain P06 work. Provider `detail` is not an instruction
+channel. Paths are not echoed in the response.
 
 ## Output protocol
 
@@ -102,8 +108,10 @@ ANSI, OSC, newlines, and other control characters from untrusted providers are
 replaced in human diagnostics. A closed stdout is an I/O failure with exit 7; a
 closed stderr cannot make an otherwise complete result fail.
 
-The setup-check response preserves the existing v1 shape and adds the resolved
-`profile`:
+The setup-check response preserves its existing v1 fields and adds lookup,
+verification and typed remediation metadata. The complete frozen example is
+[`setup-check.blocked.json`](../../schemas/v1/examples/setup-check.blocked.json);
+an abbreviated response is:
 
 ```json
 {
@@ -111,10 +119,10 @@ The setup-check response preserves the existing v1 shape and adds the resolved
   "command": "setup.check",
   "profile": "desktop",
   "status": "blocked",
+  "verification_scope": "executable_probe_only",
+  "local_asr_model": "not_checked",
   "dependencies": [
-    {"dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null},
-    {"dependency": "ffprobe", "capability": "media_processing", "status": "missing", "detail": null},
-    {"dependency": "whisper", "capability": "transcription", "status": "missing", "detail": null}
+    {"dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": {"reason": "missing", "managed_install": "unavailable_unqualified", "required_authority": "user", "next_step": "Install or locate a trusted FFmpeg executable, then rerun setup check.", "explicit_path_option": "--ffmpeg"}}
   ]
 }
 ```

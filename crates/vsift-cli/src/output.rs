@@ -6,8 +6,9 @@ use serde::Serialize;
 use vsift_application::RuntimeDiagnosis;
 use vsift_domain::{
     Confidence, ConfidenceOrigin, DependencyState, DependencyStatus, FailureClass, FailureCode,
-    FrameTiming, OperationStatus, RuntimeReadiness,
+    FrameTiming, OperationStatus, RuntimeDependency, RuntimeReadiness,
 };
+use vsift_infrastructure::ExplicitProbePaths;
 
 use crate::command::ExecutionProfile;
 
@@ -283,22 +284,30 @@ pub(crate) struct SetupCheckResponse {
     command: &'static str,
     profile: &'static str,
     status: &'static str,
+    verification_scope: &'static str,
+    local_asr_model: &'static str,
     dependencies: Vec<SetupCheckDependencyResponse>,
 }
 
 impl SetupCheckResponse {
     /// Creates the compatible setup response for the explicitly resolved profile.
     #[must_use]
-    pub(crate) fn new(diagnosis: &RuntimeDiagnosis, profile: ExecutionProfile) -> Self {
+    pub(crate) fn new(
+        diagnosis: &RuntimeDiagnosis,
+        profile: ExecutionProfile,
+        selections: &ExplicitProbePaths,
+    ) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
             command: "setup.check",
             profile: profile.identifier(),
             status: diagnosis.readiness.identifier(),
+            verification_scope: "executable_probe_only",
+            local_asr_model: "not_checked",
             dependencies: diagnosis
                 .dependencies
                 .iter()
-                .map(SetupCheckDependencyResponse::from)
+                .map(|status| SetupCheckDependencyResponse::new(status, selections))
                 .collect(),
         }
     }
@@ -310,10 +319,22 @@ struct SetupCheckDependencyResponse {
     capability: &'static str,
     status: &'static str,
     detail: Option<String>,
+    lookup: &'static str,
+    validation: &'static str,
+    remediation: Option<SetupRemediationResponse>,
 }
 
-impl From<&DependencyStatus> for SetupCheckDependencyResponse {
-    fn from(status: &DependencyStatus) -> Self {
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct SetupRemediationResponse {
+    reason: &'static str,
+    managed_install: &'static str,
+    required_authority: &'static str,
+    next_step: &'static str,
+    explicit_path_option: &'static str,
+}
+
+impl SetupCheckDependencyResponse {
+    fn new(status: &DependencyStatus, selections: &ExplicitProbePaths) -> Self {
         let detail = match &status.state {
             DependencyState::Available { version } => {
                 Some(sanitize_untrusted_text(version, MAX_PROVIDER_DETAIL_BYTES))
@@ -326,7 +347,46 @@ impl From<&DependencyStatus> for SetupCheckDependencyResponse {
             capability: status.dependency.capability().identifier(),
             status: status.state.identifier(),
             detail,
+            lookup: if selections.for_dependency(status.dependency).is_some() {
+                "explicit_path"
+            } else {
+                "filtered_path"
+            },
+            validation: if status.state.is_available() {
+                "executable_probe_only"
+            } else {
+                "not_validated"
+            },
+            remediation: (!status.state.is_available()).then_some(SetupRemediationResponse {
+                reason: status.state.identifier(),
+                managed_install: "unavailable_unqualified",
+                required_authority: "user",
+                next_step: manual_dependency_step(status.dependency),
+                explicit_path_option: explicit_path_option(status.dependency),
+            }),
         }
+    }
+}
+
+const fn manual_dependency_step(dependency: RuntimeDependency) -> &'static str {
+    match dependency {
+        RuntimeDependency::Ffmpeg => {
+            "Install or locate a trusted FFmpeg executable, then rerun setup check."
+        }
+        RuntimeDependency::Ffprobe => {
+            "Install or locate a trusted FFprobe executable, then rerun setup check."
+        }
+        RuntimeDependency::Whisper => {
+            "Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR."
+        }
+    }
+}
+
+pub(crate) const fn explicit_path_option(dependency: RuntimeDependency) -> &'static str {
+    match dependency {
+        RuntimeDependency::Ffmpeg => "--ffmpeg",
+        RuntimeDependency::Ffprobe => "--ffprobe",
+        RuntimeDependency::Whisper => "--whisper",
     }
 }
 

@@ -129,3 +129,29 @@ fn old_setup_reader_accepts_additive_v1_fields() -> Result<(), Box<dyn std::erro
     assert_eq!(old.dependencies.len(), 3);
     Ok(())
 }
+
+#[test]
+fn additive_setup_fields_do_not_invalidate_the_original_v1_payload()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut old = load("examples/setup-check.blocked.json")?;
+    let object = old
+        .as_object_mut()
+        .ok_or_else(|| io::Error::other("setup example is not an object"))?;
+    object.remove("verification_scope");
+    object.remove("local_asr_model");
+    let dependencies = object
+        .get_mut("dependencies")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| io::Error::other("dependencies are missing"))?;
+    for dependency in dependencies {
+        let item = dependency
+            .as_object_mut()
+            .ok_or_else(|| io::Error::other("dependency is not an object"))?;
+        item.remove("lookup");
+        item.remove("validation");
+        item.remove("remediation");
+    }
+
+    validate(&load("setup-check-response.schema.json")?, &old)?;
+    Ok(())
+}

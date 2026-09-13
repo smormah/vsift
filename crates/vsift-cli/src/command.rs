@@ -138,6 +138,18 @@ pub(crate) struct SetupCheckArguments {
     /// Capability profile to diagnose.
     #[arg(long, value_enum)]
     pub profile: Option<ExecutionProfile>,
+
+    /// Use this absolute `FFmpeg` executable path instead of searching `PATH`.
+    #[arg(long)]
+    pub ffmpeg: Option<PathBuf>,
+
+    /// Use this absolute `FFprobe` executable path instead of searching `PATH`.
+    #[arg(long)]
+    pub ffprobe: Option<PathBuf>,
+
+    /// Use this absolute whisper.cpp CLI path instead of searching `PATH`.
+    #[arg(long)]
+    pub whisper: Option<PathBuf>,
 }
 
 /// Setup plan selection.

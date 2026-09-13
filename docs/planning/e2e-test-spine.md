@@ -68,7 +68,9 @@ It uses project-owned F01 media, real FFprobe/FFmpeg operations, committed
 frame/audio artifacts, evidence-only and source-inclusive retained bundles,
 explicit close/cleanup and source-preservation checks. It records a bounded
 JSON report under `.vsift/e2e-runs/<run-id>/report.json` and leaves P06-P14
-and the complete journey `not_implemented`. The P04 checkpoint still covers
+and the complete journey `not_implemented`. P06's read-only detection/guidance
+increment has contract tests, but has not yet added its managed-install E2E stage;
+the checkpoint's P06 label remains `not_implemented`. The P04 checkpoint still covers
 seven source/media scenarios. See the [P04](p04-media-qualification.md) and
 [P05](p05-session-qualification.md) qualification records. The following rules apply:
 

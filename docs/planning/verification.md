@@ -67,7 +67,7 @@ Use bounded generators and preserve every failing seed as a regression fixture.
 | P-06 | Child -> grandchild tree, parent killed abruptly | Supported containment removes descendants; limitations reported for unsupported profiles |
 | P-07 | Process spawn/assignment failure, nested Windows job, already-dead child | No unmanaged process leak; failure cleanup tested at each acquisition point |
 | P-08 | Linux process group escape in strict container test, CPU/memory/PID pressure | Kernel policy contains workload; plain process group is not accepted as strict isolation |
-| D-01 | Fully/partly preinstalled dependencies, explicit off-PATH/PATH/managed resolution, missing model, incompatible version, supplied transcript | Capability-specific readiness, precedence and provenance; no unneeded ASR requirement or download |
+| D-01 | Fully/partly preinstalled dependencies, explicit off-PATH/PATH/managed resolution, missing model, incompatible version, supplied transcript | Capability-specific readiness, precedence and provenance; no unneeded ASR requirement or download. Current P06 increment covers per-call explicit/off-PATH versus filtered PATH probing only; model, compatibility and managed precedence remain unproven. |
 | D-02 | Valid/invalid checksum, signature, manifest version, stale authorization digest | Untrusted artifact never activated; reviewed trust anchor used |
 | D-03 | Network drop, wrong range, changed ETag, resume from altered bytes, disk full | Resume safely or restart; complete hash required; previous version remains usable |
 | D-04 | Archive traversal, absolute/drive/UNC paths, links, devices, duplicate names, decompression bomb | Entire extraction stays within staging limits; malicious archive rejected |
@@ -75,8 +75,8 @@ Use bounded generators and preserve every failing seed as a regression fixture.
 | D-06 | Missing expected executable, wrong architecture, extra binaries, smoke test failure | No activation; staging removed safely or quarantined |
 | D-07 | TLS failure, proxy auth, credential-bearing redirects, host switch, offline imports and target lacking a reviewed artifact | Policy rejection and safe redaction; offline artifact validated identically; unavailable managed path gives typed manual/BYO guidance |
 | D-08 | Uninstall active/unused/externally managed component | Active removal blocked/deferred; BYO files never deleted |
-| D-09 | No administrator privileges, denied permission, missing PATH, script-installed off-PATH binary, read-only system install | Per-user operation or typed manual/configuration remediation; no automatic elevation or unsafe permission retry |
-| D-10 | Headless agent, no terminal, missing plan acceptance, bare setup, plan state changed | No prompt hang, media-derived authority or unapproved install; machine-readable failure explains next user action |
+| D-09 | No administrator privileges, denied permission, missing PATH, script-installed off-PATH binary, read-only system install | Per-user operation or typed manual/configuration remediation; no automatic elevation or unsafe permission retry. Current P06 increment covers missing PATH and off-PATH selection only. |
+| D-10 | Headless agent, no terminal, missing plan acceptance, bare setup, plan state changed | No prompt hang, media-derived authority or unapproved install; machine-readable failure explains next user action. Current P06 increment covers read-only JSON/JSONL remediation only. |
 
 Mock network transport tests are accompanied by a local test-server integration suite
 for real HTTP/TLS behavior. Production certificate validation is never disabled to
