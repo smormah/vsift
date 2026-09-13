@@ -78,7 +78,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P03 — Storage and coordination | Domain source/job/session IDs; application storage ports; safe filesystem adapter, stable OS locks, admission slots, generation commit and read holds; durable mode fails closed | P01/P02 | S-01..03/S-07/S-08/S-12, X-01..05; ADR 0010 ephemeral desktop profile passes; no strict durable claim or unsafe shortcut |
 | P04 — Source and media primitives | Source binding/staging; FFprobe parsing; source timeline; FFmpeg audio/frame operations; provider conformance registry | P02/P03 | M-01..06, V-01; bounded operations with source identity, actual times and allowed protocol policy |
 | P05 — Session lifecycle | Open/status/renew/close/clean, expiry, source-inclusive/evidence-only retain, bundle validation, private permissions | P03/P04 | S-04..11; no source deletion, active-session GC race, explicit persistence and restart semantics |
-| P06 — Dependency setup | Setup check/plan/install/repair/configure/list/remove/rollback; pinned provider/model manifests; download transport/stager/activation | P02/P03/P04 | D-01..10; fresh-machine and offline BYO flows; no automatic install or elevation; B-04 closed |
+| P06 — Dependency setup | Detect suitable existing tools; explicit plan/install of qualified missing components; off-PATH BYO selection; typed manual guidance for unavailable/failed installs; pinned provider/model manifests and bounded staging/activation | P02/P03/P04 | D-01..10; fresh/partial/off-PATH and denied/offline flows; at least one qualified managed-install target, guidance on every named target; no automatic install or elevation; B-04 closed |
 | P07 — Transcription | SRT/VTT import and alignment, PCM chunks, whisper.cpp adapter, transcript revisions, bounded records | P04/P05/P06 | T-01..06; measured default model profile; imports avoid unnecessary ASR; chunk seams verified |
 | P08 — Candidate/search index | Streaming visual signal extraction, periodic coverage, dedupe with time preservation, local transcript search, cursor paging | P04/P05/P07 | V-02..05, C-03, S-11; fixture recall report and honest gap metadata |
 | P09 — Evidence navigation | Exact frames, neighbours, bursts, source audio ranges, native crops, artifact reuse and lineage | P04/P05/P08 | V-01/V-06..08; identical request reuses compatible evidence; requested/actual time and dimensions visible |
@@ -109,6 +109,17 @@ set config. Worker requests select approved provider/policy IDs rather than exec
 paths. Define unknown-key/version rejection and secret handling before a config command.
 
 ### P06 provisioning details
+
+Follow [ADR 0014](../decisions/0014-progressive-dependency-setup.md): check
+first, install only missing/selected qualified components after separate explicit
+plan acceptance, and always offer typed manual/BYO guidance if installation cannot
+be completed. A script-installed tool outside `PATH` is a supported explicit-path
+case. A provided transcript skips Whisper/model preflight. Headless agent calls
+must not prompt, silently elevate, retry an unsafe download or treat evidence as
+installation approval. A target with no reviewed artifact must be marked managed
+installation unavailable, not given an invented URL. P06 must qualify at least
+one complete managed-install target; every named R0 target must have a usable
+manual/BYO path.
 
 Split implementation into read-only resolution, plan generation, bounded verified
 download, safe extraction, compatibility smoke test, activation, repair/rollback and

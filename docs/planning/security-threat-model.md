@@ -130,6 +130,16 @@ documented handling policy for already running jobs.
 
 ## Installation and distribution policy
 
+ADR 0014 makes the setup sequence explicit: diagnose first; propose a reviewed,
+component/target-specific plan only for missing or selected tools; apply only after
+separate acceptance; provide typed manual/BYO guidance whenever the managed path
+is unavailable, offline, denied or fails. The agent may explain that guidance but
+must not infer install authority from a video-inspection request, run a suggested
+script or retry with elevated rights. A missing reviewed artifact is a managed-
+unavailable outcome, never a reason to use an arbitrary URL. At least one complete
+managed-install target must be qualified before R0 claims this capability; every
+named R0 target must retain a tested manual/BYO path.
+
 An install plan contains supported target, exact component versions, source URLs,
 digest/signature metadata, sizes, permissions, licence notices, expected files and
 activation changes. It has a canonical digest and expiry. User authorization applies
@@ -137,6 +147,8 @@ to that plan; content, host policy or state changes invalidate it. The CLI never
 interprets an instruction inside a video as installation approval.
 
 Keep binary/model installation separate from ordinary npm package installation.
+No npm lifecycle hook downloads providers or models; `setup install` is a separate
+explicit operation.
 Use native platform packages selected by a small reviewed launcher; avoid silently
 fetching model weights in npm lifecycle scripts. Users need a Rust toolchain only
 when building from source. Qualify package-manager configurations that omit optional

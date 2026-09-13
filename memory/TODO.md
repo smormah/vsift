@@ -2,12 +2,30 @@
 
 ## Current checkpoint
 
+2026-09-13: The maintainer confirmed the R0 setup journey in ADR 0014:
+detect existing/partly installed components first, explicitly plan/install
+reviewed missing ones, and always provide typed manual/BYO guidance if managed
+installation is unavailable, denied or fails. Script-installed off-PATH tools
+must be selectable. Agents need rich remediation but cannot infer install
+authority from video inspection. The BYO-only proposal PR #49 closed unmerged;
+P06 source-review PR #48 was carried forward and closed as superseded by PR #50.
+The source assessment and clarification commits are `b1c271d` and `6ab6ef3` on
+that review branch. P06 remains planned, with its immutable provider/model
+catalogue still a gate for each managed target. This changes acceptance, not
+runtime behavior; no protected merge or implementation evidence yet.
+
+2026-09-12: P06 source review started from protected main
+`777bc3e56788d43cd9a647dba54c287390c2998d`; P05's evidence follow-up is
+merged and issue #8 is closed. A reviewed cross-target provider/model artifact
+catalog is absent. P06 implementation is gated by the source and licence decision
+recorded in `docs/planning/p06-provisioning-source-review.md`.
+
 2026-09-12: P05 implementation from protected main
 `8741f57dfc5b45c8cb4d3f1f7791d0f1d143c627` merged through protected PR #46 as
 `c3f9313f8df0871d17ab80ad5bb142be6421b36f`. The ledger now records
 completion and the passed three-OS quality, governance, documentation,
-security and local checkpoint evidence. This evidence follow-up must merge
-before issue #8 closes. P06 is the next eligible packet and remains planned.
+security and local checkpoint evidence. Its evidence follow-up has since merged
+and issue #8 is closed. P06 is the next eligible packet and remains planned.
 
 2026-09-12: P04 source/media primitives completed through protected PR #44 as
 `4fc859b3344bd47c254dd9da9cac72f5ad3d61d5`. This evidence-only follow-up
@@ -23,8 +41,25 @@ eligible packet but remains planned.
 
 ## Pending
 
-- Merge the P05 evidence-only ledger/memory update through protected checks,
-  then close issue #8. Do not begin P06 implementation in this session.
+- P05 qualification follow-up #51: Ubuntu Quality on docs-only PR #50 failed
+  `registration_scan_and_abandoned_cleanup_respect_the_live_lock` when its
+  first bucket scan returned `Busy` after registration. Investigate root-lock
+  lifetime versus test timing with repeatable Ubuntu evidence; do not relax
+  the scan guarantee or count a green rerun as a root-cause fix.
+- Merge the ADR 0014 progressive-setup clarification through protected checks
+  without claiming P06 completion. Issue #9 now describes detect/install/guide.
+- Resolve PR #48's reviewed per-target FFmpeg/FFprobe, whisper.cpp and model
+  source matrix before managed activation. Qualify at least one complete
+  managed-install target; on every named R0 target, test the typed manual/BYO
+  fallback, permission denial and off-PATH selection. D-01..D-10 and the P06
+  E2E stage remain pending.
+
+- P06 source gate (2026-09-12): select and review immutable per-target
+  FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model artifacts before
+  managed download/activation. The current source matrix cannot justify a
+  three-target installer. See `docs/planning/p06-provisioning-source-review.md`.
+  P06 remains planned; D-01..D-10, its E2E stage, ledger completion and issue #9
+  closure remain pending.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.

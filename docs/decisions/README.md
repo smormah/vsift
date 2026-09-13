@@ -17,3 +17,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0011: R1 is the managed industrial capability expansion](0011-r1-industrial-capability-expansion.md)
 - [0012: P04 source and media profile](0012-p04-source-media-profile.md)
 - [0013: Explicit retained bundles on the ephemeral desktop profile](0013-retained-bundle-publication.md)
+- [0014: Detect, explicitly install, or guide dependency setup in R0](0014-progressive-dependency-setup.md)

@@ -73,11 +73,11 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 
 | Command | Purpose / constraints |
 | --- | --- |
-| `setup check [--profile ...] [--timeout-seconds ...] --json` | Read-only capability detection; no installation or mutation |
-| `setup plan --profile ... --json` | Versions, provenance, download sizes, licences, disk needs, exact actions and plan digest |
-| `setup install --plan <file> --accept-plan <digest>` | Apply that validated plan; revalidate expiry and current state; never silently elevate |
+| `setup check [--profile ...] [--timeout-seconds ...] --json` | Read-only capability detection including existing BYO/managed state; no installation or mutation |
+| `setup plan --profile ... --json` | Plan only missing or explicitly selected qualified components; versions, provenance, sizes, licences, permissions, exact actions and digest; typed manual guidance if no qualified install exists |
+| `setup install --plan <file> --accept-plan <digest>` | Apply only that validated plan; revalidate expiry and current state; no silent elevation; typed manual fallback on failure |
 | `setup repair ...` | Produce/apply a repair plan; same installation contract, no recursive arbitrary deletion |
-| `setup list`, `setup remove`, `setup rollback`, `setup configure` | Managed versions and user-supplied registrations; live jobs pin immutable versions |
+| `setup list`, `setup remove`, `setup rollback`, `setup configure` | Managed versions and explicit off-PATH user-supplied executable/model registrations; live jobs pin immutable versions |
 | `ingest <local-file> [--transcript ...] --json` | Foreground session preparation with checkpoints, explicit source/durability policy |
 | `session list/status/close/renew` | Visible lifecycle and bounded storage reporting; close waits/rejects active work |
 | `session retain <id> --output <dir> [--include-source]` | Explicit export; distinguish evidence-only and source-inclusive bundle |
@@ -96,7 +96,12 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 Defer `compose` until R1 accuracy gates pass. `setup` alone displays help and performs
 no installation. Unknown commands fail with documented usage errors. Default
 noninteractive behavior never prompts indefinitely or changes system dependencies.
-User-provided file/config/model content cannot grant installation authority.
+User-provided file/config/model content cannot grant installation authority. A
+headless or agent call with missing permissions returns a typed reason and manual
+recovery path rather than requesting elevation or hanging for a prompt. Only
+reviewed component/target artifacts may appear in managed plans; unsupported
+targets retain an explicit BYO path. See
+[ADR 0014](../decisions/0014-progressive-dependency-setup.md).
 
 ### Output and errors
 
