@@ -7,7 +7,7 @@ as `0f0156bd62ac6777fcb1f412968df6eda977158e`; all required platform,
 governance, documentation, dependency and security checks passed. A candidate
 Windows x64 source set has exact observed FFmpeg/whisper archive hashes and a
 pinned `base` model LFS pointer, but binary licence/notice and controlled smoke
-tests remain before any accepted managed-install catalogue. No dependency was
+tests remain before any accepted managed-install catalogue (`2256582`). No dependency was
 installed. P06 stays planned in the ledger, so P07/P08 remain ineligible.
 
 2026-09-13 P06 kickoff: `codex/p06-detection-guidance` starts from protected
