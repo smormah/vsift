@@ -2,11 +2,13 @@
 
 ## Current checkpoint
 
-2026-09-13: An opt-in disposable Windows candidate smoke (`a0fe266`) is
-being prepared for
-the pinned P06 FFmpeg/FFprobe/whisper.cpp/model set. It is not an accepted
-installer catalogue, transcript-accuracy test or P06 E2E completion. Local
-archive guardrail tests pass; hosted run and protected merge evidence pending.
+2026-09-13: Protected PR #55 merged the opt-in disposable Windows candidate
+smoke (`a0fe266`, merge `1c805c1`). Hosted
+[run 34737109736](https://github.com/smormah/vsift/actions/runs/34737109736)
+passed archive/model hashes, selected-file verification, FFmpeg/FFprobe F01
+operations and whisper.cpp model-backed inference on Windows Server 2025.
+It is not an accepted installer catalogue, real-speech transcript-accuracy
+test, Windows 11 qualification or P06 E2E completion.
 
 2026-09-13: P06 read-only detection/guidance increment merged through protected
 [PR #53](https://github.com/smormah/vsift/pull/53) as
@@ -82,10 +84,14 @@ eligible packet but remains planned.
   every named R0 target. See `docs/planning/p06-provisioning-source-review.md`.
   P06 remains planned; D-01..D-10, its E2E stage, ledger completion and issue #9
   closure remain pending.
-- P06 candidate smoke: dispatch the isolated Windows job after protected merge;
-  review verified downloads, model-backed inference, bounded behavior and runner
-  identity. Its tone-only fixture cannot qualify transcription accuracy. Do not
-  accept a managed catalogue until legal/notices and full installer/E2E gates pass.
+- P06 candidate smoke follow-up: measure peak resources and real-speech
+  transcription on an owned fixture once P07 supplies speech, then qualify
+  Windows 11 desktop separately. Tone-only runner evidence does not accept a
+  managed catalogue; legal/notices and full installer/E2E gates remain open.
+- P06 source availability: the reviewed 2026-09-09 BtbN FFmpeg daily asset is
+  subject to its 14-build retention policy; its successful hosted smoke does
+  not make it a durable installer source. Select a retained replacement or
+  governed artifact strategy, with legal/source/notice review, before activation.
 - P06 next increments: validate FFmpeg/FFprobe/whisper.cpp behavior and model
   selection rather than accepting help/version alone; add persistent explicit
   BYO selection through the reserved configure boundary; qualify source catalog,

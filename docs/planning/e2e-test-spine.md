@@ -72,7 +72,14 @@ and the complete journey `not_implemented`. P06's read-only detection/guidance
 increment has contract tests, but has not yet added its managed-install E2E stage;
 the checkpoint's P06 label remains `not_implemented`. The P04 checkpoint still covers
 seven source/media scenarios. See the [P04](p04-media-qualification.md) and
-[P05](p05-session-qualification.md) qualification records. The following rules apply:
+[P05](p05-session-qualification.md) qualification records.
+
+An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
+has separately verified pinned third-party bytes and model-backed inference on
+F01 tone audio. It is **not** the managed-install P06 E2E stage, a real-speech
+transcription test or a substitute for the cumulative journey.
+
+The following rules apply:
 
 - It is opt-in during ordinary development and is run after substantial vertical
   increments. It is not an every-PR or mandatory hosted-CI job.

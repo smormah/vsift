@@ -4,6 +4,13 @@ Date: 2026-09-13. Target: Windows 11 x64 desktop. This is a read-only source and
 archive-inventory review, **not** an accepted installer catalogue or permission to
 activate downloads. P06 and its source gate remain open.
 
+Availability risk: the selected 2026-09-09 BtbN asset is a *daily* build, not a
+month-end retained build. Its [pinned source retention policy](https://github.com/BtbN/FFmpeg-Builds/blob/847e5e1cacc2945ac46528d34d754bd36051680c/README.md#release-retention-policy)
+keeps only the last 14 daily builds and month-end builds for two years. The
+candidate URL may disappear; a temporary successful download is not a durable
+managed-install source. Before accepting a catalogue, choose and review a
+retained/maintained source with an explicit expiry and replacement policy.
+
 ## Candidate origins and archived integrity
 
 | Component | Immutable source selection | Bytes | Archived SHA-256 | Licence observation |
@@ -63,15 +70,16 @@ must be confirmed by a controlled compatibility test, not assumed from `--help`.
    responsibly offered by an MIT/Apache-2.0 tool. Do not conflate BtbN build-script
    licence with the downloaded binary licence.
 2. Run the exact selected binaries and pinned model on a disposable Windows x64
-   qualification host with no elevated rights. Confirm FFmpeg/FFprobe media
-   operations, whisper.cpp CPU model loading and a real transcript; record versions,
-   process containment and resource use. No reviewed binary was executed on the
-   maintainer desktop during this inventory review.
+   qualification host with no elevated rights. The F01 tone-only compatibility
+   smoke below passed; real-speech transcription, resource measurement,
+   containment and Windows 11 desktop qualification remain open. No reviewed
+   binary was executed on the maintainer desktop during this review.
 3. Pin redirect host policy, maximum compressed/extracted bytes and entry count;
    reject traversal, duplicate names, links, devices and non-whitelisted files.
    Independently test corrupt archive, wrong architecture and missing file cases.
 4. Document where the MIT and LGPL notices/source offers accompany the installed
-   versions. Define revocation and retention of this pinned candidate. The other
+   versions. Resolve the daily-build retention risk and define revocation and
+   replacement of this pinned candidate. The other
    named R0 targets still require manual/BYO guidance unless separately qualified.
 
 Until these gates and installer D-01..D-10 pass, `setup plan`/`setup install`
@@ -93,3 +101,23 @@ establish transcript accuracy or fulfil P06's full E2E stage. P07's speech
 fixture, the legal/notice review, production installer safeguards and desktop
 target qualification remain separate gates. The qualification script is not
 invoked by `vsift setup` and must never be promoted into the installer.
+
+Protected [PR #55](https://github.com/smormah/vsift/pull/55) merged the opt-in
+runner as `1c805c11519ec43ad91cc6beb18d8d39c40ee495`, after Windows,
+macOS and Ubuntu Quality, Governance, Documentation, strict-worker, dependency
+policy/review and CodeQL/Rust checks passed. The manually dispatched
+[candidate run 34737109736](https://github.com/smormah/vsift/actions/runs/34737109736)
+passed on Windows Server 2025 (build 26100), x64, runner image
+`windows-2025-vs2026` `20260907.229.1`. It verified both archive SHA-256
+values and independently downloaded and hashed the pinned model bytes. The
+selected extracted-file hashes matched the candidate inventory. The selected
+FFmpeg and FFprobe reported `n9.0.1-27-g9b0578816c-20260909`; FFprobe read
+F01 and FFmpeg extracted 16 kHz mono WAV. The whisper.cpp v1.9.2 candidate
+loaded the CPU backend and pinned model, processed that WAV and wrote a text
+artifact. Six negative archive guardrail tests passed in the same run.
+
+The run did **not** establish meaningful speech transcription: F01 audio is a
+tone sentinel. It also did not measure peak resources, inspect all CPU variants,
+test Windows 11, grant an installer trust anchor, validate notice handling or
+complete the D/E2E gates. The runner's unprivileged checkout is not a sandbox
+claim for arbitrary third-party executables.
