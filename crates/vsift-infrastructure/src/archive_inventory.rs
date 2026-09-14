@@ -76,6 +76,18 @@ impl ArchiveInventoryBounds {
             expanded_bytes,
         })
     }
+
+    /// Maximum number of entries approved for this archive.
+    #[must_use]
+    pub const fn entries(self) -> usize {
+        self.entries
+    }
+
+    /// Maximum sum of declared expanded entry bytes.
+    #[must_use]
+    pub const fn expanded_bytes(self) -> u64 {
+        self.expanded_bytes
+    }
 }
 
 /// A typed reason archive metadata cannot proceed to extraction.
@@ -202,7 +214,7 @@ pub fn validate_archive_inventory(
     Ok(())
 }
 
-fn safe_archive_path(path: &str, directory: bool) -> bool {
+pub(crate) fn safe_archive_path(path: &str, directory: bool) -> bool {
     let path = if directory {
         path.strip_suffix('/').unwrap_or(path)
     } else {

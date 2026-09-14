@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod archive_inventory;
+mod bounded_tar_inventory;
 mod executable;
 mod ffmpeg_media;
 mod filesystem_session_store;
@@ -17,6 +18,7 @@ pub use archive_inventory::{
     MAX_ARCHIVE_ENTRIES, MAX_ARCHIVE_EXPANDED_BYTES, ReviewedArchiveAlias,
     validate_archive_inventory,
 };
+pub use bounded_tar_inventory::{MAX_TAR_STREAM_BYTES, TarInventoryError, inspect_tar_inventory};
 pub use executable::{
     ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
 };
