@@ -2,6 +2,15 @@
 
 ## Active
 
+2026-09-14: P06 selected-file integrity `5454dcb` is under protected review.
+The existing bounded archive readers now hash exact reviewed regular-file bytes
+without writing them and reject missing or mismatched selected files. Focused
+and workspace tests pass. Fresh pinned Ubuntu opt-in archive tests passed
+selected-file digest checks without binary execution. This is read-only
+verification, not extraction or managed setup. Direct HTTPS transfer,
+contained staging, catalogue/plan acceptance, smoke and atomic activation
+are still absent. P06 stays planned; P07/P08 remain ineligible.
+
 2026-09-14: Protected [PR #79](https://github.com/smormah/vsift/pull/79)
 merged P06 read-only XZ/tar inventory `2a960ba` as `ad2a844`. It caps
 compressed input and decoder block memory at 128 MiB each, rejects trailing

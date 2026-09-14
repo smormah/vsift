@@ -53,6 +53,13 @@ bytes. The local inspection took about 82 seconds. This proves format
 compatibility for fixed archive bytes only, not production time/resource
 suitability, extraction or managed installation.
 
+The later selected-file integrity increment (`5454dcb`) updates this opt-in
+test to compare the three selected regular files below against their recorded
+size and SHA-256 while inspecting the complete archive. The earlier run above
+predates this additional assertion. A fresh opt-in run against the pinned
+publisher URL passed on 2026-09-14 after the archive size and SHA-256 matched;
+the selected-file inspection took 145.67 seconds without executing binaries.
+
 | Relative file under its version root | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `LICENSE.txt` | 7,651 | `da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768` |
@@ -82,6 +89,13 @@ then passed the production read-only gzip/tar inventory reader with exactly
 44 entries, 24,519,182 declared expanded bytes and all eight reviewed link
 headers. This proves format compatibility for the fixed archive bytes only;
 it does not qualify extraction, runtime behaviour or a managed install.
+
+The later selected-file integrity increment (`5454dcb`) updates this opt-in
+test to compare the six selected regular files below against their recorded
+size and SHA-256 while inspecting the complete archive. The earlier run above
+predates this additional assertion. A fresh opt-in run against the pinned
+publisher URL passed on 2026-09-14 after the archive size and SHA-256 matched;
+the selected-file inspection took 2.48 seconds without executing binaries.
 
 | Relative file under `whisper-bin-ubuntu-x64/` | Bytes | SHA-256 |
 | --- | ---: | --- |
