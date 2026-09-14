@@ -8,7 +8,7 @@ use vsift_domain::{DependencyState, FailureCode, RuntimeReadiness};
 use vsift_infrastructure::{ExplicitProbePaths, UserDependencyConfigStore};
 
 use crate::{
-    command::{ExecutionProfile, SetupConfigureArguments},
+    command::{ExecutionProfile, SetupConfigureArguments, SetupConfigureModelArguments},
     output::{
         OperationResponse, OutputMode, OutputWriter, ProcessExit, SetupCheckResponse,
         TerminalEventResponse, explicit_path_option, sanitize_untrusted_text, setup_exit,
@@ -75,6 +75,33 @@ pub(crate) fn configure(
             source: "configured_user_path",
             validation: "canonical_file_only",
             next_step: "Run setup check to probe the selected executable; model and provider compatibility remain unverified.",
+        },
+    )
+    .map_err(|_| FailureCode::Internal)
+}
+
+#[derive(Serialize)]
+struct ConfiguredModelResponse {
+    source: &'static str,
+    validation: &'static str,
+    next_step: &'static str,
+}
+
+/// Persists one BYO model file path without reading its contents or running ASR.
+pub(crate) fn configure_model(
+    arguments: &SetupConfigureModelArguments,
+) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
+    let store =
+        UserDependencyConfigStore::default_location().map_err(crate::setup_config_failure)?;
+    store
+        .configure_model(&arguments.file)
+        .map_err(crate::setup_config_failure)?;
+    OperationResponse::complete(
+        "setup.configure-model",
+        &ConfiguredModelResponse {
+            source: "configured_user_path",
+            validation: "canonical_nonempty_file_only",
+            next_step: "Model format and provider compatibility remain unverified; setup check still probes executables only.",
         },
     )
     .map_err(|_| FailureCode::Internal)

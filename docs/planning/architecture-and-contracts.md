@@ -78,7 +78,7 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 | `setup plan --profile ... --json` | Plan only missing or explicitly selected qualified components; versions, provenance, sizes, licences, permissions, exact actions and digest; typed manual guidance if no qualified install exists |
 | `setup install --plan <file> --accept-plan <digest>` | Apply only that validated plan; revalidate expiry and current state; no silent elevation; typed manual fallback on failure |
 | `setup repair ...` | Produce/apply a repair plan; same installation contract, no recursive arbitrary deletion |
-| `setup list`, `setup remove`, `setup rollback`, `setup configure` | Managed versions and explicit off-PATH user-supplied executable/model registrations; live jobs pin immutable versions |
+| `setup list`, `setup remove`, `setup rollback`, `setup configure`, `setup configure-model` | Managed versions and explicit off-PATH user-supplied executable/model registrations; live jobs pin immutable versions |
 | `ingest <local-file> [--transcript ...] --json` | Foreground session preparation with checkpoints, explicit source/durability policy |
 | `session list/status/close/renew` | Visible lifecycle and bounded storage reporting; close waits/rejects active work |
 | `session retain <id> --output <dir> [--include-source]` | Explicit export; distinguish evidence-only and source-inclusive bundle |

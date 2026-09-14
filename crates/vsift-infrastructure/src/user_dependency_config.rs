@@ -28,6 +28,8 @@ pub enum UserDependencyConfigError {
     Unavailable,
     /// A configured executable is not an absolute regular file.
     InvalidExecutable,
+    /// A selected model is not an absolute, nonempty regular file.
+    InvalidModel,
     /// The configuration directory or file is not private and regular.
     UnsafeStorage,
     /// The stored schema, paths or keys are invalid.
@@ -43,6 +45,7 @@ impl fmt::Display for UserDependencyConfigError {
         formatter.write_str(match self {
             Self::Unavailable => "per-user configuration location is unavailable",
             Self::InvalidExecutable => "selected executable is not an absolute regular file",
+            Self::InvalidModel => "selected model is not an absolute nonempty regular file",
             Self::UnsafeStorage => "per-user configuration storage is not private",
             Self::InvalidRecord => "per-user dependency configuration is invalid",
             Self::Busy => "per-user dependency configuration is busy",
@@ -120,6 +123,18 @@ impl UserDependencyConfigStore {
         read_record(&root).map(StoredSelections::into_paths)
     }
 
+    /// Reads the optional user-selected ASR model path without opening model bytes.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed on an unsafe root, malformed record or storage failure.
+    pub fn read_model(&self) -> Result<Option<PathBuf>, UserDependencyConfigError> {
+        let Some(root) = self.open_root(false)? else {
+            return Ok(None);
+        };
+        read_record(&root).map(|record| record.model)
+    }
+
     /// Atomically records one canonical user-selected executable path.
     ///
     /// This validates the file's present identity but does not claim provider compatibility.
@@ -138,6 +153,35 @@ impl UserDependencyConfigStore {
         if selected.path().to_str().is_none() {
             return Err(UserDependencyConfigError::InvalidExecutable);
         }
+        self.update_record(|record| record.set(dependency, selected.path().to_path_buf()))
+    }
+
+    /// Records a canonical path to a user-selected model file without loading or running it.
+    ///
+    /// Registration only establishes file presence; it does not prove model format,
+    /// compatibility, accuracy or safety. A later preflight must revalidate the file.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, storage, integrity or contention failure.
+    pub fn configure_model(&self, file: &Path) -> Result<(), UserDependencyConfigError> {
+        if !file.is_absolute() {
+            return Err(UserDependencyConfigError::InvalidModel);
+        }
+        let selected =
+            fs::canonicalize(file).map_err(|_| UserDependencyConfigError::InvalidModel)?;
+        let metadata =
+            fs::metadata(&selected).map_err(|_| UserDependencyConfigError::InvalidModel)?;
+        if !metadata.is_file() || metadata.len() == 0 || selected.to_str().is_none() {
+            return Err(UserDependencyConfigError::InvalidModel);
+        }
+        self.update_record(|record| record.model = Some(selected))
+    }
+
+    fn update_record(
+        &self,
+        change: impl FnOnce(&mut StoredSelections),
+    ) -> Result<(), UserDependencyConfigError> {
         let root = self
             .open_root(true)?
             .ok_or(UserDependencyConfigError::Unavailable)?;
@@ -158,7 +202,7 @@ impl UserDependencyConfigStore {
         lock.try_lock()
             .map_err(|_| UserDependencyConfigError::Busy)?;
         let mut record = read_record(&root)?;
-        record.set(dependency, selected.path().to_path_buf());
+        change(&mut record);
         let bytes =
             serde_json::to_vec(&record).map_err(|_| UserDependencyConfigError::InvalidRecord)?;
         if bytes.len() as u64 > MAX_CONFIG_BYTES {
@@ -248,6 +292,7 @@ struct StoredSelections {
     ffmpeg: Option<PathBuf>,
     ffprobe: Option<PathBuf>,
     whisper: Option<PathBuf>,
+    model: Option<PathBuf>,
 }
 
 impl StoredSelections {
@@ -299,6 +344,7 @@ fn read_record(root: &Dir) -> Result<StoredSelections, UserDependencyConfigError
             record.ffmpeg.as_ref(),
             record.ffprobe.as_ref(),
             record.whisper.as_ref(),
+            record.model.as_ref(),
         ]
         .into_iter()
         .flatten()
@@ -409,6 +455,76 @@ mod tests {
             assert_eq!(config.read()?.ffmpeg, Some(fs::canonicalize(&first)?));
             config.configure(RuntimeDependency::Ffmpeg, &second)?;
             assert_eq!(config.read()?.ffmpeg, Some(fs::canonicalize(&second)?));
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })();
+        fs::remove_dir_all(&parent)?;
+        result
+    }
+
+    #[test]
+    fn model_registration_preserves_executables_and_replaces_only_the_model()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let config = UserDependencyConfigStore::at(parent.join("config"))?;
+            let executable = parent.join("ffmpeg");
+            let first = parent.join("first-model");
+            let second = parent.join("second-model");
+            fs::write(&executable, b"not executed")?;
+            fs::write(&first, b"not parsed")?;
+            fs::write(&second, b"also not parsed")?;
+            config.configure(RuntimeDependency::Ffmpeg, &executable)?;
+            config.configure_model(&first)?;
+            assert_eq!(config.read_model()?, Some(fs::canonicalize(&first)?));
+            config.configure_model(&second)?;
+            assert_eq!(config.read_model()?, Some(fs::canonicalize(&second)?));
+            assert_eq!(config.read()?.ffmpeg, Some(fs::canonicalize(&executable)?));
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })();
+        fs::remove_dir_all(&parent)?;
+        result
+    }
+
+    #[test]
+    fn invalid_model_does_not_create_or_change_configuration()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let config = UserDependencyConfigStore::at(parent.join("config"))?;
+            assert_eq!(
+                config.configure_model(PathBuf::from("relative-model").as_path()),
+                Err(UserDependencyConfigError::InvalidModel)
+            );
+            assert!(!parent.join("config").exists());
+            let empty = parent.join("empty-model");
+            fs::write(&empty, b"")?;
+            assert_eq!(
+                config.configure_model(&empty),
+                Err(UserDependencyConfigError::InvalidModel)
+            );
+            assert!(!parent.join("config").exists());
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })();
+        fs::remove_dir_all(&parent)?;
+        result
+    }
+
+    #[test]
+    fn prior_executable_only_record_remains_readable() -> Result<(), Box<dyn std::error::Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let config = UserDependencyConfigStore::at(parent.join("config"))?;
+            let executable = parent.join("tool");
+            fs::write(&executable, b"not executed")?;
+            config.configure(RuntimeDependency::Whisper, &executable)?;
+            let record_path = parent.join("config/dependencies-v1.json");
+            let mut record: serde_json::Value = serde_json::from_slice(&fs::read(&record_path)?)?;
+            if let Some(fields) = record.as_object_mut() {
+                fields.remove("model");
+            }
+            fs::write(&record_path, serde_json::to_vec(&record)?)?;
+            assert_eq!(config.read_model()?, None);
+            assert_eq!(config.read()?.whisper, Some(fs::canonicalize(&executable)?));
             Ok::<(), Box<dyn std::error::Error>>(())
         })();
         fs::remove_dir_all(&parent)?;

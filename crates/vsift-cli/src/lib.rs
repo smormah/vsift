@@ -151,6 +151,10 @@ where
                 let result = setup::configure(&arguments);
                 write_session_result(&mut writer, mode, "setup.configure", result)
             }
+            Some(SetupCommand::ConfigureModel(arguments)) => {
+                let result = setup::configure_model(&arguments);
+                write_session_result(&mut writer, mode, "setup.configure-model", result)
+            }
             None => write_setup_help(&mut writer),
             Some(unimplemented) => {
                 let operation = command::SetupArguments {
@@ -195,7 +199,9 @@ where
 fn setup_config_failure(error: UserDependencyConfigError) -> FailureCode {
     match error {
         UserDependencyConfigError::Unavailable => FailureCode::MissingCapability,
-        UserDependencyConfigError::InvalidExecutable => FailureCode::InvalidArgument,
+        UserDependencyConfigError::InvalidExecutable | UserDependencyConfigError::InvalidModel => {
+            FailureCode::InvalidArgument
+        }
         UserDependencyConfigError::UnsafeStorage | UserDependencyConfigError::Io => {
             FailureCode::StorageIo
         }

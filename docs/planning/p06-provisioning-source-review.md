@@ -16,9 +16,11 @@ reports `executable_probe_only` and does not check the model. Managed setup
 lifecycle commands still return `COMMAND_NOT_IMPLEMENTED`.
 
 The later persistent-BYO increment implements `setup configure` for user-managed
-executable paths in a private per-user record. It does not persist a model,
-validate provider compatibility or implement managed plan/install. The other
-setup lifecycle commands remain unavailable.
+executable paths in a private per-user record. The following increment adds
+`setup configure-model` for a canonical nonempty user-managed model file in that
+record. Registration does not read model bytes or change executable-only setup
+readiness. Model-backed compatibility, reviewed managed source selection and
+installation remain unimplemented.
 
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
