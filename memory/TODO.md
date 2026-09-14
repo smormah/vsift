@@ -2,6 +2,18 @@
 
 ## Current checkpoint
 
+2026-09-14: Protected [PR #68](https://github.com/smormah/vsift/pull/68)
+merged the Ubuntu diagnostic runner as `78e005d`. Its first macOS Quality
+attempt hit the existing intermittent P03 `Busy` failure in
+[issue #66](https://github.com/smormah/vsift/issues/66); the unchanged-commit
+rerun and all other required checks passed. Opt-in
+[hosted run 34851335044](https://github.com/smormah/vsift/actions/runs/34851335044)
+passed pinned archive/model verification and F01 model-backed tone inference.
+It observed 23.05 seconds and 290,820 KiB largest child peak RSS across the
+smoke. Build configuration and an LGPL statement were captured. Full binary
+notice/source review, model resource/accuracy qualification, catalogue,
+installer and D-01..D-10/P06 E2E remain open; P06 stays planned.
+
 2026-09-14: The P06 verified-stream primitive merged through protected
 [PR #67](https://github.com/smormah/vsift/pull/67) as `cda41cf`; all supported
 OS quality, documentation, governance, strict-worker, dependency and security
