@@ -22,6 +22,11 @@ record. Registration does not read model bytes or change executable-only setup
 readiness. Model-backed compatibility, reviewed managed source selection and
 installation remain unimplemented.
 
+The verified-stream increment adds a bounded exact-size/SHA-256 check over an
+injected byte source and unactivated sink. It is not exposed as managed setup
+and does not authorize a user URL or checksum. The reviewed catalogue, HTTPS
+transport, extraction and activation are separate pending P06 steps.
+
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
 model LFS pointer. It is not an accepted catalogue: binary-specific licence

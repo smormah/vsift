@@ -8,6 +8,7 @@ mod identity;
 mod job;
 mod media;
 mod pagination;
+mod provisioning;
 mod session;
 mod storage;
 mod timeline;
@@ -25,6 +26,7 @@ pub use media::{
     MediaStream, MediaStreamKind,
 };
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
+pub use provisioning::{ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES};
 pub use session::{SessionArtifactKind, SessionLifetime, SessionPhase, SessionTransitionError};
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
