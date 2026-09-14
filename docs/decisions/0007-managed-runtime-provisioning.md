@@ -58,5 +58,16 @@ compressed-input reader before the tar inventory check. The expanded tar has
 its independent whole-stream limit; invalid gzip trailers and hidden content
 after the tar end marker fail closed. This covers an inspection format used by
 the Ubuntu whisper.cpp candidate, not publisher archive qualification,
-selected-file extraction, installation or activation. XZ decoding remains
-unimplemented.
+selected-file extraction, installation or activation. XZ decoding had not yet
+been added at this point.
+
+## 2026-09-14 implementation note: XZ tar inventory
+
+P06 now also reads one XZ stream through a pure-Rust decoder with a reviewed
+128 MiB compressed-input ceiling and a 128 MiB decoder block-memory limit,
+then applies the bounded tar inventory policy. Concatenated streams, trailing
+bytes, truncation and excess dictionary requirements fail closed. The pinned
+Ubuntu FFmpeg archive passed read-only inventory on its verified bytes without
+executing the included programs. This is not a total process-RSS or time bound;
+resource qualification, selected-file extraction and managed activation remain
+pending.

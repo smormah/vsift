@@ -2,6 +2,15 @@
 
 ## Current checkpoint
 
+2026-09-14: P06 XZ/tar inspection `2a960ba` adds one-stream, read-only decode
+under a 128 MiB compressed-input ceiling and 128 MiB decoder block-memory
+limit before the existing bounded tar policy. The exact publisher Ubuntu
+FFmpeg archive passed opt-in size/SHA-256 and 73-entry Rust inventory without
+binary execution. Local fmt, strict Clippy, workspace tests, warning-denied
+rustdoc, governance and `cargo deny check` passed. Protected checks/merge are
+pending. Total process/time qualification, selected-file extraction, contained
+staging, catalogue and activation remain open; P06 stays planned.
+
 2026-09-14: Protected [PR #77](https://github.com/smormah/vsift/pull/77)
 merged P06 gzip tar inspection `f553d98` and pinned archive regression
 `c52df98` as `caf46ad`. It reads all gzip members through
