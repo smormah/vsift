@@ -13,6 +13,7 @@ mod process_supervisor;
 mod source_snapshot;
 mod user_dependency_config;
 mod verified_artifact_transfer;
+mod xz_tar_inventory;
 
 pub use archive_inventory::{
     ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, ArchiveInventoryError,
@@ -47,3 +48,4 @@ pub use source_snapshot::{
 };
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
+pub use xz_tar_inventory::{MAX_XZ_ARCHIVE_BYTES, XzTarInventoryError, inspect_xz_tar_inventory};
