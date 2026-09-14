@@ -2,6 +2,13 @@
 
 ## Active
 
+2026-09-14: Protected [PR #67](https://github.com/smormah/vsift/pull/67)
+merged the verified-stream primitive as `cda41cf` after all required checks
+passed. P06 still has no managed URL/installer. The opt-in Ubuntu candidate
+runner now prepares build configuration/licence and F01 resource observations;
+these are unmeasured until the hosted workflow runs. Local archive and safe-
+diagnostic tests pass. P06 remains planned and P07/P08 remain ineligible.
+
 2026-09-14: P06 verified-stream primitive is underway from protected main
 `a554586`: exact bounded bytes and SHA-256 are checked before any future
 activation. Local fmt, strict Clippy and workspace tests pass. HTTPS source,

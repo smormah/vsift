@@ -2,6 +2,14 @@
 
 ## Current checkpoint
 
+2026-09-14: The P06 verified-stream primitive merged through protected
+[PR #67](https://github.com/smormah/vsift/pull/67) as `cda41cf`; all supported
+OS quality, documentation, governance, strict-worker, dependency and security
+checks passed. On `codex/p06-ubuntu-resource-evidence`, the opt-in hosted
+candidate runner is being extended to print the pinned FFmpeg configuration/
+licence statement and F01 elapsed/RSS observations. Local archive/diagnostic
+tests pass. Hosted execution and catalogue assessment are pending; P06 is planned.
+
 2026-09-14: P06 verified-stream work on `codex/p06-verified-stream` adds a typed
 reviewed size/SHA-256 requirement and bounded transfer over injected streams.
 It does not fetch or activate a dependency. Local fmt, strict Clippy and full
