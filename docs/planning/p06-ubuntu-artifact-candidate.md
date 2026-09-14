@@ -18,6 +18,28 @@ not download it again. BtbN says the month-end release is retained for two years
 so catalogue acceptance requires an explicit expiry and reviewed replacement.
 It must not silently switch to a floating `latest` asset.
 
+The [BtbN release tag](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-31-13-27)
+resolves to build-repository commit
+[`8267213e26c1031621e6e1210fe3aa4867214f6a`](https://github.com/BtbN/FFmpeg-Builds/tree/8267213e26c1031621e6e1210fe3aa4867214f6a).
+That snapshot contains the publisher's
+[packaging script](https://github.com/BtbN/FFmpeg-Builds/blob/8267213e26c1031621e6e1210fe3aa4867214f6a/build.sh),
+[Linux x64 LGPL variant](https://github.com/BtbN/FFmpeg-Builds/blob/8267213e26c1031621e6e1210fe3aa4867214f6a/variants/linux64-lgpl.sh),
+and [dependency build scripts](https://github.com/BtbN/FFmpeg-Builds/tree/8267213e26c1031621e6e1210fe3aa4867214f6a/scripts.d).
+The binary version suffix resolves to upstream FFmpeg commit
+[`e47273f4d9227152dcbf543cebaf9e2430ddbcc4`](https://github.com/FFmpeg/FFmpeg/commit/e47273f4d9227152dcbf543cebaf9e2430ddbcc4).
+The [whisper.cpp v1.9.2 tag](https://github.com/ggml-org/whisper.cpp/tree/306c88f4d1286aec1bf96e544632897886af5501)
+resolves to `306c88f4d1286aec1bf96e544632897886af5501`.
+These links identify available source and build inputs; they do not prove that
+every dependency at build time is reproducible from those snapshots or supply
+a cryptographic publisher signature for either binary. A future catalogue must
+retain the independently calculated fixed archive hashes above as its trust
+anchor and disclose the publisher/source links.
+
+For this month-end candidate, stop issuing new install plans by **2028-08-01**
+unless a replacement archive is reviewed and pinned. This proposed cutoff is
+one month before the publisher's two-year retention window ends; it is a
+maintenance policy, not a promise that GitHub will serve the asset until then.
+
 The FFmpeg archive contains 73 entries, 66 regular files, no links and
 370,667,773 expanded bytes. These selected regular files were hashed from the
 verified archive without execution:

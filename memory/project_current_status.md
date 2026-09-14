@@ -2,6 +2,13 @@
 
 ## Active
 
+2026-09-14: Ubuntu P06 candidate provenance now links BtbN release build-scripts
+commit `8267213e`, upstream FFmpeg commit `e47273f4` and whisper.cpp v1.9.2
+tag commit `306c88f4`. A 2028-08-01 new-plan cutoff is proposed before the
+month-end asset's two-year retention ends. These links support review but do
+not prove binary signature or all compiled-source correspondence. Catalogue,
+installer and D-01..D-10/P06 E2E remain open; P06 is planned.
+
 2026-09-14: Protected [PR #68](https://github.com/smormah/vsift/pull/68)
 merged as `78e005d` after all required checks passed; its first macOS Quality
 attempt hit the existing P03 `Busy` flake tracked in
