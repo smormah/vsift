@@ -35,6 +35,26 @@ materialized. The policy has no archive parser, decompressor, filesystem write
 or activation path. It therefore narrows D-04's extraction risk but does not
 close D-04 or authorize the Ubuntu candidate for installation.
 
+The next increment (`01ba396`, from protected main `ef95bba`) adds a read-only
+raw-tar adapter over a bounded input stream. It reads each entry sequentially,
+rejects unsupported extension/special headers, nonzero trailing content and
+declared/whole-stream overages, then applies the same provider-neutral policy.
+It does not unpack or write an entry, decompress the publisher's XZ/GZIP
+archives, or authorize the Ubuntu candidate. D-04 remains open.
+
+Dependency review: `tar` 0.4.46 is confined to `vsift-infrastructure`, pinned
+with default `xattr` support disabled. The [maintainer repository](https://github.com/composefs/tar-rs)
+was not archived and had a 2026-09-01 push at review; the crate declares
+MIT OR Apache-2.0 and Rust 1.63 MSRV, below VSift's Rust 1.98 toolchain.
+Version 0.4.46 is newer than the 0.4.45 fix for
+[CVE-2026-33055](https://github.com/composefs/tar-rs/security/advisories/GHSA-gchp-q4r4-x4ff).
+The new locked graph adds `tar` and `filetime`; `cargo deny check` passed
+advisories, bans, licences and sources with existing duplicate-version warnings.
+The [crate's security documentation](https://docs.rs/tar/0.4.46/tar/#security)
+explicitly excludes concurrent destination mutation from its unpacking
+guarantee. VSift does not call its unpack APIs; a later extractor must use
+contained filesystem handles and verify selected regular-file bytes itself.
+
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
 model LFS pointer. It is not an accepted catalogue: binary-specific licence

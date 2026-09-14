@@ -39,3 +39,14 @@ extractor, compatibility smoke test or activation transaction. The HTTPS
 adapter must enforce a transfer deadline and redirect/proxy policy; only a
 reviewed catalogue may supply the expected digest. The default `setup plan`
 and `setup install` remain unavailable pending the remaining P06 gates.
+
+## 2026-09-14 implementation note: bounded tar inventory reader
+
+P06 now reads raw tar headers through a bounded, sequential, no-write adapter
+and applies the archive-inventory policy before any selected-file extraction.
+The reader rejects unsupported extension/special headers, checks exact reviewed
+link metadata, drains entry content rather than seeking past truncation, and
+rejects nonzero trailing data or an oversized uncompressed tar stream. It does
+not decompress publisher archives, extract files, stage runtimes or activate
+them. The managed plan/install commands remain unavailable until those steps
+and their failure tests are complete.
