@@ -9,6 +9,8 @@ use std::{
 };
 
 use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
+#[cfg(unix)]
+use cap_std::fs::OpenOptionsExt;
 use cap_std::fs::{Dir, DirBuilder, OpenOptions};
 use serde::{Deserialize, Serialize};
 use vsift_domain::RuntimeDependency;
