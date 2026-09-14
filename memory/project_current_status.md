@@ -2,6 +2,15 @@
 
 ## Active
 
+2026-09-14: P06 read-only XZ/tar inventory `2a960ba` caps compressed input
+and decoder block memory at 128 MiB each, rejects trailing/concatenated
+streams and reuses the bounded tar policy. The exact pinned FFmpeg archive
+passed opt-in size/SHA-256 and 73-entry inspection without execution. Local
+fmt, strict Clippy, workspace tests, rustdoc, governance and `cargo deny check`
+passed; protected checks and merge are pending. Total process/time bounds,
+selected-file extraction, staging, managed plan and activation remain absent;
+P06 is planned and P07/P08 ineligible.
+
 2026-09-14: Protected [PR #77](https://github.com/smormah/vsift/pull/77)
 merged P06 gzip tar inventory adapter `f553d98` and pinned archive regression
 `c52df98` as `caf46ad`. The adapter is read-only and bounded

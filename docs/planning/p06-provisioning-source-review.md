@@ -67,11 +67,29 @@ VSift's Rust 1.98 toolchain; its [repository](https://github.com/rust-lang/flate
 was active and not archived at review (2026-09-06 push). The locked graph adds
 `flate2`, `miniz_oxide`, `adler2`, `simd-adler32` and `crc32fast`;
 `cargo deny check` passed advisories, bans, licences and sources with existing
-duplicate-version warnings. This reader does not inspect the publisher's XZ
-archive, extract any bytes, qualify the Ubuntu candidate, or close D-04.
+duplicate-version warnings. This reader does not extract any bytes, qualify
+the Ubuntu candidate, or close D-04.
 The pinned whisper.cpp gzip asset also passed opt-in, read-only Rust inventory
 inspection after independent exact-size/SHA-256 verification (`c52df98`);
 all 44 entries and eight reviewed link headers matched. No binary was run.
+
+The next read-only increment (`2a960ba`) adds XZ/tar inspection for the pinned
+Ubuntu FFmpeg format. It uses `lzma-rust2` 0.20.1 with only `std` and `xz` in
+production; its default `optimization` and encoder features are off. The
+encoder is test-only. The crate declares Apache-2.0 and Rust 1.85 MSRV,
+below VSift's Rust 1.98 toolchain. Its [maintainer repository](https://github.com/hasenbanck/lzma-rust2)
+was not archived and was active at review (2026-09-14 push). The locked graph
+adds `lzma-rust2` and `const-oid`; `cargo deny check` passed advisories, bans,
+licences and sources with existing duplicate-version warnings. The
+[documented `XzStream` API](https://docs.rs/lzma-rust2/0.20.1/lzma_rust2/struct.XzStream.html)
+supports an explicit decode-memory limit, unlike the convenience reader.
+VSift accepts one stream only, caps compressed bytes at 128 MiB, uses a 128 MiB
+block-memory limit, and feeds the existing whole-tar cap. These are not a
+total process-RSS or wall-clock bound; installation still needs resource and
+deadline qualification. The exact FFmpeg archive passed opt-in Rust read-only
+inventory after size/SHA-256 verification without running an executable.
+There is still no selected-file extraction or activation, so D-04 and P06
+remain open.
 
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one

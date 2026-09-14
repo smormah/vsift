@@ -44,6 +44,15 @@ The FFmpeg archive contains 73 entries, 66 regular files, no links and
 370,667,773 expanded bytes. These selected regular files were hashed from the
 verified archive without execution:
 
+On 2026-09-14 the same publisher URL was downloaded to a temporary review
+file on the maintainer machine, measured at 113,372,924 bytes and verified
+against the pinned SHA-256 above. No executable was run. Opt-in Rust test
+`p06_ffmpeg_archive` (`2a960ba`) passed the production read-only XZ/tar
+inventory reader with exactly 73 entries and 370,667,773 declared expanded
+bytes. The local inspection took about 82 seconds. This proves format
+compatibility for fixed archive bytes only, not production time/resource
+suitability, extraction or managed installation.
+
 | Relative file under its version root | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `LICENSE.txt` | 7,651 | `da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768` |
