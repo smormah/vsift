@@ -2,13 +2,16 @@
 
 ## Active
 
-2026-09-14: P06 gzip tar inventory adapter `f553d98` is read-only and bounded
+2026-09-14: Protected [PR #77](https://github.com/smormah/vsift/pull/77)
+merged P06 gzip tar inventory adapter `f553d98` and pinned archive regression
+`c52df98` as `caf46ad`. The adapter is read-only and bounded
 on compressed input and expanded tar stream. Pinned `flate2` 1.1.10 with a
 pure-Rust backend passed dependency review and `cargo deny check`. Focused
 decoder/adversarial tests, local fmt, strict Clippy, workspace tests, rustdoc
 and governance passed. The exact publisher whisper.cpp archive passed opt-in
 read-only inventory after pinned size/SHA-256 verification (`c52df98`), without
-execution. Protected checks and merge are pending. XZ decoding,
+execution. Protected Ubuntu, macOS and Windows Quality, dependency, docs,
+governance, strict-worker and CodeQL/Rust checks passed. XZ decoding,
 selected-file extraction, staging, managed plan and activation remain absent;
 P06 is planned and P07/P08 ineligible.
 
