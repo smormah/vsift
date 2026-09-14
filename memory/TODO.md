@@ -2,15 +2,23 @@
 
 ## Current checkpoint
 
+2026-09-14: `setup configure-model` merged through protected
+[PR #64](https://github.com/smormah/vsift/pull/64) as `15ed193`; Ubuntu, macOS,
+Windows, documentation, governance, strict-worker, dependency and security
+checks passed. P06 remains planned. A read-only source review on
+`codex/p06-ubuntu-source-review` reconfirmed the pinned FFmpeg archive hash and
+identified its LGPL v3 `LICENSE.txt` text without executing it. The selected
+whisper.cpp and pinned model repositories declare MIT; full build source and
+notice disclosure remain open before managed plan acceptance.
+
 2026-09-14: P06 persistent BYO executable registration merged through protected
 [PR #63](https://github.com/smormah/vsift/pull/63) as `55c8a6d`. Ubuntu,
 macOS and Windows Quality, Documentation, Governance, strict-worker,
 dependency policy/review and CodeQL/Rust analysis passed. The Unix extension
-import correction is included. P06 remains planned. The next increment on
-`codex/p06-model-selection` records a user-selected nonempty model file without
-loading it; model-backed compatibility, managed installation, D-01..D-10 and
-P06 E2E remain open. Local fmt, strict Clippy, workspace tests, warning-denied
-rustdoc, governance and diff check pass; protected evidence is pending.
+import correction is included. P06 remained planned. The subsequent
+`codex/p06-model-selection` increment recorded a user-selected nonempty model
+file without loading it; its protected merge is recorded above. Model-backed
+compatibility, managed installation, D-01..D-10 and P06 E2E remain open.
 
 2026-09-13: P06 persistent BYO executable registration was implemented
 from protected main `4c8dc36` on `codex/p06-persistent-byo`. It stores canonical
