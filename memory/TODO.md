@@ -2,14 +2,19 @@
 
 ## Current checkpoint
 
-2026-09-14: From protected main `ef95bba`, P06 raw-tar inventory reader
-`01ba396` adds bounded sequential metadata inspection and rejects truncation,
-trailing content and special headers before any future extraction. The reviewed
-`tar` 0.4.46 dependency is infrastructure-only; PAX rejection was added in
-`c6fad01`. Local fmt, strict Clippy, workspace tests, warning-denied rustdoc,
-governance and `cargo deny check` passed. Publisher XZ/GZIP decompression,
-selected-file extraction, contained staging, catalogue and activation remain
-open. Protected checks and merge evidence are pending; P06 stays planned.
+2026-09-14: Protected [PR #75](https://github.com/smormah/vsift/pull/75)
+merged P06 raw-tar inventory reader `01ba396` and PAX regression `c6fad01`
+as `e0da4b8`. It adds bounded sequential metadata inspection and rejects
+truncation, trailing content and special headers before any future extraction.
+The reviewed
+`tar` 0.4.46 dependency is infrastructure-only. Local fmt, strict Clippy,
+workspace tests, warning-denied rustdoc, governance and `cargo deny check`
+passed. Protected Quality on Ubuntu, macOS and Windows, dependency, docs,
+governance, strict-worker and CodeQL/Rust checks passed. The first Ubuntu run
+hit the existing P05 `Busy` symptom in two lifecycle tests; unchanged rerun
+passed and [issue #66](https://github.com/smormah/vsift/issues/66) records it.
+Publisher XZ/GZIP decompression, selected-file extraction, contained staging,
+catalogue and activation remain open; P06 stays planned.
 
 2026-09-14: After protected [PR #72](https://github.com/smormah/vsift/pull/72)
 merged the fixed Ubuntu provenance references as `8e299e4`, protected
