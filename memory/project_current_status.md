@@ -2,7 +2,8 @@
 
 ## Active
 
-2026-09-14: P06 selected-file integrity `5454dcb` is under protected review.
+2026-09-14: Protected [PR #81](https://github.com/smormah/vsift/pull/81)
+merged P06 selected-file integrity `5454dcb` as `d9861a6`.
 The existing bounded archive readers now hash exact reviewed regular-file bytes
 without writing them and reject missing or mismatched selected files. Focused
 and workspace tests pass. Fresh pinned Ubuntu opt-in archive tests passed
@@ -10,6 +11,13 @@ selected-file digest checks without binary execution. This is read-only
 verification, not extraction or managed setup. Direct HTTPS transfer,
 contained staging, catalogue/plan acceptance, smoke and atomic activation
 are still absent. P06 stays planned; P07/P08 remain ineligible.
+Local fmt, strict Clippy, workspace tests, rustdoc, governance and
+`cargo deny check` passed. Protected Ubuntu, macOS and Windows Quality,
+dependency, docs, governance, strict-worker and CodeQL/Rust checks passed
+after an unchanged Ubuntu rerun. The first Ubuntu job returned the existing
+intermittent `Busy` symptom in the P06 user-configuration unit test
+(run `34897284569`, job `104154428124`); [issue #66](https://github.com/smormah/vsift/issues/66)
+retains the lock investigation.
 
 2026-09-14: Protected [PR #79](https://github.com/smormah/vsift/pull/79)
 merged P06 read-only XZ/tar inventory `2a960ba` as `ad2a844`. It caps
