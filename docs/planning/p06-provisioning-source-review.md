@@ -68,10 +68,13 @@ disclosure still need review; these observed labels do not by themselves accept
 the managed catalogue or settle legal status. See the
 [Ubuntu candidate record](p06-ubuntu-artifact-candidate.md).
 
-The next opt-in Ubuntu candidate run will capture the pinned executable's own
-build configuration and licence statement, plus bounded F01 resource observations.
-Until hosted execution returns evidence, these are planned checks only; they do
-not change catalogue acceptance or enable `setup plan`.
+The opt-in [Ubuntu candidate run 34851335044](https://github.com/smormah/vsift/actions/runs/34851335044)
+captured the pinned executable's build configuration and a line of its LGPL
+runtime statement. F01 model-backed inference took 23.05 seconds; the largest
+child-process peak RSS across the smoke was 290,820 KiB. This is tone-only,
+single-run candidate evidence, not an isolated model resource/accuracy gate.
+The full compiled-component source/notice review, catalogue and production
+installer gates remain open; `setup plan` remains unavailable.
 
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:

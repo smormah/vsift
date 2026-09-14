@@ -105,13 +105,33 @@ notices or close D-01..D-10 and the P06 E2E stage. The link-copy layout needs a
 full required-library inventory and production extraction tests before it can
 become an accepted catalogue entry.
 
-## Follow-up hosted observation under review
+## Follow-up hosted observation
 
-The opt-in runner now records the verified build's `ffmpeg -version`
-configuration line and `ffmpeg -L` licence statement after its archive hash
-passes, plus elapsed F01 model inference and the largest child-process peak RSS
-reported by the Ubuntu runner. Tool text printed to the hosted log is bounded
-and stripped of terminal controls. These observations are pending a new hosted
-run; no resource figure is claimed here yet. The RSS counter spans all child
-commands in the smoke, so it is an upper bound for an individual operation's
-peak, not a controlled resource qualification. F01 remains tone-only.
+Protected [PR #68](https://github.com/smormah/vsift/pull/68) merged the
+bounded diagnostic runner as `78e005d` after Ubuntu and Windows Quality and
+all other required checks passed. Its first macOS Quality attempt hit the
+existing intermittent P03 `Busy` failure tracked in
+[issue #66](https://github.com/smormah/vsift/issues/66); the unchanged-commit
+rerun passed. The opt-in [hosted Ubuntu run 34851335044](https://github.com/smormah/vsift/actions/runs/34851335044)
+then passed all five archive/diagnostic guardrail tests and verified the two
+archive hashes, model hash, selected files, F01 media operations and model-backed
+inference on Linux `6.17.0-1022-azure` x64 with glibc 2.39.
+
+The pinned FFmpeg binary reported `n9.0.1-11-ge47273f4d9-20260831`. Its
+observed build configuration included `--enable-version3`, `--enable-openssl`,
+`--enable-libx264` **absent** (`--disable-libx264`), `--disable-libx265` and
+`--disable-libfdk-aac`; the full bounded configuration is in the hosted job
+log. `ffmpeg -L` printed a GNU Lesser General Public License statement; the
+script captured only one line of that multi-line statement, so the archive's
+independently checked LGPL version 3 `LICENSE.txt` remains the precise notice
+evidence. This does not enumerate the obligations or source location of every
+compiled component. A plan-facing notice and source reference review remains
+open.
+
+F01 model-backed inference took **23.05 seconds**. The runner reported
+**290,820 KiB** as the largest peak RSS among *all* child processes in the
+smoke, including archive/media operations, using Linux `RUSAGE_CHILDREN`.
+That figure is not an isolated whisper.cpp memory measurement or a controlled
+resource qualification. F01 is tone-only, so it cannot establish speech
+accuracy. These observations do not exercise the production Rust installer,
+promote this candidate to an accepted catalogue, or close D-01..D-10/P06 E2E.

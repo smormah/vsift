@@ -2,6 +2,18 @@
 
 ## Active
 
+2026-09-14: Protected [PR #68](https://github.com/smormah/vsift/pull/68)
+merged as `78e005d` after all required checks passed; its first macOS Quality
+attempt hit the existing P03 `Busy` flake tracked in
+[issue #66](https://github.com/smormah/vsift/issues/66), then passed on an
+unchanged-commit rerun. Opt-in
+[hosted Ubuntu run 34851335044](https://github.com/smormah/vsift/actions/runs/34851335044)
+passed pinned candidate hashes and F01 model-backed tone inference, captured
+the FFmpeg build configuration/LGPL statement, and observed 23.05 seconds and
+290,820 KiB largest child peak RSS across the smoke. This is not controlled
+speech/resource or installer qualification. Catalogue, notices/source,
+D-01..D-10 and P06 E2E remain open; P06 stays planned and P07/P08 ineligible.
+
 2026-09-14: Protected [PR #67](https://github.com/smormah/vsift/pull/67)
 merged the verified-stream primitive as `cda41cf` after all required checks
 passed. P06 still has no managed URL/installer. The opt-in Ubuntu candidate
