@@ -2,6 +2,14 @@
 
 ## Active
 
+2026-09-14: P06 gzip tar inventory adapter `f553d98` is read-only and bounded
+on compressed input and expanded tar stream. Pinned `flate2` 1.1.10 with a
+pure-Rust backend passed dependency review and `cargo deny check`. Focused
+decoder/adversarial tests, local fmt, strict Clippy, workspace tests, rustdoc
+and governance passed. Protected checks and merge are pending. XZ decoding,
+selected-file extraction, staging, managed plan and activation remain absent;
+P06 is planned and P07/P08 ineligible.
+
 2026-09-14: Protected [PR #75](https://github.com/smormah/vsift/pull/75)
 merged P06 raw-tar reader `01ba396` as `e0da4b8`. It inspects bounded,
 sequential archive metadata without writing files. Focused

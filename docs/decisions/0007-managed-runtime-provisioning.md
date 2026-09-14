@@ -50,3 +50,13 @@ rejects nonzero trailing data or an oversized uncompressed tar stream. It does
 not decompress publisher archives, extract files, stage runtimes or activate
 them. The managed plan/install commands remain unavailable until those steps
 and their failure tests are complete.
+
+## 2026-09-14 implementation note: gzip tar inventory
+
+The read-only P06 path now decodes all gzip members through a bounded
+compressed-input reader before the tar inventory check. The expanded tar has
+its independent whole-stream limit; invalid gzip trailers and hidden content
+after the tar end marker fail closed. This covers an inspection format used by
+the Ubuntu whisper.cpp candidate, not publisher archive qualification,
+selected-file extraction, installation or activation. XZ decoding remains
+unimplemented.
