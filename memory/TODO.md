@@ -2,6 +2,15 @@
 
 ## Current checkpoint
 
+2026-09-14: P06 selected-file integrity `5454dcb` is under protected review.
+The bounded raw-tar, gzip/tar and XZ/tar readers now verify a nonempty reviewed
+selection of exact regular-file paths, sizes and SHA-256 while still validating
+the whole inventory. Focused tests and workspace tests pass. Pinned publisher
+archive opt-in tests now include the selected digests; their new assertions
+passed fresh pinned-asset runs without binary execution. Direct HTTPS,
+contained staging, managed catalogue/plan acceptance, smoke and activation
+remain open. P06 stays planned.
+
 2026-09-14: Protected [PR #79](https://github.com/smormah/vsift/pull/79)
 merged P06 XZ/tar inspection `2a960ba` as `ad2a844`. It adds one-stream,
 read-only decode under a 128 MiB compressed-input ceiling and 128 MiB decoder

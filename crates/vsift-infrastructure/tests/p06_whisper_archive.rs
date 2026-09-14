@@ -9,13 +9,26 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
+use vsift_domain::ArtifactIntegrity;
 use vsift_infrastructure::{
-    ArchiveInventoryBounds, ReviewedArchiveAlias, inspect_gzip_tar_inventory,
+    ArchiveInventoryBounds, ReviewedArchiveAlias, ReviewedArchiveFile,
+    inspect_gzip_tar_selected_files,
 };
 
 const EXPECTED_BYTES: u64 = 9_497_583;
 const EXPECTED_SHA256: &str = "46811a3ecf584307480a220b9ef5ff81b7b22dc41577cbc274ce3afc61f753b1";
 const ROOT: &str = "whisper-bin-ubuntu-x64";
+
+fn selected(
+    path: &'static str,
+    bytes: u64,
+    sha256: &str,
+) -> Result<ReviewedArchiveFile<'static>, Box<dyn Error>> {
+    Ok(ReviewedArchiveFile {
+        path,
+        integrity: ArtifactIntegrity::from_sha256_hex(bytes, sha256)?,
+    })
+}
 
 #[test]
 #[ignore = "opt-in pinned publisher archive; set VSIFT_P06_WHISPER_ARCHIVE to its local path"]
@@ -75,12 +88,45 @@ fn pinned_upstream_archive_passes_read_only_inventory() -> Result<(), Box<dyn Er
             target: "libggml-base.so.0.18.1",
         },
     ];
-    let entries = inspect_gzip_tar_inventory(
+    let files = [
+        selected(
+            "whisper-bin-ubuntu-x64/LICENSE",
+            1_078,
+            "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+        )?,
+        selected(
+            "whisper-bin-ubuntu-x64/whisper-cli",
+            976_312,
+            "61fa94d25ba9a4695118883011f35e8521c158145ec73bcd8805a7c11760e6d7",
+        )?,
+        selected(
+            "whisper-bin-ubuntu-x64/libggml.so.0.18.1",
+            54_936,
+            "1985fa3dc169a16715a0998da0a075b29be8f68ea2501e3c043be53be7f11857",
+        )?,
+        selected(
+            "whisper-bin-ubuntu-x64/libggml-base.so.0.18.1",
+            910_680,
+            "bc41368cecccc3db8b4f52ad168b51413ee6c005a772b1d3e4f4b3bb47777553",
+        )?,
+        selected(
+            "whisper-bin-ubuntu-x64/libggml-cpu-x64.so",
+            878_024,
+            "b7c084e19dc63a83acf9d6dac8d2cba089026996bf805659e10d650d5a51c216",
+        )?,
+        selected(
+            "whisper-bin-ubuntu-x64/libwhisper.so.1.9.2",
+            611_280,
+            "afd9560fa2dd20a7c0f9aa682f9c4f339b2d223f2ad6fa200fc229bc3b1606d6",
+        )?,
+    ];
+    let entries = inspect_gzip_tar_selected_files(
         File::open(path)?,
         EXPECTED_BYTES,
         30_000_000,
         ArchiveInventoryBounds::new(44, 24_519_182)?,
         &aliases,
+        &files,
     )?;
     assert_eq!(entries.len(), 44);
     assert!(entries.iter().all(|entry| entry.path.starts_with(ROOT)));

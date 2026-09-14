@@ -71,3 +71,14 @@ Ubuntu FFmpeg archive passed read-only inventory on its verified bytes without
 executing the included programs. This is not a total process-RSS or time bound;
 resource qualification, selected-file extraction and managed activation remain
 pending.
+
+## 2026-09-14 implementation note: selected-file integrity
+
+The bounded tar reader now also accepts a nonempty reviewed list of exact
+regular-file paths, sizes and SHA-256 digests. It validates the complete archive
+inventory and hashes the selected file bytes while reading raw tar, gzip/tar or
+XZ/tar without writing to disk. A missing, renamed, non-regular or changed file
+fails closed. This does not stage or install a runtime. Direct HTTPS transport,
+reviewed plan acceptance, contained staging, compatibility smoke and atomic
+activation remain separate P06 gates; the default managed setup commands remain
+unavailable.

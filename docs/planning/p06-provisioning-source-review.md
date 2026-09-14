@@ -91,6 +91,16 @@ inventory after size/SHA-256 verification without running an executable.
 There is still no selected-file extraction or activation, so D-04 and P06
 remain open.
 
+The next read-only increment (`5454dcb`) verifies exact path, regular-file
+type, size and SHA-256 for a nonempty reviewed file selection while the bounded
+tar reader consumes the whole archive. The gzip/tar and XZ/tar adapters use the
+same check, and the pinned Ubuntu archive opt-in tests name the previously
+observed selected-file digests. The check writes no file and does not qualify
+contained extraction, a production catalogue, direct HTTPS transfer, a plan,
+smoke validation or activation. D-04 and P06 remain open.
+Both opt-in tests passed against fresh pinned publisher downloads after checking
+whole-archive size and SHA-256, without running a binary.
+
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
 model LFS pointer. It is not an accepted catalogue: binary-specific licence
