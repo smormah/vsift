@@ -27,6 +27,14 @@ injected byte source and unactivated sink. It is not exposed as managed setup
 and does not authorize a user URL or checksum. The reviewed catalogue, HTTPS
 transport, extraction and activation are separate pending P06 steps.
 
+The following archive-inventory increment (`7e73b95`) adds a provider-neutral
+infrastructure policy for a complete bounded entry index. It rejects portable
+path escapes, case-insensitive duplicates, undeclared symbolic links, hard
+links and special entries; a reviewed link header is inspected only, never
+materialized. The policy has no archive parser, decompressor, filesystem write
+or activation path. It therefore narrows D-04's extraction risk but does not
+close D-04 or authorize the Ubuntu candidate for installation.
+
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
 model LFS pointer. It is not an accepted catalogue: binary-specific licence
