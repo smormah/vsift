@@ -6,7 +6,9 @@
 on compressed input and expanded tar stream. Pinned `flate2` 1.1.10 with a
 pure-Rust backend passed dependency review and `cargo deny check`. Focused
 decoder/adversarial tests, local fmt, strict Clippy, workspace tests, rustdoc
-and governance passed. Protected checks and merge are pending. XZ decoding,
+and governance passed. The exact publisher whisper.cpp archive passed opt-in
+read-only inventory after pinned size/SHA-256 verification (`c52df98`), without
+execution. Protected checks and merge are pending. XZ decoding,
 selected-file extraction, staging, managed plan and activation remain absent;
 P06 is planned and P07/P08 ineligible.
 

@@ -6,7 +6,9 @@
 the pinned pure-Rust `flate2` 1.1.10 backend under a 256 MiB maximum compressed
 input limit, then applies the existing bounded tar inventory policy. Focused
 tests cover valid, truncated, corrupt, oversized and hidden-second-member
-streams. Local fmt, strict Clippy, workspace tests, warning-denied rustdoc,
+streams. The exact publisher whisper.cpp archive passed opt-in read-only
+inventory after size/SHA-256 verification (`c52df98`), without execution.
+Local fmt, strict Clippy, workspace tests, warning-denied rustdoc,
 governance and `cargo deny check` passed. Protected checks/merge are pending.
 XZ decoding, selected-file extraction, staging, catalogue and activation remain
 open; P06 stays planned.

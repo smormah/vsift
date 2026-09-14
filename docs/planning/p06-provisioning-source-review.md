@@ -69,6 +69,9 @@ was active and not archived at review (2026-09-06 push). The locked graph adds
 `cargo deny check` passed advisories, bans, licences and sources with existing
 duplicate-version warnings. This reader does not inspect the publisher's XZ
 archive, extract any bytes, qualify the Ubuntu candidate, or close D-04.
+The pinned whisper.cpp gzip asset also passed opt-in, read-only Rust inventory
+inspection after independent exact-size/SHA-256 verification (`c52df98`);
+all 44 entries and eight reviewed link headers matched. No binary was run.
 
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
