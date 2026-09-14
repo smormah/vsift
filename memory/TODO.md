@@ -3,12 +3,14 @@
 ## Current checkpoint
 
 2026-09-14: After protected [PR #72](https://github.com/smormah/vsift/pull/72)
-merged the fixed Ubuntu provenance references as `8e299e4`, the next P06
-archive-inventory increment `7e73b95` added portable path, duplicate,
-reviewed-link and expansion-budget validation over untrusted entry metadata.
-It has no parser, extraction, contained staging or activation; D-04 and P06
-remain open. Local focused tests and strict Clippy passed; full gates and
-protected checks are pending.
+merged the fixed Ubuntu provenance references as `8e299e4`, protected
+[PR #73](https://github.com/smormah/vsift/pull/73) merged the P06 archive-
+inventory policy (`7e73b95`, merge `12749a9`). It added portable path,
+duplicate, reviewed-link and expansion-budget validation over untrusted entry
+metadata. Local fmt, strict Clippy, workspace tests and governance passed;
+Ubuntu, macOS, Windows Quality, Documentation, Governance, dependency,
+strict-worker and CodeQL/Rust checks passed. It has no parser, extraction,
+contained staging or activation; D-04 and P06 remain open.
 
 2026-09-14: P06 Ubuntu candidate provenance review identified BtbN's retained
 release-tag build-scripts commit `8267213e`, upstream FFmpeg commit `e47273f4`
