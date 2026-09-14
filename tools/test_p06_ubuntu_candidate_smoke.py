@@ -9,7 +9,7 @@ import tarfile
 import tempfile
 import unittest
 
-from p06_ubuntu_candidate_smoke import CandidateRejected, extract_candidate
+from p06_ubuntu_candidate_smoke import CandidateRejected, extract_candidate, safe_observed_line
 
 
 def regular(name: str, content: bytes) -> tuple[tarfile.TarInfo, io.BytesIO]:
@@ -27,6 +27,9 @@ def link(name: str, target: str) -> tuple[tarfile.TarInfo, None]:
 
 
 class CandidateExtractionTests(unittest.TestCase):
+    def test_hosted_diagnostic_line_is_printable_and_bounded(self) -> None:
+        self.assertEqual(safe_observed_line("safe\x1b[31m\nnext", 8), "safe?[31")
+
     def make_archive(self, path: Path, members: list[tuple[tarfile.TarInfo, io.BytesIO | None]]) -> None:
         with tarfile.open(path, "w:gz") as archive:
             for member, content in members:

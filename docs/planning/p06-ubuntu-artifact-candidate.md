@@ -104,3 +104,14 @@ installer, qualify arbitrary Ubuntu desktop configurations, resolve binary
 notices or close D-01..D-10 and the P06 E2E stage. The link-copy layout needs a
 full required-library inventory and production extraction tests before it can
 become an accepted catalogue entry.
+
+## Follow-up hosted observation under review
+
+The opt-in runner now records the verified build's `ffmpeg -version`
+configuration line and `ffmpeg -L` licence statement after its archive hash
+passes, plus elapsed F01 model inference and the largest child-process peak RSS
+reported by the Ubuntu runner. Tool text printed to the hosted log is bounded
+and stripped of terminal controls. These observations are pending a new hosted
+run; no resource figure is claimed here yet. The RSS counter spans all child
+commands in the smoke, so it is an upper bound for an individual operation's
+peak, not a controlled resource qualification. F01 remains tone-only.

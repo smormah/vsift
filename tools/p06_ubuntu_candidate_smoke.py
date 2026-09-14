@@ -16,6 +16,7 @@ import stat
 import sys
 import tarfile
 import tempfile
+import time
 
 from p06_windows_candidate_smoke import (
     CandidateRejected,
@@ -64,6 +65,12 @@ ALIASES = {
     "libwhisper.so.1": "libwhisper.so.1.9.2",
     "libwhisper.so": "libwhisper.so.1",
 }
+
+
+def safe_observed_line(value: str, limit: int) -> str:
+    """Keep candidate diagnostics printable and bounded in hosted job logs."""
+    return "".join(character if 32 <= ord(character) <= 126 else "?"
+                   for character in value[:limit])
 
 
 def extract_candidate(archive_path: Path, destination: Path,
@@ -133,6 +140,8 @@ def extract_candidate(archive_path: Path, destination: Path,
 def main() -> None:
     if sys.platform != "linux" or platform.machine() != "x86_64" or not os.environ.get("GITHUB_ACTIONS"):
         raise CandidateRejected("candidate binaries may run only on an x64 Linux Actions runner")
+    import resource
+
     fixture = Path(__file__).resolve().parents[1] / "fixtures/corpus/generated/F01.mp4"
     if not fixture.is_file():
         raise CandidateRejected("synthetic F01 fixture missing")
@@ -156,8 +165,21 @@ def main() -> None:
         ffmpeg = ffmpeg_dir / "bin/ffmpeg"
         ffprobe = ffmpeg_dir / "bin/ffprobe"
         whisper = whisper_dir / "whisper-cli"
-        print("ffmpeg:", run_bounded([str(ffmpeg), "-version"], work, 15,
-                                     work / "ffmpeg-version.log").splitlines()[0])
+        version_output = run_bounded([str(ffmpeg), "-version"], work, 15,
+                                     work / "ffmpeg-version.log")
+        print("ffmpeg:", safe_observed_line(version_output.splitlines()[0], 250))
+        configuration = next((line for line in version_output.splitlines()
+                              if line.startswith("configuration:")), None)
+        if configuration is None or len(configuration) > 3000:
+            raise CandidateRejected("pinned FFmpeg build configuration was not captured")
+        print("ffmpeg build configuration:", safe_observed_line(configuration, 3000))
+        licence_output = run_bounded([str(ffmpeg), "-L"], work, 15,
+                                     work / "ffmpeg-license.log")
+        licence_statement = next((line for line in licence_output.splitlines()
+                                  if "Lesser General Public License" in line), None)
+        if licence_statement is None:
+            raise CandidateRejected("pinned FFmpeg build did not report the expected LGPL statement")
+        print("ffmpeg runtime licence statement:", safe_observed_line(licence_statement, 500))
         print("ffprobe:", run_bounded([str(ffprobe), "-version"], work, 15,
                                       work / "ffprobe-version.log").splitlines()[0])
         run_bounded([str(ffprobe), "-v", "error", "-show_format", str(fixture)],
@@ -169,11 +191,16 @@ def main() -> None:
         if not wav.is_file() or wav.stat().st_size < 44:
             raise CandidateRejected("FFmpeg did not produce PCM input")
         output = work / "candidate-transcript"
+        inference_started = time.monotonic()
         run_bounded([str(whisper), "-m", str(model), "-f", str(wav),
                      "-otxt", "-of", str(output)], work, 180, work / "whisper.log")
+        inference_seconds = time.monotonic() - inference_started
+        largest_child_rss_kib = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
         if not output.with_suffix(".txt").is_file():
             raise CandidateRejected("whisper.cpp did not write a transcript artifact")
         print("F01 media and model-backed inference passed; speech accuracy not assessed")
+        print(f"hosted F01 inference elapsed: {inference_seconds:.2f}s; "
+              f"largest child peak RSS across smoke: {largest_child_rss_kib} KiB")
 
 
 if __name__ == "__main__":

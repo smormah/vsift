@@ -68,6 +68,11 @@ disclosure still need review; these observed labels do not by themselves accept
 the managed catalogue or settle legal status. See the
 [Ubuntu candidate record](p06-ubuntu-artifact-candidate.md).
 
+The next opt-in Ubuntu candidate run will capture the pinned executable's own
+build configuration and licence statement, plus bounded F01 resource observations.
+Until hosted execution returns evidence, these are planned checks only; they do
+not change catalogue acceptance or enable `setup plan`.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 
