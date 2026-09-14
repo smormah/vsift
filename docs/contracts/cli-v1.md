@@ -1,6 +1,6 @@
 # CLI and JSON contract v1
 
-Status: published v1 boundary. `setup check`, foreground `ingest`, the P05
+Status: published v1 boundary. `setup check/configure`, foreground `ingest`, the P05
 `session` lifecycle and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
@@ -15,7 +15,8 @@ workspace; otherwise P05 uses the per-user application cache.
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
 | `setup check` | Read-only dependency diagnosis | Implemented |
-| `setup plan/install/repair/list/remove/rollback/configure` | Check-first explicit managed dependency lifecycle and BYO selection; manual fallback when no qualified install is available | P06 |
+| `setup configure` | Persist an explicit user-managed executable path without running it | Partial P06 |
+| `setup plan/install/repair/list/remove/rollback` | Check-first explicit managed dependency lifecycle; manual fallback when no qualified install is available | P06 |
 | `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get/retranscribe` | Timestamped transcript evidence | P07 |
@@ -112,6 +113,17 @@ The setup-check response preserves its existing v1 fields and adds lookup,
 verification and typed remediation metadata. The complete frozen example is
 [`setup-check.blocked.json`](../../schemas/v1/examples/setup-check.blocked.json);
 an abbreviated response is:
+
+`lookup` is `explicit_path` for a path passed to this check,
+`configured_user_path` for an explicit per-user registration, or `filtered_path`
+for safe ambient discovery. `setup configure <ffmpeg|ffprobe|whisper>
+--executable <absolute-path>` persistently registers a canonical user-managed
+file without executing it. It creates private per-user configuration under
+`LOCALAPPDATA/vsift` on Windows, `~/Library/Application Support/vsift` on macOS,
+or `${XDG_CONFIG_HOME:-~/.config}/vsift` on Linux. It rejects unknown record
+keys/versions and unsafe storage; `setup check` revalidates and probes the
+selection on each call. A per-call path takes precedence. Configuration does
+not authorize downloads or establish model/provider compatibility.
 
 ```json
 {

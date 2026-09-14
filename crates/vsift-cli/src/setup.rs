@@ -2,12 +2,13 @@
 
 use std::io::Write;
 
+use serde::Serialize;
 use vsift_application::{DependencyProbe, DiagnoseRuntime, RuntimeDiagnosis};
-use vsift_domain::{DependencyState, RuntimeReadiness};
-use vsift_infrastructure::ExplicitProbePaths;
+use vsift_domain::{DependencyState, FailureCode, RuntimeReadiness};
+use vsift_infrastructure::{ExplicitProbePaths, UserDependencyConfigStore};
 
 use crate::{
-    command::ExecutionProfile,
+    command::{ExecutionProfile, SetupConfigureArguments},
     output::{
         OperationResponse, OutputMode, OutputWriter, ProcessExit, SetupCheckResponse,
         TerminalEventResponse, explicit_path_option, sanitize_untrusted_text, setup_exit,
@@ -20,6 +21,7 @@ pub(crate) async fn run_setup_check<P, StandardOutput, StandardError>(
     profile: ExecutionProfile,
     mode: OutputMode,
     selections: &ExplicitProbePaths,
+    per_call: &ExplicitProbePaths,
     writer: &mut OutputWriter<StandardOutput, StandardError>,
 ) -> ProcessExit
 where
@@ -28,10 +30,10 @@ where
     StandardError: Write,
 {
     let diagnosis = DiagnoseRuntime::new(probe).execute().await;
-    let response = SetupCheckResponse::new(&diagnosis, profile, selections);
+    let response = SetupCheckResponse::new(&diagnosis, profile, selections, per_call);
     let output_result = match mode {
         OutputMode::Human => {
-            writer.write_trusted_stdout(&human_result(&diagnosis, profile, selections))
+            writer.write_trusted_stdout(&human_result(&diagnosis, profile, selections, per_call))
         }
         OutputMode::Json => writer.write_json(&response),
         OutputMode::JsonLines => OperationResponse::complete("setup.check", &response)
@@ -48,10 +50,41 @@ where
     setup_exit(diagnosis.readiness)
 }
 
+#[derive(Serialize)]
+struct ConfiguredSelectionResponse {
+    dependency: &'static str,
+    source: &'static str,
+    validation: &'static str,
+    next_step: &'static str,
+}
+
+/// Persists one explicit BYO executable selection without running it.
+pub(crate) fn configure(
+    arguments: &SetupConfigureArguments,
+) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
+    let dependency = arguments.dependency.into();
+    let store =
+        UserDependencyConfigStore::default_location().map_err(crate::setup_config_failure)?;
+    store
+        .configure(dependency, &arguments.executable)
+        .map_err(crate::setup_config_failure)?;
+    OperationResponse::complete(
+        "setup.configure",
+        &ConfiguredSelectionResponse {
+            dependency: dependency.identifier(),
+            source: "configured_user_path",
+            validation: "canonical_file_only",
+            next_step: "Run setup check to probe the selected executable; model and provider compatibility remain unverified.",
+        },
+    )
+    .map_err(|_| FailureCode::Internal)
+}
+
 fn human_result(
     diagnosis: &RuntimeDiagnosis,
     profile: ExecutionProfile,
     selections: &ExplicitProbePaths,
+    per_call: &ExplicitProbePaths,
 ) -> String {
     let mut result = format!(
         "VSift setup check\nProfile: {}\nStatus: {}\n",
@@ -71,6 +104,13 @@ fn human_result(
         result.push_str(status.dependency.capability().identifier());
         result.push_str("): ");
         result.push_str(&detail);
+        if per_call.for_dependency(status.dependency).is_some() {
+            result.push_str(" [per-call path]");
+        } else if selections.for_dependency(status.dependency).is_some() {
+            result.push_str(" [configured user path]");
+        } else {
+            result.push_str(" [filtered PATH]");
+        }
         result.push('\n');
         if !status.state.is_available() {
             result.push_str("  Install or locate this trusted tool, then rerun setup check with its absolute path using ");
@@ -175,6 +215,7 @@ mod tests {
                 ExecutionProfile::Desktop,
                 OutputMode::Json,
                 &ExplicitProbePaths::default(),
+                &ExplicitProbePaths::default(),
                 &mut writer,
             )
             .await;
@@ -193,6 +234,7 @@ mod tests {
             },
             ExecutionProfile::Desktop,
             OutputMode::Json,
+            &ExplicitProbePaths::default(),
             &ExplicitProbePaths::default(),
             &mut writer,
         )
@@ -218,6 +260,7 @@ mod tests {
             },
             ExecutionProfile::Desktop,
             OutputMode::Human,
+            &ExplicitProbePaths::default(),
             &ExplicitProbePaths::default(),
             &mut writer,
         )

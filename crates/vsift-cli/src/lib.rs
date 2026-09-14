@@ -16,7 +16,10 @@ use command::{BundleCommand, Cli, Command, EventFormat, SetupCommand};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{OperationResponse, OutputMode, OutputWriter, ProcessExit, TerminalEventResponse};
 use vsift_domain::FailureCode;
-use vsift_infrastructure::{ExplicitProbePaths, ProcessDependencyProbe};
+use vsift_infrastructure::{
+    ExplicitProbePaths, ProcessDependencyProbe, UserDependencyConfigError,
+    UserDependencyConfigStore,
+};
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
 pub async fn run() -> ExitCode {
@@ -106,16 +109,47 @@ where
                         );
                     }
                 };
-                let selections = ExplicitProbePaths {
+                let per_call = ExplicitProbePaths {
                     ffmpeg: arguments.ffmpeg,
                     ffprobe: arguments.ffprobe,
                     whisper: arguments.whisper,
+                };
+                let configured = match UserDependencyConfigStore::default_location()
+                    .and_then(|store| store.read())
+                {
+                    Ok(configured) => configured,
+                    Err(error) => {
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            "setup.check",
+                            setup_config_failure(error),
+                            None,
+                        );
+                    }
+                };
+                let selections = ExplicitProbePaths {
+                    ffmpeg: per_call.ffmpeg.clone().or(configured.ffmpeg),
+                    ffprobe: per_call.ffprobe.clone().or(configured.ffprobe),
+                    whisper: per_call.whisper.clone().or(configured.whisper),
                 };
                 let probe = ProcessDependencyProbe::with_explicit_paths(
                     config.probe_timeout,
                     selections.clone(),
                 );
-                setup::run_setup_check(probe, config.profile, mode, &selections, &mut writer).await
+                setup::run_setup_check(
+                    probe,
+                    config.profile,
+                    mode,
+                    &selections,
+                    &per_call,
+                    &mut writer,
+                )
+                .await
+            }
+            Some(SetupCommand::Configure(arguments)) => {
+                let result = setup::configure(&arguments);
+                write_session_result(&mut writer, mode, "setup.configure", result)
             }
             None => write_setup_help(&mut writer),
             Some(unimplemented) => {
@@ -155,6 +189,18 @@ where
             FailureCode::CommandNotImplemented,
             None,
         ),
+    }
+}
+
+fn setup_config_failure(error: UserDependencyConfigError) -> FailureCode {
+    match error {
+        UserDependencyConfigError::Unavailable => FailureCode::MissingCapability,
+        UserDependencyConfigError::InvalidExecutable => FailureCode::InvalidArgument,
+        UserDependencyConfigError::UnsafeStorage | UserDependencyConfigError::Io => {
+            FailureCode::StorageIo
+        }
+        UserDependencyConfigError::InvalidRecord => FailureCode::IntegrityFailure,
+        UserDependencyConfigError::Busy => FailureCode::Busy,
     }
 }
 

@@ -1,6 +1,6 @@
 //! JSON Schema and compatibility fixtures for the public v1 contract.
 
-use std::{fs, io, path::PathBuf};
+use std::{fmt::Write as _, fs, io, path::PathBuf};
 
 use assert_cmd::Command;
 use serde::Deserialize;
@@ -78,9 +78,19 @@ fn terminal_event_embeds_a_valid_operation_response() -> Result<(), Box<dyn std:
 
 #[test]
 fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Error>> {
+    let mut random = [0_u8; 16];
+    getrandom::fill(&mut random).map_err(|_| io::Error::other("random source failed"))?;
+    let mut suffix = String::with_capacity(32);
+    for byte in random {
+        write!(&mut suffix, "{byte:02x}")?;
+    }
+    let base = std::env::temp_dir().join(format!("vsift-schema-test-{suffix}"));
     let setup = Command::cargo_bin("vsift")?
         .args(["setup", "check", "--json", "--timeout-seconds", "1"])
         .env("PATH", "")
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
         .output()?;
     assert_eq!(
         serde_json::from_slice::<Value>(&setup.stdout)?,

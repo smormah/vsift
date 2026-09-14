@@ -192,10 +192,29 @@ pub(crate) struct SetupVersionArguments {
 #[derive(Args, Debug)]
 pub(crate) struct SetupConfigureArguments {
     /// Stable dependency identifier.
-    pub dependency: String,
+    #[arg(value_enum)]
+    pub dependency: SetupDependency,
     /// Explicit executable path; project-local configuration is never auto-loaded.
     #[arg(long)]
     pub executable: PathBuf,
+}
+
+/// A provider whose executable may be explicitly registered by the user.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum SetupDependency {
+    Ffmpeg,
+    Ffprobe,
+    Whisper,
+}
+
+impl From<SetupDependency> for vsift_domain::RuntimeDependency {
+    fn from(value: SetupDependency) -> Self {
+        match value {
+            SetupDependency::Ffmpeg => Self::Ffmpeg,
+            SetupDependency::Ffprobe => Self::Ffprobe,
+            SetupDependency::Whisper => Self::Whisper,
+        }
+    }
 }
 
 /// Resource and lifecycle profile selected for an operation.

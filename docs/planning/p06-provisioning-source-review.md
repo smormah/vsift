@@ -12,8 +12,13 @@ FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model: no exact per-targ
 URLs, archived digests, publisher identity, expected file inventory, binary licences,
 or compatibility baseline. The first P06 increment supports per-call absolute
 executable selection alongside filtered `PATH` and typed manual guidance, but
-reports `executable_probe_only` and does not check the model. The other setup
-commands explicitly return `COMMAND_NOT_IMPLEMENTED`.
+reports `executable_probe_only` and does not check the model. Managed setup
+lifecycle commands still return `COMMAND_NOT_IMPLEMENTED`.
+
+The later persistent-BYO increment implements `setup configure` for user-managed
+executable paths in a private per-user record. It does not persist a model,
+validate provider compatibility or implement managed plan/install. The other
+setup lifecycle commands remain unavailable.
 
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one

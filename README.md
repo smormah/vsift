@@ -34,14 +34,15 @@ it is not required to make the first release useful.
 
 ## Current behavior
 
-The CLI provides read-only runtime diagnostics and a foreground disposable
-source-bound session:
+The CLI provides runtime diagnostics, explicit per-user executable registration
+and a foreground disposable source-bound session:
 
 ```console
 vsift setup check
 vsift setup check --json
 vsift setup check --events jsonl
 vsift setup check --whisper "C:\\path\\to\\whisper-cli.exe" --json
+vsift setup configure whisper --executable "C:\\path\\to\\whisper-cli.exe" --json
 vsift ingest ./recording.mp4 --json
 vsift session list --json
 vsift session clean --expired --dry-run --json
@@ -60,9 +61,11 @@ be done safely or lacks permission, VSift must explain the manual install or
 explicit-path alternative. No dependency download is triggered by `npm install`,
 ordinary video inspection or an AI assistant acting without separate authority.
 Today, `setup check` can select existing executables by absolute path and returns
-typed manual guidance for missing or unhealthy tools. Its `ready` status means
-the executable probes passed; it does not yet verify compatibility or model
-weights. The flags are per-invocation, not saved configuration. Managed plans and
+typed manual guidance for missing or unhealthy tools. `setup configure` saves an
+explicit canonical FFmpeg, FFprobe or whisper.cpp executable path in private
+per-user configuration; a per-check path overrides it. Configuration does not run
+the tool or download anything. The check's `ready` status means executable probes
+passed; it does not yet verify compatibility or model weights. Managed plans and
 installation remain gated by reviewed, pinned artifacts; no target is qualified
 yet. A supplied transcript avoids the local Whisper/model requirement.
 
