@@ -2,6 +2,15 @@
 
 ## Active
 
+2026-09-14: P06 raw-tar reader `01ba396` on `codex/p06-bounded-tar-reader`
+inspects bounded, sequential archive metadata without writing files. Focused
+truncation, trailing-data, stream-budget, special-entry and PAX tests passed
+(`c6fad01`). `tar` 0.4.46 dependency review, local fmt, strict Clippy,
+workspace tests, rustdoc, governance and `cargo deny check` passed. No
+publisher decompression, selected-file extraction, staging, managed plan or
+activation exists. Protected checks and merge evidence are pending; P06 is
+planned and P07/P08 ineligible.
+
 2026-09-14: Protected [PR #72](https://github.com/smormah/vsift/pull/72)
 merged Ubuntu candidate provenance as `8e299e4`. Protected
 [PR #73](https://github.com/smormah/vsift/pull/73) merged archive inventory
