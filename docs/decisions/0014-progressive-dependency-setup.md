@@ -96,5 +96,14 @@ file. Registration does not execute the tool, validate a model, establish provid
 compatibility or authorize managed installation. `setup check` resolves a per-call
 path before the stored selection, then filtered `PATH`, and probes the selected
 file afresh. Invalid/unknown configuration fails closed without silently falling
-back to ambient tools. Model selection and managed-version precedence remain P06
-work.
+back to ambient tools. Model selection and managed-version precedence were still
+open at this point.
+
+## 2026-09-14 implementation note: model file selection
+
+`setup configure-model --file <absolute-path>` records a canonical nonempty
+user-managed model file in the same private per-user configuration. This is
+registration only: it does not parse model contents, run inference, establish
+compatibility or change `setup check`'s executable-only readiness. A later P06
+preflight must revalidate the file before use. Managed-version precedence and
+model-backed qualification remain open.

@@ -1,6 +1,6 @@
 # CLI and JSON contract v1
 
-Status: published v1 boundary. `setup check/configure`, foreground `ingest`, the P05
+Status: published v1 boundary. `setup check/configure/configure-model`, foreground `ingest`, the P05
 `session` lifecycle and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
@@ -16,6 +16,7 @@ workspace; otherwise P05 uses the per-user application cache.
 | --- | --- | --- |
 | `setup check` | Read-only dependency diagnosis | Implemented |
 | `setup configure` | Persist an explicit user-managed executable path without running it | Partial P06 |
+| `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
 | `setup plan/install/repair/list/remove/rollback` | Check-first explicit managed dependency lifecycle; manual fallback when no qualified install is available | P06 |
 | `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
@@ -87,7 +88,7 @@ managed target is qualified yet, so `managed_install` reports
 `status` reflects only executable probe results. `verification_scope` is
 `executable_probe_only`, and `local_asr_model` is `not_checked`: a successful
 `--version`/`--help` response does **not** prove provider compatibility or a
-working transcription model. Those checks, persistent selection and verified
+working transcription model. Those checks and verified
 managed installation remain P06 work. Provider `detail` is not an instruction
 channel. Paths are not echoed in the response.
 
@@ -122,8 +123,12 @@ file without executing it. It creates private per-user configuration under
 `LOCALAPPDATA/vsift` on Windows, `~/Library/Application Support/vsift` on macOS,
 or `${XDG_CONFIG_HOME:-~/.config}/vsift` on Linux. It rejects unknown record
 keys/versions and unsafe storage; `setup check` revalidates and probes the
-selection on each call. A per-call path takes precedence. Configuration does
-not authorize downloads or establish model/provider compatibility.
+selection on each call. A per-call path takes precedence.
+`setup configure-model --file <absolute-path>` stores a canonical nonempty
+user-managed model path in
+the same private record. Registration does not parse model bytes; `setup check`
+still reports `local_asr_model: not_checked`. Configuration does not authorize
+downloads or establish model/provider compatibility.
 
 ```json
 {

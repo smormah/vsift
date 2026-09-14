@@ -43,6 +43,7 @@ vsift setup check --json
 vsift setup check --events jsonl
 vsift setup check --whisper "C:\\path\\to\\whisper-cli.exe" --json
 vsift setup configure whisper --executable "C:\\path\\to\\whisper-cli.exe" --json
+vsift setup configure-model --file "C:\\path\\to\\ggml-base.bin" --json
 vsift ingest ./recording.mp4 --json
 vsift session list --json
 vsift session clean --expired --dry-run --json
@@ -63,11 +64,13 @@ ordinary video inspection or an AI assistant acting without separate authority.
 Today, `setup check` can select existing executables by absolute path and returns
 typed manual guidance for missing or unhealthy tools. `setup configure` saves an
 explicit canonical FFmpeg, FFprobe or whisper.cpp executable path in private
-per-user configuration; a per-check path overrides it. Configuration does not run
-the tool or download anything. The check's `ready` status means executable probes
-passed; it does not yet verify compatibility or model weights. Managed plans and
-installation remain gated by reviewed, pinned artifacts; no target is qualified
-yet. A supplied transcript avoids the local Whisper/model requirement.
+per-user configuration; a per-check path overrides it. `setup configure-model`
+saves a canonical nonempty model file path in the same record without reading its
+bytes. Configuration does not run a tool or download anything. The check's
+`ready` status means executable probes passed; it does not yet verify
+compatibility or model weights. Managed plans and installation remain gated by
+reviewed, pinned artifacts; no target is qualified yet. A supplied transcript
+avoids the local Whisper/model requirement.
 
 ## Architecture
 

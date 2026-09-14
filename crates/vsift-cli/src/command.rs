@@ -102,6 +102,7 @@ impl SetupArguments {
             Some(SetupCommand::Remove(_)) => "setup.remove",
             Some(SetupCommand::Rollback(_)) => "setup.rollback",
             Some(SetupCommand::Configure(_)) => "setup.configure",
+            Some(SetupCommand::ConfigureModel(_)) => "setup.configure-model",
             None => "setup",
         }
     }
@@ -126,6 +127,8 @@ pub(crate) enum SetupCommand {
     Rollback(SetupVersionArguments),
     /// Register explicitly supplied dependency configuration.
     Configure(SetupConfigureArguments),
+    /// Register an explicit user-managed local ASR model file.
+    ConfigureModel(SetupConfigureModelArguments),
 }
 
 /// Read-only setup-check options.
@@ -197,6 +200,14 @@ pub(crate) struct SetupConfigureArguments {
     /// Explicit executable path; project-local configuration is never auto-loaded.
     #[arg(long)]
     pub executable: PathBuf,
+}
+
+/// Explicit user-managed ASR model registration.
+#[derive(Args, Debug)]
+pub(crate) struct SetupConfigureModelArguments {
+    /// Absolute path to an existing model file; bytes are not parsed during registration.
+    #[arg(long)]
+    pub file: PathBuf,
 }
 
 /// A provider whose executable may be explicitly registered by the user.

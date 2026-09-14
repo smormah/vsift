@@ -282,6 +282,45 @@ fn configured_off_path_selection_persists_and_per_call_path_overrides_it()
 }
 
 #[test]
+fn model_registration_is_private_and_does_not_claim_compatibility()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    std::fs::create_dir_all(&base)?;
+    let model = base.join("selected-model.bin");
+    std::fs::write(&model, b"fixture only; no model parser runs")?;
+    let registered = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "configure-model", "--file"])
+        .arg(&model)
+        .arg("--json")
+        .output()?;
+    let response = parse_stdout(&registered)?;
+    assert!(registered.status.success());
+    assert_eq!(response["command"], "setup.configure-model");
+    assert_eq!(
+        response["data"]["validation"],
+        "canonical_nonempty_file_only"
+    );
+    assert!(
+        !String::from_utf8_lossy(&registered.stdout).contains(&model.to_string_lossy().to_string())
+    );
+
+    let stored: Value = serde_json::from_slice(&std::fs::read(
+        config_root(&base).join("dependencies-v1.json"),
+    )?)?;
+    assert_eq!(
+        stored["model"],
+        std::fs::canonicalize(&model)?.to_string_lossy().as_ref()
+    );
+    let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "check", "--json"])
+        .env("PATH", "")
+        .output()?;
+    assert_eq!(parse_stdout(&checked)?["local_asr_model"], "not_checked");
+    std::fs::remove_dir_all(&base)?;
+    Ok(())
+}
+
+#[test]
 fn invalid_configure_path_has_no_persistent_side_effect() -> Result<(), Box<dyn std::error::Error>>
 {
     let base = isolated_config_base()?;

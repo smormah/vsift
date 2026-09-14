@@ -2,12 +2,21 @@
 
 ## Active
 
-2026-09-13: P06 persistent BYO executable registration is underway from
+2026-09-14: Protected [PR #63](https://github.com/smormah/vsift/pull/63)
+merged persistent BYO executable registration as `55c8a6d`; all Ubuntu,
+macOS, Windows, documentation, governance, strict-worker, dependency and
+security checks passed. The new `codex/p06-model-selection` increment records
+an explicit user-managed model file without parsing or executing it. `setup
+check` still reports `local_asr_model: not_checked`. Model compatibility,
+managed plans/install, D-01..D-10 and P06 E2E remain pending; the ledger stays
+planned and P07/P08 remain ineligible.
+
+2026-09-13: P06 persistent BYO executable registration was developed from
 protected main `4c8dc36`. This increment selects private per-user canonical
 paths and leaves model compatibility, managed installation and D/E2E gates open.
 The ledger remains planned; P07/P08 remain ineligible.
 Local fmt, strict Clippy, workspace tests, warning-denied rustdoc, governance,
-cargo-deny and diff check pass; protected PR evidence is pending.
+cargo-deny and diff check passed; protected merge evidence is recorded above.
 
 2026-09-13: Read-only P06 Ubuntu x64 candidate inventory from direct publisher
 downloads is in `docs/planning/p06-ubuntu-artifact-candidate.md`. The verified

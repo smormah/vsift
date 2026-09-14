@@ -2,14 +2,24 @@
 
 ## Current checkpoint
 
-2026-09-13: P06 persistent BYO executable registration is being implemented
+2026-09-14: P06 persistent BYO executable registration merged through protected
+[PR #63](https://github.com/smormah/vsift/pull/63) as `55c8a6d`. Ubuntu,
+macOS and Windows Quality, Documentation, Governance, strict-worker,
+dependency policy/review and CodeQL/Rust analysis passed. The Unix extension
+import correction is included. P06 remains planned. The next increment on
+`codex/p06-model-selection` records a user-selected nonempty model file without
+loading it; model-backed compatibility, managed installation, D-01..D-10 and
+P06 E2E remain open. Local fmt, strict Clippy, workspace tests, warning-denied
+rustdoc, governance and diff check pass; protected evidence is pending.
+
+2026-09-13: P06 persistent BYO executable registration was implemented
 from protected main `4c8dc36` on `codex/p06-persistent-byo`. It stores canonical
 per-user FFmpeg/FFprobe/whisper.cpp paths without executing them; `setup check`
-probes selected paths with per-call precedence. Model persistence, compatibility,
-managed installation, D-01..D-10 and P06 E2E remain open. Local and protected
-validation/merge references will be added when available. Local fmt, strict
-Clippy, workspace tests, warning-denied rustdoc, governance, cargo-deny and
-diff check pass; protected review is pending.
+probes selected paths with per-call precedence. At that increment, model
+persistence, compatibility, managed installation, D-01..D-10 and P06 E2E
+remained open. Local fmt, strict Clippy, workspace tests, warning-denied
+rustdoc, governance, cargo-deny and diff check passed. Protected checks and
+merge are recorded above.
 
 2026-09-13: A read-only Ubuntu x64 P06 candidate review independently verified
 the publisher archive hashes and selected files for the retained month-end
