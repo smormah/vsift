@@ -9,8 +9,8 @@ use std::{
 use lzma_rust2::{Action, Status, XzStream};
 
 use crate::{
-    ArchiveEntry, ArchiveInventoryBounds, ReviewedArchiveAlias, TarInventoryError,
-    inspect_tar_inventory,
+    ArchiveEntry, ArchiveInventoryBounds, ReviewedArchiveAlias, ReviewedArchiveFile,
+    TarInventoryError, inspect_tar_inventory, inspect_tar_selected_files,
 };
 
 /// Hard limit on compressed XZ bytes read from a verified artifact.
@@ -128,12 +128,58 @@ pub fn inspect_xz_tar_inventory<Source: Read>(
     bounds: ArchiveInventoryBounds,
     reviewed_aliases: &[ReviewedArchiveAlias<'_>],
 ) -> Result<Vec<ArchiveEntry>, XzTarInventoryError> {
+    inspect_xz_tar(
+        source,
+        max_compressed_bytes,
+        max_tar_bytes,
+        bounds,
+        reviewed_aliases,
+        None,
+    )
+}
+
+/// Validates an XZ/tar inventory and exact selected regular-file bytes.
+///
+/// # Errors
+///
+/// Returns typed compressed-size, decoder, selection or tar rejection.
+pub fn inspect_xz_tar_selected_files<Source: Read>(
+    source: Source,
+    max_compressed_bytes: u64,
+    max_tar_bytes: u64,
+    bounds: ArchiveInventoryBounds,
+    reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+    selected_files: &[ReviewedArchiveFile<'_>],
+) -> Result<Vec<ArchiveEntry>, XzTarInventoryError> {
+    inspect_xz_tar(
+        source,
+        max_compressed_bytes,
+        max_tar_bytes,
+        bounds,
+        reviewed_aliases,
+        Some(selected_files),
+    )
+}
+
+fn inspect_xz_tar<Source: Read>(
+    source: Source,
+    max_compressed_bytes: u64,
+    max_tar_bytes: u64,
+    bounds: ArchiveInventoryBounds,
+    reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+    selected_files: Option<&[ReviewedArchiveFile<'_>]>,
+) -> Result<Vec<ArchiveEntry>, XzTarInventoryError> {
     if max_compressed_bytes == 0 || max_compressed_bytes > MAX_XZ_ARCHIVE_BYTES {
         return Err(XzTarInventoryError::InvalidCompressedLimit);
     }
     let mut reader =
         MemoryLimitedXzReader::new(source.take(max_compressed_bytes + 1), XZ_MEMORY_LIMIT_KIB);
-    let inventory = inspect_tar_inventory(&mut reader, max_tar_bytes, bounds, reviewed_aliases);
+    let inventory = match selected_files {
+        Some(files) => {
+            inspect_tar_selected_files(&mut reader, max_tar_bytes, bounds, reviewed_aliases, files)
+        }
+        None => inspect_tar_inventory(&mut reader, max_tar_bytes, bounds, reviewed_aliases),
+    };
     if reader.compressed.limit() == 0 {
         return Err(XzTarInventoryError::CompressedInputTooLarge);
     }
@@ -160,8 +206,12 @@ mod tests {
     use lzma_rust2::{XzOptions, XzWriter};
     use tar::{Builder, Header};
 
-    use super::{MemoryLimitedXzReader, XzTarInventoryError, inspect_xz_tar_inventory};
-    use crate::ArchiveInventoryBounds;
+    use super::{
+        MemoryLimitedXzReader, XzTarInventoryError, inspect_xz_tar_inventory,
+        inspect_xz_tar_selected_files,
+    };
+    use crate::{ArchiveInventoryBounds, ReviewedArchiveFile};
+    use vsift_domain::ArtifactIntegrity;
 
     fn fixture() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut tar = Builder::new(Vec::new());
@@ -188,6 +238,28 @@ mod tests {
             inspect_xz_tar_inventory(Cursor::new(&xz), xz.len() as u64, 10_000, bounds()?, &[])?;
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].path, "root/tool");
+        Ok(())
+    }
+
+    #[test]
+    fn verifies_selected_file_inside_xz() -> Result<(), Box<dyn std::error::Error>> {
+        let xz = fixture()?;
+        let selected = [ReviewedArchiveFile {
+            path: "root/tool",
+            integrity: ArtifactIntegrity::from_sha256_hex(
+                3,
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            )?,
+        }];
+        let entries = inspect_xz_tar_selected_files(
+            Cursor::new(&xz),
+            xz.len() as u64,
+            10_000,
+            bounds()?,
+            &[],
+            &selected,
+        )?;
+        assert_eq!(entries.len(), 1);
         Ok(())
     }
 

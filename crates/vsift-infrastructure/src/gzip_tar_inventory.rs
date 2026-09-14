@@ -5,8 +5,8 @@ use std::{error::Error, fmt, io::Read};
 use flate2::read::MultiGzDecoder;
 
 use crate::{
-    ArchiveEntry, ArchiveInventoryBounds, ReviewedArchiveAlias, TarInventoryError,
-    inspect_tar_inventory,
+    ArchiveEntry, ArchiveInventoryBounds, ReviewedArchiveAlias, ReviewedArchiveFile,
+    TarInventoryError, inspect_tar_inventory, inspect_tar_selected_files,
 };
 
 /// Hard limit on compressed gzip bytes read from a verified artifact.
@@ -52,6 +52,47 @@ pub fn inspect_gzip_tar_inventory<Source: Read>(
     bounds: ArchiveInventoryBounds,
     reviewed_aliases: &[ReviewedArchiveAlias<'_>],
 ) -> Result<Vec<ArchiveEntry>, GzipTarInventoryError> {
+    inspect_gzip_tar(
+        source,
+        max_compressed_bytes,
+        max_tar_bytes,
+        bounds,
+        reviewed_aliases,
+        None,
+    )
+}
+
+/// Validates a gzip/tar inventory and exact selected regular-file bytes.
+///
+/// # Errors
+///
+/// Returns typed compressed-size, decoder, selection or tar rejection.
+pub fn inspect_gzip_tar_selected_files<Source: Read>(
+    source: Source,
+    max_compressed_bytes: u64,
+    max_tar_bytes: u64,
+    bounds: ArchiveInventoryBounds,
+    reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+    selected_files: &[ReviewedArchiveFile<'_>],
+) -> Result<Vec<ArchiveEntry>, GzipTarInventoryError> {
+    inspect_gzip_tar(
+        source,
+        max_compressed_bytes,
+        max_tar_bytes,
+        bounds,
+        reviewed_aliases,
+        Some(selected_files),
+    )
+}
+
+fn inspect_gzip_tar<Source: Read>(
+    source: Source,
+    max_compressed_bytes: u64,
+    max_tar_bytes: u64,
+    bounds: ArchiveInventoryBounds,
+    reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+    selected_files: Option<&[ReviewedArchiveFile<'_>]>,
+) -> Result<Vec<ArchiveEntry>, GzipTarInventoryError> {
     if max_compressed_bytes == 0 || max_compressed_bytes > MAX_GZIP_ARCHIVE_BYTES {
         return Err(GzipTarInventoryError::InvalidCompressedLimit);
     }
@@ -59,7 +100,12 @@ pub fn inspect_gzip_tar_inventory<Source: Read>(
     // One additional byte distinguishes an oversized compressed artifact from
     // a stream exactly at its reviewed limit, even if the decoder buffers input.
     let mut decoder = MultiGzDecoder::new(source.take(max_compressed_bytes + 1));
-    let inventory = inspect_tar_inventory(&mut decoder, max_tar_bytes, bounds, reviewed_aliases);
+    let inventory = match selected_files {
+        Some(files) => {
+            inspect_tar_selected_files(&mut decoder, max_tar_bytes, bounds, reviewed_aliases, files)
+        }
+        None => inspect_tar_inventory(&mut decoder, max_tar_bytes, bounds, reviewed_aliases),
+    };
     let mut compressed = decoder.into_inner();
     if compressed.limit() == 0 {
         return Err(GzipTarInventoryError::CompressedInputTooLarge);
@@ -85,8 +131,11 @@ mod tests {
     use flate2::{Compression, write::GzEncoder};
     use tar::{Builder, Header};
 
-    use super::{GzipTarInventoryError, inspect_gzip_tar_inventory};
-    use crate::{ArchiveInventoryBounds, TarInventoryError};
+    use super::{
+        GzipTarInventoryError, inspect_gzip_tar_inventory, inspect_gzip_tar_selected_files,
+    };
+    use crate::{ArchiveInventoryBounds, ReviewedArchiveFile, TarInventoryError};
+    use vsift_domain::ArtifactIntegrity;
 
     fn fixture() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut tar = Builder::new(Vec::new());
@@ -119,6 +168,28 @@ mod tests {
         )?;
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].path, "root/tool");
+        Ok(())
+    }
+
+    #[test]
+    fn verifies_selected_file_inside_gzip() -> Result<(), Box<dyn std::error::Error>> {
+        let gzip = fixture()?;
+        let selected = [ReviewedArchiveFile {
+            path: "root/tool",
+            integrity: ArtifactIntegrity::from_sha256_hex(
+                3,
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            )?,
+        }];
+        let entries = inspect_gzip_tar_selected_files(
+            Cursor::new(&gzip),
+            gzip.len() as u64,
+            10_000,
+            bounds()?,
+            &[],
+            &selected,
+        )?;
+        assert_eq!(entries.len(), 1);
         Ok(())
     }
 
