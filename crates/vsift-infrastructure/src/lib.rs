@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod archive_inventory;
 mod executable;
 mod ffmpeg_media;
 mod filesystem_session_store;
@@ -11,6 +12,11 @@ mod source_snapshot;
 mod user_dependency_config;
 mod verified_artifact_transfer;
 
+pub use archive_inventory::{
+    ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, ArchiveInventoryError,
+    MAX_ARCHIVE_ENTRIES, MAX_ARCHIVE_EXPANDED_BYTES, ReviewedArchiveAlias,
+    validate_archive_inventory,
+};
 pub use executable::{
     ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
 };

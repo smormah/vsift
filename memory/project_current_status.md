@@ -2,6 +2,14 @@
 
 ## Active
 
+2026-09-14: Protected [PR #72](https://github.com/smormah/vsift/pull/72)
+merged Ubuntu candidate provenance as `8e299e4` with all required checks
+passing. P06 archive inventory policy `7e73b95` now validates bounded entry
+metadata and exact reviewed link headers before a future extractor acts.
+It does not parse an archive, write staging files or install anything. D-04,
+the catalogue and full P06 gates remain open; local focused tests and strict
+Clippy passed, full/protected checks pending. P07/P08 remain ineligible.
+
 2026-09-14: Ubuntu P06 candidate provenance now links BtbN release build-scripts
 commit `8267213e`, upstream FFmpeg commit `e47273f4` and whisper.cpp v1.9.2
 tag commit `306c88f4`. A 2028-08-01 new-plan cutoff is proposed before the
