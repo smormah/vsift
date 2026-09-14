@@ -2,6 +2,17 @@
 
 ## Current checkpoint
 
+2026-09-14: P06 gzip tar inspection `f553d98` reads all gzip members through
+the pinned pure-Rust `flate2` 1.1.10 backend under a 256 MiB maximum compressed
+input limit, then applies the existing bounded tar inventory policy. Focused
+tests cover valid, truncated, corrupt, oversized and hidden-second-member
+streams. The exact publisher whisper.cpp archive passed opt-in read-only
+inventory after size/SHA-256 verification (`c52df98`), without execution.
+Local fmt, strict Clippy, workspace tests, warning-denied rustdoc,
+governance and `cargo deny check` passed. Protected checks/merge are pending.
+XZ decoding, selected-file extraction, staging, catalogue and activation remain
+open; P06 stays planned.
+
 2026-09-14: Protected [PR #75](https://github.com/smormah/vsift/pull/75)
 merged P06 raw-tar inventory reader `01ba396` and PAX regression `c6fad01`
 as `e0da4b8`. It adds bounded sequential metadata inspection and rejects

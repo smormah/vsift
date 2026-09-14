@@ -65,6 +65,15 @@ The whisper.cpp archive contains 44 entries, 35 regular files, eight symbolic
 links and 24,519,182 expanded bytes. It includes an MIT `LICENSE` file. The
 following selected regular files were hashed from the verified archive:
 
+On 2026-09-14 the same publisher URL was downloaded to a temporary review
+file on the maintainer machine, measured at 9,497,583 bytes and verified
+against the pinned SHA-256 above. No executable was run. Opt-in Rust test
+`p06_whisper_archive` (`c52df98`) independently verified the file digest,
+then passed the production read-only gzip/tar inventory reader with exactly
+44 entries, 24,519,182 declared expanded bytes and all eight reviewed link
+headers. This proves format compatibility for the fixed archive bytes only;
+it does not qualify extraction, runtime behaviour or a managed install.
+
 | Relative file under `whisper-bin-ubuntu-x64/` | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `LICENSE` | 1,078 | `94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d` |

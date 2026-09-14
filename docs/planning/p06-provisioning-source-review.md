@@ -55,6 +55,24 @@ explicitly excludes concurrent destination mutation from its unpacking
 guarantee. VSift does not call its unpack APIs; a later extractor must use
 contained filesystem handles and verify selected regular-file bytes itself.
 
+The next read-only increment decodes gzip through pinned `flate2` 1.1.10 in
+`vsift-infrastructure`, with the pure-Rust backend and no C zlib backend. It
+checks all gzip members, caps compressed input at a reviewed value not above
+256 MiB, and feeds the existing 1 GiB-capped tar reader; a corrupt trailer or
+additional decompressed content after the tar end marker is rejected. The
+[crate documentation](https://docs.rs/flate2/1.1.10/flate2/) distinguishes
+single-member decoding from `MultiGzDecoder`, which is why this adapter uses
+the latter. `flate2` declares MIT OR Apache-2.0 and Rust 1.67 MSRV, below
+VSift's Rust 1.98 toolchain; its [repository](https://github.com/rust-lang/flate2-rs)
+was active and not archived at review (2026-09-06 push). The locked graph adds
+`flate2`, `miniz_oxide`, `adler2`, `simd-adler32` and `crc32fast`;
+`cargo deny check` passed advisories, bans, licences and sources with existing
+duplicate-version warnings. This reader does not inspect the publisher's XZ
+archive, extract any bytes, qualify the Ubuntu candidate, or close D-04.
+The pinned whisper.cpp gzip asset also passed opt-in, read-only Rust inventory
+inspection after independent exact-size/SHA-256 verification (`c52df98`);
+all 44 entries and eight reviewed link headers matched. No binary was run.
+
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
 model LFS pointer. It is not an accepted catalogue: binary-specific licence
