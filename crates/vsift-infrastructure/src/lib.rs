@@ -7,6 +7,7 @@ mod bounded_tar_inventory;
 mod executable;
 mod ffmpeg_media;
 mod filesystem_session_store;
+mod gzip_tar_inventory;
 mod process_dependency_probe;
 mod process_supervisor;
 mod source_snapshot;
@@ -30,6 +31,9 @@ pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ExclusiveSessionLifetimeHold,
     FilesystemAdmissionPermit, FilesystemSessionStore, SessionIndexPage, SessionReadHold,
     SessionRegistration, SessionStatus, SessionStoreOpenError,
+};
+pub use gzip_tar_inventory::{
+    GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{
