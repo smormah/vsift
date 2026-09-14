@@ -28,6 +28,17 @@ verified archive without execution:
 | `bin/ffmpeg` | 116,038,416 | `ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc` |
 | `bin/ffprobe` | 115,829,520 | `0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7` |
 
+On 2026-09-14 the pinned FFmpeg archive was downloaded again from the same
+publisher URL into a temporary file, verified against the SHA-256 above, and
+inspected without executing a binary. Its sole `LICENSE.txt` is the GNU Lesser
+General Public License **version 3** text, matching the selected file hash
+above. This is a concrete archive notice, not a complete inventory of every
+compiled library's licence or corresponding source. The [publisher release](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-31-13-27)
+labels this asset `LGPL, static`; [FFmpeg's own licence guidance](https://ffmpeg.org/legal.html)
+explains that build configuration and linked components matter. A managed plan
+must link the exact archive notice and the build's source/configuration
+references, and describe the build accurately without claiming legal clearance.
+
 The whisper.cpp archive contains 44 entries, 35 regular files, eight symbolic
 links and 24,519,182 expanded bytes. It includes an MIT `LICENSE` file. The
 following selected regular files were hashed from the verified archive:
@@ -40,6 +51,13 @@ following selected regular files were hashed from the verified archive:
 | `libggml-base.so.0.18.1` | 910,680 | `bc41368cecccc3db8b4f52ad168b51413ee6c005a772b1d3e4f4b3bb47777553` |
 | `libggml-cpu-x64.so` | 878,024 | `b7c084e19dc63a83acf9d6dac8d2cba089026996bf805659e10d650d5a51c216` |
 | `libwhisper.so.1.9.2` | 611,280 | `afd9560fa2dd20a7c0f9aa682f9c4f339b2d223f2ad6fa200fc229bc3b1606d6` |
+
+The selected `LICENSE` matches [whisper.cpp v1.9.2's MIT notice](https://github.com/ggml-org/whisper.cpp/blob/v1.9.2/LICENSE).
+The [pinned model card](https://huggingface.co/ggerganov/whisper.cpp/blob/80da2d8bfee42b0e836fc3a9890373e5defc00a6/README.md)
+declares MIT for the converted Whisper weights and identifies their OpenAI
+origin; [OpenAI Whisper's notice](https://github.com/openai/whisper/blob/main/LICENSE)
+is MIT. These are publisher/repository disclosures; no model bytes were
+redownloaded during this notice inspection.
 
 The symlinks are expected SONAME aliases and parakeet aliases in the upstream
 archive. P06's extraction policy must not blindly materialize archive links.

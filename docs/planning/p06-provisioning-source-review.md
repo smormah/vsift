@@ -54,6 +54,15 @@ operations and model-backed tone-audio inference. Resource, speech accuracy,
 notices, production installer and D/E2E gates remain open. This does not promote
 the Python qualification harness into the Rust installer.
 
+A 2026-09-14 read-only recheck of the pinned Ubuntu FFmpeg archive confirmed
+its `LICENSE.txt` is the LGPL version 3 text. The publisher labels the asset
+LGPL/static. The selected whisper.cpp v1.9.2 notice and pinned model card state
+MIT, with OpenAI Whisper's original notice also MIT. The exact build's full
+compiled-component source/configuration references and plan-facing notice
+disclosure still need review; these observed labels do not by themselves accept
+the managed catalogue or settle legal status. See the
+[Ubuntu candidate record](p06-ubuntu-artifact-candidate.md).
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 

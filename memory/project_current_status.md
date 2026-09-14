@@ -2,12 +2,20 @@
 
 ## Active
 
+2026-09-14: Protected [PR #64](https://github.com/smormah/vsift/pull/64)
+merged model file registration as `15ed193`, with all supported-OS quality and
+security/governance checks passed. A follow-up read-only Ubuntu candidate
+review reconfirmed the exact FFmpeg archive hash and its LGPL v3 notice, plus
+MIT publisher notices for whisper.cpp and the converted model. The candidate
+is still not an accepted catalogue: full compiled-component source references,
+plan-facing disclosure, production installer and D/E2E evidence remain open.
+P06 stays planned; P07/P08 remain ineligible.
+
 2026-09-14: Protected [PR #63](https://github.com/smormah/vsift/pull/63)
 merged persistent BYO executable registration as `55c8a6d`; all Ubuntu,
 macOS, Windows, documentation, governance, strict-worker, dependency and
-security checks passed. The new `codex/p06-model-selection` increment records
-an explicit user-managed model file without parsing or executing it. `setup
-check` still reports `local_asr_model: not_checked`. Model compatibility,
+security checks passed. The subsequent model selection increment is recorded
+above. `setup check` still reports `local_asr_model: not_checked`. Model compatibility,
 managed plans/install, D-01..D-10 and P06 E2E remain pending; the ledger stays
 planned and P07/P08 remain ineligible.
 
