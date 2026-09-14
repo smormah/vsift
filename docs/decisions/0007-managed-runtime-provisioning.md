@@ -28,3 +28,14 @@ rollback and removal use the same transaction and do not delete user-managed fil
 The npm package remains small and does not silently fetch large tools or models.
 Offline and proxy-aware flows share the same verification policy. Redistribution of
 each provider build/model requires separate licence and provenance review.
+
+## 2026-09-14 implementation note: verified transfer primitive
+
+P06 now has a typed size/SHA-256 requirement and a bounded streaming verifier.
+It accepts only a nonempty artifact of at most 1 GiB and exactly the reviewed
+size and SHA-256. The destination is unactivated staging and must be discarded
+on every error. This is not a URL fetcher, source trust catalogue, archive
+extractor, compatibility smoke test or activation transaction. The HTTPS
+adapter must enforce a transfer deadline and redirect/proxy policy; only a
+reviewed catalogue may supply the expected digest. The default `setup plan`
+and `setup install` remain unavailable pending the remaining P06 gates.

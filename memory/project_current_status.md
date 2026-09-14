@@ -2,6 +2,16 @@
 
 ## Active
 
+2026-09-14: P06 verified-stream primitive is underway from protected main
+`a554586`: exact bounded bytes and SHA-256 are checked before any future
+activation. Local fmt, strict Clippy and workspace tests pass. HTTPS source,
+catalogue, extraction, activation, D-01..D-10 and P06 E2E remain open.
+Protected PR #65 merged the source notice review as `a554586`; its first
+Ubuntu Quality attempt failed with `Busy` in the existing shared-read-lock
+test, then passed unchanged on rerun. [Issue #66](https://github.com/smormah/vsift/issues/66)
+tracks the unexplained test failure. The ledger remains planned; P07/P08
+remain ineligible.
+
 2026-09-14: Protected [PR #64](https://github.com/smormah/vsift/pull/64)
 merged model file registration as `15ed193`, with all supported-OS quality and
 security/governance checks passed. A follow-up read-only Ubuntu candidate

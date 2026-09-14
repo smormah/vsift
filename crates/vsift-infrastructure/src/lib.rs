@@ -9,6 +9,7 @@ mod process_dependency_probe;
 mod process_supervisor;
 mod source_snapshot;
 mod user_dependency_config;
+mod verified_artifact_transfer;
 
 pub use executable::{
     ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
@@ -33,3 +34,4 @@ pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
 };
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
+pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};

@@ -2,6 +2,16 @@
 
 ## Current checkpoint
 
+2026-09-14: P06 verified-stream work on `codex/p06-verified-stream` adds a typed
+reviewed size/SHA-256 requirement and bounded transfer over injected streams.
+It does not fetch or activate a dependency. Local fmt, strict Clippy and full
+workspace tests pass; protected checks and merge evidence are pending. The
+source-notice record merged through protected [PR #65](https://github.com/smormah/vsift/pull/65)
+as `a554586` after all required checks passed on a rerun. Its first Ubuntu
+attempt failed an existing P03 shared-lifetime-lock test with `Busy`; the
+unchanged-commit rerun passed. [Issue #66](https://github.com/smormah/vsift/issues/66)
+tracks that unexplained intermittent failure. P06 remains planned.
+
 2026-09-14: `setup configure-model` merged through protected
 [PR #64](https://github.com/smormah/vsift/pull/64) as `15ed193`; Ubuntu, macOS,
 Windows, documentation, governance, strict-worker, dependency and security
