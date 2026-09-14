@@ -260,4 +260,18 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn pax_extension_cannot_hide_an_effective_entry() -> Result<(), Box<dyn std::error::Error>> {
+        let mut archive = Builder::new(Vec::new());
+        archive.append_pax_extensions([("path", b"root/hidden".as_slice())])?;
+        let data = archive.into_inner()?;
+        assert_eq!(
+            inspect_tar_inventory(Cursor::new(data), 10_000, bounds()?, &[]),
+            Err(TarInventoryError::Inventory(
+                ArchiveInventoryError::SpecialEntry
+            ))
+        );
+        Ok(())
+    }
 }
