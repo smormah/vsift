@@ -2,6 +2,14 @@
 
 ## Current checkpoint
 
+2026-09-14: P06 Ubuntu candidate provenance review identified BtbN's retained
+release-tag build-scripts commit `8267213e`, upstream FFmpeg commit `e47273f4`
+from the binary version, and whisper.cpp tag commit `306c88f4`. The candidate
+record links source/build inputs and proposes 2028-08-01 as the last date for
+new plans before the publisher's two-year retention window. This does not
+constitute a binary signature, complete compiled-source proof or an accepted
+managed catalogue. P06 remains planned.
+
 2026-09-14: Protected [PR #68](https://github.com/smormah/vsift/pull/68)
 merged the Ubuntu diagnostic runner as `78e005d`. Its first macOS Quality
 attempt hit the existing intermittent P03 `Busy` failure in

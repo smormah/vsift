@@ -73,6 +73,12 @@ captured the pinned executable's build configuration and a line of its LGPL
 runtime statement. F01 model-backed inference took 23.05 seconds; the largest
 child-process peak RSS across the smoke was 290,820 KiB. This is tone-only,
 single-run candidate evidence, not an isolated model resource/accuracy gate.
+The candidate record now links the BtbN release's fixed build-scripts commit,
+the upstream FFmpeg commit named by the binary, and the whisper.cpp tag commit.
+It proposes a 2028-08-01 cutoff for new plans from the 2026-08-31 month-end
+asset, subject to an earlier revocation or a reviewed replacement. These
+source links and publisher checksums are supporting provenance, not a binary
+signature or independent proof of all compiled dependency sources.
 The full compiled-component source/notice review, catalogue and production
 installer gates remain open; `setup plan` remains unavailable.
 
