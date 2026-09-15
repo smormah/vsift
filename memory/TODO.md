@@ -2,8 +2,9 @@
 
 ## Current checkpoint
 
-2026-09-15: P06 direct publisher transport implementation `c058756`
-from protected predecessor `3a56ac2` adds immutable reviewed GitHub-release
+2026-09-15: Protected [PR #87](https://github.com/smormah/vsift/pull/87)
+merged P06 direct publisher transport implementation `c058756` as `0d36160`
+from protected predecessor `3a56ac2`. It adds immutable reviewed GitHub-release
 and Hugging Face model routes, origin-specific HTTPS CDN redirects, system TLS,
 deadlines and cancellation. It writes only to the existing private unactivated
 stage, verifies exact size/SHA-256, and discards interruptions without resume.
@@ -11,7 +12,11 @@ The pinned 9,497,583-byte Ubuntu whisper.cpp asset passed an opt-in fresh
 publisher download without execution. Focused route/redirect/cancellation and
 streaming short/excess/digest/cleanup tests, local fmt, strict Clippy,
 workspace tests, warning-denied rustdoc, governance and `cargo deny check`
-passed. Protected review is pending. Catalogue acceptance remains blocked by
+passed. Protected Ubuntu, macOS and Windows Quality, Documentation,
+Governance and strict-worker checks passed in [CI run 34981240230](https://github.com/smormah/vsift/actions/runs/34981240230);
+[dependency/security run 34981240514](https://github.com/smormah/vsift/actions/runs/34981240514)
+and [Rust analysis run 34981240137](https://github.com/smormah/vsift/actions/runs/34981240137)
+passed. Catalogue acceptance remains blocked by
 the exact FFmpeg build's compiled-component source/notice review; setup plan,
 selected-file assembly, smoke, activation, D-01..D-10 and P06 E2E remain open.
 P06 stays planned.
