@@ -2,6 +2,19 @@
 
 ## Active
 
+2026-09-15: P06 owned selected-file assembly `e0d2ada` from protected main
+`d377430` is ready for protected review. The private marked artifact stage
+creates an empty private payload directory and passes a rechecked artifact
+to bounded raw tar, gzip/tar or XZ/tar selected-file staging. Open rejects
+changed, linked, extra or directory-substituted files; discard removes only
+reviewed files and leaves the artifact for an explicit later discard. Fresh
+pinned Ubuntu whisper.cpp archive bytes passed owned import, gzip/tar assembly,
+`whisper-cli` recheck and disposal without executing a binary. Focused tests,
+full workspace fmt/strict Clippy/tests, warning-denied rustdoc, governance
+and dependency policy passed locally. Catalogue, plan acceptance, alias and
+executable preparation, smoke, activation and full D/P06 E2E are still open;
+P06 stays planned.
+
 2026-09-15: Protected [PR #87](https://github.com/smormah/vsift/pull/87)
 merged P06 direct publisher transfer `c058756` as `0d36160` from protected
 main `3a56ac2`. Infrastructure validates immutable
