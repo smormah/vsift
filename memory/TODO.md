@@ -2,20 +2,24 @@
 
 ## Current checkpoint
 
-2026-09-15: On `codex/p06-owned-acquisition` from protected main `eb56928`,
-implementation commit `f6c3509`, P06 now has a private, marked per-user
-managed-data root and a fresh marked
-unactivated stage for an exact reviewed artifact. The import rechecks the
-staged file before archive use and removes only its own stage after failed
-transfer. Focused Windows tests cover valid import/discard, changed source,
-changed staged bytes, existing unowned roots and unexpected content. The
-candidate catalogue is not accepted: the BtbN build reports many enabled
-compiled components while its archive carries only the LGPL text. Direct
-publisher HTTPS, plan acceptance, archive assembly in the owned root,
-compatibility smoke, activation and D-01..D-10/P06 E2E remain open. P06 stays
-planned. Local full workspace tests, fmt, strict Clippy, documentation build,
-governance and `cargo deny check` passed. Protected PR/check results and merge
-hash are pending.
+2026-09-15: Protected [PR #85](https://github.com/smormah/vsift/pull/85)
+merged P06 owned unactivated artifact staging `f6c3509` as `3ad5bf6`
+from predecessor `eb56928`. The private per-user managed-data root and each
+fresh stage use exact ownership markers; import and later open verify the
+reviewed size/SHA-256, failed transfers discard only known stage files, and
+unowned or unexpectedly changed storage is preserved and rejected. Focused
+Windows tests cover valid import/discard, changed source/staged bytes,
+unowned roots and unexpected content; Ubuntu CI also passed a Unix stage-name
+substitution regression. Local fmt, strict Clippy, full workspace tests,
+warning-denied rustdoc, governance and dependency policy passed. Protected
+[CI run 34953469291](https://github.com/smormah/vsift/actions/runs/34953469291)
+passed Ubuntu, macOS and Windows Quality, Documentation, Governance and
+strict-worker checks; [Security run 34953469302](https://github.com/smormah/vsift/actions/runs/34953469302)
+and [CodeQL run 34953469319](https://github.com/smormah/vsift/actions/runs/34953469319)
+passed. The Ubuntu candidate catalogue is still unaccepted because the exact
+FFmpeg build's compiled-source/notice disclosure remains open. Direct HTTPS,
+plan acceptance, archive assembly in the owned root, smoke, activation and
+D-01..D-10/P06 E2E remain open. P06 stays planned.
 
 2026-09-15: Protected [PR #83](https://github.com/smormah/vsift/pull/83)
 merged P06 contained selected-file staging `57b8113` as `b5d8769` from
