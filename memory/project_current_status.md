@@ -3,7 +3,8 @@
 ## Active
 
 2026-09-15: P06 work on `codex/p06-owned-acquisition` starts from protected
-`eb56928`. An infrastructure-only managed-data store now opens or creates a
+`eb56928` (implementation `f6c3509`). An infrastructure-only managed-data
+store now opens or creates a
 private per-user root with an exact owner marker, rejects existing unmarked
 storage, and imports exact reviewed bytes into a private marked stage. Every
 open rechecks staged bytes; failed import discards only the owned artifact and

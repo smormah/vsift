@@ -3,7 +3,8 @@
 ## Current checkpoint
 
 2026-09-15: On `codex/p06-owned-acquisition` from protected main `eb56928`,
-P06 now has a private, marked per-user managed-data root and a fresh marked
+implementation commit `f6c3509`, P06 now has a private, marked per-user
+managed-data root and a fresh marked
 unactivated stage for an exact reviewed artifact. The import rechecks the
 staged file before archive use and removes only its own stage after failed
 transfer. Focused Windows tests cover valid import/discard, changed source,
