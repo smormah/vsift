@@ -13,8 +13,8 @@ use std::{
 use sha2::{Digest, Sha256};
 use vsift_domain::ArtifactIntegrity;
 use vsift_infrastructure::{
-    ArchiveInventoryBounds, ReviewedArchiveAlias, ReviewedArchiveFile,
-    stage_gzip_tar_selected_files,
+    ArchiveInventoryBounds, ManagedArtifactStore, ReviewedArchiveAlias, ReviewedArchiveFile,
+    ReviewedPayloadArchive, stage_gzip_tar_selected_files,
 };
 
 use support::PrivateStaging;
@@ -134,7 +134,7 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
     let files = reviewed_files()?;
     let staging = PrivateStaging::new("vsift-p06-whisper-stage")?;
     let entries = stage_gzip_tar_selected_files(
-        File::open(path)?,
+        File::open(&path)?,
         EXPECTED_BYTES,
         30_000_000,
         ArchiveInventoryBounds::new(44, 24_519_182)?,
@@ -159,5 +159,25 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
             "whisper-cli",
         ]
     );
+    let owned = ManagedArtifactStore::at(staging.path().join("managed"))?;
+    let artifact = owned.import_verified(
+        File::open(&path)?,
+        ArtifactIntegrity::from_sha256_hex(EXPECTED_BYTES, EXPECTED_SHA256)?,
+    )?;
+    let payload = artifact.stage_reviewed_payload(
+        ReviewedPayloadArchive::GzipTar {
+            max_compressed_bytes: EXPECTED_BYTES,
+            max_tar_bytes: 30_000_000,
+        },
+        ArchiveInventoryBounds::new(44, 24_519_182)?,
+        &aliases,
+        &files,
+    )?;
+    assert_eq!(
+        payload.open_selected_file("whisper-cli")?.metadata()?.len(),
+        976_312
+    );
+    payload.discard()?;
+    artifact.discard()?;
     Ok(())
 }

@@ -115,6 +115,13 @@ On 2026-09-15 a fresh publisher download matched the pinned whole-archive size
 and SHA-256, and the updated opt-in staging test passed in 2.47 seconds. The
 temporary selected files were removed without execution.
 
+On 2026-09-15 a fresh pinned whisper.cpp publisher archive also passed
+exact-byte import into the positively marked per-user managed-data root,
+gzip/tar selected-file assembly beneath that artifact's private stage,
+`whisper-cli` size/SHA-256 recheck and explicit discard. This exercised the
+owned composition, still without executable modes, aliases, smoke or
+activation; it does not accept the candidate as a managed source.
+
 | Relative file under `whisper-bin-ubuntu-x64/` | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `LICENSE` | 1,078 | `94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d` |

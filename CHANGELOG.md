@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 now composes a verified managed artifact with bounded raw tar, gzip/tar
+  or XZ/tar selected-file staging under a fresh private payload directory.
+  Selected files are rechecked before use; changed, linked or unexpected files
+  block opening and cleanup removes only the reviewed selection. The payload
+  remains unactivated and managed setup commands remain unavailable.
 - P06 can transfer an exact reviewed publisher artifact over direct HTTPS into
   the private unactivated stage. Immutable GitHub release and Hugging Face
   model routes admit only their reviewed CDN redirect, with bounded deadlines,

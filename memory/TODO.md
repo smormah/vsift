@@ -2,6 +2,22 @@
 
 ## Current checkpoint
 
+2026-09-15: P06 owned selected-file payload assembly `e0d2ada` from
+protected predecessor `d377430` composes exact-byte artifacts with bounded
+raw tar, gzip/tar and XZ/tar readers under a fresh private payload directory.
+Exact reviewed flat files are rechecked on open; changed, linked, extra or
+replaced-directory content fails closed, and explicit discard removes only
+the reviewed selection. A fresh pinned Ubuntu whisper.cpp publisher archive
+passed exact-byte import, owned gzip/tar assembly, `whisper-cli` recheck and
+discard without execution. Focused storage/substitution tests, full local fmt,
+strict Clippy and workspace tests, warning-denied rustdoc, governance and
+`cargo deny check` passed. A private-payload initialization cleanup correction
+`60eee40` also passed full local fmt, strict Clippy and workspace tests.
+Protected review is pending. The exact Ubuntu FFmpeg candidate still needs
+compiled-component source/notice review before
+catalogue acceptance. Plan authority, alias/executable preparation, smoke,
+activation, lifecycle and D-01..D-10/P06 E2E remain open. P06 stays planned.
+
 2026-09-15: Protected [PR #87](https://github.com/smormah/vsift/pull/87)
 merged P06 direct publisher transport implementation `c058756` as `0d36160`
 from protected predecessor `3a56ac2`. It adds immutable reviewed GitHub-release
