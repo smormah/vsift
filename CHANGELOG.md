@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Per-user dependency configuration now reports `BUSY` only when the OS says
+  another handle holds its lock. Other lock acquisition failures surface as
+  storage I/O; an intermittent hosted `BUSY` test symptom remains under review.
 - Registration explicitly releases its short-lived root initialization lock
   before returning the long-lived marker hold, preventing a duplicated file
   descriptor from prolonging root contention during an immediate bucket scan.
