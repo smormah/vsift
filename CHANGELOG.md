@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 can transfer an exact reviewed publisher artifact over direct HTTPS into
+  the private unactivated stage. Immutable GitHub release and Hugging Face
+  model routes admit only their reviewed CDN redirect, with bounded deadlines,
+  cancellation, whole-artifact size/SHA-256 verification and no resume.
+  Managed setup commands remain unavailable.
 - P06 now has a positively marked private per-user managed root and one-artifact
   staging transaction. It verifies exact reviewed bytes on import and again
   before archive use, removes its own stage after failed import, and refuses

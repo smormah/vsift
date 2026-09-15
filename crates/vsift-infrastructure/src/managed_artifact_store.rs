@@ -12,6 +12,7 @@ use cap_fs_ext::{DirExt, FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, DirBuilder, OpenOptions};
 #[cfg(unix)]
 use cap_std::fs::{DirBuilderExt, OpenOptionsExt};
+use tokio::io::AsyncWriteExt;
 use vsift_domain::ArtifactIntegrity;
 
 use crate::{
@@ -21,6 +22,7 @@ use crate::{
         validate_same_held_directory,
     },
     transfer_verified,
+    verified_artifact_transfer::StreamingArtifactVerifier,
 };
 
 const ROOT_MARKER: &str = "owner-v1";
@@ -124,6 +126,43 @@ impl ManagedArtifactStore {
         source: Source,
         integrity: ArtifactIntegrity,
     ) -> Result<StagedManagedArtifact, ManagedArtifactError> {
+        let staged = self.create_stage(integrity)?;
+        let result = staged
+            .stage
+            .open_with(ARTIFACT, &artifact_write_options())
+            .map_err(|_| ManagedArtifactError::Io)
+            .and_then(|mut file| {
+                transfer_verified(source, &mut file, integrity)
+                    .map_err(ManagedArtifactError::Transfer)?;
+                file.sync_all().map_err(|_| ManagedArtifactError::Io)
+            });
+        if let Err(error) = result {
+            staged.discard()?;
+            return Err(error);
+        }
+        Ok(staged)
+    }
+
+    pub(crate) fn begin_stream(
+        &self,
+        integrity: ArtifactIntegrity,
+    ) -> Result<StreamingManagedArtifact, ManagedArtifactError> {
+        let staged = self.create_stage(integrity)?;
+        let Ok(file) = staged.stage.open_with(ARTIFACT, &artifact_write_options()) else {
+            staged.discard()?;
+            return Err(ManagedArtifactError::Io);
+        };
+        Ok(StreamingManagedArtifact {
+            staged,
+            file: tokio::fs::File::from_std(file.into_std()),
+            verifier: StreamingArtifactVerifier::new(integrity),
+        })
+    }
+
+    fn create_stage(
+        &self,
+        integrity: ArtifactIntegrity,
+    ) -> Result<StagedManagedArtifact, ManagedArtifactError> {
         let root = self.open_root()?;
         let mut random = [0_u8; 16];
         getrandom::fill(&mut random).map_err(|_| ManagedArtifactError::Io)?;
@@ -154,26 +193,6 @@ impl ManagedArtifactStore {
             stage_name,
             integrity,
         };
-        let mut options = OpenOptions::new();
-        options
-            .write(true)
-            .create_new(true)
-            .follow(FollowSymlinks::No);
-        #[cfg(unix)]
-        options.mode(0o600);
-        let result = staged
-            .stage
-            .open_with(ARTIFACT, &options)
-            .map_err(|_| ManagedArtifactError::Io)
-            .and_then(|mut file| {
-                transfer_verified(source, &mut file, integrity)
-                    .map_err(ManagedArtifactError::Transfer)?;
-                file.sync_all().map_err(|_| ManagedArtifactError::Io)
-            });
-        if let Err(error) = result {
-            staged.discard()?;
-            return Err(error);
-        }
         Ok(staged)
     }
 
@@ -188,6 +207,55 @@ impl ManagedArtifactStore {
         }
         Ok(root)
     }
+}
+
+pub(crate) struct StreamingManagedArtifact {
+    staged: StagedManagedArtifact,
+    file: tokio::fs::File,
+    verifier: StreamingArtifactVerifier,
+}
+
+impl StreamingManagedArtifact {
+    pub(crate) async fn append(&mut self, chunk: &[u8]) -> Result<(), ManagedArtifactError> {
+        self.verifier
+            .accept(chunk)
+            .map_err(ManagedArtifactError::Transfer)?;
+        self.file
+            .write_all(chunk)
+            .await
+            .map_err(|_| ManagedArtifactError::Io)
+    }
+
+    pub(crate) async fn finish(&mut self) -> Result<(), ManagedArtifactError> {
+        self.verifier
+            .finish()
+            .map_err(ManagedArtifactError::Transfer)?;
+        self.file
+            .sync_all()
+            .await
+            .map_err(|_| ManagedArtifactError::Io)
+    }
+
+    pub(crate) fn complete(self) -> StagedManagedArtifact {
+        drop(self.file);
+        self.staged
+    }
+
+    pub(crate) fn abort(self) -> Result<(), ManagedArtifactError> {
+        drop(self.file);
+        self.staged.discard()
+    }
+}
+
+fn artifact_write_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    options
+        .write(true)
+        .create_new(true)
+        .follow(FollowSymlinks::No);
+    #[cfg(unix)]
+    options.mode(0o600);
+    options
 }
 
 /// Verified artifact bytes awaiting further archive checks and smoke tests.
@@ -334,7 +402,7 @@ mod tests {
 
     use vsift_domain::ArtifactIntegrity;
 
-    use super::{ManagedArtifactError, ManagedArtifactStore, hex};
+    use super::{ArtifactTransferError, ManagedArtifactError, ManagedArtifactStore, hex};
 
     fn fixture_root() -> Result<PathBuf, Box<dyn Error>> {
         let mut random = [0_u8; 16];
@@ -383,6 +451,41 @@ mod tests {
             assert_eq!(fs::read_dir(root)?.count(), 1);
             Ok::<(), Box<dyn Error>>(())
         })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[tokio::test]
+    async fn streaming_import_enforces_exact_bytes_and_discards_failed_stages()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = async {
+            let root = parent.join("managed");
+            let store = ManagedArtifactStore::at(root.clone())?;
+            for (bytes, expected) in [
+                (&b"ab"[..], ArtifactTransferError::Truncated),
+                (&b"abd"[..], ArtifactTransferError::DigestMismatch),
+                (&b"abcd"[..], ArtifactTransferError::Oversized),
+            ] {
+                let mut stream = store.begin_stream(abc_integrity()?)?;
+                let failure = match stream.append(bytes).await {
+                    Ok(()) => stream.finish().await.err(),
+                    Err(error) => Some(error),
+                };
+                assert!(matches!(failure, Some(ManagedArtifactError::Transfer(error)) if error == expected));
+                stream.abort()?;
+                assert_eq!(fs::read_dir(&root)?.count(), 1);
+            }
+            let mut stream = store.begin_stream(abc_integrity()?)?;
+            stream.append(b"a").await?;
+            stream.append(b"bc").await?;
+            stream.finish().await?;
+            let staged = stream.complete();
+            assert_eq!(staged.open_artifact()?.metadata()?.len(), 3);
+            staged.discard()?;
+            assert_eq!(fs::read_dir(root)?.count(), 1);
+            Ok::<(), Box<dyn Error>>(())
+        }.await;
         fs::remove_dir_all(parent)?;
         result
     }

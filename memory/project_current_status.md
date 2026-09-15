@@ -2,6 +2,19 @@
 
 ## Active
 
+2026-09-15: P06 direct publisher transfer `c058756` from protected main
+`3a56ac2` is ready for protected review. Infrastructure validates immutable
+reviewed GitHub-release and Hugging Face model routes, admits only their
+observed HTTPS publisher CDNs, uses system TLS with typed redacted failures,
+and streams exact size/SHA-256 to the owned unactivated stage. No resume:
+cancelled, failed or timed-out attempts discard owned staging and start from
+zero next time. The pinned Ubuntu whisper.cpp asset passed opt-in direct
+download/recheck without execution. Focused route, redirect, cancellation and
+stream failure tests plus fmt, strict Clippy, full workspace tests,
+warning-denied rustdoc, governance and dependency policy passed locally.
+Catalogue review, plan acceptance, assembly, compatibility smoke, activation
+and full D/P06 E2E remain required; P06 stays planned.
+
 2026-09-15: Protected [PR #85](https://github.com/smormah/vsift/pull/85)
 merged P06 owned unactivated artifact staging `f6c3509` as `3ad5bf6` from
 `eb56928`. An infrastructure-only managed-data store opens or creates a

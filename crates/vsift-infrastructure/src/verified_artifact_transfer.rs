@@ -12,7 +12,7 @@ use vsift_domain::ArtifactIntegrity;
 const TRANSFER_BUFFER_BYTES: usize = 16 * 1024;
 
 /// A typed reason a candidate artifact must not be activated.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ArtifactTransferError {
     /// The source ended before the reviewed byte count.
     Truncated,
@@ -58,7 +58,7 @@ where
     Source: Read,
     Destination: Write,
 {
-    let mut digest = Sha256::new();
+    let mut verifier = StreamingArtifactVerifier::new(integrity);
     let mut buffer = [0_u8; TRANSFER_BUFFER_BYTES];
     let mut copied = 0_u64;
     while copied < integrity.bytes() {
@@ -70,23 +70,61 @@ where
         if read == 0 {
             return Err(ArtifactTransferError::Truncated);
         }
+        verifier.accept(&buffer[..read])?;
         destination
             .write_all(&buffer[..read])
             .map_err(|error| ArtifactTransferError::DestinationIo(error.kind()))?;
-        digest.update(&buffer[..read]);
         copied += read as u64;
     }
     let mut extra = [0_u8; 1];
     if read_retry(&mut source, &mut extra)? != 0 {
         return Err(ArtifactTransferError::Oversized);
     }
-    let observed: [u8; 32] = digest.finalize().into();
-    if observed != integrity.sha256() {
-        return Err(ArtifactTransferError::DigestMismatch);
-    }
+    verifier.finish()?;
     destination
         .flush()
         .map_err(|error| ArtifactTransferError::DestinationIo(error.kind()))
+}
+
+/// Reuses the exact reviewed byte count and digest policy for asynchronous chunks.
+pub(crate) struct StreamingArtifactVerifier {
+    integrity: ArtifactIntegrity,
+    copied: u64,
+    digest: Sha256,
+}
+
+impl StreamingArtifactVerifier {
+    pub(crate) fn new(integrity: ArtifactIntegrity) -> Self {
+        Self {
+            integrity,
+            copied: 0,
+            digest: Sha256::new(),
+        }
+    }
+
+    pub(crate) fn accept(&mut self, chunk: &[u8]) -> Result<(), ArtifactTransferError> {
+        let bytes = u64::try_from(chunk.len()).map_err(|_| ArtifactTransferError::Oversized)?;
+        self.copied = self
+            .copied
+            .checked_add(bytes)
+            .ok_or(ArtifactTransferError::Oversized)?;
+        if self.copied > self.integrity.bytes() {
+            return Err(ArtifactTransferError::Oversized);
+        }
+        self.digest.update(chunk);
+        Ok(())
+    }
+
+    pub(crate) fn finish(&self) -> Result<(), ArtifactTransferError> {
+        if self.copied != self.integrity.bytes() {
+            return Err(ArtifactTransferError::Truncated);
+        }
+        let observed: [u8; 32] = self.digest.clone().finalize().into();
+        if observed != self.integrity.sha256() {
+            return Err(ArtifactTransferError::DigestMismatch);
+        }
+        Ok(())
+    }
 }
 
 fn read_retry(source: &mut impl Read, buffer: &mut [u8]) -> Result<usize, ArtifactTransferError> {

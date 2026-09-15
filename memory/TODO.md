@@ -2,6 +2,20 @@
 
 ## Current checkpoint
 
+2026-09-15: P06 direct publisher transport implementation `c058756`
+from protected predecessor `3a56ac2` adds immutable reviewed GitHub-release
+and Hugging Face model routes, origin-specific HTTPS CDN redirects, system TLS,
+deadlines and cancellation. It writes only to the existing private unactivated
+stage, verifies exact size/SHA-256, and discards interruptions without resume.
+The pinned 9,497,583-byte Ubuntu whisper.cpp asset passed an opt-in fresh
+publisher download without execution. Focused route/redirect/cancellation and
+streaming short/excess/digest/cleanup tests, local fmt, strict Clippy,
+workspace tests, warning-denied rustdoc, governance and `cargo deny check`
+passed. Protected review is pending. Catalogue acceptance remains blocked by
+the exact FFmpeg build's compiled-component source/notice review; setup plan,
+selected-file assembly, smoke, activation, D-01..D-10 and P06 E2E remain open.
+P06 stays planned.
+
 2026-09-15: Protected [PR #85](https://github.com/smormah/vsift/pull/85)
 merged P06 owned unactivated artifact staging `f6c3509` as `3ad5bf6`
 from predecessor `eb56928`. The private per-user managed-data root and each
