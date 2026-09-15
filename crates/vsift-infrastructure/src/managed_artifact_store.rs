@@ -450,8 +450,10 @@ impl StagedManagedArtifact {
             .stage
             .open_dir_nofollow(PAYLOAD)
             .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
-        validate_private_root(&self.stage_path.join(PAYLOAD), &payload)
-            .map_err(map_private_error)?;
+        if let Err(error) = validate_private_root(&self.stage_path.join(PAYLOAD), &payload) {
+            self.remove_empty_payload(payload)?;
+            return Err(map_private_error(error));
+        }
         Ok(payload)
     }
 
