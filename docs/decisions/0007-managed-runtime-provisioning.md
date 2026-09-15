@@ -114,3 +114,27 @@ The same bounded import can receive a trusted offline byte source. This does
 not make a user-entered checksum or URL a trust anchor. The reviewed catalogue,
 direct HTTPS policy, selected-file assembly, installation lock, smoke and atomic
 activation still gate all public managed commands. No version is active yet.
+
+## 2026-09-15 implementation note: direct reviewed publisher transfer
+
+The infrastructure transport now accepts an immutable GitHub release-asset or
+Hugging Face model-revision route supplied by reviewed source, fetches it from
+the publisher on the user's machine over HTTPS, and permits only that origin's
+observed release CDN redirect route. It rejects downgrade, other hosts,
+credential-bearing URLs, unexpected encoding/range/status and size metadata.
+Connect, stalled-read and total deadlines bound the operation; cancellation
+discards its positively identified unactivated stage. There is no resume:
+an interrupted attempt is discarded and a later attempt starts at byte zero.
+Every completed stage checks the reviewed whole-artifact size and SHA-256 and
+is rechecked before archive inspection. Errors report typed reasons without
+rendering signed CDN URLs or proxy credentials.
+
+The transport uses pinned maintained `reqwest` with the native TLS backend:
+Windows and macOS use their system TLS facilities and Linux uses OpenSSL.
+The alternate bundled root-certificate backend introduced a dependency
+licence rejected by the existing `cargo deny` policy; native TLS passed that
+policy without relaxing it. This requires platform and proxy failure testing
+on the named targets. The exact Ubuntu whisper.cpp archive passed an opt-in
+direct publisher download into owned staging without execution. Catalogue
+approval, plan acceptance, selected-file assembly, compatibility smoke and
+atomic activation still gate public managed commands. No version is active.

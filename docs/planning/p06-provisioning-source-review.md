@@ -174,11 +174,20 @@ An unactivated P06 managed-data root and exact-byte import boundary now exist
 in infrastructure. A new root receives a fixed ownership marker; existing
 unmarked or unsafe roots fail closed. Imported bytes are rechecked before
 archive use and failed transfers discard only positively identified staging.
-This does not accept the Ubuntu candidate, fetch publisher bytes, disclose a
+This does not accept the Ubuntu candidate into the catalogue, disclose a
 plan, run a provider, or activate any version. The many components enabled in
 the observed FFmpeg build configuration still require a bounded source/notice
 assessment; the archive's LGPL text alone is insufficient to claim that its
 entire compiled dependency set has been reviewed.
+
+The next infrastructure increment directly downloads a reviewed immutable
+publisher URL to that owned unactivated stage with system TLS, an origin-specific
+HTTPS CDN redirect rule, bounded deadlines and whole-artifact size/SHA-256.
+Interrupted transfers discard and restart from zero; the verified offline
+import applies the same byte policy. A pinned Ubuntu whisper.cpp release asset
+passed an opt-in direct transfer test. This does not accept that asset into a
+catalogue, qualify its runtime, or enable any setup command. Deterministic
+TLS/proxy/drop fault campaigns, platform validation and activation remain open.
 
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:

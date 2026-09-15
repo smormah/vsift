@@ -12,6 +12,7 @@ mod managed_artifact_store;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
+mod publisher_artifact_transfer;
 mod source_snapshot;
 mod user_dependency_config;
 mod verified_artifact_transfer;
@@ -51,6 +52,10 @@ pub use process_supervisor::{
     HostIsolation, IsolationRequirement, OutputStream, ProcessCancellation, ProcessContainment,
     ProcessError, ProcessOutcome, ProcessRequest, ProcessRequestError, ProcessSupervisor,
     ProcessWorkingDirectory, SupervisorPolicy, TerminationReason,
+};
+pub use publisher_artifact_transfer::{
+    PublisherOrigin, PublisherSourceError, PublisherTransferCancellation, PublisherTransferError,
+    ReviewedPublisherArtifact, download_reviewed_publisher_artifact,
 };
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
