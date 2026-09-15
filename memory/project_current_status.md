@@ -2,6 +2,20 @@
 
 ## Active
 
+2026-09-15: P06 configuration lock classification `2830a70` from protected
+main `664d43a` now separates true held-lock `BUSY` from OS lock I/O in
+private BYO configuration writes. A cross-platform held-lock regression
+preserves the prior record and confirms success after release; narrow context
+on the sequential model-registration test will identify which write fails.
+Local fmt, strict Clippy, full workspace tests, warning-denied rustdoc and
+governance passed. Protected PR/CI and merge record are pending. Docs-only
+PR #92 first Ubuntu Quality attempt reproduced the existing intermittent
+`Busy` on model registration (run `35017216692`, job `104543565997`), and
+unchanged rerun passed (job `104545464013`) before the protected merge
+`664d43a`. [Issue #66](https://github.com/smormah/vsift/issues/66) remains
+open because the exact lock holder is unproven. P06 stays planned; reviewed
+layout, catalogue, compatibility smoke, installer and D/E2E are pending.
+
 2026-09-15: Protected [PR #91](https://github.com/smormah/vsift/pull/91)
 merged P06 unqualified read-only plan implementation `08f1a96` and headless
 regressions `8a40634` as `1d79a8d` from protected main `ade30f6`. It now

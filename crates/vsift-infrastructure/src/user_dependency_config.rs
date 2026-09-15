@@ -202,8 +202,10 @@ impl UserDependencyConfigStore {
             return Err(UserDependencyConfigError::UnsafeStorage);
         }
         let lock = lock.into_std();
-        lock.try_lock()
-            .map_err(|_| UserDependencyConfigError::Busy)?;
+        lock.try_lock().map_err(|error| match error {
+            std::fs::TryLockError::WouldBlock => UserDependencyConfigError::Busy,
+            std::fs::TryLockError::Error(_) => UserDependencyConfigError::Io,
+        })?;
         let mut record = read_record(&root)?;
         change(&mut record);
         let bytes =
@@ -379,12 +381,48 @@ mod tests {
             fs::write(&executable, b"not executed")?;
             fs::write(&first, b"not parsed")?;
             fs::write(&second, b"also not parsed")?;
-            config.configure(RuntimeDependency::Ffmpeg, &executable)?;
-            config.configure_model(&first)?;
+            config
+                .configure(RuntimeDependency::Ffmpeg, &executable)
+                .map_err(|error| std::io::Error::other(format!("configure ffmpeg: {error:?}")))?;
+            config.configure_model(&first).map_err(|error| {
+                std::io::Error::other(format!("configure first model: {error:?}"))
+            })?;
             assert_eq!(config.read_model()?, Some(fs::canonicalize(&first)?));
-            config.configure_model(&second)?;
+            config.configure_model(&second).map_err(|error| {
+                std::io::Error::other(format!("configure second model: {error:?}"))
+            })?;
             assert_eq!(config.read_model()?, Some(fs::canonicalize(&second)?));
             assert_eq!(config.read()?.ffmpeg, Some(fs::canonicalize(&executable)?));
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })();
+        fs::remove_dir_all(&parent)?;
+        result
+    }
+
+    #[test]
+    fn concurrent_configuration_lock_reports_busy_without_changing_the_record()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let config = UserDependencyConfigStore::at(parent.join("config"))?;
+            let executable = parent.join("ffmpeg");
+            let model = parent.join("model");
+            fs::write(&executable, b"not executed")?;
+            fs::write(&model, b"not parsed")?;
+            config.configure(RuntimeDependency::Ffmpeg, &executable)?;
+            let held = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(parent.join("config/dependencies.lock"))?;
+            held.try_lock()?;
+            assert_eq!(
+                config.configure_model(&model),
+                Err(UserDependencyConfigError::Busy)
+            );
+            assert!(config.read_model()?.is_none());
+            drop(held);
+            config.configure_model(&model)?;
+            assert_eq!(config.read_model()?, Some(fs::canonicalize(&model)?));
             Ok::<(), Box<dyn std::error::Error>>(())
         })();
         fs::remove_dir_all(&parent)?;

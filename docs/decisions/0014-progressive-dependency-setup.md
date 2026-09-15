@@ -117,3 +117,14 @@ plus manual BYO next steps for missing or unhealthy tools. A responding
 executable is labelled probe-only; neither provider compatibility nor model
 validity is inferred. `setup install` remains reserved. This narrows D-07/D-10
 manual guidance but does not qualify a managed-install target or close P06.
+
+## 2026-09-15 implementation note: configuration lock classification
+
+The private BYO configuration writer now distinguishes the standard library's
+`TryLockError::WouldBlock` from its I/O error variant. Only actual contention
+is `Busy`; an OS lock failure is storage I/O. A held-lock regression checks
+that configuration remains unchanged and succeeds after release. Narrow error
+context on the sequential model-registration test will identify which write
+fails if [issue #66](https://github.com/smormah/vsift/issues/66) recurs.
+This classification does not identify the historical lock holder or close
+that intermittent finding.
