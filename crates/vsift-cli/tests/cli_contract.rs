@@ -444,3 +444,57 @@ fn setup_plan_uses_configured_off_path_tool_but_does_not_call_it_qualified()
     std::fs::remove_dir_all(&base)?;
     Ok(())
 }
+
+#[test]
+fn headless_unqualified_plan_jsonl_has_one_terminal_and_no_install_authority()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "plan", "--profile", "worker", "--events", "jsonl"])
+        .env("PATH", "")
+        .output()?;
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout)?;
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 1);
+    let event: Value = serde_json::from_str(lines[0])?;
+    assert_eq!(event["event"], "terminal");
+    assert_eq!(event["command"], "setup.plan");
+    assert_eq!(
+        event["result"]["data"]["managed_install"],
+        "unavailable_unqualified"
+    );
+    assert_eq!(event["result"]["data"]["plan_digest"], Value::Null);
+    assert_eq!(event["result"]["data"]["actions"], serde_json::json!([]));
+    if base.exists() {
+        std::fs::remove_dir_all(&base)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn unqualified_plan_rejects_corrupt_byo_config_before_probing()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "configure", "whisper", "--executable"])
+        .arg(&binary)
+        .arg("--json")
+        .output()?;
+    assert!(configured.status.success());
+    std::fs::write(
+        config_root(&base).join("dependencies-v1.json"),
+        br#"{"schema_version":1,"unknown":true}"#,
+    )?;
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "plan", "--profile", "desktop", "--json"])
+        .env("PATH", "")
+        .output()?;
+    let value = parse_stdout(&output)?;
+    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(value["error"]["code"], "INTEGRITY_FAILURE");
+    assert_eq!(value["data"], Value::Null);
+    std::fs::remove_dir_all(&base)?;
+    Ok(())
+}
