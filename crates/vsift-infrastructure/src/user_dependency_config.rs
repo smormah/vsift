@@ -11,11 +11,14 @@ use std::{
 use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
 #[cfg(unix)]
 use cap_std::fs::OpenOptionsExt;
-use cap_std::fs::{Dir, DirBuilder, OpenOptions};
+use cap_std::fs::{Dir, OpenOptions};
 use serde::{Deserialize, Serialize};
 use vsift_domain::RuntimeDependency;
 
-use crate::{ExplicitProbePaths, TrustedExecutable};
+use crate::{
+    ExplicitProbePaths, TrustedExecutable,
+    private_user_root::{PrivateRootError, open_private_root},
+};
 
 const CONFIG_FILE: &str = "dependencies-v1.json";
 const LOCK_FILE: &str = "dependencies.lock";
@@ -238,50 +241,12 @@ impl UserDependencyConfigStore {
     }
 
     fn open_root(&self, create: bool) -> Result<Option<Dir>, UserDependencyConfigError> {
-        match fs::symlink_metadata(&self.root_path) {
-            Ok(metadata) if metadata.is_dir() => {}
-            Ok(_) => return Err(UserDependencyConfigError::UnsafeStorage),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound && !create => {
-                return Ok(None);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                let parent = self
-                    .root_path
-                    .parent()
-                    .ok_or(UserDependencyConfigError::Unavailable)?;
-                fs::create_dir_all(parent).map_err(|_| UserDependencyConfigError::Io)?;
-                #[allow(unused_mut, reason = "Unix configures the creation mode")]
-                let mut builder = DirBuilder::new();
-                #[cfg(unix)]
-                {
-                    use cap_std::fs::DirBuilderExt;
-                    builder.mode(0o700);
-                }
-                let parent_dir = Dir::open_ambient_dir(parent, cap_std::ambient_authority())
-                    .map_err(|_| UserDependencyConfigError::Io)?;
-                parent_dir
-                    .create_dir_with(
-                        Path::new(
-                            self.root_path
-                                .file_name()
-                                .ok_or(UserDependencyConfigError::Unavailable)?,
-                        ),
-                        &builder,
-                    )
-                    .map_err(|error| {
-                        if error.kind() == std::io::ErrorKind::AlreadyExists {
-                            UserDependencyConfigError::Busy
-                        } else {
-                            UserDependencyConfigError::Io
-                        }
-                    })?;
-            }
-            Err(_) => return Err(UserDependencyConfigError::Io),
-        }
-        let root = Dir::open_ambient_dir(&self.root_path, cap_std::ambient_authority())
-            .map_err(|_| UserDependencyConfigError::Io)?;
-        validate_private_root(&self.root_path, &root)?;
-        Ok(Some(root))
+        open_private_root(&self.root_path, create).map_err(|error| match error {
+            PrivateRootError::Unavailable => UserDependencyConfigError::Unavailable,
+            PrivateRootError::UnsafeStorage => UserDependencyConfigError::UnsafeStorage,
+            PrivateRootError::Busy => UserDependencyConfigError::Busy,
+            PrivateRootError::Io => UserDependencyConfigError::Io,
+        })
     }
 }
 
@@ -363,65 +328,6 @@ fn hex(bytes: &[u8]) -> String {
         result.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
     }
     result
-}
-
-#[cfg(unix)]
-fn validate_private_root(_path: &Path, root: &Dir) -> Result<(), UserDependencyConfigError> {
-    use cap_std::fs::{MetadataExt as _, PermissionsExt};
-    let metadata = root
-        .dir_metadata()
-        .map_err(|_| UserDependencyConfigError::Io)?;
-    if metadata.permissions().mode() & 0o077 != 0
-        || metadata.uid() != rustix::process::getuid().as_raw()
-    {
-        return Err(UserDependencyConfigError::UnsafeStorage);
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn validate_private_root(path: &Path, _root: &Dir) -> Result<(), UserDependencyConfigError> {
-    use windows_acl::{
-        acl::{ACL, AceType},
-        helper::{current_user, name_to_sid, sid_to_string},
-    };
-    let username = current_user().ok_or(UserDependencyConfigError::UnsafeStorage)?;
-    let user_sid = name_to_sid(&username, None)
-        .ok()
-        .and_then(|mut sid| sid_to_string(sid.as_mut_ptr().cast()).ok())
-        .ok_or(UserDependencyConfigError::UnsafeStorage)?;
-    let path = path
-        .to_str()
-        .ok_or(UserDependencyConfigError::UnsafeStorage)?;
-    let acl =
-        ACL::from_file_path(path, false).map_err(|_| UserDependencyConfigError::UnsafeStorage)?;
-    let entries = acl
-        .all()
-        .map_err(|_| UserDependencyConfigError::UnsafeStorage)?;
-    let trusted = [user_sid.as_str(), "S-1-5-18", "S-1-5-32-544"];
-    let current_user_allowed = entries.iter().any(|entry| {
-        matches!(
-            entry.entry_type,
-            AceType::AccessAllow
-                | AceType::AccessAllowCallback
-                | AceType::AccessAllowObject
-                | AceType::AccessAllowCallbackObject
-        ) && entry.string_sid == user_sid
-    });
-    let unsafe_entry = entries.iter().any(|entry| {
-        entry.entry_type == AceType::Unknown
-            || (matches!(
-                entry.entry_type,
-                AceType::AccessAllow
-                    | AceType::AccessAllowCallback
-                    | AceType::AccessAllowObject
-                    | AceType::AccessAllowCallbackObject
-            ) && !trusted.contains(&entry.string_sid.as_str()))
-    });
-    if !current_user_allowed || unsafe_entry {
-        return Err(UserDependencyConfigError::UnsafeStorage);
-    }
-    Ok(())
 }
 
 #[cfg(test)]

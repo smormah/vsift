@@ -170,6 +170,16 @@ signature or independent proof of all compiled dependency sources.
 The full compiled-component source/notice review, catalogue and production
 installer gates remain open; `setup plan` remains unavailable.
 
+An unactivated P06 managed-data root and exact-byte import boundary now exist
+in infrastructure. A new root receives a fixed ownership marker; existing
+unmarked or unsafe roots fail closed. Imported bytes are rechecked before
+archive use and failed transfers discard only positively identified staging.
+This does not accept the Ubuntu candidate, fetch publisher bytes, disclose a
+plan, run a provider, or activate any version. The many components enabled in
+the observed FFmpeg build configuration still require a bounded source/notice
+assessment; the archive's LGPL text alone is insufficient to claim that its
+entire compiled dependency set has been reviewed.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 

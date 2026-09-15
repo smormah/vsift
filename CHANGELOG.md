@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 now has a positively marked private per-user managed root and one-artifact
+  staging transaction. It verifies exact reviewed bytes on import and again
+  before archive use, removes its own stage after failed import, and refuses
+  unmarked roots or unexpected staging entries. This is an infrastructure
+  boundary; managed setup commands remain unavailable.
 - P06 bounded archive adapters can stage an exact reviewed regular-file
   selection into an empty private directory capability. Staging uses portable
   flat names, create-new/no-follow writes and private modes, ignores archive

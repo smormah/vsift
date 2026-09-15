@@ -2,6 +2,21 @@
 
 ## Active
 
+2026-09-15: P06 work on `codex/p06-owned-acquisition` starts from protected
+`eb56928` (implementation `f6c3509`). An infrastructure-only managed-data
+store now opens or creates a
+private per-user root with an exact owner marker, rejects existing unmarked
+storage, and imports exact reviewed bytes into a private marked stage. Every
+open rechecks staged bytes; failed import discards only the owned artifact and
+stage, while unexpected entries block deletion. Focused Windows tests pass;
+full local workspace tests, fmt, strict Clippy, documentation build,
+governance and dependency policy passed; protected verification and merge
+reference are pending. No public managed
+command is enabled. The Ubuntu candidate's archive notice does not enumerate
+all enabled compiled components, so catalogue acceptance remains open. Direct
+HTTPS, plan authorization, assembly, smoke, version transactions and complete
+D/P06 E2E qualification remain required. P06 stays planned.
+
 2026-09-15: Protected [PR #83](https://github.com/smormah/vsift/pull/83)
 merged P06 contained selected-file staging `57b8113` as `b5d8769` from
 protected main `e75d560`. The bounded archive adapters accept an empty private
