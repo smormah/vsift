@@ -22,7 +22,7 @@ pub use archive_inventory::{
 };
 pub use bounded_tar_inventory::{
     MAX_TAR_STREAM_BYTES, ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory,
-    inspect_tar_selected_files,
+    inspect_tar_selected_files, stage_tar_selected_files,
 };
 pub use executable::{
     ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
@@ -38,7 +38,7 @@ pub use filesystem_session_store::{
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
-    inspect_gzip_tar_selected_files,
+    inspect_gzip_tar_selected_files, stage_gzip_tar_selected_files,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{
@@ -54,5 +54,5 @@ pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfig
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use xz_tar_inventory::{
     MAX_XZ_ARCHIVE_BYTES, XzTarInventoryError, inspect_xz_tar_inventory,
-    inspect_xz_tar_selected_files,
+    inspect_xz_tar_selected_files, stage_xz_tar_selected_files,
 };
