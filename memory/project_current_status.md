@@ -2,6 +2,20 @@
 
 ## Active
 
+2026-09-15: P06 contained selected-file staging `57b8113` is under review from
+protected main `e75d560`. The bounded archive adapters accept an empty private
+directory capability and write only hash-verified reviewed regular files under
+portable flat basenames. They do not materialize archive links, directories or
+modes, and roll back created files on later archive/compression failure.
+Focused raw-tar, gzip and XZ tests pass. Fresh pinned FFmpeg and whisper.cpp
+archives passed contained staging without binary execution. Full workspace
+tests, fmt, strict Clippy, warning-denied rustdoc, governance and
+`cargo deny check` pass; protected review remains pending.
+Managed-root ownership, direct HTTPS, catalogue/plan acceptance, executable
+permission transition, smoke and activation are absent. P06 stays planned;
+P07/P08 remain ineligible.
+
+
 2026-09-14: Protected [PR #81](https://github.com/smormah/vsift/pull/81)
 merged P06 selected-file integrity `5454dcb` as `d9861a6`.
 The existing bounded archive readers now hash exact reviewed regular-file bytes

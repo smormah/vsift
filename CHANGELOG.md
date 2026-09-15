@@ -14,6 +14,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 bounded archive adapters can stage an exact reviewed regular-file
+  selection into an empty private directory capability. Staging uses portable
+  flat names, create-new/no-follow writes and private modes, ignores archive
+  links/directories/modes, and removes files it created when any later archive
+  or compression check fails. This infrastructure primitive does not activate
+  managed installation.
 - P05 foreground disposable `ingest`, session list/status/renew/close/clean,
   explicit evidence-only or source-inclusive retain, and data-only bundle
   validation. Source and frame/audio artifacts use P03's private

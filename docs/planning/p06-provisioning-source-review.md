@@ -101,6 +101,20 @@ smoke validation or activation. D-04 and P06 remain open.
 Both opt-in tests passed against fresh pinned publisher downloads after checking
 whole-archive size and SHA-256, without running a binary.
 
+The contained-staging increment (`57b8113`) adds no-follow, create-new writes
+under an empty directory capability. Only the exact reviewed regular files are
+written, under portable flat basenames and private modes; archive links,
+directories and modes remain metadata only. Digest, later-entry, trailing gzip
+member and trailing XZ content failures remove files created by the call, while
+a nonempty staging directory is rejected without changing its contents. This
+is an unactivated infrastructure primitive, not an application-owned managed
+root, download, accepted catalogue, plan, compatibility check or installer.
+D-04 is narrowed but remains open through lifecycle and adversarial E2E proof.
+Fresh downloads of both pinned Ubuntu publisher archives matched their recorded
+whole-archive identities and passed the contained-staging opt-in tests without
+executing the staged files. FFmpeg staging took 106.30 seconds and whisper.cpp
+staging took 2.47 seconds on the maintainer machine.
+
 The [Windows x64 candidate investigation](p06-windows-artifact-candidate.md)
 now records exact observed archive hashes, selected-file inventories and one
 model LFS pointer. It is not an accepted catalogue: binary-specific licence

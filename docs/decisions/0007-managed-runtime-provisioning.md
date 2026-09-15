@@ -82,3 +82,19 @@ fails closed. This does not stage or install a runtime. Direct HTTPS transport,
 reviewed plan acceptance, contained staging, compatibility smoke and atomic
 activation remain separate P06 gates; the default managed setup commands remain
 unavailable.
+
+## 2026-09-15 implementation note: contained selected-file staging
+
+P06 now has an infrastructure-only staging operation for raw tar, gzip/tar and
+XZ/tar inputs. A caller must supply a newly created empty private directory
+capability. The operation writes only reviewed regular files, flattened to
+portable basenames, with create-new/no-follow semantics and private file modes;
+archive directories, links and permission bits are never materialized. It
+checks the complete bounded archive and selected hashes, and removes every file
+created by the call if a later digest, inventory, decompression or trailing-data
+check fails. The directory remains unactivated and caller-owned.
+
+This increment has no managed root lifecycle, direct HTTPS transport, plan
+acceptance, executable permission transition, compatibility smoke or atomic
+activation. Those gates remain required before `setup plan` or `setup install`
+can become available.
