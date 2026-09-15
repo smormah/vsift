@@ -11,8 +11,10 @@ the reviewed selection. A fresh pinned Ubuntu whisper.cpp publisher archive
 passed exact-byte import, owned gzip/tar assembly, `whisper-cli` recheck and
 discard without execution. Focused storage/substitution tests, full local fmt,
 strict Clippy and workspace tests, warning-denied rustdoc, governance and
-`cargo deny check` passed. Protected review is pending. The exact Ubuntu
-FFmpeg candidate still needs compiled-component source/notice review before
+`cargo deny check` passed. A private-payload initialization cleanup correction
+`60eee40` also passed full local fmt, strict Clippy and workspace tests.
+Protected review is pending. The exact Ubuntu FFmpeg candidate still needs
+compiled-component source/notice review before
 catalogue acceptance. Plan authority, alias/executable preparation, smoke,
 activation, lifecycle and D-01..D-10/P06 E2E remain open. P06 stays planned.
 

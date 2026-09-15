@@ -11,8 +11,10 @@ reviewed files and leaves the artifact for an explicit later discard. Fresh
 pinned Ubuntu whisper.cpp archive bytes passed owned import, gzip/tar assembly,
 `whisper-cli` recheck and disposal without executing a binary. Focused tests,
 full workspace fmt/strict Clippy/tests, warning-denied rustdoc, governance
-and dependency policy passed locally. Catalogue, plan acceptance, alias and
-executable preparation, smoke, activation and full D/P06 E2E are still open;
+and dependency policy passed locally. Private-payload initialization cleanup
+`60eee40` passed full local fmt, strict Clippy and workspace tests. Catalogue,
+plan acceptance, alias and executable preparation, smoke, activation and full
+D/P06 E2E are still open;
 P06 stays planned.
 
 2026-09-15: Protected [PR #87](https://github.com/smormah/vsift/pull/87)
