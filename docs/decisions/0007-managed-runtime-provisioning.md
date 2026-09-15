@@ -98,3 +98,19 @@ This increment has no managed root lifecycle, direct HTTPS transport, plan
 acceptance, executable permission transition, compatibility smoke or atomic
 activation. Those gates remain required before `setup plan` or `setup install`
 can become available.
+
+## 2026-09-15 implementation note: owned unactivated artifact staging
+
+The per-user managed-data root now has a private directory check and an exact
+VSift ownership marker. Only a newly created root may receive that marker;
+an existing unmarked or altered directory fails closed. Each imported artifact
+uses a fresh private, marked stage and a create-new/no-follow regular file.
+The exact reviewed size and SHA-256 are checked while copying and again when
+the staged file is opened for archive inspection. Failed copies discard only
+the two known stage files and their directory. Unexpected content or a changed
+marker blocks cleanup rather than risking deletion outside the owned stage.
+
+The same bounded import can receive a trusted offline byte source. This does
+not make a user-entered checksum or URL a trust anchor. The reviewed catalogue,
+direct HTTPS policy, selected-file assembly, installation lock, smoke and atomic
+activation still gate all public managed commands. No version is active yet.

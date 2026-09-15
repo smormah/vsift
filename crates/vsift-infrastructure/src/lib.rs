@@ -8,6 +8,8 @@ mod executable;
 mod ffmpeg_media;
 mod filesystem_session_store;
 mod gzip_tar_inventory;
+mod managed_artifact_store;
+mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
 mod source_snapshot;
@@ -39,6 +41,9 @@ pub use filesystem_session_store::{
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
     inspect_gzip_tar_selected_files, stage_gzip_tar_selected_files,
+};
+pub use managed_artifact_store::{
+    ManagedArtifactError, ManagedArtifactStore, StagedManagedArtifact,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{
