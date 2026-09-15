@@ -2,6 +2,20 @@
 
 ## Current checkpoint
 
+2026-09-15: P06 read-only unqualified plan implementation `08f1a96` from
+protected predecessor `ade30f6` makes `setup plan --profile` diagnose
+configured or filtered-`PATH` executables and return a complete v1 manual
+disposition. No accepted catalogue means `managed_install` is
+`unavailable_unqualified`, actions are empty and the acceptance digest is null;
+`setup install` remains reserved. Frozen schema/example and CLI contract tests
+cover missing tools and an off-PATH configured tool. Follow-up `8a40634`
+covers headless JSONL and corrupt BYO configuration. Local fmt, strict Clippy,
+full workspace tests, warning-denied rustdoc, governance and `cargo deny check`
+passed. Protected PR/CI evidence and actual merge hash are pending. The exact
+FFmpeg compiled-component source/notice review, accepted catalogue,
+compatibility/model verification, executable preparation, activation,
+installer fault campaigns and D-01..D-10/P06 E2E remain open. P06 stays planned.
+
 2026-09-15: Protected [PR #89](https://github.com/smormah/vsift/pull/89)
 merged P06 owned selected-file payload assembly `e0d2ada` with private
 initialization correction `60eee40` as `c8d95dd` from protected predecessor

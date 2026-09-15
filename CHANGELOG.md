@@ -14,21 +14,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 `setup plan --profile` now performs a read-only configured/PATH executable
+  diagnosis. Until a per-target managed artifact is qualified, its v1 result
+  reports an unavailable managed path, no install actions or acceptance digest,
+  and typed manual BYO steps. `setup install` remains reserved.
 - P06 now composes a verified managed artifact with bounded raw tar, gzip/tar
   or XZ/tar selected-file staging under a fresh private payload directory.
   Selected files are rechecked before use; changed, linked or unexpected files
   block opening and cleanup removes only the reviewed selection. The payload
-  remains unactivated and managed setup commands remain unavailable.
+  remains unactivated and managed installation remains unavailable.
 - P06 can transfer an exact reviewed publisher artifact over direct HTTPS into
   the private unactivated stage. Immutable GitHub release and Hugging Face
   model routes admit only their reviewed CDN redirect, with bounded deadlines,
   cancellation, whole-artifact size/SHA-256 verification and no resume.
-  Managed setup commands remain unavailable.
+  Managed installation remains unavailable.
 - P06 now has a positively marked private per-user managed root and one-artifact
   staging transaction. It verifies exact reviewed bytes on import and again
   before archive use, removes its own stage after failed import, and refuses
   unmarked roots or unexpected staging entries. This is an infrastructure
-  boundary; managed setup commands remain unavailable.
+  boundary; managed installation remains unavailable.
 - P06 bounded archive adapters can stage an exact reviewed regular-file
   selection into an empty private directory capability. Staging uses portable
   flat names, create-new/no-follow writes and private modes, ignores archive

@@ -3,6 +3,8 @@
 These files are the machine-readable public v1 boundary:
 
 - `setup-check-response.schema.json` — backward-compatible setup diagnosis;
+- `setup-plan-unqualified.schema.json` — check-first read-only setup plan while
+  managed installation has no qualified build, with no executable actions;
 - `operation-response.schema.json` — terminal result for new operations;
 - `terminal-event.schema.json` — JSONL terminal wrapper (validate its `result` with
   `operation-response.schema.json` too);

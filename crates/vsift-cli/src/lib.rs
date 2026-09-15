@@ -155,6 +155,46 @@ where
                 let result = setup::configure_model(&arguments);
                 write_session_result(&mut writer, mode, "setup.configure-model", result)
             }
+            Some(SetupCommand::Plan(arguments)) => {
+                let config = match EffectiveConfig::resolve(
+                    ConfigLayer {
+                        profile: Some(arguments.profile),
+                        probe_timeout_seconds: None,
+                    },
+                    ConfigLayer::default(),
+                    ConfigLayer::default(),
+                    &HostPolicy::local_r0(),
+                ) {
+                    Ok(config) => config,
+                    Err(error) => {
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            "setup.plan",
+                            FailureCode::InvalidArgument,
+                            Some(&error.to_string()),
+                        );
+                    }
+                };
+                let configured = match UserDependencyConfigStore::default_location()
+                    .and_then(|store| store.read())
+                {
+                    Ok(configured) => configured,
+                    Err(error) => {
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            "setup.plan",
+                            setup_config_failure(error),
+                            None,
+                        );
+                    }
+                };
+                let probe =
+                    ProcessDependencyProbe::with_explicit_paths(config.probe_timeout, configured);
+                let result = setup::plan_unqualified(probe, config.profile).await;
+                write_session_result(&mut writer, mode, "setup.plan", result)
+            }
             None => write_setup_help(&mut writer),
             Some(unimplemented) => {
                 let operation = command::SetupArguments {
@@ -388,7 +428,16 @@ mod tests {
         let mut stderr = Vec::new();
 
         let exit = execute_with(
-            ["vsift", "setup", "plan", "--profile", "desktop", "--json"],
+            [
+                "vsift",
+                "setup",
+                "install",
+                "--plan",
+                "missing.json",
+                "--accept-plan",
+                "unknown",
+                "--json",
+            ],
             &mut stdout,
             &mut stderr,
         )
@@ -396,7 +445,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
 
         assert_eq!(exit, ProcessExit::UsageOrCapability);
-        assert_eq!(value["command"], "setup.plan");
+        assert_eq!(value["command"], "setup.install");
         assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
         assert!(stderr.is_empty());
         Ok(())

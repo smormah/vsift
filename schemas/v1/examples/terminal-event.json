@@ -2,11 +2,11 @@
   "schema_version": "1",
   "event": "terminal",
   "sequence": 0,
-  "command": "setup.plan",
+  "command": "setup.install",
   "operation_id": null,
   "result": {
     "schema_version": "1",
-    "command": "setup.plan",
+    "command": "setup.install",
     "operation_id": null,
     "status": "failed",
     "data": null,

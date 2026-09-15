@@ -1,6 +1,6 @@
 # CLI and JSON contract v1
 
-Status: published v1 boundary. `setup check/configure/configure-model`, foreground `ingest`, the P05
+Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`, the P05
 `session` lifecycle and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
@@ -17,7 +17,8 @@ workspace; otherwise P05 uses the per-user application cache.
 | `setup check` | Read-only dependency diagnosis | Implemented |
 | `setup configure` | Persist an explicit user-managed executable path without running it | Partial P06 |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
-| `setup plan/install/repair/list/remove/rollback` | Check-first explicit managed dependency lifecycle; manual fallback when no qualified install is available | P06 |
+| `setup plan` | Check-first read-only diagnosis and typed manual disposition; no qualified managed artifact yet | Partial P06 |
+| `setup install/repair/list/remove/rollback` | Explicit managed dependency lifecycle, still reserved | P06 |
 | `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get/retranscribe` | Timestamped transcript evidence | P07 |
@@ -91,6 +92,43 @@ managed target is qualified yet, so `managed_install` reports
 working transcription model. Those checks and verified
 managed installation remain P06 work. Provider `detail` is not an instruction
 channel. Paths are not echoed in the response.
+
+The current `setup plan --profile <desktop|worker>` probes configured
+executables or filtered `PATH` like `setup check`, without per-call path options.
+It reports `managed_install: unavailable_unqualified`, `actions: []` and
+`plan_digest: null` because no immutable per-target artifact has cleared the
+catalogue. Missing, unhealthy and timed-out tools receive
+`manual_selection_required` steps to install or locate a trusted tool and
+register an absolute BYO path. Responding executables are
+`existing_executable_probe_only`; this is not a compatibility or model
+assertion. `readiness` is executable-probe-only and `local_asr_model` remains
+`not_checked`. A complete read-only response means planning finished, not that
+installation is authorized or available. `setup install` still returns
+`COMMAND_NOT_IMPLEMENTED` and cannot consume the null digest. No publisher URL,
+licence clearance or version is inferred here.
+The complete frozen response is
+[`setup-plan.unqualified.json`](../../schemas/v1/examples/setup-plan.unqualified.json);
+an abbreviated data example follows.
+
+```json
+{
+  "schema_version": "1",
+  "command": "setup.plan",
+  "status": "complete",
+  "data": {
+    "profile": "desktop",
+    "readiness": "blocked",
+    "verification_scope": "executable_probe_only",
+    "local_asr_model": "not_checked",
+    "managed_install": "unavailable_unqualified",
+    "plan_digest": null,
+    "actions": [],
+    "dependencies": [
+      {"dependency": "ffmpeg", "status": "missing", "disposition": "manual_selection_required", "required_authority": "user", "next_step": "Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check."}
+    ]
+  }
+}
+```
 
 ## Output protocol
 

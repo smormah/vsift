@@ -3,8 +3,10 @@
 use std::io::Write;
 
 use serde::Serialize;
-use vsift_application::{DependencyProbe, DiagnoseRuntime, RuntimeDiagnosis};
-use vsift_domain::{DependencyState, FailureCode, RuntimeReadiness};
+use vsift_application::{
+    DependencyProbe, DiagnoseRuntime, RuntimeDiagnosis, UnqualifiedPlanAction, UnqualifiedSetupPlan,
+};
+use vsift_domain::{DependencyState, FailureCode, RuntimeDependency, RuntimeReadiness};
 use vsift_infrastructure::{ExplicitProbePaths, UserDependencyConfigStore};
 
 use crate::{
@@ -48,6 +50,89 @@ where
     }
 
     setup_exit(diagnosis.readiness)
+}
+
+#[derive(Serialize)]
+struct UnqualifiedPlanResponse {
+    profile: &'static str,
+    readiness: &'static str,
+    verification_scope: &'static str,
+    local_asr_model: &'static str,
+    managed_install: &'static str,
+    plan_digest: Option<&'static str>,
+    actions: Vec<&'static str>,
+    dependencies: Vec<UnqualifiedPlanDependencyResponse>,
+}
+
+#[derive(Serialize)]
+struct UnqualifiedPlanDependencyResponse {
+    dependency: &'static str,
+    status: &'static str,
+    disposition: &'static str,
+    required_authority: Option<&'static str>,
+    next_step: &'static str,
+}
+
+/// Inspects configured/PATH executables and returns only manual guidance while
+/// no immutable build has passed catalogue qualification.
+pub(crate) async fn plan_unqualified<P: DependencyProbe>(
+    probe: P,
+    profile: ExecutionProfile,
+) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
+    let plan = UnqualifiedSetupPlan::from_diagnosis(DiagnoseRuntime::new(probe).execute().await);
+    let dependencies = plan
+        .dependencies
+        .iter()
+        .map(|(status, action)| {
+            let (disposition, required_authority, next_step) = match action {
+                UnqualifiedPlanAction::ProbeOnly => (
+                    "existing_executable_probe_only",
+                    None,
+                    "Keep this executable selected and verify provider compatibility before use.",
+                ),
+                UnqualifiedPlanAction::ManualSelection => (
+                    "manual_selection_required",
+                    Some("user"),
+                    manual_plan_step(status.dependency),
+                ),
+            };
+            UnqualifiedPlanDependencyResponse {
+                dependency: status.dependency.identifier(),
+                status: status.state.identifier(),
+                disposition,
+                required_authority,
+                next_step,
+            }
+        })
+        .collect();
+    OperationResponse::complete(
+        "setup.plan",
+        &UnqualifiedPlanResponse {
+            profile: profile.identifier(),
+            readiness: plan.readiness.identifier(),
+            verification_scope: "executable_probe_only",
+            local_asr_model: "not_checked",
+            managed_install: "unavailable_unqualified",
+            plan_digest: None,
+            actions: Vec::new(),
+            dependencies,
+        },
+    )
+    .map_err(|_| FailureCode::Internal)
+}
+
+const fn manual_plan_step(dependency: RuntimeDependency) -> &'static str {
+    match dependency {
+        RuntimeDependency::Ffmpeg => {
+            "Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check."
+        }
+        RuntimeDependency::Ffprobe => {
+            "Install or locate trusted FFprobe, then run setup configure ffprobe --executable <absolute-path> and setup check."
+        }
+        RuntimeDependency::Whisper => {
+            "For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR."
+        }
+    }
 }
 
 #[derive(Serialize)]

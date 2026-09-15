@@ -99,6 +99,11 @@ acceptance, executable permission transition, compatibility smoke or atomic
 activation. Those gates remain required before `setup plan` or `setup install`
 can become available.
 
+The later 2026-09-15 unqualified read-only plan note in ADR 0014 supersedes
+that command-availability statement only for manual disposition. A managed
+download plan still requires these catalogue, compatibility and activation
+gates.
+
 ## 2026-09-15 implementation note: owned unactivated artifact staging
 
 The per-user managed-data root now has a private directory check and an exact

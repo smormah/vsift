@@ -2,6 +2,19 @@
 
 ## Active
 
+2026-09-15: P06 unqualified read-only plan implementation `08f1a96` from
+protected main `ade30f6` now composes the existing configured/PATH probe into
+`setup plan --profile`. The v1 result gives per-tool manual BYO steps for
+unavailable executables and labels responding tools probe-only. It has no
+install actions or acceptance digest; `setup install` remains reserved and
+the model/provider compatibility is unchecked. Frozen schema/example and
+missing/off-PATH CLI tests and follow-up headless JSONL/corrupt-config tests
+`8a40634` plus local fmt, strict Clippy, full workspace tests,
+warning-denied rustdoc, governance and dependency policy passed. Protected
+PR/CI and merge record are pending. Qualified source catalogue, plan acceptance,
+compatibility smoke, alias/executable transition, atomic activation, lifecycle
+and D-01..D-10/P06 E2E are still required. P06 stays planned.
+
 2026-09-15: Protected [PR #89](https://github.com/smormah/vsift/pull/89)
 merged P06 owned selected-file assembly `e0d2ada` with private initialization
 correction `60eee40` as `c8d95dd` from protected main `d377430`. The private
