@@ -138,3 +138,26 @@ on the named targets. The exact Ubuntu whisper.cpp archive passed an opt-in
 direct publisher download into owned staging without execution. Catalogue
 approval, plan acceptance, selected-file assembly, compatibility smoke and
 atomic activation still gate public managed commands. No version is active.
+
+## 2026-09-15 implementation note: owned selected-file payload assembly
+
+The previously separate exact-byte artifact stage and bounded archive readers
+now compose within infrastructure. A rechecked artifact can populate a newly
+created empty private `payload.pending` directory inside its positively marked
+stage. Raw tar, gzip/tar and XZ/tar use the same reviewed archive limits,
+aliases and exact selected-file digests as their standalone readers. The
+archive's links, directories and permission bits are never materialized.
+The selected flat regular files can be reopened only if the held payload
+directory has the exact reviewed inventory and each requested file retains
+its size/SHA-256, regular type and single-link identity. Unexpected content
+or directory-name substitution blocks opening and cleanup; discard removes
+only reviewed files and the held payload directory, leaving the artifact
+available for explicit discard. Failed archive staging removes its created
+files and the empty payload directory when ownership remains demonstrable.
+
+A fresh pinned Ubuntu whisper.cpp archive passed an opt-in exact-byte import,
+owned gzip/tar assembly, selected `whisper-cli` recheck and discard without
+binary execution. This is still an unactivated payload: alias creation,
+executable permissions, compatibility smoke, version activation, plan authority
+and the reviewed catalogue remain separate gates. No public managed command
+is enabled.

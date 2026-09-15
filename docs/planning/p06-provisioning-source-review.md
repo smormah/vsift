@@ -180,7 +180,7 @@ the observed FFmpeg build configuration still require a bounded source/notice
 assessment; the archive's LGPL text alone is insufficient to claim that its
 entire compiled dependency set has been reviewed.
 
-The next infrastructure increment directly downloads a reviewed immutable
+The direct-transfer infrastructure increment downloads a reviewed immutable
 publisher URL to that owned unactivated stage with system TLS, an origin-specific
 HTTPS CDN redirect rule, bounded deadlines and whole-artifact size/SHA-256.
 Interrupted transfers discard and restart from zero; the verified offline
@@ -188,6 +188,16 @@ import applies the same byte policy. A pinned Ubuntu whisper.cpp release asset
 passed an opt-in direct transfer test. This does not accept that asset into a
 catalogue, qualify its runtime, or enable any setup command. Deterministic
 TLS/proxy/drop fault campaigns, platform validation and activation remain open.
+
+An owned payload-assembly increment now passes the rechecked artifact to the
+bounded raw tar, gzip/tar or XZ/tar selected-file reader inside a fresh private
+directory under that artifact stage. Only exact reviewed flat regular files
+are written; unexpected, linked or changed payload files fail recheck and
+block unsafe cleanup. A fresh pinned Ubuntu whisper.cpp archive passed the
+opt-in import, owned assembly and `whisper-cli` recheck without execution.
+The listed Ubuntu artifacts remain candidates, not an accepted catalogue or
+plan. SONAME alias creation, executable modes, compatibility smoke, atomic
+activation and full P06 qualification remain open.
 
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
