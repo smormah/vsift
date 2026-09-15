@@ -8,7 +8,8 @@ protected main `ade30f6` now composes the existing configured/PATH probe into
 unavailable executables and labels responding tools probe-only. It has no
 install actions or acceptance digest; `setup install` remains reserved and
 the model/provider compatibility is unchecked. Frozen schema/example and
-missing/off-PATH CLI tests plus local fmt, strict Clippy, full workspace tests,
+missing/off-PATH CLI tests and follow-up headless JSONL/corrupt-config tests
+`8a40634` plus local fmt, strict Clippy, full workspace tests,
 warning-denied rustdoc, governance and dependency policy passed. Protected
 PR/CI and merge record are pending. Qualified source catalogue, plan acceptance,
 compatibility smoke, alias/executable transition, atomic activation, lifecycle
