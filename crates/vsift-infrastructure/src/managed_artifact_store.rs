@@ -19,6 +19,8 @@ use vsift_domain::ArtifactIntegrity;
 use crate::{
     ArchiveInventoryBounds, ArtifactTransferError, GzipTarInventoryError, ReviewedArchiveAlias,
     ReviewedArchiveFile, TarInventoryError, XzTarInventoryError,
+    archive_inventory::safe_archive_path,
+    bounded_tar_inventory::safe_staging_name,
     private_user_root::{
         PrivateRootError, open_private_root_with_creation, validate_private_root,
         validate_same_held_directory,
@@ -32,6 +34,9 @@ const ROOT_MARKER: &str = "owner-v1";
 const STAGE_MARKER: &str = "stage-v1";
 const ARTIFACT: &str = "artifact.pending";
 const PAYLOAD: &str = "payload.pending";
+const RUNTIME: &str = "runtime.pending";
+const MAX_RUNTIME_FILES: usize = 128;
+const MAX_RUNTIME_BYTES: u64 = 1_073_741_824;
 const ROOT_IDENTITY: &[u8] = b"VSIFT-MANAGED-ROOT-v1\n";
 const STAGE_IDENTITY: &[u8] = b"VSIFT-MANAGED-STAGE-v1\n";
 
@@ -86,6 +91,49 @@ pub enum ManagedPayloadError {
     /// XZ/tar inventory, selection or staging failed.
     XzTar(XzTarInventoryError),
 }
+
+/// One reviewed regular-file alias, flattened to a selected file's exact bytes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReviewedRuntimeAlias<'a> {
+    /// Portable flat runtime filename; never an archive-provided link target.
+    pub name: &'a str,
+    /// Portable flat name of a previously hash-verified selected regular file.
+    pub source_selected: &'a str,
+}
+
+/// Reviewed output policy for a private, unactivated runtime copy.
+#[derive(Clone, Copy, Debug)]
+pub struct ReviewedRuntimeLayout<'a> {
+    /// Exact upper byte budget for all selected and alias copies.
+    pub max_bytes: u64,
+    /// Only aliases separately approved for the eventual runtime layout.
+    pub aliases: &'a [ReviewedRuntimeAlias<'a>],
+    /// Selected regular files to grant private owner execution on Unix.
+    pub executables: &'a [&'a str],
+}
+
+/// Typed reason a reviewed runtime layout cannot be prepared.
+#[derive(Debug)]
+pub enum ManagedRuntimeLayoutError {
+    /// The trusted layout is invalid, colliding or exceeds its byte budget.
+    InvalidReview,
+    /// The owned directory or selected source could not be trusted or written.
+    Storage(ManagedArtifactError),
+    /// A source copy differed from its selected-file digest or size.
+    Transfer(ArtifactTransferError),
+}
+
+impl fmt::Display for ManagedRuntimeLayoutError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidReview => "reviewed runtime layout is invalid",
+            Self::Storage(_) => "private runtime layout storage failed",
+            Self::Transfer(_) => "selected runtime copy failed verification or I/O",
+        })
+    }
+}
+
+impl Error for ManagedRuntimeLayoutError {}
 
 impl fmt::Display for ManagedPayloadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -436,6 +484,14 @@ impl StagedManagedArtifact {
     }
 
     fn create_payload_directory(&self) -> Result<Dir, ManagedArtifactError> {
+        self.create_private_child(PAYLOAD)
+    }
+
+    fn create_runtime_directory(&self) -> Result<Dir, ManagedArtifactError> {
+        self.create_private_child(RUNTIME)
+    }
+
+    fn create_private_child(&self, name: &str) -> Result<Dir, ManagedArtifactError> {
         check_marker(&self.root, ROOT_MARKER, ROOT_IDENTITY)?;
         check_marker(&self.stage, STAGE_MARKER, STAGE_IDENTITY)?;
         self.validate_stage_at_name()?;
@@ -444,26 +500,30 @@ impl StagedManagedArtifact {
         #[cfg(unix)]
         builder.mode(0o700);
         self.stage
-            .create_dir_with(PAYLOAD, &builder)
+            .create_dir_with(name, &builder)
             .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
         let payload = self
             .stage
-            .open_dir_nofollow(PAYLOAD)
+            .open_dir_nofollow(name)
             .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
-        if let Err(error) = validate_private_root(&self.stage_path.join(PAYLOAD), &payload) {
-            self.remove_empty_payload(payload)?;
+        if let Err(error) = validate_private_root(&self.stage_path.join(name), &payload) {
+            self.remove_empty_child(name, payload)?;
             return Err(map_private_error(error));
         }
         Ok(payload)
     }
 
     fn remove_empty_payload(&self, payload: Dir) -> Result<(), ManagedArtifactError> {
+        self.remove_empty_child(PAYLOAD, payload)
+    }
+
+    fn remove_empty_child(&self, name: &str, payload: Dir) -> Result<(), ManagedArtifactError> {
         check_marker(&self.root, ROOT_MARKER, ROOT_IDENTITY)?;
         check_marker(&self.stage, STAGE_MARKER, STAGE_IDENTITY)?;
         self.validate_stage_at_name()?;
         let at_name = self
             .stage
-            .open_dir_nofollow(PAYLOAD)
+            .open_dir_nofollow(name)
             .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
         validate_same_held_directory(&at_name, &payload).map_err(map_private_error)?;
         drop(at_name);
@@ -477,8 +537,50 @@ impl StagedManagedArtifact {
         }
         drop(payload);
         self.stage
-            .remove_dir(PAYLOAD)
+            .remove_dir(name)
             .map_err(|_| ManagedArtifactError::Io)
+    }
+
+    fn remove_reviewed_runtime(
+        &self,
+        runtime: Dir,
+        reviewed_names: &[String],
+    ) -> Result<(), ManagedArtifactError> {
+        check_marker(&self.root, ROOT_MARKER, ROOT_IDENTITY)?;
+        check_marker(&self.stage, STAGE_MARKER, STAGE_IDENTITY)?;
+        self.validate_stage_at_name()?;
+        let at_name = self
+            .stage
+            .open_dir_nofollow(RUNTIME)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        validate_same_held_directory(&at_name, &runtime).map_err(map_private_error)?;
+        drop(at_name);
+        for entry in runtime.entries().map_err(|_| ManagedArtifactError::Io)? {
+            let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
+            let name = entry.file_name();
+            if !reviewed_names
+                .iter()
+                .any(|reviewed| name == reviewed.as_str())
+            {
+                return Err(ManagedArtifactError::UnsafeStorage);
+            }
+            let metadata = runtime
+                .symlink_metadata(&name)
+                .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+            if !metadata.is_file() || metadata.nlink() != 1 {
+                return Err(ManagedArtifactError::UnsafeStorage);
+            }
+        }
+        for name in reviewed_names {
+            match runtime.symlink_metadata(name) {
+                Ok(metadata) if metadata.is_file() && metadata.nlink() == 1 => runtime
+                    .remove_file(name)
+                    .map_err(|_| ManagedArtifactError::Io)?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                _ => return Err(ManagedArtifactError::UnsafeStorage),
+            }
+        }
+        self.remove_empty_child(RUNTIME, runtime)
     }
 
     fn validate_stage_at_name(&self) -> Result<(), ManagedArtifactError> {
@@ -545,6 +647,84 @@ struct SelectedPayloadFile {
     integrity: ArtifactIntegrity,
 }
 
+#[derive(Clone, Copy)]
+enum RuntimeFileMode {
+    PrivateData,
+    OwnerExecutable,
+}
+
+struct PlannedRuntimeFile {
+    name: String,
+    source_selected: String,
+    integrity: ArtifactIntegrity,
+    mode: RuntimeFileMode,
+}
+
+fn portable_runtime_name(name: &str) -> bool {
+    safe_archive_path(name, false) && !name.contains('/') && safe_staging_name(name)
+}
+
+fn review_runtime_layout(
+    selected: &[SelectedPayloadFile],
+    layout: ReviewedRuntimeLayout<'_>,
+) -> Result<Vec<PlannedRuntimeFile>, ManagedRuntimeLayoutError> {
+    if layout.max_bytes == 0 || layout.max_bytes > MAX_RUNTIME_BYTES {
+        return Err(ManagedRuntimeLayoutError::InvalidReview);
+    }
+    let mut executable_names = HashSet::new();
+    for executable in layout.executables {
+        if !portable_runtime_name(executable)
+            || !selected.iter().any(|file| file.name == *executable)
+            || !executable_names.insert(executable.to_ascii_lowercase())
+        {
+            return Err(ManagedRuntimeLayoutError::InvalidReview);
+        }
+    }
+    let mut names = HashSet::new();
+    let mut bytes = 0_u64;
+    let mut planned = Vec::with_capacity(selected.len() + layout.aliases.len());
+    for file in selected {
+        if !portable_runtime_name(&file.name) || !names.insert(file.name.to_ascii_lowercase()) {
+            return Err(ManagedRuntimeLayoutError::InvalidReview);
+        }
+        bytes = bytes
+            .checked_add(file.integrity.bytes())
+            .ok_or(ManagedRuntimeLayoutError::InvalidReview)?;
+        planned.push(PlannedRuntimeFile {
+            name: file.name.clone(),
+            source_selected: file.name.clone(),
+            integrity: file.integrity,
+            mode: if executable_names.contains(&file.name.to_ascii_lowercase()) {
+                RuntimeFileMode::OwnerExecutable
+            } else {
+                RuntimeFileMode::PrivateData
+            },
+        });
+    }
+    for alias in layout.aliases {
+        let source = selected
+            .iter()
+            .find(|file| file.name == alias.source_selected)
+            .ok_or(ManagedRuntimeLayoutError::InvalidReview)?;
+        if !portable_runtime_name(alias.name) || !names.insert(alias.name.to_ascii_lowercase()) {
+            return Err(ManagedRuntimeLayoutError::InvalidReview);
+        }
+        bytes = bytes
+            .checked_add(source.integrity.bytes())
+            .ok_or(ManagedRuntimeLayoutError::InvalidReview)?;
+        planned.push(PlannedRuntimeFile {
+            name: alias.name.to_owned(),
+            source_selected: source.name.clone(),
+            integrity: source.integrity,
+            mode: RuntimeFileMode::PrivateData,
+        });
+    }
+    if planned.len() > MAX_RUNTIME_FILES || bytes > layout.max_bytes {
+        return Err(ManagedRuntimeLayoutError::InvalidReview);
+    }
+    Ok(planned)
+}
+
 /// An exact reviewed selection in a private unactivated payload directory.
 pub struct StagedManagedPayload<'a> {
     artifact: &'a StagedManagedArtifact,
@@ -560,6 +740,78 @@ impl StagedManagedPayload<'_> {
             .iter()
             .map(|file| file.name.as_str())
             .collect()
+    }
+
+    /// Copies verified selected files and reviewed regular-file aliases into a
+    /// fresh private runtime directory; the original payload remains untouched.
+    ///
+    /// The result remains unactivated. The caller must recheck every runtime
+    /// file and perform bounded compatibility smoke before any later promotion.
+    ///
+    /// # Errors
+    ///
+    /// Rejects invalid/colliding reviews, changed selected bytes and unsafe
+    /// storage. On failure, only positively identified new runtime files are
+    /// removed; unexpected entries block cleanup.
+    pub fn prepare_reviewed_runtime(
+        &self,
+        layout: ReviewedRuntimeLayout<'_>,
+    ) -> Result<PreparedManagedRuntime<'_, '_>, ManagedRuntimeLayoutError> {
+        let planned = review_runtime_layout(&self.selected, layout)?;
+        let sources = planned
+            .iter()
+            .map(|file| {
+                self.open_selected_file(&file.source_selected)
+                    .map_err(ManagedRuntimeLayoutError::Storage)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let runtime = self
+            .artifact
+            .create_runtime_directory()
+            .map_err(ManagedRuntimeLayoutError::Storage)?;
+        let mut created = Vec::with_capacity(planned.len());
+        let result = planned
+            .iter()
+            .zip(sources)
+            .try_for_each(|(file, mut source)| {
+                let mut output = runtime
+                    .open_with(&file.name, &artifact_write_options())
+                    .map_err(|_| ManagedRuntimeLayoutError::Storage(ManagedArtifactError::Io))?;
+                created.push(file.name.clone());
+                transfer_verified(&mut source, &mut output, file.integrity)
+                    .map_err(ManagedRuntimeLayoutError::Transfer)?;
+                output
+                    .sync_all()
+                    .map_err(|_| ManagedRuntimeLayoutError::Storage(ManagedArtifactError::Io))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let mode = match file.mode {
+                        RuntimeFileMode::PrivateData => 0o600,
+                        RuntimeFileMode::OwnerExecutable => 0o700,
+                    };
+                    output
+                        .into_std()
+                        .set_permissions(fs::Permissions::from_mode(mode))
+                        .map_err(|_| {
+                            ManagedRuntimeLayoutError::Storage(ManagedArtifactError::Io)
+                        })?;
+                }
+                #[cfg(windows)]
+                let _ = file.mode;
+                Ok::<(), ManagedRuntimeLayoutError>(())
+            });
+        if let Err(error) = result {
+            self.artifact
+                .remove_reviewed_runtime(runtime, &created)
+                .map_err(ManagedRuntimeLayoutError::Storage)?;
+            return Err(error);
+        }
+        Ok(PreparedManagedRuntime {
+            payload: self,
+            runtime,
+            files: planned,
+        })
     }
 
     /// Rechecks one selected regular file by its reviewed SHA-256 before smoke.
@@ -680,6 +932,143 @@ impl StagedManagedPayload<'_> {
     }
 }
 
+/// Private, byte-verified runtime copies and aliases awaiting compatibility smoke.
+pub struct PreparedManagedRuntime<'a, 'b> {
+    payload: &'b StagedManagedPayload<'a>,
+    runtime: Dir,
+    files: Vec<PlannedRuntimeFile>,
+}
+
+impl PreparedManagedRuntime<'_, '_> {
+    /// Exact flat filenames in the unactivated runtime directory.
+    #[must_use]
+    pub fn reviewed_names(&self) -> Vec<&str> {
+        self.files.iter().map(|file| file.name.as_str()).collect()
+    }
+
+    /// Rechecks every regular runtime file and permission before later smoke.
+    ///
+    /// # Errors
+    ///
+    /// Rejects substituted directories, linked or extra files, changed bytes
+    /// and unexpected Unix modes.
+    pub fn recheck_all(&self) -> Result<(), ManagedArtifactError> {
+        for file in &self.files {
+            self.open_reviewed_file(&file.name)?;
+        }
+        Ok(())
+    }
+
+    /// Opens one reviewed runtime file as a held, rehashed regular-file handle.
+    ///
+    /// # Errors
+    ///
+    /// Rejects names outside the review and any changed ownership, content or
+    /// permissions before handing the file to a later smoke boundary.
+    pub fn open_reviewed_file(&self, name: &str) -> Result<fs::File, ManagedArtifactError> {
+        let artifact = self.payload.artifact;
+        check_marker(&artifact.root, ROOT_MARKER, ROOT_IDENTITY)?;
+        check_marker(&artifact.stage, STAGE_MARKER, STAGE_IDENTITY)?;
+        artifact.validate_stage_at_name()?;
+        let at_name = artifact
+            .stage
+            .open_dir_nofollow(RUNTIME)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        validate_same_held_directory(&at_name, &self.runtime).map_err(map_private_error)?;
+        validate_private_root(&artifact.stage_path.join(RUNTIME), &self.runtime)
+            .map_err(map_private_error)?;
+        let reviewed = self
+            .files
+            .iter()
+            .find(|file| file.name == name)
+            .ok_or(ManagedArtifactError::UnsafeStorage)?;
+        self.validate_exact_contents()?;
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let file = self
+            .runtime
+            .open_with(name, &options)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        let metadata = file.metadata().map_err(|_| ManagedArtifactError::Io)?;
+        validate_runtime_file(&metadata, reviewed.mode)?;
+        let mut file = file.into_std();
+        transfer_verified(&mut file, std::io::sink(), reviewed.integrity)
+            .map_err(ManagedArtifactError::Transfer)?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|_| ManagedArtifactError::Io)?;
+        Ok(file)
+    }
+
+    fn validate_exact_contents(&self) -> Result<(), ManagedArtifactError> {
+        let mut observed = HashSet::with_capacity(self.files.len());
+        for entry in self
+            .runtime
+            .entries()
+            .map_err(|_| ManagedArtifactError::Io)?
+        {
+            let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
+            let name = entry.file_name();
+            let name = name.to_str().ok_or(ManagedArtifactError::UnsafeStorage)?;
+            let reviewed = self
+                .files
+                .iter()
+                .find(|file| file.name == name)
+                .ok_or(ManagedArtifactError::UnsafeStorage)?;
+            if !observed.insert(name.to_owned()) {
+                return Err(ManagedArtifactError::UnsafeStorage);
+            }
+            let metadata = self
+                .runtime
+                .symlink_metadata(name)
+                .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+            validate_runtime_file(&metadata, reviewed.mode)?;
+        }
+        if observed.len() != self.files.len() {
+            return Err(ManagedArtifactError::UnsafeStorage);
+        }
+        Ok(())
+    }
+
+    /// Discards only reviewed runtime copies; original payload remains available.
+    ///
+    /// # Errors
+    ///
+    /// Unexpected or linked entries prevent deletion.
+    pub fn discard(self) -> Result<(), ManagedArtifactError> {
+        let reviewed_names = self
+            .files
+            .iter()
+            .map(|file| file.name.clone())
+            .collect::<Vec<_>>();
+        self.payload
+            .artifact
+            .remove_reviewed_runtime(self.runtime, &reviewed_names)
+    }
+}
+
+fn validate_runtime_file(
+    metadata: &cap_std::fs::Metadata,
+    mode: RuntimeFileMode,
+) -> Result<(), ManagedArtifactError> {
+    if !metadata.is_file() || metadata.nlink() != 1 {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    #[cfg(unix)]
+    {
+        use cap_std::fs::PermissionsExt;
+        let expected = match mode {
+            RuntimeFileMode::PrivateData => 0o600,
+            RuntimeFileMode::OwnerExecutable => 0o700,
+        };
+        if metadata.permissions().mode() & 0o777 != expected {
+            return Err(ManagedArtifactError::UnsafeStorage);
+        }
+    }
+    #[cfg(windows)]
+    let _ = mode;
+    Ok(())
+}
+
 fn write_marker(directory: &Dir, name: &str, expected: &[u8]) -> Result<(), ManagedArtifactError> {
     let mut options = OpenOptions::new();
     options
@@ -749,7 +1138,8 @@ mod tests {
 
     use super::{
         ArtifactTransferError, ManagedArtifactError, ManagedArtifactStore, ManagedPayloadError,
-        PAYLOAD, ReviewedArchiveFile, ReviewedPayloadArchive, TarInventoryError, hex,
+        ManagedRuntimeLayoutError, PAYLOAD, RUNTIME, ReviewedArchiveFile, ReviewedPayloadArchive,
+        ReviewedRuntimeAlias, ReviewedRuntimeLayout, TarInventoryError, hex,
     };
     use crate::ArchiveInventoryBounds;
 
@@ -829,6 +1219,280 @@ mod tests {
             payload.discard()?;
             artifact.discard()?;
             assert_eq!(fs::read_dir(root)?.count(), 1);
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn reviewed_runtime_copies_selected_bytes_and_regular_alias_without_activation()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let (archive, integrity) = reviewed_tar()?;
+            let artifact = store.import_verified(&archive[..], integrity)?;
+            let selected = [selected_tool()?];
+            let payload = artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let aliases = [ReviewedRuntimeAlias {
+                name: "tool-alias",
+                source_selected: "tool",
+            }];
+            let runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                max_bytes: 6,
+                aliases: &aliases,
+                executables: &["tool"],
+            })?;
+            assert_eq!(runtime.reviewed_names(), ["tool", "tool-alias"]);
+            runtime.recheck_all()?;
+            let mut observed = Vec::new();
+            runtime
+                .open_reviewed_file("tool-alias")?
+                .read_to_end(&mut observed)?;
+            assert_eq!(observed, b"abc");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                assert_eq!(
+                    fs::metadata(artifact.stage_path.join(RUNTIME).join("tool"))?
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o700
+                );
+                assert_eq!(
+                    fs::metadata(artifact.stage_path.join(RUNTIME).join("tool-alias"))?
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o600
+                );
+                fs::set_permissions(
+                    artifact.stage_path.join(RUNTIME).join("tool"),
+                    fs::Permissions::from_mode(0o600),
+                )?;
+                assert!(matches!(
+                    runtime.open_reviewed_file("tool"),
+                    Err(ManagedArtifactError::UnsafeStorage)
+                ));
+                fs::set_permissions(
+                    artifact.stage_path.join(RUNTIME).join("tool"),
+                    fs::Permissions::from_mode(0o700),
+                )?;
+            }
+            fs::write(artifact.stage_path.join(RUNTIME).join("tool-alias"), b"abd")?;
+            assert!(matches!(
+                runtime.open_reviewed_file("tool-alias"),
+                Err(ManagedArtifactError::Transfer(_))
+            ));
+            runtime.discard()?;
+            assert!(!artifact.stage_path.join(RUNTIME).exists());
+            payload.open_selected_file("tool")?;
+            payload.discard()?;
+            artifact.discard()?;
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn invalid_runtime_review_has_no_filesystem_effect() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let (archive, integrity) = reviewed_tar()?;
+            let artifact = store.import_verified(&archive[..], integrity)?;
+            let selected = [selected_tool()?];
+            let payload = artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            for (max_bytes, alias) in [
+                (
+                    2,
+                    ReviewedRuntimeAlias {
+                        name: "alias",
+                        source_selected: "tool",
+                    },
+                ),
+                (
+                    6,
+                    ReviewedRuntimeAlias {
+                        name: "../escape",
+                        source_selected: "tool",
+                    },
+                ),
+                (
+                    6,
+                    ReviewedRuntimeAlias {
+                        name: "alias",
+                        source_selected: "missing",
+                    },
+                ),
+                (
+                    6,
+                    ReviewedRuntimeAlias {
+                        name: "TOOL",
+                        source_selected: "tool",
+                    },
+                ),
+            ] {
+                assert!(matches!(
+                    payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                        max_bytes,
+                        aliases: &[alias],
+                        executables: &["tool"],
+                    }),
+                    Err(ManagedRuntimeLayoutError::InvalidReview)
+                ));
+                assert!(!artifact.stage_path.join(RUNTIME).exists());
+            }
+            assert!(matches!(
+                payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                    max_bytes: 3,
+                    aliases: &[],
+                    executables: &["missing"],
+                }),
+                Err(ManagedRuntimeLayoutError::InvalidReview)
+            ));
+            assert!(!artifact.stage_path.join(RUNTIME).exists());
+            payload.open_selected_file("tool")?;
+            payload.discard()?;
+            artifact.discard()?;
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn unexpected_runtime_entry_blocks_open_and_cleanup() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let (archive, integrity) = reviewed_tar()?;
+            let artifact = store.import_verified(&archive[..], integrity)?;
+            let selected = [selected_tool()?];
+            let payload = artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                max_bytes: 3,
+                aliases: &[],
+                executables: &["tool"],
+            })?;
+            let unexpected = artifact.stage_path.join(RUNTIME).join("unexpected");
+            fs::write(&unexpected, b"keep")?;
+            assert!(matches!(
+                runtime.open_reviewed_file("tool"),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            assert!(matches!(
+                runtime.discard(),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            assert_eq!(fs::read(unexpected)?, b"keep");
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn substituted_runtime_directory_cannot_redirect_open_or_cleanup() -> Result<(), Box<dyn Error>>
+    {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let (archive, integrity) = reviewed_tar()?;
+            let artifact = store.import_verified(&archive[..], integrity)?;
+            let selected = [selected_tool()?];
+            let payload = artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                max_bytes: 3,
+                aliases: &[],
+                executables: &["tool"],
+            })?;
+            let at_name = artifact.stage_path.join(RUNTIME);
+            let held_name = artifact.stage_path.join("runtime-held");
+            fs::rename(&at_name, &held_name)?;
+            fs::create_dir(&at_name)?;
+            fs::write(at_name.join("attacker"), b"keep")?;
+            assert!(matches!(
+                runtime.open_reviewed_file("tool"),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            assert!(matches!(
+                runtime.discard(),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            assert_eq!(fs::read(at_name.join("attacker"))?, b"keep");
+            assert_eq!(fs::read(held_name.join("tool"))?, b"abc");
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hard_linked_runtime_file_is_neither_opened_nor_deleted() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let (archive, integrity) = reviewed_tar()?;
+            let artifact = store.import_verified(&archive[..], integrity)?;
+            let selected = [selected_tool()?];
+            let payload = artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                max_bytes: 3,
+                aliases: &[],
+                executables: &["tool"],
+            })?;
+            let outside = parent.join("outside");
+            fs::hard_link(artifact.stage_path.join(RUNTIME).join("tool"), &outside)?;
+            assert!(matches!(
+                runtime.open_reviewed_file("tool"),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            assert!(matches!(
+                runtime.discard(),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            assert_eq!(fs::read(outside)?, b"abc");
             Ok::<(), Box<dyn Error>>(())
         })();
         fs::remove_dir_all(parent)?;

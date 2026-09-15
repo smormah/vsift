@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 can now copy a verified payload into a fresh private, unactivated
+  `runtime.pending` directory with only reviewed regular-file aliases and
+  selected Unix owner-executable modes. Every copy is bounded and rechecked;
+  failed preparation removes only its owned runtime files. A pinned Ubuntu
+  whisper.cpp archive passed this layout stage without binary execution.
 - P06 `setup plan --profile` now performs a read-only configured/PATH executable
   diagnosis. Until a per-target managed artifact is qualified, its v1 result
   reports an unavailable managed path, no install actions or acceptance digest,

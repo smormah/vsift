@@ -122,6 +122,16 @@ gzip/tar selected-file assembly beneath that artifact's private stage,
 owned composition, still without executable modes, aliases, smoke or
 activation; it does not accept the candidate as a managed source.
 
+The next owned-runtime-layout increment takes the same exact archive through
+a separate private runtime copy. Six reviewed SONAME aliases are regular-file
+copies from the selected versioned libraries, never extracted symlinks;
+`whisper-cli` receives Unix owner-only executable mode. The opt-in Rust test
+rechecks all twelve runtime files and then discards runtime, payload and
+artifact without executing the candidate. This confirms the production
+layout primitive accepts the pinned archive bytes. It does not qualify
+runtime compatibility, model-backed smoke, notice/source closure, catalogue
+acceptance or installation.
+
 | Relative file under `whisper-bin-ubuntu-x64/` | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `LICENSE` | 1,078 | `94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d` |
