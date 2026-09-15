@@ -1,4 +1,6 @@
-//! Opt-in read-only check of the pinned upstream Ubuntu `FFmpeg` build archive.
+//! Opt-in contained-staging check of the pinned Ubuntu `FFmpeg` build archive.
+
+mod support;
 
 use std::{
     env,
@@ -11,8 +13,10 @@ use std::{
 use sha2::{Digest, Sha256};
 use vsift_domain::ArtifactIntegrity;
 use vsift_infrastructure::{
-    ArchiveInventoryBounds, ReviewedArchiveFile, inspect_xz_tar_selected_files,
+    ArchiveInventoryBounds, ReviewedArchiveFile, stage_xz_tar_selected_files,
 };
+
+use support::PrivateStaging;
 
 const EXPECTED_BYTES: u64 = 113_372_924;
 const EXPECTED_SHA256: &str = "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf";
@@ -31,7 +35,7 @@ fn selected(
 
 #[test]
 #[ignore = "opt-in pinned publisher archive; set VSIFT_P06_FFMPEG_ARCHIVE to its local path"]
-fn pinned_upstream_archive_passes_read_only_inventory() -> Result<(), Box<dyn Error>> {
+fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Error>> {
     let path = env::var_os("VSIFT_P06_FFMPEG_ARCHIVE")
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "candidate archive path missing"))?;
     let metadata = std::fs::metadata(&path)?;
@@ -70,13 +74,15 @@ fn pinned_upstream_archive_passes_read_only_inventory() -> Result<(), Box<dyn Er
             "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
         )?,
     ];
-    let entries = inspect_xz_tar_selected_files(
+    let staging = PrivateStaging::new("vsift-p06-ffmpeg-stage")?;
+    let entries = stage_xz_tar_selected_files(
         File::open(path)?,
         EXPECTED_BYTES,
         400_000_000,
         ArchiveInventoryBounds::new(73, 370_667_773)?,
         &[],
         &files,
+        staging.directory()?,
     )?;
     assert_eq!(entries.len(), 73);
     assert!(entries.iter().all(|entry| entry.path.starts_with(ROOT)));
@@ -84,5 +90,10 @@ fn pinned_upstream_archive_passes_read_only_inventory() -> Result<(), Box<dyn Er
         entries.iter().map(|entry| entry.bytes).sum::<u64>(),
         370_667_773
     );
+    let mut names = std::fs::read_dir(staging.path())?
+        .map(|entry| entry.map(|item| item.file_name()))
+        .collect::<Result<Vec<_>, _>>()?;
+    names.sort();
+    assert_eq!(names, ["LICENSE.txt", "ffmpeg", "ffprobe"]);
     Ok(())
 }

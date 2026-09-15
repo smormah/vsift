@@ -4,9 +4,13 @@ use std::{
     collections::HashSet,
     error::Error,
     fmt,
-    io::{self, Read},
+    io::{self, Read, Write},
 };
 
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+#[cfg(unix)]
+use cap_std::fs::OpenOptionsExt;
+use cap_std::fs::{Dir, OpenOptions};
 use sha2::{Digest, Sha256};
 use vsift_domain::ArtifactIntegrity;
 
@@ -47,6 +51,10 @@ pub enum TarInventoryError {
     MissingSelectedFile,
     /// A selected entry has a different path, type, size or SHA-256.
     SelectedFileMismatch,
+    /// The selected output filename already exists or staging is not empty.
+    InvalidStaging,
+    /// Private staging could not create, write, flush or remove a selected file.
+    StagingIo(io::ErrorKind),
 }
 
 impl fmt::Display for TarInventoryError {
@@ -60,6 +68,8 @@ impl fmt::Display for TarInventoryError {
             Self::InvalidSelection => "reviewed tar file selection is invalid",
             Self::MissingSelectedFile => "tar archive lacks a reviewed file",
             Self::SelectedFileMismatch => "selected tar file differs from reviewed bytes",
+            Self::InvalidStaging => "selected tar staging directory is not empty",
+            Self::StagingIo(_) => "selected tar file staging failed",
         })
     }
 }
@@ -84,7 +94,7 @@ pub fn inspect_tar_inventory<Source: Read>(
     bounds: ArchiveInventoryBounds,
     reviewed_aliases: &[ReviewedArchiveAlias<'_>],
 ) -> Result<Vec<ArchiveEntry>, TarInventoryError> {
-    inspect_tar(source, max_tar_bytes, bounds, reviewed_aliases, &[])
+    inspect_tar(source, max_tar_bytes, bounds, reviewed_aliases, &[], None)
 }
 
 /// Validates the full tar inventory and exact bytes of selected regular files.
@@ -111,6 +121,41 @@ pub fn inspect_tar_selected_files<Source: Read>(
         bounds,
         reviewed_aliases,
         selected_files,
+        None,
+    )
+}
+
+/// Validates the full tar and stages selected regular files under flat names.
+///
+/// The caller supplies a newly created private directory capability. It must be
+/// empty. Each selected file is created with its final archive basename, using
+/// create-new and no-follow semantics; archive directories, links and modes are
+/// never materialized. Any failure removes every file created by this call.
+/// The resulting files remain unactivated and require a fresh compatibility and
+/// integrity check before activation.
+///
+/// # Errors
+///
+/// Returns typed selection, parser, stream, digest or staging rejection.
+pub fn stage_tar_selected_files<Source: Read>(
+    source: Source,
+    max_tar_bytes: u64,
+    bounds: ArchiveInventoryBounds,
+    reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+    selected_files: &[ReviewedArchiveFile<'_>],
+    staging: &Dir,
+) -> Result<Vec<ArchiveEntry>, TarInventoryError> {
+    if selected_files.is_empty() {
+        return Err(TarInventoryError::InvalidSelection);
+    }
+    ensure_empty_staging(staging)?;
+    inspect_tar(
+        source,
+        max_tar_bytes,
+        bounds,
+        reviewed_aliases,
+        selected_files,
+        Some(staging),
     )
 }
 
@@ -120,6 +165,7 @@ fn inspect_tar<Source: Read>(
     bounds: ArchiveInventoryBounds,
     reviewed_aliases: &[ReviewedArchiveAlias<'_>],
     selected_files: &[ReviewedArchiveFile<'_>],
+    staging: Option<&Dir>,
 ) -> Result<Vec<ArchiveEntry>, TarInventoryError> {
     if max_tar_bytes == 0 || max_tar_bytes > MAX_TAR_STREAM_BYTES {
         return Err(TarInventoryError::InvalidStreamLimit);
@@ -128,14 +174,49 @@ fn inspect_tar<Source: Read>(
         return Err(TarInventoryError::InvalidSelection);
     }
     let mut selected_paths = HashSet::new();
+    let mut staging_names = HashSet::new();
     for selected in selected_files {
+        let staging_name = selected_staging_name(selected.path);
         if !safe_archive_path(selected.path, false)
             || !selected_paths.insert(selected.path.to_ascii_lowercase())
+            || (staging.is_some()
+                && (!safe_staging_name(staging_name)
+                    || !staging_names.insert(staging_name.to_ascii_lowercase())))
         {
             return Err(TarInventoryError::InvalidSelection);
         }
     }
     let mut found_selected = vec![false; selected_files.len()];
+    let mut created_names = Vec::new();
+    let result = inspect_tar_inner(
+        source,
+        max_tar_bytes,
+        bounds,
+        reviewed_aliases,
+        selected_files,
+        staging,
+        &mut found_selected,
+        &mut created_names,
+    );
+    if result.is_err()
+        && let Some(directory) = staging
+    {
+        cleanup_staging_names(directory, &created_names)?;
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn inspect_tar_inner<Source: Read>(
+    source: Source,
+    max_tar_bytes: u64,
+    bounds: ArchiveInventoryBounds,
+    reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+    selected_files: &[ReviewedArchiveFile<'_>],
+    staging: Option<&Dir>,
+    found_selected: &mut [bool],
+    created_names: &mut Vec<String>,
+) -> Result<Vec<ArchiveEntry>, TarInventoryError> {
     let mut archive = tar::Archive::new(source.take(max_tar_bytes + 1));
     let mut entries = Vec::new();
     let mut declared_bytes = 0_u64;
@@ -162,7 +243,14 @@ fn inspect_tar<Source: Read>(
                 ArchiveInventoryError::TooManyBytes,
             ));
         }
-        verify_entry_payload(&mut entry, &metadata, selected_files, &mut found_selected)?;
+        verify_entry_payload(
+            &mut entry,
+            &metadata,
+            selected_files,
+            found_selected,
+            staging,
+            created_names,
+        )?;
         entries.push(metadata);
     }
     let mut remaining = archive.into_inner();
@@ -238,6 +326,8 @@ fn verify_entry_payload<Source: Read>(
     metadata: &ArchiveEntry,
     selected_files: &[ReviewedArchiveFile<'_>],
     found_selected: &mut [bool],
+    staging: Option<&Dir>,
+    created_names: &mut Vec<String>,
 ) -> Result<(), TarInventoryError> {
     let Some((position, selected)) = selected_files
         .iter()
@@ -254,6 +344,24 @@ fn verify_entry_payload<Source: Read>(
     {
         return Err(TarInventoryError::SelectedFileMismatch);
     }
+    let staging_name = selected_staging_name(selected.path);
+    let mut staged = match staging {
+        Some(directory) => {
+            let mut options = OpenOptions::new();
+            options
+                .write(true)
+                .create_new(true)
+                .follow(FollowSymlinks::No);
+            #[cfg(unix)]
+            options.mode(0o600);
+            let file = directory
+                .open_with(staging_name, &options)
+                .map_err(|error| TarInventoryError::StagingIo(error.kind()))?;
+            created_names.push(staging_name.to_owned());
+            Some(file)
+        }
+        None => None,
+    };
     let mut digest = Sha256::new();
     let mut buffer = [0_u8; 16 * 1024];
     loop {
@@ -266,23 +374,112 @@ fn verify_entry_payload<Source: Read>(
             break;
         }
         digest.update(&buffer[..read]);
+        if let Some(file) = staged.as_mut() {
+            file.write_all(&buffer[..read])
+                .map_err(|error| TarInventoryError::StagingIo(error.kind()))?;
+        }
     }
     let observed: [u8; 32] = digest.finalize().into();
     if observed != selected.integrity.sha256() {
         return Err(TarInventoryError::SelectedFileMismatch);
     }
+    if let Some(file) = staged {
+        file.sync_all()
+            .map_err(|error| TarInventoryError::StagingIo(error.kind()))?;
+    }
     found_selected[position] = true;
     Ok(())
 }
 
+fn selected_staging_name(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+
+fn safe_staging_name(name: &str) -> bool {
+    if name.len() > 128 || name.ends_with([' ', '.']) {
+        return false;
+    }
+    let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+    !matches!(
+        stem.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    )
+}
+
+pub(crate) fn cleanup_staged_files(
+    staging: &Dir,
+    selected_files: &[ReviewedArchiveFile<'_>],
+) -> Result<(), TarInventoryError> {
+    let names = selected_files
+        .iter()
+        .map(|selected| selected_staging_name(selected.path).to_owned())
+        .collect::<Vec<_>>();
+    cleanup_staging_names(staging, &names)
+}
+
+fn cleanup_staging_names(staging: &Dir, names: &[String]) -> Result<(), TarInventoryError> {
+    let mut failure = None;
+    for name in names.iter().rev() {
+        if let Err(error) = staging.remove_file(name)
+            && error.kind() != io::ErrorKind::NotFound
+            && failure.is_none()
+        {
+            failure = Some(error.kind());
+        }
+    }
+    match failure {
+        Some(kind) => Err(TarInventoryError::StagingIo(kind)),
+        None => Ok(()),
+    }
+}
+
+fn ensure_empty_staging(staging: &Dir) -> Result<(), TarInventoryError> {
+    let mut entries = staging
+        .read_dir(".")
+        .map_err(|error| TarInventoryError::StagingIo(error.kind()))?;
+    match entries.next() {
+        Some(Ok(_)) => Err(TarInventoryError::InvalidStaging),
+        Some(Err(error)) => Err(TarInventoryError::StagingIo(error.kind())),
+        None => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{
+        fmt::Write as _,
+        fs,
+        io::{self, Cursor},
+        path::PathBuf,
+    };
 
+    use cap_std::fs::Dir;
     use tar::{Builder, EntryType, Header};
 
     use super::{
         ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory, inspect_tar_selected_files,
+        stage_tar_selected_files,
     };
     use crate::{ArchiveInventoryBounds, ArchiveInventoryError, ReviewedArchiveAlias};
     use vsift_domain::ArtifactIntegrity;
@@ -296,7 +493,7 @@ mod tests {
         let mut file = Header::new_gnu();
         file.set_path("root/lib.so.1")?;
         file.set_size(3);
-        file.set_mode(0o600);
+        file.set_mode(0o777);
         file.set_cksum();
         archive.append(&file, Cursor::new(b"abc"))?;
         let mut link = Header::new_gnu();
@@ -320,6 +517,20 @@ mod tests {
         })
     }
 
+    fn staging_directory() -> Result<(PathBuf, Dir), Box<dyn std::error::Error>> {
+        let mut random = [0_u8; 16];
+        getrandom::fill(&mut random)
+            .map_err(|_| io::Error::other("test random source unavailable"))?;
+        let mut suffix = String::with_capacity(32);
+        for byte in random {
+            write!(&mut suffix, "{byte:02x}")?;
+        }
+        let path = std::env::temp_dir().join(format!("vsift-p06-stage-{suffix}"));
+        fs::create_dir(&path)?;
+        let directory = Dir::open_ambient_dir(&path, cap_std::ambient_authority())?;
+        Ok((path, directory))
+    }
+
     #[test]
     fn verifies_selected_regular_bytes_and_complete_inventory()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -332,6 +543,142 @@ mod tests {
         let entries =
             inspect_tar_selected_files(Cursor::new(&data), 10_000, bounds()?, &aliases, &files)?;
         assert_eq!(entries.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn stages_only_selected_regular_files_under_flat_private_names()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let data = fixture_tar()?;
+        let aliases = [ReviewedArchiveAlias {
+            path: "root/lib.so",
+            target: "lib.so.1",
+        }];
+        let files = [selected_file()?];
+        let (path, directory) = staging_directory()?;
+        let result = stage_tar_selected_files(
+            Cursor::new(&data),
+            10_000,
+            bounds()?,
+            &aliases,
+            &files,
+            &directory,
+        );
+        assert!(result.is_ok());
+        assert_eq!(fs::read(path.join("lib.so.1"))?, b"abc");
+        assert!(!path.join("lib.so").exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            assert_eq!(
+                fs::metadata(path.join("lib.so.1"))?.permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        drop(directory);
+        fs::remove_dir_all(path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn staging_failure_removes_created_files_and_preserves_existing_content()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let data = fixture_tar()?;
+        let files = [selected_file()?];
+        let (path, directory) = staging_directory()?;
+        let wrong_digest = ReviewedArchiveFile {
+            path: files[0].path,
+            integrity: ArtifactIntegrity::from_sha256_hex(
+                3,
+                "a52d159f262b2c6ddb724a61840befc36eb30c88877a4030b65cbe86298449c9",
+            )?,
+        };
+        assert_eq!(
+            stage_tar_selected_files(
+                Cursor::new(&data),
+                10_000,
+                bounds()?,
+                &[ReviewedArchiveAlias {
+                    path: "root/lib.so",
+                    target: "lib.so.1",
+                }],
+                &[wrong_digest],
+                &directory,
+            ),
+            Err(TarInventoryError::SelectedFileMismatch)
+        );
+        assert!(fs::read_dir(&path)?.next().is_none());
+        assert_eq!(
+            stage_tar_selected_files(
+                Cursor::new(&data),
+                10_000,
+                bounds()?,
+                &[],
+                &files,
+                &directory,
+            ),
+            Err(TarInventoryError::Inventory(
+                ArchiveInventoryError::UnreviewedLink
+            ))
+        );
+        assert!(fs::read_dir(&path)?.next().is_none());
+        fs::write(path.join("sentinel"), b"owned")?;
+        assert_eq!(
+            stage_tar_selected_files(
+                Cursor::new(&data),
+                10_000,
+                bounds()?,
+                &[],
+                &files,
+                &directory,
+            ),
+            Err(TarInventoryError::InvalidStaging)
+        );
+        assert_eq!(fs::read(path.join("sentinel"))?, b"owned");
+        drop(directory);
+        fs::remove_dir_all(path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_selected_paths_that_collide_when_flattened() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let data = fixture_tar()?;
+        let selected = selected_file()?;
+        let collision = ReviewedArchiveFile {
+            path: "other/lib.so.1",
+            integrity: selected.integrity,
+        };
+        let (path, directory) = staging_directory()?;
+        assert_eq!(
+            stage_tar_selected_files(
+                Cursor::new(data),
+                10_000,
+                bounds()?,
+                &[],
+                &[selected, collision],
+                &directory,
+            ),
+            Err(TarInventoryError::InvalidSelection)
+        );
+        let reserved = ReviewedArchiveFile {
+            path: "root/CON.txt",
+            integrity: selected.integrity,
+        };
+        assert_eq!(
+            stage_tar_selected_files(
+                Cursor::new([]),
+                10_000,
+                bounds()?,
+                &[],
+                &[reserved],
+                &directory,
+            ),
+            Err(TarInventoryError::InvalidSelection)
+        );
+        drop(directory);
+        fs::remove_dir_all(path)?;
         Ok(())
     }
 

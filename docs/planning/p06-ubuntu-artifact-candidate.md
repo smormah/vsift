@@ -60,6 +60,14 @@ predates this additional assertion. A fresh opt-in run against the pinned
 publisher URL passed on 2026-09-14 after the archive size and SHA-256 matched;
 the selected-file inspection took 145.67 seconds without executing binaries.
 
+The contained-staging increment (`57b8113`) changes this opt-in test to write
+only `LICENSE.txt`, `ffmpeg` and `ffprobe` as private regular files under an
+empty temporary directory capability, then removes that temporary directory.
+It does not grant executable permission, run the files or activate the layout.
+On 2026-09-15 a fresh publisher download matched the pinned whole-archive size
+and SHA-256, and the updated opt-in staging test passed in 106.30 seconds. The
+temporary selected files were removed without execution.
+
 | Relative file under its version root | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `LICENSE.txt` | 7,651 | `da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768` |
@@ -96,6 +104,16 @@ size and SHA-256 while inspecting the complete archive. The earlier run above
 predates this additional assertion. A fresh opt-in run against the pinned
 publisher URL passed on 2026-09-14 after the archive size and SHA-256 matched;
 the selected-file inspection took 2.48 seconds without executing binaries.
+
+The contained-staging increment (`57b8113`) changes this opt-in test to write
+only the six reviewed regular files as private flat files under an empty
+temporary directory capability, then removes that directory. None of the eight
+archive symlinks is materialized. This does not create the required reviewed
+regular-file aliases, grant executable permission, run a binary or activate the
+layout.
+On 2026-09-15 a fresh publisher download matched the pinned whole-archive size
+and SHA-256, and the updated opt-in staging test passed in 2.47 seconds. The
+temporary selected files were removed without execution.
 
 | Relative file under `whisper-bin-ubuntu-x64/` | Bytes | SHA-256 |
 | --- | ---: | --- |
