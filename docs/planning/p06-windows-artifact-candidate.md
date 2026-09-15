@@ -115,8 +115,9 @@ must be confirmed by a controlled compatibility test, not assumed from `--help`.
    replacement of this pinned candidate. The other
    named R0 targets still require manual/BYO guidance unless separately qualified.
 
-Until these gates and installer D-01..D-10 pass, `setup plan`/`setup install`
-remain unavailable and this candidate is **not** an accepted trust anchor.
+Until these gates and installer D-01..D-10 pass, `setup plan` cannot offer a
+managed download, `setup install` remains unavailable, and this candidate is
+**not** an accepted trust anchor.
 
 ## Opt-in candidate compatibility experiment
 

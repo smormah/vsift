@@ -67,9 +67,12 @@ distinction explicitly.
 ## 3. Public CLI contract
 
 P01 publishes the namespace and common v1 boundary. `setup check` executes a
-read-only executable probe with explicit off-PATH selection and manual guidance;
-every other row is reserved and returns `COMMAND_NOT_IMPLEMENTED` until its owning
-packet ships. The exact limits, compatibility rules, schemas, and implementation map
+read-only executable probe with explicit off-PATH selection and manual guidance.
+The partial P06 `setup plan` now diagnoses configured/PATH executables and returns
+only typed manual dispositions while no managed artifact is qualified; it has no
+install actions or acceptance digest. Other unimplemented rows remain reserved
+and return `COMMAND_NOT_IMPLEMENTED` until their owning packet ships. The exact
+limits, compatibility rules, schemas, and implementation map
 are in the [v1 CLI contract](../contracts/cli-v1.md).
 
 | Command | Purpose / constraints |

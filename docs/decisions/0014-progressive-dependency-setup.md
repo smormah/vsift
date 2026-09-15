@@ -107,3 +107,13 @@ registration only: it does not parse model contents, run inference, establish
 compatibility or change `setup check`'s executable-only readiness. A later P06
 preflight must revalidate the file before use. Managed-version precedence and
 model-backed qualification remain open.
+
+## 2026-09-15 implementation note: unqualified read-only plan
+
+`setup plan --profile` now performs the configured/PATH executable probe and
+returns a v1 read-only disposition. With no accepted managed catalogue it
+reports `unavailable_unqualified`, no install actions and no acceptance digest,
+plus manual BYO next steps for missing or unhealthy tools. A responding
+executable is labelled probe-only; neither provider compatibility nor model
+validity is inferred. `setup install` remains reserved. This narrows D-07/D-10
+manual guidance but does not qualify a managed-install target or close P06.

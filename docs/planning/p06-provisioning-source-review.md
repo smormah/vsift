@@ -22,6 +22,16 @@ record. Registration does not read model bytes or change executable-only setup
 readiness. Model-backed compatibility, reviewed managed source selection and
 installation remain unimplemented.
 
+The 2026-09-15 read-only plan increment changes `setup plan --profile` from a
+generic reserved failure into a check-first diagnosis of configured or filtered
+`PATH` executables. Its v1 result explicitly says
+`managed_install: unavailable_unqualified`, with no actions or acceptance
+digest, and gives typed user-managed/BYO next steps for unavailable tools.
+Responding tools remain executable-probe-only candidates; the local ASR model
+is not checked. `setup install` and the other managed lifecycle commands
+remain reserved. No catalogue item, installation or compatibility qualification
+is implied by this plan response; D-07/D-10 and P06 E2E remain open.
+
 The verified-stream increment adds a bounded exact-size/SHA-256 check over an
 injected byte source and unactivated sink. It is not exposed as managed setup
 and does not authorize a user URL or checksum. The reviewed catalogue, HTTPS
@@ -168,7 +178,7 @@ asset, subject to an earlier revocation or a reviewed replacement. These
 source links and publisher checksums are supporting provenance, not a binary
 signature or independent proof of all compiled dependency sources.
 The full compiled-component source/notice review, catalogue and production
-installer gates remain open; `setup plan` remains unavailable.
+installer gates remain open; `setup plan` cannot offer a managed download.
 
 An unactivated P06 managed-data root and exact-byte import boundary now exist
 in infrastructure. A new root receives a fixed ownership marker; existing

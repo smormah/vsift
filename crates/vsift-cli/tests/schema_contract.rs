@@ -36,6 +36,10 @@ fn every_published_example_validates_against_its_schema() -> Result<(), Box<dyn 
             "operation-response.schema.json",
             "examples/operation-error.json",
         ),
+        (
+            "setup-plan-unqualified.schema.json",
+            "examples/setup-plan.unqualified.json",
+        ),
         ("terminal-event.schema.json", "examples/terminal-event.json"),
         ("config.schema.json", "examples/config.json"),
     ] {
@@ -54,6 +58,10 @@ fn strict_schemas_reject_unknown_fields() -> Result<(), Box<dyn std::error::Erro
         (
             "operation-response.schema.json",
             "examples/operation-error.json",
+        ),
+        (
+            "setup-plan-unqualified.schema.json",
+            "examples/setup-plan.unqualified.json",
         ),
         ("terminal-event.schema.json", "examples/terminal-event.json"),
         ("config.schema.json", "examples/config.json"),
@@ -98,7 +106,15 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     );
 
     let operation = Command::cargo_bin("vsift")?
-        .args(["setup", "plan", "--profile", "desktop", "--json"])
+        .args([
+            "setup",
+            "install",
+            "--plan",
+            "missing.json",
+            "--accept-plan",
+            "unknown",
+            "--json",
+        ])
         .output()?;
     assert_eq!(
         serde_json::from_slice::<Value>(&operation.stdout)?,
@@ -106,12 +122,31 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     );
 
     let event = Command::cargo_bin("vsift")?
-        .args(["setup", "plan", "--profile", "desktop", "--events", "jsonl"])
+        .args([
+            "setup",
+            "install",
+            "--plan",
+            "missing.json",
+            "--accept-plan",
+            "unknown",
+            "--events",
+            "jsonl",
+        ])
         .output()?;
     assert_eq!(
         serde_json::from_slice::<Value>(&event.stdout)?,
         load("examples/terminal-event.json")?
     );
+    let plan = Command::cargo_bin("vsift")?
+        .args(["setup", "plan", "--profile", "desktop", "--json"])
+        .env("PATH", "")
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
+        .output()?;
+    let plan_value = serde_json::from_slice::<Value>(&plan.stdout)?;
+    assert_eq!(plan_value, load("examples/setup-plan.unqualified.json")?);
+    validate(&load("setup-plan-unqualified.schema.json")?, &plan_value)?;
     Ok(())
 }
 

@@ -37,6 +37,46 @@ pub struct RuntimeDiagnosis {
     pub dependencies: Vec<DependencyStatus>,
 }
 
+/// One dependency's disposition when no managed artifact is qualified.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnqualifiedPlanAction {
+    /// An executable responded, but compatibility is still unverified.
+    ProbeOnly,
+    /// The user must locate or install a trusted executable outside managed setup.
+    ManualSelection,
+}
+
+/// Read-only check-first result while the managed catalogue has no accepted builds.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnqualifiedSetupPlan {
+    /// Executable-probe aggregate only.
+    pub readiness: RuntimeReadiness,
+    /// Per-dependency status and permitted next action in stable order.
+    pub dependencies: Vec<(DependencyStatus, UnqualifiedPlanAction)>,
+}
+
+impl UnqualifiedSetupPlan {
+    /// Interprets a completed diagnosis without offering an unreviewed download.
+    #[must_use]
+    pub fn from_diagnosis(diagnosis: RuntimeDiagnosis) -> Self {
+        Self {
+            readiness: diagnosis.readiness,
+            dependencies: diagnosis
+                .dependencies
+                .into_iter()
+                .map(|status| {
+                    let action = if status.state.is_available() {
+                        UnqualifiedPlanAction::ProbeOnly
+                    } else {
+                        UnqualifiedPlanAction::ManualSelection
+                    };
+                    (status, action)
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Read-only use case that diagnoses `VSift`'s local runtime.
 pub struct DiagnoseRuntime<P> {
     probe: P,

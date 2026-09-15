@@ -367,14 +367,80 @@ fn corrupt_user_config_fails_closed_without_an_ambient_probe()
 }
 
 #[test]
-fn reserved_operations_fail_without_claiming_implementation()
+fn unqualified_setup_plan_checks_first_and_never_offers_an_install()
 -> Result<(), Box<dyn std::error::Error>> {
-    let output = run(&["setup", "plan", "--profile", "desktop", "--json"])?;
+    let base = isolated_config_base()?;
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "plan", "--profile", "desktop", "--json"])
+        .env("PATH", "")
+        .output()?;
     let value = parse_stdout(&output)?;
-
-    assert_eq!(output.status.code(), Some(2));
+    assert!(output.status.success());
     assert_eq!(value["command"], "setup.plan");
+    assert_eq!(value["status"], "complete");
+    assert_eq!(value["data"]["readiness"], "blocked");
+    assert_eq!(value["data"]["managed_install"], "unavailable_unqualified");
+    assert_eq!(value["data"]["plan_digest"], Value::Null);
+    assert_eq!(value["data"]["actions"], serde_json::json!([]));
+    assert_eq!(
+        value["data"]["dependencies"][0]["disposition"],
+        "manual_selection_required"
+    );
+    assert_eq!(
+        value["data"]["dependencies"][0]["required_authority"],
+        "user"
+    );
+    if base.exists() {
+        std::fs::remove_dir_all(&base)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn reserved_install_fails_without_claiming_implementation() -> Result<(), Box<dyn std::error::Error>>
+{
+    let output = run(&[
+        "setup",
+        "install",
+        "--plan",
+        "missing.json",
+        "--accept-plan",
+        "unknown",
+        "--json",
+    ])?;
+    let value = parse_stdout(&output)?;
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(value["command"], "setup.install");
     assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
     assert_eq!(value["data"], Value::Null);
+    Ok(())
+}
+
+#[test]
+fn setup_plan_uses_configured_off_path_tool_but_does_not_call_it_qualified()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "configure", "whisper", "--executable"])
+        .arg(&binary)
+        .arg("--json")
+        .output()?;
+    assert!(configured.status.success());
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "plan", "--profile", "worker", "--json"])
+        .env("PATH", "")
+        .output()?;
+    let value = parse_stdout(&output)?;
+    assert!(output.status.success());
+    assert_eq!(value["data"]["profile"], "worker");
+    assert_eq!(value["data"]["dependencies"][2]["status"], "available");
+    assert_eq!(
+        value["data"]["dependencies"][2]["disposition"],
+        "existing_executable_probe_only"
+    );
+    assert_eq!(value["data"]["managed_install"], "unavailable_unqualified");
+    assert_eq!(value["data"]["actions"], serde_json::json!([]));
+    std::fs::remove_dir_all(&base)?;
     Ok(())
 }

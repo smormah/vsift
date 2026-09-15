@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup-plan-unqualified.schema.json",
+  "title": "VSift unqualified read-only setup plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command", "operation_id", "status", "data", "warnings", "error", "coverage", "lifecycle"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "command": { "const": "setup.plan" },
+    "operation_id": { "type": "null" },
+    "status": { "const": "complete" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "readiness", "verification_scope", "local_asr_model", "managed_install", "plan_digest", "actions", "dependencies"],
+      "properties": {
+        "profile": { "enum": ["desktop", "worker"] },
+        "readiness": { "enum": ["ready", "degraded", "blocked"] },
+        "verification_scope": { "const": "executable_probe_only" },
+        "local_asr_model": { "const": "not_checked" },
+        "managed_install": { "const": "unavailable_unqualified" },
+        "plan_digest": { "type": "null" },
+        "actions": { "const": [] },
+        "dependencies": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dependency", "status", "disposition", "required_authority", "next_step"],
+            "properties": {
+              "dependency": { "enum": ["ffmpeg", "ffprobe", "whisper"] },
+              "status": { "enum": ["available", "missing", "unhealthy", "timed_out"] },
+              "disposition": { "enum": ["existing_executable_probe_only", "manual_selection_required"] },
+              "required_authority": { "enum": ["user", null] },
+              "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
+            },
+            "allOf": [
+              { "if": { "properties": { "status": { "const": "available" } } }, "then": { "properties": { "disposition": { "const": "existing_executable_probe_only" }, "required_authority": { "type": "null" } } } },
+              { "if": { "properties": { "status": { "enum": ["missing", "unhealthy", "timed_out"] } } }, "then": { "properties": { "disposition": { "const": "manual_selection_required" }, "required_authority": { "const": "user" } } } }
+            ]
+          }
+        }
+      }
+    },
+    "warnings": { "const": [] },
+    "error": { "type": "null" },
+    "coverage": { "type": "null" },
+    "lifecycle": { "type": "null" }
+  }
+}
