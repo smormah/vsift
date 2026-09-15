@@ -2,8 +2,9 @@
 
 ## Current checkpoint
 
-2026-09-15: P06 contained selected-file staging `57b8113` is under review from
-protected predecessor `e75d560`. Raw tar, gzip/tar and XZ/tar readers can now
+2026-09-15: Protected [PR #83](https://github.com/smormah/vsift/pull/83)
+merged P06 contained selected-file staging `57b8113` as `b5d8769` from
+predecessor `e75d560`. Raw tar, gzip/tar and XZ/tar readers can now
 write only reviewed regular files under portable flat basenames through an
 empty private directory capability. Writes are create-new/no-follow with
 private modes; archive directories, links and modes are ignored. Focused tests
@@ -11,8 +12,9 @@ cover hash and later-inventory failure cleanup, hidden gzip/XZ content,
 nonempty-directory preservation, basename collisions and Windows reserved
 names. Fresh pinned FFmpeg and whisper.cpp archives passed contained staging
 without binary execution. Full workspace tests, fmt, strict Clippy,
-warning-denied rustdoc, governance and `cargo deny check` pass; protected
-review remains pending. This creates no
+warning-denied rustdoc, governance and `cargo deny check` passed. Protected
+Ubuntu, macOS and Windows Quality, dependency, docs, governance, strict-worker
+and CodeQL/Rust checks all passed on the reviewed commit. This creates no
 managed root and performs no download, plan acceptance, smoke or activation;
 P06 remains planned.
 
