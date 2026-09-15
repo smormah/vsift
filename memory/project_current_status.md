@@ -2,8 +2,9 @@
 
 ## Active
 
-2026-09-15: P06 direct publisher transfer `c058756` from protected main
-`3a56ac2` is ready for protected review. Infrastructure validates immutable
+2026-09-15: Protected [PR #87](https://github.com/smormah/vsift/pull/87)
+merged P06 direct publisher transfer `c058756` as `0d36160` from protected
+main `3a56ac2`. Infrastructure validates immutable
 reviewed GitHub-release and Hugging Face model routes, admits only their
 observed HTTPS publisher CDNs, uses system TLS with typed redacted failures,
 and streams exact size/SHA-256 to the owned unactivated stage. No resume:
@@ -12,6 +13,10 @@ zero next time. The pinned Ubuntu whisper.cpp asset passed opt-in direct
 download/recheck without execution. Focused route, redirect, cancellation and
 stream failure tests plus fmt, strict Clippy, full workspace tests,
 warning-denied rustdoc, governance and dependency policy passed locally.
+Protected Ubuntu, macOS and Windows Quality, Documentation, Governance and
+strict-worker checks passed in [CI run 34981240230](https://github.com/smormah/vsift/actions/runs/34981240230),
+dependency/security in [run 34981240514](https://github.com/smormah/vsift/actions/runs/34981240514),
+and Rust analysis in [run 34981240137](https://github.com/smormah/vsift/actions/runs/34981240137).
 Catalogue review, plan acceptance, assembly, compatibility smoke, activation
 and full D/P06 E2E remain required; P06 stays planned.
 
