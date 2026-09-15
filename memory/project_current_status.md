@@ -2,16 +2,22 @@
 
 ## Active
 
-2026-09-15: P06 unqualified read-only plan implementation `08f1a96` from
-protected main `ade30f6` now composes the existing configured/PATH probe into
+2026-09-15: Protected [PR #91](https://github.com/smormah/vsift/pull/91)
+merged P06 unqualified read-only plan implementation `08f1a96` and headless
+regressions `8a40634` as `1d79a8d` from protected main `ade30f6`. It now
+composes the existing configured/PATH probe into
 `setup plan --profile`. The v1 result gives per-tool manual BYO steps for
 unavailable executables and labels responding tools probe-only. It has no
 install actions or acceptance digest; `setup install` remains reserved and
 the model/provider compatibility is unchecked. Frozen schema/example and
-missing/off-PATH CLI tests and follow-up headless JSONL/corrupt-config tests
-`8a40634` plus local fmt, strict Clippy, full workspace tests,
-warning-denied rustdoc, governance and dependency policy passed. Protected
-PR/CI and merge record are pending. Qualified source catalogue, plan acceptance,
+missing/off-PATH CLI tests and headless JSONL/corrupt-config tests, plus local
+fmt, strict Clippy, full workspace tests, warning-denied rustdoc, governance
+and dependency policy passed. Protected Ubuntu, macOS, Windows Quality,
+Documentation, Governance and strict-worker passed in
+[CI run 34989855963](https://github.com/smormah/vsift/actions/runs/34989855963),
+dependency/security in [run 34989855845](https://github.com/smormah/vsift/actions/runs/34989855845)
+and Rust analysis in [run 34989855862](https://github.com/smormah/vsift/actions/runs/34989855862).
+Qualified source catalogue, plan acceptance,
 compatibility smoke, alias/executable transition, atomic activation, lifecycle
 and D-01..D-10/P06 E2E are still required. P06 stays planned.
 
