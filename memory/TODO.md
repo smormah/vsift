@@ -2,6 +2,21 @@
 
 ## Current checkpoint
 
+2026-09-15: P06 configuration lock classification `2830a70` from protected
+predecessor `664d43a` maps only `TryLockError::WouldBlock` to retryable `BUSY`;
+an OS lock error now surfaces as storage I/O. A held-lock regression proves
+the user-managed record stays unchanged while the lock is held and updates
+after release. The sequential model-registration test now names each write in
+its error context. Local fmt, strict Clippy, full workspace tests,
+warning-denied rustdoc and governance passed. Protected PR/CI and merge hash
+are pending. The docs-only PR #92 first Ubuntu Quality job failed the same
+intermittent model-registration `Busy` test (run `35017216692`, job
+`104543565997`), then its unchanged failed-job rerun passed (job
+`104545464013`) and merged as `664d43a`. The exact holder remains unknown;
+[issue #66](https://github.com/smormah/vsift/issues/66) stays open. P06 remains
+planned, with reviewed layout, source catalogue, installer and D-01..D-10/E2E
+still open.
+
 2026-09-15: Protected [PR #91](https://github.com/smormah/vsift/pull/91)
 merged P06 read-only unqualified plan implementation `08f1a96` and headless
 regressions `8a40634` as `1d79a8d` from protected predecessor `ade30f6`.
