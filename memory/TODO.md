@@ -2,6 +2,25 @@
 
 ## Current checkpoint
 
+2026-09-15: P06 owned runtime layout preparation `15cec51` from protected
+predecessor `97f13d8` copies an exact reviewed payload into a separate fresh
+private `runtime.pending` directory. The reviewed total-copy budget, flat
+portable/case-insensitive filenames, selected executables and alias sources
+are validated before mutation; selected files and regular alias copies retain
+their pinned size/SHA-256. Unix selected executables receive owner-only mode;
+runtime open/recheck rejects unexpected, linked, changed, mode-altered or
+directory-substituted files. Discard removes only positively owned runtime
+copies while leaving the original payload/artifact for explicit disposal.
+A fresh pinned 9,497,583-byte Ubuntu whisper.cpp publisher archive matched
+SHA-256 and passed opt-in owned assembly, six SONAME regular alias copies,
+`whisper-cli` mode preparation, all twelve runtime-file rechecks and ordered
+discard without binary execution. Focused tests, local fmt, strict Clippy,
+full workspace tests, warning-denied rustdoc, governance and `cargo deny check`
+passed. Protected PR/CI and merge hash are pending. Catalogue acceptance,
+compiled-component source/notice closure for FFmpeg, model/compatibility
+smoke, version activation, plan authority, repair/rollback/uninstall and
+D-01..D-10/P06 E2E remain open. P06 stays planned.
+
 2026-09-15: Protected [PR #93](https://github.com/smormah/vsift/pull/93)
 merged P06 configuration lock classification `2830a70` as `90bd4b8` from
 protected predecessor `664d43a`. It maps only `TryLockError::WouldBlock` to

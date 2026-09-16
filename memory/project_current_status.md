@@ -2,6 +2,22 @@
 
 ## Active
 
+2026-09-15: P06 owned runtime layout implementation `15cec51` from protected
+main `97f13d8` creates a fresh private `runtime.pending` child from an exact
+selected payload. It validates the trusted output byte/name/alias/executable
+review first, copies only verified selected regular files and regular aliases,
+sets Unix owner-only executable mode, and rechecks held directory identity,
+file set, type/link count, modes and SHA-256. Invalid reviews have no runtime
+effects; suspicious entries block open/cleanup. A fresh pinned Ubuntu
+whisper.cpp archive passed six regular SONAME alias copies and all twelve
+runtime-file rechecks without candidate execution. Focused tests, full local
+fmt/strict Clippy/workspace tests, warning-denied rustdoc, governance and
+dependency policy passed. Protected PR/CI and merge record are pending.
+No source catalogue was accepted and no provider was smoke-tested or activated;
+P06 remains planned. Plan acceptance, source/notice closure, compatibility,
+version transactions, lifecycle and D-01..D-10/E2E are pending. Issue #66's
+intermittent lock cause also remains open.
+
 2026-09-15: Protected [PR #93](https://github.com/smormah/vsift/pull/93)
 merged P06 configuration lock classification `2830a70` as `90bd4b8` from
 protected main `664d43a`. It now separates true held-lock `BUSY` from OS lock I/O in
