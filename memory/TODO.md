@@ -2,24 +2,33 @@
 
 ## Current checkpoint
 
-2026-09-15: P06 owned runtime layout preparation `15cec51` from protected
-predecessor `97f13d8` copies an exact reviewed payload into a separate fresh
-private `runtime.pending` directory. The reviewed total-copy budget, flat
-portable/case-insensitive filenames, selected executables and alias sources
-are validated before mutation; selected files and regular alias copies retain
-their pinned size/SHA-256. Unix selected executables receive owner-only mode;
-runtime open/recheck rejects unexpected, linked, changed, mode-altered or
-directory-substituted files. Discard removes only positively owned runtime
-copies while leaving the original payload/artifact for explicit disposal.
-A fresh pinned 9,497,583-byte Ubuntu whisper.cpp publisher archive matched
-SHA-256 and passed opt-in owned assembly, six SONAME regular alias copies,
-`whisper-cli` mode preparation, all twelve runtime-file rechecks and ordered
-discard without binary execution. Focused tests, local fmt, strict Clippy,
-full workspace tests, warning-denied rustdoc, governance and `cargo deny check`
-passed. Protected PR/CI and merge hash are pending. Catalogue acceptance,
-compiled-component source/notice closure for FFmpeg, model/compatibility
-smoke, version activation, plan authority, repair/rollback/uninstall and
-D-01..D-10/P06 E2E remain open. P06 stays planned.
+2026-09-16: Protected [PR #95](https://github.com/smormah/vsift/pull/95)
+merged P06 owned runtime layout preparation `15cec51` and its memory update
+`1023d24` as `218671d` from protected predecessor `97f13d8`. It copies an exact
+reviewed payload into a separate fresh private `runtime.pending` directory.
+The reviewed total-copy budget, flat portable/case-insensitive filenames,
+selected executables and alias sources are validated before mutation; selected
+files and regular alias copies retain their pinned size/SHA-256. Unix selected
+executables receive owner-only mode; runtime open/recheck rejects unexpected,
+linked, changed, mode-altered or directory-substituted files. Discard removes
+only positively owned runtime copies while leaving the original payload and
+artifact for explicit disposal. A fresh pinned 9,497,583-byte Ubuntu
+whisper.cpp publisher archive passed opt-in owned assembly, six SONAME regular
+alias copies, `whisper-cli` mode preparation, all twelve runtime rechecks and
+ordered discard without binary execution. Local fmt, strict Clippy, full
+workspace tests, warning-denied rustdoc, governance and `cargo deny check`
+passed. Protected Ubuntu and macOS Quality first reproduced two existing P05
+lock `Busy` failures (jobs `104652588417` and `104652588434`); their unchanged
+reruns passed (jobs `104653707688` and `104653707499`), as did Windows,
+Documentation, Governance and strict-worker in
+[CI run 35051470387](https://github.com/smormah/vsift/actions/runs/35051470387).
+[Dependency/security run 35051470403](https://github.com/smormah/vsift/actions/runs/35051470403)
+and [Rust analysis run 35051470400](https://github.com/smormah/vsift/actions/runs/35051470400)
+passed. [Issue #66](https://github.com/smormah/vsift/issues/66) remains open;
+reruns do not identify the lock holder. Catalogue acceptance, compiled-component
+source/notice closure for FFmpeg, model/compatibility smoke, version activation,
+plan authority, repair/rollback/uninstall and D-01..D-10/P06 E2E remain open.
+P06 stays planned.
 
 2026-09-15: Protected [PR #93](https://github.com/smormah/vsift/pull/93)
 merged P06 configuration lock classification `2830a70` as `90bd4b8` from
