@@ -35,6 +35,7 @@ const STAGE_MARKER: &str = "stage-v1";
 const ARTIFACT: &str = "artifact.pending";
 const PAYLOAD: &str = "payload.pending";
 const RUNTIME: &str = "runtime.pending";
+const INSTALL_LOCK: &str = "install.lock";
 const MAX_RUNTIME_FILES: usize = 128;
 const MAX_RUNTIME_BYTES: u64 = 1_073_741_824;
 const ROOT_IDENTITY: &[u8] = b"VSIFT-MANAGED-ROOT-v1\n";
@@ -47,7 +48,7 @@ pub enum ManagedArtifactError {
     Unavailable,
     /// The root, marker or staging directory is not positively owned and private.
     UnsafeStorage,
-    /// A concurrent creator is initializing the same root.
+    /// A concurrent creator or installation transaction holds the managed root.
     Busy,
     /// Private storage failed to create, read, write or remove files.
     Io,
@@ -153,7 +154,7 @@ impl fmt::Display for ManagedArtifactError {
         formatter.write_str(match self {
             Self::Unavailable => "per-user managed storage location is unavailable",
             Self::UnsafeStorage => "managed staging storage is not positively owned and private",
-            Self::Busy => "managed root initialization is busy",
+            Self::Busy => "managed root or installation transaction is busy",
             Self::Io => "managed staging I/O failed",
             Self::Transfer(_) => "managed artifact differs from reviewed bytes",
         })
@@ -166,6 +167,15 @@ impl Error for ManagedArtifactError {}
 #[derive(Clone, Debug)]
 pub struct ManagedArtifactStore {
     root_path: PathBuf,
+}
+
+/// Exclusive root-wide authority for one managed installation transaction.
+///
+/// Dropping the guard releases the OS lock. It grants serialization only; it
+/// does not represent plan acceptance, compatibility success or install authority.
+#[derive(Debug)]
+pub struct ManagedInstallGuard {
+    _lock: fs::File,
 }
 
 impl ManagedArtifactStore {
@@ -212,6 +222,45 @@ impl ManagedArtifactStore {
             return Err(ManagedArtifactError::Unavailable);
         }
         Ok(Self { root_path })
+    }
+
+    /// Tries to serialize one managed installation transaction for this root.
+    ///
+    /// The lock file lives inside the positively owned private root and must be
+    /// a single-link regular file with private Unix permissions. The operation
+    /// never waits or retries, so headless callers receive a typed `Busy` result.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Busy` when another process holds the installation lock, and
+    /// rejects linked, replaced or incorrectly permissioned lock files.
+    pub fn try_install_guard(&self) -> Result<ManagedInstallGuard, ManagedArtifactError> {
+        let root = self.open_root()?;
+        let mut options = OpenOptions::new();
+        options
+            .read(true)
+            .write(true)
+            .create(true)
+            .follow(FollowSymlinks::No);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let lock = root
+            .open_with(INSTALL_LOCK, &options)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        let metadata = lock.metadata().map_err(|_| ManagedArtifactError::Io)?;
+        if !metadata.is_file() || metadata.nlink() != 1 {
+            return Err(ManagedArtifactError::UnsafeStorage);
+        }
+        #[cfg(unix)]
+        if metadata.permissions().mode() & 0o777 != 0o600 {
+            return Err(ManagedArtifactError::UnsafeStorage);
+        }
+        let lock = lock.into_std();
+        lock.try_lock().map_err(|error| match error {
+            fs::TryLockError::WouldBlock => ManagedArtifactError::Busy,
+            fs::TryLockError::Error(_) => ManagedArtifactError::Io,
+        })?;
+        Ok(ManagedInstallGuard { _lock: lock })
     }
 
     /// Imports exact reviewed bytes into a new, private, unactivated directory.
@@ -1137,9 +1186,10 @@ mod tests {
     use vsift_domain::ArtifactIntegrity;
 
     use super::{
-        ArtifactTransferError, ManagedArtifactError, ManagedArtifactStore, ManagedPayloadError,
-        ManagedRuntimeLayoutError, PAYLOAD, RUNTIME, ReviewedArchiveFile, ReviewedPayloadArchive,
-        ReviewedRuntimeAlias, ReviewedRuntimeLayout, TarInventoryError, hex,
+        ArtifactTransferError, INSTALL_LOCK, ManagedArtifactError, ManagedArtifactStore,
+        ManagedPayloadError, ManagedRuntimeLayoutError, PAYLOAD, RUNTIME, ReviewedArchiveFile,
+        ReviewedPayloadArchive, ReviewedRuntimeAlias, ReviewedRuntimeLayout, TarInventoryError,
+        hex,
     };
     use crate::ArchiveInventoryBounds;
 
@@ -1181,6 +1231,69 @@ mod tests {
 
     fn reviewed_bounds() -> Result<ArchiveInventoryBounds, Box<dyn Error>> {
         Ok(ArchiveInventoryBounds::new(2, 100)?)
+    }
+
+    #[test]
+    fn installation_guard_is_exclusive_and_releases_without_retry() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let root = parent.join("managed");
+            let first = ManagedArtifactStore::at(root.clone())?;
+            let second = ManagedArtifactStore::at(root)?;
+            let guard = first.try_install_guard()?;
+            assert!(matches!(
+                second.try_install_guard(),
+                Err(ManagedArtifactError::Busy)
+            ));
+            drop(guard);
+            let next = second.try_install_guard()?;
+            drop(next);
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn linked_installation_lock_is_rejected_and_external_file_is_preserved()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let root = parent.join("managed");
+            let store = ManagedArtifactStore::at(root.clone())?;
+            drop(store.try_install_guard()?);
+            let external = parent.join("external-lock-link");
+            fs::hard_link(root.join(INSTALL_LOCK), &external)?;
+            assert!(matches!(
+                store.try_install_guard(),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            assert!(external.is_file());
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_private_installation_lock_mode_is_rejected() -> Result<(), Box<dyn Error>> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let parent = fixture_root()?;
+        let result = (|| {
+            let root = parent.join("managed");
+            let store = ManagedArtifactStore::at(root.clone())?;
+            drop(store.try_install_guard()?);
+            fs::set_permissions(root.join(INSTALL_LOCK), fs::Permissions::from_mode(0o644))?;
+            assert!(matches!(
+                store.try_install_guard(),
+                Err(ManagedArtifactError::UnsafeStorage)
+            ));
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
     }
 
     #[test]
