@@ -17,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 can now publish a fully rechecked prepared runtime under a canonical
+  component/version identity and atomically select it with a hashed pointer while
+  holding the root installation guard. Published versions retain exact manifests,
+  regular-file identity, private modes and SHA-256 checks; interrupted pointer
+  replacement is retryable and prior versions remain readable. This infrastructure
+  primitive carries no catalogue, compatibility or plan-acceptance authority.
 - P06 now has a root-wide managed installation guard backed by a private,
   single-link OS-locked file. Concurrent writers receive typed `Busy` without
   waiting or retrying; linked or incorrectly permissioned lock files fail

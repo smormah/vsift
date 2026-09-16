@@ -293,3 +293,13 @@ executable and does not bundle it with its own release. The applicable notices
 for the exact selected build still need to be recorded without asserting that
 direct download constitutes legal clearance. Windows Server tone-audio smoke
 still does not qualify Windows 11 or real-speech behavior.
+
+## 2026-09-16 publication status
+
+Infrastructure can now publish a completely rechecked prepared runtime under an
+immutable provider-neutral component/version identity and atomically replace its
+hashed current pointer while retaining prior versions. Interrupted pointer
+publication is idempotent, and conflicting identity reuse fails closed. This closes
+no source-review item above: a caller still needs an accepted catalogue entry,
+compatible smoke result and accepted plan before it may invoke that primitive.
+Managed installation therefore remains unavailable.
