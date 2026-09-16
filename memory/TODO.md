@@ -2,19 +2,23 @@
 
 ## Current checkpoint
 
-2026-09-16: P06 managed installation-guard implementation `3ff602f` from
-protected main `66cbc45` adds a root-wide, non-blocking OS lock inside the
-positively marked private managed root. The lock must be a single-link regular
-file and Unix mode `0600`;
-another holder returns typed `Busy`, while other lock failures remain I/O.
-Focused tests prove exclusion, release, external-hard-link rejection with source
-preservation, and Unix mode rejection. Local fmt, strict Clippy, full workspace
-tests, warning-denied rustdoc, governance and `cargo deny check` passed. The first
-full run hit three unrelated Windows process-supervisor timing failures; the
-unchanged focused binary and complete suite then passed without relaxed tests.
-Protected review is pending. The guard narrows
-D-05 transaction concurrency risk but provides no plan authority, publication,
-rollback or install command. P06 remains planned.
+2026-09-16: Protected [PR #99](https://github.com/smormah/vsift/pull/99)
+merged P06 managed installation-guard implementation `3ff602f`, progress record
+`0514737` and Unix import fix `2b5af29` as `e5b6c28` from protected main
+`66cbc45`. It adds a root-wide, non-blocking OS lock inside the positively marked
+private managed root. The lock must be a single-link regular file and Unix mode
+`0600`; another holder returns typed `Busy`, while other lock failures remain
+I/O. Tests prove exclusion/release, external-hard-link rejection with source
+preservation, and Unix mode rejection. Local gates passed after an initial full
+run's three unrelated Windows process-supervisor timing failures passed on
+unchanged focused and complete reruns. The first protected CI attempt exposed a
+missing Unix permission-extension import; no behavior changed, and corrected
+Ubuntu, macOS, Windows Quality, Documentation, Governance and strict-worker
+passed in [CI run 35074995313](https://github.com/smormah/vsift/actions/runs/35074995313).
+[Dependency/security run 35074995207](https://github.com/smormah/vsift/actions/runs/35074995207)
+and [Rust analysis run 35074995323](https://github.com/smormah/vsift/actions/runs/35074995323)
+passed. The guard narrows D-05 transaction concurrency risk but provides no plan
+authority, publication, rollback or install command. P06 remains planned.
 
 2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
 merged P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from
