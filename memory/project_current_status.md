@@ -2,20 +2,22 @@
 
 ## Active
 
-2026-09-16: P06 immutable version publication implementation `285d3a1` is
-ready for protected review from protected main `a492863`. The provider-neutral
-infrastructure API requires the same managed root's installation guard, records
-an exact private manifest for canonical component/version identity, moves the
-prepared runtime into version storage, fully reopens and rehashes it, and only
-then atomically replaces a current pointer bound to the manifest SHA-256. Older
-versions remain readable, including through a capability held across an update.
-Fault tests prove prior selection before pointer replacement and idempotent retry
-both before and after commit; identity conflicts, cross-root guards, linked
-metadata and invalid keys fail closed. Windows candidate handles are explicitly
-closed before directory rename and the destination is fully revalidated after
-reopen. Selected-runtime lookup creates no absent storage. Focused tests and all
-local gates pass, with only existing allowed duplicate warnings from dependency
-policy. This is process-interruption ordering only; power-loss durability,
+2026-09-16: Protected [PR #101](https://github.com/smormah/vsift/pull/101)
+merged P06 immutable version publication implementation `285d3a1` and memory
+record `4a16921` as `6eee0e0` from protected main `a492863`. The
+provider-neutral infrastructure API requires the same managed root's
+installation guard, records an exact private manifest for canonical
+component/version identity, moves the prepared runtime into version storage,
+fully reopens and rehashes it, and only then atomically replaces a current
+pointer bound to the manifest SHA-256. Older versions remain readable, including
+through a capability held across an update. Fault tests prove prior selection
+before pointer replacement and idempotent retry both before and after commit;
+identity conflicts, cross-root guards, linked metadata and invalid keys fail
+closed. Windows candidate handles are explicitly closed before directory rename
+and the destination is fully revalidated after reopen. Selected-runtime lookup
+creates no absent storage. All local gates passed. Protected CI `35079430148`,
+dependency/security `35079430100` and Rust analysis `35079430156` passed on the
+first attempt. This is process-interruption ordering only; power-loss durability,
 catalogue/plan/compatibility authority, rollback, uninstall, active-removal
 fencing, bounded GC and public managed installation remain open. P06 stays
 planned and issue #66 stays open.

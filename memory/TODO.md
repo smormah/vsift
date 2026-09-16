@@ -2,24 +2,26 @@
 
 ## Current checkpoint
 
-2026-09-16: P06 immutable managed-version publication implementation `285d3a1`
-is ready for protected review from protected predecessor `a492863` (PR #100's
-docs-only installation-guard merge record). A prepared runtime can now publish
-only while holding the same root's installation guard, under bounded canonical
-provider-neutral component/version keys. Publication writes a private exact
-file/size/SHA-256/mode manifest, closes the Windows candidate directory handle
-before its handle-relative rename, then reopens and rehashes the complete
-published inventory before atomically replacing a manifest-digest-bound current
-pointer. Absent selection lookup is read-only. Tests cover prior-version
-retention, a held old-version capability across update, interruption before and
-after pointer replacement with idempotent retry, cross-root guard rejection,
-linked manifest rejection with external-file preservation, identity conflict
-without selection change, and invalid keys. Focused tests and local fmt, strict
-workspace Clippy, complete workspace tests, warning-denied rustdoc, governance
-and dependency policy pass; `cargo deny` reports only the existing allowed
-duplicate warnings. This adds no power-loss guarantee, catalogue or plan
-authority, compatibility smoke, rollback/uninstall/GC, removal fencing or public
-install command. P06 remains planned; issue #66 remains open.
+2026-09-16: Protected [PR #101](https://github.com/smormah/vsift/pull/101)
+merged P06 immutable managed-version publication implementation `285d3a1` and
+progress record `4a16921` as `6eee0e0` from protected predecessor `a492863`.
+A prepared runtime can publish only while holding the same root's installation
+guard, under bounded canonical provider-neutral component/version keys.
+Publication writes a private exact file/size/SHA-256/mode manifest, closes the
+Windows candidate directory handle before its handle-relative rename, then
+reopens and rehashes the complete published inventory before atomically
+replacing a manifest-digest-bound current pointer. Absent selection lookup is
+read-only. Tests cover prior-version retention, a held old-version capability
+across update, interruption before and after pointer replacement with
+idempotent retry, cross-root guard rejection, linked manifest rejection with
+external-file preservation, identity conflict without selection change, and
+invalid keys. Local gates and protected Ubuntu, macOS, Windows, Documentation,
+Governance and strict-worker passed in [CI run 35079430148](https://github.com/smormah/vsift/actions/runs/35079430148);
+[dependency/security run 35079430100](https://github.com/smormah/vsift/actions/runs/35079430100)
+and [Rust analysis run 35079430156](https://github.com/smormah/vsift/actions/runs/35079430156)
+passed. This adds no power-loss guarantee, catalogue or plan authority,
+compatibility smoke, rollback/uninstall/GC, removal fencing or public install
+command. P06 remains planned; issue #66 remains open.
 
 2026-09-16: Protected [PR #99](https://github.com/smormah/vsift/pull/99)
 merged P06 managed installation-guard implementation `3ff602f`, progress record
