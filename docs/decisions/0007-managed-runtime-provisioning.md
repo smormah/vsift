@@ -226,3 +226,28 @@ provider selection, compatibility result or user authorization, and therefore
 cannot activate a runtime by itself. Immutable version publication, current
 pointer replacement, crash recovery, rollback and active-job retention remain
 separate required gates.
+
+## 2026-09-16 implementation note: immutable version publication
+
+A prepared runtime can now be published beneath the marked private managed root
+using a bounded canonical component/version identity while the caller holds that
+root's installation guard. Publication writes a private immutable-version manifest
+covering the exact file names, sizes, SHA-256 digests and executable/data modes,
+moves the candidate into the version store, then reopens and rehashes the complete
+published inventory before atomically replacing the component's hashed current
+pointer. A guard from another root, linked metadata, unexpected files and reuse of
+an identity for a different manifest fail closed. Looking up an absent selection is
+read-only and does not create managed storage.
+
+The previous pointer remains selected when publication stops before replacement;
+the already published version is reusable on retry. If replacement commits but the
+caller observes a later failure, retry is also idempotent. Older versions remain
+present and a held published-directory capability continues to open its reviewed
+files after a newer version is selected. These tests establish process-interruption
+ordering only; no power-loss durability claim is added.
+
+This is an infrastructure capability, not install authority. It does not prove that
+a candidate passed compatibility smoke, bind an accepted plan digest, authorize a
+catalogue entry, expose `setup install`, implement rollback/uninstall/garbage
+collection, or prevent removal while another process holds a version. Those gates
+remain required before managed installation is available.

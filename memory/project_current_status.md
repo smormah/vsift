@@ -2,6 +2,24 @@
 
 ## Active
 
+2026-09-16: P06 immutable version publication implementation `285d3a1` is
+ready for protected review from protected main `a492863`. The provider-neutral
+infrastructure API requires the same managed root's installation guard, records
+an exact private manifest for canonical component/version identity, moves the
+prepared runtime into version storage, fully reopens and rehashes it, and only
+then atomically replaces a current pointer bound to the manifest SHA-256. Older
+versions remain readable, including through a capability held across an update.
+Fault tests prove prior selection before pointer replacement and idempotent retry
+both before and after commit; identity conflicts, cross-root guards, linked
+metadata and invalid keys fail closed. Windows candidate handles are explicitly
+closed before directory rename and the destination is fully revalidated after
+reopen. Selected-runtime lookup creates no absent storage. Focused tests and all
+local gates pass, with only existing allowed duplicate warnings from dependency
+policy. This is process-interruption ordering only; power-loss durability,
+catalogue/plan/compatibility authority, rollback, uninstall, active-removal
+fencing, bounded GC and public managed installation remain open. P06 stays
+planned and issue #66 stays open.
+
 2026-09-16: Protected [PR #99](https://github.com/smormah/vsift/pull/99)
 merged P06 managed installation-guard implementation `3ff602f`, memory update
 `0514737` and Unix import fix `2b5af29` as `e5b6c28` from protected main

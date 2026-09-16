@@ -13,6 +13,7 @@ use cap_fs_ext::{DirExt, FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, DirBuilder, OpenOptions};
 #[cfg(unix)]
 use cap_std::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use vsift_domain::ArtifactIntegrity;
 
@@ -36,10 +37,18 @@ const ARTIFACT: &str = "artifact.pending";
 const PAYLOAD: &str = "payload.pending";
 const RUNTIME: &str = "runtime.pending";
 const INSTALL_LOCK: &str = "install.lock";
+const VERSIONS: &str = "versions-v1";
+const CURRENT: &str = "current-v1";
+const DIRECTORY_MARKER: &str = "owner-v1";
+const VERSION_MANIFEST: &str = "version-v1";
+const MAX_MANAGED_KEY_BYTES: usize = 64;
 const MAX_RUNTIME_FILES: usize = 128;
 const MAX_RUNTIME_BYTES: u64 = 1_073_741_824;
+const MAX_VERSION_METADATA_BYTES: u64 = 32_768;
 const ROOT_IDENTITY: &[u8] = b"VSIFT-MANAGED-ROOT-v1\n";
 const STAGE_IDENTITY: &[u8] = b"VSIFT-MANAGED-STAGE-v1\n";
+const VERSIONS_IDENTITY: &[u8] = b"VSIFT-MANAGED-VERSIONS-v1\n";
+const CURRENT_IDENTITY: &[u8] = b"VSIFT-MANAGED-CURRENT-v1\n";
 
 /// A typed failure to own, stage or discard an unactivated artifact.
 #[derive(Debug)]
@@ -124,6 +133,79 @@ pub enum ManagedRuntimeLayoutError {
     Transfer(ArtifactTransferError),
 }
 
+/// Typed reason a prepared runtime cannot be published and selected.
+#[derive(Debug)]
+pub enum ManagedRuntimePublicationError {
+    /// A component or version key is not a bounded canonical storage key.
+    InvalidIdentity,
+    /// The managed storage boundary is unavailable, unsafe or failed I/O.
+    Storage(ManagedArtifactError),
+    /// The requested immutable identity already names different reviewed bytes.
+    VersionConflict,
+}
+
+impl fmt::Display for ManagedRuntimePublicationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidIdentity => "managed runtime identity is invalid",
+            Self::Storage(_) => "managed runtime publication storage failed",
+            Self::VersionConflict => "managed runtime identity already names different bytes",
+        })
+    }
+}
+
+impl Error for ManagedRuntimePublicationError {}
+
+/// Canonical provider-neutral identity for one immutable managed runtime.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManagedRuntimeIdentity {
+    component: String,
+    version: String,
+}
+
+impl ManagedRuntimeIdentity {
+    /// Validates bounded lowercase ASCII keys used only beneath the managed root.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, oversized, noncanonical or path-like keys.
+    pub fn new(
+        component: impl Into<String>,
+        version: impl Into<String>,
+    ) -> Result<Self, ManagedRuntimePublicationError> {
+        let component = component.into();
+        let version = version.into();
+        if !canonical_managed_key(&component) || !canonical_managed_key(&version) {
+            return Err(ManagedRuntimePublicationError::InvalidIdentity);
+        }
+        Ok(Self { component, version })
+    }
+
+    /// Stable component key selected by reviewed application policy.
+    #[must_use]
+    pub fn component(&self) -> &str {
+        &self.component
+    }
+
+    /// Stable version key selected by reviewed application policy.
+    #[must_use]
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    fn version_directory_name(&self) -> String {
+        format!("{}--{}", self.component, self.version)
+    }
+
+    fn current_name(&self) -> String {
+        format!("{}.current", self.component)
+    }
+
+    fn pending_name(&self) -> String {
+        format!("{}.pending", self.component)
+    }
+}
+
 impl fmt::Display for ManagedRuntimeLayoutError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
@@ -176,6 +258,8 @@ pub struct ManagedArtifactStore {
 #[derive(Debug)]
 pub struct ManagedInstallGuard {
     _lock: fs::File,
+    root: Dir,
+    root_path: PathBuf,
 }
 
 impl ManagedArtifactStore {
@@ -260,7 +344,90 @@ impl ManagedArtifactStore {
             fs::TryLockError::WouldBlock => ManagedArtifactError::Busy,
             fs::TryLockError::Error(_) => ManagedArtifactError::Io,
         })?;
-        Ok(ManagedInstallGuard { _lock: lock })
+        Ok(ManagedInstallGuard {
+            _lock: lock,
+            root,
+            root_path: self.root_path.clone(),
+        })
+    }
+
+    /// Opens the immutable runtime currently selected for a component.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an invalid component key, corrupt pointer, changed manifest or
+    /// unsafe published directory. Returns `None` when no version is selected.
+    pub fn open_selected_runtime(
+        &self,
+        component: &str,
+    ) -> Result<Option<PublishedManagedRuntime>, ManagedRuntimePublicationError> {
+        if !canonical_managed_key(component) {
+            return Err(ManagedRuntimePublicationError::InvalidIdentity);
+        }
+        let Some(root) = self
+            .open_existing_root()
+            .map_err(ManagedRuntimePublicationError::Storage)?
+        else {
+            return Ok(None);
+        };
+        let versions_exists = root
+            .try_exists(VERSIONS)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+        let current_exists = root
+            .try_exists(CURRENT)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+        if !versions_exists && !current_exists {
+            return Ok(None);
+        }
+        if !versions_exists || !current_exists {
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ));
+        }
+        let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let current = open_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let current_name = format!("{component}.current");
+        if !current
+            .try_exists(&current_name)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
+        {
+            return Ok(None);
+        }
+        let pointer = read_current_pointer(&current, &current_name)?;
+        if pointer.identity.component() != component {
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ));
+        }
+        open_published_runtime_from_manifest(
+            &self.root_path,
+            &versions,
+            pointer.identity,
+            Some(&pointer.manifest_sha256),
+        )
+        .map(Some)
+    }
+
+    /// Opens one immutable published runtime without changing selection.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a missing, corrupt, changed or unsafe version directory.
+    pub fn open_published_runtime(
+        &self,
+        identity: &ManagedRuntimeIdentity,
+    ) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+        let root = self
+            .open_existing_root()
+            .map_err(ManagedRuntimePublicationError::Storage)?
+            .ok_or(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ))?;
+        let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        open_published_runtime_from_manifest(&self.root_path, &versions, identity.clone(), None)
     }
 
     /// Imports exact reviewed bytes into a new, private, unactivated directory.
@@ -359,6 +526,19 @@ impl ManagedArtifactStore {
             check_marker(&root, ROOT_MARKER, ROOT_IDENTITY)?;
         }
         Ok(root)
+    }
+
+    fn open_existing_root(&self) -> Result<Option<Dir>, ManagedArtifactError> {
+        let Some((root, created)) =
+            open_private_root_with_creation(&self.root_path, false).map_err(map_private_error)?
+        else {
+            return Ok(None);
+        };
+        if created {
+            return Err(ManagedArtifactError::UnsafeStorage);
+        }
+        check_marker(&root, ROOT_MARKER, ROOT_IDENTITY)?;
+        Ok(Some(root))
     }
 }
 
@@ -696,7 +876,7 @@ struct SelectedPayloadFile {
     integrity: ArtifactIntegrity,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 enum RuntimeFileMode {
     PrivateData,
     OwnerExecutable,
@@ -858,7 +1038,7 @@ impl StagedManagedPayload<'_> {
         }
         Ok(PreparedManagedRuntime {
             payload: self,
-            runtime,
+            runtime: Some(runtime),
             files: planned,
         })
     }
@@ -984,7 +1164,7 @@ impl StagedManagedPayload<'_> {
 /// Private, byte-verified runtime copies and aliases awaiting compatibility smoke.
 pub struct PreparedManagedRuntime<'a, 'b> {
     payload: &'b StagedManagedPayload<'a>,
-    runtime: Dir,
+    runtime: Option<Dir>,
     files: Vec<PlannedRuntimeFile>,
 }
 
@@ -1016,6 +1196,10 @@ impl PreparedManagedRuntime<'_, '_> {
     /// permissions before handing the file to a later smoke boundary.
     pub fn open_reviewed_file(&self, name: &str) -> Result<fs::File, ManagedArtifactError> {
         let artifact = self.payload.artifact;
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or(ManagedArtifactError::UnsafeStorage)?;
         check_marker(&artifact.root, ROOT_MARKER, ROOT_IDENTITY)?;
         check_marker(&artifact.stage, STAGE_MARKER, STAGE_IDENTITY)?;
         artifact.validate_stage_at_name()?;
@@ -1023,8 +1207,8 @@ impl PreparedManagedRuntime<'_, '_> {
             .stage
             .open_dir_nofollow(RUNTIME)
             .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
-        validate_same_held_directory(&at_name, &self.runtime).map_err(map_private_error)?;
-        validate_private_root(&artifact.stage_path.join(RUNTIME), &self.runtime)
+        validate_same_held_directory(&at_name, runtime).map_err(map_private_error)?;
+        validate_private_root(&artifact.stage_path.join(RUNTIME), runtime)
             .map_err(map_private_error)?;
         let reviewed = self
             .files
@@ -1034,8 +1218,7 @@ impl PreparedManagedRuntime<'_, '_> {
         self.validate_exact_contents()?;
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
-        let file = self
-            .runtime
+        let file = runtime
             .open_with(name, &options)
             .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
         let metadata = file.metadata().map_err(|_| ManagedArtifactError::Io)?;
@@ -1049,12 +1232,12 @@ impl PreparedManagedRuntime<'_, '_> {
     }
 
     fn validate_exact_contents(&self) -> Result<(), ManagedArtifactError> {
-        let mut observed = HashSet::with_capacity(self.files.len());
-        for entry in self
+        let runtime = self
             .runtime
-            .entries()
-            .map_err(|_| ManagedArtifactError::Io)?
-        {
+            .as_ref()
+            .ok_or(ManagedArtifactError::UnsafeStorage)?;
+        let mut observed = HashSet::with_capacity(self.files.len());
+        for entry in runtime.entries().map_err(|_| ManagedArtifactError::Io)? {
             let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
             let name = entry.file_name();
             let name = name.to_str().ok_or(ManagedArtifactError::UnsafeStorage)?;
@@ -1066,8 +1249,7 @@ impl PreparedManagedRuntime<'_, '_> {
             if !observed.insert(name.to_owned()) {
                 return Err(ManagedArtifactError::UnsafeStorage);
             }
-            let metadata = self
-                .runtime
+            let metadata = runtime
                 .symlink_metadata(name)
                 .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
             validate_runtime_file(&metadata, reviewed.mode)?;
@@ -1078,12 +1260,140 @@ impl PreparedManagedRuntime<'_, '_> {
         Ok(())
     }
 
+    /// Publishes this rechecked runtime as an immutable version and atomically
+    /// selects it for its component.
+    ///
+    /// The caller must hold the installation guard for the same managed root.
+    /// A retry with the same identity and exact manifest is idempotent. A
+    /// different manifest under an existing identity fails without changing
+    /// the selected version. This operation carries no plan or compatibility
+    /// authority; the application layer must establish both before calling it.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a guard from another root, changed runtime bytes, conflicting
+    /// immutable identity, unsafe storage or pointer publication failure.
+    pub fn publish_and_select(
+        &mut self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+    ) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+        self.publish_and_select_at_boundary(guard, identity, None)
+    }
+
+    fn publish_and_select_at_boundary(
+        &mut self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+        fault: Option<ManagedPublicationBoundary>,
+    ) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+        self.recheck_all()
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let artifact = self.payload.artifact;
+        validate_same_held_directory(&guard.root, &artifact.root)
+            .map_err(map_private_error)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let root_path =
+            artifact
+                .stage_path
+                .parent()
+                .ok_or(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage,
+                ))?;
+        if guard.root_path != root_path {
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ));
+        }
+        let versions = open_or_create_managed_directory(
+            &artifact.root,
+            root_path,
+            VERSIONS,
+            VERSIONS_IDENTITY,
+        )
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+        let current =
+            open_or_create_managed_directory(&artifact.root, root_path, CURRENT, CURRENT_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?;
+        let manifest = version_manifest(identity, &self.files);
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ))?;
+        write_marker(runtime, VERSION_MANIFEST, &manifest)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+
+        let version_name = identity.version_directory_name();
+        let version_exists = versions
+            .try_exists(&version_name)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+        if version_exists {
+            let existing =
+                open_published_runtime(root_path, &versions, identity, &manifest, &self.files);
+            runtime
+                .remove_file(VERSION_MANIFEST)
+                .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+            let existing = existing?;
+            let candidate = self
+                .runtime
+                .take()
+                .ok_or(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage,
+                ))?;
+            let reviewed_names = self
+                .files
+                .iter()
+                .map(|file| file.name.clone())
+                .collect::<Vec<_>>();
+            artifact
+                .remove_reviewed_runtime(candidate, &reviewed_names)
+                .map_err(ManagedRuntimePublicationError::Storage)?;
+            inject_publication_fault(fault, ManagedPublicationBoundary::VersionPublished)?;
+            write_current_pointer(&current, identity, &manifest, fault)?;
+            return Ok(existing);
+        }
+
+        let runtime = self
+            .runtime
+            .take()
+            .ok_or(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ))?;
+        drop(runtime);
+        if artifact
+            .stage
+            .rename(RUNTIME, &versions, &version_name)
+            .is_err()
+        {
+            self.runtime = artifact.stage.open_dir_nofollow(RUNTIME).ok();
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::Io,
+            ));
+        }
+        let at_name = versions.open_dir_nofollow(&version_name).map_err(|_| {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+        })?;
+        validate_private_root(&root_path.join(VERSIONS).join(&version_name), &at_name)
+            .map_err(map_private_error)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let published =
+            open_published_runtime(root_path, &versions, identity, &manifest, &self.files)?;
+        inject_publication_fault(fault, ManagedPublicationBoundary::VersionPublished)?;
+        write_current_pointer(&current, identity, &manifest, fault)?;
+        Ok(published)
+    }
+
     /// Discards only reviewed runtime copies; original payload remains available.
     ///
     /// # Errors
     ///
     /// Unexpected or linked entries prevent deletion.
-    pub fn discard(self) -> Result<(), ManagedArtifactError> {
+    pub fn discard(mut self) -> Result<(), ManagedArtifactError> {
+        let Some(runtime) = self.runtime.take() else {
+            return Ok(());
+        };
         let reviewed_names = self
             .files
             .iter()
@@ -1091,7 +1401,478 @@ impl PreparedManagedRuntime<'_, '_> {
             .collect::<Vec<_>>();
         self.payload
             .artifact
-            .remove_reviewed_runtime(self.runtime, &reviewed_names)
+            .remove_reviewed_runtime(runtime, &reviewed_names)
+    }
+}
+
+/// Held, revalidated capability for one immutable published runtime version.
+pub struct PublishedManagedRuntime {
+    identity: ManagedRuntimeIdentity,
+    directory: Dir,
+    files: Vec<PublishedRuntimeFile>,
+}
+
+impl PublishedManagedRuntime {
+    /// Immutable component/version identity selected by reviewed policy.
+    #[must_use]
+    pub fn identity(&self) -> &ManagedRuntimeIdentity {
+        &self.identity
+    }
+
+    /// Exact flat filenames in this immutable runtime version.
+    #[must_use]
+    pub fn reviewed_names(&self) -> Vec<&str> {
+        self.files.iter().map(|file| file.name.as_str()).collect()
+    }
+
+    /// Opens and rehashes one reviewed runtime file without following links.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unknown, changed, linked or permission-altered files.
+    pub fn open_reviewed_file(&self, name: &str) -> Result<fs::File, ManagedArtifactError> {
+        let reviewed = self
+            .files
+            .iter()
+            .find(|file| file.name == name)
+            .ok_or(ManagedArtifactError::UnsafeStorage)?;
+        validate_published_contents(&self.directory, &self.files)?;
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let file = self
+            .directory
+            .open_with(name, &options)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        let metadata = file.metadata().map_err(|_| ManagedArtifactError::Io)?;
+        validate_runtime_file(&metadata, reviewed.mode)?;
+        let mut file = file.into_std();
+        transfer_verified(&mut file, std::io::sink(), reviewed.integrity)
+            .map_err(ManagedArtifactError::Transfer)?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|_| ManagedArtifactError::Io)?;
+        Ok(file)
+    }
+}
+
+struct PublishedRuntimeFile {
+    name: String,
+    integrity: ArtifactIntegrity,
+    mode: RuntimeFileMode,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ManagedPublicationBoundary {
+    VersionPublished,
+    PointerPrepared,
+    PointerReplaced,
+}
+
+struct CurrentPointer {
+    identity: ManagedRuntimeIdentity,
+    manifest_sha256: String,
+}
+
+fn canonical_managed_key(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= MAX_MANAGED_KEY_BYTES
+        && (bytes[0].is_ascii_lowercase() || bytes[0].is_ascii_digit())
+        && (bytes[bytes.len() - 1].is_ascii_lowercase() || bytes[bytes.len() - 1].is_ascii_digit())
+        && bytes.iter().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
+}
+
+fn open_or_create_managed_directory(
+    root: &Dir,
+    root_path: &Path,
+    name: &str,
+    identity: &[u8],
+) -> Result<Dir, ManagedArtifactError> {
+    let exists = root
+        .try_exists(name)
+        .map_err(|_| ManagedArtifactError::Io)?;
+    if !exists {
+        #[allow(unused_mut, reason = "Unix configures the creation mode")]
+        let mut builder = DirBuilder::new();
+        #[cfg(unix)]
+        builder.mode(0o700);
+        root.create_dir_with(name, &builder)
+            .map_err(|_| ManagedArtifactError::Io)?;
+    }
+    if !exists {
+        let directory = root
+            .open_dir_nofollow(name)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        validate_private_root(&root_path.join(name), &directory).map_err(map_private_error)?;
+        write_marker(&directory, DIRECTORY_MARKER, identity)?;
+    }
+    open_managed_directory(root, root_path, name, identity)
+}
+
+fn open_managed_directory(
+    root: &Dir,
+    root_path: &Path,
+    name: &str,
+    identity: &[u8],
+) -> Result<Dir, ManagedArtifactError> {
+    let directory = root
+        .open_dir_nofollow(name)
+        .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+    validate_private_root(&root_path.join(name), &directory).map_err(map_private_error)?;
+    check_marker(&directory, DIRECTORY_MARKER, identity)?;
+    Ok(directory)
+}
+
+fn version_manifest(identity: &ManagedRuntimeIdentity, files: &[PlannedRuntimeFile]) -> Vec<u8> {
+    let mut manifest = format!(
+        "VSIFT-MANAGED-VERSION-v1\ncomponent={}\nversion={}\nfiles={}\n",
+        identity.component(),
+        identity.version(),
+        files.len()
+    );
+    for file in files {
+        let mode = match file.mode {
+            RuntimeFileMode::PrivateData => "data",
+            RuntimeFileMode::OwnerExecutable => "executable",
+        };
+        manifest.push_str("file=");
+        manifest.push_str(&file.name);
+        manifest.push('\t');
+        manifest.push_str(&file.integrity.bytes().to_string());
+        manifest.push('\t');
+        manifest.push_str(&hex(&file.integrity.sha256()));
+        manifest.push('\t');
+        manifest.push_str(mode);
+        manifest.push('\n');
+    }
+    manifest.into_bytes()
+}
+
+fn parse_version_manifest(
+    bytes: &[u8],
+) -> Result<(ManagedRuntimeIdentity, Vec<PublishedRuntimeFile>), ManagedRuntimePublicationError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| {
+        ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+    })?;
+    let mut lines = text.lines();
+    if lines.next() != Some("VSIFT-MANAGED-VERSION-v1") {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    let component = required_metadata_value(lines.next(), "component=")?;
+    let version = required_metadata_value(lines.next(), "version=")?;
+    let identity = ManagedRuntimeIdentity::new(component, version).map_err(|_| {
+        ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+    })?;
+    let count = required_metadata_value(lines.next(), "files=")?
+        .parse::<usize>()
+        .map_err(|_| {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+        })?;
+    if count == 0 || count > MAX_RUNTIME_FILES {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    let mut names = HashSet::with_capacity(count);
+    let mut files = Vec::with_capacity(count);
+    for line in lines {
+        let Some(value) = line.strip_prefix("file=") else {
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ));
+        };
+        let mut fields = value.split('\t');
+        let (Some(name), Some(bytes), Some(sha256), Some(mode), None) = (
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+        ) else {
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ));
+        };
+        if !portable_runtime_name(name) || !names.insert(name.to_ascii_lowercase()) {
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ));
+        }
+        let bytes = bytes.parse::<u64>().map_err(|_| {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+        })?;
+        let integrity = ArtifactIntegrity::from_sha256_hex(bytes, sha256).map_err(|_| {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+        })?;
+        let mode = match mode {
+            "data" => RuntimeFileMode::PrivateData,
+            "executable" => RuntimeFileMode::OwnerExecutable,
+            _ => {
+                return Err(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage,
+                ));
+            }
+        };
+        files.push(PublishedRuntimeFile {
+            name: name.to_owned(),
+            integrity,
+            mode,
+        });
+    }
+    if files.len() != count || !text.ends_with('\n') {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    Ok((identity, files))
+}
+
+fn required_metadata_value<'a>(
+    line: Option<&'a str>,
+    prefix: &str,
+) -> Result<&'a str, ManagedRuntimePublicationError> {
+    line.and_then(|value| value.strip_prefix(prefix)).ok_or(
+        ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage),
+    )
+}
+
+fn open_published_runtime(
+    root_path: &Path,
+    versions: &Dir,
+    identity: &ManagedRuntimeIdentity,
+    expected_manifest: &[u8],
+    planned: &[PlannedRuntimeFile],
+) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+    let published =
+        open_published_runtime_from_manifest(root_path, versions, identity.clone(), None)?;
+    let observed = read_private_regular_file(
+        &published.directory,
+        VERSION_MANIFEST,
+        MAX_VERSION_METADATA_BYTES,
+    )
+    .map_err(ManagedRuntimePublicationError::Storage)?;
+    if observed != expected_manifest {
+        return Err(ManagedRuntimePublicationError::VersionConflict);
+    }
+    if published.files.len() != planned.len()
+        || !published.files.iter().zip(planned).all(|(left, right)| {
+            left.name == right.name && left.integrity == right.integrity && left.mode == right.mode
+        })
+    {
+        return Err(ManagedRuntimePublicationError::VersionConflict);
+    }
+    Ok(published)
+}
+
+fn open_published_runtime_from_manifest(
+    root_path: &Path,
+    versions: &Dir,
+    identity: ManagedRuntimeIdentity,
+    expected_manifest_sha256: Option<&str>,
+) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+    let version_name = identity.version_directory_name();
+    let directory = versions.open_dir_nofollow(&version_name).map_err(|_| {
+        ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+    })?;
+    validate_private_root(&root_path.join(VERSIONS).join(&version_name), &directory)
+        .map_err(map_private_error)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+    let manifest =
+        read_private_regular_file(&directory, VERSION_MANIFEST, MAX_VERSION_METADATA_BYTES)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+    if expected_manifest_sha256.is_some_and(|expected| sha256_hex(&manifest) != expected) {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    let (observed_identity, files) = parse_version_manifest(&manifest)?;
+    if observed_identity != identity {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    validate_published_contents(&directory, &files)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+    Ok(PublishedManagedRuntime {
+        identity,
+        directory,
+        files,
+    })
+}
+
+fn validate_published_contents(
+    directory: &Dir,
+    files: &[PublishedRuntimeFile],
+) -> Result<(), ManagedArtifactError> {
+    let mut observed = HashSet::with_capacity(files.len() + 1);
+    for entry in directory.entries().map_err(|_| ManagedArtifactError::Io)? {
+        let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
+        let name = entry.file_name();
+        let name = name.to_str().ok_or(ManagedArtifactError::UnsafeStorage)?;
+        if name != VERSION_MANIFEST && !files.iter().any(|file| file.name == name) {
+            return Err(ManagedArtifactError::UnsafeStorage);
+        }
+        if !observed.insert(name.to_owned()) {
+            return Err(ManagedArtifactError::UnsafeStorage);
+        }
+        let metadata = directory
+            .symlink_metadata(name)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        if name == VERSION_MANIFEST {
+            validate_private_regular_metadata(&metadata)?;
+        } else {
+            let reviewed = files
+                .iter()
+                .find(|file| file.name == name)
+                .ok_or(ManagedArtifactError::UnsafeStorage)?;
+            validate_runtime_file(&metadata, reviewed.mode)?;
+        }
+    }
+    if observed.len() != files.len() + 1 || !observed.contains(VERSION_MANIFEST) {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    for reviewed in files {
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let file = directory
+            .open_with(&reviewed.name, &options)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        let metadata = file.metadata().map_err(|_| ManagedArtifactError::Io)?;
+        validate_runtime_file(&metadata, reviewed.mode)?;
+        transfer_verified(file.into_std(), std::io::sink(), reviewed.integrity)
+            .map_err(ManagedArtifactError::Transfer)?;
+    }
+    Ok(())
+}
+
+fn write_current_pointer(
+    current: &Dir,
+    identity: &ManagedRuntimeIdentity,
+    manifest: &[u8],
+    fault: Option<ManagedPublicationBoundary>,
+) -> Result<(), ManagedRuntimePublicationError> {
+    let pending_name = identity.pending_name();
+    if current
+        .try_exists(&pending_name)
+        .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
+    {
+        let metadata = current.symlink_metadata(&pending_name).map_err(|_| {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+        })?;
+        validate_private_regular_metadata(&metadata)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        current
+            .remove_file(&pending_name)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+    }
+    let pointer = format!(
+        "VSIFT-MANAGED-POINTER-v1\ncomponent={}\nversion={}\nmanifest_sha256={}\n",
+        identity.component(),
+        identity.version(),
+        sha256_hex(manifest)
+    );
+    write_marker(current, &pending_name, pointer.as_bytes())
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+    inject_publication_fault(fault, ManagedPublicationBoundary::PointerPrepared)?;
+    current
+        .rename(&pending_name, current, identity.current_name())
+        .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+    inject_publication_fault(fault, ManagedPublicationBoundary::PointerReplaced)
+}
+
+fn read_current_pointer(
+    current: &Dir,
+    name: &str,
+) -> Result<CurrentPointer, ManagedRuntimePublicationError> {
+    let bytes = read_private_regular_file(current, name, MAX_VERSION_METADATA_BYTES)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+    let text = std::str::from_utf8(&bytes).map_err(|_| {
+        ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+    })?;
+    let mut lines = text.lines();
+    if lines.next() != Some("VSIFT-MANAGED-POINTER-v1") {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    let component = required_metadata_value(lines.next(), "component=")?;
+    let version = required_metadata_value(lines.next(), "version=")?;
+    let manifest_sha256 = required_metadata_value(lines.next(), "manifest_sha256=")?;
+    if lines.next().is_some()
+        || !text.ends_with('\n')
+        || manifest_sha256.len() != 64
+        || !manifest_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    Ok(CurrentPointer {
+        identity: ManagedRuntimeIdentity::new(component, version).map_err(|_| {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+        })?,
+        manifest_sha256: manifest_sha256.to_owned(),
+    })
+}
+
+fn read_private_regular_file(
+    directory: &Dir,
+    name: &str,
+    max_bytes: u64,
+) -> Result<Vec<u8>, ManagedArtifactError> {
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let file = directory
+        .open_with(name, &options)
+        .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+    let metadata = file.metadata().map_err(|_| ManagedArtifactError::Io)?;
+    validate_private_regular_metadata(&metadata)?;
+    if metadata.len() == 0 || metadata.len() > max_bytes {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    let capacity = usize::try_from(metadata.len()).map_err(|_| ManagedArtifactError::Io)?;
+    let mut bytes = Vec::with_capacity(capacity);
+    file.take(max_bytes + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ManagedArtifactError::Io)?;
+    if bytes.len() as u64 != metadata.len() {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    Ok(bytes)
+}
+
+fn validate_private_regular_metadata(
+    metadata: &cap_std::fs::Metadata,
+) -> Result<(), ManagedArtifactError> {
+    if !metadata.is_file() || metadata.nlink() != 1 {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    #[cfg(unix)]
+    if metadata.permissions().mode() & 0o777 != 0o600 {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
+}
+
+fn inject_publication_fault(
+    configured: Option<ManagedPublicationBoundary>,
+    reached: ManagedPublicationBoundary,
+) -> Result<(), ManagedRuntimePublicationError> {
+    if configured == Some(reached) {
+        Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::Io,
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -1185,10 +1966,11 @@ mod tests {
     use vsift_domain::ArtifactIntegrity;
 
     use super::{
-        ArtifactTransferError, INSTALL_LOCK, ManagedArtifactError, ManagedArtifactStore,
-        ManagedPayloadError, ManagedRuntimeLayoutError, PAYLOAD, RUNTIME, ReviewedArchiveFile,
-        ReviewedPayloadArchive, ReviewedRuntimeAlias, ReviewedRuntimeLayout, TarInventoryError,
-        hex,
+        ArtifactTransferError, INSTALL_LOCK, MAX_MANAGED_KEY_BYTES, ManagedArtifactError,
+        ManagedArtifactStore, ManagedPayloadError, ManagedPublicationBoundary,
+        ManagedRuntimeIdentity, ManagedRuntimeLayoutError, ManagedRuntimePublicationError, PAYLOAD,
+        RUNTIME, ReviewedArchiveFile, ReviewedPayloadArchive, ReviewedRuntimeAlias,
+        ReviewedRuntimeLayout, TarInventoryError, VERSION_MANIFEST, hex,
     };
     use crate::ArchiveInventoryBounds;
 
@@ -1414,6 +2196,318 @@ mod tests {
         })();
         fs::remove_dir_all(parent)?;
         result
+    }
+
+    #[test]
+    fn publication_selects_immutable_version_and_preserves_previous_version()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let guard = store.try_install_guard()?;
+            let (archive, integrity) = reviewed_tar()?;
+            let first_identity = ManagedRuntimeIdentity::new("whisper-cli", "1.9.2-linux-x64")?;
+            let first_artifact = store.import_verified(&archive[..], integrity)?;
+            let selected = [selected_tool()?];
+            let first_payload = first_artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let mut first_runtime =
+                first_payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                    max_bytes: 3,
+                    aliases: &[],
+                    executables: &["tool"],
+                })?;
+            let published = first_runtime
+                .publish_and_select(&guard, &first_identity)
+                .map_err(|error| std::io::Error::other(format!("publish first: {error:?}")))?;
+            assert_eq!(published.identity(), &first_identity);
+            assert_eq!(published.reviewed_names(), ["tool"]);
+            let mut observed = Vec::new();
+            published
+                .open_reviewed_file("tool")?
+                .read_to_end(&mut observed)?;
+            assert_eq!(observed, b"abc");
+            first_runtime.discard()?;
+            first_payload.discard()?;
+            first_artifact.discard()?;
+
+            let second_identity = ManagedRuntimeIdentity::new("whisper-cli", "1.9.3-linux-x64")?;
+            let second_artifact = store.import_verified(&archive[..], integrity)?;
+            let second_payload = second_artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let mut second_runtime =
+                second_payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                    max_bytes: 3,
+                    aliases: &[],
+                    executables: &["tool"],
+                })?;
+            second_runtime
+                .publish_and_select(&guard, &second_identity)
+                .map_err(|error| std::io::Error::other(format!("publish second: {error:?}")))?;
+            second_runtime.discard()?;
+            second_payload.discard()?;
+            second_artifact.discard()?;
+
+            let current = store
+                .open_selected_runtime("whisper-cli")?
+                .ok_or("selected runtime missing")?;
+            assert_eq!(current.identity(), &second_identity);
+            published.open_reviewed_file("tool")?;
+            let previous = store.open_published_runtime(&first_identity)?;
+            assert_eq!(previous.identity(), &first_identity);
+            previous.open_reviewed_file("tool")?;
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn interrupted_pointer_publication_preserves_selection_and_retry_is_idempotent()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let guard = store.try_install_guard()?;
+            let (archive, integrity) = reviewed_tar()?;
+            let selected = [selected_tool()?];
+
+            let publish = |identity: &ManagedRuntimeIdentity,
+                           fault: Option<ManagedPublicationBoundary>|
+             -> Result<(), Box<dyn Error>> {
+                let artifact = store.import_verified(&archive[..], integrity)?;
+                let payload = artifact.stage_reviewed_payload(
+                    ReviewedPayloadArchive::Tar {
+                        max_tar_bytes: 10_000,
+                    },
+                    reviewed_bounds()?,
+                    &[],
+                    &selected,
+                )?;
+                let mut runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                    max_bytes: 3,
+                    aliases: &[],
+                    executables: &["tool"],
+                })?;
+                let outcome = runtime.publish_and_select_at_boundary(&guard, identity, fault);
+                runtime.discard()?;
+                payload.discard()?;
+                artifact.discard()?;
+                outcome.map(drop).map_err(Into::into)
+            };
+
+            let first = ManagedRuntimeIdentity::new("whisper-cli", "1.9.2-linux-x64")?;
+            publish(&first, None)?;
+            let second = ManagedRuntimeIdentity::new("whisper-cli", "1.9.3-linux-x64")?;
+            let interrupted = publish(&second, Some(ManagedPublicationBoundary::PointerPrepared));
+            assert!(matches!(
+                interrupted,
+                Err(error)
+                    if error.downcast_ref::<ManagedRuntimePublicationError>().is_some()
+            ));
+            assert_eq!(
+                store
+                    .open_selected_runtime("whisper-cli")?
+                    .ok_or("selected runtime missing")?
+                    .identity(),
+                &first
+            );
+            store.open_published_runtime(&second)?;
+
+            publish(&second, None)?;
+            assert_eq!(
+                store
+                    .open_selected_runtime("whisper-cli")?
+                    .ok_or("selected runtime missing")?
+                    .identity(),
+                &second
+            );
+
+            let third = ManagedRuntimeIdentity::new("whisper-cli", "1.9.4-linux-x64")?;
+            let committed_but_unreported =
+                publish(&third, Some(ManagedPublicationBoundary::PointerReplaced));
+            assert!(committed_but_unreported.is_err());
+            assert_eq!(
+                store
+                    .open_selected_runtime("whisper-cli")?
+                    .ok_or("selected runtime missing")?
+                    .identity(),
+                &third
+            );
+            publish(&third, None)?;
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn publication_rejects_guard_from_another_root_and_linked_version_manifest()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let root = parent.join("managed");
+            let store = ManagedArtifactStore::at(root.clone())?;
+            let other = ManagedArtifactStore::at(parent.join("other-managed"))?;
+            let wrong_guard = other.try_install_guard()?;
+            let (archive, integrity) = reviewed_tar()?;
+            let selected = [selected_tool()?];
+            let artifact = store.import_verified(&archive[..], integrity)?;
+            let payload = artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let mut runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                max_bytes: 3,
+                aliases: &[],
+                executables: &["tool"],
+            })?;
+            let identity = ManagedRuntimeIdentity::new("whisper-cli", "1.9.2-linux-x64")?;
+            assert!(matches!(
+                runtime.publish_and_select(&wrong_guard, &identity),
+                Err(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage
+                ))
+            ));
+            drop(wrong_guard);
+            let guard = store.try_install_guard()?;
+            runtime.publish_and_select(&guard, &identity)?;
+            runtime.discard()?;
+            payload.discard()?;
+            artifact.discard()?;
+
+            let manifest = root
+                .join("versions-v1")
+                .join("whisper-cli--1.9.2-linux-x64")
+                .join(VERSION_MANIFEST);
+            let external = parent.join("external-version-marker");
+            fs::hard_link(&manifest, &external)?;
+            assert!(matches!(
+                store.open_published_runtime(&identity),
+                Err(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage
+                ))
+            ));
+            assert!(external.is_file());
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn conflicting_version_identity_preserves_selected_runtime_and_candidate_cleanup()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let guard = store.try_install_guard()?;
+            let identity = ManagedRuntimeIdentity::new("whisper-cli", "1.9.2-linux-x64")?;
+            let (archive, integrity) = reviewed_tar()?;
+            let selected = [selected_tool()?];
+
+            let first_artifact = store.import_verified(&archive[..], integrity)?;
+            let first_payload = first_artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let mut first_runtime =
+                first_payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                    max_bytes: 3,
+                    aliases: &[],
+                    executables: &["tool"],
+                })?;
+            first_runtime.publish_and_select(&guard, &identity)?;
+            first_runtime.discard()?;
+            first_payload.discard()?;
+            first_artifact.discard()?;
+
+            let candidate_artifact = store.import_verified(&archive[..], integrity)?;
+            let candidate_payload = candidate_artifact.stage_reviewed_payload(
+                ReviewedPayloadArchive::Tar {
+                    max_tar_bytes: 10_000,
+                },
+                reviewed_bounds()?,
+                &[],
+                &selected,
+            )?;
+            let aliases = [ReviewedRuntimeAlias {
+                name: "tool-copy",
+                source_selected: "tool",
+            }];
+            let mut candidate_runtime =
+                candidate_payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                    max_bytes: 6,
+                    aliases: &aliases,
+                    executables: &["tool"],
+                })?;
+            assert!(matches!(
+                candidate_runtime.publish_and_select(&guard, &identity),
+                Err(ManagedRuntimePublicationError::VersionConflict)
+            ));
+            candidate_runtime.discard()?;
+            candidate_payload.discard()?;
+            candidate_artifact.discard()?;
+            let current = store
+                .open_selected_runtime("whisper-cli")?
+                .ok_or("selected runtime missing")?;
+            assert_eq!(current.identity(), &identity);
+            assert_eq!(current.reviewed_names(), ["tool"]);
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn managed_runtime_identity_rejects_path_and_noncanonical_keys() {
+        for (component, version) in [
+            ("", "1"),
+            ("Whisper", "1"),
+            ("whisper/cli", "1"),
+            ("whisper", "../1"),
+            ("whisper", "1."),
+        ] {
+            assert!(matches!(
+                ManagedRuntimeIdentity::new(component, version),
+                Err(ManagedRuntimePublicationError::InvalidIdentity)
+            ));
+        }
+        assert!(matches!(
+            ManagedRuntimeIdentity::new("whisper", "a".repeat(MAX_MANAGED_KEY_BYTES + 1)),
+            Err(ManagedRuntimePublicationError::InvalidIdentity)
+        ));
+    }
+
+    #[test]
+    fn selected_runtime_lookup_does_not_create_managed_storage() -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let root = parent.join("managed");
+        let store = ManagedArtifactStore::at(root.clone())?;
+        assert!(store.open_selected_runtime("whisper-cli")?.is_none());
+        assert!(!root.exists());
+        fs::remove_dir_all(parent)?;
+        Ok(())
     }
 
     #[test]
