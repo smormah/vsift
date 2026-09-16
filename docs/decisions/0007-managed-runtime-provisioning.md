@@ -205,4 +205,8 @@ Keeping preparation and execution as separate checkpoints makes the evidence
 boundary explicit: one proves that fresh publisher bytes satisfy the production
 layout primitive on the target host, while the other observes candidate runtime
 compatibility. Neither checkpoint is an installer transaction or catalogue
-acceptance. The first protected hosted execution is pending.
+acceptance. Protected [run 35053264628](https://github.com/smormah/vsift/actions/runs/35053264628)
+passed both checkpoints on Ubuntu 24.04: the Rust production-layout test
+completed in 3.48 seconds, and the independent F01 model-backed candidate smoke
+completed afterward. This narrows target-host layout uncertainty but does not
+join preparation and execution into an install transaction.

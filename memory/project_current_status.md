@@ -2,16 +2,19 @@
 
 ## Active
 
-2026-09-16: P06 hosted production-layout checkpoint work from protected main
-`8604370` now makes the opt-in Ubuntu 24.04 workflow pass a fresh bounded and
-SHA-256-verified whisper.cpp archive through the production Rust owned runtime
-layout test before its separate Python model-backed candidate experiment. The
-Rust checkpoint performs exact import, selected payload assembly, regular alias
-copies, executable-mode preparation, recheck and explicit discard without
-running the binary; the archive is removed even if that check fails. Actionlint,
-five Python guardrail tests and all local Rust/documentation/governance/dependency
-gates passed. Protected validation and the first hosted run are pending. No catalogue,
-accepted plan, activation or public install is introduced; P06 stays planned.
+2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
+merged the P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from
+protected main `8604370`. The opt-in Ubuntu 24.04 workflow now passes a fresh
+bounded and SHA-256-verified whisper.cpp archive through the production Rust
+owned-runtime test before its separate Python model-backed candidate experiment.
+The Rust checkpoint performs exact import, selected payload assembly, regular
+alias copies, executable-mode preparation, recheck and explicit discard without
+running the binary; the archive is removed even if that check fails. All local
+and protected gates passed in CI `35052887409`, security `35052887516` and Rust
+analysis `35052887463`. Protected hosted run `35053264628` passed the production
+layout in 3.48 seconds, then independently passed F01 inference in 23.03 seconds;
+largest child peak RSS across the smoke was 291,688 KiB. No catalogue, accepted
+plan, activation or public install is introduced; P06 stays planned.
 
 2026-09-16: Protected [PR #95](https://github.com/smormah/vsift/pull/95)
 merged P06 owned runtime layout implementation `15cec51` and memory update

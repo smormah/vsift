@@ -227,9 +227,11 @@ The manually dispatched Ubuntu workflow now places a fresh bounded,
 SHA-256-verified whisper.cpp download through that production Rust layout check
 before running the separate Python model-backed candidate experiment. The Rust
 checkpoint discards the owned runtime without execution; the Python checkpoint
-independently obtains its pinned inputs. The first protected hosted run is
-pending, and this composition does not create plan authority or catalogue
-acceptance.
+independently obtains its pinned inputs. The first protected
+[hosted run 35053264628](https://github.com/smormah/vsift/actions/runs/35053264628)
+passed: the production Rust layout check completed and discarded its owned
+stages before the independent F01 model-backed candidate experiment passed.
+This composition does not create plan authority or catalogue acceptance.
 
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
