@@ -19,5 +19,35 @@ jobs:
       - name: Test candidate archive guardrails
         run: python -m unittest discover -s tools -p test_p06_ubuntu_candidate_smoke.py
 
+      - name: Download pinned whisper.cpp archive for the Rust layout check
+        env:
+          VSIFT_P06_WHISPER_ARCHIVE: ${{ runner.temp }}/vsift-p06-whisper-v1.9.2.tar.gz
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd() / "tools"))
+          from p06_ubuntu_candidate_smoke import ARCHIVES
+          from p06_windows_candidate_smoke import verified_download
+
+          url, size, digest = ARCHIVES["whisper"]
+          verified_download(url, Path(os.environ["VSIFT_P06_WHISPER_ARCHIVE"]), size, digest)
+          PY
+
+      - name: Exercise the production owned runtime layout with pinned bytes
+        env:
+          VSIFT_P06_WHISPER_ARCHIVE: ${{ runner.temp }}/vsift-p06-whisper-v1.9.2.tar.gz
+        run: >-
+          cargo test --locked -p vsift-infrastructure --test p06_whisper_archive
+          pinned_upstream_archive_passes_contained_staging -- --ignored --exact --nocapture
+
+      - name: Remove the Rust layout-check archive
+        if: always()
+        env:
+          VSIFT_P06_WHISPER_ARCHIVE: ${{ runner.temp }}/vsift-p06-whisper-v1.9.2.tar.gz
+        run: rm -f -- "$VSIFT_P06_WHISPER_ARCHIVE"
+
       - name: Run pinned Ubuntu candidate compatibility smoke
         run: python tools/p06_ubuntu_candidate_smoke.py

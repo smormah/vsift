@@ -188,3 +188,21 @@ selected-file assembly, six required regular alias copies, executable-mode
 preparation and whole-runtime recheck without binary execution. This narrows
 D-04/D-06 preparation risk but does not accept the candidate, prove bounded
 compatibility smoke, activate a version or enable managed installation.
+
+## 2026-09-16 implementation note: hosted production-layout checkpoint
+
+The credential-free, manually dispatched Ubuntu candidate workflow now first
+downloads a fresh pinned whisper.cpp archive through the bounded candidate
+transport and passes those bytes through the ignored Rust integration test for
+the production owned-artifact, selected-payload and reviewed-runtime layout.
+That checkpoint creates and rechecks the six selected files and six regular
+alias copies, then explicitly discards every owned stage without running the
+candidate. The workflow removes the downloaded archive even when the Rust check
+fails. Its existing Python experiment subsequently downloads its own pinned
+inputs and performs the model-backed candidate smoke on the disposable runner.
+
+Keeping preparation and execution as separate checkpoints makes the evidence
+boundary explicit: one proves that fresh publisher bytes satisfy the production
+layout primitive on the target host, while the other observes candidate runtime
+compatibility. Neither checkpoint is an installer transaction or catalogue
+acceptance. The first protected hosted execution is pending.

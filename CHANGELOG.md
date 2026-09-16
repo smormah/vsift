@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- The opt-in disposable Ubuntu P06 qualification workflow now sends a freshly
+  bounded and SHA-256-verified whisper.cpp archive through the production Rust
+  owned-runtime layout check before running the separate candidate compatibility
+  smoke. It still grants no catalogue, plan, activation or install authority.
 - P06 can now copy a verified payload into a fresh private, unactivated
   `runtime.pending` directory with only reviewed regular-file aliases and
   selected Unix owner-executable modes. Every copy is bounded and rechecked;
