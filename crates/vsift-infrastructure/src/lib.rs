@@ -44,7 +44,8 @@ pub use gzip_tar_inventory::{
     inspect_gzip_tar_selected_files, stage_gzip_tar_selected_files,
 };
 pub use managed_artifact_store::{
-    ManagedArtifactError, ManagedArtifactStore, ManagedPayloadError, ReviewedPayloadArchive,
+    ManagedArtifactError, ManagedArtifactStore, ManagedPayloadError, ManagedRuntimeLayoutError,
+    PreparedManagedRuntime, ReviewedPayloadArchive, ReviewedRuntimeAlias, ReviewedRuntimeLayout,
     StagedManagedArtifact, StagedManagedPayload,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};

@@ -395,7 +395,7 @@ fn selected_staging_name(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
-fn safe_staging_name(name: &str) -> bool {
+pub(crate) fn safe_staging_name(name: &str) -> bool {
     if name.len() > 128 || name.ends_with([' ', '.']) {
         return false;
     }

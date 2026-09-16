@@ -209,6 +209,20 @@ The listed Ubuntu artifacts remain candidates, not an accepted catalogue or
 plan. SONAME alias creation, executable modes, compatibility smoke, atomic
 activation and full P06 qualification remain open.
 
+The later owned-runtime-layout increment stages a **separate** fresh private
+`runtime.pending` directory from the verified payload. It checks the reviewed
+total copied-byte budget, portable/case-insensitive names, selected executable
+list and alias-to-selected-source mapping before mutation; selected and alias
+copies retain exact selected-file hashes. Unix executable mode is owner-only,
+while the original selected payload remains private and unchanged. Reopen
+rejects unexpected, linked, substituted, mode-changed or hash-changed runtime
+files, and explicit discard removes only positively owned copies. A fresh
+pinned Ubuntu whisper.cpp publisher archive passed the six regular SONAME
+alias copies, `whisper-cli` mode preparation and runtime recheck without
+execution. This is a layout candidate, not an accepted trust anchor, smoke
+result, installed version or D-04/D-06 closure. Compatibility and source/
+notice review, activation and full installer faults remain open.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 

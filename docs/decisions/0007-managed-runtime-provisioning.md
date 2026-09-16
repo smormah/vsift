@@ -166,3 +166,25 @@ binary execution. This is still an unactivated payload: alias creation,
 executable permissions, compatibility smoke, version activation, plan authority
 and the reviewed catalogue remain separate gates. No public managed command
 is enabled.
+
+## 2026-09-15 implementation note: owned runtime layout preparation
+
+An exact selected payload can now prepare a separate private
+`runtime.pending` directory under its held artifact stage. The operation
+checks a trusted flat-name and total-byte review before mutation, copies each
+selected regular file with its original size/SHA-256, and creates only
+explicit alias copies from selected files. It never materializes archive link
+headers as filesystem links. Unix modes are set to owner-only read/write for
+data and owner-only read/write/execute for the reviewed executable selection;
+Windows continues to rely on the private directory ACL, with Windows runtime
+compatibility still unqualified. Runtime open rechecks held directory identity,
+the exact file set, regular/single-link type, mode where applicable, and each
+requested digest. Discard removes only reviewed copies and leaves the original
+payload and artifact for explicit later discard. A failed copy rolls back only
+positively identified runtime files; suspicious extras block cleanup.
+
+The pinned Ubuntu whisper.cpp archive passed opt-in owned import, gzip/tar
+selected-file assembly, six required regular alias copies, executable-mode
+preparation and whole-runtime recheck without binary execution. This narrows
+D-04/D-06 preparation risk but does not accept the candidate, prove bounded
+compatibility smoke, activate a version or enable managed installation.
