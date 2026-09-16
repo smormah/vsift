@@ -2,6 +2,17 @@
 
 ## Active
 
+2026-09-16: P06 hosted production-layout checkpoint work from protected main
+`8604370` now makes the opt-in Ubuntu 24.04 workflow pass a fresh bounded and
+SHA-256-verified whisper.cpp archive through the production Rust owned runtime
+layout test before its separate Python model-backed candidate experiment. The
+Rust checkpoint performs exact import, selected payload assembly, regular alias
+copies, executable-mode preparation, recheck and explicit discard without
+running the binary; the archive is removed even if that check fails. Actionlint,
+five Python guardrail tests and all local Rust/documentation/governance/dependency
+gates passed. Protected validation and the first hosted run are pending. No catalogue,
+accepted plan, activation or public install is introduced; P06 stays planned.
+
 2026-09-16: Protected [PR #95](https://github.com/smormah/vsift/pull/95)
 merged P06 owned runtime layout implementation `15cec51` and memory update
 `1023d24` as `218671d` from protected main `97f13d8`. It creates a fresh

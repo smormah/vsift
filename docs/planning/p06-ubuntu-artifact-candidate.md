@@ -132,6 +132,15 @@ layout primitive accepts the pinned archive bytes. It does not qualify
 runtime compatibility, model-backed smoke, notice/source closure, catalogue
 acceptance or installation.
 
+The opt-in hosted workflow now composes that ignored Rust integration check
+before its separate Python candidate smoke. It obtains a fresh bounded,
+SHA-256-verified archive on the disposable Ubuntu runner, exercises the
+production owned import/payload/runtime/discard path without binary execution,
+and removes the downloaded archive even if the check fails. The later Python
+step independently downloads and executes pinned candidate inputs. A protected
+hosted run is still required before this can be cited as target-host evidence;
+even a passing run will not establish an atomic install or accept a catalogue.
+
 | Relative file under `whisper-bin-ubuntu-x64/` | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `LICENSE` | 1,078 | `94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d` |
@@ -167,13 +176,16 @@ fallback remains necessary on every named target.
 
 `.github/workflows/p06-ubuntu-candidate-smoke.yml` runs a candidate-only Python
 qualification script on a disposable Ubuntu 24.04 x64 runner with no repository
-permissions or persisted checkout credentials. The script repeats the independently
-recorded archive/model hashes, checks archive budgets and paths, extracts only the
-selected regular files, materializes reviewed SONAME aliases as regular copies,
-and runs FFprobe, FFmpeg and whisper.cpp against owned F01 tone media. Four local
-archive guardrail tests and read-only selected-file extraction passed. The script
-is not the production installer and does not prove real-speech accuracy or
-resource suitability.
+permissions or persisted checkout credentials. Before that script, the workflow
+now downloads fresh pinned whisper.cpp bytes with the same bounded verifier and
+runs the production Rust owned-runtime integration check without executing the
+candidate. The Python script independently repeats the recorded archive/model
+hashes, checks archive budgets and paths, extracts only the selected regular
+files, materializes reviewed SONAME aliases as regular copies, and runs FFprobe,
+FFmpeg and whisper.cpp against owned F01 tone media. Five local archive and
+diagnostic guardrail tests and read-only selected-file extraction passed in the
+last recorded run. The workflow is not the production installer and does not
+prove real-speech accuracy or resource suitability.
 
 Protected [PR #61](https://github.com/smormah/vsift/pull/61) merged this
 candidate runner as `a9ecd1b` after Ubuntu, Windows and macOS Quality,

@@ -223,6 +223,14 @@ execution. This is a layout candidate, not an accepted trust anchor, smoke
 result, installed version or D-04/D-06 closure. Compatibility and source/
 notice review, activation and full installer faults remain open.
 
+The manually dispatched Ubuntu workflow now places a fresh bounded,
+SHA-256-verified whisper.cpp download through that production Rust layout check
+before running the separate Python model-backed candidate experiment. The Rust
+checkpoint discards the owned runtime without execution; the Python checkpoint
+independently obtains its pinned inputs. The first protected hosted run is
+pending, and this composition does not create plan authority or catalogue
+acceptance.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 

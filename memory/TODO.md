@@ -2,6 +2,19 @@
 
 ## Current checkpoint
 
+2026-09-16: P06 hosted production-layout checkpoint work from protected main
+`8604370` extends the credential-free, manually dispatched Ubuntu 24.04
+candidate workflow. It uses the bounded candidate downloader for a fresh pinned
+whisper.cpp archive, passes those bytes through the production Rust
+owned-artifact/payload/runtime/discard integration check without execution, and
+removes the archive on success or failure. The existing Python experiment then
+independently downloads pinned inputs and performs model-backed candidate smoke.
+Actionlint, five Python guardrail tests, local fmt, strict Clippy, full workspace
+tests, warning-denied rustdoc, governance and `cargo deny check` passed.
+Protected review and the first hosted execution are pending. This only joins two evidence
+checkpoints on one disposable host; it does not accept a catalogue, authorize a
+plan, activate a version or enable `setup install`. P06 remains planned.
+
 2026-09-16: Protected [PR #95](https://github.com/smormah/vsift/pull/95)
 merged P06 owned runtime layout preparation `15cec51` and its memory update
 `1023d24` as `218671d` from protected predecessor `97f13d8`. It copies an exact
