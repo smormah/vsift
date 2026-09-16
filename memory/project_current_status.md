@@ -2,16 +2,22 @@
 
 ## Active
 
-2026-09-16: P06 managed installation-guard implementation `3ff602f` from
-protected main `66cbc45` adds an infrastructure-only, root-wide OS lock for
-future version mutations.
-It is non-blocking for headless use, classifies held-lock contention as `Busy`,
-and rejects linked or non-private Unix lock files. Focused exclusion/release,
-hard-link/source-preservation and Unix-mode tests plus all local gates pass. An
-initial full run's three unrelated Windows process-supervisor timing failures
-passed on unchanged focused and complete reruns; protected gates are pending.
-No version publication, accepted plan or public install is introduced, so P06
-remains planned.
+2026-09-16: Protected [PR #99](https://github.com/smormah/vsift/pull/99)
+merged P06 managed installation-guard implementation `3ff602f`, memory update
+`0514737` and Unix import fix `2b5af29` as `e5b6c28` from protected main
+`66cbc45`. The infrastructure-only root-wide OS lock is non-blocking for
+headless use, classifies held-lock contention as `Busy`, and rejects linked or
+non-private Unix lock files. Focused exclusion/release, hard-link/source-
+preservation and Unix-mode tests plus all local gates pass. An initial local
+full run's three unrelated Windows process-supervisor timing failures passed on
+unchanged focused and complete reruns. Initial protected CI then found the
+missing Unix permissions trait import; the corrected commit passed protected
+CI `35074995313`, security `35074995207` and Rust analysis `35074995323` on all
+targets. No version publication, accepted plan or public install is introduced,
+so P06 remains planned. Docs-only record PR #100 first reproduced the existing
+model-registration `Busy` on Ubuntu (job `104727292434`); the unchanged rerun
+passed (job `104728936272`). [Issue #66](https://github.com/smormah/vsift/issues/66)
+remains open.
 
 2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
 merged the P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from
