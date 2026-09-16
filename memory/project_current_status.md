@@ -14,7 +14,10 @@ unchanged focused and complete reruns. Initial protected CI then found the
 missing Unix permissions trait import; the corrected commit passed protected
 CI `35074995313`, security `35074995207` and Rust analysis `35074995323` on all
 targets. No version publication, accepted plan or public install is introduced,
-so P06 remains planned.
+so P06 remains planned. Docs-only record PR #100 first reproduced the existing
+model-registration `Busy` on Ubuntu (job `104727292434`); the unchanged rerun
+passed (job `104728936272`). [Issue #66](https://github.com/smormah/vsift/issues/66)
+remains open.
 
 2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
 merged the P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from

@@ -18,7 +18,11 @@ passed in [CI run 35074995313](https://github.com/smormah/vsift/actions/runs/350
 [Dependency/security run 35074995207](https://github.com/smormah/vsift/actions/runs/35074995207)
 and [Rust analysis run 35074995323](https://github.com/smormah/vsift/actions/runs/35074995323)
 passed. The guard narrows D-05 transaction concurrency risk but provides no plan
-authority, publication, rollback or install command. P06 remains planned.
+authority, publication, rollback or install command. The docs-only protected
+record PR #100 first reproduced the existing model-registration `Busy` symptom
+in Ubuntu job `104727292434`; its unchanged rerun passed in job `104728936272`.
+[Issue #66](https://github.com/smormah/vsift/issues/66) remains open. P06 remains
+planned.
 
 2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
 merged P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from
