@@ -12,7 +12,7 @@ use std::{
 use cap_fs_ext::{DirExt, FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, DirBuilder, OpenOptions};
 #[cfg(unix)]
-use cap_std::fs::{DirBuilderExt, OpenOptionsExt};
+use cap_std::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use tokio::io::AsyncWriteExt;
 use vsift_domain::ArtifactIntegrity;
 
@@ -1104,7 +1104,6 @@ fn validate_runtime_file(
     }
     #[cfg(unix)]
     {
-        use cap_std::fs::PermissionsExt;
         let expected = match mode {
             RuntimeFileMode::PrivateData => 0o600,
             RuntimeFileMode::OwnerExecutable => 0o700,
