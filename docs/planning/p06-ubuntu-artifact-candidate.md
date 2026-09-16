@@ -137,9 +137,12 @@ before its separate Python candidate smoke. It obtains a fresh bounded,
 SHA-256-verified archive on the disposable Ubuntu runner, exercises the
 production owned import/payload/runtime/discard path without binary execution,
 and removes the downloaded archive even if the check fails. The later Python
-step independently downloads and executes pinned candidate inputs. A protected
-hosted run is still required before this can be cited as target-host evidence;
-even a passing run will not establish an atomic install or accept a catalogue.
+step independently downloads and executes pinned candidate inputs. Protected
+[run 35053264628](https://github.com/smormah/vsift/actions/runs/35053264628)
+passed this composition on Ubuntu 24.04. The Rust production-layout check took
+3.48 seconds and explicitly discarded its runtime before the independent
+candidate execution. This target-host evidence does not establish an atomic
+install or accept a catalogue.
 
 | Relative file under `whisper-bin-ubuntu-x64/` | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -236,3 +239,24 @@ That figure is not an isolated whisper.cpp memory measurement or a controlled
 resource qualification. F01 is tone-only, so it cannot establish speech
 accuracy. These observations do not exercise the production Rust installer,
 promote this candidate to an accepted catalogue, or close D-01..D-10/P06 E2E.
+
+## Production-layout hosted checkpoint
+
+Protected [PR #97](https://github.com/smormah/vsift/pull/97) merged the hosted
+production-layout checkpoint as `a405e33` after all protected Ubuntu, macOS and
+Windows quality, documentation, governance, strict-worker, dependency and Rust
+analysis checks passed. The manually dispatched
+[Ubuntu run 35053264628](https://github.com/smormah/vsift/actions/runs/35053264628)
+then passed five Python guardrail tests and a fresh pinned whisper.cpp download.
+The Rust production path imported the exact archive, assembled the selected
+payload, prepared and rechecked the twelve-file runtime, and discarded runtime,
+payload and artifact without candidate execution in 3.48 seconds.
+
+The subsequent independent candidate experiment again verified both archives
+and the pinned model, observed FFmpeg/FFprobe
+`n9.0.1-11-ge47273f4d9-20260831`, and passed F01 model-backed inference in
+23.03 seconds. The largest child peak RSS across the whole smoke was 291,688
+KiB on Linux `6.17.0-1022-azure` x64 with glibc 2.39. F01 remains tone-only,
+and the resource figure is not an isolated provider measurement. The run does
+not exercise plan acceptance, atomic activation, repair/rollback/uninstall or
+the D-01..D-10/P06 E2E matrix.

@@ -2,18 +2,25 @@
 
 ## Current checkpoint
 
-2026-09-16: P06 hosted production-layout checkpoint work from protected main
-`8604370` extends the credential-free, manually dispatched Ubuntu 24.04
-candidate workflow. It uses the bounded candidate downloader for a fresh pinned
-whisper.cpp archive, passes those bytes through the production Rust
-owned-artifact/payload/runtime/discard integration check without execution, and
-removes the archive on success or failure. The existing Python experiment then
-independently downloads pinned inputs and performs model-backed candidate smoke.
-Actionlint, five Python guardrail tests, local fmt, strict Clippy, full workspace
-tests, warning-denied rustdoc, governance and `cargo deny check` passed.
-Protected review and the first hosted execution are pending. This only joins two evidence
-checkpoints on one disposable host; it does not accept a catalogue, authorize a
-plan, activate a version or enable `setup install`. P06 remains planned.
+2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
+merged P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from
+protected main `8604370`. The credential-free, manually dispatched Ubuntu 24.04
+workflow uses the bounded candidate downloader for fresh pinned whisper.cpp
+bytes, passes them through the production Rust owned-artifact/payload/runtime/
+discard integration check without execution, and removes the archive on success
+or failure. The existing Python experiment then independently downloads pinned
+inputs and performs model-backed candidate smoke. Actionlint, five Python
+guardrail tests and all local gates passed. Protected Ubuntu, macOS and Windows
+Quality, Documentation, Governance and strict-worker passed in
+[CI run 35052887409](https://github.com/smormah/vsift/actions/runs/35052887409);
+[dependency/security run 35052887516](https://github.com/smormah/vsift/actions/runs/35052887516)
+and [Rust analysis run 35052887463](https://github.com/smormah/vsift/actions/runs/35052887463)
+passed. Protected [hosted run 35053264628](https://github.com/smormah/vsift/actions/runs/35053264628)
+then passed the production layout in 3.48 seconds, cleaned it, and passed the
+independent F01 candidate smoke in 23.03 seconds with 291,688 KiB largest-child
+peak RSS across the whole smoke. This joins two evidence checkpoints; it does
+not accept a catalogue, authorize a plan, activate a version or enable
+`setup install`. P06 remains planned.
 
 2026-09-16: Protected [PR #95](https://github.com/smormah/vsift/pull/95)
 merged P06 owned runtime layout preparation `15cec51` and its memory update
