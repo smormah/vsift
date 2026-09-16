@@ -2,21 +2,29 @@
 
 ## Active
 
-2026-09-15: P06 owned runtime layout implementation `15cec51` from protected
-main `97f13d8` creates a fresh private `runtime.pending` child from an exact
-selected payload. It validates the trusted output byte/name/alias/executable
-review first, copies only verified selected regular files and regular aliases,
-sets Unix owner-only executable mode, and rechecks held directory identity,
-file set, type/link count, modes and SHA-256. Invalid reviews have no runtime
-effects; suspicious entries block open/cleanup. A fresh pinned Ubuntu
-whisper.cpp archive passed six regular SONAME alias copies and all twelve
-runtime-file rechecks without candidate execution. Focused tests, full local
-fmt/strict Clippy/workspace tests, warning-denied rustdoc, governance and
-dependency policy passed. Protected PR/CI and merge record are pending.
-No source catalogue was accepted and no provider was smoke-tested or activated;
-P06 remains planned. Plan acceptance, source/notice closure, compatibility,
-version transactions, lifecycle and D-01..D-10/E2E are pending. Issue #66's
-intermittent lock cause also remains open.
+2026-09-16: Protected [PR #95](https://github.com/smormah/vsift/pull/95)
+merged P06 owned runtime layout implementation `15cec51` and memory update
+`1023d24` as `218671d` from protected main `97f13d8`. It creates a fresh
+private `runtime.pending` child from an exact selected payload, validates the
+trusted byte/name/alias/executable review before mutation, copies only verified
+regular files and aliases, sets Unix owner-only executable mode, and rechecks
+held directory identity, exact file set, type/link count, modes and SHA-256.
+Invalid reviews have no runtime effects; suspicious entries block open and
+cleanup. A fresh pinned Ubuntu whisper.cpp archive passed six regular SONAME
+alias copies and all twelve runtime-file rechecks without candidate execution.
+Local fmt, strict Clippy, full workspace tests, warning-denied rustdoc,
+governance and dependency policy passed. Protected Ubuntu and macOS Quality
+first reproduced existing P05 lock `Busy` failures (jobs `104652588417` and
+`104652588434`); unchanged reruns passed (jobs `104653707688` and
+`104653707499`), together with Windows, Documentation, Governance and
+strict-worker in [CI run 35051470387](https://github.com/smormah/vsift/actions/runs/35051470387).
+[Dependency/security run 35051470403](https://github.com/smormah/vsift/actions/runs/35051470403)
+and [Rust analysis run 35051470400](https://github.com/smormah/vsift/actions/runs/35051470400)
+passed. No catalogue was accepted and no provider was smoke-tested or
+activated. P06 remains planned; plan acceptance, source/notice closure,
+compatibility, version transactions, lifecycle and D-01..D-10/E2E are pending.
+[Issue #66](https://github.com/smormah/vsift/issues/66) remains open because
+the intermittent lock holder is still unknown.
 
 2026-09-15: Protected [PR #93](https://github.com/smormah/vsift/pull/93)
 merged P06 configuration lock classification `2830a70` as `90bd4b8` from
