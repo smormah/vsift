@@ -233,6 +233,12 @@ passed: the production Rust layout check completed and discarded its owned
 stages before the independent F01 model-backed candidate experiment passed.
 This composition does not create plan authority or catalogue acceptance.
 
+The infrastructure also now has a root-wide, non-blocking managed installation
+guard. A private single-link lock file serializes future version mutations and
+returns typed `Busy` to concurrent headless callers; linked or incorrectly
+permissioned lock files fail closed. This narrows D-05 concurrency risk but does
+not publish a version or make any candidate catalogue-eligible.
+
 The missing catalog is material because the listed sources do not form one
 interchangeable upstream binary channel:
 

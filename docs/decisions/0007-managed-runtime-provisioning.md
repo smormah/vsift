@@ -210,3 +210,19 @@ passed both checkpoints on Ubuntu 24.04: the Rust production-layout test
 completed in 3.48 seconds, and the independent F01 model-backed candidate smoke
 completed afterward. This narrows target-host layout uncertainty but does not
 join preparation and execution into an install transaction.
+
+## 2026-09-16 implementation note: installation transaction guard
+
+The managed root now exposes a root-wide, non-blocking installation guard. Its
+lock file is opened without following links inside the positively marked private
+root and must remain a single-link regular file; Unix additionally requires mode
+`0600`. A held OS lock returns typed `Busy`, while other lock failures remain I/O.
+Dropping the guard releases the lock, allowing a later transaction to proceed.
+Tests cover exclusion/release, external hard-link rejection with source
+preservation, and Unix permission rejection.
+
+This guard is a concurrency prerequisite for D-05. It carries no plan digest,
+provider selection, compatibility result or user authorization, and therefore
+cannot activate a runtime by itself. Immutable version publication, current
+pointer replacement, crash recovery, rollback and active-job retention remain
+separate required gates.

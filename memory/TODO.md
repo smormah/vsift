@@ -2,6 +2,20 @@
 
 ## Current checkpoint
 
+2026-09-16: P06 managed installation-guard implementation `3ff602f` from
+protected main `66cbc45` adds a root-wide, non-blocking OS lock inside the
+positively marked private managed root. The lock must be a single-link regular
+file and Unix mode `0600`;
+another holder returns typed `Busy`, while other lock failures remain I/O.
+Focused tests prove exclusion, release, external-hard-link rejection with source
+preservation, and Unix mode rejection. Local fmt, strict Clippy, full workspace
+tests, warning-denied rustdoc, governance and `cargo deny check` passed. The first
+full run hit three unrelated Windows process-supervisor timing failures; the
+unchanged focused binary and complete suite then passed without relaxed tests.
+Protected review is pending. The guard narrows
+D-05 transaction concurrency risk but provides no plan authority, publication,
+rollback or install command. P06 remains planned.
+
 2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
 merged P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from
 protected main `8604370`. The credential-free, manually dispatched Ubuntu 24.04

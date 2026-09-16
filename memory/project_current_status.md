@@ -2,6 +2,17 @@
 
 ## Active
 
+2026-09-16: P06 managed installation-guard implementation `3ff602f` from
+protected main `66cbc45` adds an infrastructure-only, root-wide OS lock for
+future version mutations.
+It is non-blocking for headless use, classifies held-lock contention as `Busy`,
+and rejects linked or non-private Unix lock files. Focused exclusion/release,
+hard-link/source-preservation and Unix-mode tests plus all local gates pass. An
+initial full run's three unrelated Windows process-supervisor timing failures
+passed on unchanged focused and complete reruns; protected gates are pending.
+No version publication, accepted plan or public install is introduced, so P06
+remains planned.
+
 2026-09-16: Protected [PR #97](https://github.com/smormah/vsift/pull/97)
 merged the P06 hosted production-layout checkpoint `f9d2104` as `a405e33` from
 protected main `8604370`. The opt-in Ubuntu 24.04 workflow now passes a fresh

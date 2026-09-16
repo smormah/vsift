@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 now has a root-wide managed installation guard backed by a private,
+  single-link OS-locked file. Concurrent writers receive typed `Busy` without
+  waiting or retrying; linked or incorrectly permissioned lock files fail
+  closed. The guard serializes future transactions but grants no install authority.
 - The opt-in disposable Ubuntu P06 qualification workflow now sends a freshly
   bounded and SHA-256-verified whisper.cpp archive through the production Rust
   owned-runtime layout check before running the separate candidate compatibility
