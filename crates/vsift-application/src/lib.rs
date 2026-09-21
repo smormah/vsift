@@ -6,6 +6,7 @@ use std::future::Future;
 
 use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, RuntimeReadiness};
 
+mod provisioning;
 mod session;
 mod storage;
 
@@ -14,6 +15,12 @@ pub use session::{
     StagedSessionSource,
 };
 
+pub use provisioning::{
+    AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedPlanAvailability, ManagedSetupAction,
+    ManagedSetupPlan, PlanAcceptanceError, ReviewedArchiveLimits, ReviewedArchiveLink,
+    ReviewedArchiveSelection, ReviewedManagedFile, ReviewedRuntimeCopy, SetupDependencyDisposition,
+    SetupModelDisposition, SetupProfile, SetupSelectionState, plan_managed_setup,
+};
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
     InitializeSessionStorage, InitializeSessionStorageRequest, InitializedSessionStorage,

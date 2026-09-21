@@ -9,6 +9,7 @@ mod ffmpeg_media;
 mod filesystem_session_store;
 mod gzip_tar_inventory;
 mod managed_artifact_store;
+mod managed_catalogue;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -49,6 +50,9 @@ pub use managed_artifact_store::{
     ManagedVersionRemovalOutcome, PreparedManagedRuntime, PublishedManagedRuntime,
     ReviewedPayloadArchive, ReviewedRuntimeAlias, ReviewedRuntimeLayout, StagedManagedArtifact,
     StagedManagedPayload,
+};
+pub use managed_catalogue::{
+    ManagedCatalogueError, accepted_ubuntu_catalogue, detect_managed_target,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{

@@ -1,9 +1,13 @@
-# P06 Ubuntu x64 artifact candidate — not qualified
+# P06 Ubuntu x64 artifact review and hosted qualification
 
 Date: 2026-09-13. Target for investigation: Ubuntu 24.04 x64 on a disposable
 hosted runner. This is a read-only source and archive-inventory review, not an
 accepted managed-install catalogue, compatibility result or P06 E2E checkpoint.
 No downloaded executable was run on the maintainer desktop.
+On 2026-09-21 the exact set below was accepted into reviewed source for
+**read-only Ubuntu 24.04 x86-64 plans**. That later decision does not turn the
+hosted candidate experiment into a production installer, real-speech or P06
+E2E test.
 
 | Component | Direct publisher origin | Bytes | Independently calculated SHA-256 |
 | --- | --- | ---: | --- |

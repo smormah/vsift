@@ -128,3 +128,15 @@ context on the sequential model-registration test will identify which write
 fails if [issue #66](https://github.com/smormah/vsift/issues/66) recurs.
 This classification does not identify the historical lock holder or close
 that intermittent finding.
+
+## 2026-09-21 implementation note: reviewed source and read-only plans
+
+The first complete managed source set is now fixed in reviewed source for Ubuntu
+24.04 x86-64 only. `setup plan` displays exact direct-origin artifact and layout
+details, a time-bounded catalogue revision, licence and source references,
+trust limits, and a deterministic digest bound to current observations.
+`catalogue_accepted_install_pending` explicitly means the source is accepted
+for reviewable planning while `setup install` remains unavailable. Other
+targets, expired or invalid catalogue entries have typed unavailable outcomes
+and manual/BYO guidance. This does not complete provider/model compatibility,
+installation, D-01..D-10 or P06 E2E evidence.

@@ -2,6 +2,23 @@
 
 ## Active
 
+2026-09-22: P06 catalogue/plan implementation `b74de4d` is awaiting protected
+PR checks and merge evidence. Reviewed source now pins exactly one complete
+managed candidate set for Ubuntu 24.04 x86-64: BtbN month-end FFmpeg/FFprobe,
+whisper.cpp v1.9.2 CLI and the pinned multilingual `base` model. The catalogue
+checks its own direct-origin routes, hashes, archive bounds, selected files,
+link headers and regular alias inventory; a malformed entry fails closed.
+`setup plan` is read-only and shows only needed actions, exact files and
+publisher/licence/source/trust-limit disclosures. Its deterministic digest
+binds target, catalogue revision, present probe and configured-model/selection
+observations, and all actions; unsupported, expired or invalid entries yield no
+digest. New plans stop on 2028-08-01. Full local fmt, strict Clippy, tests,
+warning-denied rustdoc, governance and dependency policy passed (existing
+duplicate-version warnings only). `setup install` still returns
+`COMMAND_NOT_IMPLEMENTED`; production compatibility smoke, accepted-plan
+revalidation, public lifecycle, bounded GC, power-loss and D-01..D-10/P06 E2E
+remain open. P06 stays planned and issue #66 stays open.
+
 2026-09-21: Protected [PR #105](https://github.com/smormah/vsift/pull/105)
 merged P06 managed-version lifecycle implementation `ec6538b` and memory record
 `fc3b51a` as `39211bd` from protected main `b32c82b`. It adds a guarded
@@ -478,6 +495,14 @@ remaining OS/storage crash gate are recorded. That gate is P10/P11/P14 work and 
 not invalidate P03's completed ephemeral profile.
 
 ## Complete
+
+### 2026-09-22 — P06 reviewed catalogue and plan increment
+
+Implementation `b74de4d` accepts an exact Ubuntu 24.04 x86-64 source set for
+read-only `setup plan`, with deterministic digest, expiry, complete installed
+inventory and source/notice/trust-limit disclosure. Full local gates passed;
+protected merge evidence remains to be recorded. This does not complete P06 or
+make `setup install` available.
 
 ### 2026-09-13 — P05 lock follow-up and P06 retained-source review increments
 

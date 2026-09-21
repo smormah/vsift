@@ -9,16 +9,23 @@ mod output;
 mod session;
 mod setup;
 
-use std::{ffi::OsString, io, io::Write, process::ExitCode};
+use std::{
+    ffi::OsString,
+    io,
+    io::Write,
+    process::ExitCode,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{BundleCommand, Cli, Command, EventFormat, SetupCommand};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{OperationResponse, OutputMode, OutputWriter, ProcessExit, TerminalEventResponse};
+use vsift_application::SetupSelectionState;
 use vsift_domain::FailureCode;
 use vsift_infrastructure::{
     ExplicitProbePaths, ProcessDependencyProbe, UserDependencyConfigError,
-    UserDependencyConfigStore,
+    UserDependencyConfigStore, accepted_ubuntu_catalogue, detect_managed_target,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -176,9 +183,19 @@ where
                         );
                     }
                 };
-                let configured = match UserDependencyConfigStore::default_location()
-                    .and_then(|store| store.read())
-                {
+                let store = match UserDependencyConfigStore::default_location() {
+                    Ok(store) => store,
+                    Err(error) => {
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            "setup.plan",
+                            setup_config_failure(error),
+                            None,
+                        );
+                    }
+                };
+                let configured = match store.read() {
                     Ok(configured) => configured,
                     Err(error) => {
                         return write_failure(
@@ -190,9 +207,67 @@ where
                         );
                     }
                 };
+                let configured_model = match store.read_model() {
+                    Ok(model) => model,
+                    Err(error) => {
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            "setup.plan",
+                            setup_config_failure(error),
+                            None,
+                        );
+                    }
+                };
+                let now_unix_seconds = match SystemTime::now().duration_since(UNIX_EPOCH) {
+                    Ok(duration) => duration.as_secs(),
+                    Err(_) => {
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            "setup.plan",
+                            FailureCode::Internal,
+                            None,
+                        );
+                    }
+                };
+                let Ok(catalogue) = accepted_ubuntu_catalogue() else {
+                    return write_failure(
+                        &mut writer,
+                        mode,
+                        "setup.plan",
+                        FailureCode::Internal,
+                        None,
+                    );
+                };
+                let selections = SetupSelectionState {
+                    ffmpeg: configured
+                        .ffmpeg
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned()),
+                    ffprobe: configured
+                        .ffprobe
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned()),
+                    whisper: configured
+                        .whisper
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned()),
+                    model: configured_model
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned()),
+                };
                 let probe =
                     ProcessDependencyProbe::with_explicit_paths(config.probe_timeout, configured);
-                let result = setup::plan_unqualified(probe, config.profile).await;
+                let result = setup::plan(
+                    probe,
+                    config.profile,
+                    detect_managed_target(),
+                    selections,
+                    now_unix_seconds,
+                    Some(catalogue),
+                )
+                .await;
                 write_session_result(&mut writer, mode, "setup.plan", result)
             }
             None => write_setup_help(&mut writer),
