@@ -2,6 +2,22 @@
 
 ## Current checkpoint
 
+2026-09-22: P06 reviewed Ubuntu 24.04 x86-64 catalogue and deterministic
+read-only planning are implemented on branch `codex/p06-catalogue-plan-authority`
+from protected predecessor `57cf7c2` in `b74de4d`. The three direct-origin
+entries pin the retained FFmpeg/FFprobe archive, whisper.cpp CLI and multilingual
+`base` model with complete selected/runtime inventory, source/notice/trust-limit
+disclosures and a 2028-08-01 stop-new-plans cutoff. `setup plan` emits only
+missing-component actions and a SHA-256 digest bound to target, catalogue,
+probe/model/selection observations and exact actions. Unsupported, expired and
+invalid catalogues provide typed no-action/no-digest manual guidance. Existing
+tools and model files remain probe/presence-only. `setup install` is still
+reserved; this is catalogue/plan authority, not a managed-install completion.
+Full local fmt, strict Clippy, workspace tests, warning-denied rustdoc and
+governance passed; `cargo deny check` passed with existing duplicate-version
+warnings. Protected PR and merge evidence remain to be recorded. P06 stays
+planned, and issue #66 remains open.
+
 2026-09-21: Protected [PR #105](https://github.com/smormah/vsift/pull/105)
 merged P06 managed-version lifecycle implementation `ec6538b` and progress
 record `fc3b51a` as `39211bd` from protected predecessor `b32c82b`. It adds
@@ -469,31 +485,37 @@ eligible packet but remains planned.
 
 ## Pending
 
-- P06 source gate (2026-09-12): select and review immutable per-target
-  FFmpeg/FFprobe, whisper.cpp CLI and multilingual `base` model artifacts before
-  managed download/activation. The current source matrix cannot justify a
-  three-target installer. Qualify at least one complete managed-install target;
-  test typed manual/BYO fallback, permission denial and off-PATH selection on
-  every named R0 target. See `docs/planning/p06-provisioning-source-review.md`.
-  P06 remains planned; D-01..D-10, its E2E stage, ledger completion and issue #9
-  closure remain pending.
+- P06 next critical path after `b74de4d`: wire install to the reviewed catalogue
+  and fresh accepted-plan digest under the installation guard; run exact target
+  compatibility smoke before atomic publication. Implement public
+  install/repair/list/rollback/remove, bounded owned-stage/tombstone/version
+  cleanup, power-loss and interruption qualification, and D-01..D-10/P06 E2E.
+  Do not infer model/provider compatibility from a version probe or model file
+  presence. Keep other targets on typed manual/BYO guidance.
+- P06 target gate: the exact Ubuntu 24.04 x86-64 catalogue is accepted for
+  read-only plans, but no complete managed-install target is yet qualified.
+  The source matrix does not justify a three-target installer. Complete the
+  Ubuntu installer and test typed manual/BYO fallback, permission denial and
+  off-PATH selection on every named R0 target. See
+  `docs/planning/p06-provisioning-source-review.md`. P06 remains planned;
+  D-01..D-10, E2E, ledger completion and issue #9 closure remain pending.
 - P06 candidate smoke follow-up: measure peak resources and real-speech
   transcription on an owned fixture once P07 supplies speech, then qualify
-  Windows 11 desktop separately. Tone-only runner evidence does not accept a
-  managed catalogue; legal/notices and full installer/E2E gates remain open.
+  Windows 11 desktop separately. Tone-only runner evidence accepted only a
+  disclosed source catalogue for planning; it does not qualify the complete
+  installer or E2E gate. No legal-clearance claim is made.
 - P06 source availability: the reviewed 2026-09-09 BtbN FFmpeg daily asset is
   subject to its 14-build retention policy; its successful hosted smoke does
-  not make it a durable installer source. Select a retained replacement or
-  governed artifact strategy, with legal/source/notice review, before activation.
-  A 2026-08-31 month-end alternative (PR #57, `b7e88af`) passed its hosted
-  tone-audio compatibility smoke, but has only two-year publisher retention;
-  do not promote it to a trust anchor before the remaining gates.
+  not make it a durable installer source. The 2026-08-31 month-end alternative
+  (PR #57, `b7e88af`) is now the reviewed planning anchor with a 2028-08-01
+  stop-new-plans cutoff. Replace or revoke it through a reviewed catalogue
+  revision before retention expiry; never resolve live `latest`.
 - P06 next increments: validate real-speech behavior, resource use and model
-  selection rather than accepting tone-audio inference alone; add persistent explicit
-  BYO selection through the reserved configure boundary; qualify source catalog,
-  then implement explicit plan/install/repair/remove with atomic rollback and
-  native three-OS failure/E2E evidence. Do not mark probe-only success as ASR
-  readiness or let an agent infer installation approval.
+  selection rather than accepting tone-audio inference alone; compose accepted
+  plans with direct download, exact layout and smoke before activation; then
+  implement public repair/list/rollback/remove and native three-OS failure/E2E
+  evidence. Do not mark probe-only success as ASR readiness or let an agent
+  infer installation approval.
 - FS-01: OS/storage crash qualification is missing. The default cap-std NTFS
   read-only directory handle fails synchronization; a safe writable-directory
   handle succeeds. Do not misreport this as Windows durability being impossible.
@@ -528,6 +550,13 @@ eligible packet but remains planned.
 
 ## Completed
 
+- 2026-09-22: P06 reviewed-source and plan increment `b74de4d` pins the
+  Ubuntu 24.04 x86-64 direct-origin catalogue, exact archive/runtime inventory,
+  expiry and disclosures, and emits state-bound deterministic read-only plans.
+  Unsupported, expired and invalid catalogue states have no managed actions or
+  acceptance digest. Full local fmt, strict Clippy, workspace tests, rustdoc,
+  governance and dependency policy passed. Protected merge evidence pending;
+  P06 itself remains planned.
 - 2026-09-13: P05 registration-lock follow-up #51 merged through protected
   PR #58 as `9f86ff1`, with explicit root-lock release, duplicate-handle
   regression, three-OS Quality and
