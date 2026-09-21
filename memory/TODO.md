@@ -2,6 +2,18 @@
 
 ## Current checkpoint
 
+2026-09-22: P06 accepted-source staging bridge implementation `e4ba5bc`
+rechecks every planned Ubuntu action against the complete reviewed literal
+before exposing direct-publisher transfer authority. The accepted entry now
+drives bounded archive staging and regular-file runtime assembly for the
+FFmpeg and whisper.cpp archives; whole-artifact and selected-payload identity
+must match before each step. The pinned-archive opt-in tests exercise this
+bridge, and full local fmt, strict Clippy, workspace tests, warning-denied
+rustdoc and governance passed. Protected CI and fresh hosted real-archive
+evidence remain pending. The raw model staging path, compatibility smoke,
+accepted-plan revalidation, public install/lifecycle, bounded cleanup,
+power-loss and D-01..D-10/P06 E2E remain open. P06 stays planned.
+
 2026-09-22: P06 reviewed Ubuntu 24.04 x86-64 catalogue and deterministic
 read-only planning are implemented on branch `codex/p06-catalogue-plan-authority`
 from protected predecessor `57cf7c2` in `b74de4d`. The three direct-origin
