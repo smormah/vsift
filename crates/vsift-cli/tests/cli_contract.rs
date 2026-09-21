@@ -367,8 +367,7 @@ fn corrupt_user_config_fails_closed_without_an_ambient_probe()
 }
 
 #[test]
-fn unqualified_setup_plan_checks_first_and_never_offers_an_install()
--> Result<(), Box<dyn std::error::Error>> {
+fn reviewed_setup_plan_checks_first_and_never_installs() -> Result<(), Box<dyn std::error::Error>> {
     let base = isolated_config_base()?;
     let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
         .args(["setup", "plan", "--profile", "desktop", "--json"])
@@ -379,13 +378,7 @@ fn unqualified_setup_plan_checks_first_and_never_offers_an_install()
     assert_eq!(value["command"], "setup.plan");
     assert_eq!(value["status"], "complete");
     assert_eq!(value["data"]["readiness"], "blocked");
-    assert_eq!(value["data"]["managed_install"], "unavailable_unqualified");
-    assert_eq!(value["data"]["plan_digest"], Value::Null);
-    assert_eq!(value["data"]["actions"], serde_json::json!([]));
-    assert_eq!(
-        value["data"]["dependencies"][0]["disposition"],
-        "manual_selection_required"
-    );
+    assert_planning_target(&value["data"], 3);
     assert_eq!(
         value["data"]["dependencies"][0]["required_authority"],
         "user"
@@ -439,14 +432,13 @@ fn setup_plan_uses_configured_off_path_tool_but_does_not_call_it_qualified()
         value["data"]["dependencies"][2]["disposition"],
         "existing_executable_probe_only"
     );
-    assert_eq!(value["data"]["managed_install"], "unavailable_unqualified");
-    assert_eq!(value["data"]["actions"], serde_json::json!([]));
+    assert_planning_target(&value["data"], 2);
     std::fs::remove_dir_all(&base)?;
     Ok(())
 }
 
 #[test]
-fn headless_unqualified_plan_jsonl_has_one_terminal_and_no_install_authority()
+fn headless_plan_jsonl_has_one_terminal_and_no_install_authority()
 -> Result<(), Box<dyn std::error::Error>> {
     let base = isolated_config_base()?;
     let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
@@ -460,16 +452,34 @@ fn headless_unqualified_plan_jsonl_has_one_terminal_and_no_install_authority()
     let event: Value = serde_json::from_str(lines[0])?;
     assert_eq!(event["event"], "terminal");
     assert_eq!(event["command"], "setup.plan");
-    assert_eq!(
-        event["result"]["data"]["managed_install"],
-        "unavailable_unqualified"
-    );
-    assert_eq!(event["result"]["data"]["plan_digest"], Value::Null);
-    assert_eq!(event["result"]["data"]["actions"], serde_json::json!([]));
+    assert_planning_target(&event["result"]["data"], 3);
     if base.exists() {
         std::fs::remove_dir_all(&base)?;
     }
     Ok(())
+}
+
+fn assert_planning_target(data: &Value, expected_ubuntu_actions: usize) {
+    if data["target"] == "ubuntu_24_04_x86_64" {
+        assert_eq!(
+            data["managed_install"],
+            "catalogue_accepted_install_pending"
+        );
+        assert_eq!(
+            data["actions"].as_array().map(Vec::len),
+            Some(expected_ubuntu_actions)
+        );
+        assert_eq!(data["plan_digest"].as_str().map(str::len), Some(64));
+        assert_eq!(data["dependencies"][0]["disposition"], "managed_install");
+    } else {
+        assert_eq!(data["managed_install"], "unavailable_target");
+        assert_eq!(data["plan_digest"], Value::Null);
+        assert_eq!(data["actions"], serde_json::json!([]));
+        assert_eq!(
+            data["dependencies"][0]["disposition"],
+            "manual_selection_required"
+        );
+    }
 }
 
 #[test]

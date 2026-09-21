@@ -10,6 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+sha2.workspace = true
 vsift-domain.workspace = true
 
 [dev-dependencies]
@@ -17,4 +18,3 @@ tokio.workspace = true
 
 [lints]
 workspace = true
-

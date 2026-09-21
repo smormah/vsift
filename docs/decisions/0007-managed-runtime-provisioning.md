@@ -280,3 +280,15 @@ compatibility decision, accepted plan, public rollback/uninstall command or boun
 garbage-collection policy invokes them yet. Power-loss durability and an
 independent process-crash-at-every-deletion-boundary campaign remain open, so
 managed installation remains unavailable.
+
+## 2026-09-21 implementation note: catalogue and plan
+
+A single Ubuntu 24.04 x86-64 catalogue revision now pins direct publisher
+artifacts, selected payload/runtime inventories, exact integrity and bounded
+archive metadata, the 2028-08-01 stop-new-plans date, and notice/source
+disclosures. Application planning binds that reviewed data and current probe,
+model presence and configured selections into a canonical SHA-256 digest.
+Unsupported, expired or invalid catalogue states produce no managed action or
+digest. This supplies reviewable plan authority but does not permit activation:
+the CLI still reserves `setup install` until compatibility and accepted-plan
+revalidation are wired into the transaction.

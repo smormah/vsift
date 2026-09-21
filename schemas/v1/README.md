@@ -3,8 +3,11 @@
 These files are the machine-readable public v1 boundary:
 
 - `setup-check-response.schema.json` — backward-compatible setup diagnosis;
-- `setup-plan-unqualified.schema.json` — check-first read-only setup plan while
-  managed installation has no qualified build, with no executable actions;
+- `setup-plan.schema.json` — current read-only reviewed-catalogue plan and
+  typed managed-unavailable states; a digest never authorizes installation by
+  itself;
+- `setup-plan-unqualified.schema.json` — historical P06 check-first response
+  before catalogue acceptance, retained for v1 compatibility evidence;
 - `operation-response.schema.json` — terminal result for new operations;
 - `terminal-event.schema.json` — JSONL terminal wrapper (validate its `result` with
   `operation-response.schema.json` too);

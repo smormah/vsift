@@ -1,8 +1,51 @@
 # P06 provisioning source review — 2026-09-12
 
-Status: **design/availability gate open; P06 remains planned**. This is a source
-assessment, not installation or D-01..D-10 implementation evidence. Reviewed
+Status: **Ubuntu 24.04 x86-64 catalogue accepted for read-only plans on
+2026-09-21; managed installation and complete P06 qualification remain open**.
+The sections below record the source investigation as it stood at their dated
+checkpoints. They are not installation or D-01..D-10 implementation evidence. Reviewed
 protected-main predecessor: `777bc3e56788d43cd9a647dba54c287390c2998d`.
+
+## 2026-09-21 reviewed catalogue and plan authority
+
+The application now receives a typed reviewed catalogue from infrastructure
+source for exactly Ubuntu 24.04 x86-64. The three entries pin the
+[BtbN month-end FFmpeg/FFprobe build](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-31-13-27),
+[whisper.cpp v1.9.2 Ubuntu CLI](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.2)
+and [multilingual `base` model revision](https://huggingface.co/ggerganov/whisper.cpp/tree/80da2d8bfee42b0e836fc3a9890373e5defc00a6).
+Their exact direct publisher URLs, whole-artifact and installed-file sizes and
+SHA-256, archive bounds, selected paths, reviewed link headers, regular alias
+copies and expected executable modes live in
+`crates/vsift-infrastructure/src/managed_catalogue.rs`. Independent inventory
+and hosted F01/model-backed observations are in the
+[Ubuntu candidate record](p06-ubuntu-artifact-candidate.md). The catalogue
+stops issuing new plans on **2028-08-01T00:00:00Z**, before the publisher's
+month-end retention window ends. Any replacement requires reviewed source and
+a new revision. An unsafe or withdrawn entry is revoked by removing or changing
+it in reviewed source; installation must recompute the plan against current
+source and reject an old digest. There is no live `latest` trust anchor or
+VSift mirror.
+
+The plan discloses the FFmpeg archive's verified LGPL version 3 text, the
+publisher's static-build label, its pinned build-repository revision and the
+limits of the compiled dependency/source inventory. The other entries disclose
+their [MIT source notice](https://github.com/ggml-org/whisper.cpp/blob/v1.9.2/LICENSE)
+and [pinned model card](https://huggingface.co/ggerganov/whisper.cpp/blob/80da2d8bfee42b0e836fc3a9890373e5defc00a6/README.md).
+This is notice and provenance disclosure for a user-initiated direct download,
+not a legal-clearance conclusion. The code does not redistribute those bytes.
+Hosted tone-audio smoke is evidence of operations on one Ubuntu runner, not
+real-speech accuracy, arbitrary desktop compatibility or production install.
+
+`setup plan` now binds profile, exact target, catalogue revision, current
+executable probe states and configured selections, model presence, and every
+artifact/layout/disclosure field into a canonical SHA-256 digest. It emits
+actions only for missing capabilities and a typed unavailable reason with no
+digest on other targets, invalid entries or after expiry. Existing tools and
+configured model files remain probe/presence-only. A plan is not authority to
+mutate: `setup install` remains reserved until it can revalidate current state,
+the accepted digest, compatibility and the complete installer transaction.
+P06 stays planned; D-01..D-10, bounded cleanup, power-loss qualification and
+the P06 E2E checkpoint remain open.
 
 ## Finding
 

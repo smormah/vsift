@@ -4,9 +4,13 @@ use std::io::Write;
 
 use serde::Serialize;
 use vsift_application::{
-    DependencyProbe, DiagnoseRuntime, RuntimeDiagnosis, UnqualifiedPlanAction, UnqualifiedSetupPlan,
+    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, ManagedSetupAction,
+    RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    SetupSelectionState, plan_managed_setup,
 };
-use vsift_domain::{DependencyState, FailureCode, RuntimeDependency, RuntimeReadiness};
+use vsift_domain::{
+    DependencyState, FailureCode, ManagedTarget, RuntimeDependency, RuntimeReadiness,
+};
 use vsift_infrastructure::{ExplicitProbePaths, UserDependencyConfigStore};
 
 use crate::{
@@ -53,19 +57,22 @@ where
 }
 
 #[derive(Serialize)]
-struct UnqualifiedPlanResponse {
+struct SetupPlanResponse {
     profile: &'static str,
     readiness: &'static str,
     verification_scope: &'static str,
-    local_asr_model: &'static str,
+    target: &'static str,
+    local_asr_model: SetupPlanModelResponse,
     managed_install: &'static str,
-    plan_digest: Option<&'static str>,
-    actions: Vec<&'static str>,
-    dependencies: Vec<UnqualifiedPlanDependencyResponse>,
+    catalogue_revision: Option<String>,
+    stop_new_plans_at: Option<String>,
+    plan_digest: Option<String>,
+    actions: Vec<SetupPlanActionResponse>,
+    dependencies: Vec<SetupPlanDependencyResponse>,
 }
 
 #[derive(Serialize)]
-struct UnqualifiedPlanDependencyResponse {
+struct SetupPlanDependencyResponse {
     dependency: &'static str,
     status: &'static str,
     disposition: &'static str,
@@ -73,52 +80,241 @@ struct UnqualifiedPlanDependencyResponse {
     next_step: &'static str,
 }
 
-/// Inspects configured/PATH executables and returns only manual guidance while
-/// no immutable build has passed catalogue qualification.
-pub(crate) async fn plan_unqualified<P: DependencyProbe>(
+#[derive(Serialize)]
+struct SetupPlanModelResponse {
+    status: &'static str,
+    disposition: &'static str,
+    required_authority: Option<&'static str>,
+    next_step: &'static str,
+}
+
+#[derive(Serialize)]
+struct SetupPlanActionResponse {
+    id: String,
+    component: &'static str,
+    version: String,
+    publisher: String,
+    source_url: String,
+    bytes: u64,
+    sha256: String,
+    format: &'static str,
+    archive_limits: Option<SetupArchiveLimitsResponse>,
+    selected_files: Vec<SetupArchiveSelectionResponse>,
+    archive_links: Vec<SetupArchiveLinkResponse>,
+    runtime_copies: Vec<SetupRuntimeCopyResponse>,
+    licence: String,
+    notice_url: String,
+    source_code_url: String,
+    trust_limit: String,
+    licence_scope: &'static str,
+    destination: &'static str,
+    permissions: &'static str,
+    change: &'static str,
+    required_authority: &'static str,
+    files: Vec<SetupPlanFileResponse>,
+}
+
+#[derive(Serialize)]
+struct SetupPlanFileResponse {
+    name: String,
+    bytes: u64,
+    sha256: String,
+    mode: &'static str,
+}
+
+#[derive(Serialize)]
+struct SetupArchiveLimitsResponse {
+    max_stream_bytes: u64,
+    entries: usize,
+    expanded_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct SetupArchiveSelectionResponse {
+    archive_path: String,
+    runtime_name: String,
+    bytes: u64,
+    sha256: String,
+}
+
+#[derive(Serialize)]
+struct SetupArchiveLinkResponse {
+    archive_path: String,
+    target: String,
+}
+
+#[derive(Serialize)]
+struct SetupRuntimeCopyResponse {
+    name: String,
+    source_selected: String,
+}
+
+/// Inspects current selections and builds a deterministic reviewed managed plan.
+pub(crate) async fn plan<P: DependencyProbe>(
     probe: P,
     profile: ExecutionProfile,
+    target: ManagedTarget,
+    selections: SetupSelectionState,
+    now_unix_seconds: u64,
+    catalogue: Option<AcceptedManagedCatalogue>,
 ) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
-    let plan = UnqualifiedSetupPlan::from_diagnosis(DiagnoseRuntime::new(probe).execute().await);
+    let plan = plan_managed_setup(
+        match profile {
+            ExecutionProfile::Desktop => SetupProfile::Desktop,
+            ExecutionProfile::Worker => SetupProfile::Worker,
+        },
+        DiagnoseRuntime::new(probe).execute().await,
+        target,
+        selections,
+        now_unix_seconds,
+        catalogue,
+    );
     let dependencies = plan
         .dependencies
         .iter()
-        .map(|(status, action)| {
-            let (disposition, required_authority, next_step) = match action {
-                UnqualifiedPlanAction::ProbeOnly => (
-                    "existing_executable_probe_only",
+        .map(|(status, disposition)| {
+            let (required_authority, next_step) = match disposition {
+                SetupDependencyDisposition::ExistingProbeOnly => (
                     None,
                     "Keep this executable selected and verify provider compatibility before use.",
                 ),
-                UnqualifiedPlanAction::ManualSelection => (
-                    "manual_selection_required",
+                SetupDependencyDisposition::ManagedInstall => (
+                    Some("user"),
+                    "Review the exact managed action and its digest. Setup install remains unavailable until the complete installer qualifies.",
+                ),
+                SetupDependencyDisposition::ManualSelection => (
                     Some("user"),
                     manual_plan_step(status.dependency),
                 ),
             };
-            UnqualifiedPlanDependencyResponse {
+            SetupPlanDependencyResponse {
                 dependency: status.dependency.identifier(),
                 status: status.state.identifier(),
-                disposition,
+                disposition: disposition.identifier(),
                 required_authority,
                 next_step,
             }
         })
         .collect();
+    let model = model_response(plan.model);
+    let actions = plan.actions.iter().map(action_response).collect();
     OperationResponse::complete(
         "setup.plan",
-        &UnqualifiedPlanResponse {
+        &SetupPlanResponse {
             profile: profile.identifier(),
             readiness: plan.readiness.identifier(),
-            verification_scope: "executable_probe_only",
-            local_asr_model: "not_checked",
-            managed_install: "unavailable_unqualified",
-            plan_digest: None,
-            actions: Vec::new(),
+            verification_scope: "executable_probe_and_reviewed_catalogue",
+            target: plan.target.identifier(),
+            local_asr_model: model,
+            managed_install: plan.availability.identifier(),
+            catalogue_revision: plan.catalogue_revision,
+            stop_new_plans_at: plan.stop_new_plans_date,
+            plan_digest: plan.digest,
+            actions,
             dependencies,
         },
     )
     .map_err(|_| FailureCode::Internal)
+}
+
+fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse {
+    let (status, required_authority, next_step) = match disposition {
+        SetupModelDisposition::ConfiguredProbeOnly => (
+            "configured_present_unverified",
+            None,
+            "Keep the configured model selected and validate it with provider preflight before use.",
+        ),
+        SetupModelDisposition::ManagedInstall => (
+            "missing",
+            Some("user"),
+            "Review the exact managed model action and its digest. Setup install remains unavailable until the complete installer qualifies.",
+        ),
+        SetupModelDisposition::ManualSelection => (
+            "missing",
+            Some("user"),
+            "For local ASR, configure trusted model weights with setup configure-model --file <absolute-path>. A supplied transcript can skip local ASR.",
+        ),
+    };
+    SetupPlanModelResponse {
+        status,
+        disposition: disposition.identifier(),
+        required_authority,
+        next_step,
+    }
+}
+
+fn action_response(action: &ManagedSetupAction) -> SetupPlanActionResponse {
+    SetupPlanActionResponse {
+        id: action.id.clone(),
+        component: action.artifact.component.identifier(),
+        version: action.artifact.version.clone(),
+        publisher: action.artifact.publisher.clone(),
+        source_url: action.artifact.source_url.clone(),
+        bytes: action.artifact.integrity.bytes(),
+        sha256: action.artifact.integrity.sha256_hex(),
+        format: action.artifact.format.identifier(),
+        archive_limits: action
+            .artifact
+            .archive_limits
+            .map(|limits| SetupArchiveLimitsResponse {
+                max_stream_bytes: limits.max_stream_bytes,
+                entries: limits.entries,
+                expanded_bytes: limits.expanded_bytes,
+            }),
+        selected_files: action
+            .artifact
+            .selected_files
+            .iter()
+            .map(|file| SetupArchiveSelectionResponse {
+                archive_path: file.archive_path.clone(),
+                runtime_name: file.runtime_name.clone(),
+                bytes: file.integrity.bytes(),
+                sha256: file.integrity.sha256_hex(),
+            })
+            .collect(),
+        archive_links: action
+            .artifact
+            .archive_links
+            .iter()
+            .map(|link| SetupArchiveLinkResponse {
+                archive_path: link.archive_path.clone(),
+                target: link.target.clone(),
+            })
+            .collect(),
+        runtime_copies: action
+            .artifact
+            .runtime_copies
+            .iter()
+            .map(|copy| SetupRuntimeCopyResponse {
+                name: copy.name.clone(),
+                source_selected: copy.source_selected.clone(),
+            })
+            .collect(),
+        licence: action.artifact.licence.clone(),
+        notice_url: action.artifact.notice_url.clone(),
+        source_code_url: action.artifact.source_code_url.clone(),
+        trust_limit: action.artifact.trust_limit.clone(),
+        licence_scope: "disclosure_not_legal_clearance",
+        destination: "private_per_user_managed_runtime",
+        permissions: "private_user_only",
+        change: "planned_download_verify_extract_smoke_activate",
+        required_authority: "user",
+        files: action
+            .artifact
+            .files
+            .iter()
+            .map(|file| SetupPlanFileResponse {
+                name: file.name.clone(),
+                bytes: file.integrity.bytes(),
+                sha256: file.integrity.sha256_hex(),
+                mode: if file.executable {
+                    "owner_executable"
+                } else {
+                    "owner_read_write"
+                },
+            })
+            .collect(),
+    }
 }
 
 const fn manual_plan_step(dependency: RuntimeDependency) -> &'static str {
@@ -257,11 +453,11 @@ fn human_state(state: &DependencyState, explicit: bool) -> (&'static str, String
 mod tests {
     use std::future::ready;
 
-    use vsift_application::DependencyProbe;
-    use vsift_domain::{DependencyState, DependencyStatus, RuntimeDependency};
-    use vsift_infrastructure::ExplicitProbePaths;
+    use vsift_application::{DependencyProbe, SetupSelectionState};
+    use vsift_domain::{DependencyState, DependencyStatus, ManagedTarget, RuntimeDependency};
+    use vsift_infrastructure::{ExplicitProbePaths, accepted_ubuntu_catalogue};
 
-    use super::run_setup_check;
+    use super::{plan, run_setup_check};
     use crate::{
         command::ExecutionProfile,
         output::{OutputMode, OutputWriter, ProcessExit},
@@ -382,6 +578,87 @@ mod tests {
         assert!(String::from_utf8_lossy(&stdout).contains("Profile: desktop"));
         assert!(!stdout.contains(&0x1b));
         assert!(!stdout.contains(&0x07));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn accepted_ubuntu_plan_is_reviewable_and_matches_public_schema()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let response = plan(
+            FixedProbe {
+                state: DependencyState::Missing,
+            },
+            ExecutionProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await
+        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
+        let value = serde_json::to_value(response)?;
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../../schemas/v1/setup-plan.schema.json"))?;
+        jsonschema::validator_for(&schema)?
+            .validate(&value)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let data = &value["data"];
+        assert_eq!(
+            data["managed_install"],
+            "catalogue_accepted_install_pending"
+        );
+        assert_eq!(data["target"], "ubuntu_24_04_x86_64");
+        assert_eq!(data["actions"].as_array().map(Vec::len), Some(3));
+        assert_eq!(
+            data["actions"][0]["files"].as_array().map(Vec::len),
+            Some(3)
+        );
+        assert_eq!(
+            data["actions"][1]["files"].as_array().map(Vec::len),
+            Some(12)
+        );
+        assert_eq!(
+            data["actions"][1]["archive_links"].as_array().map(Vec::len),
+            Some(8)
+        );
+        assert_eq!(
+            data["actions"][1]["runtime_copies"]
+                .as_array()
+                .map(Vec::len),
+            Some(6)
+        );
+        assert!(
+            data["actions"][2]["source_url"]
+                .as_str()
+                .is_some_and(|url| url.contains("/resolve/80da2d8b"))
+        );
+        assert_eq!(data["plan_digest"].as_str().map(str::len), Some(64));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unaccepted_target_never_offers_managed_actions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let response = plan(
+            FixedProbe {
+                state: DependencyState::Missing,
+            },
+            ExecutionProfile::Worker,
+            ManagedTarget::MacOsArm64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await
+        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
+        let value = serde_json::to_value(response)?;
+        assert_eq!(value["data"]["managed_install"], "unavailable_target");
+        assert!(
+            value["data"]["actions"]
+                .as_array()
+                .is_some_and(Vec::is_empty)
+        );
+        assert!(value["data"]["plan_digest"].is_null());
         Ok(())
     }
 }

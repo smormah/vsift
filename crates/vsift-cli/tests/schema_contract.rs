@@ -40,6 +40,10 @@ fn every_published_example_validates_against_its_schema() -> Result<(), Box<dyn 
             "setup-plan-unqualified.schema.json",
             "examples/setup-plan.unqualified.json",
         ),
+        (
+            "setup-plan.schema.json",
+            "examples/setup-plan.unavailable.json",
+        ),
         ("terminal-event.schema.json", "examples/terminal-event.json"),
         ("config.schema.json", "examples/config.json"),
     ] {
@@ -62,6 +66,10 @@ fn strict_schemas_reject_unknown_fields() -> Result<(), Box<dyn std::error::Erro
         (
             "setup-plan-unqualified.schema.json",
             "examples/setup-plan.unqualified.json",
+        ),
+        (
+            "setup-plan.schema.json",
+            "examples/setup-plan.unavailable.json",
         ),
         ("terminal-event.schema.json", "examples/terminal-event.json"),
         ("config.schema.json", "examples/config.json"),
@@ -145,8 +153,34 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         .env("HOME", &base)
         .output()?;
     let plan_value = serde_json::from_slice::<Value>(&plan.stdout)?;
-    assert_eq!(plan_value, load("examples/setup-plan.unqualified.json")?);
-    validate(&load("setup-plan-unqualified.schema.json")?, &plan_value)?;
+    validate(&load("setup-plan.schema.json")?, &plan_value)?;
+    assert_eq!(
+        plan_value["data"]["verification_scope"],
+        "executable_probe_and_reviewed_catalogue"
+    );
+    assert_eq!(plan_value["data"]["readiness"], "blocked");
+    if plan_value["data"]["target"] == "ubuntu_24_04_x86_64" {
+        assert_eq!(
+            plan_value["data"]["managed_install"],
+            "catalogue_accepted_install_pending"
+        );
+        assert_eq!(
+            plan_value["data"]["actions"].as_array().map(Vec::len),
+            Some(3)
+        );
+        assert_eq!(
+            plan_value["data"]["plan_digest"].as_str().map(str::len),
+            Some(64)
+        );
+    } else {
+        assert_eq!(plan_value["data"]["managed_install"], "unavailable_target");
+        assert!(
+            plan_value["data"]["actions"]
+                .as_array()
+                .is_some_and(Vec::is_empty)
+        );
+        assert!(plan_value["data"]["plan_digest"].is_null());
+    }
     Ok(())
 }
 

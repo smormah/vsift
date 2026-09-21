@@ -17,7 +17,7 @@ workspace; otherwise P05 uses the per-user application cache.
 | `setup check` | Read-only dependency diagnosis | Implemented |
 | `setup configure` | Persist an explicit user-managed executable path without running it | Partial P06 |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
-| `setup plan` | Check-first read-only diagnosis and typed manual disposition; no qualified managed artifact yet | Partial P06 |
+| `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
 | `setup install/repair/list/remove/rollback` | Explicit managed dependency lifecycle, still reserved | P06 |
 | `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
@@ -83,9 +83,7 @@ rights, offline/unqualified target or failed installation, headless calls return
 typed bounded manual remediation and never prompt, elevate or silently retry with
 broader authority. An agent's request to inspect a video does not authorize setup.
 The first P06 increment checks explicit paths or filtered `PATH` and provides
-typed manual/BYO remediation for missing, unhealthy and timed-out tools. No
-managed target is qualified yet, so `managed_install` reports
-`unavailable_unqualified`; it is never an offer to download. The legacy aggregate
+typed manual/BYO remediation for missing, unhealthy and timed-out tools. The legacy aggregate
 `status` reflects only executable probe results. `verification_scope` is
 `executable_probe_only`, and `local_asr_model` is `not_checked`: a successful
 `--version`/`--help` response does **not** prove provider compatibility or a
@@ -93,22 +91,33 @@ working transcription model. Those checks and verified
 managed installation remain P06 work. Provider `detail` is not an instruction
 channel. Paths are not echoed in the response.
 
-The current `setup plan --profile <desktop|worker>` probes configured
-executables or filtered `PATH` like `setup check`, without per-call path options.
-It reports `managed_install: unavailable_unqualified`, `actions: []` and
-`plan_digest: null` because no immutable per-target artifact has cleared the
-catalogue. Missing, unhealthy and timed-out tools receive
-`manual_selection_required` steps to install or locate a trusted tool and
-register an absolute BYO path. Responding executables are
-`existing_executable_probe_only`; this is not a compatibility or model
-assertion. `readiness` is executable-probe-only and `local_asr_model` remains
-`not_checked`. A complete read-only response means planning finished, not that
-installation is authorized or available. `setup install` still returns
-`COMMAND_NOT_IMPLEMENTED` and cannot consume the null digest. No publisher URL,
-licence clearance or version is inferred here.
-The complete frozen response is
-[`setup-plan.unqualified.json`](../../schemas/v1/examples/setup-plan.unqualified.json);
-an abbreviated data example follows.
+`setup plan --profile <desktop|worker>` probes configured executables or filtered
+`PATH` like `setup check`, without per-call path options. On **Ubuntu 24.04
+x86-64** it consults the reviewed, pinned catalogue for the paired FFmpeg and
+FFprobe build, whisper.cpp CLI and multilingual `base` model. It returns only
+actions needed by the current probe and configured-model presence, with exact
+publisher URL, sizes, SHA-256, archive inventory, installed files, licence and
+notice/source links, known trust limits, private destination and permissions.
+Its lowercase SHA-256 `plan_digest` binds profile, exact target, catalogue
+revision, current probe results, configured selections and all planned actions.
+The same unchanged observations produce the same digest. Any changed catalogue
+or observed selection requires a fresh plan and acceptance. No configured paths
+are echoed in the response. The plan is **read-only**: `setup install` still
+returns `COMMAND_NOT_IMPLEMENTED` and cannot apply it yet. The availability
+value `catalogue_accepted_install_pending` states that distinction explicitly.
+
+Windows x86-64, macOS ARM64, other hosts and expired or invalid catalogue
+entries return typed `unavailable_*` status, no actions or digest, and manual
+BYO guidance. Missing, unhealthy and timed-out tools receive
+`manual_selection_required` unless a reviewed managed action applies. A
+responding executable remains `existing_executable_probe_only`; a configured
+model file remains `configured_model_probe_only`. Neither response proves
+provider or model compatibility. `readiness` remains the executable-probe
+aggregate. The model status in a plan is presence-only and is separate from
+the still-unverified `setup check` model status. The new strict response schema
+is [`setup-plan.schema.json`](../../schemas/v1/setup-plan.schema.json); the
+older [`unqualified` example](../../schemas/v1/examples/setup-plan.unqualified.json)
+is retained as historical v1 evidence. An abbreviated current response follows.
 
 ```json
 {
@@ -118,13 +127,16 @@ an abbreviated data example follows.
   "data": {
     "profile": "desktop",
     "readiness": "blocked",
-    "verification_scope": "executable_probe_only",
-    "local_asr_model": "not_checked",
-    "managed_install": "unavailable_unqualified",
-    "plan_digest": null,
-    "actions": [],
+    "verification_scope": "executable_probe_and_reviewed_catalogue",
+    "target": "ubuntu_24_04_x86_64",
+    "local_asr_model": {"status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed model action and its digest. Setup install remains unavailable until the complete installer qualifies."},
+    "managed_install": "catalogue_accepted_install_pending",
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-21-r1",
+    "stop_new_plans_at": "2028-08-01T00:00:00Z",
+    "plan_digest": "<64 lowercase hex characters>",
+    "actions": ["<exact reviewed artifact actions>"],
     "dependencies": [
-      {"dependency": "ffmpeg", "status": "missing", "disposition": "manual_selection_required", "required_authority": "user", "next_step": "Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check."}
+      {"dependency": "ffmpeg", "status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed action and its digest. Setup install remains unavailable until the complete installer qualifies."}
     ]
   }
 }

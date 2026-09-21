@@ -17,6 +17,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 now records an exact Ubuntu 24.04 x86-64 reviewed catalogue for the
+  pinned month-end FFmpeg/FFprobe build, whisper.cpp v1.9.2 CLI and multilingual
+  `base` model. `setup plan` emits only currently needed actions with direct
+  publisher URLs, pinned bytes/hashes, archive and installed-file inventories,
+  licence/source disclosures, trust limits, private destination, and a
+  deterministic state-bound acceptance digest. It stops new plans on 2028-08-01
+  and returns typed managed-unavailable guidance elsewhere. Installation and
+  compatibility preflight remain unavailable; the plan makes no legal-clearance
+  claim.
 - P06 published runtimes now hold shared per-version OS locks. A guarded
   transaction can atomically select an older published version for rollback and
   remove only an unselected version after obtaining its exclusive lock. Selected

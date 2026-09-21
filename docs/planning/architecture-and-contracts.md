@@ -78,7 +78,7 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 | Command | Purpose / constraints |
 | --- | --- |
 | `setup check [--profile ...] [--timeout-seconds ...] [--ffmpeg ABS] [--ffprobe ABS] [--whisper ABS] --json` | Read-only executable probing with per-call explicit BYO selection and typed manual guidance; compatibility, model and managed state remain unverified |
-| `setup plan --profile ... --json` | Plan only missing or explicitly selected qualified components; versions, provenance, sizes, licences, permissions, exact actions and digest; typed manual guidance if no qualified install exists |
+| `setup plan --profile ... --json` | Read-only current executable/model-presence plan. Ubuntu 24.04 x86-64 receives only needed reviewed direct-publisher actions, full provenance/layout/disclosure and a state-bound digest; unsupported/expired targets receive typed manual guidance without actions. Applying the plan is still reserved. |
 | `setup install --plan <file> --accept-plan <digest>` | Apply only that validated plan; revalidate expiry and current state; no silent elevation; typed manual fallback on failure |
 | `setup repair ...` | Produce/apply a repair plan; same installation contract, no recursive arbitrary deletion |
 | `setup list`, `setup remove`, `setup rollback`, `setup configure`, `setup configure-model` | Managed versions and explicit off-PATH user-supplied executable/model registrations; live jobs pin immutable versions |
