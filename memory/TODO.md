@@ -2,9 +2,10 @@
 
 ## Current checkpoint
 
-2026-09-22: P06 reviewed Ubuntu 24.04 x86-64 catalogue and deterministic
-read-only planning are implemented on branch `codex/p06-catalogue-plan-authority`
-from protected predecessor `57cf7c2` in `b74de4d`. The three direct-origin
+2026-09-22: Protected [PR #109](https://github.com/smormah/vsift/pull/109)
+merged P06 reviewed Ubuntu 24.04 x86-64 catalogue and deterministic
+read-only planning implementation `b74de4d` and progress record `9b97ff9`
+as `e533247` from protected predecessor `57cf7c2`. The three direct-origin
 entries pin the retained FFmpeg/FFprobe archive, whisper.cpp CLI and multilingual
 `base` model with complete selected/runtime inventory, source/notice/trust-limit
 disclosures and a 2028-08-01 stop-new-plans cutoff. `setup plan` emits only
@@ -15,8 +16,11 @@ tools and model files remain probe/presence-only. `setup install` is still
 reserved; this is catalogue/plan authority, not a managed-install completion.
 Full local fmt, strict Clippy, workspace tests, warning-denied rustdoc and
 governance passed; `cargo deny check` passed with existing duplicate-version
-warnings. Protected PR and merge evidence remain to be recorded. P06 stays
-planned, and issue #66 remains open.
+warnings. Protected Ubuntu, macOS, Windows, Documentation, Governance and
+strict-worker checks passed in [CI run 35665923881](https://github.com/smormah/vsift/actions/runs/35665923881);
+[dependency/security run 35665923929](https://github.com/smormah/vsift/actions/runs/35665923929)
+and [Rust analysis run 35665923796](https://github.com/smormah/vsift/actions/runs/35665923796)
+passed. P06 stays planned, and issue #66 remains open.
 
 2026-09-21: Protected [PR #105](https://github.com/smormah/vsift/pull/105)
 merged P06 managed-version lifecycle implementation `ec6538b` and progress
