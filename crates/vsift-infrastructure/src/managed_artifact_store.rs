@@ -41,6 +41,8 @@ const VERSIONS: &str = "versions-v1";
 const CURRENT: &str = "current-v1";
 const DIRECTORY_MARKER: &str = "owner-v1";
 const VERSION_MANIFEST: &str = "version-v1";
+const VERSION_USE_LOCK: &str = "use.lock";
+const VERSION_REMOVING: &str = "removing-v1";
 const MAX_MANAGED_KEY_BYTES: usize = 64;
 const MAX_RUNTIME_FILES: usize = 128;
 const MAX_RUNTIME_BYTES: u64 = 1_073_741_824;
@@ -49,6 +51,8 @@ const ROOT_IDENTITY: &[u8] = b"VSIFT-MANAGED-ROOT-v1\n";
 const STAGE_IDENTITY: &[u8] = b"VSIFT-MANAGED-STAGE-v1\n";
 const VERSIONS_IDENTITY: &[u8] = b"VSIFT-MANAGED-VERSIONS-v1\n";
 const CURRENT_IDENTITY: &[u8] = b"VSIFT-MANAGED-CURRENT-v1\n";
+const USE_LOCK_IDENTITY: &[u8] = b"VSIFT-MANAGED-USE-LOCK-v1\n";
+const REMOVING_IDENTITY: &[u8] = b"VSIFT-MANAGED-REMOVING-v1\n";
 
 /// A typed failure to own, stage or discard an unactivated artifact.
 #[derive(Debug)]
@@ -142,6 +146,17 @@ pub enum ManagedRuntimePublicationError {
     Storage(ManagedArtifactError),
     /// The requested immutable identity already names different reviewed bytes.
     VersionConflict,
+}
+
+/// Outcome of a requested managed-version removal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ManagedVersionRemovalOutcome {
+    /// The managed version is absent after removal or an idempotent retry.
+    Removed,
+    /// The version remains the component's selected version.
+    Selected,
+    /// A live published-runtime capability holds the version for use.
+    InUse,
 }
 
 impl fmt::Display for ManagedRuntimePublicationError {
@@ -428,6 +443,155 @@ impl ManagedArtifactStore {
         let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
             .map_err(ManagedRuntimePublicationError::Storage)?;
         open_published_runtime_from_manifest(&self.root_path, &versions, identity.clone(), None)
+    }
+
+    /// Atomically selects an already published immutable version for rollback.
+    ///
+    /// # Errors
+    ///
+    /// Requires the installation guard for this root and rejects a missing,
+    /// removing, changed or unsafe published version.
+    pub fn select_published_runtime(
+        &self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+    ) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+        let root = self
+            .open_existing_root()
+            .map_err(ManagedRuntimePublicationError::Storage)?
+            .ok_or(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ))?;
+        validate_install_guard(guard, &root, &self.root_path)?;
+        let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let current = open_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let published = open_published_runtime_from_manifest(
+            &self.root_path,
+            &versions,
+            identity.clone(),
+            None,
+        )?;
+        let manifest = read_private_regular_file(
+            &published.directory,
+            VERSION_MANIFEST,
+            MAX_VERSION_METADATA_BYTES,
+        )
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+        write_current_pointer(&current, identity, &manifest, None)?;
+        Ok(published)
+    }
+
+    /// Removes one unselected managed version when no live capability uses it.
+    ///
+    /// A tombstone written while holding the exclusive use lock prevents a new
+    /// opener from racing deletion. Only the manifest's exact managed files are
+    /// removed; unexpected content fails closed.
+    ///
+    /// # Errors
+    ///
+    /// Requires the installation guard for this root and rejects corrupt,
+    /// linked or otherwise unsafe managed storage.
+    pub fn remove_published_runtime(
+        &self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+    ) -> Result<ManagedVersionRemovalOutcome, ManagedRuntimePublicationError> {
+        self.remove_published_runtime_at_boundary(guard, identity, None)
+    }
+
+    fn remove_published_runtime_at_boundary(
+        &self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+        fault: Option<ManagedRemovalBoundary>,
+    ) -> Result<ManagedVersionRemovalOutcome, ManagedRuntimePublicationError> {
+        let root = self
+            .open_existing_root()
+            .map_err(ManagedRuntimePublicationError::Storage)?
+            .ok_or(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ))?;
+        validate_install_guard(guard, &root, &self.root_path)?;
+        let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let current = open_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let current_name = identity.current_name();
+        if current
+            .try_exists(&current_name)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
+            && read_current_pointer(&current, &current_name)?.identity == *identity
+        {
+            return Ok(ManagedVersionRemovalOutcome::Selected);
+        }
+
+        let version_name = identity.version_directory_name();
+        match versions.symlink_metadata(&version_name) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(ManagedVersionRemovalOutcome::Removed);
+            }
+            Err(_) => {
+                return Err(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::Io,
+                ));
+            }
+        }
+        let directory = versions.open_dir_nofollow(&version_name).map_err(|_| {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
+        })?;
+        validate_private_root(
+            &self.root_path.join(VERSIONS).join(&version_name),
+            &directory,
+        )
+        .map_err(map_private_error)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+        if finish_manifestless_removal(&directory)
+            .map_err(ManagedRuntimePublicationError::Storage)?
+        {
+            drop(directory);
+            versions
+                .remove_dir(&version_name)
+                .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+            return Ok(ManagedVersionRemovalOutcome::Removed);
+        }
+        let manifest =
+            read_private_regular_file(&directory, VERSION_MANIFEST, MAX_VERSION_METADATA_BYTES)
+                .map_err(ManagedRuntimePublicationError::Storage)?;
+        let (observed_identity, files) = parse_version_manifest(&manifest)?;
+        if observed_identity != *identity {
+            return Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::UnsafeStorage,
+            ));
+        }
+        let removing = directory
+            .try_exists(VERSION_REMOVING)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+        validate_version_contents(&directory, &files, removing)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        let use_lock = match try_exclusive_version_use(&directory, removing)? {
+            ExclusiveVersionUse::Acquired(lock) => lock,
+            ExclusiveVersionUse::InUse => return Ok(ManagedVersionRemovalOutcome::InUse),
+        };
+        if removing {
+            check_marker(&directory, VERSION_REMOVING, REMOVING_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?;
+        } else {
+            write_marker(&directory, VERSION_REMOVING, REMOVING_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?;
+        }
+        drop(use_lock);
+        validate_version_contents(&directory, &files, true)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        remove_managed_version_files(&directory, &files, fault)
+            .map_err(ManagedRuntimePublicationError::Storage)?;
+        drop(directory);
+        versions
+            .remove_dir(&version_name)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+        Ok(ManagedVersionRemovalOutcome::Removed)
     }
 
     /// Imports exact reviewed bytes into a new, private, unactivated directory.
@@ -1322,8 +1486,7 @@ impl PreparedManagedRuntime<'_, '_> {
             .ok_or(ManagedRuntimePublicationError::Storage(
                 ManagedArtifactError::UnsafeStorage,
             ))?;
-        write_marker(runtime, VERSION_MANIFEST, &manifest)
-            .map_err(ManagedRuntimePublicationError::Storage)?;
+        prepare_version_metadata(runtime, &manifest)?;
 
         let version_name = identity.version_directory_name();
         let version_exists = versions
@@ -1332,9 +1495,7 @@ impl PreparedManagedRuntime<'_, '_> {
         if version_exists {
             let existing =
                 open_published_runtime(root_path, &versions, identity, &manifest, &self.files);
-            runtime
-                .remove_file(VERSION_MANIFEST)
-                .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+            remove_version_metadata(runtime)?;
             let existing = existing?;
             let candidate = self
                 .runtime
@@ -1410,6 +1571,7 @@ pub struct PublishedManagedRuntime {
     identity: ManagedRuntimeIdentity,
     directory: Dir,
     files: Vec<PublishedRuntimeFile>,
+    _use_lock: fs::File,
 }
 
 impl PublishedManagedRuntime {
@@ -1467,6 +1629,18 @@ enum ManagedPublicationBoundary {
     PointerReplaced,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ManagedRemovalBoundary {
+    PayloadFiles,
+    UseLock,
+    VersionManifest,
+}
+
+enum ExclusiveVersionUse {
+    Acquired(Option<fs::File>),
+    InUse,
+}
+
 struct CurrentPointer {
     identity: ManagedRuntimeIdentity,
     manifest_sha256: String,
@@ -1481,6 +1655,21 @@ fn canonical_managed_key(value: &str) -> bool {
         && bytes.iter().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
+}
+
+fn validate_install_guard(
+    guard: &ManagedInstallGuard,
+    root: &Dir,
+    root_path: &Path,
+) -> Result<(), ManagedRuntimePublicationError> {
+    if guard.root_path != root_path {
+        return Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::UnsafeStorage,
+        ));
+    }
+    validate_same_held_directory(&guard.root, root)
+        .map_err(map_private_error)
+        .map_err(ManagedRuntimePublicationError::Storage)
 }
 
 fn open_or_create_managed_directory(
@@ -1547,6 +1736,30 @@ fn version_manifest(identity: &ManagedRuntimeIdentity, files: &[PlannedRuntimeFi
         manifest.push('\n');
     }
     manifest.into_bytes()
+}
+
+fn prepare_version_metadata(
+    runtime: &Dir,
+    manifest: &[u8],
+) -> Result<(), ManagedRuntimePublicationError> {
+    write_marker(runtime, VERSION_MANIFEST, manifest)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+    if let Err(error) = write_marker(runtime, VERSION_USE_LOCK, USE_LOCK_IDENTITY) {
+        runtime
+            .remove_file(VERSION_MANIFEST)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+        return Err(ManagedRuntimePublicationError::Storage(error));
+    }
+    Ok(())
+}
+
+fn remove_version_metadata(runtime: &Dir) -> Result<(), ManagedRuntimePublicationError> {
+    for name in [VERSION_MANIFEST, VERSION_USE_LOCK] {
+        runtime
+            .remove_file(name)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+    }
+    Ok(())
 }
 
 fn parse_version_manifest(
@@ -1696,10 +1909,23 @@ fn open_published_runtime_from_manifest(
     }
     validate_published_contents(&directory, &files)
         .map_err(ManagedRuntimePublicationError::Storage)?;
+    let use_lock =
+        open_version_use_lock(&directory).map_err(ManagedRuntimePublicationError::Storage)?;
+    use_lock.try_lock_shared().map_err(|error| match error {
+        fs::TryLockError::WouldBlock => {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::Busy)
+        }
+        fs::TryLockError::Error(_) => {
+            ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io)
+        }
+    })?;
+    validate_published_contents(&directory, &files)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
     Ok(PublishedManagedRuntime {
         identity,
         directory,
         files,
+        _use_lock: use_lock,
     })
 }
 
@@ -1707,12 +1933,24 @@ fn validate_published_contents(
     directory: &Dir,
     files: &[PublishedRuntimeFile],
 ) -> Result<(), ManagedArtifactError> {
-    let mut observed = HashSet::with_capacity(files.len() + 1);
+    validate_version_contents(directory, files, false)
+}
+
+fn validate_version_contents(
+    directory: &Dir,
+    files: &[PublishedRuntimeFile],
+    allow_removing: bool,
+) -> Result<(), ManagedArtifactError> {
+    let mut observed = HashSet::with_capacity(files.len() + 3);
     for entry in directory.entries().map_err(|_| ManagedArtifactError::Io)? {
         let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
         let name = entry.file_name();
         let name = name.to_str().ok_or(ManagedArtifactError::UnsafeStorage)?;
-        if name != VERSION_MANIFEST && !files.iter().any(|file| file.name == name) {
+        if name != VERSION_MANIFEST
+            && name != VERSION_USE_LOCK
+            && !(allow_removing && name == VERSION_REMOVING)
+            && !files.iter().any(|file| file.name == name)
+        {
             return Err(ManagedArtifactError::UnsafeStorage);
         }
         if !observed.insert(name.to_owned()) {
@@ -1721,7 +1959,7 @@ fn validate_published_contents(
         let metadata = directory
             .symlink_metadata(name)
             .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
-        if name == VERSION_MANIFEST {
+        if name == VERSION_MANIFEST || name == VERSION_USE_LOCK || name == VERSION_REMOVING {
             validate_private_regular_metadata(&metadata)?;
         } else {
             let reviewed = files
@@ -1731,10 +1969,28 @@ fn validate_published_contents(
             validate_runtime_file(&metadata, reviewed.mode)?;
         }
     }
-    if observed.len() != files.len() + 1 || !observed.contains(VERSION_MANIFEST) {
+    if (!allow_removing && observed.len() != files.len() + 2)
+        || (allow_removing && observed.len() < 2)
+        || !observed.contains(VERSION_MANIFEST)
+        || (!allow_removing && !observed.contains(VERSION_USE_LOCK))
+        || (allow_removing && !observed.contains(VERSION_REMOVING))
+    {
         return Err(ManagedArtifactError::UnsafeStorage);
     }
+    if observed.contains(VERSION_USE_LOCK) {
+        check_marker(directory, VERSION_USE_LOCK, USE_LOCK_IDENTITY)?;
+    }
+    if allow_removing {
+        check_marker(directory, VERSION_REMOVING, REMOVING_IDENTITY)?;
+    }
     for reviewed in files {
+        if allow_removing
+            && !directory
+                .try_exists(&reviewed.name)
+                .map_err(|_| ManagedArtifactError::Io)?
+        {
+            continue;
+        }
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
         let file = directory
@@ -1746,6 +2002,122 @@ fn validate_published_contents(
             .map_err(ManagedArtifactError::Transfer)?;
     }
     Ok(())
+}
+
+fn remove_managed_version_files(
+    directory: &Dir,
+    files: &[PublishedRuntimeFile],
+    fault: Option<ManagedRemovalBoundary>,
+) -> Result<(), ManagedArtifactError> {
+    for file in files {
+        match directory.symlink_metadata(&file.name) {
+            Ok(metadata) => {
+                validate_runtime_file(&metadata, file.mode)?;
+                directory
+                    .remove_file(&file.name)
+                    .map_err(|_| ManagedArtifactError::Io)?;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(ManagedArtifactError::UnsafeStorage),
+        }
+    }
+    if fault == Some(ManagedRemovalBoundary::PayloadFiles) {
+        return Err(ManagedArtifactError::Io);
+    }
+    remove_known_regular_file_if_present(directory, VERSION_USE_LOCK)?;
+    if fault == Some(ManagedRemovalBoundary::UseLock) {
+        return Err(ManagedArtifactError::Io);
+    }
+    remove_known_regular_file_if_present(directory, VERSION_MANIFEST)?;
+    if fault == Some(ManagedRemovalBoundary::VersionManifest) {
+        return Err(ManagedArtifactError::Io);
+    }
+    remove_known_regular_file_if_present(directory, VERSION_REMOVING)?;
+    if directory
+        .entries()
+        .map_err(|_| ManagedArtifactError::Io)?
+        .next()
+        .is_some()
+    {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    Ok(())
+}
+
+fn remove_known_regular_file_if_present(
+    directory: &Dir,
+    name: &str,
+) -> Result<(), ManagedArtifactError> {
+    match directory.symlink_metadata(name) {
+        Ok(metadata) => {
+            validate_private_regular_metadata(&metadata)?;
+            directory
+                .remove_file(name)
+                .map_err(|_| ManagedArtifactError::Io)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(ManagedArtifactError::UnsafeStorage),
+    }
+}
+
+fn finish_manifestless_removal(directory: &Dir) -> Result<bool, ManagedArtifactError> {
+    if directory
+        .try_exists(VERSION_MANIFEST)
+        .map_err(|_| ManagedArtifactError::Io)?
+    {
+        return Ok(false);
+    }
+    let mut entries = directory.entries().map_err(|_| ManagedArtifactError::Io)?;
+    let Some(entry) = entries.next() else {
+        return Ok(true);
+    };
+    let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
+    let name = entry
+        .file_name()
+        .to_str()
+        .ok_or(ManagedArtifactError::UnsafeStorage)?
+        .to_owned();
+    if name != VERSION_REMOVING || entries.next().is_some() {
+        return Err(ManagedArtifactError::UnsafeStorage);
+    }
+    check_marker(directory, VERSION_REMOVING, REMOVING_IDENTITY)?;
+    directory
+        .remove_file(VERSION_REMOVING)
+        .map_err(|_| ManagedArtifactError::Io)?;
+    Ok(true)
+}
+
+fn try_exclusive_version_use(
+    directory: &Dir,
+    removing: bool,
+) -> Result<ExclusiveVersionUse, ManagedRuntimePublicationError> {
+    if removing
+        && !directory
+            .try_exists(VERSION_USE_LOCK)
+            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
+    {
+        return Ok(ExclusiveVersionUse::Acquired(None));
+    }
+    let lock = open_version_use_lock(directory).map_err(ManagedRuntimePublicationError::Storage)?;
+    match lock.try_lock() {
+        Ok(()) => Ok(ExclusiveVersionUse::Acquired(Some(lock))),
+        Err(fs::TryLockError::WouldBlock) => Ok(ExclusiveVersionUse::InUse),
+        Err(fs::TryLockError::Error(_)) => Err(ManagedRuntimePublicationError::Storage(
+            ManagedArtifactError::Io,
+        )),
+    }
+}
+
+fn open_version_use_lock(directory: &Dir) -> Result<fs::File, ManagedArtifactError> {
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).follow(FollowSymlinks::No);
+    let lock = directory
+        .open_with(VERSION_USE_LOCK, &options)
+        .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+    let metadata = lock.metadata().map_err(|_| ManagedArtifactError::Io)?;
+    validate_private_regular_metadata(&metadata)?;
+    check_marker(directory, VERSION_USE_LOCK, USE_LOCK_IDENTITY)?;
+    Ok(lock.into_std())
 }
 
 fn write_current_pointer(
@@ -1967,10 +2339,12 @@ mod tests {
 
     use super::{
         ArtifactTransferError, INSTALL_LOCK, MAX_MANAGED_KEY_BYTES, ManagedArtifactError,
-        ManagedArtifactStore, ManagedPayloadError, ManagedPublicationBoundary,
-        ManagedRuntimeIdentity, ManagedRuntimeLayoutError, ManagedRuntimePublicationError, PAYLOAD,
-        RUNTIME, ReviewedArchiveFile, ReviewedPayloadArchive, ReviewedRuntimeAlias,
-        ReviewedRuntimeLayout, TarInventoryError, VERSION_MANIFEST, hex,
+        ManagedArtifactStore, ManagedInstallGuard, ManagedPayloadError, ManagedPublicationBoundary,
+        ManagedRemovalBoundary, ManagedRuntimeIdentity, ManagedRuntimeLayoutError,
+        ManagedRuntimePublicationError, ManagedVersionRemovalOutcome, PAYLOAD,
+        PublishedManagedRuntime, RUNTIME, ReviewedArchiveFile, ReviewedPayloadArchive,
+        ReviewedRuntimeAlias, ReviewedRuntimeLayout, TarInventoryError, VERSION_MANIFEST, VERSIONS,
+        hex,
     };
     use crate::ArchiveInventoryBounds;
 
@@ -2508,6 +2882,127 @@ mod tests {
         assert!(!root.exists());
         fs::remove_dir_all(parent)?;
         Ok(())
+    }
+
+    fn assert_removal_fault(
+        store: &ManagedArtifactStore,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+        boundary: ManagedRemovalBoundary,
+    ) {
+        assert!(matches!(
+            store.remove_published_runtime_at_boundary(guard, identity, Some(boundary)),
+            Err(ManagedRuntimePublicationError::Storage(
+                ManagedArtifactError::Io
+            ))
+        ));
+    }
+
+    #[test]
+    fn rollback_and_removal_respect_selection_and_live_version_holds() -> Result<(), Box<dyn Error>>
+    {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let guard = store.try_install_guard()?;
+            let (archive, integrity) = reviewed_tar()?;
+            let selected = [selected_tool()?];
+            let publish = |identity: &ManagedRuntimeIdentity|
+             -> Result<PublishedManagedRuntime, Box<dyn Error>> {
+                let artifact = store.import_verified(&archive[..], integrity)?;
+                let payload = artifact.stage_reviewed_payload(
+                    ReviewedPayloadArchive::Tar {
+                        max_tar_bytes: 10_000,
+                    },
+                    reviewed_bounds()?,
+                    &[],
+                    &selected,
+                )?;
+                let mut runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                    max_bytes: 3,
+                    aliases: &[],
+                    executables: &["tool"],
+                })?;
+                let published = runtime.publish_and_select(&guard, identity)?;
+                runtime.discard()?;
+                payload.discard()?;
+                artifact.discard()?;
+                Ok(published)
+            };
+
+            let first = ManagedRuntimeIdentity::new("whisper-cli", "1.9.2-linux-x64")?;
+            let active_first = publish(&first)?;
+            let second = ManagedRuntimeIdentity::new("whisper-cli", "1.9.3-linux-x64")?;
+            let active_second = publish(&second)?;
+            assert_eq!(
+                store.remove_published_runtime(&guard, &second)?,
+                ManagedVersionRemovalOutcome::Selected
+            );
+            assert_eq!(
+                store.remove_published_runtime(&guard, &first)?,
+                ManagedVersionRemovalOutcome::InUse
+            );
+
+            drop(active_first);
+            let rollback = store.select_published_runtime(&guard, &first)?;
+            assert_eq!(
+                store
+                    .open_selected_runtime("whisper-cli")?
+                    .ok_or("selected runtime missing")?
+                    .identity(),
+                &first
+            );
+            assert_eq!(
+                store.remove_published_runtime(&guard, &second)?,
+                ManagedVersionRemovalOutcome::InUse
+            );
+            drop(active_second);
+            assert_removal_fault(
+                &store,
+                &guard,
+                &second,
+                ManagedRemovalBoundary::PayloadFiles,
+            );
+            assert_removal_fault(&store, &guard, &second, ManagedRemovalBoundary::UseLock);
+            assert_removal_fault(
+                &store,
+                &guard,
+                &second,
+                ManagedRemovalBoundary::VersionManifest,
+            );
+            assert_eq!(
+                store.remove_published_runtime(&guard, &second)?,
+                ManagedVersionRemovalOutcome::Removed
+            );
+            assert_eq!(
+                store.remove_published_runtime(&guard, &second)?,
+                ManagedVersionRemovalOutcome::Removed
+            );
+            let versions = parent.join("managed").join(VERSIONS);
+            let substituted = versions.join(second.version_directory_name());
+            fs::write(&substituted, b"keep")?;
+            assert!(matches!(
+                store.remove_published_runtime(&guard, &second),
+                Err(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage
+                ))
+            ));
+            assert_eq!(fs::read(substituted)?, b"keep");
+            assert!(matches!(
+                store.open_published_runtime(&second),
+                Err(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage
+                ))
+            ));
+            drop(rollback);
+            assert_eq!(
+                store.remove_published_runtime(&guard, &first)?,
+                ManagedVersionRemovalOutcome::Selected
+            );
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
     }
 
     #[test]

@@ -46,8 +46,9 @@ pub use gzip_tar_inventory::{
 pub use managed_artifact_store::{
     ManagedArtifactError, ManagedArtifactStore, ManagedInstallGuard, ManagedPayloadError,
     ManagedRuntimeIdentity, ManagedRuntimeLayoutError, ManagedRuntimePublicationError,
-    PreparedManagedRuntime, PublishedManagedRuntime, ReviewedPayloadArchive, ReviewedRuntimeAlias,
-    ReviewedRuntimeLayout, StagedManagedArtifact, StagedManagedPayload,
+    ManagedVersionRemovalOutcome, PreparedManagedRuntime, PublishedManagedRuntime,
+    ReviewedPayloadArchive, ReviewedRuntimeAlias, ReviewedRuntimeLayout, StagedManagedArtifact,
+    StagedManagedPayload,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{

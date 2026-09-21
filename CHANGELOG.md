@@ -17,6 +17,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 published runtimes now hold shared per-version OS locks. A guarded
+  transaction can atomically select an older published version for rollback and
+  remove only an unselected version after obtaining its exclusive lock. Selected
+  or live-held versions remain intact; a private tombstone makes interrupted
+  exact-file removal retryable through metadata deletion and a lost response.
+  A native child-process test proves a live hold blocks removal and abrupt
+  process exit releases it. Public install, rollback and uninstall commands
+  remain unavailable.
 - P06 can now publish a fully rechecked prepared runtime under a canonical
   component/version identity and atomically select it with a hashed pointer while
   holding the root installation guard. Published versions retain exact manifests,

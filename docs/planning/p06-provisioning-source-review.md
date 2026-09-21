@@ -303,3 +303,17 @@ publication is idempotent, and conflicting identity reuse fails closed. This clo
 no source-review item above: a caller still needs an accepted catalogue entry,
 compatible smoke result and accepted plan before it may invoke that primitive.
 Managed installation therefore remains unavailable.
+
+## 2026-09-21 lifecycle status
+
+Published runtimes now retain shared per-version OS locks. Under the root-wide
+installation guard, infrastructure can revalidate and atomically reselect an older
+immutable version, refuse removal of the selected or live-held version, and remove
+only exact manifest-owned content after obtaining the exclusive lock. A private
+tombstone prevents new openers and makes partial metadata deletion and a lost
+success response retryable. A native child-process regression proves a held
+version blocks removal and abrupt holder exit releases the OS lock. These
+provider-neutral rollback and removal primitives do not select a source or
+authorize their own use. The catalogue, target
+compatibility, accepted plan, public commands and bounded garbage-collection policy
+remain required, so managed installation remains unavailable.
