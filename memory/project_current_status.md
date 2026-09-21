@@ -2,21 +2,24 @@
 
 ## Active
 
-2026-09-21: P06 managed-version lifecycle implementation `ec6538b` adds a
-guarded rollback-selection primitive and removal fencing without exposing a
-public command. Published-runtime capabilities hold shared private per-version
-OS locks. An unselected version can be removed only after obtaining the exclusive
-lock; the selected version returns `Selected` and any live holder returns `InUse`.
+2026-09-21: Protected [PR #105](https://github.com/smormah/vsift/pull/105)
+merged P06 managed-version lifecycle implementation `ec6538b` and memory record
+`fc3b51a` as `39211bd` from protected main `b32c82b`. It adds a guarded
+rollback-selection primitive and removal fencing without exposing a public
+command. Published-runtime capabilities hold shared private per-version OS locks.
+An unselected version can be removed only after obtaining the exclusive lock; the
+selected version returns `Selected` and any live holder returns `InUse`.
 A tombstone blocks new openers, and deletion is restricted to the revalidated
 manifest inventory and known metadata. Injected failures after payload, use-lock
 and manifest deletion resume safely, as do tombstone-only and already-completed
 retries. Unsafe substitutions fail closed. A native child-process regression
 proves exclusion across processes and lock release after abrupt holder exit.
 Full local formatting, strict workspace Clippy, tests, rustdoc and governance
-passed; cargo-deny passed with the existing duplicate warnings. Protected CI is
-pending. Catalogue/plan/compatibility authority, power-loss qualification,
-bounded GC and public install/rollback/uninstall orchestration remain open. P06
-stays planned and issue #66 stays open.
+passed; cargo-deny passed with the existing duplicate warnings. Protected CI
+`35633903728`, dependency/security `35633903800` and Rust analysis `35633903719`
+passed on the first attempt. Catalogue/plan/compatibility authority, power-loss
+qualification, bounded GC and public install/rollback/uninstall orchestration
+remain open. P06 stays planned and issue #66 stays open.
 
 2026-09-16: Protected [PR #101](https://github.com/smormah/vsift/pull/101)
 merged P06 immutable version publication implementation `285d3a1` and memory
