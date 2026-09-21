@@ -2,6 +2,23 @@
 
 ## Current checkpoint
 
+2026-09-21: P06 managed-version lifecycle implementation `ec6538b` adds
+provider-neutral rollback selection and exact removal fencing. A caller holding
+the same managed root's installation guard can revalidate and atomically select
+an older immutable published version. Every opened published runtime now retains
+a shared private per-version OS lock; removal refuses the selected version,
+returns typed `InUse` while any process holds the version, and proceeds only with
+the exclusive lock. A private tombstone fences new openers while exact
+manifest-owned files are deleted. Retries recover after payload, use-lock and
+manifest deletion, a tombstone-only directory, and an already completed removal;
+substituted directory entries fail closed and are preserved. A native
+child-process regression proves removal exclusion and lock release after abrupt
+holder exit. Full local fmt, strict Clippy, workspace tests, rustdoc and governance
+passed; cargo-deny passed with the existing duplicate-version warnings. Protected
+CI evidence is pending. This adds no source catalogue, target compatibility or
+accepted-plan authority, power-loss guarantee, bounded GC, or public install,
+rollback or uninstall command. P06 remains planned; issue #66 remains open.
+
 2026-09-16: Protected [PR #101](https://github.com/smormah/vsift/pull/101)
 merged P06 immutable managed-version publication implementation `285d3a1` and
 progress record `4a16921` as `6eee0e0` from protected predecessor `a492863`.

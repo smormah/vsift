@@ -251,3 +251,32 @@ a candidate passed compatibility smoke, bind an accepted plan digest, authorize 
 catalogue entry, expose `setup install`, implement rollback/uninstall/garbage
 collection, or prevent removal while another process holds a version. Those gates
 remain required before managed installation is available.
+
+## 2026-09-21 implementation note: rollback selection and removal fencing
+
+Every opened published runtime now retains a shared OS lock on a private,
+single-link per-version lock file. While holding the same root's installation
+guard, infrastructure can revalidate an existing immutable version and atomically
+select it as the component's current version. This supplies the rollback selection
+primitive without downloading, republishing or changing the version contents.
+
+Removal checks the current pointer first and returns `Selected` without mutation
+when the requested version is active. For another version it requires an exclusive
+use lock, returning `InUse` while any published-runtime capability remains live.
+After exclusivity is established, a private tombstone fences new openers. Deletion
+is limited to the manifest's exact reviewed files and known metadata; unknown,
+linked or changed content fails closed. The lock handle closes before its file is
+removed for Windows compatibility. Retries safely resume after partial payload,
+lock-file or manifest deletion, after only the tombstone remains, and after the
+version directory was already removed.
+
+A native child-process regression opens an unselected version in one process,
+proves the guarded remover receives `InUse` in another, terminates the holder,
+and then removes the version successfully. This checks both cross-process
+exclusion and OS lock release after abrupt process exit on each CI platform.
+
+This implements provider-neutral lifecycle mechanics only. No source catalogue,
+compatibility decision, accepted plan, public rollback/uninstall command or bounded
+garbage-collection policy invokes them yet. Power-loss durability and an
+independent process-crash-at-every-deletion-boundary campaign remain open, so
+managed installation remains unavailable.
