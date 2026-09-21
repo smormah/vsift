@@ -52,7 +52,8 @@ pub use managed_artifact_store::{
     StagedManagedPayload,
 };
 pub use managed_catalogue::{
-    ManagedCatalogueError, accepted_ubuntu_catalogue, detect_managed_target,
+    ManagedCatalogueError, ReviewedActionStageError, ReviewedUbuntuAction,
+    accepted_ubuntu_catalogue, detect_managed_target,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{

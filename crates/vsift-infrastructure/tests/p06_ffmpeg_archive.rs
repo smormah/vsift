@@ -11,9 +11,11 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
+use vsift_application::ManagedSetupAction;
 use vsift_domain::ArtifactIntegrity;
 use vsift_infrastructure::{
-    ArchiveInventoryBounds, ReviewedArchiveFile, stage_xz_tar_selected_files,
+    ArchiveInventoryBounds, ManagedArtifactStore, ReviewedArchiveFile, ReviewedUbuntuAction,
+    accepted_ubuntu_catalogue, stage_xz_tar_selected_files,
 };
 
 use support::PrivateStaging;
@@ -76,7 +78,7 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
     ];
     let staging = PrivateStaging::new("vsift-p06-ffmpeg-stage")?;
     let entries = stage_xz_tar_selected_files(
-        File::open(path)?,
+        File::open(&path)?,
         EXPECTED_BYTES,
         400_000_000,
         ArchiveInventoryBounds::new(73, 370_667_773)?,
@@ -95,5 +97,30 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
         .collect::<Result<Vec<_>, _>>()?;
     names.sort();
     assert_eq!(names, ["LICENSE.txt", "ffmpeg", "ffprobe"]);
+
+    let owned = ManagedArtifactStore::at(staging.path().join("managed"))?;
+    let artifact = owned.import_verified(
+        File::open(&path)?,
+        ArtifactIntegrity::from_sha256_hex(EXPECTED_BYTES, EXPECTED_SHA256)?,
+    )?;
+    let accepted = accepted_ubuntu_catalogue()?
+        .artifacts
+        .into_iter()
+        .find(|entry| entry.component.identifier() == "ffmpeg_ffprobe")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "media review missing"))?;
+    let reviewed = ReviewedUbuntuAction::from_accepted_action(&ManagedSetupAction {
+        id: String::from("install-ffmpeg_ffprobe"),
+        artifact: accepted,
+    })?;
+    let payload = reviewed.stage_archive(&artifact)?;
+    let runtime = reviewed.prepare_runtime(&payload)?;
+    assert_eq!(
+        runtime.reviewed_names(),
+        ["LICENSE.txt", "ffmpeg", "ffprobe"]
+    );
+    runtime.recheck_all()?;
+    runtime.discard()?;
+    payload.discard()?;
+    artifact.discard()?;
     Ok(())
 }

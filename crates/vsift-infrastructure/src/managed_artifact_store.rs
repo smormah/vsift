@@ -765,6 +765,12 @@ pub struct StagedManagedArtifact {
 }
 
 impl StagedManagedArtifact {
+    /// Reviewed whole-artifact integrity supplied when this owned stage was made.
+    #[must_use]
+    pub const fn integrity(&self) -> ArtifactIntegrity {
+        self.integrity
+    }
+
     /// Rechecks exact bytes and opens the candidate without following links.
     ///
     /// # Errors
@@ -1133,6 +1139,15 @@ impl StagedManagedPayload<'_> {
             .iter()
             .map(|file| file.name.as_str())
             .collect()
+    }
+
+    /// Integrity recorded for one exactly selected regular payload file.
+    #[must_use]
+    pub fn selected_integrity(&self, name: &str) -> Option<ArtifactIntegrity> {
+        self.selected
+            .iter()
+            .find(|file| file.name == name)
+            .map(|file| file.integrity)
     }
 
     /// Copies verified selected files and reviewed regular-file aliases into a

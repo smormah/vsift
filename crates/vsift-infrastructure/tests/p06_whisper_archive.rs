@@ -11,11 +11,11 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
+use vsift_application::ManagedSetupAction;
 use vsift_domain::ArtifactIntegrity;
 use vsift_infrastructure::{
     ArchiveInventoryBounds, ManagedArtifactStore, ReviewedArchiveAlias, ReviewedArchiveFile,
-    ReviewedPayloadArchive, ReviewedRuntimeAlias, ReviewedRuntimeLayout,
-    stage_gzip_tar_selected_files,
+    ReviewedUbuntuAction, accepted_ubuntu_catalogue, stage_gzip_tar_selected_files,
 };
 
 use support::PrivateStaging;
@@ -68,35 +68,6 @@ fn reviewed_aliases() -> [ReviewedArchiveAlias<'static>; 8] {
         ReviewedArchiveAlias {
             path: concat!("whisper-bin-ubuntu-x64", "/libggml-base.so.0"),
             target: "libggml-base.so.0.18.1",
-        },
-    ]
-}
-
-fn runtime_aliases() -> [ReviewedRuntimeAlias<'static>; 6] {
-    [
-        ReviewedRuntimeAlias {
-            name: "libggml.so.0",
-            source_selected: "libggml.so.0.18.1",
-        },
-        ReviewedRuntimeAlias {
-            name: "libggml.so",
-            source_selected: "libggml.so.0.18.1",
-        },
-        ReviewedRuntimeAlias {
-            name: "libggml-base.so.0",
-            source_selected: "libggml-base.so.0.18.1",
-        },
-        ReviewedRuntimeAlias {
-            name: "libggml-base.so",
-            source_selected: "libggml-base.so.0.18.1",
-        },
-        ReviewedRuntimeAlias {
-            name: "libwhisper.so.1",
-            source_selected: "libwhisper.so.1.9.2",
-        },
-        ReviewedRuntimeAlias {
-            name: "libwhisper.so",
-            source_selected: "libwhisper.so.1.9.2",
         },
     ]
 }
@@ -194,25 +165,21 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
         File::open(&path)?,
         ArtifactIntegrity::from_sha256_hex(EXPECTED_BYTES, EXPECTED_SHA256)?,
     )?;
-    let payload = artifact.stage_reviewed_payload(
-        ReviewedPayloadArchive::GzipTar {
-            max_compressed_bytes: EXPECTED_BYTES,
-            max_tar_bytes: 30_000_000,
-        },
-        ArchiveInventoryBounds::new(44, 24_519_182)?,
-        &aliases,
-        &files,
-    )?;
+    let accepted = accepted_ubuntu_catalogue()?
+        .artifacts
+        .into_iter()
+        .find(|entry| entry.component.identifier() == "whisper_cli")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "whisper review missing"))?;
+    let reviewed = ReviewedUbuntuAction::from_accepted_action(&ManagedSetupAction {
+        id: String::from("install-whisper_cli"),
+        artifact: accepted,
+    })?;
+    let payload = reviewed.stage_archive(&artifact)?;
     assert_eq!(
         payload.open_selected_file("whisper-cli")?.metadata()?.len(),
         976_312
     );
-    let runtime_aliases = runtime_aliases();
-    let runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
-        max_bytes: 7_000_000,
-        aliases: &runtime_aliases,
-        executables: &["whisper-cli"],
-    })?;
+    let runtime = reviewed.prepare_runtime(&payload)?;
     assert_eq!(runtime.reviewed_names().len(), 12);
     runtime.recheck_all()?;
     assert_eq!(

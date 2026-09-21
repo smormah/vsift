@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 accepted Ubuntu actions can now be rebound to exact reviewed publisher
+  source and passed through the owned archive/payload/runtime preparation path
+  using the catalogue inventory itself. Changed action fields or mismatched
+  staged bytes fail closed. This remains unactivated; raw-model staging,
+  compatibility smoke and the public installer are still pending.
 - P06 now records an exact Ubuntu 24.04 x86-64 reviewed catalogue for the
   pinned month-end FFmpeg/FFprobe build, whisper.cpp v1.9.2 CLI and multilingual
   `base` model. `setup plan` emits only currently needed actions with direct
