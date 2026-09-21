@@ -7,8 +7,9 @@ binds proposed Ubuntu actions back to exact current reviewed literals before
 publisher transfer. The FFmpeg and whisper.cpp archive paths now derive
 inventory, selected-file hashes, link headers, runtime aliases and executable
 modes from that entry, rejecting mismatched whole-artifact or selected-payload
-identity before unactivated preparation. The opt-in real-archive checks use
-the bridge. Local fmt, strict Clippy, workspace tests, warning-denied rustdoc
+identity before unactivated preparation. The opt-in real-archive checks and
+manually dispatched Ubuntu workflow use both archive bridges. Local fmt,
+strict Clippy, workspace tests, warning-denied rustdoc
 and governance passed; protected and fresh hosted archive runs remain pending.
 Raw model staging, compatibility smoke, accepted-plan revalidation, public
 installation/lifecycle, bounded GC, power-loss and D-01..D-10/P06 E2E remain

@@ -7,8 +7,9 @@ rechecks every planned Ubuntu action against the complete reviewed literal
 before exposing direct-publisher transfer authority. The accepted entry now
 drives bounded archive staging and regular-file runtime assembly for the
 FFmpeg and whisper.cpp archives; whole-artifact and selected-payload identity
-must match before each step. The pinned-archive opt-in tests exercise this
-bridge, and full local fmt, strict Clippy, workspace tests, warning-denied
+must match before each step. The pinned-archive opt-in tests and manually
+dispatched Ubuntu workflow exercise both archive bridges; full local fmt,
+strict Clippy, workspace tests, warning-denied
 rustdoc and governance passed. Protected CI and fresh hosted real-archive
 evidence remain pending. The raw model staging path, compatibility smoke,
 accepted-plan revalidation, public install/lifecycle, bounded cleanup,

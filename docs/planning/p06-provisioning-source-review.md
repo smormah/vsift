@@ -58,7 +58,9 @@ regular runtime copies and executable modes to the private staging path.
 Staging refuses a verified artifact with a different whole-artifact identity;
 runtime preparation refuses a payload with a different selected inventory.
 The opt-in pinned FFmpeg and whisper.cpp archive checks now use this bridge
-for the owned payload and runtime path. This is still an unactivated boundary:
+for the owned payload and runtime path. The manually dispatched disposable
+Ubuntu workflow runs both checks against fresh publisher bytes before its
+separate model-backed candidate smoke. This is still an unactivated boundary:
 the raw model requires its own regular-file staging path, and production
 compatibility smoke, accepted-plan revalidation, activation and cleanup
 qualification remain required before `setup install` can run.
