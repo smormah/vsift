@@ -1,8 +1,8 @@
 //! Setup command composition and presentation.
 
-use std::io::Write;
+use std::{io::Write, path::Path};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use vsift_application::{
     AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, ManagedSetupAction,
     RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
@@ -15,6 +15,7 @@ use vsift_infrastructure::{ExplicitProbePaths, UserDependencyConfigStore};
 
 use crate::{
     command::{ExecutionProfile, SetupConfigureArguments, SetupConfigureModelArguments},
+    json_input::read_json_file,
     output::{
         OperationResponse, OutputMode, OutputWriter, ProcessExit, SetupCheckResponse,
         TerminalEventResponse, explicit_path_option, sanitize_untrusted_text, setup_exit,
@@ -149,15 +150,191 @@ struct SetupRuntimeCopyResponse {
     source_selected: String,
 }
 
-/// Inspects current selections and builds a deterministic reviewed managed plan.
-pub(crate) async fn plan<P: DependencyProbe>(
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SavedSetupPlan {
+    schema_version: String,
+    command: String,
+    operation_id: Option<String>,
+    status: String,
+    data: SavedSetupPlanData,
+    warnings: Vec<String>,
+    error: Option<serde_json::Value>,
+    coverage: Option<serde_json::Value>,
+    lifecycle: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupPlanData {
+    profile: String,
+    readiness: String,
+    verification_scope: String,
+    target: String,
+    local_asr_model: SavedSetupPlanModel,
+    managed_install: String,
+    catalogue_revision: Option<String>,
+    stop_new_plans_at: Option<String>,
+    plan_digest: Option<String>,
+    actions: Vec<SavedSetupPlanAction>,
+    dependencies: Vec<SavedSetupPlanDependency>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupPlanDependency {
+    dependency: String,
+    status: String,
+    disposition: String,
+    required_authority: Option<String>,
+    next_step: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupPlanModel {
+    status: String,
+    disposition: String,
+    required_authority: Option<String>,
+    next_step: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupPlanAction {
+    id: String,
+    component: String,
+    version: String,
+    publisher: String,
+    source_url: String,
+    bytes: u64,
+    sha256: String,
+    format: String,
+    archive_limits: Option<SavedSetupArchiveLimits>,
+    selected_files: Vec<SavedSetupArchiveSelection>,
+    archive_links: Vec<SavedSetupArchiveLink>,
+    runtime_copies: Vec<SavedSetupRuntimeCopy>,
+    licence: String,
+    notice_url: String,
+    source_code_url: String,
+    trust_limit: String,
+    licence_scope: String,
+    destination: String,
+    permissions: String,
+    change: String,
+    required_authority: String,
+    files: Vec<SavedSetupPlanFile>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupPlanFile {
+    name: String,
+    bytes: u64,
+    sha256: String,
+    mode: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupArchiveLimits {
+    max_stream_bytes: u64,
+    entries: usize,
+    expanded_bytes: u64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupArchiveSelection {
+    archive_path: String,
+    runtime_name: String,
+    bytes: u64,
+    sha256: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupArchiveLink {
+    archive_path: String,
+    target: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSetupRuntimeCopy {
+    name: String,
+    source_selected: String,
+}
+
+/// Current plan authority and its exact public presentation.
+pub(crate) struct EvaluatedSetupPlan {
+    authority: vsift_application::ManagedSetupPlan,
+    presentation: SetupPlanResponse,
+}
+
+impl SavedSetupPlan {
+    /// Reads one bounded, strict `setup plan --json` result.
+    pub(crate) fn read(path: &Path) -> Result<Self, FailureCode> {
+        let plan: Self = read_json_file(path).map_err(|error| error.code())?;
+        if plan.schema_version != "1"
+            || plan.command != "setup.plan"
+            || plan.operation_id.is_some()
+            || plan.status != "complete"
+            || !plan.warnings.is_empty()
+            || plan.error.is_some()
+            || plan.coverage.is_some()
+            || plan.lifecycle.is_some()
+        {
+            return Err(FailureCode::InvalidArgument);
+        }
+        Ok(plan)
+    }
+
+    /// Returns the profile that must be re-observed before acceptance.
+    pub(crate) fn profile(&self) -> Result<ExecutionProfile, FailureCode> {
+        match self.data.profile.as_str() {
+            "desktop" => Ok(ExecutionProfile::Desktop),
+            "worker" => Ok(ExecutionProfile::Worker),
+            _ => Err(FailureCode::InvalidArgument),
+        }
+    }
+}
+
+impl EvaluatedSetupPlan {
+    /// Renders the current read-only plan through the stable response envelope.
+    pub(crate) fn into_response(self) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
+        OperationResponse::complete("setup.plan", &self.presentation)
+            .map_err(|_| FailureCode::Internal)
+    }
+
+    /// Requires the saved public plan, current observations and accepted digest
+    /// to describe exactly the same authority.
+    pub(crate) fn validate_acceptance(
+        &self,
+        saved: &SavedSetupPlan,
+        supplied_digest: &str,
+    ) -> Result<(), FailureCode> {
+        let saved_data = serde_json::to_value(&saved.data).map_err(|_| FailureCode::Internal)?;
+        let current_data =
+            serde_json::to_value(&self.presentation).map_err(|_| FailureCode::Internal)?;
+        if saved_data != current_data {
+            return Err(FailureCode::InvalidArgument);
+        }
+        self.authority
+            .validate_acceptance(supplied_digest)
+            .map_err(|_| FailureCode::InvalidArgument)
+    }
+}
+
+/// Inspects current selections and builds plan authority plus its presentation.
+pub(crate) async fn evaluate_plan<P: DependencyProbe>(
     probe: P,
     profile: ExecutionProfile,
     target: ManagedTarget,
     selections: SetupSelectionState,
     now_unix_seconds: u64,
     catalogue: Option<AcceptedManagedCatalogue>,
-) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
+) -> Result<EvaluatedSetupPlan, FailureCode> {
     let plan = plan_managed_setup(
         match profile {
             ExecutionProfile::Desktop => SetupProfile::Desktop,
@@ -198,23 +375,23 @@ pub(crate) async fn plan<P: DependencyProbe>(
         .collect();
     let model = model_response(plan.model);
     let actions = plan.actions.iter().map(action_response).collect();
-    OperationResponse::complete(
-        "setup.plan",
-        &SetupPlanResponse {
-            profile: profile.identifier(),
-            readiness: plan.readiness.identifier(),
-            verification_scope: "executable_probe_and_reviewed_catalogue",
-            target: plan.target.identifier(),
-            local_asr_model: model,
-            managed_install: plan.availability.identifier(),
-            catalogue_revision: plan.catalogue_revision,
-            stop_new_plans_at: plan.stop_new_plans_date,
-            plan_digest: plan.digest,
-            actions,
-            dependencies,
-        },
-    )
-    .map_err(|_| FailureCode::Internal)
+    let presentation = SetupPlanResponse {
+        profile: profile.identifier(),
+        readiness: plan.readiness.identifier(),
+        verification_scope: "executable_probe_and_reviewed_catalogue",
+        target: plan.target.identifier(),
+        local_asr_model: model,
+        managed_install: plan.availability.identifier(),
+        catalogue_revision: plan.catalogue_revision.clone(),
+        stop_new_plans_at: plan.stop_new_plans_date.clone(),
+        plan_digest: plan.digest.clone(),
+        actions,
+        dependencies,
+    };
+    Ok(EvaluatedSetupPlan {
+        authority: plan,
+        presentation,
+    })
 }
 
 fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse {
@@ -454,12 +631,15 @@ mod tests {
     use std::future::ready;
 
     use vsift_application::{DependencyProbe, SetupSelectionState};
-    use vsift_domain::{DependencyState, DependencyStatus, ManagedTarget, RuntimeDependency};
+    use vsift_domain::{
+        DependencyState, DependencyStatus, FailureCode, ManagedTarget, RuntimeDependency,
+    };
     use vsift_infrastructure::{ExplicitProbePaths, accepted_ubuntu_catalogue};
 
-    use super::{plan, run_setup_check};
+    use super::{SavedSetupPlan, evaluate_plan, run_setup_check};
     use crate::{
         command::ExecutionProfile,
+        json_input::decode_json,
         output::{OutputMode, OutputWriter, ProcessExit},
     };
 
@@ -584,7 +764,7 @@ mod tests {
     #[tokio::test]
     async fn accepted_ubuntu_plan_is_reviewable_and_matches_public_schema()
     -> Result<(), Box<dyn std::error::Error>> {
-        let response = plan(
+        let response = evaluate_plan(
             FixedProbe {
                 state: DependencyState::Missing,
             },
@@ -595,7 +775,9 @@ mod tests {
             Some(accepted_ubuntu_catalogue()?),
         )
         .await
-        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
+        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?
+        .into_response()
+        .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
         let value = serde_json::to_value(response)?;
         let schema: serde_json::Value =
             serde_json::from_str(include_str!("../../../schemas/v1/setup-plan.schema.json"))?;
@@ -637,9 +819,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn accepted_plan_is_strict_and_revalidated_against_current_state()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let original = evaluate_plan(
+            FixedProbe {
+                state: DependencyState::Missing,
+            },
+            ExecutionProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await
+        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
+        let digest = original
+            .authority
+            .digest
+            .clone()
+            .ok_or_else(|| std::io::Error::other("qualified plan omitted its digest"))?;
+        let response = original
+            .into_response()
+            .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
+        let bytes = serde_json::to_vec(&response)?;
+        let saved: SavedSetupPlan = decode_json(&bytes)?;
+
+        let unchanged = evaluate_plan(
+            FixedProbe {
+                state: DependencyState::Missing,
+            },
+            ExecutionProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await
+        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
+        assert_eq!(unchanged.validate_acceptance(&saved, &digest), Ok(()));
+        assert_eq!(
+            unchanged.validate_acceptance(&saved, &"0".repeat(64)),
+            Err(FailureCode::InvalidArgument)
+        );
+
+        let changed = evaluate_plan(
+            MissingOneProbe {
+                missing: RuntimeDependency::Whisper,
+            },
+            ExecutionProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await
+        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
+        assert_eq!(
+            changed.validate_acceptance(&saved, &digest),
+            Err(FailureCode::InvalidArgument)
+        );
+
+        let mut unknown: serde_json::Value = serde_json::from_slice(&bytes)?;
+        unknown["data"]["unreviewed"] = serde_json::json!(true);
+        assert!(decode_json::<SavedSetupPlan>(&serde_json::to_vec(&unknown)?).is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn unaccepted_target_never_offers_managed_actions()
     -> Result<(), Box<dyn std::error::Error>> {
-        let response = plan(
+        let response = evaluate_plan(
             FixedProbe {
                 state: DependencyState::Missing,
             },
@@ -650,7 +899,9 @@ mod tests {
             Some(accepted_ubuntu_catalogue()?),
         )
         .await
-        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
+        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?
+        .into_response()
+        .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
         let value = serde_json::to_value(response)?;
         assert_eq!(value["data"]["managed_install"], "unavailable_target");
         assert!(
