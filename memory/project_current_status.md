@@ -2,8 +2,11 @@
 
 ## Active
 
-2026-09-22: P06 pinned raw-model staging implementation `2ba8867` now
-copies the accepted multilingual `base` artifact into a private selected
+2026-09-22: Protected [PR #113](https://github.com/smormah/vsift/pull/113)
+merged P06 pinned raw-model staging implementation `2ba8867`, progress record
+`9ac8aa1` and hosted evidence record `a4f4982` as `ed77829` from protected
+predecessor `55ab879`. The change copies the accepted multilingual `base`
+artifact into a private selected
 payload and separate unactivated runtime. The source is rehashed before copy;
 whole-artifact identity, portable filename, selected-file digest and runtime
 inventory are checked. Invalid review fails before payload mutation. The
@@ -12,7 +15,14 @@ through the production owned layout. Local fmt, strict Clippy, workspace
 tests, warning-denied rustdoc, actionlint and governance passed. Fresh
 [hosted Ubuntu run 35719747666](https://github.com/smormah/vsift/actions/runs/35719747666)
 passed all three production owned layouts and the separate model-backed
-candidate smoke; protected CI remains pending. Production compatibility smoke,
+candidate smoke. Protected Ubuntu, macOS, Windows, Documentation, Governance
+and strict-worker checks passed in
+[CI run 35720189321](https://github.com/smormah/vsift/actions/runs/35720189321),
+[dependency/security run 35720189327](https://github.com/smormah/vsift/actions/runs/35720189327),
+and [Rust analysis run 35720189342](https://github.com/smormah/vsift/actions/runs/35720189342).
+The first Ubuntu Quality attempt reproduced the existing unrelated P05
+cleanup-lock `Busy` symptom; its unchanged failed-job rerun passed. Production
+compatibility smoke,
 accepted-plan revalidation, public install/lifecycle, bounded cleanup,
 power-loss and D-01..D-10/P06 E2E remain open. P06 stays planned.
 
