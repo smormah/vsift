@@ -79,5 +79,33 @@ jobs:
           VSIFT_P06_FFMPEG_ARCHIVE: ${{ runner.temp }}/vsift-p06-ffmpeg-month-end.tar.xz
         run: rm -f -- "$VSIFT_P06_FFMPEG_ARCHIVE"
 
+      - name: Download pinned base model for the Rust raw-file layout check
+        env:
+          VSIFT_P06_BASE_MODEL: ${{ runner.temp }}/vsift-p06-ggml-base.bin
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd() / "tools"))
+          from p06_windows_candidate_smoke import MODEL_HASH, MODEL_SIZE, MODEL_URL, verified_download
+
+          verified_download(MODEL_URL, Path(os.environ["VSIFT_P06_BASE_MODEL"]), MODEL_SIZE, MODEL_HASH)
+          PY
+
+      - name: Exercise the production owned base-model runtime layout
+        env:
+          VSIFT_P06_BASE_MODEL: ${{ runner.temp }}/vsift-p06-ggml-base.bin
+        run: >-
+          cargo test --locked -p vsift-infrastructure --test p06_model_artifact
+          pinned_model_passes_owned_raw_payload_and_runtime_recheck -- --ignored --exact --nocapture
+
+      - name: Remove the Rust model layout-check file
+        if: always()
+        env:
+          VSIFT_P06_BASE_MODEL: ${{ runner.temp }}/vsift-p06-ggml-base.bin
+        run: rm -f -- "$VSIFT_P06_BASE_MODEL"
+
       - name: Run pinned Ubuntu candidate compatibility smoke
         run: python tools/p06_ubuntu_candidate_smoke.py

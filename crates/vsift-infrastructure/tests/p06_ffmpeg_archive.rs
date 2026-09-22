@@ -112,7 +112,7 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
         id: String::from("install-ffmpeg_ffprobe"),
         artifact: accepted,
     })?;
-    let payload = reviewed.stage_archive(&artifact)?;
+    let payload = reviewed.stage_payload(&artifact)?;
     let runtime = reviewed.prepare_runtime(&payload)?;
     assert_eq!(
         runtime.reviewed_names(),

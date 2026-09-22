@@ -96,8 +96,12 @@ pub enum ReviewedPayloadArchive {
 /// Typed reason reviewed archive bytes cannot become an unactivated payload.
 #[derive(Debug)]
 pub enum ManagedPayloadError {
+    /// The selected raw-file name or whole-artifact identity is not reviewed.
+    InvalidReview,
     /// The artifact or owned private payload boundary failed.
     Storage(ManagedArtifactError),
+    /// A raw regular-file copy differed from reviewed bytes or failed I/O.
+    RawTransfer(ArtifactTransferError),
     /// Raw tar inventory, selection or staging failed.
     Tar(TarInventoryError),
     /// Gzip/tar inventory, selection or staging failed.
@@ -236,7 +240,9 @@ impl Error for ManagedRuntimeLayoutError {}
 impl fmt::Display for ManagedPayloadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
+            Self::InvalidReview => "reviewed raw managed payload is invalid",
             Self::Storage(_) => "private managed payload boundary failed",
+            Self::RawTransfer(_) => "reviewed raw managed payload copy failed",
             Self::Tar(_) => "reviewed tar payload could not be staged",
             Self::GzipTar(_) => "reviewed gzip/tar payload could not be staged",
             Self::XzTar(_) => "reviewed XZ/tar payload could not be staged",
@@ -796,6 +802,52 @@ impl StagedManagedArtifact {
         file.seek(SeekFrom::Start(0))
             .map_err(|_| ManagedArtifactError::Io)?;
         Ok(file)
+    }
+
+    /// Copies one exact verified raw artifact into a fresh private payload.
+    ///
+    /// The model remains unactivated. A failed copy removes only the reviewed
+    /// newly created file; unexpected or substituted entries stop cleanup.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an unsafe filename, different integrity, changed source bytes
+    /// or a private-storage failure.
+    pub fn stage_reviewed_raw_file(
+        &self,
+        name: &str,
+        integrity: ArtifactIntegrity,
+    ) -> Result<StagedManagedPayload<'_>, ManagedPayloadError> {
+        if !portable_runtime_name(name) || integrity != self.integrity {
+            return Err(ManagedPayloadError::InvalidReview);
+        }
+        let mut source = self.open_artifact().map_err(ManagedPayloadError::Storage)?;
+        let payload = self
+            .create_payload_directory()
+            .map_err(ManagedPayloadError::Storage)?;
+        let result = (|| {
+            let mut output = payload
+                .open_with(name, &artifact_write_options())
+                .map_err(|_| ManagedPayloadError::Storage(ManagedArtifactError::UnsafeStorage))?;
+            transfer_verified(&mut source, &mut output, integrity)
+                .map_err(ManagedPayloadError::RawTransfer)?;
+            output
+                .sync_all()
+                .map_err(|_| ManagedPayloadError::Storage(ManagedArtifactError::Io))
+        })();
+        let selected = StagedManagedPayload {
+            artifact: self,
+            payload,
+            selected: vec![SelectedPayloadFile {
+                name: name.to_owned(),
+                integrity,
+            }],
+        };
+        if let Err(error) = result {
+            selected.discard().map_err(ManagedPayloadError::Storage)?;
+            return Err(error);
+        }
+        Ok(selected)
     }
 
     /// Stages an exact reviewed selection beneath this owned unactivated artifact.
@@ -3486,6 +3538,45 @@ mod tests {
                 Err(ManagedArtifactError::Transfer(_))
             ));
             staged.discard()?;
+            Ok::<(), Box<dyn Error>>(())
+        })();
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[test]
+    fn raw_model_staging_requires_exact_review_and_remains_unactivated()
+    -> Result<(), Box<dyn Error>> {
+        let parent = fixture_root()?;
+        let result = (|| {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            let integrity = abc_integrity()?;
+            let staged = store.import_verified(&b"abc"[..], integrity)?;
+            let different = ArtifactIntegrity::from_sha256_hex(3, &"0".repeat(64))?;
+            assert!(matches!(
+                staged.stage_reviewed_raw_file("ggml-base.bin", different),
+                Err(ManagedPayloadError::InvalidReview)
+            ));
+            assert!(matches!(
+                staged.stage_reviewed_raw_file("../outside", integrity),
+                Err(ManagedPayloadError::InvalidReview)
+            ));
+            let payload = staged.stage_reviewed_raw_file("ggml-base.bin", integrity)?;
+            let mut file = payload.open_selected_file("ggml-base.bin")?;
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)?;
+            assert_eq!(bytes, b"abc");
+            let runtime = payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+                max_bytes: 3,
+                aliases: &[],
+                executables: &[],
+            })?;
+            assert_eq!(runtime.reviewed_names(), ["ggml-base.bin"]);
+            runtime.recheck_all()?;
+            runtime.discard()?;
+            payload.discard()?;
+            staged.discard()?;
+            assert!(store.open_selected_runtime("whisper_model")?.is_none());
             Ok::<(), Box<dyn Error>>(())
         })();
         fs::remove_dir_all(parent)?;

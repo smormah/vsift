@@ -17,6 +17,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06's pinned multilingual `base` model now uses the same accepted-action
+  authority as the Ubuntu archives. Exact model bytes can be copied into a
+  private unactivated payload and runtime with bounded size/SHA-256 rechecks;
+  unsafe names or mismatched review fail before mutation. The disposable
+  Ubuntu workflow exercises the path against fresh publisher bytes. Provider
+  compatibility and managed activation remain pending.
 - P06 accepted Ubuntu actions can now be rebound to exact reviewed publisher
   source and passed through the owned archive/payload/runtime preparation path
   using the catalogue inventory itself. Changed action fields or mismatched
