@@ -2,6 +2,18 @@
 
 ## Active
 
+2026-09-22: P06 pinned raw-model staging implementation `2ba8867` now
+copies the accepted multilingual `base` artifact into a private selected
+payload and separate unactivated runtime. The source is rehashed before copy;
+whole-artifact identity, portable filename, selected-file digest and runtime
+inventory are checked. Invalid review fails before payload mutation. The
+disposable Ubuntu workflow now runs a fresh pinned publisher-model download
+through the production owned layout. Local fmt, strict Clippy, workspace
+tests, warning-denied rustdoc, actionlint and governance passed; hosted and
+protected evidence remain pending. Production compatibility smoke,
+accepted-plan revalidation, public install/lifecycle, bounded cleanup,
+power-loss and D-01..D-10/P06 E2E remain open. P06 stays planned.
+
 2026-09-22: Protected [PR #111](https://github.com/smormah/vsift/pull/111)
 merged P06 accepted-source staging bridge implementation `e4ba5bc`, progress
 record `ec07c87`, hosted workflow `cb818ac` and evidence record `4854d91`
