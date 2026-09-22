@@ -390,7 +390,7 @@ fn reviewed_setup_plan_checks_first_and_never_installs() -> Result<(), Box<dyn s
 }
 
 #[test]
-fn reserved_install_fails_without_claiming_implementation() -> Result<(), Box<dyn std::error::Error>>
+fn reserved_install_remains_unavailable_without_mutation() -> Result<(), Box<dyn std::error::Error>>
 {
     let output = run(&[
         "setup",

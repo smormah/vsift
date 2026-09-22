@@ -105,6 +105,14 @@ or observed selection requires a fresh plan and acceptance. No configured paths
 are echoed in the response. The plan is **read-only**: `setup install` still
 returns `COMMAND_NOT_IMPLEMENTED` and cannot apply it yet. The availability
 value `catalogue_accepted_install_pending` states that distinction explicitly.
+For a readable `--plan` document, the reserved install path now decodes the
+complete strict response within the JSON byte/nesting budgets, rebuilds the
+current plan, requires the saved presentation to match it exactly, and checks
+`--accept-plan` against the current digest before returning the reserved-command
+result. Malformed, unknown-field, changed-state or mismatched-digest documents
+fail with `INVALID_ARGUMENT` before any transfer or managed-root mutation. An
+unreadable plan retains the reserved `COMMAND_NOT_IMPLEMENTED` behavior until the
+installer can provide its complete storage-failure contract.
 
 Windows x86-64, macOS ARM64, other hosts and expired or invalid catalogue
 entries return typed `unavailable_*` status, no actions or digest, and manual

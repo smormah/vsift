@@ -395,3 +395,14 @@ provider-neutral rollback and removal primitives do not select a source or
 authorize their own use. The catalogue, target
 compatibility, accepted plan, public commands and bounded garbage-collection policy
 remain required, so managed installation remains unavailable.
+
+## 2026-09-22 accepted-plan revalidation status
+
+A readable saved `setup plan --json` result can now enter a bounded strict
+decoder and be compared with a fresh evaluation of the current target,
+catalogue, configured selections, executable probes, model observation and time.
+The complete public data must be identical and the separately supplied digest
+must authorize that current plan. Malformed, unknown-field, stale and mismatched
+inputs fail before transfer or managed-root mutation. The successful validation
+path deliberately stops with `COMMAND_NOT_IMPLEMENTED`; it is authority evidence,
+not a public installer or compatibility/activation result.

@@ -18,7 +18,7 @@ use std::{
 };
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
-use command::{BundleCommand, Cli, Command, EventFormat, SetupCommand};
+use command::{BundleCommand, Cli, Command, EventFormat, ExecutionProfile, SetupCommand};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{OperationResponse, OutputMode, OutputWriter, ProcessExit, TerminalEventResponse};
 use vsift_application::SetupSelectionState;
@@ -163,112 +163,49 @@ where
                 write_session_result(&mut writer, mode, "setup.configure-model", result)
             }
             Some(SetupCommand::Plan(arguments)) => {
-                let config = match EffectiveConfig::resolve(
-                    ConfigLayer {
-                        profile: Some(arguments.profile),
-                        probe_timeout_seconds: None,
-                    },
-                    ConfigLayer::default(),
-                    ConfigLayer::default(),
-                    &HostPolicy::local_r0(),
-                ) {
-                    Ok(config) => config,
-                    Err(error) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            "setup.plan",
-                            FailureCode::InvalidArgument,
-                            Some(&error.to_string()),
-                        );
-                    }
-                };
-                let store = match UserDependencyConfigStore::default_location() {
-                    Ok(store) => store,
-                    Err(error) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            "setup.plan",
-                            setup_config_failure(error),
-                            None,
-                        );
-                    }
-                };
-                let configured = match store.read() {
-                    Ok(configured) => configured,
-                    Err(error) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            "setup.plan",
-                            setup_config_failure(error),
-                            None,
-                        );
-                    }
-                };
-                let configured_model = match store.read_model() {
-                    Ok(model) => model,
-                    Err(error) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            "setup.plan",
-                            setup_config_failure(error),
-                            None,
-                        );
-                    }
-                };
-                let now_unix_seconds = match SystemTime::now().duration_since(UNIX_EPOCH) {
-                    Ok(duration) => duration.as_secs(),
-                    Err(_) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            "setup.plan",
-                            FailureCode::Internal,
-                            None,
-                        );
-                    }
-                };
-                let Ok(catalogue) = accepted_ubuntu_catalogue() else {
-                    return write_failure(
-                        &mut writer,
-                        mode,
-                        "setup.plan",
-                        FailureCode::Internal,
-                        None,
-                    );
-                };
-                let selections = SetupSelectionState {
-                    ffmpeg: configured
-                        .ffmpeg
-                        .as_ref()
-                        .map(|path| path.to_string_lossy().into_owned()),
-                    ffprobe: configured
-                        .ffprobe
-                        .as_ref()
-                        .map(|path| path.to_string_lossy().into_owned()),
-                    whisper: configured
-                        .whisper
-                        .as_ref()
-                        .map(|path| path.to_string_lossy().into_owned()),
-                    model: configured_model
-                        .as_ref()
-                        .map(|path| path.to_string_lossy().into_owned()),
-                };
-                let probe =
-                    ProcessDependencyProbe::with_explicit_paths(config.probe_timeout, configured);
-                let result = setup::plan(
-                    probe,
-                    config.profile,
-                    detect_managed_target(),
-                    selections,
-                    now_unix_seconds,
-                    Some(catalogue),
-                )
-                .await;
+                let result = current_setup_plan(arguments.profile)
+                    .await
+                    .and_then(setup::EvaluatedSetupPlan::into_response);
                 write_session_result(&mut writer, mode, "setup.plan", result)
+            }
+            Some(SetupCommand::Install(arguments)) => {
+                let saved = match setup::SavedSetupPlan::read(&arguments.plan) {
+                    Ok(saved) => saved,
+                    Err(FailureCode::StorageIo) => {
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            "setup.install",
+                            FailureCode::CommandNotImplemented,
+                            None,
+                        );
+                    }
+                    Err(code) => {
+                        return write_failure(&mut writer, mode, "setup.install", code, None);
+                    }
+                };
+                let profile = match saved.profile() {
+                    Ok(profile) => profile,
+                    Err(code) => {
+                        return write_failure(&mut writer, mode, "setup.install", code, None);
+                    }
+                };
+                let current = match current_setup_plan(profile).await {
+                    Ok(current) => current,
+                    Err(code) => {
+                        return write_failure(&mut writer, mode, "setup.install", code, None);
+                    }
+                };
+                if let Err(code) = current.validate_acceptance(&saved, &arguments.accept_plan) {
+                    return write_failure(&mut writer, mode, "setup.install", code, None);
+                }
+                write_failure(
+                    &mut writer,
+                    mode,
+                    "setup.install",
+                    FailureCode::CommandNotImplemented,
+                    None,
+                )
             }
             None => write_setup_help(&mut writer),
             Some(unimplemented) => {
@@ -309,6 +246,56 @@ where
             None,
         ),
     }
+}
+
+async fn current_setup_plan(
+    profile: ExecutionProfile,
+) -> Result<setup::EvaluatedSetupPlan, FailureCode> {
+    let config = EffectiveConfig::resolve(
+        ConfigLayer {
+            profile: Some(profile),
+            probe_timeout_seconds: None,
+        },
+        ConfigLayer::default(),
+        ConfigLayer::default(),
+        &HostPolicy::local_r0(),
+    )
+    .map_err(|_| FailureCode::InvalidArgument)?;
+    let store = UserDependencyConfigStore::default_location().map_err(setup_config_failure)?;
+    let configured = store.read().map_err(setup_config_failure)?;
+    let configured_model = store.read_model().map_err(setup_config_failure)?;
+    let now_unix_seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| FailureCode::Internal)?
+        .as_secs();
+    let catalogue = accepted_ubuntu_catalogue().map_err(|_| FailureCode::Internal)?;
+    let selections = SetupSelectionState {
+        ffmpeg: configured
+            .ffmpeg
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned()),
+        ffprobe: configured
+            .ffprobe
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned()),
+        whisper: configured
+            .whisper
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned()),
+        model: configured_model
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned()),
+    };
+    let probe = ProcessDependencyProbe::with_explicit_paths(config.probe_timeout, configured);
+    setup::evaluate_plan(
+        probe,
+        config.profile,
+        detect_managed_target(),
+        selections,
+        now_unix_seconds,
+        Some(catalogue),
+    )
+    .await
 }
 
 fn setup_config_failure(error: UserDependencyConfigError) -> FailureCode {
@@ -497,7 +484,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reserved_command_fails_explicitly_without_running_future_work()
+    async fn reserved_install_remains_unavailable_for_an_unreadable_plan()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();

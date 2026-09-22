@@ -17,6 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 can now strictly and boundedly decode a saved `setup plan --json`
+  document, rebuild the plan from current target, catalogue, configuration,
+  probes and time, require the entire presentation to remain unchanged, and
+  verify the separately supplied acceptance digest. Malformed or stale readable
+  plans fail before transfer or filesystem mutation. A valid plan still ends in
+  `COMMAND_NOT_IMPLEMENTED`; compatibility smoke and the installer transaction
+  remain pending.
 - P06's pinned multilingual `base` model now uses the same accepted-action
   authority as the Ubuntu archives. Exact model bytes can be copied into a
   private unactivated payload and runtime with bounded size/SHA-256 rechecks;

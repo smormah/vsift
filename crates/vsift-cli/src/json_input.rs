@@ -5,7 +5,13 @@
     reason = "P01 freezes the bounded decoder before P11 admits job request files"
 )]
 
-use std::{error::Error, fmt};
+use std::{
+    error::Error,
+    fmt,
+    fs::File,
+    io::{Read, Take},
+    path::Path,
+};
 
 use serde::de::DeserializeOwned;
 use vsift_domain::FailureCode;
@@ -44,9 +50,26 @@ where
     serde_json::from_slice(bytes).map_err(JsonInputError::Malformed)
 }
 
+/// Reads and decodes one bounded JSON document without first allocating for an
+/// untrusted file size.
+pub(crate) fn read_json_file<T>(path: &Path) -> Result<T, JsonInputError>
+where
+    T: DeserializeOwned,
+{
+    let file = File::open(path).map_err(JsonInputError::Io)?;
+    let mut bounded: Take<File> = file.take((MAX_JSON_INPUT_BYTES as u64) + 1);
+    let mut bytes = Vec::with_capacity(MAX_JSON_INPUT_BYTES.min(64 * 1024));
+    bounded
+        .read_to_end(&mut bytes)
+        .map_err(JsonInputError::Io)?;
+    decode_json(&bytes)
+}
+
 /// Why a noninteractive JSON request was rejected before execution.
 #[derive(Debug)]
 pub(crate) enum JsonInputError {
+    /// The request file could not be opened or read.
+    Io(std::io::Error),
     /// The request exceeded the input byte budget.
     TooLarge,
     /// Object/array nesting exceeded the parser budget.
@@ -62,6 +85,7 @@ impl JsonInputError {
     #[must_use]
     pub(crate) const fn code(&self) -> FailureCode {
         match self {
+            Self::Io(_) => FailureCode::StorageIo,
             Self::UnsupportedVersion => FailureCode::UnsupportedSchema,
             Self::TooLarge | Self::TooDeep | Self::Malformed(_) => FailureCode::InvalidArgument,
         }
@@ -71,6 +95,7 @@ impl JsonInputError {
 impl fmt::Display for JsonInputError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
+            Self::Io(_) => "JSON request could not be read",
             Self::TooLarge => "JSON request exceeds the byte limit",
             Self::TooDeep => "JSON request exceeds the nesting limit",
             Self::Malformed(_) => "JSON request does not match its strict schema",
@@ -83,6 +108,7 @@ impl fmt::Display for JsonInputError {
 impl Error for JsonInputError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            Self::Io(error) => Some(error),
             Self::Malformed(error) => Some(error),
             Self::TooLarge | Self::TooDeep | Self::UnsupportedVersion => None,
         }
@@ -138,6 +164,7 @@ mod tests {
 
     use super::{
         JsonInputError, MAX_JSON_INPUT_BYTES, MAX_JSON_NESTING, SchemaVersion, decode_json,
+        read_json_file,
     };
 
     #[derive(Debug, Deserialize)]
@@ -213,10 +240,34 @@ mod tests {
     }
 
     #[test]
+    fn file_reader_stops_after_the_json_byte_budget() -> Result<(), Box<dyn std::error::Error>> {
+        let mut random = [0_u8; 12];
+        getrandom::fill(&mut random).map_err(|_| std::io::Error::other("random source failed"))?;
+        let path = std::env::temp_dir().join(format!("vsift-plan-{}.json", hex(&random)));
+        std::fs::write(&path, vec![b' '; MAX_JSON_INPUT_BYTES + 1])?;
+
+        let result = read_json_file::<serde_json::Value>(&path);
+        std::fs::remove_file(&path)?;
+
+        assert!(matches!(result, Err(JsonInputError::TooLarge)));
+        Ok(())
+    }
+
+    #[test]
     fn braces_inside_strings_do_not_consume_nesting_budget()
     -> Result<(), Box<dyn std::error::Error>> {
         let value: serde_json::Value = decode_json(br#"{"value":"[[[{{{\\\""}"#)?;
         assert!(value.is_object());
         Ok(())
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        const DIGITS: &[u8; 16] = b"0123456789abcdef";
+        let mut encoded = String::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+            encoded.push(char::from(DIGITS[usize::from(byte >> 4)]));
+            encoded.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
+        }
+        encoded
     }
 }
