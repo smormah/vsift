@@ -31,6 +31,7 @@ const COMPATIBILITY_FIXTURE_BYTES: u64 = 76_500;
 const COMPATIBILITY_FIXTURE_SHA256: &str =
     "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070";
 const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.1-11-ge47273f4d9-20260831";
+const EXPECTED_FFPROBE_VERSION: &str = "ffprobe version n9.0.1-11-ge47273f4d9-20260831";
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -142,7 +143,10 @@ fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogu
             COMPATIBILITY_FIXTURE_SHA256,
         )?,
         expected_ffmpeg_version: String::from(EXPECTED_FFMPEG_VERSION),
+        expected_ffprobe_version: String::from(EXPECTED_FFPROBE_VERSION),
         stream_limit_bytes: 64 * 1024,
+        audio_file_limit_bytes: 256 * 1024,
+        transcript_file_limit_bytes: 64 * 1024,
         media_deadline_seconds: 60,
         inference_deadline_seconds: 180,
         audio_sample_rate_hz: 16_000,
@@ -794,6 +798,12 @@ mod tests {
         );
         assert_eq!(catalogue.compatibility.audio_sample_rate_hz, 16_000);
         assert_eq!(catalogue.compatibility.audio_channels, 1);
+        assert_eq!(catalogue.compatibility.stream_limit_bytes, 64 * 1024);
+        assert_eq!(catalogue.compatibility.audio_file_limit_bytes, 256 * 1024);
+        assert_eq!(
+            catalogue.compatibility.transcript_file_limit_bytes,
+            64 * 1024
+        );
         assert_eq!(catalogue.compatibility.media_deadline_seconds, 60);
         assert_eq!(catalogue.compatibility.inference_deadline_seconds, 180);
         for artifact in catalogue.artifacts {

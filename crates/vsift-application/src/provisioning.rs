@@ -148,8 +148,14 @@ pub struct ReviewedCompatibilityPolicy {
     pub fixture: ArtifactIntegrity,
     /// Expected first-line prefix from the selected `FFmpeg` build.
     pub expected_ffmpeg_version: String,
+    /// Expected first-line prefix from the selected `FFprobe` build.
+    pub expected_ffprobe_version: String,
     /// Maximum captured bytes on each provider output stream.
     pub stream_limit_bytes: usize,
+    /// Maximum generated PCM/WAV bytes admitted by the smoke workspace.
+    pub audio_file_limit_bytes: u64,
+    /// Maximum generated transcript bytes admitted by the smoke workspace.
+    pub transcript_file_limit_bytes: u64,
     /// Per-process deadline for media inspection and extraction.
     pub media_deadline_seconds: u64,
     /// Deadline for the model-backed inference process.
@@ -461,8 +467,13 @@ fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
 
 fn compatibility_is_complete(policy: &ReviewedCompatibilityPolicy) -> bool {
     !policy.expected_ffmpeg_version.is_empty()
+        && !policy.expected_ffprobe_version.is_empty()
         && policy.stream_limit_bytes > 0
         && policy.stream_limit_bytes <= 64 * 1024
+        && policy.audio_file_limit_bytes > 44
+        && policy.audio_file_limit_bytes <= 1024 * 1024
+        && policy.transcript_file_limit_bytes > 0
+        && policy.transcript_file_limit_bytes <= 1024 * 1024
         && policy.media_deadline_seconds > 0
         && policy.media_deadline_seconds <= 60
         && policy.inference_deadline_seconds > 0
@@ -514,7 +525,10 @@ fn plan_digest(plan: &ManagedSetupPlan) -> String {
         digest_field(&mut digest, &policy.fixture.bytes().to_string());
         digest_field(&mut digest, &policy.fixture.sha256_hex());
         digest_field(&mut digest, &policy.expected_ffmpeg_version);
+        digest_field(&mut digest, &policy.expected_ffprobe_version);
         digest_field(&mut digest, &policy.stream_limit_bytes.to_string());
+        digest_field(&mut digest, &policy.audio_file_limit_bytes.to_string());
+        digest_field(&mut digest, &policy.transcript_file_limit_bytes.to_string());
         digest_field(&mut digest, &policy.media_deadline_seconds.to_string());
         digest_field(&mut digest, &policy.inference_deadline_seconds.to_string());
         digest_field(&mut digest, &policy.audio_sample_rate_hz.to_string());
@@ -645,7 +659,10 @@ mod tests {
             compatibility: ReviewedCompatibilityPolicy {
                 fixture: integrity('f')?,
                 expected_ffmpeg_version: String::from("ffmpeg version fixture"),
+                expected_ffprobe_version: String::from("ffprobe version fixture"),
                 stream_limit_bytes: 64 * 1024,
+                audio_file_limit_bytes: 256 * 1024,
+                transcript_file_limit_bytes: 64 * 1024,
                 media_deadline_seconds: 60,
                 inference_deadline_seconds: 180,
                 audio_sample_rate_hz: 16_000,
