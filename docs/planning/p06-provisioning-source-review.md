@@ -77,7 +77,9 @@ rechecked without model execution or activation. Invalid names and a changed
 whole-artifact identity fail before payload creation. The disposable Ubuntu
 workflow downloads the exact pinned model from its publisher and runs the
 production Rust owned-layout test before the separate candidate inference
-smoke. A successful byte/layout check does not prove model compatibility,
+smoke. Both stages passed in
+[hosted Ubuntu run 35719747666](https://github.com/smormah/vsift/actions/runs/35719747666).
+A successful byte/layout check does not prove production model compatibility,
 speech accuracy, installer rollback or D-01..D-10 completion.
 
 ## Finding
