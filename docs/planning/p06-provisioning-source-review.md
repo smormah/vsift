@@ -60,7 +60,9 @@ runtime preparation refuses a payload with a different selected inventory.
 The opt-in pinned FFmpeg and whisper.cpp archive checks now use this bridge
 for the owned payload and runtime path. The manually dispatched disposable
 Ubuntu workflow runs both checks against fresh publisher bytes before its
-separate model-backed candidate smoke. This is still an unactivated boundary:
+separate model-backed candidate smoke. All three checkpoints passed in
+[hosted run 35668273600](https://github.com/smormah/vsift/actions/runs/35668273600).
+This is still an unactivated boundary:
 the raw model requires its own regular-file staging path, and production
 compatibility smoke, accepted-plan revalidation, activation and cleanup
 qualification remain required before `setup install` can run.

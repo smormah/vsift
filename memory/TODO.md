@@ -12,9 +12,13 @@ dispatched Ubuntu workflow exercise both archive bridges; full local fmt,
 strict Clippy, workspace tests, warning-denied rustdoc and governance passed.
 Fresh [hosted Ubuntu run 35668273600](https://github.com/smormah/vsift/actions/runs/35668273600)
 passed both production owned archive layouts and the separate model-backed
-candidate smoke. Protected PR checks remain pending. The raw model staging
-path, compatibility smoke,
-accepted-plan revalidation, public install/lifecycle, bounded cleanup,
+candidate smoke. Initial protected macOS Quality in
+[CI run 35668269011](https://github.com/smormah/vsift/actions/runs/35668269011)
+reproduced the existing unrelated P05 cleanup-lock `Busy` symptom, then its
+unchanged failed-job rerun passed; Ubuntu, Windows and the other checks passed.
+The updated-branch protected run remains pending. The raw model staging
+path, compatibility smoke, accepted-plan revalidation, public
+install/lifecycle, bounded cleanup,
 power-loss and D-01..D-10/P06 E2E remain open. P06 stays planned.
 
 2026-09-22: Protected [PR #109](https://github.com/smormah/vsift/pull/109)
