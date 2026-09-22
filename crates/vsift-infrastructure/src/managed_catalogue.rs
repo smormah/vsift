@@ -6,7 +6,8 @@ use std::{collections::HashSet, error::Error, fmt};
 
 use vsift_application::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedSetupAction, ReviewedArchiveLimits,
-    ReviewedArchiveLink, ReviewedArchiveSelection, ReviewedManagedFile, ReviewedRuntimeCopy,
+    ReviewedArchiveLink, ReviewedArchiveSelection, ReviewedCompatibilityPolicy,
+    ReviewedManagedFile, ReviewedRuntimeCopy,
 };
 use vsift_domain::{
     ArtifactIntegrity, ArtifactIntegrityError, ManagedArtifactFormat, ManagedComponent,
@@ -20,12 +21,16 @@ use crate::{
     StagedManagedArtifact, StagedManagedPayload,
 };
 
-const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-09-21-r1";
+const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-09-22-r2";
 const STOP_NEW_PLANS_AT: u64 = 1_848_700_800;
 const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
 const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
 const WHISPER_URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-ubuntu-x64.tar.gz";
 const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
+const COMPATIBILITY_FIXTURE_BYTES: u64 = 76_500;
+const COMPATIBILITY_FIXTURE_SHA256: &str =
+    "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070";
+const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.1-11-ge47273f4d9-20260831";
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -126,6 +131,22 @@ pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCa
         stop_new_plans_at: STOP_NEW_PLANS_AT,
         stop_new_plans_date: String::from(STOP_NEW_PLANS_DATE),
         artifacts,
+        compatibility: compatibility_policy()?,
+    })
+}
+
+fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
+    Ok(ReviewedCompatibilityPolicy {
+        fixture: ArtifactIntegrity::from_sha256_hex(
+            COMPATIBILITY_FIXTURE_BYTES,
+            COMPATIBILITY_FIXTURE_SHA256,
+        )?,
+        expected_ffmpeg_version: String::from(EXPECTED_FFMPEG_VERSION),
+        stream_limit_bytes: 64 * 1024,
+        media_deadline_seconds: 60,
+        inference_deadline_seconds: 180,
+        audio_sample_rate_hz: 16_000,
+        audio_channels: 1,
     })
 }
 
@@ -766,6 +787,15 @@ mod tests {
             ManagedComponent::WhisperModel
         );
         assert_eq!(catalogue.stop_new_plans_date, "2028-08-01T00:00:00Z");
+        assert_eq!(catalogue.compatibility.fixture.bytes(), 76_500);
+        assert_eq!(
+            catalogue.compatibility.fixture.sha256_hex(),
+            "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070"
+        );
+        assert_eq!(catalogue.compatibility.audio_sample_rate_hz, 16_000);
+        assert_eq!(catalogue.compatibility.audio_channels, 1);
+        assert_eq!(catalogue.compatibility.media_deadline_seconds, 60);
+        assert_eq!(catalogue.compatibility.inference_deadline_seconds, 180);
         for artifact in catalogue.artifacts {
             assert!(artifact.source_url.starts_with("https://"));
             assert!(!artifact.files.is_empty());

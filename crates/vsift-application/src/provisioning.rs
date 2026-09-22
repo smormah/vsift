@@ -141,6 +141,25 @@ pub struct AcceptedManagedArtifact {
     pub files: Vec<ReviewedManagedFile>,
 }
 
+/// Exact bounded compatibility contract reviewed for one managed target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReviewedCompatibilityPolicy {
+    /// Synthetic media fixture that every provider set must process.
+    pub fixture: ArtifactIntegrity,
+    /// Expected first-line prefix from the selected `FFmpeg` build.
+    pub expected_ffmpeg_version: String,
+    /// Maximum captured bytes on each provider output stream.
+    pub stream_limit_bytes: usize,
+    /// Per-process deadline for media inspection and extraction.
+    pub media_deadline_seconds: u64,
+    /// Deadline for the model-backed inference process.
+    pub inference_deadline_seconds: u64,
+    /// Required PCM sample rate passed between `FFmpeg` and whisper.cpp.
+    pub audio_sample_rate_hz: u32,
+    /// Required PCM channel count passed between `FFmpeg` and whisper.cpp.
+    pub audio_channels: u8,
+}
+
 /// A complete target catalogue accepted in reviewed application source.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcceptedManagedCatalogue {
@@ -154,6 +173,8 @@ pub struct AcceptedManagedCatalogue {
     pub stop_new_plans_date: String,
     /// Complete component set in stable component order.
     pub artifacts: Vec<AcceptedManagedArtifact>,
+    /// Compatibility checks that must pass before publication.
+    pub compatibility: ReviewedCompatibilityPolicy,
 }
 
 /// Why managed actions are or are not available in a setup plan.
@@ -264,6 +285,7 @@ pub struct ManagedSetupPlan {
     /// Canonical SHA-256 acceptance digest, absent when managed setup is unavailable.
     pub digest: Option<String>,
     selection_state: SetupSelectionState,
+    compatibility: Option<ReviewedCompatibilityPolicy>,
 }
 
 /// Explicit plan acceptance failed.
@@ -394,6 +416,7 @@ pub fn plan_managed_setup(
         model,
         actions,
         digest: None,
+        compatibility: catalogue.as_ref().map(|entry| entry.compatibility.clone()),
         selection_state,
     };
     if matches!(
@@ -407,6 +430,7 @@ pub fn plan_managed_setup(
 
 fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
     entry.artifacts.len() == 3
+        && compatibility_is_complete(&entry.compatibility)
         && entry
             .artifacts
             .iter()
@@ -433,6 +457,18 @@ fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
                     }
                 }
         })
+}
+
+fn compatibility_is_complete(policy: &ReviewedCompatibilityPolicy) -> bool {
+    !policy.expected_ffmpeg_version.is_empty()
+        && policy.stream_limit_bytes > 0
+        && policy.stream_limit_bytes <= 64 * 1024
+        && policy.media_deadline_seconds > 0
+        && policy.media_deadline_seconds <= 60
+        && policy.inference_deadline_seconds > 0
+        && policy.inference_deadline_seconds <= 300
+        && policy.audio_sample_rate_hz == 16_000
+        && policy.audio_channels == 1
 }
 
 fn plan_digest(plan: &ManagedSetupPlan) -> String {
@@ -474,6 +510,16 @@ fn plan_digest(plan: &ManagedSetupPlan) -> String {
         &mut digest,
         plan.selection_state.model.as_deref().unwrap_or(""),
     );
+    if let Some(policy) = &plan.compatibility {
+        digest_field(&mut digest, &policy.fixture.bytes().to_string());
+        digest_field(&mut digest, &policy.fixture.sha256_hex());
+        digest_field(&mut digest, &policy.expected_ffmpeg_version);
+        digest_field(&mut digest, &policy.stream_limit_bytes.to_string());
+        digest_field(&mut digest, &policy.media_deadline_seconds.to_string());
+        digest_field(&mut digest, &policy.inference_deadline_seconds.to_string());
+        digest_field(&mut digest, &policy.audio_sample_rate_hz.to_string());
+        digest_field(&mut digest, &policy.audio_channels.to_string());
+    }
     for action in &plan.actions {
         digest_field(&mut digest, &action.id);
         digest_artifact(&mut digest, &action.artifact);
@@ -545,8 +591,8 @@ mod tests {
 
     use super::{
         AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedPlanAvailability,
-        PlanAcceptanceError, ReviewedManagedFile, SetupDependencyDisposition, SetupProfile,
-        SetupSelectionState, plan_managed_setup,
+        PlanAcceptanceError, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+        SetupDependencyDisposition, SetupProfile, SetupSelectionState, plan_managed_setup,
     };
     use crate::RuntimeDiagnosis;
 
@@ -596,6 +642,15 @@ mod tests {
             stop_new_plans_at: 2_000,
             stop_new_plans_date: String::from("fixture-date"),
             artifacts,
+            compatibility: ReviewedCompatibilityPolicy {
+                fixture: integrity('f')?,
+                expected_ffmpeg_version: String::from("ffmpeg version fixture"),
+                stream_limit_bytes: 64 * 1024,
+                media_deadline_seconds: 60,
+                inference_deadline_seconds: 180,
+                audio_sample_rate_hz: 16_000,
+                audio_channels: 1,
+            },
         })
     }
 
@@ -757,6 +812,18 @@ mod tests {
             1_000,
             Some(changed_catalogue),
         );
+        let mut changed_compatibility = catalogue()?;
+        changed_compatibility
+            .compatibility
+            .inference_deadline_seconds = 181;
+        let changed_policy = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis(&[RuntimeDependency::Ffmpeg]),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_000,
+            Some(changed_compatibility),
+        );
 
         assert_eq!(
             selected.validate_acceptance(prior),
@@ -764,6 +831,10 @@ mod tests {
         );
         assert_eq!(
             changed.validate_acceptance(prior),
+            Err(PlanAcceptanceError::DigestMismatch)
+        );
+        assert_eq!(
+            changed_policy.validate_acceptance(prior),
             Err(PlanAcceptanceError::DigestMismatch)
         );
         Ok(())
@@ -781,6 +852,25 @@ mod tests {
             SetupSelectionState::default(),
             1_000,
             Some(incomplete),
+        );
+        assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
+        assert!(plan.actions.is_empty());
+        assert!(plan.digest.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_compatibility_policy_cannot_produce_actions_or_digest()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut invalid = catalogue()?;
+        invalid.compatibility.stream_limit_bytes = 0;
+        let plan = plan_managed_setup(
+            SetupProfile::Desktop,
+            diagnosis(&RuntimeDependency::ALL),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_000,
+            Some(invalid),
         );
         assert_eq!(plan.availability, ManagedPlanAvailability::CatalogueInvalid);
         assert!(plan.actions.is_empty());
