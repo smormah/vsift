@@ -49,5 +49,35 @@ jobs:
           VSIFT_P06_WHISPER_ARCHIVE: ${{ runner.temp }}/vsift-p06-whisper-v1.9.2.tar.gz
         run: rm -f -- "$VSIFT_P06_WHISPER_ARCHIVE"
 
+      - name: Download pinned FFmpeg archive for the Rust layout check
+        env:
+          VSIFT_P06_FFMPEG_ARCHIVE: ${{ runner.temp }}/vsift-p06-ffmpeg-month-end.tar.xz
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd() / "tools"))
+          from p06_ubuntu_candidate_smoke import ARCHIVES
+          from p06_windows_candidate_smoke import verified_download
+
+          url, size, digest = ARCHIVES["ffmpeg"]
+          verified_download(url, Path(os.environ["VSIFT_P06_FFMPEG_ARCHIVE"]), size, digest)
+          PY
+
+      - name: Exercise the production owned FFmpeg runtime layout with pinned bytes
+        env:
+          VSIFT_P06_FFMPEG_ARCHIVE: ${{ runner.temp }}/vsift-p06-ffmpeg-month-end.tar.xz
+        run: >-
+          cargo test --locked -p vsift-infrastructure --test p06_ffmpeg_archive
+          pinned_upstream_archive_passes_contained_staging -- --ignored --exact --nocapture
+
+      - name: Remove the Rust FFmpeg layout-check archive
+        if: always()
+        env:
+          VSIFT_P06_FFMPEG_ARCHIVE: ${{ runner.temp }}/vsift-p06-ffmpeg-month-end.tar.xz
+        run: rm -f -- "$VSIFT_P06_FFMPEG_ARCHIVE"
+
       - name: Run pinned Ubuntu candidate compatibility smoke
         run: python tools/p06_ubuntu_candidate_smoke.py

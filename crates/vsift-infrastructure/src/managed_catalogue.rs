@@ -5,19 +5,27 @@ use std::fs;
 use std::{collections::HashSet, error::Error, fmt};
 
 use vsift_application::{
-    AcceptedManagedArtifact, AcceptedManagedCatalogue, ReviewedArchiveLimits, ReviewedArchiveLink,
-    ReviewedArchiveSelection, ReviewedManagedFile, ReviewedRuntimeCopy,
+    AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedSetupAction, ReviewedArchiveLimits,
+    ReviewedArchiveLink, ReviewedArchiveSelection, ReviewedManagedFile, ReviewedRuntimeCopy,
 };
 use vsift_domain::{
     ArtifactIntegrity, ArtifactIntegrityError, ManagedArtifactFormat, ManagedComponent,
     ManagedTarget,
 };
 
-use crate::{PublisherOrigin, PublisherSourceError, ReviewedPublisherArtifact};
+use crate::{
+    ArchiveInventoryBounds, ManagedPayloadError, ManagedRuntimeLayoutError, PreparedManagedRuntime,
+    PublisherOrigin, PublisherSourceError, ReviewedArchiveAlias, ReviewedArchiveFile,
+    ReviewedPayloadArchive, ReviewedPublisherArtifact, ReviewedRuntimeAlias, ReviewedRuntimeLayout,
+    StagedManagedArtifact, StagedManagedPayload,
+};
 
 const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-09-21-r1";
 const STOP_NEW_PLANS_AT: u64 = 1_848_700_800;
 const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
+const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
+const WHISPER_URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-ubuntu-x64.tar.gz";
+const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,6 +36,8 @@ pub enum ManagedCatalogueError {
     InvalidPublisherSource,
     /// Selected paths, runtime copies or archive limits disagree.
     InvalidLayout,
+    /// An action differs from the exact currently accepted source entry.
+    UnacceptedAction,
 }
 
 impl fmt::Display for ManagedCatalogueError {
@@ -36,6 +46,7 @@ impl fmt::Display for ManagedCatalogueError {
             Self::InvalidIntegrity => "managed catalogue integrity metadata is invalid",
             Self::InvalidPublisherSource => "managed catalogue publisher source is invalid",
             Self::InvalidLayout => "managed catalogue runtime inventory is invalid",
+            Self::UnacceptedAction => "managed action differs from the accepted catalogue",
         })
     }
 }
@@ -118,6 +129,205 @@ pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCa
     })
 }
 
+/// Exact production-source binding for one action from the accepted Ubuntu plan.
+///
+/// Constructing this value rechecks every field against the reviewed literals;
+/// a serialized plan or caller-edited action cannot supply transport authority.
+#[derive(Clone, Debug)]
+pub struct ReviewedUbuntuAction {
+    artifact: AcceptedManagedArtifact,
+    publisher: ReviewedPublisherArtifact,
+    bounds: Option<ArchiveInventoryBounds>,
+}
+
+/// A reviewed action cannot enter the archive staging path.
+#[derive(Debug)]
+pub enum ReviewedActionStageError {
+    /// The selected artifact is a raw file, not an archive.
+    RawFile,
+    /// Staged bytes were verified against a different reviewed artifact.
+    IntegrityMismatch,
+    /// Archive inventory, extraction or private staging failed.
+    Payload(ManagedPayloadError),
+}
+
+impl fmt::Display for ReviewedActionStageError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::RawFile => "raw managed artifact requires a file staging path",
+            Self::IntegrityMismatch => "staged artifact differs from the accepted action",
+            Self::Payload(_) => "reviewed archive could not be staged",
+        })
+    }
+}
+
+impl Error for ReviewedActionStageError {}
+
+impl ReviewedUbuntuAction {
+    /// Rebinds a planned action to the exact current accepted source entry.
+    ///
+    /// # Errors
+    ///
+    /// Rejects any changed action inventory, URL, digest, disclosure or version.
+    pub fn from_accepted_action(
+        action: &ManagedSetupAction,
+    ) -> Result<Self, ManagedCatalogueError> {
+        let (expected, url, origin) = match action.artifact.component {
+            ManagedComponent::MediaTools => (
+                ffmpeg_artifact()?,
+                FFMPEG_URL,
+                PublisherOrigin::GitHubRelease,
+            ),
+            ManagedComponent::WhisperCli => (
+                whisper_artifact()?,
+                WHISPER_URL,
+                PublisherOrigin::GitHubRelease,
+            ),
+            ManagedComponent::WhisperModel => (
+                model_artifact()?,
+                MODEL_URL,
+                PublisherOrigin::HuggingFaceModel,
+            ),
+        };
+        if action.id != format!("install-{}", expected.component.identifier())
+            || action.artifact != expected
+        {
+            return Err(ManagedCatalogueError::UnacceptedAction);
+        }
+        validate_layout(&expected)?;
+        let bounds = expected
+            .archive_limits
+            .map(|limits| ArchiveInventoryBounds::new(limits.entries, limits.expanded_bytes))
+            .transpose()
+            .map_err(|_| ManagedCatalogueError::InvalidLayout)?;
+        let publisher =
+            ReviewedPublisherArtifact::from_reviewed_source(url, origin, expected.integrity)?;
+        Ok(Self {
+            artifact: expected,
+            publisher,
+            bounds,
+        })
+    }
+
+    /// Immutable publisher source and exact artifact integrity for bounded transfer.
+    #[must_use]
+    pub const fn publisher_source(&self) -> &ReviewedPublisherArtifact {
+        &self.publisher
+    }
+
+    /// Exact accepted component and version metadata for later publication.
+    #[must_use]
+    pub const fn artifact(&self) -> &AcceptedManagedArtifact {
+        &self.artifact
+    }
+
+    /// Applies the complete reviewed archive inventory to verified staged bytes.
+    ///
+    /// The raw model requires a separate regular-file staging path. The returned
+    /// payload is unactivated and still requires runtime assembly and smoke.
+    ///
+    /// # Errors
+    ///
+    /// Refuses raw files and propagates typed bounded-extraction failures.
+    pub fn stage_archive<'a>(
+        &self,
+        staged: &'a StagedManagedArtifact,
+    ) -> Result<StagedManagedPayload<'a>, ReviewedActionStageError> {
+        if staged.integrity() != self.artifact.integrity {
+            return Err(ReviewedActionStageError::IntegrityMismatch);
+        }
+        let Some(limits) = self.artifact.archive_limits else {
+            return Err(ReviewedActionStageError::RawFile);
+        };
+        let archive = match self.artifact.format {
+            ManagedArtifactFormat::TarXz => ReviewedPayloadArchive::XzTar {
+                max_compressed_bytes: self.artifact.integrity.bytes(),
+                max_tar_bytes: limits.max_stream_bytes,
+            },
+            ManagedArtifactFormat::TarGz => ReviewedPayloadArchive::GzipTar {
+                max_compressed_bytes: self.artifact.integrity.bytes(),
+                max_tar_bytes: limits.max_stream_bytes,
+            },
+            ManagedArtifactFormat::RawFile => return Err(ReviewedActionStageError::RawFile),
+        };
+        let Some(bounds) = self.bounds else {
+            return Err(ReviewedActionStageError::RawFile);
+        };
+        let links = self
+            .artifact
+            .archive_links
+            .iter()
+            .map(|link| ReviewedArchiveAlias {
+                path: &link.archive_path,
+                target: &link.target,
+            })
+            .collect::<Vec<_>>();
+        let files = self
+            .artifact
+            .selected_files
+            .iter()
+            .map(|file| ReviewedArchiveFile {
+                path: &file.archive_path,
+                integrity: file.integrity,
+            })
+            .collect::<Vec<_>>();
+        staged
+            .stage_reviewed_payload(archive, bounds, &links, &files)
+            .map_err(ReviewedActionStageError::Payload)
+    }
+
+    /// Copies the exact selected files and reviewed regular aliases into an
+    /// unactivated private runtime; no archive link is materialized as a link.
+    ///
+    /// # Errors
+    ///
+    /// Rejects changed payload bytes, invalid layout or unsafe private storage.
+    pub fn prepare_runtime<'payload>(
+        &self,
+        payload: &'payload StagedManagedPayload<'_>,
+    ) -> Result<PreparedManagedRuntime<'payload, 'payload>, ManagedRuntimeLayoutError> {
+        if self.artifact.format == ManagedArtifactFormat::RawFile
+            || payload.selected_names().len() != self.artifact.selected_files.len()
+            || self
+                .artifact
+                .selected_files
+                .iter()
+                .any(|file| payload.selected_integrity(&file.runtime_name) != Some(file.integrity))
+        {
+            return Err(ManagedRuntimeLayoutError::InvalidReview);
+        }
+        let max_bytes = self
+            .artifact
+            .files
+            .iter()
+            .try_fold(0_u64, |total, file| {
+                total.checked_add(file.integrity.bytes())
+            })
+            .ok_or(ManagedRuntimeLayoutError::InvalidReview)?;
+        let aliases = self
+            .artifact
+            .runtime_copies
+            .iter()
+            .map(|copy| ReviewedRuntimeAlias {
+                name: &copy.name,
+                source_selected: &copy.source_selected,
+            })
+            .collect::<Vec<_>>();
+        let executables = self
+            .artifact
+            .files
+            .iter()
+            .filter(|file| file.executable)
+            .map(|file| file.name.as_str())
+            .collect::<Vec<_>>();
+        payload.prepare_reviewed_runtime(ReviewedRuntimeLayout {
+            max_bytes,
+            aliases: &aliases,
+            executables: &executables,
+        })
+    }
+}
+
 fn validate_layout(artifact: &AcceptedManagedArtifact) -> Result<(), ManagedCatalogueError> {
     let mut names = HashSet::new();
     for file in &artifact.files {
@@ -154,6 +364,7 @@ fn validate_layout(artifact: &AcceptedManagedArtifact) -> Result<(), ManagedCata
     for selection in &artifact.selected_files {
         if !archive_path(&selection.archive_path)
             || !flat_name(&selection.runtime_name)
+            || selection.archive_path.rsplit('/').next() != Some(selection.runtime_name.as_str())
             || !selected_paths.insert(selection.archive_path.to_ascii_lowercase())
             || !selected_names.insert(selection.runtime_name.to_ascii_lowercase())
             || !artifact.files.iter().any(|file| {
@@ -183,6 +394,7 @@ fn validate_layout(artifact: &AcceptedManagedArtifact) -> Result<(), ManagedCata
             return Err(ManagedCatalogueError::InvalidLayout);
         };
         if !flat_name(&copy.name)
+            || selected_names.contains(&copy.name.to_ascii_lowercase())
             || !selected_names.contains(&copy.source_selected.to_ascii_lowercase())
             || !copy_names.insert(copy.name.to_ascii_lowercase())
             || !artifact
@@ -218,17 +430,16 @@ fn archive_path(path: &str) -> bool {
 }
 
 fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
-    const URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
     let integrity = integrity(
         113_372_924,
         "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf",
     )?;
-    validate_source(URL, PublisherOrigin::GitHubRelease, integrity)?;
+    validate_source(FFMPEG_URL, PublisherOrigin::GitHubRelease, integrity)?;
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::MediaTools,
         version: String::from("n9.0.1-11-ge47273f4d9-20260831"),
         publisher: String::from("BtbN FFmpeg Builds"),
-        source_url: String::from(URL),
+        source_url: String::from(FFMPEG_URL),
         integrity,
         format: ManagedArtifactFormat::TarXz,
         archive_limits: Some(ReviewedArchiveLimits {
@@ -290,12 +501,11 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
 }
 
 fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
-    const URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-ubuntu-x64.tar.gz";
     let integrity = integrity(
         9_497_583,
         "46811a3ecf584307480a220b9ef5ff81b7b22dc41577cbc274ce3afc61f753b1",
     )?;
-    validate_source(URL, PublisherOrigin::GitHubRelease, integrity)?;
+    validate_source(WHISPER_URL, PublisherOrigin::GitHubRelease, integrity)?;
     let base_files = [
         (
             "LICENSE",
@@ -357,7 +567,7 @@ fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> 
         component: ManagedComponent::WhisperCli,
         version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
         publisher: String::from("ggml-org whisper.cpp"),
-        source_url: String::from(URL),
+        source_url: String::from(WHISPER_URL),
         integrity,
         format: ManagedArtifactFormat::TarGz,
         archive_limits: Some(ReviewedArchiveLimits {
@@ -425,17 +635,16 @@ fn whisper_runtime_copies() -> Vec<ReviewedRuntimeCopy> {
 }
 
 fn model_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
-    const URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
     let integrity = integrity(
         147_951_465,
         "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
     )?;
-    validate_source(URL, PublisherOrigin::HuggingFaceModel, integrity)?;
+    validate_source(MODEL_URL, PublisherOrigin::HuggingFaceModel, integrity)?;
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::WhisperModel,
         version: String::from("whisper-base-multilingual-80da2d8"),
         publisher: String::from("ggerganov whisper.cpp model repository"),
-        source_url: String::from(URL),
+        source_url: String::from(MODEL_URL),
         integrity,
         format: ManagedArtifactFormat::RawFile,
         archive_limits: None,
@@ -503,10 +712,12 @@ fn validate_source(
 mod tests {
     use std::collections::HashSet;
 
+    use vsift_application::ManagedSetupAction;
     use vsift_domain::{ManagedComponent, ManagedTarget};
 
     use super::{
-        ManagedCatalogueError, accepted_ubuntu_catalogue, detect_managed_target, validate_layout,
+        ManagedCatalogueError, ReviewedUbuntuAction, accepted_ubuntu_catalogue,
+        detect_managed_target, validate_layout,
     };
 
     #[test]
@@ -567,6 +778,44 @@ mod tests {
             validate_layout(&catalogue.artifacts[0]),
             Err(ManagedCatalogueError::InvalidLayout)
         );
+        let mut catalogue = accepted_ubuntu_catalogue()?;
+        catalogue.artifacts[1].selected_files[0].runtime_name = String::from("elsewhere");
+        assert_eq!(
+            validate_layout(&catalogue.artifacts[1]),
+            Err(ManagedCatalogueError::InvalidLayout)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn only_exact_accepted_actions_receive_publisher_authority()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let catalogue = accepted_ubuntu_catalogue()?;
+        for artifact in catalogue.artifacts {
+            let action = ManagedSetupAction {
+                id: format!("install-{}", artifact.component.identifier()),
+                artifact,
+            };
+            let reviewed = ReviewedUbuntuAction::from_accepted_action(&action)?;
+            assert_eq!(
+                reviewed.publisher_source().integrity(),
+                action.artifact.integrity
+            );
+            assert_eq!(reviewed.artifact(), &action.artifact);
+
+            let mut altered = action.clone();
+            altered.artifact.version.push_str("-changed");
+            assert!(matches!(
+                ReviewedUbuntuAction::from_accepted_action(&altered),
+                Err(ManagedCatalogueError::UnacceptedAction)
+            ));
+            let mut altered = action.clone();
+            altered.id.push_str("-changed");
+            assert!(matches!(
+                ReviewedUbuntuAction::from_accepted_action(&altered),
+                Err(ManagedCatalogueError::UnacceptedAction)
+            ));
+        }
         Ok(())
     }
 }
