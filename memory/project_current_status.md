@@ -9,14 +9,18 @@ inventory, selected-file hashes, link headers, runtime aliases and executable
 modes from that entry, rejecting mismatched whole-artifact or selected-payload
 identity before unactivated preparation. The opt-in real-archive checks and
 manually dispatched Ubuntu workflow use both archive bridges. Local fmt,
-strict Clippy, workspace tests, warning-denied rustdoc
-and governance passed; protected and fresh hosted archive runs remain pending.
+strict Clippy, workspace tests, warning-denied rustdoc and governance passed.
+Fresh [hosted Ubuntu run 35668273600](https://github.com/smormah/vsift/actions/runs/35668273600)
+passed both production owned archive layouts and the separate model-backed
+candidate smoke; protected PR checks remain pending.
 Raw model staging, compatibility smoke, accepted-plan revalidation, public
 installation/lifecycle, bounded GC, power-loss and D-01..D-10/P06 E2E remain
 open. P06 stays planned.
 
-2026-09-22: P06 catalogue/plan implementation `b74de4d` is awaiting protected
-PR checks and merge evidence. Reviewed source now pins exactly one complete
+2026-09-22: Protected [PR #109](https://github.com/smormah/vsift/pull/109)
+merged P06 catalogue/plan implementation `b74de4d` and progress record
+`9b97ff9` as `e533247` from protected predecessor `57cf7c2`. Reviewed source
+now pins exactly one complete
 managed candidate set for Ubuntu 24.04 x86-64: BtbN month-end FFmpeg/FFprobe,
 whisper.cpp v1.9.2 CLI and the pinned multilingual `base` model. The catalogue
 checks its own direct-origin routes, hashes, archive bounds, selected files,
@@ -27,7 +31,12 @@ binds target, catalogue revision, present probe and configured-model/selection
 observations, and all actions; unsupported, expired or invalid entries yield no
 digest. New plans stop on 2028-08-01. Full local fmt, strict Clippy, tests,
 warning-denied rustdoc, governance and dependency policy passed (existing
-duplicate-version warnings only). `setup install` still returns
+duplicate-version warnings only). Protected Ubuntu, macOS, Windows,
+Documentation, Governance and strict-worker checks passed in
+[CI run 35665923881](https://github.com/smormah/vsift/actions/runs/35665923881);
+[dependency/security run 35665923929](https://github.com/smormah/vsift/actions/runs/35665923929)
+and [Rust analysis run 35665923796](https://github.com/smormah/vsift/actions/runs/35665923796)
+passed. `setup install` still returns
 `COMMAND_NOT_IMPLEMENTED`; production compatibility smoke, accepted-plan
 revalidation, public lifecycle, bounded GC, power-loss and D-01..D-10/P06 E2E
 remain open. P06 stays planned and issue #66 stays open.

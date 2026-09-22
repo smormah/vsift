@@ -9,15 +9,18 @@ drives bounded archive staging and regular-file runtime assembly for the
 FFmpeg and whisper.cpp archives; whole-artifact and selected-payload identity
 must match before each step. The pinned-archive opt-in tests and manually
 dispatched Ubuntu workflow exercise both archive bridges; full local fmt,
-strict Clippy, workspace tests, warning-denied
-rustdoc and governance passed. Protected CI and fresh hosted real-archive
-evidence remain pending. The raw model staging path, compatibility smoke,
+strict Clippy, workspace tests, warning-denied rustdoc and governance passed.
+Fresh [hosted Ubuntu run 35668273600](https://github.com/smormah/vsift/actions/runs/35668273600)
+passed both production owned archive layouts and the separate model-backed
+candidate smoke. Protected PR checks remain pending. The raw model staging
+path, compatibility smoke,
 accepted-plan revalidation, public install/lifecycle, bounded cleanup,
 power-loss and D-01..D-10/P06 E2E remain open. P06 stays planned.
 
-2026-09-22: P06 reviewed Ubuntu 24.04 x86-64 catalogue and deterministic
-read-only planning are implemented on branch `codex/p06-catalogue-plan-authority`
-from protected predecessor `57cf7c2` in `b74de4d`. The three direct-origin
+2026-09-22: Protected [PR #109](https://github.com/smormah/vsift/pull/109)
+merged P06 reviewed Ubuntu 24.04 x86-64 catalogue and deterministic
+read-only planning implementation `b74de4d` and progress record `9b97ff9`
+as `e533247` from protected predecessor `57cf7c2`. The three direct-origin
 entries pin the retained FFmpeg/FFprobe archive, whisper.cpp CLI and multilingual
 `base` model with complete selected/runtime inventory, source/notice/trust-limit
 disclosures and a 2028-08-01 stop-new-plans cutoff. `setup plan` emits only
@@ -28,8 +31,11 @@ tools and model files remain probe/presence-only. `setup install` is still
 reserved; this is catalogue/plan authority, not a managed-install completion.
 Full local fmt, strict Clippy, workspace tests, warning-denied rustdoc and
 governance passed; `cargo deny check` passed with existing duplicate-version
-warnings. Protected PR and merge evidence remain to be recorded. P06 stays
-planned, and issue #66 remains open.
+warnings. Protected Ubuntu, macOS, Windows, Documentation, Governance and
+strict-worker checks passed in [CI run 35665923881](https://github.com/smormah/vsift/actions/runs/35665923881);
+[dependency/security run 35665923929](https://github.com/smormah/vsift/actions/runs/35665923929)
+and [Rust analysis run 35665923796](https://github.com/smormah/vsift/actions/runs/35665923796)
+passed. P06 stays planned, and issue #66 remains open.
 
 2026-09-21: Protected [PR #105](https://github.com/smormah/vsift/pull/105)
 merged P06 managed-version lifecycle implementation `ec6538b` and progress
