@@ -2,6 +2,20 @@
 
 ## Current checkpoint
 
+2026-09-22: P06 pinned raw-model staging implementation `2ba8867` now
+copies the accepted multilingual `base` artifact into a private selected
+payload and separate unactivated runtime. Exact whole-file identity, portable
+name, selected-file digest and runtime inventory are checked; invalid review
+fails before payload mutation. The disposable Ubuntu workflow now includes a
+fresh publisher-model download and Rust owned-layout check. Local fmt, strict
+Clippy, workspace tests, warning-denied rustdoc, actionlint and governance
+passed. Fresh [hosted Ubuntu run 35719747666](https://github.com/smormah/vsift/actions/runs/35719747666)
+passed all three production owned layouts and the separate model-backed
+candidate smoke; protected CI remains pending. Model
+compatibility smoke in the production path, accepted-plan revalidation,
+public install/lifecycle, bounded cleanup, power-loss and D-01..D-10/P06 E2E
+remain open. P06 stays planned.
+
 2026-09-22: Protected [PR #111](https://github.com/smormah/vsift/pull/111)
 merged P06 accepted-source staging bridge implementation `e4ba5bc`, progress
 record `ec07c87`, hosted workflow `cb818ac` and evidence record `4854d91`

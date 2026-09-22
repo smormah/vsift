@@ -140,23 +140,20 @@ pub struct ReviewedUbuntuAction {
     bounds: Option<ArchiveInventoryBounds>,
 }
 
-/// A reviewed action cannot enter the archive staging path.
+/// A reviewed action cannot enter its owned payload staging path.
 #[derive(Debug)]
 pub enum ReviewedActionStageError {
-    /// The selected artifact is a raw file, not an archive.
-    RawFile,
     /// Staged bytes were verified against a different reviewed artifact.
     IntegrityMismatch,
-    /// Archive inventory, extraction or private staging failed.
+    /// Reviewed raw-file or archive payload staging failed.
     Payload(ManagedPayloadError),
 }
 
 impl fmt::Display for ReviewedActionStageError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::RawFile => "raw managed artifact requires a file staging path",
             Self::IntegrityMismatch => "staged artifact differs from the accepted action",
-            Self::Payload(_) => "reviewed archive could not be staged",
+            Self::Payload(_) => "reviewed managed payload could not be staged",
         })
     }
 }
@@ -221,23 +218,36 @@ impl ReviewedUbuntuAction {
         &self.artifact
     }
 
-    /// Applies the complete reviewed archive inventory to verified staged bytes.
+    /// Applies the complete reviewed raw-file or archive policy to staged bytes.
     ///
-    /// The raw model requires a separate regular-file staging path. The returned
-    /// payload is unactivated and still requires runtime assembly and smoke.
+    /// The returned payload is unactivated and still requires runtime assembly
+    /// and provider compatibility smoke before any publication.
     ///
     /// # Errors
     ///
-    /// Refuses raw files and propagates typed bounded-extraction failures.
-    pub fn stage_archive<'a>(
+    /// Refuses a different whole-artifact identity and propagates typed raw
+    /// copy or bounded archive-extraction failures.
+    pub fn stage_payload<'a>(
         &self,
         staged: &'a StagedManagedArtifact,
     ) -> Result<StagedManagedPayload<'a>, ReviewedActionStageError> {
         if staged.integrity() != self.artifact.integrity {
             return Err(ReviewedActionStageError::IntegrityMismatch);
         }
+        if self.artifact.format == ManagedArtifactFormat::RawFile {
+            let Some(file) = self.artifact.files.first() else {
+                return Err(ReviewedActionStageError::Payload(
+                    ManagedPayloadError::InvalidReview,
+                ));
+            };
+            return staged
+                .stage_reviewed_raw_file(&file.name, file.integrity)
+                .map_err(ReviewedActionStageError::Payload);
+        }
         let Some(limits) = self.artifact.archive_limits else {
-            return Err(ReviewedActionStageError::RawFile);
+            return Err(ReviewedActionStageError::Payload(
+                ManagedPayloadError::InvalidReview,
+            ));
         };
         let archive = match self.artifact.format {
             ManagedArtifactFormat::TarXz => ReviewedPayloadArchive::XzTar {
@@ -248,10 +258,16 @@ impl ReviewedUbuntuAction {
                 max_compressed_bytes: self.artifact.integrity.bytes(),
                 max_tar_bytes: limits.max_stream_bytes,
             },
-            ManagedArtifactFormat::RawFile => return Err(ReviewedActionStageError::RawFile),
+            ManagedArtifactFormat::RawFile => {
+                return Err(ReviewedActionStageError::Payload(
+                    ManagedPayloadError::InvalidReview,
+                ));
+            }
         };
         let Some(bounds) = self.bounds else {
-            return Err(ReviewedActionStageError::RawFile);
+            return Err(ReviewedActionStageError::Payload(
+                ManagedPayloadError::InvalidReview,
+            ));
         };
         let links = self
             .artifact
@@ -286,13 +302,24 @@ impl ReviewedUbuntuAction {
         &self,
         payload: &'payload StagedManagedPayload<'_>,
     ) -> Result<PreparedManagedRuntime<'payload, 'payload>, ManagedRuntimeLayoutError> {
-        if self.artifact.format == ManagedArtifactFormat::RawFile
-            || payload.selected_names().len() != self.artifact.selected_files.len()
-            || self
+        let selected = match self.artifact.format {
+            ManagedArtifactFormat::RawFile => self
+                .artifact
+                .files
+                .iter()
+                .map(|file| (file.name.as_str(), file.integrity))
+                .collect::<Vec<_>>(),
+            ManagedArtifactFormat::TarXz | ManagedArtifactFormat::TarGz => self
                 .artifact
                 .selected_files
                 .iter()
-                .any(|file| payload.selected_integrity(&file.runtime_name) != Some(file.integrity))
+                .map(|file| (file.runtime_name.as_str(), file.integrity))
+                .collect::<Vec<_>>(),
+        };
+        if payload.selected_names().len() != selected.len()
+            || selected
+                .iter()
+                .any(|(name, integrity)| payload.selected_integrity(name) != Some(*integrity))
         {
             return Err(ManagedRuntimeLayoutError::InvalidReview);
         }

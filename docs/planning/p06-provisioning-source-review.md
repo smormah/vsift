@@ -62,10 +62,25 @@ for the owned payload and runtime path. The manually dispatched disposable
 Ubuntu workflow runs both checks against fresh publisher bytes before its
 separate model-backed candidate smoke. All three checkpoints passed in
 [hosted run 35668273600](https://github.com/smormah/vsift/actions/runs/35668273600).
-This is still an unactivated boundary:
-the raw model requires its own regular-file staging path, and production
-compatibility smoke, accepted-plan revalidation, activation and cleanup
-qualification remain required before `setup install` can run.
+This is still an unactivated boundary. The raw model path is added in the
+next dated checkpoint; production compatibility smoke, accepted-plan
+revalidation, activation and cleanup qualification remain required before
+`setup install` can run.
+
+## 2026-09-22 pinned raw-model staging
+
+The accepted multilingual `base` model now follows a reviewed raw-file path
+through the same owned stage as the Ubuntu archives. The source artifact is
+rehashed before copy; its flat runtime name and full size/SHA-256 must match
+the accepted entry. A private selected payload and separate runtime copy are
+rechecked without model execution or activation. Invalid names and a changed
+whole-artifact identity fail before payload creation. The disposable Ubuntu
+workflow downloads the exact pinned model from its publisher and runs the
+production Rust owned-layout test before the separate candidate inference
+smoke. Both stages passed in
+[hosted Ubuntu run 35719747666](https://github.com/smormah/vsift/actions/runs/35719747666).
+A successful byte/layout check does not prove production model compatibility,
+speech accuracy, installer rollback or D-01..D-10 completion.
 
 ## Finding
 

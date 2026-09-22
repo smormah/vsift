@@ -174,7 +174,7 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
         id: String::from("install-whisper_cli"),
         artifact: accepted,
     })?;
-    let payload = reviewed.stage_archive(&artifact)?;
+    let payload = reviewed.stage_payload(&artifact)?;
     assert_eq!(
         payload.open_selected_file("whisper-cli")?.metadata()?.len(),
         976_312
