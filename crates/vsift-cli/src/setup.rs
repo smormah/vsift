@@ -57,14 +57,15 @@ where
     setup_exit(diagnosis.readiness)
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupPlanResponse {
-    profile: &'static str,
-    readiness: &'static str,
-    verification_scope: &'static str,
-    target: &'static str,
+    profile: String,
+    readiness: String,
+    verification_scope: String,
+    target: String,
     local_asr_model: SetupPlanModelResponse,
-    managed_install: &'static str,
+    managed_install: String,
     catalogue_revision: Option<String>,
     stop_new_plans_at: Option<String>,
     plan_digest: Option<String>,
@@ -72,33 +73,36 @@ struct SetupPlanResponse {
     dependencies: Vec<SetupPlanDependencyResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupPlanDependencyResponse {
-    dependency: &'static str,
-    status: &'static str,
-    disposition: &'static str,
-    required_authority: Option<&'static str>,
-    next_step: &'static str,
+    dependency: String,
+    status: String,
+    disposition: String,
+    required_authority: Option<String>,
+    next_step: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupPlanModelResponse {
-    status: &'static str,
-    disposition: &'static str,
-    required_authority: Option<&'static str>,
-    next_step: &'static str,
+    status: String,
+    disposition: String,
+    required_authority: Option<String>,
+    next_step: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupPlanActionResponse {
     id: String,
-    component: &'static str,
+    component: String,
     version: String,
     publisher: String,
     source_url: String,
     bytes: u64,
     sha256: String,
-    format: &'static str,
+    format: String,
     archive_limits: Option<SetupArchiveLimitsResponse>,
     selected_files: Vec<SetupArchiveSelectionResponse>,
     archive_links: Vec<SetupArchiveLinkResponse>,
@@ -107,30 +111,33 @@ struct SetupPlanActionResponse {
     notice_url: String,
     source_code_url: String,
     trust_limit: String,
-    licence_scope: &'static str,
-    destination: &'static str,
-    permissions: &'static str,
-    change: &'static str,
-    required_authority: &'static str,
+    licence_scope: String,
+    destination: String,
+    permissions: String,
+    change: String,
+    required_authority: String,
     files: Vec<SetupPlanFileResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupPlanFileResponse {
     name: String,
     bytes: u64,
     sha256: String,
-    mode: &'static str,
+    mode: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupArchiveLimitsResponse {
     max_stream_bytes: u64,
     entries: usize,
     expanded_bytes: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupArchiveSelectionResponse {
     archive_path: String,
     runtime_name: String,
@@ -138,13 +145,15 @@ struct SetupArchiveSelectionResponse {
     sha256: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupArchiveLinkResponse {
     archive_path: String,
     target: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct SetupRuntimeCopyResponse {
     name: String,
     source_selected: String,
@@ -157,113 +166,11 @@ pub(crate) struct SavedSetupPlan {
     command: String,
     operation_id: Option<String>,
     status: String,
-    data: SavedSetupPlanData,
+    data: SetupPlanResponse,
     warnings: Vec<String>,
     error: Option<serde_json::Value>,
     coverage: Option<serde_json::Value>,
     lifecycle: Option<serde_json::Value>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupPlanData {
-    profile: String,
-    readiness: String,
-    verification_scope: String,
-    target: String,
-    local_asr_model: SavedSetupPlanModel,
-    managed_install: String,
-    catalogue_revision: Option<String>,
-    stop_new_plans_at: Option<String>,
-    plan_digest: Option<String>,
-    actions: Vec<SavedSetupPlanAction>,
-    dependencies: Vec<SavedSetupPlanDependency>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupPlanDependency {
-    dependency: String,
-    status: String,
-    disposition: String,
-    required_authority: Option<String>,
-    next_step: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupPlanModel {
-    status: String,
-    disposition: String,
-    required_authority: Option<String>,
-    next_step: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupPlanAction {
-    id: String,
-    component: String,
-    version: String,
-    publisher: String,
-    source_url: String,
-    bytes: u64,
-    sha256: String,
-    format: String,
-    archive_limits: Option<SavedSetupArchiveLimits>,
-    selected_files: Vec<SavedSetupArchiveSelection>,
-    archive_links: Vec<SavedSetupArchiveLink>,
-    runtime_copies: Vec<SavedSetupRuntimeCopy>,
-    licence: String,
-    notice_url: String,
-    source_code_url: String,
-    trust_limit: String,
-    licence_scope: String,
-    destination: String,
-    permissions: String,
-    change: String,
-    required_authority: String,
-    files: Vec<SavedSetupPlanFile>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupPlanFile {
-    name: String,
-    bytes: u64,
-    sha256: String,
-    mode: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupArchiveLimits {
-    max_stream_bytes: u64,
-    entries: usize,
-    expanded_bytes: u64,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupArchiveSelection {
-    archive_path: String,
-    runtime_name: String,
-    bytes: u64,
-    sha256: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupArchiveLink {
-    archive_path: String,
-    target: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SavedSetupRuntimeCopy {
-    name: String,
-    source_selected: String,
 }
 
 /// Current plan authority and its exact public presentation.
@@ -365,23 +272,23 @@ pub(crate) async fn evaluate_plan<P: DependencyProbe>(
                 ),
             };
             SetupPlanDependencyResponse {
-                dependency: status.dependency.identifier(),
-                status: status.state.identifier(),
-                disposition: disposition.identifier(),
-                required_authority,
-                next_step,
+                dependency: status.dependency.identifier().to_owned(),
+                status: status.state.identifier().to_owned(),
+                disposition: disposition.identifier().to_owned(),
+                required_authority: required_authority.map(str::to_owned),
+                next_step: next_step.to_owned(),
             }
         })
         .collect();
     let model = model_response(plan.model);
     let actions = plan.actions.iter().map(action_response).collect();
     let presentation = SetupPlanResponse {
-        profile: profile.identifier(),
-        readiness: plan.readiness.identifier(),
-        verification_scope: "executable_probe_and_reviewed_catalogue",
-        target: plan.target.identifier(),
+        profile: profile.identifier().to_owned(),
+        readiness: plan.readiness.identifier().to_owned(),
+        verification_scope: "executable_probe_and_reviewed_catalogue".to_owned(),
+        target: plan.target.identifier().to_owned(),
         local_asr_model: model,
-        managed_install: plan.availability.identifier(),
+        managed_install: plan.availability.identifier().to_owned(),
         catalogue_revision: plan.catalogue_revision.clone(),
         stop_new_plans_at: plan.stop_new_plans_date.clone(),
         plan_digest: plan.digest.clone(),
@@ -413,23 +320,23 @@ fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse 
         ),
     };
     SetupPlanModelResponse {
-        status,
-        disposition: disposition.identifier(),
-        required_authority,
-        next_step,
+        status: status.to_owned(),
+        disposition: disposition.identifier().to_owned(),
+        required_authority: required_authority.map(str::to_owned),
+        next_step: next_step.to_owned(),
     }
 }
 
 fn action_response(action: &ManagedSetupAction) -> SetupPlanActionResponse {
     SetupPlanActionResponse {
         id: action.id.clone(),
-        component: action.artifact.component.identifier(),
+        component: action.artifact.component.identifier().to_owned(),
         version: action.artifact.version.clone(),
         publisher: action.artifact.publisher.clone(),
         source_url: action.artifact.source_url.clone(),
         bytes: action.artifact.integrity.bytes(),
         sha256: action.artifact.integrity.sha256_hex(),
-        format: action.artifact.format.identifier(),
+        format: action.artifact.format.identifier().to_owned(),
         archive_limits: action
             .artifact
             .archive_limits
@@ -471,11 +378,11 @@ fn action_response(action: &ManagedSetupAction) -> SetupPlanActionResponse {
         notice_url: action.artifact.notice_url.clone(),
         source_code_url: action.artifact.source_code_url.clone(),
         trust_limit: action.artifact.trust_limit.clone(),
-        licence_scope: "disclosure_not_legal_clearance",
-        destination: "private_per_user_managed_runtime",
-        permissions: "private_user_only",
-        change: "planned_download_verify_extract_smoke_activate",
-        required_authority: "user",
+        licence_scope: "disclosure_not_legal_clearance".to_owned(),
+        destination: "private_per_user_managed_runtime".to_owned(),
+        permissions: "private_user_only".to_owned(),
+        change: "planned_download_verify_extract_smoke_activate".to_owned(),
+        required_authority: "user".to_owned(),
         files: action
             .artifact
             .files
@@ -488,7 +395,8 @@ fn action_response(action: &ManagedSetupAction) -> SetupPlanActionResponse {
                     "owner_executable"
                 } else {
                     "owner_read_write"
-                },
+                }
+                .to_owned(),
             })
             .collect(),
     }
