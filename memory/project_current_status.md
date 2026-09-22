@@ -2,7 +2,10 @@
 
 ## Active
 
-2026-09-22: P06 accepted-source staging bridge implementation `e4ba5bc`
+2026-09-22: Protected [PR #111](https://github.com/smormah/vsift/pull/111)
+merged P06 accepted-source staging bridge implementation `e4ba5bc`, progress
+record `ec07c87`, hosted workflow `cb818ac` and evidence record `4854d91`
+as `192e012` from protected predecessor `a989f17`. It
 binds proposed Ubuntu actions back to exact current reviewed literals before
 publisher transfer. The FFmpeg and whisper.cpp archive paths now derive
 inventory, selected-file hashes, link headers, runtime aliases and executable
@@ -16,7 +19,11 @@ candidate smoke. Initial protected macOS Quality in
 [CI run 35668269011](https://github.com/smormah/vsift/actions/runs/35668269011)
 reproduced the existing unrelated P05 cleanup-lock `Busy` symptom, then its
 unchanged failed-job rerun passed; Ubuntu, Windows and other checks passed.
-The updated-branch protected run remains pending.
+Updated-branch Ubuntu, macOS, Windows, Documentation, Governance and
+strict-worker checks passed in [CI run 35718111229](https://github.com/smormah/vsift/actions/runs/35718111229);
+[dependency/security run 35718111241](https://github.com/smormah/vsift/actions/runs/35718111241)
+and [Rust analysis run 35718111230](https://github.com/smormah/vsift/actions/runs/35718111230)
+passed.
 Raw model staging, compatibility smoke, accepted-plan revalidation, public
 installation/lifecycle, bounded GC, power-loss and D-01..D-10/P06 E2E remain
 open. P06 stays planned.
