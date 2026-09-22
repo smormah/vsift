@@ -2,6 +2,18 @@
 
 ## Active
 
+2026-09-22: P06 reviewed compatibility-policy implementation `440f42d`
+advances the accepted Ubuntu catalogue to revision
+`ubuntu-24.04-x86_64-2026-09-22-r2`. It fixes the exact checked-in F01
+size/SHA-256, expected FFmpeg build prefix, 64-KiB per-stream capture limit,
+60-second media and 180-second inference deadlines, and 16-kHz mono extraction.
+The application rejects incomplete or out-of-policy catalogues without actions
+or an acceptance digest. Every policy value is included in the canonical plan
+digest, so a change cannot reuse an earlier acceptance. Focused application and
+infrastructure tests pass. The production executor does not yet run the policy;
+smoke result/failure cleanup, activation, public install/lifecycle, bounded GC,
+power-loss qualification and D-01..D-10/P06 E2E remain open. P06 stays planned.
+
 2026-09-22: Protected [PR #115](https://github.com/smormah/vsift/pull/115)
 merged P06 accepted-plan revalidation implementation `39fb72d` and documentation
 record `71bb29d` as `a7180d7` from protected predecessor `c982d84`.

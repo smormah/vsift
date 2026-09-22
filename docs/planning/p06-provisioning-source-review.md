@@ -1,7 +1,8 @@
 # P06 provisioning source review — 2026-09-12
 
-Status: **Ubuntu 24.04 x86-64 catalogue accepted for read-only plans on
-2026-09-21; managed installation and complete P06 qualification remain open**.
+Status: **Ubuntu 24.04 x86-64 catalogue and digest-bound compatibility policy
+accepted for read-only plans; compatibility execution, managed installation and
+complete P06 qualification remain open**.
 The sections below record the source investigation as it stood at their dated
 checkpoints. They are not installation or D-01..D-10 implementation evidence. Reviewed
 protected-main predecessor: `777bc3e56788d43cd9a647dba54c287390c2998d`.
@@ -406,3 +407,22 @@ must authorize that current plan. Malformed, unknown-field, stale and mismatched
 inputs fail before transfer or managed-root mutation. The successful validation
 path deliberately stops with `COMMAND_NOT_IMPLEMENTED`; it is authority evidence,
 not a public installer or compatibility/activation result.
+
+## 2026-09-22 reviewed compatibility policy
+
+Catalogue revision `ubuntu-24.04-x86_64-2026-09-22-r2` adds the exact policy a
+production candidate smoke must use. It identifies checked-in `F01.mp4` as
+76,500 bytes with SHA-256
+`65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070`,
+requires the FFmpeg first line to begin with
+`ffmpeg version n9.0.1-11-ge47273f4d9-20260831`, limits each captured provider
+stream to 64 KiB, limits media work to 60 seconds and model inference to 180
+seconds, and fixes extracted audio at 16 kHz mono. An incomplete or out-of-policy
+catalogue produces no actions or digest. Every policy value participates in the
+plan digest, so a policy change invalidates earlier acceptance even if the
+artifact bytes do not change.
+
+This checkpoint defines authority for the future executor; it does not execute
+candidate code, record a compatibility result, publish a runtime or enable
+`setup install`. The production smoke and its failure cleanup still require
+implementation and D-06 evidence.
