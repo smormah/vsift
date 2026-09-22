@@ -292,3 +292,14 @@ Unsupported, expired or invalid catalogue states produce no managed action or
 digest. This supplies reviewable plan authority but does not permit activation:
 the CLI still reserves `setup install` until compatibility and accepted-plan
 revalidation are wired into the transaction.
+
+## 2026-09-22 implementation note: plan revalidation without mutation
+
+The CLI now has the accepted-plan gate needed immediately before a future
+transaction. A saved JSON plan is read with fixed byte/nesting limits and strict
+unknown-field rejection, compared in full with a newly evaluated current plan,
+and authorized only when `--accept-plan` matches that current digest. This
+detects catalogue expiry, target, configuration, probe, model and presentation
+changes without trusting the saved document as authority. The valid path still
+returns `COMMAND_NOT_IMPLEMENTED` and invokes no transfer, staging, compatibility
+smoke, publication or activation primitive.

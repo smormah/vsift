@@ -2,6 +2,19 @@
 
 ## Current checkpoint
 
+2026-09-22: P06 accepted-plan revalidation implementation `39fb72d` adds the
+authority gate immediately before a future install transaction. A saved
+`setup plan --json` response is read under the one-MiB and depth-64 limits with
+strict unknown-field rejection. Its profile drives a fresh target/catalogue/
+configuration/probe/model/time evaluation; the complete public plan and the
+separately supplied acceptance digest must both match. Malformed, stale or
+mismatched readable inputs fail before network or managed-root mutation. Full
+local formatting, strict Clippy, workspace tests, warning-denied rustdoc and
+governance pass. A valid plan still
+returns `COMMAND_NOT_IMPLEMENTED`; production compatibility smoke, public
+install/lifecycle, bounded cleanup, power-loss qualification and D-01..D-10/P06
+E2E remain open. P06 stays planned.
+
 2026-09-22: Protected [PR #113](https://github.com/smormah/vsift/pull/113)
 merged P06 pinned raw-model staging implementation `2ba8867`, progress record
 `9ac8aa1` and hosted evidence record `a4f4982` as `ed77829` from protected

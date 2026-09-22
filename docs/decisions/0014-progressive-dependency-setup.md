@@ -140,3 +140,15 @@ for reviewable planning while `setup install` remains unavailable. Other
 targets, expired or invalid catalogue entries have typed unavailable outcomes
 and manual/BYO guidance. This does not complete provider/model compatibility,
 installation, D-01..D-10 or P06 E2E evidence.
+
+## 2026-09-22 implementation note: accepted-plan revalidation gate
+
+The reserved `setup install` path can now consume a readable bounded, strict
+`setup plan --json` document. It derives the profile from that document, rebuilds
+the plan from the current target, accepted catalogue, configuration, executable
+probes, model observation and current time, requires the complete public plan to
+match, then verifies the separately supplied acceptance digest. Unknown fields,
+changed observations and digest mismatch fail before network or managed-storage
+work. Even an accepted plan still returns `COMMAND_NOT_IMPLEMENTED`: production
+compatibility smoke and the complete guarded transfer/publication transaction
+remain prerequisites for enabling installation.
