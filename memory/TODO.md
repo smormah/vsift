@@ -2,7 +2,10 @@
 
 ## Current checkpoint
 
-2026-09-22: P06 accepted-source staging bridge implementation `e4ba5bc`
+2026-09-22: Protected [PR #111](https://github.com/smormah/vsift/pull/111)
+merged P06 accepted-source staging bridge implementation `e4ba5bc`, progress
+record `ec07c87`, hosted workflow `cb818ac` and evidence record `4854d91`
+as `192e012` from protected predecessor `a989f17`. It
 rechecks every planned Ubuntu action against the complete reviewed literal
 before exposing direct-publisher transfer authority. The accepted entry now
 drives bounded archive staging and regular-file runtime assembly for the
@@ -16,7 +19,11 @@ candidate smoke. Initial protected macOS Quality in
 [CI run 35668269011](https://github.com/smormah/vsift/actions/runs/35668269011)
 reproduced the existing unrelated P05 cleanup-lock `Busy` symptom, then its
 unchanged failed-job rerun passed; Ubuntu, Windows and the other checks passed.
-The updated-branch protected run remains pending. The raw model staging
+Updated-branch Ubuntu, macOS, Windows, Documentation, Governance and
+strict-worker checks passed in [CI run 35718111229](https://github.com/smormah/vsift/actions/runs/35718111229);
+[dependency/security run 35718111241](https://github.com/smormah/vsift/actions/runs/35718111241)
+and [Rust analysis run 35718111230](https://github.com/smormah/vsift/actions/runs/35718111230)
+passed. The raw model staging
 path, compatibility smoke, accepted-plan revalidation, public
 install/lifecycle, bounded cleanup,
 power-loss and D-01..D-10/P06 E2E remain open. P06 stays planned.
