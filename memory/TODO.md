@@ -2,15 +2,25 @@
 
 ## Current checkpoint
 
-2026-09-22: P06 accepted-plan revalidation implementation `39fb72d` adds the
-authority gate immediately before a future install transaction. A saved
+2026-09-22: Protected [PR #115](https://github.com/smormah/vsift/pull/115)
+merged P06 accepted-plan revalidation implementation `39fb72d` and documentation
+record `71bb29d` as `a7180d7` from protected predecessor `c982d84`.
+[PR #116](https://github.com/smormah/vsift/pull/116) then merged shared strict
+plan DTO refactor `cd6d00d` as `42df227`. The authority gate immediately before
+a future install transaction now reads a saved
 `setup plan --json` response is read under the one-MiB and depth-64 limits with
 strict unknown-field rejection. Its profile drives a fresh target/catalogue/
 configuration/probe/model/time evaluation; the complete public plan and the
 separately supplied acceptance digest must both match. Malformed, stale or
 mismatched readable inputs fail before network or managed-root mutation. Full
 local formatting, strict Clippy, workspace tests, warning-denied rustdoc and
-governance pass. A valid plan still
+governance pass. Protected Ubuntu, macOS, Windows, Documentation, Governance and
+strict-worker checks passed for the implementation in
+[CI run 35790319080](https://github.com/smormah/vsift/actions/runs/35790319080),
+[dependency/security run 35790319171](https://github.com/smormah/vsift/actions/runs/35790319171),
+and [Rust analysis run 35790319082](https://github.com/smormah/vsift/actions/runs/35790319082).
+The DTO follow-up passed the same protected set in CI `35791005761`,
+dependency/security `35791005738` and Rust analysis `35791005741`. A valid plan still
 returns `COMMAND_NOT_IMPLEMENTED`; production compatibility smoke, public
 install/lifecycle, bounded cleanup, power-loss qualification and D-01..D-10/P06
 E2E remain open. P06 stays planned.

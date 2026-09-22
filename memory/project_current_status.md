@@ -2,14 +2,23 @@
 
 ## Active
 
-2026-09-22: P06 accepted-plan revalidation implementation `39fb72d` now reads
-a saved `setup plan --json` response under the one-MiB and depth-64 limits with
+2026-09-22: Protected [PR #115](https://github.com/smormah/vsift/pull/115)
+merged P06 accepted-plan revalidation implementation `39fb72d` and documentation
+record `71bb29d` as `a7180d7` from protected predecessor `c982d84`.
+[PR #116](https://github.com/smormah/vsift/pull/116) then merged shared strict
+plan DTO refactor `cd6d00d` as `42df227`. A saved `setup plan --json` response
+is now read under the one-MiB and depth-64 limits with
 strict unknown-field rejection. The saved profile drives a fresh target,
 catalogue, configuration, executable-probe, model and time evaluation. The
 complete public data and separately supplied digest must still match before the
 reserved install path can proceed. Malformed, stale or mismatched readable plans
 fail before network or managed-root mutation. Full local formatting, strict
-Clippy, workspace tests, warning-denied rustdoc and governance pass. Even a
+Clippy, workspace tests, warning-denied rustdoc and governance pass. Protected
+Ubuntu, macOS, Windows, Documentation, Governance and strict-worker checks passed
+for the implementation in CI `35790319080`, dependency/security `35790319171`
+and Rust analysis `35790319082`; the DTO follow-up passed the same protected set
+in CI `35791005761`, dependency/security `35791005738` and Rust analysis
+`35791005741`. Even a
 valid accepted plan still returns
 `COMMAND_NOT_IMPLEMENTED`; compatibility smoke, the public install/lifecycle
 transaction, bounded cleanup, power-loss qualification and D-01..D-10/P06 E2E
