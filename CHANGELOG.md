@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- The engine can now prove that the selected FFmpeg and FFprobe actually work.
+  It runs a small reviewed test video, built into VSift, through the same
+  metadata, frame and audio steps an investigation uses and checks each result
+  against the video's known answers. It can also identify whether a registered
+  Whisper model is the reviewed pinned model. Nothing new appears on the command
+  line yet: a later step runs this automatically before the first media
+  operation.
+
 ### Changed
 
 - Delivery is re-planned by ADR 0015. Managed dependency installation

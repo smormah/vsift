@@ -11,20 +11,19 @@ Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-deli
 moved to attended implementation with maintainer review. Nothing public can yet read
 a video's content; this order gets there:
 
-1. **Confirm the #66 lock fix and close [#66](https://github.com/smormah/vsift/issues/66).**
-   Every lock now goes through `HeldFileLock` (`crates/vsift-infrastructure/src/file_lock.rs`),
-   which unlocks explicitly rather than relying on closing the file. On Unix an
-   `flock` survives in a child spawned by another thread between fork and exec.
-   Regression tests fail without the fix. After merge, run the manual "Lock stress"
-   workflow on Ubuntu and macOS, then close #66 if it and routine CI stay green.
-2. **Close P06 (narrowed by ADR 0015):**
-   - A bounded compatibility check of the selected FFmpeg/FFprobe against F01
-     through `ProcessSupervisor`, under the reviewed policy limits. The same
-     executor is also the first step of P13's installer work.
-   - A model digest check, or an explicit unverified state.
-   - `setup check`/`setup plan` report what was actually verified.
-   - Evidence: D-01, D-07 (unavailable-target guidance), D-09, D-10 and the P06
-     E2E stage. Then the one-off ledger completion record and an issue #9 update.
+1. **Close P06 (narrowed by ADR 0015).** Done so far: detection, BYO selection,
+   read-only plans and typed guidance; engine verification of the selected
+   FFmpeg/FFprobe (`FixtureMediaToolVerifier`, embedded F01 through real probe,
+   frame and audio) and model identity (`verify_model_file`). By design there is
+   no `setup verify` command (ADR 0015 note); a P07 preflight will call it.
+   Remaining:
+   - Audit D-01, D-07 (unavailable-target guidance), D-09 and D-10 against their
+     rows and close gaps, such as denied storage for configuration writes.
+   - Add the P06 stage to the E2E spine (preinstalled, partial, off-PATH,
+     denied, offline and unqualified journeys, using the verifier).
+   - Then the one-off ledger completion record and an issue #9 update.
+2. **(Done) #66 lock fix:** PR #121, stress run passed 40 rounds on Ubuntu and
+   macOS, issue closed. Remove this line in the next rewrite.
 3. **P07 increment 1:** extract the embeddable engine facade and contract crate
    with no behaviour change (ADR 0016).
 4. **P07 transcription:** segment-first, with published transcript schemas and
@@ -42,8 +41,7 @@ a video's content; this order gets there:
 
 ## Known issues and gates
 
-- #66: fixed in code; awaiting stress-run confirmation (item 1). A recurrence is a
-  new finding, not a re-run candidate.
+- #66 is closed. A recurrence of lock `Busy` is a new finding, not a re-run candidate.
 - FS-01: strict OS/storage-crash durability is unqualified. Durable requests fail
   closed until P10/P11/P14 run the Ubuntu/ext4 campaign (ADR 0010).
 - Baseline findings B-01..B-11 close through their mapped packets.
