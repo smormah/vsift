@@ -136,6 +136,29 @@ pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCa
     })
 }
 
+/// Returns the reviewed compatibility policy that any selected provider set must meet.
+///
+/// The policy is target-independent: it fixes the fixture, output limits,
+/// deadlines and audio contract. It is published with the Ubuntu catalogue
+/// revision, but bring-your-own verification uses it on every target.
+///
+/// # Errors
+///
+/// Fails if the reviewed fixture integrity literal is malformed.
+pub fn reviewed_compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError>
+{
+    compatibility_policy()
+}
+
+/// Returns the exact size and SHA-256 of the reviewed pinned whisper.cpp model.
+///
+/// # Errors
+///
+/// Fails if the reviewed model literals are malformed.
+pub fn pinned_whisper_model() -> Result<ArtifactIntegrity, ManagedCatalogueError> {
+    Ok(model_artifact()?.integrity)
+}
+
 fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
     Ok(ReviewedCompatibilityPolicy {
         fixture: ArtifactIntegrity::from_sha256_hex(

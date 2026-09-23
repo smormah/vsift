@@ -11,6 +11,7 @@ mod filesystem_session_store;
 mod gzip_tar_inventory;
 mod managed_artifact_store;
 mod managed_catalogue;
+mod media_tool_verification;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -54,8 +55,10 @@ pub use managed_artifact_store::{
 };
 pub use managed_catalogue::{
     ManagedCatalogueError, ReviewedActionStageError, ReviewedUbuntuAction,
-    accepted_ubuntu_catalogue, detect_managed_target,
+    accepted_ubuntu_catalogue, detect_managed_target, pinned_whisper_model,
+    reviewed_compatibility_policy,
 };
+pub use media_tool_verification::{FixtureMediaToolVerifier, verify_model_file};
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{
     CapturedOutput, ControlStatus, DEFAULT_STREAM_LIMIT, EffectiveControls, HardIsolation,

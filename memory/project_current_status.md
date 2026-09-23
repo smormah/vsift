@@ -42,6 +42,10 @@ Those arrive with P07–P09.
   only; strict durability is gated (FS-01).
 - **Locks:** every OS file lock goes through one type that unlocks explicitly
   on release, so a lock never outlives its owner (issue #66).
+- **Tool verification (P06):** the engine can prove selected FFmpeg/FFprobe work
+  by running the embedded F01 fixture through the real probe, frame and audio
+  steps, and can identify a registered model against the reviewed pin. Nothing
+  calls it from the CLI yet; a P07 preflight will.
 - **P04:** restricted FFprobe/FFmpeg metadata, frame and audio operations that
   report observed timestamps.
 - **Managed-installer foundations** (built under P06, now owned by P13):

@@ -9,6 +9,7 @@ use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, Runti
 mod provisioning;
 mod session;
 mod storage;
+mod verification;
 
 pub use session::{
     ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
@@ -27,6 +28,9 @@ pub use storage::{
     InitializeSessionStorage, InitializeSessionStorageRequest, InitializedSessionStorage,
     PublishSessionGeneration, PublishSessionGenerationRequest, SessionStorageError, SessionStore,
     StorageCapabilities,
+};
+pub use verification::{
+    MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier, ModelVerification,
 };
 
 /// Port used to inspect one specialist runtime dependency.

@@ -98,3 +98,19 @@ protected-branch checks.
   revalidate or replace it through a reviewed catalogue revision.
 - Pull request volume and session-start reading drop substantially. Reviewers
   read one PR per increment, and the size limits keep handoff files usable.
+
+## 2026-09-23 implementation note: verification is an engine capability
+
+Decision 2 said `setup check`/`setup plan` would report what was verified.
+`setup check`'s v1 schema fixes `verification_scope` to `executable_probe_only`,
+and ADR 0008 keeps that payload compatible, so that wording is corrected:
+
+- Verification is an engine capability. The `MediaToolVerifier` port lives in
+  the application layer; `FixtureMediaToolVerifier` runs the embedded F01 fixture
+  through the real P04 probe, frame and audio operations and compares each
+  result with F01's recorded truth. `verify_model_file` identifies a registered
+  model against the reviewed pinned digest.
+- Its consumer is an automatic preflight before the first media stage, which
+  arrives with P07. No separate CLI command is added until an operator-facing
+  consumer needs one, such as worker readiness (P11) or the installer (P13).
+- `setup check` keeps its fast executable probe and its v1 contract unchanged.
