@@ -2102,8 +2102,20 @@ dependencies = [
  "time",
  "tokio",
  "vsift-application",
+ "vsift-contract",
  "vsift-domain",
  "vsift-infrastructure",
+]
+
+[[package]]
+name = "vsift-contract"
+version = "0.1.0"
+dependencies = [
+ "jsonschema",
+ "serde",
+ "serde_json",
+ "vsift-application",
+ "vsift-domain",
 ]
 
 [[package]]

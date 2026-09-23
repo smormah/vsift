@@ -5,18 +5,31 @@ VSift is a local-first Rust application that converts technical video into evide
 ## Dependency rule
 
 ```text
-vsift-cli ------------------------+
-    |                             |
-    v                             v
-vsift-infrastructure ------> vsift-application ------> vsift-domain
+vsift-cli ------------------------+----------------> vsift-contract
+    |                             |                    |       |
+    v                             v                    |       |
+vsift-infrastructure ------> vsift-application <-------+       |
+                                  |                            |
+                                  v                            |
+                             vsift-domain <--------------------+
 ```
 
 - `vsift-domain` owns stable business concepts and invariants. It has no infrastructure dependencies.
 - `vsift-application` owns use cases and the ports required from infrastructure.
 - `vsift-infrastructure` implements process, filesystem, provider, and persistence ports.
-- `vsift-cli` is the composition root and translates use-case results into human and versioned JSON output.
+- `vsift-contract` owns the versioned v1 JSON wire types and the mapping from domain and
+  application values into them, so every host emits identical JSON
+  ([ADR 0016](decisions/0016-embeddable-engine-and-evidence-contract.md)). It depends only
+  on `vsift-domain`, `vsift-application`, `serde` and `serde_json`; never on
+  infrastructure or a host.
+- `vsift-cli` is the composition root. It parses arguments, composes adapters, and
+  presents results: human text, exit codes and the output byte budget. It emits JSON only
+  through `vsift-contract` types.
 
-Dependencies may point only to the right in the diagram. Cross-crate access uses each crate's public root exports; implementation modules remain private.
+Arrows show the only permitted dependency directions; every path ends at
+`vsift-domain`. Cross-crate access uses each crate's public root exports; implementation
+modules remain private. ADR 0016's engine facade crate (`vsift`) is the next step and
+will sit between the hosts and the application and infrastructure crates.
 
 ## Runtime boundary
 

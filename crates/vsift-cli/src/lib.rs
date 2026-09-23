@@ -20,8 +20,9 @@ use std::{
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{BundleCommand, Cli, Command, EventFormat, ExecutionProfile, SetupCommand};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
-use output::{OperationResponse, OutputMode, OutputWriter, ProcessExit, TerminalEventResponse};
+use output::{OutputMode, OutputWriter, ProcessExit};
 use vsift_application::SetupSelectionState;
+use vsift_contract::{OperationResponse, TerminalEventResponse};
 use vsift_domain::FailureCode;
 use vsift_infrastructure::{
     ExplicitProbePaths, ProcessDependencyProbe, UserDependencyConfigError,
@@ -169,7 +170,7 @@ where
                 write_session_result(&mut writer, mode, "setup.plan", result)
             }
             Some(SetupCommand::Install(arguments)) => {
-                let saved = match setup::SavedSetupPlan::read(&arguments.plan) {
+                let saved = match setup::read_saved_plan(&arguments.plan) {
                     Ok(saved) => saved,
                     Err(FailureCode::StorageIo) => {
                         return write_failure(
@@ -185,7 +186,7 @@ where
                     }
                 };
                 let profile = match saved.profile() {
-                    Ok(profile) => profile,
+                    Ok(profile) => ExecutionProfile::from(profile),
                     Err(code) => {
                         return write_failure(&mut writer, mode, "setup.install", code, None);
                     }

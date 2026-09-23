@@ -41,7 +41,8 @@ Before adding code, identify its owner:
 | Business concept or invariant | `vsift-domain` |
 | Use-case orchestration or provider port | `vsift-application` |
 | Filesystem, process, network, model, or storage implementation | `vsift-infrastructure` |
-| Argument parsing, output formatting, or dependency composition | `vsift-cli` |
+| Versioned JSON wire type, or mapping a domain/application value into one | `vsift-contract` |
+| Argument parsing, human output, exit codes, or dependency composition | `vsift-cli` |
 
 Do not create a general-purpose `utils` or `helpers` module. Name modules after the capability or concept they own.
 
@@ -50,6 +51,8 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
 - Domain tests verify invariants without I/O.
 - Application tests use small explicit fakes for ports.
 - Infrastructure tests exercise real boundaries using isolated temporary directories and rights-safe fixtures.
+- Contract tests serialize `vsift-contract` values and validate them against
+  `schemas/v1` and its frozen examples, without running the CLI.
 - CLI tests execute the compiled binary and verify public output and exit codes.
 - JSON changes require compatibility-focused contract tests.
 

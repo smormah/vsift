@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Behaviour is unchanged: `setup install` still returns `COMMAND_NOT_IMPLEMENTED`.
 - ADR 0016 commits VSift to an embeddable engine library and a published evidence
   contract, starting at P07.
+- Internal reorganisation with no behaviour change: the v1 JSON response types moved
+  from the CLI into a new `vsift-contract` crate that every future host will share.
+  Command output, exit codes and schemas are unchanged.
 - The governance check now keeps the two session handoff files to a current-state
   size. The earlier day-by-day log is archived in `docs/history/`.
 

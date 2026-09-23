@@ -2,11 +2,14 @@
 
 use std::{io::Write, path::Path};
 
-use serde::{Deserialize, Serialize};
 use vsift_application::{
-    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, ManagedSetupAction,
-    RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, RuntimeDiagnosis,
     SetupSelectionState, plan_managed_setup,
+};
+use vsift_contract::{
+    ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup,
+    MAX_PROVIDER_DETAIL_BYTES, OperationResponse, SavedSetupPlan, SetupCheckResponse,
+    SetupPlanResponse, TerminalEventResponse, explicit_path_option, sanitize_untrusted_text,
 };
 use vsift_domain::{
     DependencyState, FailureCode, ManagedTarget, RuntimeDependency, RuntimeReadiness,
@@ -16,10 +19,7 @@ use vsift_infrastructure::{ExplicitProbePaths, UserDependencyConfigStore};
 use crate::{
     command::{ExecutionProfile, SetupConfigureArguments, SetupConfigureModelArguments},
     json_input::read_json_file,
-    output::{
-        OperationResponse, OutputMode, OutputWriter, ProcessExit, SetupCheckResponse,
-        TerminalEventResponse, explicit_path_option, sanitize_untrusted_text, setup_exit,
-    },
+    output::{OutputMode, OutputWriter, ProcessExit, setup_exit},
 };
 
 /// Executes the read-only setup check with explicit dependencies and output streams.
@@ -37,7 +37,9 @@ where
     StandardError: Write,
 {
     let diagnosis = DiagnoseRuntime::new(probe).execute().await;
-    let response = SetupCheckResponse::new(&diagnosis, profile, selections, per_call);
+    let response = SetupCheckResponse::new(&diagnosis, profile.into(), |dependency| {
+        dependency_lookup(dependency, selections, per_call)
+    });
     let output_result = match mode {
         OutputMode::Human => {
             writer.write_trusted_stdout(&human_result(&diagnosis, profile, selections, per_call))
@@ -57,154 +59,33 @@ where
     setup_exit(diagnosis.readiness)
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupPlanResponse {
-    profile: String,
-    readiness: String,
-    verification_scope: String,
-    target: String,
-    local_asr_model: SetupPlanModelResponse,
-    managed_install: String,
-    catalogue_revision: Option<String>,
-    stop_new_plans_at: Option<String>,
-    plan_digest: Option<String>,
-    actions: Vec<SetupPlanActionResponse>,
-    dependencies: Vec<SetupPlanDependencyResponse>,
+/// Resolves where the probed executable came from: a per-call path wins over a
+/// configured user path, which wins over the filtered `PATH`.
+fn dependency_lookup(
+    dependency: RuntimeDependency,
+    selections: &ExplicitProbePaths,
+    per_call: &ExplicitProbePaths,
+) -> DependencyLookup {
+    if per_call.for_dependency(dependency).is_some() {
+        DependencyLookup::ExplicitPath
+    } else if selections.for_dependency(dependency).is_some() {
+        DependencyLookup::ConfiguredUserPath
+    } else {
+        DependencyLookup::FilteredPath
+    }
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupPlanDependencyResponse {
-    dependency: String,
-    status: String,
-    disposition: String,
-    required_authority: Option<String>,
-    next_step: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupPlanModelResponse {
-    status: String,
-    disposition: String,
-    required_authority: Option<String>,
-    next_step: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupPlanActionResponse {
-    id: String,
-    component: String,
-    version: String,
-    publisher: String,
-    source_url: String,
-    bytes: u64,
-    sha256: String,
-    format: String,
-    archive_limits: Option<SetupArchiveLimitsResponse>,
-    selected_files: Vec<SetupArchiveSelectionResponse>,
-    archive_links: Vec<SetupArchiveLinkResponse>,
-    runtime_copies: Vec<SetupRuntimeCopyResponse>,
-    licence: String,
-    notice_url: String,
-    source_code_url: String,
-    trust_limit: String,
-    licence_scope: String,
-    destination: String,
-    permissions: String,
-    change: String,
-    required_authority: String,
-    files: Vec<SetupPlanFileResponse>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupPlanFileResponse {
-    name: String,
-    bytes: u64,
-    sha256: String,
-    mode: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupArchiveLimitsResponse {
-    max_stream_bytes: u64,
-    entries: usize,
-    expanded_bytes: u64,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupArchiveSelectionResponse {
-    archive_path: String,
-    runtime_name: String,
-    bytes: u64,
-    sha256: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupArchiveLinkResponse {
-    archive_path: String,
-    target: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SetupRuntimeCopyResponse {
-    name: String,
-    source_selected: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct SavedSetupPlan {
-    schema_version: String,
-    command: String,
-    operation_id: Option<String>,
-    status: String,
-    data: SetupPlanResponse,
-    warnings: Vec<String>,
-    error: Option<serde_json::Value>,
-    coverage: Option<serde_json::Value>,
-    lifecycle: Option<serde_json::Value>,
+/// Reads one bounded, strict `setup plan --json` result supplied for acceptance.
+pub(crate) fn read_saved_plan(path: &Path) -> Result<SavedSetupPlan, FailureCode> {
+    let plan: SavedSetupPlan = read_json_file(path).map_err(|error| error.code())?;
+    plan.validate_envelope()?;
+    Ok(plan)
 }
 
 /// Current plan authority and its exact public presentation.
 pub(crate) struct EvaluatedSetupPlan {
     authority: vsift_application::ManagedSetupPlan,
     presentation: SetupPlanResponse,
-}
-
-impl SavedSetupPlan {
-    /// Reads one bounded, strict `setup plan --json` result.
-    pub(crate) fn read(path: &Path) -> Result<Self, FailureCode> {
-        let plan: Self = read_json_file(path).map_err(|error| error.code())?;
-        if plan.schema_version != "1"
-            || plan.command != "setup.plan"
-            || plan.operation_id.is_some()
-            || plan.status != "complete"
-            || !plan.warnings.is_empty()
-            || plan.error.is_some()
-            || plan.coverage.is_some()
-            || plan.lifecycle.is_some()
-        {
-            return Err(FailureCode::InvalidArgument);
-        }
-        Ok(plan)
-    }
-
-    /// Returns the profile that must be re-observed before acceptance.
-    pub(crate) fn profile(&self) -> Result<ExecutionProfile, FailureCode> {
-        match self.data.profile.as_str() {
-            "desktop" => Ok(ExecutionProfile::Desktop),
-            "worker" => Ok(ExecutionProfile::Worker),
-            _ => Err(FailureCode::InvalidArgument),
-        }
-    }
 }
 
 impl EvaluatedSetupPlan {
@@ -221,12 +102,7 @@ impl EvaluatedSetupPlan {
         saved: &SavedSetupPlan,
         supplied_digest: &str,
     ) -> Result<(), FailureCode> {
-        let saved_data = serde_json::to_value(&saved.data).map_err(|_| FailureCode::Internal)?;
-        let current_data =
-            serde_json::to_value(&self.presentation).map_err(|_| FailureCode::Internal)?;
-        if saved_data != current_data {
-            return Err(FailureCode::InvalidArgument);
-        }
+        saved.require_same_plan(&self.presentation)?;
         self.authority
             .validate_acceptance(supplied_digest)
             .map_err(|_| FailureCode::InvalidArgument)
@@ -243,185 +119,18 @@ pub(crate) async fn evaluate_plan<P: DependencyProbe>(
     catalogue: Option<AcceptedManagedCatalogue>,
 ) -> Result<EvaluatedSetupPlan, FailureCode> {
     let plan = plan_managed_setup(
-        match profile {
-            ExecutionProfile::Desktop => SetupProfile::Desktop,
-            ExecutionProfile::Worker => SetupProfile::Worker,
-        },
+        profile.into(),
         DiagnoseRuntime::new(probe).execute().await,
         target,
         selections,
         now_unix_seconds,
         catalogue,
     );
-    let dependencies = plan
-        .dependencies
-        .iter()
-        .map(|(status, disposition)| {
-            let (required_authority, next_step) = match disposition {
-                SetupDependencyDisposition::ExistingProbeOnly => (
-                    None,
-                    "Keep this executable selected and verify provider compatibility before use.",
-                ),
-                SetupDependencyDisposition::ManagedInstall => (
-                    Some("user"),
-                    "Review the exact managed action and its digest. Setup install remains unavailable until the complete installer qualifies.",
-                ),
-                SetupDependencyDisposition::ManualSelection => (
-                    Some("user"),
-                    manual_plan_step(status.dependency),
-                ),
-            };
-            SetupPlanDependencyResponse {
-                dependency: status.dependency.identifier().to_owned(),
-                status: status.state.identifier().to_owned(),
-                disposition: disposition.identifier().to_owned(),
-                required_authority: required_authority.map(str::to_owned),
-                next_step: next_step.to_owned(),
-            }
-        })
-        .collect();
-    let model = model_response(plan.model);
-    let actions = plan.actions.iter().map(action_response).collect();
-    let presentation = SetupPlanResponse {
-        profile: profile.identifier().to_owned(),
-        readiness: plan.readiness.identifier().to_owned(),
-        verification_scope: "executable_probe_and_reviewed_catalogue".to_owned(),
-        target: plan.target.identifier().to_owned(),
-        local_asr_model: model,
-        managed_install: plan.availability.identifier().to_owned(),
-        catalogue_revision: plan.catalogue_revision.clone(),
-        stop_new_plans_at: plan.stop_new_plans_date.clone(),
-        plan_digest: plan.digest.clone(),
-        actions,
-        dependencies,
-    };
+    let presentation = SetupPlanResponse::new(&plan);
     Ok(EvaluatedSetupPlan {
         authority: plan,
         presentation,
     })
-}
-
-fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse {
-    let (status, required_authority, next_step) = match disposition {
-        SetupModelDisposition::ConfiguredProbeOnly => (
-            "configured_present_unverified",
-            None,
-            "Keep the configured model selected and validate it with provider preflight before use.",
-        ),
-        SetupModelDisposition::ManagedInstall => (
-            "missing",
-            Some("user"),
-            "Review the exact managed model action and its digest. Setup install remains unavailable until the complete installer qualifies.",
-        ),
-        SetupModelDisposition::ManualSelection => (
-            "missing",
-            Some("user"),
-            "For local ASR, configure trusted model weights with setup configure-model --file <absolute-path>. A supplied transcript can skip local ASR.",
-        ),
-    };
-    SetupPlanModelResponse {
-        status: status.to_owned(),
-        disposition: disposition.identifier().to_owned(),
-        required_authority: required_authority.map(str::to_owned),
-        next_step: next_step.to_owned(),
-    }
-}
-
-fn action_response(action: &ManagedSetupAction) -> SetupPlanActionResponse {
-    SetupPlanActionResponse {
-        id: action.id.clone(),
-        component: action.artifact.component.identifier().to_owned(),
-        version: action.artifact.version.clone(),
-        publisher: action.artifact.publisher.clone(),
-        source_url: action.artifact.source_url.clone(),
-        bytes: action.artifact.integrity.bytes(),
-        sha256: action.artifact.integrity.sha256_hex(),
-        format: action.artifact.format.identifier().to_owned(),
-        archive_limits: action
-            .artifact
-            .archive_limits
-            .map(|limits| SetupArchiveLimitsResponse {
-                max_stream_bytes: limits.max_stream_bytes,
-                entries: limits.entries,
-                expanded_bytes: limits.expanded_bytes,
-            }),
-        selected_files: action
-            .artifact
-            .selected_files
-            .iter()
-            .map(|file| SetupArchiveSelectionResponse {
-                archive_path: file.archive_path.clone(),
-                runtime_name: file.runtime_name.clone(),
-                bytes: file.integrity.bytes(),
-                sha256: file.integrity.sha256_hex(),
-            })
-            .collect(),
-        archive_links: action
-            .artifact
-            .archive_links
-            .iter()
-            .map(|link| SetupArchiveLinkResponse {
-                archive_path: link.archive_path.clone(),
-                target: link.target.clone(),
-            })
-            .collect(),
-        runtime_copies: action
-            .artifact
-            .runtime_copies
-            .iter()
-            .map(|copy| SetupRuntimeCopyResponse {
-                name: copy.name.clone(),
-                source_selected: copy.source_selected.clone(),
-            })
-            .collect(),
-        licence: action.artifact.licence.clone(),
-        notice_url: action.artifact.notice_url.clone(),
-        source_code_url: action.artifact.source_code_url.clone(),
-        trust_limit: action.artifact.trust_limit.clone(),
-        licence_scope: "disclosure_not_legal_clearance".to_owned(),
-        destination: "private_per_user_managed_runtime".to_owned(),
-        permissions: "private_user_only".to_owned(),
-        change: "planned_download_verify_extract_smoke_activate".to_owned(),
-        required_authority: "user".to_owned(),
-        files: action
-            .artifact
-            .files
-            .iter()
-            .map(|file| SetupPlanFileResponse {
-                name: file.name.clone(),
-                bytes: file.integrity.bytes(),
-                sha256: file.integrity.sha256_hex(),
-                mode: if file.executable {
-                    "owner_executable"
-                } else {
-                    "owner_read_write"
-                }
-                .to_owned(),
-            })
-            .collect(),
-    }
-}
-
-const fn manual_plan_step(dependency: RuntimeDependency) -> &'static str {
-    match dependency {
-        RuntimeDependency::Ffmpeg => {
-            "Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check."
-        }
-        RuntimeDependency::Ffprobe => {
-            "Install or locate trusted FFprobe, then run setup configure ffprobe --executable <absolute-path> and setup check."
-        }
-        RuntimeDependency::Whisper => {
-            "For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR."
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct ConfiguredSelectionResponse {
-    dependency: &'static str,
-    source: &'static str,
-    validation: &'static str,
-    next_step: &'static str,
 }
 
 /// Persists one explicit BYO executable selection without running it.
@@ -436,21 +145,9 @@ pub(crate) fn configure(
         .map_err(crate::setup_config_failure)?;
     OperationResponse::complete(
         "setup.configure",
-        &ConfiguredSelectionResponse {
-            dependency: dependency.identifier(),
-            source: "configured_user_path",
-            validation: "canonical_file_only",
-            next_step: "Run setup check to probe the selected executable; model and provider compatibility remain unverified.",
-        },
+        &ConfiguredSelectionResponse::new(dependency),
     )
     .map_err(|_| FailureCode::Internal)
-}
-
-#[derive(Serialize)]
-struct ConfiguredModelResponse {
-    source: &'static str,
-    validation: &'static str,
-    next_step: &'static str,
 }
 
 /// Persists one BYO model file path without reading its contents or running ASR.
@@ -462,15 +159,8 @@ pub(crate) fn configure_model(
     store
         .configure_model(&arguments.file)
         .map_err(crate::setup_config_failure)?;
-    OperationResponse::complete(
-        "setup.configure-model",
-        &ConfiguredModelResponse {
-            source: "configured_user_path",
-            validation: "canonical_nonempty_file_only",
-            next_step: "Model format and provider compatibility remain unverified; setup check still probes executables only.",
-        },
-    )
-    .map_err(|_| FailureCode::Internal)
+    OperationResponse::complete("setup.configure-model", &ConfiguredModelResponse::new())
+        .map_err(|_| FailureCode::Internal)
 }
 
 fn human_result(
@@ -497,13 +187,13 @@ fn human_result(
         result.push_str(status.dependency.capability().identifier());
         result.push_str("): ");
         result.push_str(&detail);
-        if per_call.for_dependency(status.dependency).is_some() {
-            result.push_str(" [per-call path]");
-        } else if selections.for_dependency(status.dependency).is_some() {
-            result.push_str(" [configured user path]");
-        } else {
-            result.push_str(" [filtered PATH]");
-        }
+        result.push_str(
+            match dependency_lookup(status.dependency, selections, per_call) {
+                DependencyLookup::ExplicitPath => " [per-call path]",
+                DependencyLookup::ConfiguredUserPath => " [configured user path]",
+                DependencyLookup::FilteredPath => " [filtered PATH]",
+            },
+        );
         result.push('\n');
         if !status.state.is_available() {
             result.push_str("  Install or locate this trusted tool, then rerun setup check with its absolute path using ");
@@ -520,7 +210,10 @@ fn human_result(
 
 fn human_state(state: &DependencyState, explicit: bool) -> (&'static str, String) {
     match state {
-        DependencyState::Available { version } => ("ok", sanitize_untrusted_text(version, 240)),
+        DependencyState::Available { version } => (
+            "ok",
+            sanitize_untrusted_text(version, MAX_PROVIDER_DETAIL_BYTES),
+        ),
         DependencyState::Missing => (
             "missing",
             String::from(if explicit {

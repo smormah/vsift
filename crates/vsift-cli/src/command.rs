@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use vsift_application::SetupProfile;
 use vsift_domain::{EvidenceId, JobId, SessionId};
 
 /// Complete public R0 command parser.
@@ -244,6 +245,24 @@ impl ExecutionProfile {
         match self {
             Self::Desktop => "desktop",
             Self::Worker => "worker",
+        }
+    }
+}
+
+impl From<ExecutionProfile> for SetupProfile {
+    fn from(value: ExecutionProfile) -> Self {
+        match value {
+            ExecutionProfile::Desktop => Self::Desktop,
+            ExecutionProfile::Worker => Self::Worker,
+        }
+    }
+}
+
+impl From<SetupProfile> for ExecutionProfile {
+    fn from(value: SetupProfile) -> Self {
+        match value {
+            SetupProfile::Desktop => Self::Desktop,
+            SetupProfile::Worker => Self::Worker,
         }
     }
 }
