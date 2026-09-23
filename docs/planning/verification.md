@@ -57,6 +57,11 @@ Use bounded generators and preserve every failing seed as a regression fixture.
 
 ## 2. Process supervisor and runtime provisioning
 
+Packet ownership of the D cases follows [ADR 0015](../decisions/0015-r0-delivery-replan.md).
+P06 owns D-01, the unavailable-target guidance clause of D-07, D-09 and D-10. P13 owns
+D-02..D-08, the managed-installer cases. The per-case notes below record progress made
+before the 2026-09-23 re-plan and stay valid for whichever packet now owns the case.
+
 | ID | Cases | Expected assertion |
 | --- | --- | --- |
 | P-01 | Malicious filenames/query strings and input that looks like provider flags | Exact allowlisted argv; stdin/environment/working directory match policy |

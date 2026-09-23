@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Delivery is re-planned by ADR 0015. Managed dependency installation
+  (`setup install` and its repair, list, rollback and remove lifecycle) moves from
+  P06 to P13 and remains an R0 release requirement. P06 now closes on detection,
+  bring-your-own selection, verification of the selected tools and manual guidance.
+  Behaviour is unchanged: `setup install` still returns `COMMAND_NOT_IMPLEMENTED`.
+- ADR 0016 commits VSift to an embeddable engine library and a published evidence
+  contract, starting at P07.
+- The governance check now keeps the two session handoff files to a current-state
+  size. The earlier day-by-day log is archived in `docs/history/`.
+
 ### Fixed
 
 - Per-user dependency configuration now reports `BUSY` only when the OS says

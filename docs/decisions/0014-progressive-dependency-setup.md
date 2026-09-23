@@ -1,6 +1,6 @@
 # ADR 0014: Detect, explicitly install, or guide dependency setup in R0
 
-- Status: Accepted
+- Status: Accepted; refined by [ADR 0015](0015-r0-delivery-replan.md), which moves managed installation to P13
 - Date: 2026-09-13
 - Refines: [ADR 0007](0007-managed-runtime-provisioning.md) and
   [ADR 0008](0008-cli-and-json-contract.md)

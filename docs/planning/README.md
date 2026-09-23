@@ -7,8 +7,11 @@ private-root, stable-lock, weighted-admission, later-generation publication and
 process-crash recovery boundary merged in PR #42 (`3eef9b7`). P04's internal
 source/media boundary merged in PR #44 (`4fc859b`); its
 [qualification record](p04-media-qualification.md) records the checkpoint. P05
-added the public disposable session and retained-bundle lifecycle. P06 is next
-eligible, subject to its [provider/model source review](p06-provisioning-source-review.md).
+added the public disposable session and retained-bundle lifecycle. On 2026-09-23
+[ADR 0015](../decisions/0015-r0-delivery-replan.md) re-planned delivery: P06 closes on
+detection, selection, verification and guidance, managed installation moved to P13, and
+[ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) makes the engine
+an embeddable library with a published evidence contract, starting in P07.
 
 ## Purpose and reading order
 

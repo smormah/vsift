@@ -9,7 +9,7 @@ cargo run --locked -p vsift-governance -- check
 
 It validates the exact P00-P14 and R-01-R-14 sets, accepted DEC-01-DEC-13 records,
 source documents, fixture truth, bidirectional requirement mappings, predecessor
-ordering and completion evidence. A packet marked complete requires a full merge
+ordering, completion evidence and the size limits of the two handoff files. A packet marked complete requires a full merge
 commit and nonempty verification record. The checker deliberately fixes the R0
 objective; changing it requires an explicit reviewed code, ledger and ADR change.
 
@@ -27,7 +27,10 @@ Each implementation PR cites one packet issue, requirements, tests, threats/find
 predecessors and exclusions. Protected main, CODEOWNERS, required CI/security checks
 and the Governance check prevent an unattended task from merging around the ledger.
 
-## Rules for unattended implementation
+## Rules for implementation sessions
+
+These apply to attended and unattended sessions alike, whether the implementer is a
+person or an AI agent.
 
 1. Read `AGENTS.md`, both memory files, the ledger, packet, linked contracts/tests and
    accepted ADRs before editing.
@@ -44,14 +47,24 @@ and the Governance check prevent an unattended task from merging around the ledg
    platform claim or privilege requires its recorded review and relevant ADR update.
 7. Treat failing tests as evidence. Fix the defect or revise the accepted design with
    an explicit ADR; never rewrite independent ground truth to match implementation.
-8. Update code, tests, docs, changelog, ledger and memory in the same PR. Record actual
-   limitations and residual risk.
-9. Complete means merged through protected checks. The following record update adds
-   the merge hash if the implementation PR could not know it in advance.
+8. Update code, tests, docs, changelog, ledger and handoff files in the same PR. Record
+   actual limitations and residual risk. Verification commands and results belong in
+   the PR description; do not open separate PRs that only record evidence.
+9. Complete means merged through protected checks. Only when a whole packet completes,
+   one small follow-up may set its ledger status with the merge commit the
+   implementation PR could not know in advance.
 10. Stop at packet completion or a documented blocker. Do not automatically advance
     into the next packet merely because time or model context remains.
 11. R0 release evidence must include the complete video-to-grounded-handoff journey
     through the two named independent agent clients; component tests cannot substitute.
+12. `memory/TODO.md` and `memory/project_current_status.md` describe the current state.
+    Rewrite them rather than appending history, keep them within the governance
+    checker's size limits, and leave history to git, the changelog, qualification
+    records and `docs/history/`.
+13. Report status in plain English. Say explicitly whether an increment or the whole
+    packet is complete, and list what remains.
+14. A failed required check is evidence. Link it to a tracked issue before re-running,
+    and treat a tracked intermittent failure as priority work rather than routine noise.
 
 ## Drift response
 
