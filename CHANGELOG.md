@@ -20,6 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Locks are now always released explicitly instead of by closing their file
+  (issue #66). On Linux and macOS a child process started by another thread
+  briefly holds copies of every open file, so a lock released only by closing
+  could stay held for a moment and make an immediate retry report `BUSY`. This
+  caused the intermittent CI failures and would have affected a busy worker.
+  It applies to session, registration, admission, root-initialization,
+  configuration, managed-install and managed-version locks.
 - Per-user dependency configuration now reports `BUSY` only when the OS says
   another handle holds its lock. Other lock acquisition failures surface as
   storage I/O; an intermittent hosted `BUSY` test symptom remains under review.

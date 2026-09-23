@@ -14,6 +14,8 @@ use cap_std::fs::{Dir, DirBuilder, OpenOptions};
 #[cfg(unix)]
 use cap_std::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use sha2::{Digest, Sha256};
+
+use crate::file_lock::HeldFileLock;
 use tokio::io::AsyncWriteExt;
 use vsift_domain::ArtifactIntegrity;
 
@@ -278,7 +280,7 @@ pub struct ManagedArtifactStore {
 /// does not represent plan acceptance, compatibility success or install authority.
 #[derive(Debug)]
 pub struct ManagedInstallGuard {
-    _lock: fs::File,
+    _lock: HeldFileLock,
     root: Dir,
     root_path: PathBuf,
 }
@@ -360,8 +362,7 @@ impl ManagedArtifactStore {
         if metadata.permissions().mode() & 0o777 != 0o600 {
             return Err(ManagedArtifactError::UnsafeStorage);
         }
-        let lock = lock.into_std();
-        lock.try_lock().map_err(|error| match error {
+        let lock = HeldFileLock::try_exclusive(lock.into_std()).map_err(|error| match error {
             fs::TryLockError::WouldBlock => ManagedArtifactError::Busy,
             fs::TryLockError::Error(_) => ManagedArtifactError::Io,
         })?;
@@ -1638,7 +1639,7 @@ pub struct PublishedManagedRuntime {
     identity: ManagedRuntimeIdentity,
     directory: Dir,
     files: Vec<PublishedRuntimeFile>,
-    _use_lock: fs::File,
+    _use_lock: HeldFileLock,
 }
 
 impl PublishedManagedRuntime {
@@ -1704,7 +1705,7 @@ enum ManagedRemovalBoundary {
 }
 
 enum ExclusiveVersionUse {
-    Acquired(Option<fs::File>),
+    Acquired(Option<HeldFileLock>),
     InUse,
 }
 
@@ -1978,7 +1979,7 @@ fn open_published_runtime_from_manifest(
         .map_err(ManagedRuntimePublicationError::Storage)?;
     let use_lock =
         open_version_use_lock(&directory).map_err(ManagedRuntimePublicationError::Storage)?;
-    use_lock.try_lock_shared().map_err(|error| match error {
+    let use_lock = HeldFileLock::try_shared(use_lock).map_err(|error| match error {
         fs::TryLockError::WouldBlock => {
             ManagedRuntimePublicationError::Storage(ManagedArtifactError::Busy)
         }
@@ -2166,8 +2167,8 @@ fn try_exclusive_version_use(
         return Ok(ExclusiveVersionUse::Acquired(None));
     }
     let lock = open_version_use_lock(directory).map_err(ManagedRuntimePublicationError::Storage)?;
-    match lock.try_lock() {
-        Ok(()) => Ok(ExclusiveVersionUse::Acquired(Some(lock))),
+    match HeldFileLock::try_exclusive(lock) {
+        Ok(held) => Ok(ExclusiveVersionUse::Acquired(Some(held))),
         Err(fs::TryLockError::WouldBlock) => Ok(ExclusiveVersionUse::InUse),
         Err(fs::TryLockError::Error(_)) => Err(ManagedRuntimePublicationError::Storage(
             ManagedArtifactError::Io,

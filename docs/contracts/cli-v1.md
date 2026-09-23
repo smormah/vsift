@@ -195,8 +195,9 @@ downloads or establish model/provider compatibility.
 
 Configuration writes use one private lock file. A held lock returns retryable
 `BUSY` without changing the record; an OS lock failure returns `STORAGE_IO`
-rather than claiming contention. The hosted intermittent lock finding remains
-open in [issue #66](https://github.com/smormah/vsift/issues/66).
+rather than claiming contention. Every VSift lock is released with an explicit
+unlock rather than by closing its file, so a lock never stays held after its
+owner lets go ([issue #66](https://github.com/smormah/vsift/issues/66)).
 
 ```json
 {

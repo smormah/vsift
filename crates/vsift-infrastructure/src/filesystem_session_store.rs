@@ -20,7 +20,7 @@ use vsift_domain::{
     SessionPhase, SourceId, StorageGeneration,
 };
 
-use crate::SourceSnapshot;
+use crate::{SourceSnapshot, file_lock::HeldFileLock};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
 const OWNERSHIP_FILE: &str = "ownership.json";
@@ -107,12 +107,12 @@ pub struct FilesystemSessionStore {
 /// Dropping the value releases every reservation. The slot files themselves are
 /// immutable anchors and are never replaced during normal operation.
 pub struct FilesystemAdmissionPermit {
-    _slots: Vec<fs::File>,
+    _slots: Vec<HeldFileLock>,
 }
 
 /// A committed metadata snapshot protected by a shared session lifetime hold.
 pub struct SessionReadHold {
-    _lifetime_lock: fs::File,
+    _lifetime_lock: HeldFileLock,
     generation: StorageGeneration,
     manifest_sha256: String,
 }
@@ -135,7 +135,7 @@ impl SessionReadHold {
 ///
 /// P03 exposes only coordination. P05 owns lifecycle state changes and deletion.
 pub struct ExclusiveSessionLifetimeHold {
-    _lifetime_lock: fs::File,
+    _lifetime_lock: HeldFileLock,
 }
 
 /// Verified committed lifecycle state for one disposable session.
@@ -187,7 +187,7 @@ pub enum CleanOutcome {
 /// A cleaner cannot classify a suspended opener as abandoned merely from its
 /// registration timestamp; this OS lock remains authoritative until drop/crash.
 pub struct SessionRegistration {
-    _marker_lock: fs::File,
+    _marker_lock: HeldFileLock,
 }
 
 /// One bounded page from a fixed index bucket, with no media or transcript data.
@@ -416,12 +416,15 @@ impl FilesystemSessionStore {
                 map_storage_io(error)
             }
         })?;
-        let marker_lock = open_regular_file(&bucket, session_id.as_str(), true)
-            .map_err(map_storage_io)?
-            .into_std();
-        marker_lock.try_lock_shared().map_err(map_lock_error)?;
-        release_root_initialization_lock(&initialization_lock)?;
-        drop(initialization_lock);
+        let marker_lock = HeldFileLock::try_shared(
+            open_regular_file(&bucket, session_id.as_str(), true)
+                .map_err(map_storage_io)?
+                .into_std(),
+        )
+        .map_err(map_lock_error)?;
+        // Registration returns the long-lived marker hold, so it must know the
+        // short-lived root lock is free before returning rather than rely on drop.
+        initialization_lock.release().map_err(map_storage_io)?;
         Ok(SessionRegistration {
             _marker_lock: marker_lock,
         })
@@ -531,8 +534,9 @@ impl FilesystemSessionStore {
             .root
             .open_dir_nofollow(COORDINATION_DIRECTORY)
             .map_err(map_storage_io)?;
-        let lifetime = open_session_lock(&coordination, session_id, "lifetime")?;
-        lifetime.try_lock_shared().map_err(map_lock_error)?;
+        let _lifetime =
+            HeldFileLock::try_shared(open_session_lock(&coordination, session_id, "lifetime")?)
+                .map_err(map_lock_error)?;
         let sessions = self
             .root
             .open_dir_nofollow(SESSIONS_DIRECTORY)
@@ -570,8 +574,9 @@ impl FilesystemSessionStore {
             }
             Err(error) => return Err(map_storage_io(error)),
         }
-        let writer = open_session_lock(&coordination, session_id, "writer")?;
-        writer.try_lock().map_err(map_lock_error)?;
+        let _writer =
+            HeldFileLock::try_exclusive(open_session_lock(&coordination, session_id, "writer")?)
+                .map_err(map_lock_error)?;
         let request = PublishSessionGenerationRequest::new(
             session_id.clone(),
             operation_id.clone(),
@@ -709,7 +714,7 @@ impl FilesystemSessionStore {
     fn claim_registration(
         &self,
         session_id: &SessionId,
-    ) -> Result<Option<(Dir, fs::File, SessionIndexMarker)>, SessionStorageError> {
+    ) -> Result<Option<(Dir, HeldFileLock, SessionIndexMarker)>, SessionStorageError> {
         let _initialization_lock = self.try_root_initialization_lock()?;
         if !self
             .root
@@ -739,7 +744,7 @@ impl FilesystemSessionStore {
             .map_err(|_| SessionStorageError::IntegrityFailure)?
             .into_std();
         let marker = read_versioned_json_file::<SessionIndexMarker>(&bucket, session_id.as_str())?;
-        marker_lock.try_lock().map_err(map_lock_error)?;
+        let marker_lock = HeldFileLock::try_exclusive(marker_lock).map_err(map_lock_error)?;
         if marker.session_id != session_id.as_str()
             || OperationId::parse(&marker.operation_id).is_err()
         {
@@ -748,16 +753,17 @@ impl FilesystemSessionStore {
         Ok(Some((bucket, marker_lock, marker)))
     }
 
-    fn try_root_initialization_lock(&self) -> Result<fs::File, SessionStorageError> {
+    fn try_root_initialization_lock(&self) -> Result<HeldFileLock, SessionStorageError> {
         let coordination = self
             .root
             .open_dir_nofollow(COORDINATION_DIRECTORY)
             .map_err(map_storage_io)?;
-        let lock = open_regular_file(&coordination, INITIALIZATION_LOCK, true)
-            .map_err(map_storage_io)?
-            .into_std();
-        lock.try_lock().map_err(map_lock_error)?;
-        Ok(lock)
+        HeldFileLock::try_exclusive(
+            open_regular_file(&coordination, INITIALIZATION_LOCK, true)
+                .map_err(map_storage_io)?
+                .into_std(),
+        )
+        .map_err(map_lock_error)
     }
 
     /// Explicitly exports one committed session to a new private data-only directory.
@@ -1339,8 +1345,9 @@ impl FilesystemSessionStore {
             .root
             .open_dir_nofollow(COORDINATION_DIRECTORY)
             .map_err(map_storage_io)?;
-        let lifetime = open_session_lock(&coordination, session_id, "lifetime")?;
-        lifetime.try_lock_shared().map_err(map_lock_error)?;
+        let lifetime =
+            HeldFileLock::try_shared(open_session_lock(&coordination, session_id, "lifetime")?)
+                .map_err(map_lock_error)?;
         let sessions = self
             .root
             .open_dir_nofollow(SESSIONS_DIRECTORY)
@@ -1370,8 +1377,9 @@ impl FilesystemSessionStore {
             .root
             .open_dir_nofollow(COORDINATION_DIRECTORY)
             .map_err(map_storage_io)?;
-        let lifetime = open_session_lock(&coordination, session_id, "lifetime")?;
-        lifetime.try_lock().map_err(map_lock_error)?;
+        let lifetime =
+            HeldFileLock::try_exclusive(open_session_lock(&coordination, session_id, "lifetime")?)
+                .map_err(map_lock_error)?;
         Ok(ExclusiveSessionLifetimeHold {
             _lifetime_lock: lifetime,
         })
@@ -1712,8 +1720,8 @@ fn acquire_admission(
         let slot = open_regular_file(&coordination, &admission_slot_name(index), true)
             .map_err(map_storage_io)?
             .into_std();
-        match slot.try_lock() {
-            Ok(()) => slots.push(slot),
+        match HeldFileLock::try_exclusive(slot) {
+            Ok(held) => slots.push(held),
             Err(fs::TryLockError::WouldBlock) => {}
             Err(fs::TryLockError::Error(error)) => return Err(map_storage_io(error)),
         }
@@ -1748,10 +1756,18 @@ fn publish_generation(
     let coordination = root
         .open_dir_nofollow(COORDINATION_DIRECTORY)
         .map_err(map_storage_io)?;
-    let lifetime = open_session_lock(&coordination, request.session_id(), "lifetime")?;
-    lifetime.try_lock_shared().map_err(map_lock_error)?;
-    let writer = open_session_lock(&coordination, request.session_id(), "writer")?;
-    writer.try_lock().map_err(map_lock_error)?;
+    let lifetime = HeldFileLock::try_shared(open_session_lock(
+        &coordination,
+        request.session_id(),
+        "lifetime",
+    )?)
+    .map_err(map_lock_error)?;
+    let writer = HeldFileLock::try_exclusive(open_session_lock(
+        &coordination,
+        request.session_id(),
+        "writer",
+    )?)
+    .map_err(map_lock_error)?;
 
     let result = publish_generation_while_locked(root, request, LifecycleUpdate::Keep, fault);
     drop(writer);
@@ -1770,14 +1786,19 @@ fn publish_generation_with_update(
     let coordination = root
         .open_dir_nofollow(COORDINATION_DIRECTORY)
         .map_err(map_storage_io)?;
-    let lifetime = open_session_lock(&coordination, request.session_id(), "lifetime")?;
-    if exclusive_lifetime {
-        lifetime.try_lock().map_err(map_lock_error)?;
+    let lifetime_file = open_session_lock(&coordination, request.session_id(), "lifetime")?;
+    let lifetime = if exclusive_lifetime {
+        HeldFileLock::try_exclusive(lifetime_file)
     } else {
-        lifetime.try_lock_shared().map_err(map_lock_error)?;
+        HeldFileLock::try_shared(lifetime_file)
     }
-    let writer = open_session_lock(&coordination, request.session_id(), "writer")?;
-    writer.try_lock().map_err(map_lock_error)?;
+    .map_err(map_lock_error)?;
+    let writer = HeldFileLock::try_exclusive(open_session_lock(
+        &coordination,
+        request.session_id(),
+        "writer",
+    )?)
+    .map_err(map_lock_error)?;
     let result = publish_generation_while_locked(root, request, update, None);
     drop(writer);
     drop(lifetime);
@@ -2286,10 +2307,12 @@ fn initialize_session(
     let coordination = root
         .open_dir_nofollow(COORDINATION_DIRECTORY)
         .map_err(map_storage_io)?;
-    let initialization_lock = open_regular_file(&coordination, INITIALIZATION_LOCK, true)
-        .map_err(map_storage_io)?
-        .into_std();
-    initialization_lock.try_lock().map_err(map_lock_error)?;
+    let initialization_lock = HeldFileLock::try_exclusive(
+        open_regular_file(&coordination, INITIALIZATION_LOCK, true)
+            .map_err(map_storage_io)?
+            .into_std(),
+    )
+    .map_err(map_lock_error)?;
 
     let result = initialize_session_while_locked(root, &coordination, request);
     drop(initialization_lock);
@@ -2519,13 +2542,6 @@ fn map_lock_error(error: fs::TryLockError) -> SessionStorageError {
         fs::TryLockError::WouldBlock => SessionStorageError::Busy,
         fs::TryLockError::Error(error) => map_storage_io(error),
     }
-}
-
-fn release_root_initialization_lock(lock: &fs::File) -> Result<(), SessionStorageError> {
-    // Closing one descriptor does not guarantee release if a duplicate survives.
-    // Registration must release this short-lived root lock before returning the
-    // deliberately long-lived marker lock to its caller.
-    lock.unlock().map_err(map_storage_io)
 }
 
 #[allow(
@@ -2779,7 +2795,6 @@ mod tests {
         FilesystemSessionStore, GENERATIONS_DIRECTORY, INITIALIZATION_LOCK, OWNERSHIP_FILE,
         PublicationBoundary, SESSIONS_DIRECTORY, SessionStoreOpenError, admission_slot_name,
         map_storage_io, publication_boundary_name, publish_generation,
-        release_root_initialization_lock,
     };
     use vsift_application::{
         InitializeSessionStorage, InitializeSessionStorageRequest, PublishSessionGeneration,
@@ -3031,25 +3046,49 @@ mod tests {
     }
 
     #[test]
-    fn explicit_root_release_survives_a_duplicated_descriptor() -> TestResult {
+    fn root_initialization_lock_is_released_despite_a_surviving_duplicate() -> TestResult {
         let fixture = Fixture::new()?;
-        let path = fixture
-            .path
-            .join(COORDINATION_DIRECTORY)
-            .join(INITIALIZATION_LOCK);
-        let lock = StdFile::options().read(true).write(true).open(&path)?;
-        lock.try_lock()?;
-        let duplicate = lock.try_clone()?;
-        let contender = StdFile::options().read(true).write(true).open(&path)?;
-        assert!(matches!(
-            contender.try_lock(),
-            Err(fs::TryLockError::WouldBlock)
-        ));
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        let root_lock = store.try_root_initialization_lock()?;
+        let inherited = root_lock.duplicate_descriptor()?;
+        assert_eq!(
+            store.try_root_initialization_lock().err(),
+            Some(SessionStorageError::Busy)
+        );
 
-        release_root_initialization_lock(&lock)?;
-        contender.try_lock()?;
-        contender.unlock()?;
-        drop(duplicate);
+        root_lock.release()?;
+
+        drop(store.try_root_initialization_lock()?);
+        drop(inherited);
+        Ok(())
+    }
+
+    /// Regression for issue #66: a descriptor inherited by a concurrently spawned
+    /// child must not keep a dropped session hold's lock alive.
+    #[tokio::test]
+    #[allow(
+        clippy::used_underscore_binding,
+        reason = "the test reaches into a private hold to simulate an inherited descriptor"
+    )]
+    async fn dropped_session_holds_release_despite_surviving_duplicates() -> TestResult {
+        let fixture = Fixture::new()?;
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        InitializeSessionStorage::new(FilesystemSessionStore::open_existing(&fixture.path)?)
+            .execute(request(DurabilityRequirement::Ephemeral)?)
+            .await?;
+        let session_id = SessionId::parse("ses_0123456789abcdef")?;
+
+        let reader = store.acquire_read(&session_id)?;
+        let inherited_read = reader._lifetime_lock.duplicate_descriptor()?;
+        drop(reader);
+        let exclusive = store.try_acquire_exclusive_lifetime(&session_id)?;
+
+        let inherited_exclusive = exclusive._lifetime_lock.duplicate_descriptor()?;
+        drop(exclusive);
+        drop(store.acquire_read(&session_id)?);
+
+        drop(inherited_read);
+        drop(inherited_exclusive);
         Ok(())
     }
 

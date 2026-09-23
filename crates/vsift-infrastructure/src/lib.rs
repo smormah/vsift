@@ -6,6 +6,7 @@ mod archive_inventory;
 mod bounded_tar_inventory;
 mod executable;
 mod ffmpeg_media;
+mod file_lock;
 mod filesystem_session_store;
 mod gzip_tar_inventory;
 mod managed_artifact_store;
