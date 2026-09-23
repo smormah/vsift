@@ -1,6 +1,6 @@
 [package]
-name = "vsift-cli"
-description = "Agent-friendly command-line interface for VSift"
+name = "vsift-contract"
+description = "Versioned JSON wire contract shared by every VSift host"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,26 +9,14 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
-[[bin]]
-name = "vsift"
-path = "src/main.rs"
-
 [dependencies]
-clap.workspace = true
-getrandom.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-time.workspace = true
-tokio.workspace = true
 vsift-application.workspace = true
-vsift-contract.workspace = true
 vsift-domain.workspace = true
-vsift-infrastructure.workspace = true
 
 [dev-dependencies]
-assert_cmd.workspace = true
 jsonschema.workspace = true
-predicates.workspace = true
 
 [lints]
 workspace = true

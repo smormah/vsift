@@ -98,3 +98,22 @@ and nothing has been released.
   the facade and published schemas, never on infrastructure internals.
 - Fuzz targets and the benchmark add CI time. Short fuzz passes are bounded;
   long runs are scheduled, not per-PR.
+
+## 2026-09-23 implementation note: contract crate extracted
+
+- The maintainer confirmed the crate names: `vsift` for the engine facade and
+  `vsift-contract` for the wire contract. A crates.io availability check still
+  precedes first publication.
+- P07 increment 1a added `crates/vsift-contract`. It owns the v1 envelope,
+  terminal event, setup check, setup plan, strict saved-plan input, session,
+  bundle and frozen evidence-metadata types, plus the mapping into them from
+  domain and application values. It depends on `vsift-domain`,
+  `vsift-application`, `serde` and `serde_json` only.
+- Values the contract cannot own without an infrastructure or host dependency
+  are passed in typed form: the dependency lookup provenance, the bundle source
+  inclusion and the clean outcome are contract enums mapped at the CLI edge, and
+  RFC 3339 timestamps are formatted by the host, which owns the clock.
+- The CLI contract and schema suites passed unchanged. The contract crate's own
+  tests validate its values against `schemas/v1` and match the frozen examples.
+- Increment 1b adds the `vsift` facade: engine use cases with injected clock and
+  identifier ports, leaving `vsift-cli` a thin host.

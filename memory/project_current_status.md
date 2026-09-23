@@ -35,6 +35,14 @@ Those arrive with P07–P09.
 
 ## What exists internally (not exposed)
 
+- **Wire contract (P07 increment 1a, in review):** `crates/vsift-contract` owns every
+  v1 JSON type the CLI emits (operation envelope, JSONL terminal event, setup check,
+  setup plan and strict saved-plan input, configured selections, session and bundle
+  data, frozen confidence and frame-timing shapes) plus the mapping into them from
+  domain and application values. It depends on domain, application, `serde` and
+  `serde_json` only. The CLI keeps output modes, exit codes, the byte budget, human
+  text, clap types and RFC 3339 formatting. The Rust API is 0.x and unstable; only
+  the JSON is stable.
 - **P02:** shell-free process supervision with Windows Job Object and Unix
   process-group containment, bounded output, one deadline and cancellation.
 - **P03:** private storage roots, cross-process locks, weighted admission,
@@ -63,7 +71,7 @@ Those arrive with P07–P09.
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`; [ADR 0015](../docs/decisions/0015-r0-delivery-replan.md)) |
-| P07 | Next; begins with the engine boundary (ADR 0016), then transcription |
+| P07 | In progress: increment 1a (contract crate) done in review; 1b (engine facade) next, then transcription |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
@@ -71,15 +79,22 @@ Those arrive with P07–P09.
 
 `vsift-domain` (values, no I/O) ← `vsift-application` (use cases, ports) ←
 `vsift-infrastructure` (OS, processes, storage, providers) ← `vsift-cli` (parse,
-compose, present). `tools/vsift-governance` checks the delivery ledger and the size
-of these handoff files. ADR 0016 adds an engine facade crate and a contract crate at
-the start of P07. The largest modules are `filesystem_session_store.rs` and
+compose, present). `vsift-contract` (v1 wire types) depends on domain and
+application only, and the CLI emits JSON through it. `tools/vsift-governance` checks
+the delivery ledger and the size of these handoff files. The ADR 0016 engine facade
+(`vsift`) is P07 increment 1b. The largest modules are `filesystem_session_store.rs` and
 `managed_artifact_store.rs`, about 3.6k lines each including tests.
 
 ## Quality evidence
 
 - Local gates on Windows 11: fmt, strict Clippy with pedantic lints as errors,
-  the workspace tests and the governance check all pass.
+  the workspace tests, warning-denied rustdoc, `cargo deny` and the governance check
+  all pass.
+- Increment 1a evidence: the unchanged CLI contract and schema suites pass;
+  `vsift-contract` adds 28 tests, including schema validation and exact matches with
+  the frozen examples; the P06 E2E stage passes; a differential run of 47 CLI
+  invocations against `7f57f69` gave identical output after normalizing random
+  identifiers, timestamps and cursors.
 - CI on every PR:
   - Quality on Ubuntu, macOS and Windows;
   - Documentation, Governance and the strict worker boundary;

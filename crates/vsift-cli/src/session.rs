@@ -9,81 +9,20 @@ use std::{
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift_application::{OpenSession, OpenSessionError, OpenSessionRequest, SessionStorageError};
-use vsift_domain::{DurabilityRequirement, FailureCode, OperationId, SessionId, SessionPhase};
+use vsift_contract::{
+    BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, LifecycleResponse,
+    ListedSession, OpenData, OperationResponse, PageData, SessionState, StatusData,
+};
+use vsift_domain::{DurabilityRequirement, FailureCode, OperationId, SessionId};
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, FilesystemSessionStore, SessionStatus,
     SessionStoreOpenError,
 };
 
-use crate::{
-    command::{IngestArguments, SessionCommand},
-    output::{LifecycleResponse, OperationResponse},
-};
+use crate::command::{IngestArguments, SessionCommand};
 
 type Response = OperationResponse<serde_json::Value>;
 const HEX: &[u8; 16] = b"0123456789abcdef";
-
-#[derive(Serialize)]
-struct OpenData {
-    session_id: String,
-    source_id: String,
-    source_bytes: u64,
-    generation: u64,
-    publication: &'static str,
-    expires_at: String,
-}
-
-#[derive(Serialize)]
-struct StatusData {
-    session_id: String,
-    state: &'static str,
-    source_id: String,
-    source_bytes: u64,
-    artifact_count: usize,
-    artifact_bytes: u64,
-    generation: u64,
-    expires_at: String,
-}
-
-#[derive(Serialize)]
-struct PageData {
-    items: Vec<ListedSession>,
-    next_cursor: Option<u16>,
-}
-
-#[derive(Serialize)]
-struct ListedSession {
-    session_id: String,
-    state: &'static str,
-    status: Option<StatusData>,
-    error_code: Option<&'static str>,
-}
-
-#[derive(Serialize)]
-struct CleanItem {
-    session_id: String,
-    outcome: &'static str,
-    error_code: Option<&'static str>,
-}
-
-#[derive(Serialize)]
-struct CleanData {
-    items: Vec<CleanItem>,
-    next_cursor: Option<u16>,
-    dry_run: bool,
-}
-
-#[derive(Serialize)]
-struct BundleData {
-    session_id: String,
-    source_id: String,
-    source_bytes: u64,
-    source_included: bool,
-    artifact_count: usize,
-    artifact_bytes: u64,
-    reextraction_requires_matching_original: bool,
-    publication: &'static str,
-}
 
 fn now_seconds() -> Result<u64, FailureCode> {
     SystemTime::now()
@@ -234,14 +173,9 @@ fn map_storage_error(error: SessionStorageError) -> FailureCode {
 }
 
 fn status_data(status: &SessionStatus, now: u64) -> Result<StatusData, FailureCode> {
-    let state = match status.phase() {
-        SessionPhase::Closed => "closed",
-        SessionPhase::Open if status.lifetime().expired(now) => "expired",
-        SessionPhase::Open => "open",
-    };
     Ok(StatusData {
         session_id: status.session_id().as_str().to_owned(),
-        state,
+        state: SessionState::observed(status.phase(), status.lifetime(), now),
         source_id: status.source_id().as_str().to_owned(),
         source_bytes: status.source_bytes(),
         artifact_count: status.artifact_count(),
@@ -264,17 +198,18 @@ fn partial_response<T: Serialize>(
 }
 
 fn bundle_data(bundle: &BundleStatus) -> BundleData {
-    let source_included = bundle.source_policy() == BundleSourcePolicy::IncludeSource;
-    BundleData {
-        session_id: bundle.session_id().as_str().to_owned(),
-        source_id: bundle.source_id().as_str().to_owned(),
-        source_bytes: bundle.source_bytes(),
-        source_included,
-        artifact_count: bundle.artifact_count(),
-        artifact_bytes: bundle.artifact_bytes(),
-        reextraction_requires_matching_original: !source_included,
-        publication: "process_crash_consistent",
-    }
+    let source = match bundle.source_policy() {
+        BundleSourcePolicy::EvidenceOnly => BundleSourceInclusion::EvidenceOnly,
+        BundleSourcePolicy::IncludeSource => BundleSourceInclusion::SourceIncluded,
+    };
+    BundleData::new(
+        bundle.session_id(),
+        bundle.source_id(),
+        bundle.source_bytes(),
+        source,
+        bundle.artifact_count(),
+        bundle.artifact_bytes(),
+    )
 }
 
 /// Executes the P05 portion of ingestion without starting P07 transcription.
@@ -313,14 +248,7 @@ pub(crate) async fn ingest(
             OpenSessionError::Storage(storage) => map_storage_error(storage),
         })?;
     let expires_at = rfc3339(opened.lifetime.expires_at_unix_seconds())?;
-    let data = OpenData {
-        session_id: opened.session_id.as_str().to_owned(),
-        source_id: opened.source_id.as_str().to_owned(),
-        source_bytes: opened.source_bytes,
-        generation: opened.generation.value(),
-        publication: opened.publication.identifier(),
-        expires_at: expires_at.clone(),
-    };
+    let data = OpenData::new(&opened, expires_at.clone());
     Ok(response("ingest", &data)?.with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
 }
 
@@ -356,31 +284,18 @@ pub(crate) fn execute_session(
                     let mut items = Vec::new();
                     let mut partial = false;
                     for session_id in page.session_ids() {
-                        let id = session_id.as_str().to_owned();
                         match store.indexed_session_status(session_id) {
-                            Ok(Some(status)) => {
-                                let data = status_data(&status, now)?;
-                                items.push(ListedSession {
-                                    session_id: id,
-                                    state: data.state,
-                                    status: Some(data),
-                                    error_code: None,
-                                });
-                            }
-                            Ok(None) => items.push(ListedSession {
-                                session_id: id,
-                                state: "initializing",
-                                status: None,
-                                error_code: None,
-                            }),
+                            Ok(Some(status)) => items.push(ListedSession::indexed(
+                                session_id,
+                                status_data(&status, now)?,
+                            )),
+                            Ok(None) => items.push(ListedSession::initializing(session_id)),
                             Err(error) => {
                                 partial = true;
-                                items.push(ListedSession {
-                                    session_id: id,
-                                    state: "unavailable",
-                                    status: None,
-                                    error_code: Some(map_storage_error(error).identifier()),
-                                });
+                                items.push(ListedSession::unavailable(
+                                    session_id,
+                                    map_storage_error(error),
+                                ));
                             }
                         }
                     }
@@ -487,22 +402,17 @@ pub(crate) fn execute_session(
             let mut partial = false;
             for session_id in page.session_ids() {
                 match store.clean_session(session_id, now, arguments.dry_run) {
-                    Ok(outcome) => items.push(CleanItem {
-                        session_id: session_id.as_str().to_owned(),
-                        outcome: match outcome {
-                            CleanOutcome::Ineligible => "ineligible",
-                            CleanOutcome::Eligible => "eligible",
-                            CleanOutcome::Removed => "removed",
+                    Ok(outcome) => items.push(CleanItem::examined(
+                        session_id,
+                        match outcome {
+                            CleanOutcome::Ineligible => CleanItemOutcome::Ineligible,
+                            CleanOutcome::Eligible => CleanItemOutcome::Eligible,
+                            CleanOutcome::Removed => CleanItemOutcome::Removed,
                         },
-                        error_code: None,
-                    }),
+                    )),
                     Err(error) => {
                         partial = true;
-                        items.push(CleanItem {
-                            session_id: session_id.as_str().to_owned(),
-                            outcome: "skipped",
-                            error_code: Some(map_storage_error(error).identifier()),
-                        });
+                        items.push(CleanItem::skipped(session_id, map_storage_error(error)));
                     }
                 }
             }

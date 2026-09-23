@@ -13,8 +13,13 @@ These files are the machine-readable public v1 boundary:
   `operation-response.schema.json` too);
 - `config.schema.json` — strict explicit configuration document reserved for P06.
 
+The Rust types that produce these documents live in the `vsift-contract` crate
+(`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.
+Its `schema_conformance` tests validate serialized values against these schemas and
+compare them with the examples.
+
 Every file under `examples/` is a frozen valid instance checked by the Rust contract
-suite. Response readers must tolerate additive fields within major v1. Strict request
+suites in `vsift-contract` and `vsift-cli`. Response readers must tolerate additive fields within major v1. Strict request
 and configuration readers reject unknown fields. Unknown major versions are rejected.
 
 See the human-readable [CLI contract](../../docs/contracts/cli-v1.md) for limits,

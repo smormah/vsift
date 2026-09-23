@@ -8,21 +8,27 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
-complete; P06 closed on detect, select, verify and guide (PR #123, `b73df52`). Nothing
-public can yet read a video's content; P07 starts that:
+complete; P06 closed on detect, select, verify and guide (PR #123, `b73df52`). P07 is in
+progress. Nothing public can yet read a video's content; P07 starts that:
 
-1. **P07 increment 1:** extract the embeddable engine facade and contract crate
-   with no behaviour change (ADR 0016). The existing CLI contract and schema
-   tests must pass unchanged.
-2. **P07 transcription:** segment-first, with published transcript schemas and
+1. **P07 increment 1a (done, in review):** the `vsift-contract` crate now owns the v1
+   JSON wire types and their mapping from domain and application values. No behaviour
+   change: the CLI contract and schema suites pass unchanged, and a differential run of
+   47 CLI invocations against `7f57f69` produced identical output.
+2. **P07 increment 1b (next):** the `vsift` engine facade. Move the engine use cases
+   out of `vsift-cli` (session-root resolution, ingest and session flows, setup-plan
+   evaluation and acceptance), inject clock and identifier ports, and leave the CLI a
+   thin host: parsing, presentation, exit codes and composition. Still no behaviour
+   change; the same suites must pass unchanged.
+3. **P07 transcription:** segment-first, with published transcript schemas and
    SRT/VTT fuzz targets. Includes the preflight that calls
    `FixtureMediaToolVerifier` before the first media stage, and whisper.cpp
    functional verification.
 
 ## Open decisions (maintainer)
 
-- Final crate names for the facade and contract crate (provisional `vsift`,
-  `vsift-contract`), after a crates.io availability check.
+- Crate names are confirmed (`vsift` facade, `vsift-contract`); a crates.io
+  availability check still precedes first publication.
 - Minimum-supported-Rust-version policy before the library is first published.
 - Whether and when to cut 0.x pre-releases after P09.
 - Whether a local MCP adapter is wanted after P12. The CLI and skill stay primary.
@@ -30,6 +36,10 @@ public can yet read a video's content; P07 starts that:
 
 ## Known issues and gates
 
+- Schema drift found during 1a, not yet tracked in an issue (no schema change was
+  allowed in 1a): `operation-response.schema.json` has no `ISOLATION_UNAVAILABLE`
+  error code although `FailureCode::IsolationUnavailable` exists, and its `command`
+  pattern rejects `setup.configure-model`, which the CLI already emits.
 - #66 is closed. A recurrence of lock `Busy` is a new finding, not a re-run candidate.
 - FS-01: strict OS/storage-crash durability is unqualified. Durable requests fail
   closed until P10/P11/P14 run the Ubuntu/ext4 campaign (ADR 0010).
