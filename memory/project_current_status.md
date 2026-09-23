@@ -2,13 +2,18 @@
 
 ## Active
 
-2026-09-23: P06 is parked at the reviewed-policy boundary after the current
-compatibility-policy PR reaches protected `main`. The accepted Ubuntu catalogue,
-strict saved-plan revalidation, exact staging/runtime primitives and lifecycle
-primitives remain available, but no public install path is enabled. Resume with
-the production bounded compatibility executor and cleanup evidence before
-composing activation or exposing lifecycle commands. The ordered remaining scope
-is recorded in `memory/TODO.md`; P06 remains planned.
+2026-09-23: Protected [PR #118](https://github.com/smormah/vsift/pull/118)
+merged P06 compatibility-policy implementation `440f42d`, generated-artifact
+bounds `799bfc7` and parking record `c5a85e1` as `3b2b9d5`. Full local gates
+passed. Protected CI `35868919085`, dependency/security `35868919126` and Rust
+analysis `35868918990` passed; the first macOS Quality attempt reproduced the
+known unrelated P05 storage-lock `Busy` symptom and its unchanged failed-job
+rerun passed. P06 is parked at the reviewed-policy boundary. The accepted Ubuntu
+catalogue, strict saved-plan revalidation, exact staging/runtime primitives and
+lifecycle primitives remain available, but no public install path is enabled.
+Resume with the production bounded compatibility executor and cleanup evidence
+before composing activation or exposing lifecycle commands. The ordered remaining
+scope is recorded in `memory/TODO.md`; P06 remains planned.
 
 2026-09-22: P06 reviewed compatibility-policy implementation `440f42d` and
 generated-artifact bounds `799bfc7`
