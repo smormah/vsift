@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/ingest-data.schema.json",
+  "title": "VSift ingest data v1",
+  "description": "The data member of a complete ingest result. transcript is present only when a supplied transcript was imported with the session; a plain ingest omits it. Validate the envelope with operation-response.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "source_id",
+    "source_bytes",
+    "generation",
+    "publication",
+    "expires_at"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "source_bytes": { "type": "integer", "minimum": 1 },
+    "generation": { "type": "integer", "minimum": 0 },
+    "publication": { "enum": ["process_crash_consistent"] },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "transcript": { "$ref": "transcript-revision.schema.json" }
+  }
+}

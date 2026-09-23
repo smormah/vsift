@@ -43,6 +43,15 @@ impl ErrorResponse {
     pub const fn message(&self) -> &'static str {
         self.message
     }
+
+    /// Returns the remediation summaries, which hosts reuse for human presentation.
+    #[must_use]
+    pub fn remediation_summaries(&self) -> Vec<&str> {
+        self.remediation
+            .iter()
+            .map(|item| item.summary.as_str())
+            .collect()
+    }
 }
 
 /// Structured, non-executing remediation description.
@@ -171,6 +180,48 @@ impl OperationResponse<serde_json::Value> {
         response.status = OperationStatus::Partial.identifier();
         response.warnings.push(warning.to_owned());
         Ok(response)
+    }
+
+    /// Adds fixed-prose warnings to a completed result without changing its status.
+    ///
+    /// Used when useful work completed but something was excluded or changed;
+    /// the typed detail lives in `data`.
+    #[must_use]
+    pub fn with_warnings(mut self, warnings: &[&'static str]) -> Self {
+        self.warnings
+            .extend(warnings.iter().map(|warning| (*warning).to_owned()));
+        self
+    }
+
+    /// Creates a failure that also tells the caller how to fix its input.
+    ///
+    /// `summary` must be fixed prose chosen by a typed cause (numbers such as
+    /// a line are permitted); it never carries untrusted text. No command is
+    /// suggested and no authority is required.
+    #[must_use]
+    pub fn failure_with_remediation(
+        command: &'static str,
+        code: FailureCode,
+        summary: String,
+    ) -> Self {
+        let mut response = Self::failure(command, code);
+        if let Some(error) = response.error.as_mut() {
+            error.remediation.push(RemediationResponse {
+                summary,
+                required_authority: "none",
+                command: None,
+            });
+        }
+        response
+    }
+
+    /// Returns the remediation summaries of a failure response.
+    #[must_use]
+    pub fn remediation_summaries(&self) -> Vec<&str> {
+        self.error
+            .as_ref()
+            .map(ErrorResponse::remediation_summaries)
+            .unwrap_or_default()
     }
 
     /// Creates a terminal error response when no operation was admitted.

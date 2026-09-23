@@ -1,0 +1,2 @@
+The service status is healthy and the build is 2048.
+This transcript has no cue timing at all.

@@ -18,6 +18,8 @@ pub enum SessionArtifactKind {
     FramePng,
     /// A bounded mono signed-16-bit PCM audio segment.
     AudioPcm,
+    /// One immutable transcript revision, stored as versioned JSON (P07).
+    TranscriptRecord,
 }
 
 impl SessionArtifactKind {
@@ -27,6 +29,7 @@ impl SessionArtifactKind {
         match self {
             Self::FramePng => "frame_png",
             Self::AudioPcm => "audio_pcm",
+            Self::TranscriptRecord => "transcript_record",
         }
     }
 
@@ -36,6 +39,7 @@ impl SessionArtifactKind {
         match self {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
+            Self::TranscriptRecord => "json",
         }
     }
 }

@@ -1,6 +1,7 @@
 # Incremental end-to-end test spine
 
-Status: P04, P05 and P06 checkpoints implemented; the complete journey remains
+Status: P04, P05 and P06 checkpoints and the P07 supplied-transcript stage are
+implemented; the P07 local-ASR stage and the complete journey remain
 `not_implemented`. Managed installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -94,6 +95,25 @@ affected journeys `blocked`, and the test fails unless every journey passed. It
 writes `.vsift/e2e-runs/p06-<run-id>/report.json` and leaves P07-P14 and the complete
 journey `not_implemented`. Offline behaviour is inferred rather than sandboxed: no
 P06 command opens a network connection while `setup install` stays reserved.
+
+P07 adds the supplied-transcript stage of A-09:
+
+```console
+cargo test -p vsift-cli --locked --test p07_transcript_e2e -- --ignored --nocapture
+```
+
+It needs FFmpeg and FFprobe on `PATH`, registers them with `setup configure` in an
+isolated per-user base and then runs every command with an empty `PATH`, so
+whisper.cpp is absent and `setup check` reports it missing: the journey proves the
+supplied-transcript path never needs local ASR. It imports the F10 video with
+`fixtures/corpus/transcripts/F10.srt` and, separately, the equivalent `F10.vtt`, both
+with the explicit `--transcript-offset 500000`, then cites F10-E01's frozen truth window
+with `transcript get` and requires exactly one segment saying dialog R-17 on exactly
+that window, with unknown confidence. A third journey imports with a wrong offset and
+requires a typed `INVALID_ARGUMENT` naming `no_cues_within_source` and no open session.
+Missing tools make the journeys `blocked`. It writes
+`.vsift/e2e-runs/p07-<run-id>/report.json` and leaves `p07_local_asr`, P08-P14 and the
+complete journey `not_implemented`.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/transcript-segment.schema.json",
+  "title": "VSift transcript segment evidence record v1",
+  "description": "One citable, timestamped transcript segment. Each record names its own revision, source and source segment so it can be stored or indexed on its own. Times are integer microseconds on the normalized source timeline, half-open [start_us, end_us) with end_us > start_us. Text is untrusted and has been sanitized: lines are joined with \\n and no other control character remains.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "segment_id",
+    "revision_id",
+    "source_id",
+    "source_segment_id",
+    "start_us",
+    "end_us",
+    "text",
+    "original_text",
+    "markup",
+    "speaker",
+    "confidence",
+    "language",
+    "alignment",
+    "cue"
+  ],
+  "properties": {
+    "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" },
+    "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "source_segment_id": { "type": "string", "pattern": "^sgm_[a-z0-9]{16,64}$" },
+    "start_us": { "type": "integer", "minimum": 0 },
+    "end_us": { "type": "integer", "minimum": 1 },
+    "text": {
+      "description": "Plain text with recognised markup removed.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "original_text": {
+      "description": "The cue payload as supplied, present only when markup removal changed it.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 4096 }
+      ]
+    },
+    "markup": { "enum": ["none", "removed"] },
+    "speaker": {
+      "description": "A provider speaker label, never a verified identity.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "origin"],
+          "properties": {
+            "label": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "origin": { "enum": ["imported_webvtt_voice"] }
+          }
+        }
+      ]
+    },
+    "confidence": {
+      "description": "Unknown confidence is null with origin unavailable, never 1.0.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_basis_points", "origin"],
+      "properties": {
+        "value_basis_points": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0, "maximum": 10000 }
+          ]
+        },
+        "origin": { "enum": ["unavailable", "provider_uncalibrated", "provider_calibrated"] }
+      }
+    },
+    "language": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$" }
+      ]
+    },
+    "alignment": {
+      "description": "How the segment was placed: its origin, the explicit offset, and the cue timing as written before the offset.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "offset_us", "cue_start_us", "cue_end_us"],
+      "properties": {
+        "origin": { "enum": ["imported_srt", "imported_webvtt"] },
+        "offset_us": {
+          "type": "integer",
+          "minimum": -86400000000,
+          "maximum": 86400000000
+        },
+        "cue_start_us": { "type": "integer", "minimum": 0 },
+        "cue_end_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "cue": {
+      "description": "Where the cue was written in the supplied file: its timed-cue ordinal and the line of its timing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "line"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 1 },
+        "line": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

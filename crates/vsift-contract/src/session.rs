@@ -11,7 +11,10 @@ use serde::Serialize;
 use vsift_application::OpenSessionOutcome;
 use vsift_domain::{
     FailureCode, PublicationGuarantee, SessionId, SessionLifetime, SessionPhase, SourceId,
+    TranscriptRevision,
 };
+
+use crate::TranscriptRevisionData;
 
 /// Publicly reported lifecycle state of one session.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -61,6 +64,9 @@ impl SessionState {
 }
 
 /// Data of a successful `ingest` result: the newly opened disposable session.
+///
+/// `transcript` is present only when a supplied transcript was imported, so
+/// the result of a plain ingest is unchanged.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct OpenData {
     session_id: String,
@@ -69,6 +75,8 @@ pub struct OpenData {
     generation: u64,
     publication: &'static str,
     expires_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    transcript: Option<TranscriptRevisionData>,
 }
 
 impl OpenData {
@@ -82,7 +90,15 @@ impl OpenData {
             generation: opened.generation.value(),
             publication: opened.publication.identifier(),
             expires_at,
+            transcript: None,
         }
+    }
+
+    /// Adds the revision imported together with the session.
+    #[must_use]
+    pub fn with_transcript(mut self, revision: &TranscriptRevision) -> Self {
+        self.transcript = Some(TranscriptRevisionData::new(revision));
+        self
     }
 }
 

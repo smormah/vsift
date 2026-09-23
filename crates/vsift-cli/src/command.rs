@@ -271,9 +271,18 @@ impl From<SetupProfile> for ExecutionProfile {
 pub(crate) struct IngestArguments {
     /// Local source media path.
     pub source: PathBuf,
-    /// Optional local transcript sidecar.
+    /// Optional local `SubRip` (.srt) or `WebVTT` (.vtt) transcript sidecar.
     #[arg(long)]
     pub transcript: Option<PathBuf>,
+    /// Signed microseconds added to every transcript timestamp to reach source
+    /// time (for example 500000 or -250000); defaults to 0.
+    #[arg(
+        long,
+        requires = "transcript",
+        allow_negative_numbers = true,
+        value_name = "MICROSECONDS"
+    )]
+    pub transcript_offset: Option<i64>,
 }
 
 /// Session namespace arguments.
@@ -363,7 +372,7 @@ pub(crate) struct TranscriptArguments {
 }
 
 impl TranscriptArguments {
-    const fn operation_name(&self) -> &'static str {
+    pub(crate) const fn operation_name(&self) -> &'static str {
         match self.command {
             TranscriptCommand::Get(_) => "transcript.get",
             TranscriptCommand::Retranscribe(_) => "transcript.retranscribe",
@@ -375,9 +384,28 @@ impl TranscriptArguments {
 #[derive(Debug, Subcommand)]
 pub(crate) enum TranscriptCommand {
     /// Read timestamped text from a bounded range.
-    Get(SessionRangeArguments),
+    Get(TranscriptGetArguments),
     /// Produce a new transcription revision for a bounded range.
     Retranscribe(SessionRangeArguments),
+}
+
+/// Bounded, pageable transcript read.
+#[derive(Args, Debug)]
+pub(crate) struct TranscriptGetArguments {
+    /// Session containing the transcript.
+    pub session: SessionId,
+    /// Inclusive source-timeline start in microseconds.
+    #[arg(long)]
+    pub from: u64,
+    /// Exclusive source-timeline end in microseconds.
+    #[arg(long)]
+    pub to: u64,
+    /// Segments per page, 1 through 100; defaults to 20.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
+    pub limit: Option<u16>,
+    /// Opaque continuation token returned by the previous page of the same query.
+    #[arg(long)]
+    pub cursor: Option<String>,
 }
 
 /// Session and normalized microsecond range.

@@ -1,0 +1,12 @@
+1
+00:00:00,500 --> 00:00:03,500
+This synthetic sidecar is aligned with
+an explicit 500 millisecond offset.
+
+2
+00:00:04,500 --> 00:00:08,500
+Dialog R-17 is displayed now.
+
+3
+00:00:09,000 --> 00:00:11,000
+End of the synthetic imported transcript.

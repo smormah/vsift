@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/transcript-get-data.schema.json",
+  "title": "VSift transcript.get data v1",
+  "description": "The data member of a complete transcript.get result: one bounded page of the segments that intersect [range.from_us, range.to_us), in start order. Validate the envelope with operation-response.schema.json. Pass next_cursor back with the same session and range to continue; it is rejected for any other query, session or revision, or after the session expires.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "revision", "range", "items", "next_cursor"],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "revision": { "$ref": "transcript-revision.schema.json" },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "transcript-segment.schema.json" }
+    },
+    "next_cursor": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 512 }
+      ]
+    }
+  }
+}

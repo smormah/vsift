@@ -2156,6 +2156,7 @@ dependencies = [
  "getrandom 0.4.3",
  "lzma-rust2",
  "process-wrap",
+ "proptest",
  "reqwest",
  "rustix",
  "serde",

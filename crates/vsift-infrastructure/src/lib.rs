@@ -18,8 +18,11 @@ mod process_supervisor;
 mod publisher_artifact_transfer;
 mod random_identifiers;
 mod session_root;
+mod source_duration_probe;
 mod source_snapshot;
 mod system_clock;
+mod transcript_record;
+mod transcript_sidecar;
 mod user_dependency_config;
 mod verified_artifact_transfer;
 mod xz_tar_inventory;
@@ -77,10 +80,15 @@ pub use random_identifiers::RandomIdentifierSource;
 pub use session_root::{
     SessionRootError, SessionRootProvisioning, open_session_root, platform_session_root,
 };
+pub use source_duration_probe::FfprobeSourceDuration;
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
 };
 pub use system_clock::SystemClock;
+pub use transcript_record::{
+    MAX_TRANSCRIPT_RECORD_BYTES, decode_transcript_record, encode_transcript_record,
+};
+pub use transcript_sidecar::{MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript};
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use xz_tar_inventory::{

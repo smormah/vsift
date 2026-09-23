@@ -12,6 +12,7 @@ mod provisioning;
 mod session;
 mod storage;
 mod timeline;
+mod transcript;
 
 pub use evidence::{
     Confidence, ConfidenceError, ConfidenceOrigin, SpeakerLabel, SpeakerLabelError,
@@ -19,6 +20,7 @@ pub use evidence::{
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
+    SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId,
 };
 pub use job::{JobState, JobTransitionError};
 pub use media::{
@@ -37,6 +39,15 @@ pub use storage::{
 pub use timeline::{
     CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,
     TimeConversionError, TimeRange, TimeRangeError,
+};
+pub use transcript::{
+    AlignedCue, AlignmentOrigin, CueMarkup, CueSource, CueText, CueTiming, ImportedCue,
+    LanguageTag, LanguageTagError, MAX_CUE_TEXT_BYTES, MAX_SUPPLIED_TRANSCRIPT_BYTES,
+    MAX_TRANSCRIPT_CUES, MAX_TRANSCRIPT_OFFSET_MICROS, ParsedTranscript, SidecarIdentity,
+    SourceSegment, SourceSegmentState, TranscriptFormat, TranscriptImportError, TranscriptOffset,
+    TranscriptRejection, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionParts,
+    TranscriptSegment, TranscriptSegmentParts, TranscriptSlice, TranscriptWarning,
+    TranscriptWarningKind, TranscriptWarnings, align_imported_cues,
 };
 
 /// A specialist runtime dependency that provides one of `VSift`'s capabilities.

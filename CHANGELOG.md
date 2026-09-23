@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Supplied transcript import: `vsift ingest <video> --transcript <file.srt|file.vtt>
+  [--transcript-offset <signed microseconds>]` imports an existing SubRip or WebVTT
+  transcript into the new disposable session. The video is measured with FFprobe and
+  only cues that lie wholly inside it after the offset are imported; nothing is
+  clamped or shifted, and anything left out is reported with a typed warning.
+  Malformed transcripts are rejected with a typed reason and line number before any
+  session is opened. Whisper and model weights are not needed. The transcript is
+  kept with the session and copied into retained bundles.
+- `vsift transcript get <session> --from <us> --to <us> [--limit 1..100]
+  [--cursor <token>]` returns a bounded page of timestamped transcript segments,
+  each a self-describing evidence record with its alignment and provenance, plus a
+  continuation cursor.
+- New v1 schemas: `ingest-data`, `transcript-get-data`, `transcript-revision` and
+  `transcript-segment`, with frozen examples. Plain `ingest` output is unchanged.
+- F10 sidecar transcripts (`fixtures/corpus/transcripts/F10.srt` and `F10.vtt`) and
+  an opt-in P07 end-to-end stage that imports them and cites F10's truth window.
+
 - The engine can now prove that the selected FFmpeg and FFprobe actually work.
   It runs a small reviewed test video, built into VSift, through the same
   metadata, frame and audio steps an investigation uses and checks each result

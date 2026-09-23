@@ -162,9 +162,17 @@ CLI commands expose two presentations of the same typed application result:
 JSON fields, error codes, exit codes, and evidence identifiers are public API. Changes require contract tests, documentation, and compatibility review.
 The published [v1 CLI contract](contracts/cli-v1.md) and
 [JSON schemas](../schemas/v1/README.md) define the v1 boundary. `setup check`,
-foreground `ingest`, the P05 `session` lifecycle and `bundle validate` are
-operational; remaining commands fail with a typed not-implemented result until
-their owning packets ship.
+foreground `ingest` (with optional supplied-transcript import), the P05 `session`
+lifecycle, `transcript get` and `bundle validate` are operational; remaining commands
+fail with a typed not-implemented result until their owning packets ship.
+
+Transcript evidence (P07) follows the segment-first model of ADR 0016: a finite file
+is one closed source segment, and each transcript revision and segment carries its
+source and source-segment identity as well as normalized source time. The domain owns
+the transcript values and the order, overlap and alignment rules; infrastructure owns
+the bounded SubRip/WebVTT parsers, the FFprobe duration probe and the versioned
+`transcript_record` storage format; the application derives identities and pages
+revisions; `vsift-contract` publishes the segment as the first evidence record.
 
 ## Error model
 

@@ -27,7 +27,7 @@ use vsift::{
     MediaToolVerification, MediaToolVerificationRequest, ModelSelection, ModelVerification,
     OperationId, RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionListEntry,
     SessionPhase, SessionRootError, SessionRootLocation, SetupCheckRequest, SourceRetention,
-    UserConfigurationLocation,
+    SuppliedTranscriptRequest, TranscriptSourceError, UserConfigurationLocation,
 };
 
 use vsift_contract::DependencyLookup;
@@ -175,7 +175,7 @@ impl Harness {
                 transcript: None,
             })
             .await?;
-        Ok(opened.session_id)
+        Ok(opened.session.session_id)
     }
 }
 
@@ -195,26 +195,29 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
         })
         .await?;
     // One session identity, then initialize, stage and activate operations.
-    assert_eq!(opened.session_id, session(1)?);
+    assert_eq!(opened.session.session_id, session(1)?);
     assert_eq!(harness.identifiers.issued(), 4);
-    assert_eq!(opened.source_bytes, u64::try_from(SOURCE_BYTES.len())?);
-    assert_eq!(opened.lifetime, SessionLifetime::open(T0)?);
     assert_eq!(
-        opened.lifetime.expires_at_unix_seconds(),
+        opened.session.source_bytes,
+        u64::try_from(SOURCE_BYTES.len())?
+    );
+    assert_eq!(opened.session.lifetime, SessionLifetime::open(T0)?);
+    assert_eq!(
+        opened.session.lifetime.expires_at_unix_seconds(),
         T0 + SessionLifetime::IDLE_SECONDS
     );
 
     harness.clock.set(T0 + 100);
-    let status = engine.session_status(&opened.session_id)?;
-    assert_eq!(status.session_id(), &opened.session_id);
-    assert_eq!(status.source_id(), &opened.source_id);
+    let status = engine.session_status(&opened.session.session_id)?;
+    assert_eq!(status.session_id(), &opened.session.session_id);
+    assert_eq!(status.source_id(), &opened.session.source_id);
     assert_eq!(status.phase(), SessionPhase::Open);
-    assert_eq!(status.generation(), opened.generation);
+    assert_eq!(status.generation(), opened.session.generation);
     assert_eq!(status.observed_at_unix_seconds(), T0 + 100);
     assert_eq!(status.artifact_count(), 0);
 
     harness.clock.set(T0 + 3_600);
-    let renewed = engine.renew_session(&opened.session_id)?;
+    let renewed = engine.renew_session(&opened.session.session_id)?;
     assert_eq!(harness.identifiers.issued(), 5);
     assert_eq!(
         renewed.lifetime().expires_at_unix_seconds(),
@@ -230,7 +233,7 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
         [SessionListEntry::Indexed(snapshot)] if snapshot == &renewed
     ));
 
-    let closed = engine.close_session(&opened.session_id)?;
+    let closed = engine.close_session(&opened.session.session_id)?;
     assert_eq!(harness.identifiers.issued(), 6);
     assert_eq!(closed.phase(), SessionPhase::Closed);
 
@@ -243,7 +246,7 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
     assert_eq!(
         dry_run.entries(),
         [CleanEntry::Examined {
-            session_id: opened.session_id.clone(),
+            session_id: opened.session.session_id.clone(),
             decision: CleanDecision::Eligible,
         }]
     );
@@ -256,7 +259,7 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
     assert_eq!(
         removed.entries(),
         [CleanEntry::Examined {
-            session_id: opened.session_id.clone(),
+            session_id: opened.session.session_id.clone(),
             decision: CleanDecision::Removed,
         }]
     );
@@ -355,17 +358,24 @@ async fn read_only_operations_never_create_a_missing_session_root() -> TestResul
 async fn requests_the_engine_cannot_honour_fail_before_any_work() -> TestResult {
     let harness = Harness::new()?;
 
+    // A supplied transcript is read and validated before the root is touched.
     let transcript = harness
         .engine
         .ingest(IngestRequest {
             source: harness.root.source()?,
-            transcript: Some(harness.root.path("captions.srt")),
+            transcript: Some(SuppliedTranscriptRequest {
+                path: harness.root.path("captions.srt"),
+                offset_micros: 0,
+            }),
         })
         .await;
-    assert_eq!(transcript, Err(EngineError::TranscriptImportUnavailable));
+    assert_eq!(
+        transcript,
+        Err(EngineError::TranscriptSource(TranscriptSourceError::Io))
+    );
     assert_eq!(
         transcript.map_err(|error| error.failure_code()),
-        Err(FailureCode::CommandNotImplemented)
+        Err(FailureCode::StorageIo)
     );
 
     let unrestricted = harness.engine.clean_sessions(CleanRequest {

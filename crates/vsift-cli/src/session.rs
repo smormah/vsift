@@ -9,14 +9,18 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
     Engine, FailureCode, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot,
-    SourceRetention,
+    SourceRetention, SuppliedTranscriptRequest, TranscriptQuery,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, LifecycleResponse,
     ListedSession, OpenData, OperationResponse, PageData, SessionState, StatusData,
+    TranscriptPageData, transcript_warning_messages,
 };
 
-use crate::command::{IngestArguments, SessionCommand};
+use crate::{
+    CommandFailure,
+    command::{IngestArguments, SessionCommand, TranscriptGetArguments},
+};
 
 type Response = OperationResponse<serde_json::Value>;
 
@@ -148,20 +152,54 @@ fn clean_response(page: CleanPage) -> Result<Response, FailureCode> {
     }
 }
 
-/// Executes the P05 portion of ingestion without starting P07 transcription.
+/// Opens a disposable session, importing a supplied transcript when one is given.
 pub(crate) async fn ingest(
     engine: &Engine,
     arguments: IngestArguments,
-) -> Result<Response, FailureCode> {
-    let opened = engine
+) -> Result<Response, CommandFailure> {
+    let transcript = arguments.transcript.map(|path| SuppliedTranscriptRequest {
+        path,
+        offset_micros: arguments.transcript_offset.unwrap_or(0),
+    });
+    let outcome = engine
         .ingest(IngestRequest {
             source: arguments.source,
-            transcript: arguments.transcript,
+            transcript,
         })
         .await?;
-    let expires_at = rfc3339(opened.lifetime.expires_at_unix_seconds())?;
-    let data = OpenData::new(&opened, expires_at.clone());
-    Ok(response("ingest", &data)?.with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
+    let expires_at = rfc3339(outcome.session.lifetime.expires_at_unix_seconds())?;
+    let mut data = OpenData::new(&outcome.session, expires_at.clone());
+    let mut warnings = Vec::new();
+    if let Some(revision) = &outcome.transcript {
+        data = data.with_transcript(revision);
+        warnings = transcript_warning_messages(revision);
+    }
+    Ok(response("ingest", &data)?
+        .with_lifecycle(LifecycleResponse::ephemeral(expires_at))
+        .with_warnings(&warnings))
+}
+
+/// Reads one bounded page of a session's transcript.
+pub(crate) fn transcript_get(
+    engine: &Engine,
+    arguments: TranscriptGetArguments,
+) -> Result<Response, CommandFailure> {
+    let excerpt = engine.transcript(TranscriptQuery {
+        session: arguments.session,
+        from_micros: arguments.from,
+        to_micros: arguments.to,
+        limit: arguments.limit,
+        cursor: arguments.cursor,
+    })?;
+    let data = TranscriptPageData::new(
+        excerpt.session().session_id(),
+        excerpt.revision(),
+        excerpt.range(),
+        excerpt.segments(),
+        excerpt.next_cursor(),
+    );
+    let expires_at = rfc3339(excerpt.session().lifetime().expires_at_unix_seconds())?;
+    Ok(response("transcript.get", &data)?.with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
 }
 
 /// Executes one visible P05 session operation.

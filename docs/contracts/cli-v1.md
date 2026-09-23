@@ -1,7 +1,8 @@
 # CLI and JSON contract v1
 
-Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`, the P05
-`session` lifecycle and `bundle validate` are operational. Other commands below
+Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`
+(including supplied-transcript import), the P05 `session` lifecycle, `transcript get`
+and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 
@@ -19,9 +20,10 @@ workspace; otherwise P05 uses the per-user application cache.
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
 | `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
 | `setup install/repair/list/remove/rollback` | Explicit managed dependency lifecycle, still reserved | P13 ([ADR 0015](../decisions/0015-r0-delivery-replan.md)) |
-| `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
+| `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
-| `transcript get/retranscribe` | Timestamped transcript evidence | P07 |
+| `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
+| `transcript retranscribe` | New local-ASR transcript revision | P07 (local ASR increment) |
 | `search`, `candidates` | Bounded text and visual-candidate retrieval | P08 |
 | `frame get/neighbours/burst`, `audio`, `crop` | Source-grounded evidence extraction | P09 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
@@ -44,8 +46,9 @@ vsift session clean --expired --json
 
 `ingest` stages and hashes one local source, returning its session/source IDs,
 source bytes, committed generation, `process_crash_consistent` publication and
-an RFC 3339 expiry. It does not start FFmpeg, setup, transcription or indexing.
-`ingest --transcript` remains a P07 reservation and fails before mutation.
+an RFC 3339 expiry. Without `--transcript` it does not start FFmpeg, setup,
+transcription or indexing; supplied-transcript import is described in the next
+section.
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
 days from open. Close and cleanup return busy while active work holds the
 session. Expiry becomes visible at the wall-clock boundary, but physical
@@ -68,6 +71,103 @@ verifies the private snapshot; it never moves or deletes the original. An
 interrupted export can leave an incomplete private selected directory, which
 `bundle validate` rejects. The retained lifecycle does not upgrade the
 qualified publication guarantee; see [ADR 0013](../decisions/0013-retained-bundle-publication.md).
+
+### P07 supplied transcripts
+
+```console
+vsift ingest ./recording.mp4 --transcript ./recording.srt --transcript-offset 500000 --json
+vsift ingest ./recording.mp4 --transcript ./recording.vtt --transcript-offset=-250000 --json
+vsift transcript get ses_0123456789abcdef --from 5000000 --to 9000000 --json
+vsift transcript get ses_0123456789abcdef --from 0 --to 12000000 --limit 50 --cursor "<next_cursor>" --json
+```
+
+`ingest --transcript <file>` imports one `SubRip` (`.srt`) or `WebVTT` (`.vtt`)
+sidecar with the new session. `--transcript-offset <signed microseconds>` (default
+0, at most 24 hours either way, only with `--transcript`) is added to every sidecar
+timestamp to reach source time; it is recorded with the revision and with every
+segment. Use `--transcript-offset=-N` or `--transcript-offset -N` for a negative
+offset. The format is detected from content: a `WEBVTT` signature selects WebVTT,
+anything else must be valid SubRip.
+
+Import never needs whisper.cpp or model weights (ADR 0014). It does need FFmpeg and
+FFprobe, resolved like `setup check` (a `setup configure` selection first, then the
+filtered `PATH`), because the staged video is probed with the P04 adapter to learn its
+duration. Everything that can fail without touching the session root runs first:
+offset bounds, reading and parsing the sidecar, and locating the tools. Then the
+source is staged and probed, the cues are aligned, and the source binding and the
+transcript revision are committed in **one** generation. A rejected import therefore
+never leaves an open session. When the rejection comes after staging (the probe or
+the alignment failed), the unactivated registration and its private source copy stay
+in the owned root, listed as `initializing`, until `session clean` removes them as
+abandoned after the idle interval. On success `data.transcript` (schema
+[`transcript-revision.schema.json`](../../schemas/v1/transcript-revision.schema.json))
+describes the revision; a plain ingest omits the member, so its output is unchanged.
+The revision is stored as a `transcript_record` session artifact, counted by
+`session status` and copied into retained bundles.
+
+**Malformed-data policy.** A rejection is a typed failure; nothing is imported.
+
+| Input | Policy | Code |
+| --- | --- | --- |
+| File over 8 MiB, line over 4,096 bytes, cue text over 4,096 bytes, more than 20,000 timed cues, or a stored revision record over 24 MiB | Rejected | `RESOURCE_LIMIT` |
+| UTF-8 byte-order mark | Removed, then parsed | none |
+| UTF-16/UTF-32 byte-order mark, invalid UTF-8 | Rejected; text is never lossily repaired | `INVALID_SOURCE` |
+| LF, CRLF or CR line endings | Accepted and equivalent | none |
+| Control characters other than tab (including C1 and U+2028/U+2029) | Rejected at their line | `INVALID_SOURCE` |
+| Malformed timestamp (SubRip `H:MM:SS,mmm`, WebVTT `[HH:]MM:SS.mmm`), minutes or seconds over 59, missing `-->`, text after a SubRip end time, missing SubRip cue number, bad `WEBVTT` signature | Rejected at their line | `INVALID_SOURCE` |
+| Cue ending at or before its start | Rejected | `INVALID_SOURCE` |
+| Cue starting before the previous cue | Rejected (`out_of_order`); cues are never re-sorted | `INVALID_SOURCE` |
+| Overlapping cues | Kept, each with its own timing; warning `overlapping_cues` | none |
+| Text without cue timing, or a SubRip cue continued after a blank line | Rejected (`untimed_text`): untimed text cannot support a timestamp citation | `INVALID_SOURCE` |
+| Timed cue with no text | Skipped; warning `empty_cues_skipped` | none |
+| Recognised markup (WebVTT spans, timestamps and character references; SubRip `<i>`/`<b>`/`<u>`/`<font>` and `{\...}` blocks) | Removed from `text`; the payload as written is kept in `original_text`; warning `markup_removed` | none |
+| WebVTT `<v Name>` naming exactly one voice | Provider speaker label (`imported_webvtt_voice`); an invalid or ambiguous voice is dropped with warning `speaker_label_discarded`. SubRip `Name:` prefixes stay text. | none |
+| WebVTT `NOTE`, `STYLE`, `REGION` blocks and cue settings | Ignored (no cue text) | none |
+| WebVTT `Language:` header with a well-formed tag | Revision language | none |
+| No timed cue with text | Rejected (`no_cues`) | `INVALID_SOURCE` |
+
+**Offset and alignment policy (T-02).** Only cues that lie wholly inside the probed
+source timeline `[0, duration]` after the offset are imported. A cue entirely before
+zero or after the end is left out with warning `cues_outside_source`; a cue crossing
+either boundary is left out with warning `cues_crossing_source_boundary`. No cue is
+ever clamped, trimmed or shifted, because that would cite text at a time it was not
+written for. If nothing remains, the import is rejected with `no_cues_within_source`
+(`INVALID_ARGUMENT`: check the offset and that the transcript belongs to the video).
+An offset beyond 24 hours is `offset_out_of_range` (`INVALID_ARGUMENT`). Each warning
+reports its count and first cue ordinal, and says whether it excluded cues; the
+envelope `warnings` carry fixed prose for each kind. A result with warnings is still
+`complete` (exit 0).
+
+Rejections carry one `remediation` item with a fixed-prose summary naming the typed
+reason and, where known, the line, for example `The supplied transcript was rejected
+(invalid_timestamp) at line 6. ...`. It never contains transcript text, suggests no
+command and requires no authority. See
+[`transcript-rejected.json`](../../schemas/v1/examples/transcript-rejected.json). A
+missing FFmpeg/FFprobe is `MISSING_CAPABILITY` with a remediation explaining that
+import needs them but not Whisper; an unreadable sidecar is `STORAGE_IO`, and a
+non-regular or unsafe sidecar path is `INVALID_SOURCE`, as for source media.
+
+**Retrieval.** `transcript get <session> --from <us> --to <us> [--limit 1..100]
+[--cursor <token>]` returns the segments of the session's latest revision that
+intersect the half-open range (a segment that started earlier but is still running
+is included), in start order, 20 per page by default. `data`
+([`transcript-get-data.schema.json`](../../schemas/v1/transcript-get-data.schema.json))
+holds the revision summary, the range, the `items` and `next_cursor`. Each item is a
+self-contained transcript evidence record
+([`transcript-segment.schema.json`](../../schemas/v1/transcript-segment.schema.json)):
+segment, revision, source and source-segment identities, `start_us`/`end_us`,
+sanitized `text` (lines joined with `\n`), `original_text` when markup was removed,
+`markup`, `speaker`, `confidence` (always `null` with origin `unavailable` for
+imported text), `language`, `alignment` (origin, offset and the cue timing as
+written) and `cue` (its ordinal and line in the file). `--limit` and `--cursor` are
+additions to the reserved grammar, needed because overlapping cues make time-based
+continuation lose or repeat segments. Pass `next_cursor` back with the same session
+and range; it is bound to the revision (not the storage generation, so a renewal
+keeps it valid), the range and the session expiry, and any other use is
+`INVALID_ARGUMENT`. A session without a transcript, a closed or expired session, or an
+empty range is `INVALID_ARGUMENT`. `--events jsonl` returns the page as one terminal
+event; a per-record evidence stream is not yet defined. `transcript retranscribe`
+remains `COMMAND_NOT_IMPLEMENTED` until local ASR ships.
 
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
@@ -262,7 +362,11 @@ an executable plus argument array and never shell text.
 ## Identifiers, time, geometry, and confidence
 
 Opaque IDs use a type prefix followed by 16 to 64 lowercase ASCII letters or digits:
-`ses_`, `job_`, `op_`, `art_`, and `evd_`. Source and operation identities are
+`ses_`, `job_`, `op_`, `art_`, `evd_`, and, since P07, `trv_` (transcript revision),
+`tsg_` (transcript segment) and `sgm_` (source segment). Transcript and source-segment
+identities are derived from content (session, sidecar digest, format, offset and
+ordinal; source identity and segment index), so re-importing the same sidecar with the
+same offset into the same session names them identically. Source and operation identities are
 `src_sha256_` or `opk_sha256_` followed by exactly 64 lowercase hexadecimal digits.
 They cannot contain paths, options, whitespace, or control characters.
 
@@ -281,8 +385,8 @@ metadata, not verified human identity.
 
 ## Pagination
 
-Candidate pages default to 20 items and accept 1 through 100. Continuation cursors are
-opaque, local tokens of at most 512 bytes. They contain no filesystem paths or
+Candidate and transcript pages default to 20 items and accept 1 through 100.
+Continuation cursors are opaque, local tokens of at most 512 bytes. They contain no filesystem paths or
 credentials and are bound to session, canonical-query digest, immutable generation,
 last item, and expiry. A cursor from another query/session/generation or an expired
 cursor is rejected rather than silently restarted.
@@ -314,14 +418,14 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | --- | --- |
 | C-01 | CLI hierarchy, help/version, parse errors, reserved-command failure |
 | C-02 | deterministic ready/degraded/blocked setup and terminal response states |
-| C-03 | page bounds and cursor scope/expiry/round trips |
+| C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection |
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility |
 | C-09 | legal job and cancellation terminal transitions |
-| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing |
+| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion |
 
 These tests establish the public boundary only. Provider execution, filesystem
 durability, media correctness, concurrency, and load guarantees belong to later
