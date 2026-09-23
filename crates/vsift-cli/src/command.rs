@@ -3,8 +3,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use vsift_application::SetupProfile;
-use vsift_domain::{EvidenceId, JobId, SessionId};
+use vsift::{EvidenceId, JobId, RuntimeDependency, SessionId, SetupProfile};
 
 /// Complete public R0 command parser.
 #[derive(Debug, Parser)]
@@ -219,7 +218,7 @@ pub(crate) enum SetupDependency {
     Whisper,
 }
 
-impl From<SetupDependency> for vsift_domain::RuntimeDependency {
+impl From<SetupDependency> for RuntimeDependency {
     fn from(value: SetupDependency) -> Self {
         match value {
             SetupDependency::Ffmpeg => Self::Ffmpeg,

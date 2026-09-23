@@ -14,7 +14,7 @@ use std::{
 };
 
 use serde::de::DeserializeOwned;
-use vsift_domain::FailureCode;
+use vsift::FailureCode;
 
 /// Maximum accepted bytes for one R0 JSON request document.
 pub(crate) const MAX_JSON_INPUT_BYTES: usize = 1_048_576;
@@ -160,7 +160,7 @@ fn malformed_nesting_error() -> JsonInputError {
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
-    use vsift_domain::SessionId;
+    use vsift::SessionId;
 
     use super::{
         JsonInputError, MAX_JSON_INPUT_BYTES, MAX_JSON_NESTING, SchemaVersion, decode_json,

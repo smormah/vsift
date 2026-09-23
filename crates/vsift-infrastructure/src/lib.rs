@@ -16,7 +16,10 @@ mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
 mod publisher_artifact_transfer;
+mod random_identifiers;
+mod session_root;
 mod source_snapshot;
+mod system_clock;
 mod user_dependency_config;
 mod verified_artifact_transfer;
 mod xz_tar_inventory;
@@ -70,9 +73,14 @@ pub use publisher_artifact_transfer::{
     PublisherOrigin, PublisherSourceError, PublisherTransferCancellation, PublisherTransferError,
     ReviewedPublisherArtifact, download_reviewed_publisher_artifact,
 };
+pub use random_identifiers::RandomIdentifierSource;
+pub use session_root::{
+    SessionRootError, SessionRootProvisioning, open_session_root, platform_session_root,
+};
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
 };
+pub use system_clock::SystemClock;
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use xz_tar_inventory::{

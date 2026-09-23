@@ -1,48 +1,41 @@
-//! Setup command composition and presentation.
+//! Setup command presentation and saved-plan input.
+//!
+//! The engine performs every setup operation; this module renders its results
+//! as human text or v1 JSON and reads the saved plan a user supplies back.
 
 use std::{io::Write, path::Path};
 
-use vsift_application::{
-    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, RuntimeDiagnosis,
-    SetupSelectionState, plan_managed_setup,
-};
+use vsift::{DependencyState, FailureCode, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness};
 use vsift_contract::{
-    ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup,
-    MAX_PROVIDER_DETAIL_BYTES, OperationResponse, SavedSetupPlan, SetupCheckResponse,
-    SetupPlanResponse, TerminalEventResponse, explicit_path_option, sanitize_untrusted_text,
+    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, OperationResponse, SavedSetupPlan,
+    SetupCheckResponse, TerminalEventResponse, explicit_path_option, sanitize_untrusted_text,
 };
-use vsift_domain::{
-    DependencyState, FailureCode, ManagedTarget, RuntimeDependency, RuntimeReadiness,
-};
-use vsift_infrastructure::{ExplicitProbePaths, UserDependencyConfigStore};
 
 use crate::{
-    command::{ExecutionProfile, SetupConfigureArguments, SetupConfigureModelArguments},
+    command::ExecutionProfile,
     json_input::read_json_file,
     output::{OutputMode, OutputWriter, ProcessExit, setup_exit},
 };
 
-/// Executes the read-only setup check with explicit dependencies and output streams.
-pub(crate) async fn run_setup_check<P, StandardOutput, StandardError>(
-    probe: P,
+/// Writes one completed setup check and returns its compatible exit status.
+///
+/// `lookup` reports where the executable probed for each dependency came from.
+pub(crate) fn present_setup_check<L, StandardOutput, StandardError>(
+    diagnosis: &RuntimeDiagnosis,
     profile: ExecutionProfile,
     mode: OutputMode,
-    selections: &ExplicitProbePaths,
-    per_call: &ExplicitProbePaths,
+    lookup: L,
     writer: &mut OutputWriter<StandardOutput, StandardError>,
 ) -> ProcessExit
 where
-    P: DependencyProbe,
+    L: Fn(RuntimeDependency) -> DependencyLookup,
     StandardOutput: Write,
     StandardError: Write,
 {
-    let diagnosis = DiagnoseRuntime::new(probe).execute().await;
-    let response = SetupCheckResponse::new(&diagnosis, profile.into(), |dependency| {
-        dependency_lookup(dependency, selections, per_call)
-    });
+    let response = SetupCheckResponse::new(diagnosis, profile.into(), &lookup);
     let output_result = match mode {
         OutputMode::Human => {
-            writer.write_trusted_stdout(&human_result(&diagnosis, profile, selections, per_call))
+            writer.write_trusted_stdout(&human_result(diagnosis, profile, &lookup))
         }
         OutputMode::Json => writer.write_json(&response),
         OutputMode::JsonLines => OperationResponse::complete("setup.check", &response)
@@ -59,22 +52,6 @@ where
     setup_exit(diagnosis.readiness)
 }
 
-/// Resolves where the probed executable came from: a per-call path wins over a
-/// configured user path, which wins over the filtered `PATH`.
-fn dependency_lookup(
-    dependency: RuntimeDependency,
-    selections: &ExplicitProbePaths,
-    per_call: &ExplicitProbePaths,
-) -> DependencyLookup {
-    if per_call.for_dependency(dependency).is_some() {
-        DependencyLookup::ExplicitPath
-    } else if selections.for_dependency(dependency).is_some() {
-        DependencyLookup::ConfiguredUserPath
-    } else {
-        DependencyLookup::FilteredPath
-    }
-}
-
 /// Reads one bounded, strict `setup plan --json` result supplied for acceptance.
 pub(crate) fn read_saved_plan(path: &Path) -> Result<SavedSetupPlan, FailureCode> {
     let plan: SavedSetupPlan = read_json_file(path).map_err(|error| error.code())?;
@@ -82,103 +59,19 @@ pub(crate) fn read_saved_plan(path: &Path) -> Result<SavedSetupPlan, FailureCode
     Ok(plan)
 }
 
-/// Current plan authority and its exact public presentation.
-pub(crate) struct EvaluatedSetupPlan {
-    authority: vsift_application::ManagedSetupPlan,
-    presentation: SetupPlanResponse,
-}
-
-impl EvaluatedSetupPlan {
-    /// Renders the current read-only plan through the stable response envelope.
-    pub(crate) fn into_response(self) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
-        OperationResponse::complete("setup.plan", &self.presentation)
-            .map_err(|_| FailureCode::Internal)
-    }
-
-    /// Requires the saved public plan, current observations and accepted digest
-    /// to describe exactly the same authority.
-    pub(crate) fn validate_acceptance(
-        &self,
-        saved: &SavedSetupPlan,
-        supplied_digest: &str,
-    ) -> Result<(), FailureCode> {
-        saved.require_same_plan(&self.presentation)?;
-        self.authority
-            .validate_acceptance(supplied_digest)
-            .map_err(|_| FailureCode::InvalidArgument)
-    }
-}
-
-/// Inspects current selections and builds plan authority plus its presentation.
-pub(crate) async fn evaluate_plan<P: DependencyProbe>(
-    probe: P,
-    profile: ExecutionProfile,
-    target: ManagedTarget,
-    selections: SetupSelectionState,
-    now_unix_seconds: u64,
-    catalogue: Option<AcceptedManagedCatalogue>,
-) -> Result<EvaluatedSetupPlan, FailureCode> {
-    let plan = plan_managed_setup(
-        profile.into(),
-        DiagnoseRuntime::new(probe).execute().await,
-        target,
-        selections,
-        now_unix_seconds,
-        catalogue,
-    );
-    let presentation = SetupPlanResponse::new(&plan);
-    Ok(EvaluatedSetupPlan {
-        authority: plan,
-        presentation,
-    })
-}
-
-/// Persists one explicit BYO executable selection without running it.
-pub(crate) fn configure(
-    arguments: &SetupConfigureArguments,
-) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
-    let dependency = arguments.dependency.into();
-    let store =
-        UserDependencyConfigStore::default_location().map_err(crate::setup_config_failure)?;
-    store
-        .configure(dependency, &arguments.executable)
-        .map_err(crate::setup_config_failure)?;
-    OperationResponse::complete(
-        "setup.configure",
-        &ConfiguredSelectionResponse::new(dependency),
-    )
-    .map_err(|_| FailureCode::Internal)
-}
-
-/// Persists one BYO model file path without reading its contents or running ASR.
-pub(crate) fn configure_model(
-    arguments: &SetupConfigureModelArguments,
-) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
-    let store =
-        UserDependencyConfigStore::default_location().map_err(crate::setup_config_failure)?;
-    store
-        .configure_model(&arguments.file)
-        .map_err(crate::setup_config_failure)?;
-    OperationResponse::complete("setup.configure-model", &ConfiguredModelResponse::new())
-        .map_err(|_| FailureCode::Internal)
-}
-
-fn human_result(
-    diagnosis: &RuntimeDiagnosis,
-    profile: ExecutionProfile,
-    selections: &ExplicitProbePaths,
-    per_call: &ExplicitProbePaths,
-) -> String {
+fn human_result<L>(diagnosis: &RuntimeDiagnosis, profile: ExecutionProfile, lookup: &L) -> String
+where
+    L: Fn(RuntimeDependency) -> DependencyLookup,
+{
     let mut result = format!(
         "VSift setup check\nProfile: {}\nStatus: {}\n",
         profile.identifier(),
         diagnosis.readiness.identifier()
     );
     for status in &diagnosis.dependencies {
-        let (marker, detail) = human_state(
-            &status.state,
-            selections.for_dependency(status.dependency).is_some(),
-        );
+        let provenance = lookup(status.dependency);
+        let (marker, detail) =
+            human_state(&status.state, provenance != DependencyLookup::FilteredPath);
         result.push('[');
         result.push_str(marker);
         result.push_str("] ");
@@ -187,13 +80,11 @@ fn human_result(
         result.push_str(status.dependency.capability().identifier());
         result.push_str("): ");
         result.push_str(&detail);
-        result.push_str(
-            match dependency_lookup(status.dependency, selections, per_call) {
-                DependencyLookup::ExplicitPath => " [per-call path]",
-                DependencyLookup::ConfiguredUserPath => " [configured user path]",
-                DependencyLookup::FilteredPath => " [filtered PATH]",
-            },
-        );
+        result.push_str(match provenance {
+            DependencyLookup::ExplicitPath => " [per-call path]",
+            DependencyLookup::ConfiguredUserPath => " [configured user path]",
+            DependencyLookup::FilteredPath => " [filtered PATH]",
+        });
         result.push('\n');
         if !status.state.is_available() {
             result.push_str("  Install or locate this trusted tool, then rerun setup check with its absolute path using ");
@@ -229,352 +120,122 @@ fn human_state(state: &DependencyState, explicit: bool) -> (&'static str, String
 
 #[cfg(test)]
 mod tests {
-    use std::future::ready;
-
-    use vsift_application::{DependencyProbe, SetupSelectionState};
-    use vsift_domain::{
-        DependencyState, DependencyStatus, FailureCode, ManagedTarget, RuntimeDependency,
+    use vsift::{
+        DependencyState, DependencyStatus, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
     };
-    use vsift_infrastructure::{ExplicitProbePaths, accepted_ubuntu_catalogue};
+    use vsift_contract::DependencyLookup;
 
-    use super::{SavedSetupPlan, evaluate_plan, run_setup_check};
+    use super::present_setup_check;
     use crate::{
         command::ExecutionProfile,
-        json_input::decode_json,
         output::{OutputMode, OutputWriter, ProcessExit},
     };
 
-    struct FixedProbe {
-        state: DependencyState,
-    }
-
-    struct MissingOneProbe {
-        missing: RuntimeDependency,
-    }
-
-    impl DependencyProbe for FixedProbe {
-        fn probe(
-            &self,
-            dependency: RuntimeDependency,
-        ) -> impl Future<Output = DependencyStatus> + Send {
-            ready(DependencyStatus {
-                dependency,
-                state: self.state.clone(),
-            })
+    fn diagnosis(readiness: RuntimeReadiness, state: &DependencyState) -> RuntimeDiagnosis {
+        RuntimeDiagnosis {
+            readiness,
+            dependencies: RuntimeDependency::ALL
+                .into_iter()
+                .map(|dependency| DependencyStatus {
+                    dependency,
+                    state: state.clone(),
+                })
+                .collect(),
         }
     }
 
-    impl DependencyProbe for MissingOneProbe {
-        fn probe(
-            &self,
-            dependency: RuntimeDependency,
-        ) -> impl Future<Output = DependencyStatus> + Send {
-            let state = if dependency == self.missing {
-                DependencyState::Missing
-            } else {
-                DependencyState::Available {
-                    version: String::from("fixture 1"),
-                }
-            };
-            ready(DependencyStatus { dependency, state })
-        }
+    const fn filtered_path(_dependency: RuntimeDependency) -> DependencyLookup {
+        DependencyLookup::FilteredPath
     }
 
-    #[tokio::test]
-    async fn setup_json_is_deterministic_for_ready_degraded_and_blocked_states()
+    #[test]
+    fn setup_json_is_deterministic_for_ready_degraded_and_blocked_states()
     -> Result<(), Box<dyn std::error::Error>> {
-        for (state, expected_exit, expected_status) in [
+        let available = DependencyState::Available {
+            version: String::from("fixture 1"),
+        };
+        for (readiness, state, expected_exit, expected_status) in [
             (
-                DependencyState::Available {
-                    version: String::from("fixture 1"),
-                },
+                RuntimeReadiness::Ready,
+                &available,
                 ProcessExit::Success,
                 "ready",
             ),
             (
-                DependencyState::Missing,
+                RuntimeReadiness::Degraded,
+                &available,
+                ProcessExit::Success,
+                "degraded",
+            ),
+            (
+                RuntimeReadiness::Blocked,
+                &DependencyState::Missing,
                 ProcessExit::UsageOrCapability,
                 "blocked",
             ),
         ] {
             let mut stdout = Vec::new();
             let mut writer = OutputWriter::new(&mut stdout, Vec::<u8>::new());
-            let exit = run_setup_check(
-                FixedProbe { state },
+            let exit = present_setup_check(
+                &diagnosis(readiness, state),
                 ExecutionProfile::Desktop,
                 OutputMode::Json,
-                &ExplicitProbePaths::default(),
-                &ExplicitProbePaths::default(),
+                filtered_path,
                 &mut writer,
-            )
-            .await;
+            );
             let value: serde_json::Value = serde_json::from_slice(&stdout)?;
 
             assert_eq!(exit, expected_exit);
             assert_eq!(value["status"], expected_status);
             assert_eq!(value["dependencies"].as_array().map(Vec::len), Some(3));
         }
-
-        let mut stdout = Vec::new();
-        let mut writer = OutputWriter::new(&mut stdout, Vec::<u8>::new());
-        let exit = run_setup_check(
-            MissingOneProbe {
-                missing: RuntimeDependency::Whisper,
-            },
-            ExecutionProfile::Desktop,
-            OutputMode::Json,
-            &ExplicitProbePaths::default(),
-            &ExplicitProbePaths::default(),
-            &mut writer,
-        )
-        .await;
-        let value: serde_json::Value = serde_json::from_slice(&stdout)?;
-
-        assert_eq!(exit, ProcessExit::Success);
-        assert_eq!(value["status"], "degraded");
         Ok(())
     }
 
-    #[tokio::test]
-    async fn untrusted_probe_controls_do_not_reach_human_terminal()
-    -> Result<(), Box<dyn std::error::Error>> {
+    #[test]
+    fn untrusted_probe_controls_do_not_reach_human_terminal() {
         let mut stdout = Vec::new();
         let mut writer = OutputWriter::new(&mut stdout, Vec::<u8>::new());
 
-        let exit = run_setup_check(
-            FixedProbe {
-                state: DependencyState::Available {
+        let exit = present_setup_check(
+            &diagnosis(
+                RuntimeReadiness::Ready,
+                &DependencyState::Available {
                     version: String::from("fake\u{1b}]8;;file:///secret\u{7}version"),
                 },
-            },
+            ),
             ExecutionProfile::Desktop,
             OutputMode::Human,
-            &ExplicitProbePaths::default(),
-            &ExplicitProbePaths::default(),
+            filtered_path,
             &mut writer,
-        )
-        .await;
+        );
 
         assert_eq!(exit, ProcessExit::Success);
         assert!(String::from_utf8_lossy(&stdout).contains("Profile: desktop"));
         assert!(!stdout.contains(&0x1b));
         assert!(!stdout.contains(&0x07));
-        Ok(())
     }
 
-    #[tokio::test]
-    async fn accepted_ubuntu_plan_is_reviewable_and_matches_public_schema()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let response = evaluate_plan(
-            FixedProbe {
-                state: DependencyState::Missing,
+    #[test]
+    fn human_output_names_where_each_probed_executable_came_from() {
+        let mut stdout = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, Vec::<u8>::new());
+
+        present_setup_check(
+            &diagnosis(RuntimeReadiness::Blocked, &DependencyState::Missing),
+            ExecutionProfile::Worker,
+            OutputMode::Human,
+            |dependency| match dependency {
+                RuntimeDependency::Ffmpeg => DependencyLookup::ExplicitPath,
+                RuntimeDependency::Ffprobe => DependencyLookup::ConfiguredUserPath,
+                RuntimeDependency::Whisper => DependencyLookup::FilteredPath,
             },
-            ExecutionProfile::Desktop,
-            ManagedTarget::Ubuntu2404X86_64,
-            SetupSelectionState::default(),
-            1_800_000_000,
-            Some(accepted_ubuntu_catalogue()?),
-        )
-        .await
-        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?
-        .into_response()
-        .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
-        let value = serde_json::to_value(response)?;
-        let schema: serde_json::Value =
-            serde_json::from_str(include_str!("../../../schemas/v1/setup-plan.schema.json"))?;
-        jsonschema::validator_for(&schema)?
-            .validate(&value)
-            .map_err(|error| std::io::Error::other(error.to_string()))?;
-        let data = &value["data"];
-        assert_eq!(
-            data["managed_install"],
-            "catalogue_accepted_install_pending"
+            &mut writer,
         );
-        assert_eq!(data["target"], "ubuntu_24_04_x86_64");
-        assert_eq!(data["actions"].as_array().map(Vec::len), Some(3));
-        assert_eq!(
-            data["actions"][0]["files"].as_array().map(Vec::len),
-            Some(3)
-        );
-        assert_eq!(
-            data["actions"][1]["files"].as_array().map(Vec::len),
-            Some(12)
-        );
-        assert_eq!(
-            data["actions"][1]["archive_links"].as_array().map(Vec::len),
-            Some(8)
-        );
-        assert_eq!(
-            data["actions"][1]["runtime_copies"]
-                .as_array()
-                .map(Vec::len),
-            Some(6)
-        );
-        assert!(
-            data["actions"][2]["source_url"]
-                .as_str()
-                .is_some_and(|url| url.contains("/resolve/80da2d8b"))
-        );
-        assert_eq!(data["plan_digest"].as_str().map(str::len), Some(64));
-        Ok(())
-    }
+        let text = String::from_utf8_lossy(&stdout);
 
-    #[tokio::test]
-    async fn accepted_plan_is_strict_and_revalidated_against_current_state()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let original = evaluate_plan(
-            FixedProbe {
-                state: DependencyState::Missing,
-            },
-            ExecutionProfile::Desktop,
-            ManagedTarget::Ubuntu2404X86_64,
-            SetupSelectionState::default(),
-            1_800_000_000,
-            Some(accepted_ubuntu_catalogue()?),
-        )
-        .await
-        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
-        let digest = original
-            .authority
-            .digest
-            .clone()
-            .ok_or_else(|| std::io::Error::other("qualified plan omitted its digest"))?;
-        let response = original
-            .into_response()
-            .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
-        let bytes = serde_json::to_vec(&response)?;
-        let saved: SavedSetupPlan = decode_json(&bytes)?;
-
-        let unchanged = evaluate_plan(
-            FixedProbe {
-                state: DependencyState::Missing,
-            },
-            ExecutionProfile::Desktop,
-            ManagedTarget::Ubuntu2404X86_64,
-            SetupSelectionState::default(),
-            1_800_000_000,
-            Some(accepted_ubuntu_catalogue()?),
-        )
-        .await
-        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
-        assert_eq!(unchanged.validate_acceptance(&saved, &digest), Ok(()));
-        assert_eq!(
-            unchanged.validate_acceptance(&saved, &"0".repeat(64)),
-            Err(FailureCode::InvalidArgument)
-        );
-
-        let changed = evaluate_plan(
-            MissingOneProbe {
-                missing: RuntimeDependency::Whisper,
-            },
-            ExecutionProfile::Desktop,
-            ManagedTarget::Ubuntu2404X86_64,
-            SetupSelectionState::default(),
-            1_800_000_000,
-            Some(accepted_ubuntu_catalogue()?),
-        )
-        .await
-        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?;
-        assert_eq!(
-            changed.validate_acceptance(&saved, &digest),
-            Err(FailureCode::InvalidArgument)
-        );
-
-        let mut unknown: serde_json::Value = serde_json::from_slice(&bytes)?;
-        unknown["data"]["unreviewed"] = serde_json::json!(true);
-        assert!(decode_json::<SavedSetupPlan>(&serde_json::to_vec(&unknown)?).is_err());
-        Ok(())
-    }
-
-    /// D-07: every target without a usable reviewed artifact gives typed manual
-    /// guidance for each missing tool and the model, and nothing to accept.
-    #[tokio::test]
-    async fn unavailable_managed_targets_give_typed_manual_guidance()
-    -> Result<(), Box<dyn std::error::Error>> {
-        // 2030-11, after the reviewed catalogue's 2028-08-01 stop-new-plans boundary.
-        const AFTER_CATALOGUE_EXPIRY: u64 = 1_920_000_000;
-        let schema: serde_json::Value =
-            serde_json::from_str(include_str!("../../../schemas/v1/setup-plan.schema.json"))?;
-        let validator = jsonschema::validator_for(&schema)?;
-        for (target, now, catalogue, expected) in [
-            (
-                ManagedTarget::WindowsX86_64,
-                1_800_000_000,
-                Some(accepted_ubuntu_catalogue()?),
-                "unavailable_target",
-            ),
-            (
-                ManagedTarget::MacOsArm64,
-                1_800_000_000,
-                Some(accepted_ubuntu_catalogue()?),
-                "unavailable_target",
-            ),
-            (
-                ManagedTarget::Unsupported,
-                1_800_000_000,
-                Some(accepted_ubuntu_catalogue()?),
-                "unavailable_target",
-            ),
-            (
-                ManagedTarget::Ubuntu2404X86_64,
-                1_800_000_000,
-                None,
-                "unavailable_target",
-            ),
-            (
-                ManagedTarget::Ubuntu2404X86_64,
-                AFTER_CATALOGUE_EXPIRY,
-                Some(accepted_ubuntu_catalogue()?),
-                "unavailable_catalogue_expired",
-            ),
-        ] {
-            let response = evaluate_plan(
-                FixedProbe {
-                    state: DependencyState::Missing,
-                },
-                ExecutionProfile::Worker,
-                target,
-                SetupSelectionState::default(),
-                now,
-                catalogue,
-            )
-            .await
-            .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?
-            .into_response()
-            .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
-            let value = serde_json::to_value(response)?;
-            validator
-                .validate(&value)
-                .map_err(|error| std::io::Error::other(error.to_string()))?;
-            let data = &value["data"];
-            assert_eq!(data["managed_install"], expected, "{target:?}");
-            assert_eq!(data["actions"], serde_json::json!([]), "{target:?}");
-            assert!(data["plan_digest"].is_null(), "{target:?}");
-            let dependencies = data["dependencies"]
-                .as_array()
-                .ok_or("dependencies missing")?;
-            assert_eq!(dependencies.len(), 3);
-            for dependency in dependencies {
-                assert_eq!(dependency["disposition"], "manual_selection_required");
-                assert_eq!(dependency["required_authority"], "user");
-                assert!(
-                    dependency["next_step"]
-                        .as_str()
-                        .is_some_and(|step| step.contains("setup configure")),
-                    "{dependency}"
-                );
-            }
-            let model = &data["local_asr_model"];
-            assert_eq!(model["disposition"], "manual_selection_required");
-            assert_eq!(model["required_authority"], "user");
-            assert!(
-                model["next_step"]
-                    .as_str()
-                    .is_some_and(|step| step.contains("setup configure-model")
-                        && step.contains("supplied transcript")),
-                "{model}"
-            );
-        }
-        Ok(())
+        assert!(text.contains("explicit path not found [per-call path]"));
+        assert!(text.contains("explicit path not found [configured user path]"));
+        assert!(text.contains("not found on PATH [filtered PATH]"));
     }
 }

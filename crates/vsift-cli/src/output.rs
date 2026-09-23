@@ -7,8 +7,8 @@
 use std::{error::Error, fmt, io, io::Write};
 
 use serde::Serialize;
+use vsift::{FailureClass, FailureCode, RuntimeReadiness};
 use vsift_contract::sanitize_untrusted_text;
-use vsift_domain::{FailureClass, FailureCode, RuntimeReadiness};
 
 const MAX_RESULT_BYTES: usize = 1_048_576;
 const MAX_DIAGNOSTIC_BYTES: usize = 4_096;
@@ -222,8 +222,8 @@ pub(crate) const fn setup_exit(readiness: RuntimeReadiness) -> ProcessExit {
 mod tests {
     use std::io;
 
+    use vsift::{FailureClass, FailureCode};
     use vsift_contract::OperationResponse;
-    use vsift_domain::{FailureClass, FailureCode};
 
     use super::{OutputError, OutputMode, OutputWriter, ProcessExit};
 

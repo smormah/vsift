@@ -1,35 +1,24 @@
-//! Public presentation and composition for disposable desktop sessions.
-
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
-};
+//! Presentation of engine session and bundle results through the v1 contract.
+//!
+//! The engine performs every session operation. This module maps its typed
+//! results into `vsift-contract` data, formats RFC 3339 timestamps and decides
+//! the command-line response shape.
 
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use vsift_application::{OpenSession, OpenSessionError, OpenSessionRequest, SessionStorageError};
+use vsift::{
+    BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
+    Engine, FailureCode, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot,
+    SourceRetention,
+};
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, LifecycleResponse,
     ListedSession, OpenData, OperationResponse, PageData, SessionState, StatusData,
-};
-use vsift_domain::{DurabilityRequirement, FailureCode, OperationId, SessionId};
-use vsift_infrastructure::{
-    BundleSourcePolicy, BundleStatus, CleanOutcome, FilesystemSessionStore, SessionStatus,
-    SessionStoreOpenError,
 };
 
 use crate::command::{IngestArguments, SessionCommand};
 
 type Response = OperationResponse<serde_json::Value>;
-const HEX: &[u8; 16] = b"0123456789abcdef";
-
-fn now_seconds() -> Result<u64, FailureCode> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .map_err(|_| FailureCode::Internal)
-}
 
 fn rfc3339(seconds: u64) -> Result<String, FailureCode> {
     let seconds = i64::try_from(seconds).map_err(|_| FailureCode::InvalidArgument)?;
@@ -39,149 +28,20 @@ fn rfc3339(seconds: u64) -> Result<String, FailureCode> {
         .map_err(|_| FailureCode::Internal)
 }
 
-fn new_id(prefix: &str) -> Result<String, FailureCode> {
-    let mut random = [0_u8; 16];
-    getrandom::fill(&mut random).map_err(|_| FailureCode::Internal)?;
-    let mut result = String::with_capacity(prefix.len() + 32);
-    result.push_str(prefix);
-    for byte in random {
-        result.push(char::from(HEX[usize::from(byte >> 4)]));
-        result.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
-    Ok(result)
-}
-
-fn session_id() -> Result<SessionId, FailureCode> {
-    SessionId::parse(&new_id("ses_")?).map_err(|_| FailureCode::Internal)
-}
-
-fn operation_id() -> Result<OperationId, FailureCode> {
-    OperationId::parse(&new_id("op_")?).map_err(|_| FailureCode::Internal)
-}
-
-fn root_path(explicit: Option<&Path>) -> Result<PathBuf, FailureCode> {
-    if let Some(path) = explicit {
-        return if path.is_absolute() {
-            Ok(path.to_path_buf())
-        } else {
-            Err(FailureCode::InvalidArgument)
-        };
-    }
-    #[cfg(windows)]
-    {
-        let base = env::var_os("LOCALAPPDATA").ok_or(FailureCode::MissingCapability)?;
-        Ok(PathBuf::from(base).join("VSift-sessions"))
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let home = env::var_os("HOME").ok_or(FailureCode::MissingCapability)?;
-        Ok(PathBuf::from(home).join("Library/Caches/VSift-sessions"))
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let base = env::var_os("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-            .ok_or(FailureCode::MissingCapability)?;
-        Ok(base.join("vsift-sessions"))
-    }
-}
-
-fn absolute_selection(path: &Path) -> Result<PathBuf, FailureCode> {
-    if path.is_absolute() {
-        Ok(path.to_path_buf())
-    } else {
-        env::current_dir()
-            .map(|cwd| cwd.join(path))
-            .map_err(|_| FailureCode::StorageIo)
-    }
-}
-
-fn open_store(root: &Path, create: bool) -> Result<Option<FilesystemSessionStore>, FailureCode> {
-    if !root.is_absolute() {
-        return Err(FailureCode::InvalidArgument);
-    }
-    if root.exists() {
-        return FilesystemSessionStore::open_existing(root)
-            .map(Some)
-            .map_err(map_open_error);
-    }
-    if !create {
-        return Ok(None);
-    }
-    let parent = root.parent().ok_or(FailureCode::InvalidArgument)?;
-    if !parent.exists() {
-        let grandparent = parent.parent().ok_or(FailureCode::InvalidArgument)?;
-        if !grandparent.is_dir() {
-            return Err(FailureCode::StorageIo);
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            let mut builder = fs::DirBuilder::new();
-            builder.mode(0o700);
-            match builder.create(parent) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(_) => return Err(FailureCode::StorageIo),
-            }
-        }
-        #[cfg(windows)]
-        {
-            match fs::create_dir(parent) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(_) => return Err(FailureCode::StorageIo),
-            }
-        }
-    }
-    match FilesystemSessionStore::provision_default(root) {
-        Ok(store) => Ok(Some(store)),
-        Err(SessionStoreOpenError::RootAlreadyExists) => {
-            FilesystemSessionStore::open_existing(root)
-                .map(Some)
-                .map_err(map_open_error)
-        }
-        Err(error) => Err(map_open_error(error)),
-    }
-}
-
-fn map_open_error(error: SessionStoreOpenError) -> FailureCode {
-    match error {
-        SessionStoreOpenError::RootMustBeAbsolute
-        | SessionStoreOpenError::RootNotDirectory
-        | SessionStoreOpenError::RootNotPrivate
-        | SessionStoreOpenError::RootAlreadyExists
-        | SessionStoreOpenError::InvalidAdmissionCapacity => FailureCode::InvalidArgument,
-        SessionStoreOpenError::InvalidOwnership | SessionStoreOpenError::InvalidLayout => {
-            FailureCode::IntegrityFailure
-        }
-        SessionStoreOpenError::RootUnavailable => FailureCode::StorageIo,
-    }
-}
-
-fn map_storage_error(error: SessionStorageError) -> FailureCode {
-    match error {
-        SessionStorageError::UnsupportedGuarantee { .. } => FailureCode::MissingCapability,
-        SessionStorageError::Busy => FailureCode::Busy,
-        SessionStorageError::StateConflict => FailureCode::InvalidArgument,
-        SessionStorageError::IntegrityFailure => FailureCode::IntegrityFailure,
-        SessionStorageError::UnsupportedVersion => FailureCode::UnsupportedSchema,
-        SessionStorageError::AccessDenied | SessionStorageError::Io => FailureCode::StorageIo,
-        SessionStorageError::CapacityExhausted => FailureCode::ResourceLimit,
-    }
-}
-
-fn status_data(status: &SessionStatus, now: u64) -> Result<StatusData, FailureCode> {
+fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
     Ok(StatusData {
-        session_id: status.session_id().as_str().to_owned(),
-        state: SessionState::observed(status.phase(), status.lifetime(), now),
-        source_id: status.source_id().as_str().to_owned(),
-        source_bytes: status.source_bytes(),
-        artifact_count: status.artifact_count(),
-        artifact_bytes: status.artifact_bytes(),
-        generation: status.generation().value(),
-        expires_at: rfc3339(status.lifetime().expires_at_unix_seconds())?,
+        session_id: snapshot.session_id().as_str().to_owned(),
+        state: SessionState::observed(
+            snapshot.phase(),
+            snapshot.lifetime(),
+            snapshot.observed_at_unix_seconds(),
+        ),
+        source_id: snapshot.source_id().as_str().to_owned(),
+        source_bytes: snapshot.source_bytes(),
+        artifact_count: snapshot.artifact_count(),
+        artifact_bytes: snapshot.artifact_bytes(),
+        generation: snapshot.generation().value(),
+        expires_at: rfc3339(snapshot.lifetime().expires_at_unix_seconds())?,
     })
 }
 
@@ -197,10 +57,19 @@ fn partial_response<T: Serialize>(
     OperationResponse::partial(command, data, warning).map_err(|_| FailureCode::Internal)
 }
 
-fn bundle_data(bundle: &BundleStatus) -> BundleData {
-    let source = match bundle.source_policy() {
-        BundleSourcePolicy::EvidenceOnly => BundleSourceInclusion::EvidenceOnly,
-        BundleSourcePolicy::IncludeSource => BundleSourceInclusion::SourceIncluded,
+fn status_response(
+    command: &'static str,
+    snapshot: &SessionSnapshot,
+) -> Result<Response, FailureCode> {
+    let data = status_data(snapshot)?;
+    Ok(response(command, &data)?
+        .with_lifecycle(LifecycleResponse::ephemeral(data.expires_at.clone())))
+}
+
+fn bundle_data(bundle: &BundleSummary) -> BundleData {
+    let source = match bundle.source_retention() {
+        SourceRetention::EvidenceOnly => BundleSourceInclusion::EvidenceOnly,
+        SourceRetention::IncludeSource => BundleSourceInclusion::SourceIncluded,
     };
     BundleData::new(
         bundle.session_id(),
@@ -212,228 +81,141 @@ fn bundle_data(bundle: &BundleStatus) -> BundleData {
     )
 }
 
+fn list_response(page: SessionPage) -> Result<Response, FailureCode> {
+    let partial = page.is_partial();
+    let next_cursor = page.next_cursor();
+    let items =
+        page.into_entries()
+            .into_iter()
+            .map(|entry| match entry {
+                SessionListEntry::Indexed(snapshot) => Ok(ListedSession::indexed(
+                    snapshot.session_id(),
+                    status_data(&snapshot)?,
+                )),
+                SessionListEntry::Initializing(session_id) => {
+                    Ok(ListedSession::initializing(&session_id))
+                }
+                SessionListEntry::Unavailable { session_id, error } => Ok(
+                    ListedSession::unavailable(&session_id, error.failure_code()),
+                ),
+            })
+            .collect::<Result<Vec<_>, FailureCode>>()?;
+    let data = PageData { items, next_cursor };
+    if partial {
+        partial_response(
+            "session.list",
+            &data,
+            "Some session records could not be read.",
+        )
+    } else {
+        response("session.list", &data)
+    }
+}
+
+fn clean_response(page: CleanPage) -> Result<Response, FailureCode> {
+    let partial = page.is_partial();
+    let next_cursor = page.next_cursor();
+    let dry_run = page.mode() == CleanMode::DryRun;
+    let items = page
+        .into_entries()
+        .into_iter()
+        .map(|entry| match entry {
+            CleanEntry::Examined {
+                session_id,
+                decision,
+            } => CleanItem::examined(
+                &session_id,
+                match decision {
+                    CleanDecision::Ineligible => CleanItemOutcome::Ineligible,
+                    CleanDecision::Eligible => CleanItemOutcome::Eligible,
+                    CleanDecision::Removed => CleanItemOutcome::Removed,
+                },
+            ),
+            CleanEntry::Skipped { session_id, error } => {
+                CleanItem::skipped(&session_id, error.failure_code())
+            }
+        })
+        .collect();
+    let data = CleanData {
+        items,
+        next_cursor,
+        dry_run,
+    };
+    if partial {
+        partial_response("session.clean", &data, "Some sessions were not cleaned.")
+    } else {
+        response("session.clean", &data)
+    }
+}
+
 /// Executes the P05 portion of ingestion without starting P07 transcription.
 pub(crate) async fn ingest(
+    engine: &Engine,
     arguments: IngestArguments,
-    explicit_root: Option<&Path>,
 ) -> Result<Response, FailureCode> {
-    if arguments.transcript.is_some() {
-        return Err(FailureCode::CommandNotImplemented);
-    }
-    let source = if arguments.source.is_absolute() {
-        arguments.source
-    } else {
-        env::current_dir()
-            .map_err(|_| FailureCode::StorageIo)?
-            .join(arguments.source)
-    };
-    let root = root_path(explicit_root)?;
-    let store = open_store(&root, true)?.ok_or(FailureCode::StorageIo)?;
-    let now = now_seconds()?;
-    let opened = OpenSession::new(store)
-        .execute(OpenSessionRequest {
-            source,
-            session_id: session_id()?,
-            initialize_operation_id: operation_id()?,
-            stage_operation_id: operation_id()?,
-            activate_operation_id: operation_id()?,
-            durability: DurabilityRequirement::Ephemeral,
-            now_unix_seconds: now,
+    let opened = engine
+        .ingest(IngestRequest {
+            source: arguments.source,
+            transcript: arguments.transcript,
         })
-        .await
-        .map_err(|error| match error {
-            OpenSessionError::InvalidSource => FailureCode::InvalidSource,
-            OpenSessionError::SourceIo => FailureCode::StorageIo,
-            OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
-            OpenSessionError::Storage(storage) => map_storage_error(storage),
-        })?;
+        .await?;
     let expires_at = rfc3339(opened.lifetime.expires_at_unix_seconds())?;
     let data = OpenData::new(&opened, expires_at.clone());
     Ok(response("ingest", &data)?.with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
 }
 
 /// Executes one visible P05 session operation.
-#[allow(
-    clippy::too_many_lines,
-    reason = "Keep typed subcommand presentation in one exhaustive dispatch"
-)]
 pub(crate) fn execute_session(
+    engine: &Engine,
     command: SessionCommand,
-    explicit_root: Option<&Path>,
 ) -> Result<Response, FailureCode> {
-    let root = root_path(explicit_root)?;
-    let now = now_seconds()?;
-    let store = open_store(&root, false)?;
     match command {
-        SessionCommand::List(arguments) => {
-            let Some(store) = store else {
-                return response(
-                    "session.list",
-                    &PageData {
-                        items: Vec::new(),
-                        next_cursor: None,
-                    },
-                );
-            };
-            let mut bucket = arguments.cursor.unwrap_or(0);
-            loop {
-                let page = store
-                    .scan_session_bucket(bucket)
-                    .map_err(map_storage_error)?;
-                if !page.session_ids().is_empty() || page.next_bucket().is_none() {
-                    let mut items = Vec::new();
-                    let mut partial = false;
-                    for session_id in page.session_ids() {
-                        match store.indexed_session_status(session_id) {
-                            Ok(Some(status)) => items.push(ListedSession::indexed(
-                                session_id,
-                                status_data(&status, now)?,
-                            )),
-                            Ok(None) => items.push(ListedSession::initializing(session_id)),
-                            Err(error) => {
-                                partial = true;
-                                items.push(ListedSession::unavailable(
-                                    session_id,
-                                    map_storage_error(error),
-                                ));
-                            }
-                        }
-                    }
-                    let data = PageData {
-                        items,
-                        next_cursor: page.next_bucket(),
-                    };
-                    return if partial {
-                        partial_response(
-                            "session.list",
-                            &data,
-                            "Some session records could not be read.",
-                        )
-                    } else {
-                        response("session.list", &data)
-                    };
-                }
-                bucket = page.next_bucket().ok_or(FailureCode::Internal)?;
-            }
-        }
-        SessionCommand::Status(arguments) => {
-            let store = store.ok_or(FailureCode::StorageIo)?;
-            let status = store
-                .session_status(&arguments.session)
-                .map_err(map_storage_error)?;
-            let data = status_data(&status, now)?;
-            Ok(response("session.status", &data)?
-                .with_lifecycle(LifecycleResponse::ephemeral(data.expires_at.clone())))
-        }
+        SessionCommand::List(arguments) => list_response(engine.list_sessions(arguments.cursor)?),
+        SessionCommand::Status(arguments) => status_response(
+            "session.status",
+            &engine.session_status(&arguments.session)?,
+        ),
         SessionCommand::Renew(arguments) => {
-            let store = store.ok_or(FailureCode::StorageIo)?;
-            let current = store
-                .session_status(&arguments.session)
-                .map_err(map_storage_error)?;
-            store
-                .renew_session(
-                    &arguments.session,
-                    &operation_id()?,
-                    current.generation(),
-                    now,
-                )
-                .map_err(map_storage_error)?;
-            let status = store
-                .session_status(&arguments.session)
-                .map_err(map_storage_error)?;
-            let data = status_data(&status, now)?;
-            Ok(response("session.renew", &data)?
-                .with_lifecycle(LifecycleResponse::ephemeral(data.expires_at.clone())))
+            status_response("session.renew", &engine.renew_session(&arguments.session)?)
         }
         SessionCommand::Close(arguments) => {
-            let store = store.ok_or(FailureCode::StorageIo)?;
-            let current = store
-                .session_status(&arguments.session)
-                .map_err(map_storage_error)?;
-            store
-                .close_session(&arguments.session, &operation_id()?, current.generation())
-                .map_err(map_storage_error)?;
-            let status = store
-                .session_status(&arguments.session)
-                .map_err(map_storage_error)?;
-            let data = status_data(&status, now)?;
-            Ok(response("session.close", &data)?
-                .with_lifecycle(LifecycleResponse::ephemeral(data.expires_at.clone())))
+            status_response("session.close", &engine.close_session(&arguments.session)?)
         }
         SessionCommand::Retain(arguments) => {
-            let store = store.ok_or(FailureCode::StorageIo)?;
-            let policy = if arguments.include_source {
-                BundleSourcePolicy::IncludeSource
+            let retention = if arguments.include_source {
+                SourceRetention::IncludeSource
             } else {
-                BundleSourcePolicy::EvidenceOnly
+                SourceRetention::EvidenceOnly
             };
-            let output = absolute_selection(&arguments.output)?;
-            let bundle = store
-                .retain_bundle(&arguments.session, &output, policy)
-                .map_err(map_storage_error)?;
+            let bundle = engine.retain_session(&arguments.session, &arguments.output, retention)?;
             Ok(response("session.retain", &bundle_data(&bundle))?
                 .with_lifecycle(LifecycleResponse::retained()))
         }
         SessionCommand::Clean(arguments) => {
-            if !arguments.expired {
-                return Err(FailureCode::InvalidArgument);
-            }
-            let Some(store) = store else {
-                return response(
-                    "session.clean",
-                    &CleanData {
-                        items: Vec::new(),
-                        next_cursor: None,
-                        dry_run: arguments.dry_run,
-                    },
-                );
-            };
-            let mut bucket = arguments.cursor.unwrap_or(0);
-            let page = loop {
-                let page = store
-                    .scan_session_bucket(bucket)
-                    .map_err(map_storage_error)?;
-                if !page.session_ids().is_empty() || page.next_bucket().is_none() {
-                    break page;
-                }
-                bucket = page.next_bucket().ok_or(FailureCode::Internal)?;
-            };
-            let mut items = Vec::new();
-            let mut partial = false;
-            for session_id in page.session_ids() {
-                match store.clean_session(session_id, now, arguments.dry_run) {
-                    Ok(outcome) => items.push(CleanItem::examined(
-                        session_id,
-                        match outcome {
-                            CleanOutcome::Ineligible => CleanItemOutcome::Ineligible,
-                            CleanOutcome::Eligible => CleanItemOutcome::Eligible,
-                            CleanOutcome::Removed => CleanItemOutcome::Removed,
-                        },
-                    )),
-                    Err(error) => {
-                        partial = true;
-                        items.push(CleanItem::skipped(session_id, map_storage_error(error)));
-                    }
-                }
-            }
-            let data = CleanData {
-                items,
-                next_cursor: page.next_bucket(),
-                dry_run: arguments.dry_run,
-            };
-            if partial {
-                partial_response("session.clean", &data, "Some sessions were not cleaned.")
-            } else {
-                response("session.clean", &data)
-            }
+            let page = engine.clean_sessions(CleanRequest {
+                scope: if arguments.expired {
+                    CleanScope::Expired
+                } else {
+                    CleanScope::Unrestricted
+                },
+                mode: if arguments.dry_run {
+                    CleanMode::DryRun
+                } else {
+                    CleanMode::Remove
+                },
+                cursor: arguments.cursor,
+            })?;
+            clean_response(page)
         }
     }
 }
 
 /// Validates one user-selected bundle independently of any disposable root.
-pub(crate) fn validate_bundle(path: &Path) -> Result<Response, FailureCode> {
-    let selected = absolute_selection(path)?;
-    let bundle = FilesystemSessionStore::validate_bundle(&selected).map_err(map_storage_error)?;
+pub(crate) fn validate_bundle(
+    engine: &Engine,
+    directory: &std::path::Path,
+) -> Result<Response, FailureCode> {
+    let bundle = engine.validate_bundle(directory)?;
     Ok(response("bundle.validate", &bundle_data(&bundle))?
         .with_lifecycle(LifecycleResponse::retained()))
 }

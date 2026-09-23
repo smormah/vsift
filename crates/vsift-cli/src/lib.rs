@@ -9,24 +9,19 @@ mod output;
 mod session;
 mod setup;
 
-use std::{
-    ffi::OsString,
-    io,
-    io::Write,
-    process::ExitCode,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode};
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{BundleCommand, Cli, Command, EventFormat, ExecutionProfile, SetupCommand};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{OutputMode, OutputWriter, ProcessExit};
-use vsift_application::SetupSelectionState;
-use vsift_contract::{OperationResponse, TerminalEventResponse};
-use vsift_domain::FailureCode;
-use vsift_infrastructure::{
-    ExplicitProbePaths, ProcessDependencyProbe, UserDependencyConfigError,
-    UserDependencyConfigStore, accepted_ubuntu_catalogue, detect_managed_target,
+use vsift::{
+    Engine, EngineConfig, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode,
+    HostIsolation, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    UserConfigurationLocation,
+};
+use vsift_contract::{
+    ConfiguredModelResponse, ConfiguredSelectionResponse, OperationResponse, TerminalEventResponse,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -35,9 +30,29 @@ pub async fn run() -> ExitCode {
         std::env::args_os(),
         io::stdout().lock(),
         io::stderr().lock(),
+        EnginePorts::system(),
     )
     .await;
     ExitCode::from(status.code())
+}
+
+/// Builds the engine a command-line invocation uses.
+///
+/// The CLI is a local, per-user host: sessions and dependency selections live in
+/// the platform's per-user locations unless `--session-root` selects another
+/// root, and no strict worker isolation is claimed.
+fn compose_engine(session_root: Option<PathBuf>, ports: EnginePorts) -> Engine {
+    Engine::new(
+        EngineConfig {
+            session_root: session_root.map_or(
+                SessionRootLocation::PlatformDefault,
+                SessionRootLocation::Explicit,
+            ),
+            user_configuration: UserConfigurationLocation::PlatformDefault,
+            host_isolation: HostIsolation::ProcessOnly,
+        },
+        ports,
+    )
 }
 
 #[allow(
@@ -48,6 +63,7 @@ async fn execute_with<Arguments, Argument, StandardOutput, StandardError>(
     arguments: Arguments,
     standard_output: StandardOutput,
     standard_error: StandardError,
+    ports: EnginePorts,
 ) -> ProcessExit
 where
     Arguments: IntoIterator<Item = Argument>,
@@ -91,7 +107,7 @@ where
     let Some(command) = cli.command else {
         return write_root_help(&mut writer);
     };
-    let explicit_session_root = cli.session_root;
+    let engine = compose_engine(cli.session_root, ports);
     match command {
         Command::Setup(arguments) => match arguments.command {
             Some(SetupCommand::Check(arguments)) => {
@@ -117,56 +133,60 @@ where
                         );
                     }
                 };
-                let per_call = ExplicitProbePaths {
-                    ffmpeg: arguments.ffmpeg,
-                    ffprobe: arguments.ffprobe,
-                    whisper: arguments.whisper,
+                let request = SetupCheckRequest {
+                    probe_timeout: config.probe_timeout,
+                    per_call: ExecutableSelections {
+                        ffmpeg: arguments.ffmpeg,
+                        ffprobe: arguments.ffprobe,
+                        whisper: arguments.whisper,
+                    },
                 };
-                let configured = match UserDependencyConfigStore::default_location()
-                    .and_then(|store| store.read())
-                {
-                    Ok(configured) => configured,
+                let report = match engine.check_setup(request).await {
+                    Ok(report) => report,
                     Err(error) => {
                         return write_failure(
                             &mut writer,
                             mode,
                             "setup.check",
-                            setup_config_failure(error),
+                            error.failure_code(),
                             None,
                         );
                     }
                 };
-                let selections = ExplicitProbePaths {
-                    ffmpeg: per_call.ffmpeg.clone().or(configured.ffmpeg),
-                    ffprobe: per_call.ffprobe.clone().or(configured.ffprobe),
-                    whisper: per_call.whisper.clone().or(configured.whisper),
-                };
-                let probe = ProcessDependencyProbe::with_explicit_paths(
-                    config.probe_timeout,
-                    selections.clone(),
-                );
-                setup::run_setup_check(
-                    probe,
+                setup::present_setup_check(
+                    report.diagnosis(),
                     config.profile,
                     mode,
-                    &selections,
-                    &per_call,
+                    |dependency| report.lookup(dependency),
                     &mut writer,
                 )
-                .await
             }
             Some(SetupCommand::Configure(arguments)) => {
-                let result = setup::configure(&arguments);
+                let dependency = arguments.dependency.into();
+                let result = engine
+                    .configure_executable(dependency, &arguments.executable)
+                    .map_err(FailureCode::from)
+                    .and_then(|()| {
+                        complete(
+                            "setup.configure",
+                            &ConfiguredSelectionResponse::new(dependency),
+                        )
+                    });
                 write_session_result(&mut writer, mode, "setup.configure", result)
             }
             Some(SetupCommand::ConfigureModel(arguments)) => {
-                let result = setup::configure_model(&arguments);
+                let result = engine
+                    .configure_model(&arguments.file)
+                    .map_err(FailureCode::from)
+                    .and_then(|()| {
+                        complete("setup.configure-model", &ConfiguredModelResponse::new())
+                    });
                 write_session_result(&mut writer, mode, "setup.configure-model", result)
             }
             Some(SetupCommand::Plan(arguments)) => {
-                let result = current_setup_plan(arguments.profile)
+                let result = current_setup_plan(&engine, arguments.profile)
                     .await
-                    .and_then(setup::EvaluatedSetupPlan::into_response);
+                    .and_then(|plan| complete("setup.plan", plan.presentation()));
                 write_session_result(&mut writer, mode, "setup.plan", result)
             }
             Some(SetupCommand::Install(arguments)) => {
@@ -191,14 +211,20 @@ where
                         return write_failure(&mut writer, mode, "setup.install", code, None);
                     }
                 };
-                let current = match current_setup_plan(profile).await {
+                let current = match current_setup_plan(&engine, profile).await {
                     Ok(current) => current,
                     Err(code) => {
                         return write_failure(&mut writer, mode, "setup.install", code, None);
                     }
                 };
-                if let Err(code) = current.validate_acceptance(&saved, &arguments.accept_plan) {
-                    return write_failure(&mut writer, mode, "setup.install", code, None);
+                if let Err(error) = current.validate_acceptance(&saved, &arguments.accept_plan) {
+                    return write_failure(
+                        &mut writer,
+                        mode,
+                        "setup.install",
+                        error.failure_code(),
+                        None,
+                    );
                 }
                 write_failure(
                     &mut writer,
@@ -224,18 +250,17 @@ where
             }
         },
         Command::Ingest(arguments) => {
-            let result = session::ingest(arguments, explicit_session_root.as_deref()).await;
+            let result = session::ingest(&engine, arguments).await;
             write_session_result(&mut writer, mode, "ingest", result)
         }
         Command::Session(arguments) => {
             let operation = arguments.operation_name();
-            let result =
-                session::execute_session(arguments.command, explicit_session_root.as_deref());
+            let result = session::execute_session(&engine, arguments.command);
             write_session_result(&mut writer, mode, operation, result)
         }
         Command::Bundle(arguments) => match arguments.command {
             BundleCommand::Validate(arguments) => {
-                let result = session::validate_bundle(&arguments.directory);
+                let result = session::validate_bundle(&engine, &arguments.directory);
                 write_session_result(&mut writer, mode, "bundle.validate", result)
             }
         },
@@ -249,9 +274,12 @@ where
     }
 }
 
+/// Resolves the effective probe deadline for `profile`, then asks the engine
+/// for the current plan.
 async fn current_setup_plan(
+    engine: &Engine,
     profile: ExecutionProfile,
-) -> Result<setup::EvaluatedSetupPlan, FailureCode> {
+) -> Result<EvaluatedSetupPlan, FailureCode> {
     let config = EffectiveConfig::resolve(
         ConfigLayer {
             profile: Some(profile),
@@ -262,55 +290,19 @@ async fn current_setup_plan(
         &HostPolicy::local_r0(),
     )
     .map_err(|_| FailureCode::InvalidArgument)?;
-    let store = UserDependencyConfigStore::default_location().map_err(setup_config_failure)?;
-    let configured = store.read().map_err(setup_config_failure)?;
-    let configured_model = store.read_model().map_err(setup_config_failure)?;
-    let now_unix_seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| FailureCode::Internal)?
-        .as_secs();
-    let catalogue = accepted_ubuntu_catalogue().map_err(|_| FailureCode::Internal)?;
-    let selections = SetupSelectionState {
-        ffmpeg: configured
-            .ffmpeg
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned()),
-        ffprobe: configured
-            .ffprobe
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned()),
-        whisper: configured
-            .whisper
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned()),
-        model: configured_model
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned()),
-    };
-    let probe = ProcessDependencyProbe::with_explicit_paths(config.probe_timeout, configured);
-    setup::evaluate_plan(
-        probe,
-        config.profile,
-        detect_managed_target(),
-        selections,
-        now_unix_seconds,
-        Some(catalogue),
-    )
-    .await
+    Ok(engine
+        .plan_setup(SetupPlanRequest {
+            profile: config.profile.into(),
+            probe_timeout: config.probe_timeout,
+        })
+        .await?)
 }
 
-fn setup_config_failure(error: UserDependencyConfigError) -> FailureCode {
-    match error {
-        UserDependencyConfigError::Unavailable => FailureCode::MissingCapability,
-        UserDependencyConfigError::InvalidExecutable | UserDependencyConfigError::InvalidModel => {
-            FailureCode::InvalidArgument
-        }
-        UserDependencyConfigError::UnsafeStorage | UserDependencyConfigError::Io => {
-            FailureCode::StorageIo
-        }
-        UserDependencyConfigError::InvalidRecord => FailureCode::IntegrityFailure,
-        UserDependencyConfigError::Busy => FailureCode::Busy,
-    }
+fn complete<T: serde::Serialize>(
+    command: &'static str,
+    data: &T,
+) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
+    OperationResponse::complete(command, data).map_err(|_| FailureCode::Internal)
 }
 
 fn write_session_result<StandardOutput, StandardError>(
@@ -445,6 +437,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use vsift::EnginePorts;
+
     use super::{ProcessExit, execute_with};
 
     #[tokio::test]
@@ -453,7 +447,8 @@ mod tests {
         for arguments in [vec!["vsift"], vec!["vsift", "setup"]] {
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();
-            let exit = execute_with(arguments, &mut stdout, &mut stderr).await;
+            let exit =
+                execute_with(arguments, &mut stdout, &mut stderr, EnginePorts::system()).await;
 
             assert_eq!(exit, ProcessExit::Success);
             assert!(String::from_utf8(stdout)?.contains("Usage:"));
@@ -472,6 +467,7 @@ mod tests {
             ["vsift", "--json", "unknown-command"],
             &mut stdout,
             &mut stderr,
+            EnginePorts::system(),
         )
         .await;
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
@@ -503,6 +499,7 @@ mod tests {
             ],
             &mut stdout,
             &mut stderr,
+            EnginePorts::system(),
         )
         .await;
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
