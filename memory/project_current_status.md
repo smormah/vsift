@@ -2,11 +2,21 @@
 
 ## Active
 
-2026-09-22: P06 reviewed compatibility-policy implementation `440f42d`
+2026-09-23: P06 is parked at the reviewed-policy boundary after the current
+compatibility-policy PR reaches protected `main`. The accepted Ubuntu catalogue,
+strict saved-plan revalidation, exact staging/runtime primitives and lifecycle
+primitives remain available, but no public install path is enabled. Resume with
+the production bounded compatibility executor and cleanup evidence before
+composing activation or exposing lifecycle commands. The ordered remaining scope
+is recorded in `memory/TODO.md`; P06 remains planned.
+
+2026-09-22: P06 reviewed compatibility-policy implementation `440f42d` and
+generated-artifact bounds `799bfc7`
 advances the accepted Ubuntu catalogue to revision
 `ubuntu-24.04-x86_64-2026-09-22-r2`. It fixes the exact checked-in F01
-size/SHA-256, expected FFmpeg build prefix, 64-KiB per-stream capture limit,
-60-second media and 180-second inference deadlines, and 16-kHz mono extraction.
+size/SHA-256, expected FFmpeg/FFprobe build prefixes, 64-KiB per-stream and
+transcript limits, 256-KiB generated-audio limit, 60-second media and 180-second
+inference deadlines, and 16-kHz mono extraction.
 The application rejects incomplete or out-of-policy catalogues without actions
 or an acceptance digest. Every policy value is included in the canonical plan
 digest, so a change cannot reuse an earlier acceptance. Focused application and

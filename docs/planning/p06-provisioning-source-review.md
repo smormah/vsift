@@ -416,8 +416,10 @@ production candidate smoke must use. It identifies checked-in `F01.mp4` as
 `65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070`,
 requires the FFmpeg first line to begin with
 `ffmpeg version n9.0.1-11-ge47273f4d9-20260831`, limits each captured provider
-stream to 64 KiB, limits media work to 60 seconds and model inference to 180
-seconds, and fixes extracted audio at 16 kHz mono. An incomplete or out-of-policy
+stream and the transcript file to 64 KiB, requires FFprobe to report the matching
+`ffprobe version n9.0.1-11-ge47273f4d9-20260831` build, limits the generated WAV
+to 256 KiB, limits media work to 60 seconds and model inference to 180 seconds,
+and fixes extracted audio at 16 kHz mono. An incomplete or out-of-policy
 catalogue produces no actions or digest. Every policy value participates in the
 plan digest, so a policy change invalidates earlier acceptance even if the
 artifact bytes do not change.

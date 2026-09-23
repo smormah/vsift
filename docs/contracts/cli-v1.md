@@ -101,9 +101,9 @@ notice/source links, known trust limits, private destination and permissions.
 Its lowercase SHA-256 `plan_digest` binds profile, exact target, catalogue
 revision, current probe results, configured selections, all planned actions and
 the revision's reviewed compatibility policy. For the current Ubuntu revision,
-that policy fixes the exact F01 fixture identity, expected FFmpeg build identity,
-per-stream capture limit, media and inference deadlines, and 16-kHz mono audio
-contract. The policy remains an installer safety constraint rather than a claim
+that policy fixes the exact F01 fixture identity, expected FFmpeg/FFprobe build
+identities, per-stream and generated-file limits, media and inference deadlines,
+and 16-kHz mono audio contract. The policy remains an installer safety constraint rather than a claim
 that compatibility execution has passed.
 The same unchanged observations produce the same digest. Any changed catalogue
 or observed selection requires a fresh plan and acceptance. No configured paths
