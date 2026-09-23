@@ -2,9 +2,17 @@
 
 ## Current checkpoint
 
-2026-09-23 parking handoff: park P06 after the reviewed compatibility-policy
-change reaches protected `main`. No partially wired installer path should be
-left enabled: a valid accepted plan must continue to return
+2026-09-23 parking handoff: protected [PR #118](https://github.com/smormah/vsift/pull/118)
+merged the reviewed compatibility policy (`440f42d`, `799bfc7`) and parking
+record `c5a85e1` as `3b2b9d5`. Full local formatting, strict Clippy, workspace
+tests, warning-denied rustdoc and governance passed. Protected Ubuntu, macOS,
+Windows, Documentation, Governance and strict-worker checks passed in
+[CI run 35868919085](https://github.com/smormah/vsift/actions/runs/35868919085),
+[dependency/security run 35868919126](https://github.com/smormah/vsift/actions/runs/35868919126),
+and [Rust analysis run 35868918990](https://github.com/smormah/vsift/actions/runs/35868918990).
+The first macOS Quality attempt reproduced the known unrelated P05 storage-lock
+`Busy` symptom; its unchanged failed-job rerun passed. P06 is now parked. No
+partially wired installer path is enabled: a valid accepted plan continues to return
 `COMMAND_NOT_IMPLEMENTED`, with no transfer or managed-root mutation. Resume in
 this order: implement a production Ubuntu smoke workspace/executor using the
 existing `ProcessSupervisor` and the digest-bound stream, generated-file and
@@ -12,7 +20,7 @@ deadline limits; prove failure cleanup before activation; compose the guarded
 download/stage/smoke/publish transaction; expose install, rollback and uninstall;
 add bounded version cleanup; run process-kill/power-loss qualification; then close
 D-01..D-10 and the P06 E2E checkpoint. The policy is complete enough to park;
-the executor and transaction are deliberately not started in this change.
+the executor and transaction are deliberately not started. P06 remains planned.
 
 2026-09-22: P06 reviewed compatibility-policy implementation `440f42d` and
 generated-artifact bounds `799bfc7`
