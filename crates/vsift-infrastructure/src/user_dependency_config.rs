@@ -334,7 +334,10 @@ fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use vsift_domain::RuntimeDependency;
 
@@ -534,6 +537,94 @@ mod tests {
             ));
             Ok::<(), Box<dyn std::error::Error>>(())
         })();
+        fs::remove_dir_all(&parent)?;
+        result
+    }
+
+    /// Denies replacement of the stored record in the platform's native way.
+    ///
+    /// Unix denies directory writes, which blocks the private temporary file.
+    /// Returns `false` when the current user bypasses permission bits (root),
+    /// because no denied write can then be observed.
+    #[cfg(unix)]
+    fn deny_record_replacement(config: &Path) -> std::io::Result<bool> {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::set_permissions(config, fs::Permissions::from_mode(0o500))?;
+        let probe = config.join("permission-probe");
+        match fs::write(&probe, b"") {
+            Ok(()) => {
+                fs::remove_file(&probe)?;
+                Ok(false)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => Ok(true),
+            Err(error) => Err(error),
+        }
+    }
+
+    #[cfg(unix)]
+    fn allow_record_replacement(config: &Path) -> std::io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::set_permissions(config, fs::Permissions::from_mode(0o700))
+    }
+
+    /// Windows refuses to replace a file carrying the read-only attribute.
+    #[cfg(windows)]
+    fn deny_record_replacement(config: &Path) -> std::io::Result<bool> {
+        let record = config.join("dependencies-v1.json");
+        let mut permissions = fs::metadata(&record)?.permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&record, permissions)?;
+        Ok(true)
+    }
+
+    #[cfg(windows)]
+    #[allow(
+        clippy::permissions_set_readonly_false,
+        reason = "On Windows this clears only the read-only attribute the test set"
+    )]
+    fn allow_record_replacement(config: &Path) -> std::io::Result<()> {
+        let record = config.join("dependencies-v1.json");
+        let mut permissions = fs::metadata(&record)?.permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&record, permissions)
+    }
+
+    #[test]
+    fn denied_storage_fails_typed_and_leaves_the_record_unchanged()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = fixture_root()?;
+        let config_path = parent.join("config");
+        let result = (|| {
+            let config = UserDependencyConfigStore::at(config_path.clone())?;
+            let ffmpeg = parent.join("ffmpeg");
+            let ffprobe = parent.join("ffprobe");
+            fs::write(&ffmpeg, b"not executed")?;
+            fs::write(&ffprobe, b"not executed")?;
+            config.configure(RuntimeDependency::Ffmpeg, &ffmpeg)?;
+            let record = config_path.join("dependencies-v1.json");
+            let before = fs::read(&record)?;
+            if !deny_record_replacement(&config_path)? {
+                // Permission bits do not bind this user, so denial is unobservable.
+                return Ok(());
+            }
+            let outcome = config.configure(RuntimeDependency::Ffprobe, &ffprobe);
+            allow_record_replacement(&config_path)?;
+
+            assert_eq!(outcome, Err(UserDependencyConfigError::Io));
+            assert_eq!(fs::read(&record)?, before);
+            assert!(config.read()?.ffprobe.is_none());
+            for entry in fs::read_dir(&config_path)? {
+                let name = entry?.file_name();
+                assert!(
+                    !name.to_string_lossy().ends_with(".pending"),
+                    "a pending record was left behind"
+                );
+            }
+            Ok::<(), Box<dyn std::error::Error>>(())
+        })();
+        let _ = allow_record_replacement(&config_path);
         fs::remove_dir_all(&parent)?;
         result
     }

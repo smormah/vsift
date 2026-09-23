@@ -11,22 +11,21 @@ Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-deli
 moved to attended implementation with maintainer review. Nothing public can yet read
 a video's content; this order gets there:
 
-1. **Close P06 (narrowed by ADR 0015).** Done so far: detection, BYO selection,
-   read-only plans and typed guidance; engine verification of the selected
-   FFmpeg/FFprobe (`FixtureMediaToolVerifier`, embedded F01 through real probe,
-   frame and audio) and model identity (`verify_model_file`). By design there is
-   no `setup verify` command (ADR 0015 note); a P07 preflight will call it.
-   Remaining:
-   - Audit D-01, D-07 (unavailable-target guidance), D-09 and D-10 against their
-     rows and close gaps, such as denied storage for configuration writes.
-   - Add the P06 stage to the E2E spine (preinstalled, partial, off-PATH,
-     denied, offline and unqualified journeys, using the verifier).
-   - Then the one-off ledger completion record and an issue #9 update.
-2. **(Done) #66 lock fix:** PR #121, stress run passed 40 rounds on Ubuntu and
-   macOS, issue closed. Remove this line in the next rewrite.
-3. **P07 increment 1:** extract the embeddable engine facade and contract crate
+1. **Close P06 (narrowed by ADR 0015).** Every P06 increment has landed or is in
+   review: detection, BYO selection, read-only plans, typed guidance, engine
+   verification of the selected FFmpeg/FFprobe (`FixtureMediaToolVerifier`) and
+   model identity (`verify_model_file`). The final increment audits D-01, D-07
+   (unavailable-target guidance), D-09 and D-10 case by case, closes the gaps
+   (denied configuration storage, read-only tool install, saved-plan revalidation
+   through the binary, manual guidance on every unavailable target) and adds the
+   opt-in P06 E2E stage (`p06_setup_e2e`), which passed locally on Windows 11.
+   By design there is no `setup verify` command (ADR 0015 note). Remaining:
+   - Merge the final increment once protected checks pass.
+   - Then the one-off ledger completion record and an issue #9 update. P06 is
+     not complete until that record lands.
+2. **P07 increment 1:** extract the embeddable engine facade and contract crate
    with no behaviour change (ADR 0016).
-4. **P07 transcription:** segment-first, with published transcript schemas and
+3. **P07 transcription:** segment-first, with published transcript schemas and
    SRT/VTT fuzz targets.
 
 ## Open decisions (maintainer)
@@ -36,7 +35,6 @@ a video's content; this order gets there:
 - Minimum-supported-Rust-version policy before the library is first published.
 - Whether and when to cut 0.x pre-releases after P09.
 - Whether a local MCP adapter is wanted after P12. The CLI and skill stay primary.
-- Dependabot PR #103 (clap 4.6.7).
 - Removing leftover local worktrees and squash-merged `codex/*` branches.
 
 ## Known issues and gates

@@ -482,6 +482,220 @@ fn assert_planning_target(data: &Value, expected_ubuntu_actions: usize) {
     }
 }
 
+/// Denies replacement of the stored configuration record natively.
+///
+/// Unix denies writes to the private directory; Windows marks the record
+/// read-only, which the atomic replacement cannot overwrite. Returns `false`
+/// when the current user bypasses Unix permission bits (root), because a
+/// denied write cannot then be observed.
+#[cfg(unix)]
+fn deny_record_replacement(config: &Path) -> std::io::Result<bool> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::set_permissions(config, std::fs::Permissions::from_mode(0o500))?;
+    let probe = config.join("permission-probe");
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            std::fs::remove_file(&probe)?;
+            Ok(false)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => Ok(true),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(unix)]
+fn allow_record_replacement(config: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::set_permissions(config, std::fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(windows)]
+fn deny_record_replacement(config: &Path) -> std::io::Result<bool> {
+    set_read_only(&config.join("dependencies-v1.json"), true)?;
+    Ok(true)
+}
+
+#[cfg(windows)]
+fn allow_record_replacement(config: &Path) -> std::io::Result<()> {
+    set_read_only(&config.join("dependencies-v1.json"), false)
+}
+
+#[cfg(unix)]
+fn set_read_only(path: &Path, read_only: bool) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = if read_only { 0o555 } else { 0o755 };
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
+}
+
+#[cfg(windows)]
+#[allow(
+    clippy::permissions_set_readonly_false,
+    reason = "On Windows this toggles only the read-only attribute the test set"
+)]
+fn set_read_only(path: &Path, read_only: bool) -> std::io::Result<()> {
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    permissions.set_readonly(read_only);
+    std::fs::set_permissions(path, permissions)
+}
+
+#[test]
+fn denied_configuration_storage_fails_typed_without_prompting_or_changing_the_record()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "configure", "ffmpeg", "--executable"])
+        .arg(&binary)
+        .arg("--json")
+        .output()?;
+    assert!(configured.status.success());
+    let root = config_root(&base);
+    let record = root.join("dependencies-v1.json");
+    let before = std::fs::read(&record)?;
+    let result = (|| {
+        if !deny_record_replacement(&root)? {
+            // Permission bits do not bind this user, so denial is unobservable.
+            return Ok(());
+        }
+        let denied = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+            .args(["setup", "configure", "ffprobe", "--executable"])
+            .arg(&binary)
+            .arg("--json")
+            .timeout(std::time::Duration::from_secs(30))
+            .output()?;
+        allow_record_replacement(&root)?;
+        let value = parse_stdout(&denied)?;
+
+        assert_eq!(denied.status.code(), Some(7));
+        assert_eq!(value["command"], "setup.configure");
+        assert_eq!(value["status"], "failed");
+        assert_eq!(value["error"]["code"], "STORAGE_IO");
+        assert_eq!(value["error"]["retryable"], false);
+        assert_eq!(value["error"]["remediation"], serde_json::json!([]));
+        assert!(denied.stderr.is_empty());
+        assert_eq!(std::fs::read(&record)?, before);
+        for entry in std::fs::read_dir(&root)? {
+            assert!(
+                !entry?.file_name().to_string_lossy().ends_with(".pending"),
+                "a pending record was left behind"
+            );
+        }
+        Ok::<(), Box<dyn std::error::Error>>(())
+    })();
+    let _ = allow_record_replacement(&root);
+    std::fs::remove_dir_all(&base)?;
+    result
+}
+
+#[test]
+fn read_only_tool_install_is_selectable_without_write_access()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = isolated_config_base()?;
+    let install = isolated_config_base()?;
+    std::fs::create_dir_all(&install)?;
+    let source = std::path::PathBuf::from(Command::cargo_bin("vsift")?.get_program());
+    let tool = install.join(source.file_name().ok_or("binary has no file name")?);
+    std::fs::copy(&source, &tool)?;
+    set_read_only(&tool, true)?;
+    let result = (|| {
+        let before = std::fs::metadata(&tool)?;
+        let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+            .args(["setup", "configure", "whisper", "--executable"])
+            .arg(&tool)
+            .arg("--json")
+            .output()?;
+        assert!(configured.status.success());
+        let checked = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+            .args(["setup", "check", "--json"])
+            .env("PATH", "")
+            .output()?;
+        let value = parse_stdout(&checked)?;
+        assert_eq!(value["dependencies"][2]["lookup"], "configured_user_path");
+        assert_eq!(value["dependencies"][2]["status"], "available");
+
+        let after = std::fs::metadata(&tool)?;
+        assert!(after.permissions().readonly());
+        assert_eq!(after.len(), before.len());
+        assert_eq!(after.modified()?, before.modified()?);
+        Ok::<(), Box<dyn std::error::Error>>(())
+    })();
+    set_read_only(&tool, false)?;
+    std::fs::remove_dir_all(&install)?;
+    if base.exists() {
+        std::fs::remove_dir_all(&base)?;
+    }
+    result
+}
+
+#[test]
+fn saved_plan_acceptance_is_revalidated_without_mutation() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base = isolated_config_base()?;
+    let plans = isolated_config_base()?;
+    std::fs::create_dir_all(&plans)?;
+    let result = (|| {
+        let planned = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+            .args(["setup", "plan", "--profile", "desktop", "--json"])
+            .env("PATH", "")
+            .output()?;
+        assert!(planned.status.success());
+        let plan_file = plans.join("plan.json");
+        std::fs::write(&plan_file, &planned.stdout)?;
+        let plan = parse_stdout(&planned)?;
+        let qualified = plan["data"]["target"] == "ubuntu_24_04_x86_64";
+        let digest = plan["data"]["plan_digest"]
+            .as_str()
+            .map_or_else(|| "0".repeat(64), str::to_owned);
+        let install = |accept: &str| -> Result<Value, Box<dyn std::error::Error>> {
+            let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+                .args(["setup", "install", "--plan"])
+                .arg(&plan_file)
+                .args(["--accept-plan", accept, "--json"])
+                .env("PATH", "")
+                .timeout(std::time::Duration::from_secs(30))
+                .output()?;
+            assert_eq!(output.status.code(), Some(2));
+            parse_stdout(&output)
+        };
+
+        // An unqualified target has no digest to accept; a qualified one is
+        // accepted but installation stays reserved. Neither mutates state.
+        let unchanged = install(&digest)?;
+        assert_eq!(
+            unchanged["error"]["code"],
+            if qualified {
+                "COMMAND_NOT_IMPLEMENTED"
+            } else {
+                "INVALID_ARGUMENT"
+            }
+        );
+        assert!(!config_root(&base).exists());
+
+        let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+        let configured = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+            .args(["setup", "configure", "whisper", "--executable"])
+            .arg(&binary)
+            .arg("--json")
+            .output()?;
+        assert!(configured.status.success());
+        let record = config_root(&base).join("dependencies-v1.json");
+        let before = std::fs::read(&record)?;
+        let changed = install(&digest)?;
+        assert_eq!(changed["error"]["code"], "INVALID_ARGUMENT");
+        assert_eq!(changed["data"], Value::Null);
+        assert_eq!(std::fs::read(&record)?, before);
+        Ok::<(), Box<dyn std::error::Error>>(())
+    })();
+    std::fs::remove_dir_all(&plans)?;
+    if base.exists() {
+        std::fs::remove_dir_all(&base)?;
+    }
+    result
+}
+
 #[test]
 fn unqualified_plan_rejects_corrupt_byo_config_before_probing()
 -> Result<(), Box<dyn std::error::Error>> {

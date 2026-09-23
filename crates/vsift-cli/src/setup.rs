@@ -793,31 +793,95 @@ mod tests {
         Ok(())
     }
 
+    /// D-07: every target without a usable reviewed artifact gives typed manual
+    /// guidance for each missing tool and the model, and nothing to accept.
     #[tokio::test]
-    async fn unaccepted_target_never_offers_managed_actions()
+    async fn unavailable_managed_targets_give_typed_manual_guidance()
     -> Result<(), Box<dyn std::error::Error>> {
-        let response = evaluate_plan(
-            FixedProbe {
-                state: DependencyState::Missing,
-            },
-            ExecutionProfile::Worker,
-            ManagedTarget::MacOsArm64,
-            SetupSelectionState::default(),
-            1_800_000_000,
-            Some(accepted_ubuntu_catalogue()?),
-        )
-        .await
-        .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?
-        .into_response()
-        .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
-        let value = serde_json::to_value(response)?;
-        assert_eq!(value["data"]["managed_install"], "unavailable_target");
-        assert!(
-            value["data"]["actions"]
+        // 2030-11, after the reviewed catalogue's 2028-08-01 stop-new-plans boundary.
+        const AFTER_CATALOGUE_EXPIRY: u64 = 1_920_000_000;
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../../schemas/v1/setup-plan.schema.json"))?;
+        let validator = jsonschema::validator_for(&schema)?;
+        for (target, now, catalogue, expected) in [
+            (
+                ManagedTarget::WindowsX86_64,
+                1_800_000_000,
+                Some(accepted_ubuntu_catalogue()?),
+                "unavailable_target",
+            ),
+            (
+                ManagedTarget::MacOsArm64,
+                1_800_000_000,
+                Some(accepted_ubuntu_catalogue()?),
+                "unavailable_target",
+            ),
+            (
+                ManagedTarget::Unsupported,
+                1_800_000_000,
+                Some(accepted_ubuntu_catalogue()?),
+                "unavailable_target",
+            ),
+            (
+                ManagedTarget::Ubuntu2404X86_64,
+                1_800_000_000,
+                None,
+                "unavailable_target",
+            ),
+            (
+                ManagedTarget::Ubuntu2404X86_64,
+                AFTER_CATALOGUE_EXPIRY,
+                Some(accepted_ubuntu_catalogue()?),
+                "unavailable_catalogue_expired",
+            ),
+        ] {
+            let response = evaluate_plan(
+                FixedProbe {
+                    state: DependencyState::Missing,
+                },
+                ExecutionProfile::Worker,
+                target,
+                SetupSelectionState::default(),
+                now,
+                catalogue,
+            )
+            .await
+            .map_err(|error| std::io::Error::other(format!("plan failed: {error:?}")))?
+            .into_response()
+            .map_err(|error| std::io::Error::other(format!("render failed: {error:?}")))?;
+            let value = serde_json::to_value(response)?;
+            validator
+                .validate(&value)
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            let data = &value["data"];
+            assert_eq!(data["managed_install"], expected, "{target:?}");
+            assert_eq!(data["actions"], serde_json::json!([]), "{target:?}");
+            assert!(data["plan_digest"].is_null(), "{target:?}");
+            let dependencies = data["dependencies"]
                 .as_array()
-                .is_some_and(Vec::is_empty)
-        );
-        assert!(value["data"]["plan_digest"].is_null());
+                .ok_or("dependencies missing")?;
+            assert_eq!(dependencies.len(), 3);
+            for dependency in dependencies {
+                assert_eq!(dependency["disposition"], "manual_selection_required");
+                assert_eq!(dependency["required_authority"], "user");
+                assert!(
+                    dependency["next_step"]
+                        .as_str()
+                        .is_some_and(|step| step.contains("setup configure")),
+                    "{dependency}"
+                );
+            }
+            let model = &data["local_asr_model"];
+            assert_eq!(model["disposition"], "manual_selection_required");
+            assert_eq!(model["required_authority"], "user");
+            assert!(
+                model["next_step"]
+                    .as_str()
+                    .is_some_and(|step| step.contains("setup configure-model")
+                        && step.contains("supplied transcript")),
+                "{model}"
+            );
+        }
         Ok(())
     }
 }
