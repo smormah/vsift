@@ -27,6 +27,7 @@ vsift-domain.workspace = true
 
 [dev-dependencies]
 lzma-rust2 = { workspace = true, features = ["encoder"] }
+proptest.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-acl.workspace = true

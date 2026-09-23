@@ -11,6 +11,7 @@ mod identifiers;
 mod provisioning;
 mod session;
 mod storage;
+mod transcript;
 mod verification;
 
 pub use clock::{Clock, ClockError};
@@ -32,6 +33,12 @@ pub use storage::{
     InitializeSessionStorage, InitializeSessionStorageRequest, InitializedSessionStorage,
     PublishSessionGeneration, PublishSessionGenerationRequest, SessionStorageError, SessionStore,
     StorageCapabilities,
+};
+pub use transcript::{
+    ImportedRevisionRequest, SourceDurationProbe, SourceProbeError, SuppliedTranscript,
+    SuppliedTranscriptError, TranscriptBuildError, TranscriptImportRequest, TranscriptPage,
+    TranscriptPageRequest, TranscriptQueryError, build_imported_revision, page_transcript,
+    transcript_query_digest, transcript_segment_id, whole_file_source_segment,
 };
 pub use verification::{
     MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier, ModelVerification,

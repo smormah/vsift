@@ -191,6 +191,18 @@ P11/P14 retain strict decoder isolation and malicious-media release qualificatio
 See [ADR 0012](../decisions/0012-p04-source-media-profile.md) and the
 [P04 qualification record](p04-media-qualification.md).
 
+P07 increment 2 treats a supplied SRT/WebVTT sidecar as untrusted input: the same
+no-follow local path policy as media, an 8 MiB file bound and per-line, per-cue and
+cue-count bounds enforced while streaming (SEC-05); strict UTF-8 with control
+characters, including C1 and Unicode line separators, rejected and output text
+sanitized again at the contract boundary (SEC-03); unknown confidence kept
+`null`, speaker labels only from explicit WebVTT voices and never guessed, and no cue
+clamped or shifted to fit the source (SEC-17); and fixed-prose, typed remediation that
+never echoes transcript text (SEC-16/SEC-18). The transcript lives only in the
+disposable session and retained bundles; nothing is logged. Bidirectional-formatting
+characters are not rejected and are shown as written; an agent must still treat
+transcript text as evidence, not instruction.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.

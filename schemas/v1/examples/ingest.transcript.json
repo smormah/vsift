@@ -1,0 +1,47 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "complete",
+  "data": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "generation": 1,
+    "publication": "process_crash_consistent",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_bytes": 41473,
+    "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+    "transcript": {
+      "alignment": {
+        "offset_us": 500000,
+        "origin": "imported_srt"
+      },
+      "language": null,
+      "revision": 1,
+      "revision_id": "trv_663ae41bbedc740b651fe61999d395b0",
+      "segment_count": 3,
+      "sidecar": {
+        "bytes": 245,
+        "format": "srt",
+        "sha256": "2a4ee37d826754eac43da03e7cc63f718b16aed4d3ce163c380ebd8ab9630847"
+      },
+      "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+      "source_segments": [
+        {
+          "end_us": 12000000,
+          "index": 0,
+          "source_segment_id": "sgm_813c2dbd740e3afc0f67a52278553bf6",
+          "start_us": 0,
+          "state": "closed"
+        }
+      ],
+      "warnings": []
+    }
+  },
+  "warnings": [],
+  "error": null,
+  "coverage": null,
+  "lifecycle": {
+    "mode": "ephemeral",
+    "expires_at": "2026-09-25T00:00:00Z"
+  }
+}

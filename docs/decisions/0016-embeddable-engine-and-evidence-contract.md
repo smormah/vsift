@@ -152,3 +152,26 @@ and nothing has been released.
 - No behaviour change: the CLI contract and schema suites passed unchanged, and a
   differential run of 86 CLI invocations against `00e707f` gave identical output and
   exit codes after normalizing random identifiers, timestamps and index placement.
+
+## 2026-09-24 implementation note: supplied transcripts, the first evidence record
+
+- P07 increment 2 imports SubRip and WebVTT sidecars (`ingest --transcript`,
+  `--transcript-offset`) and pages them (`transcript get`). It follows decision 4: a
+  finite file is one closed source segment with a content-derived `sgm_` identity, and
+  every transcript revision (`trv_`) and segment (`tsg_`) carries source and
+  source-segment identity beside normalized time, so live capture can add segments
+  later without changing the records.
+- Decision 5 in part: `transcript-segment.schema.json` is the first published
+  evidence record, with `transcript-revision`, `transcript-get-data` and `ingest-data`
+  schemas and frozen examples. The retained bundle gains the manifest artifact kind
+  `transcript_record` (a versioned storage record, validated strictly on read). The
+  JSON Lines evidence stream is still undecided: `--events jsonl` returns a page as
+  one terminal event, and the per-record stream is left for a later P07 increment.
+- Decision 6 in part: both parsers are bounded, hand-written and covered by
+  `proptest` properties (arbitrary bytes, structured near-miss input, generated
+  round trips). The `cargo-fuzz` targets need a nightly toolchain and are deferred to
+  a separate decision; they are not in this increment.
+- The engine's `ingest` now returns `IngestOutcome` (session plus optional revision)
+  and takes an optional `SuppliedTranscriptRequest`; `Engine::transcript` pages a
+  revision. The CLI keeps its thin-host shape and gained `CommandFailure`, which
+  carries a typed fixed-prose remediation for transcript rejections.

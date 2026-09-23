@@ -1,6 +1,7 @@
 # Proposed architecture and public contracts
 
-Status: accepted R0 design, implemented only through P05. Requirement IDs refer
+Status: accepted R0 design, implemented through P06 plus the P07 engine boundary and
+supplied-transcript import (P07 increment 2). Requirement IDs refer
 to [the plan](README.md); later sections still describe future work unless
 the [delivery ledger](delivery-ledger.json) marks their packet complete.
 
@@ -17,7 +18,7 @@ provider, logging, or network dependencies.
 | Domain | source, timeline, evidence, session, job, policy | Validated IDs, ranges, lifecycle transitions, provenance, admission policy values |
 | Application | setup, ingest, retrieve, export, recover, run_job | Orchestration, authorization-policy checks, operation outcomes, cancellation flow |
 | Infrastructure | process, filesystem, runtime_registry, ffmpeg, whisper, serialization, telemetry | OS APIs, provider adapters, byte formats, physical storage, transport |
-| Engine (`vsift`) | engine, sessions, setup, verification | Compose use cases and adapters behind typed operations, results and one typed error; explicit configuration and injected clock/identifier ports |
+| Engine (`vsift`) | engine, sessions, setup, transcripts, verification | Compose use cases and adapters behind typed operations, results and one typed error; explicit configuration and injected clock/identifier ports |
 | CLI host | commands, config, output, composition | Parse and validate requests, resolve configuration, build the engine, select presentation, return exit status |
 | Future hosts | worker service, MCP, index consumer, desktop application | Use the engine facade and contract crate of [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md); never import infrastructure internals |
 
@@ -25,7 +26,9 @@ Application ports are deliberately narrow: `SourceReader`, `MediaProbe`,
 `AudioExtractor`, `FrameExtractor`, `Transcriber`, `SessionStore`, `ArtifactStore`,
 `JobStore`, `AdmissionController`, `RuntimeResolver`, `RuntimeInstaller`, `Clock`,
 `IdentifierSource`, `OperationEvents`. `Clock` and `IdentifierSource` exist since P07
-increment 1b; hosts inject them through the engine. Introduce each with its first consumer and conformance tests.
+increment 1b; hosts inject them through the engine. P07 increment 2 introduces the
+first media-probe port, `SourceDurationProbe`, for supplied-transcript alignment
+(implemented over the P04 FFprobe adapter). Introduce each with its first consumer and conformance tests.
 The infrastructure `ProcessSupervisor` is shared by provider adapters and installation
 smoke tests. Domain and application never construct FFmpeg arguments.
 
@@ -85,11 +88,11 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 | `setup install --plan <file> --accept-plan <digest>` | Apply only that validated plan; revalidate expiry and current state; no silent elevation; typed manual fallback on failure |
 | `setup repair ...` | Produce/apply a repair plan; same installation contract, no recursive arbitrary deletion |
 | `setup list`, `setup remove`, `setup rollback`, `setup configure`, `setup configure-model` | Managed versions and explicit off-PATH user-supplied executable/model registrations; live jobs pin immutable versions |
-| `ingest <local-file> [--transcript ...] --json` | Foreground session preparation with checkpoints, explicit source/durability policy |
+| `ingest <local-file> [--transcript ... [--transcript-offset ...]] --json` | Foreground session preparation with checkpoints, explicit source/durability policy; supplied SRT/WebVTT import since P07 increment 2 |
 | `session list/status/close/renew` | Visible lifecycle and bounded storage reporting; close waits/rejects active work |
 | `session retain <id> --output <dir> [--include-source]` | Explicit export; distinguish evidence-only and source-inclusive bundle |
 | `session clean --expired [--dry-run]` | Bounded scan, claim and quarantine expired owned sessions; no arbitrary source deletion |
-| `transcript get <session> --from ... --to ...` | Pageable timestamped text and alignment metadata |
+| `transcript get <session> --from ... --to ... [--limit ...] [--cursor ...]` | Pageable timestamped text and alignment metadata (implemented in P07 increment 2) |
 | `transcript retranscribe <session> --from ... --to ...` | New transcript revision; preserve previous citations |
 | `search <session> --query ...` | Literal/ranked transcript search; no raw regex or executable query input |
 | `candidates <session> --from ... --to ... --limit ...` | Bounded ordered cards, thumbnails optional, stable continuation cursor |
@@ -397,7 +400,14 @@ compromised decoder. Worker isolation requires host-enforced limits and reports 
 3. Import SRT/WebVTT initially; explicit sidecar path or explicitly selected embedded
    text track. Do not recursively discover arbitrary files. Preserve original text
    and timing origin; reject or flag malformed alignment. Teams-specific parsing
-   requires an adapter and fixtures, not guesses about export format.
+   requires an adapter and fixtures, not guesses about export format. P07 increment 2
+   implements the explicit-sidecar form (embedded text tracks are not imported): the
+   bounded parsers live in `vsift-infrastructure` (`transcript_sidecar`), the order,
+   overlap and alignment rules in `vsift-domain` (`transcript`), identity derivation,
+   paging and the atomic open-with-transcript use case in `vsift-application`, and the
+   revision is stored as an immutable `transcript_record` artifact committed in the
+   same generation as the source binding. The malformed-data and alignment policies
+   are in the [CLI contract](../contracts/cli-v1.md#p07-supplied-transcripts).
 4. If transcription is requested, extract known PCM in bounded chunks with overlap.
    whisper.cpp adapter validates output, offsets timestamps to source time and
    deterministically removes overlap duplicates. Preserve provider/model hashes and

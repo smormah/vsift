@@ -5,10 +5,11 @@ VSift gives AI coding agents local, structured access to the evidence inside tec
 The initial use case is a recorded QA walkthrough: VSift combines timestamped speech with relevant visual states so an agent can investigate the demonstrated problem without requiring the user to transcribe the recording or capture screenshots manually.
 
 > **Project status:** P04 source/media primitives and P05 disposable sessions are
-> implemented, and dependency detection, bring-your-own selection and read-only setup
-> plans work today. Transcription, candidate search, source reinspection, worker
-> execution, managed dependency installation and the complete agent handoff remain
-> future R0 packets. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
+> implemented, dependency detection, bring-your-own selection and read-only setup
+> plans work, and an existing SRT or WebVTT transcript can be imported with a video
+> and read back by time range. Local transcription, candidate search, source
+> reinspection, worker execution, managed dependency installation and the complete
+> agent handoff remain future R0 work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.
@@ -47,15 +48,17 @@ vsift setup check --whisper "C:\\path\\to\\whisper-cli.exe" --json
 vsift setup configure whisper --executable "C:\\path\\to\\whisper-cli.exe" --json
 vsift setup configure-model --file "C:\\path\\to\\ggml-base.bin" --json
 vsift ingest ./recording.mp4 --json
+vsift ingest ./recording.mp4 --transcript ./recording.vtt --transcript-offset 500000 --json
+vsift transcript get ses_0123456789abcdef --from 0 --to 60000000 --json
 vsift session list --json
 vsift session clean --expired --dry-run --json
 ```
 
 The full R0 command namespace is visible through `vsift --help` so integrations can
 target a stable grammar. `session status/renew/close/retain/clean` and
-`bundle validate` are also operational. Transcription, candidate search,
-retrieval and setup installation still return `COMMAND_NOT_IMPLEMENTED` until
-their owning packets ship.
+`bundle validate` are also operational. Local transcription (`transcript
+retranscribe`), candidate search, frame and audio retrieval and setup installation
+still return `COMMAND_NOT_IMPLEMENTED` until their owning packets ship.
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.
 R0 setup will first detect user-installed tools, then offer an explicitly approved,

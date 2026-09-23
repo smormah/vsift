@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "INVALID_SOURCE",
+    "message": "The source is invalid or unsupported.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The supplied transcript was rejected (invalid_timestamp) at line 6. Correct the timestamp: SubRip uses H:MM:SS,mmm and WebVTT uses [HH:]MM:SS.mmm.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

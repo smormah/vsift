@@ -12,16 +12,19 @@ mod setup;
 use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode};
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
-use command::{BundleCommand, Cli, Command, EventFormat, ExecutionProfile, SetupCommand};
+use command::{
+    BundleCommand, Cli, Command, EventFormat, ExecutionProfile, SetupCommand, TranscriptCommand,
+};
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{OutputMode, OutputWriter, ProcessExit};
 use vsift::{
-    Engine, EngineConfig, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode,
-    HostIsolation, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    Engine, EngineConfig, EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections,
+    FailureCode, HostIsolation, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
     UserConfigurationLocation,
 };
 use vsift_contract::{
-    ConfiguredModelResponse, ConfiguredSelectionResponse, OperationResponse, TerminalEventResponse,
+    ConfiguredModelResponse, ConfiguredSelectionResponse, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
+    OperationResponse, TerminalEventResponse, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -253,6 +256,22 @@ where
             let result = session::ingest(&engine, arguments).await;
             write_session_result(&mut writer, mode, "ingest", result)
         }
+        Command::Transcript(arguments) => {
+            let operation = arguments.operation_name();
+            match arguments.command {
+                TranscriptCommand::Get(arguments) => {
+                    let result = session::transcript_get(&engine, arguments);
+                    write_session_result(&mut writer, mode, operation, result)
+                }
+                TranscriptCommand::Retranscribe(_) => write_failure(
+                    &mut writer,
+                    mode,
+                    operation,
+                    FailureCode::CommandNotImplemented,
+                    None,
+                ),
+            }
+        }
         Command::Session(arguments) => {
             let operation = arguments.operation_name();
             let result = session::execute_session(&engine, arguments.command);
@@ -305,19 +324,54 @@ fn complete<T: serde::Serialize>(
     OperationResponse::complete(command, data).map_err(|_| FailureCode::Internal)
 }
 
-fn write_session_result<StandardOutput, StandardError>(
+/// A failed command's public code and, when a typed cause allows one, a
+/// fixed-prose remediation for the caller.
+#[derive(Debug)]
+pub(crate) struct CommandFailure {
+    code: FailureCode,
+    remediation: Option<String>,
+}
+
+impl From<FailureCode> for CommandFailure {
+    fn from(code: FailureCode) -> Self {
+        Self {
+            code,
+            remediation: None,
+        }
+    }
+}
+
+impl From<EngineError> for CommandFailure {
+    fn from(error: EngineError) -> Self {
+        let remediation = error
+            .transcript_rejection()
+            .map(transcript_rejection_summary)
+            .or_else(|| {
+                error
+                    .missing_media_tool()
+                    .map(|_| MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION.to_owned())
+            });
+        Self {
+            code: error.failure_code(),
+            remediation,
+        }
+    }
+}
+
+fn write_session_result<StandardOutput, StandardError, Failure>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     mode: OutputMode,
     command: &'static str,
-    result: Result<OperationResponse<serde_json::Value>, FailureCode>,
+    result: Result<OperationResponse<serde_json::Value>, Failure>,
 ) -> ProcessExit
 where
     StandardOutput: Write,
     StandardError: Write,
+    Failure: Into<CommandFailure>,
 {
     let response = match result {
         Ok(response) => response,
-        Err(code) => return write_failure(writer, mode, command, code, None),
+        Err(failure) => return write_command_failure(writer, mode, command, failure.into()),
     };
     let write = match mode {
         OutputMode::Json => writer.write_json(&response),
@@ -400,6 +454,40 @@ where
         },
     );
     write_help_or_version(writer, &help)
+}
+
+/// Writes a failure that may carry a typed remediation.
+fn write_command_failure<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    mode: OutputMode,
+    command: &'static str,
+    failure: CommandFailure,
+) -> ProcessExit
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    let Some(summary) = failure.remediation else {
+        return write_failure(writer, mode, command, failure.code, None);
+    };
+    let response = OperationResponse::failure_with_remediation(command, failure.code, summary);
+    let result = match mode {
+        OutputMode::Human => {
+            writer.write_safe_diagnostic(response.error_message());
+            for summary in response.remediation_summaries() {
+                writer.write_safe_diagnostic(summary);
+            }
+            Ok(())
+        }
+        OutputMode::Json => writer.write_json(&response),
+        OutputMode::JsonLines => writer.write_json(&TerminalEventResponse::new(response)),
+    };
+    if let Err(error) = result {
+        writer.write_safe_diagnostic(&error.to_string());
+        ProcessExit::StorageOrIo
+    } else {
+        ProcessExit::from(failure.code.class())
+    }
 }
 
 fn write_failure<StandardOutput, StandardError>(

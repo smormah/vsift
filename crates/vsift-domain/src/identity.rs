@@ -92,6 +92,21 @@ opaque_identifier!(
     "evd_",
     "Opaque identity for one source-grounded evidence item."
 );
+opaque_identifier!(
+    SourceSegmentId,
+    "sgm_",
+    "Opaque identity for one ordered, immutable segment of a source stream (ADR 0016)."
+);
+opaque_identifier!(
+    TranscriptRevisionId,
+    "trv_",
+    "Opaque identity for one immutable transcript revision of a session source."
+);
+opaque_identifier!(
+    TranscriptSegmentId,
+    "tsg_",
+    "Opaque identity for one timestamped segment inside a transcript revision."
+);
 
 /// Cryptographic identity of immutable source bytes.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

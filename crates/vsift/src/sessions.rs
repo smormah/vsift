@@ -6,10 +6,11 @@ use std::path::{Path, PathBuf};
 use vsift_application::{OpenSession, OpenSessionOutcome, OpenSessionRequest};
 use vsift_domain::{
     DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
+    TranscriptRevision,
 };
 use vsift_infrastructure::{
-    BundleSourcePolicy, BundleStatus, CleanOutcome, FilesystemSessionStore, SessionIndexPage,
-    SessionRootProvisioning, SessionStatus,
+    BundleSourcePolicy, BundleStatus, CleanOutcome, FfprobeSourceDuration, FilesystemSessionStore,
+    ProcessCancellation, SessionIndexPage, SessionRootProvisioning, SessionStatus,
 };
 
 use crate::{
@@ -23,9 +24,28 @@ pub struct IngestRequest {
     /// Local source media; a relative path is resolved against the process
     /// working directory.
     pub source: PathBuf,
-    /// Optional supplied transcript. Import arrives with P07 transcription;
-    /// until then a request that carries one is rejected before any work.
-    pub transcript: Option<PathBuf>,
+    /// Optional supplied `SubRip` or `WebVTT` transcript to import with it.
+    pub transcript: Option<SuppliedTranscriptRequest>,
+}
+
+/// A supplied transcript file and the explicit offset that aligns it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SuppliedTranscriptRequest {
+    /// Local sidecar file; a relative path is resolved against the process
+    /// working directory.
+    pub path: PathBuf,
+    /// Signed microseconds added to every sidecar timestamp to reach source
+    /// time; at most twenty-four hours either way.
+    pub offset_micros: i64,
+}
+
+/// A newly opened session and, when one was supplied, its transcript revision.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IngestOutcome {
+    /// The opened session.
+    pub session: OpenSessionOutcome,
+    /// The imported revision, committed in the same generation as the source.
+    pub transcript: Option<TranscriptRevision>,
 }
 
 /// Committed facts about one session, observed at a known time.
@@ -43,7 +63,7 @@ pub struct SessionSnapshot {
 }
 
 impl SessionSnapshot {
-    fn observe(status: &SessionStatus, observed_at_unix_seconds: u64) -> Self {
+    pub(crate) fn observe(status: &SessionStatus, observed_at_unix_seconds: u64) -> Self {
         Self {
             session_id: status.session_id().clone(),
             source_id: status.source_id().clone(),
@@ -350,37 +370,66 @@ impl BundleSummary {
 }
 
 impl Engine {
-    /// Copies and hashes one local source into a new disposable session.
+    /// Copies and hashes one local source into a new disposable session,
+    /// optionally importing a supplied transcript with it.
     ///
-    /// The session root is provisioned on first use. Only the P05 portion of
-    /// ingestion runs; transcription arrives with P07.
+    /// The session root is provisioned on first use. Without a transcript no
+    /// provider runs. With one, everything that can fail without touching the
+    /// session root runs first (offset bounds, reading and parsing the sidecar,
+    /// locating `FFmpeg` and `FFprobe`); then the source is staged, its duration
+    /// probed, the transcript aligned, and source and transcript are committed
+    /// in one generation. Whisper and model weights are never needed for this.
     ///
     /// # Errors
     ///
-    /// Fails with [`EngineError::TranscriptImportUnavailable`] before any work
-    /// when a transcript is supplied, and otherwise with the root, clock,
-    /// identifier, source or storage failure that stopped the open.
-    pub async fn ingest(&self, request: IngestRequest) -> Result<OpenSessionOutcome, EngineError> {
-        if request.transcript.is_some() {
-            return Err(EngineError::TranscriptImportUnavailable);
-        }
+    /// Fails with the transcript, tool, root, clock, identifier, source, probe
+    /// or storage failure that stopped the open. A rejected transcript never
+    /// leaves an open session.
+    pub async fn ingest(&self, request: IngestRequest) -> Result<IngestOutcome, EngineError> {
         let source = absolute_selection(&request.source)?;
+        let import = match &request.transcript {
+            Some(transcript) => Some(self.prepare_transcript_import(transcript)?),
+            None => None,
+        };
         let root = self.session_root_path()?;
         let store = Self::open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let now = self.now_unix_seconds()?;
-        OpenSession::new(store)
-            .execute(OpenSessionRequest {
-                source,
-                session_id: self.new_session_id()?,
-                initialize_operation_id: self.new_operation_id()?,
-                stage_operation_id: self.new_operation_id()?,
-                activate_operation_id: self.new_operation_id()?,
-                durability: DurabilityRequirement::Ephemeral,
-                now_unix_seconds: now,
-            })
+        let open = OpenSessionRequest {
+            source,
+            session_id: self.new_session_id()?,
+            initialize_operation_id: self.new_operation_id()?,
+            stage_operation_id: self.new_operation_id()?,
+            activate_operation_id: self.new_operation_id()?,
+            durability: DurabilityRequirement::Ephemeral,
+            now_unix_seconds: now,
+        };
+        let Some((import, tools)) = import else {
+            let session = OpenSession::new(store)
+                .execute(open)
+                .await
+                .map_err(EngineError::OpenSession)?;
+            return Ok(IngestOutcome {
+                session,
+                transcript: None,
+            });
+        };
+        let probe_store = Self::open_session_store(&root, SessionRootProvisioning::ExistingOnly)?
+            .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        let probe = FfprobeSourceDuration::new(
+            tools,
+            self.config().host_isolation.into_infrastructure(),
+            probe_store,
+            ProcessCancellation::new(),
+        );
+        let (session, revision) = OpenSession::new(store)
+            .execute_with_transcript(open, &import, &probe)
             .await
-            .map_err(EngineError::OpenSession)
+            .map_err(EngineError::OpenSession)?;
+        Ok(IngestOutcome {
+            session,
+            transcript: Some(revision),
+        })
     }
 
     /// Lists one bounded page of the session index.
@@ -557,7 +606,9 @@ impl Engine {
     ///
     /// The order is part of the public contract: a root failure is reported
     /// before a clock failure, which is reported before a store failure.
-    fn existing_store(&self) -> Result<(Option<FilesystemSessionStore>, u64), EngineError> {
+    pub(crate) fn existing_store(
+        &self,
+    ) -> Result<(Option<FilesystemSessionStore>, u64), EngineError> {
         let root = self.session_root_path()?;
         let now = self.now_unix_seconds()?;
         let store = Self::open_session_store(&root, SessionRootProvisioning::ExistingOnly)?;

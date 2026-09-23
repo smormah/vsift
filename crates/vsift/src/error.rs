@@ -10,9 +10,9 @@ use std::{error::Error, fmt};
 
 use vsift_application::{
     ClockError, IdentifierGenerationError, OpenSessionError, PlanAcceptanceError,
-    SessionStorageError,
+    SessionStorageError, SourceProbeError, TranscriptQueryError,
 };
-use vsift_domain::{FailureCode, RuntimeDependency};
+use vsift_domain::{FailureCode, RuntimeDependency, TranscriptImportError};
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
     SessionStoreOpenError, UserDependencyConfigError,
@@ -30,8 +30,21 @@ pub enum EngineError {
     /// A relative path could not be resolved because the process working
     /// directory is unavailable.
     WorkingDirectoryUnavailable,
-    /// Importing a supplied transcript arrives with P07 transcription.
-    TranscriptImportUnavailable,
+    /// A supplied transcript file could not be opened or read.
+    TranscriptSource(TranscriptSourceError),
+    /// A supplied transcript, or its offset, was rejected by the import policy.
+    TranscriptRejected(TranscriptImportError),
+    /// `FFmpeg` or `FFprobe`, needed to probe the source for alignment, was
+    /// neither configured nor found on the filtered `PATH`.
+    MediaToolUnavailable(RuntimeDependency),
+    /// The session has no transcript revision.
+    TranscriptUnavailable,
+    /// A requested source range is empty or reversed.
+    InvalidTimeRange,
+    /// A requested page size is outside 1 to 100.
+    InvalidPageLimit,
+    /// A transcript page request, usually its cursor, was rejected.
+    TranscriptQuery(TranscriptQueryError),
     /// Cleanup was requested without restricting it to expired sessions.
     UnrestrictedCleanRejected,
     /// The session index reported a continuation that it then did not provide.
@@ -72,26 +85,66 @@ impl EngineError {
                 OpenSessionError::SourceIo => FailureCode::StorageIo,
                 OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
                 OpenSessionError::Storage(storage) => storage_failure_code(*storage),
+                OpenSessionError::SourceProbe(probe) => probe_failure_code(*probe),
+                OpenSessionError::TranscriptRejected(rejected) => {
+                    transcript_failure_code(*rejected)
+                }
+                OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
             },
+            Self::TranscriptRejected(rejected) => transcript_failure_code(*rejected),
+            Self::TranscriptSource(
+                TranscriptSourceError::InvalidPath | TranscriptSourceError::NotRegularFile,
+            ) => FailureCode::InvalidSource,
             Self::UserConfiguration(error) => error.failure_code(),
             Self::SavedPlanRejected(code) => *code,
-            Self::TranscriptImportUnavailable => FailureCode::CommandNotImplemented,
             Self::WorkingDirectoryUnavailable
+            | Self::TranscriptSource(TranscriptSourceError::Io)
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
             | Self::PlanAcceptance(_)
+            | Self::TranscriptUnavailable
+            | Self::InvalidTimeRange
+            | Self::InvalidPageLimit
+            | Self::TranscriptQuery(_)
             | Self::Executable(
                 ExecutableRejection::NotAbsolute
                 | ExecutableRejection::NotRegularFile
                 | ExecutableRejection::Invalid,
             ) => FailureCode::InvalidArgument,
             Self::DependencyNotSelected(_)
+            | Self::MediaToolUnavailable(_)
             | Self::ModelNotSelected
             | Self::Executable(ExecutableRejection::NotFound) => FailureCode::MissingCapability,
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
             | Self::Identifier(_) => FailureCode::Internal,
+        }
+    }
+}
+
+impl EngineError {
+    /// The typed transcript rejection behind this error, if any.
+    ///
+    /// Hosts use it to tell the caller how to correct a supplied transcript
+    /// or its offset; the rejection may come from parsing or from alignment.
+    #[must_use]
+    pub const fn transcript_rejection(&self) -> Option<TranscriptImportError> {
+        match self {
+            Self::TranscriptRejected(rejection)
+            | Self::OpenSession(OpenSessionError::TranscriptRejected(rejection)) => {
+                Some(*rejection)
+            }
+            _ => None,
+        }
+    }
+
+    /// The media tool that transcript alignment needed but could not find.
+    #[must_use]
+    pub const fn missing_media_tool(&self) -> Option<RuntimeDependency> {
+        match self {
+            Self::MediaToolUnavailable(dependency) => Some(*dependency),
+            _ => None,
         }
     }
 }
@@ -105,9 +158,19 @@ impl fmt::Display for EngineError {
             Self::WorkingDirectoryUnavailable => {
                 formatter.write_str("working directory is unavailable")
             }
-            Self::TranscriptImportUnavailable => {
-                formatter.write_str("supplied transcript import is not implemented")
+            Self::TranscriptSource(error) => error.fmt(formatter),
+            Self::TranscriptRejected(error) => error.fmt(formatter),
+            Self::MediaToolUnavailable(dependency) => write!(
+                formatter,
+                "{} is needed to align a supplied transcript but was not found",
+                dependency.display_name()
+            ),
+            Self::TranscriptUnavailable => formatter.write_str("session has no transcript"),
+            Self::InvalidTimeRange => {
+                formatter.write_str("time range must have a positive duration")
             }
+            Self::InvalidPageLimit => formatter.write_str("page limit must be 1 to 100"),
+            Self::TranscriptQuery(error) => error.fmt(formatter),
             Self::UnrestrictedCleanRejected => {
                 formatter.write_str("cleanup must be restricted to expired sessions")
             }
@@ -148,8 +211,14 @@ impl Error for EngineError {
             Self::Executable(error) => Some(error),
             Self::Clock(error) => Some(error),
             Self::Identifier(error) => Some(error),
+            Self::TranscriptSource(error) => Some(error),
+            Self::TranscriptRejected(error) => Some(error),
+            Self::TranscriptQuery(error) => Some(error),
             Self::WorkingDirectoryUnavailable
-            | Self::TranscriptImportUnavailable
+            | Self::MediaToolUnavailable(_)
+            | Self::TranscriptUnavailable
+            | Self::InvalidTimeRange
+            | Self::InvalidPageLimit
             | Self::UnrestrictedCleanRejected
             | Self::SessionIndexInconsistent
             | Self::DependencyNotSelected(_)
@@ -209,6 +278,56 @@ const fn storage_failure_code(error: SessionStorageError) -> FailureCode {
         SessionStorageError::CapacityExhausted => FailureCode::ResourceLimit,
     }
 }
+
+/// Public code for a rejected transcript import.
+///
+/// Budget violations are resource limits, a wrong offset or source is the
+/// caller's alignment request, and everything else is malformed input.
+const fn transcript_failure_code(error: TranscriptImportError) -> FailureCode {
+    let rejection = error.rejection();
+    if rejection.is_resource_limit() {
+        FailureCode::ResourceLimit
+    } else if rejection.is_alignment() {
+        FailureCode::InvalidArgument
+    } else {
+        FailureCode::InvalidSource
+    }
+}
+
+/// Public code for a failed source-duration probe.
+const fn probe_failure_code(error: SourceProbeError) -> FailureCode {
+    match error {
+        SourceProbeError::InvalidSource => FailureCode::InvalidSource,
+        SourceProbeError::Busy => FailureCode::Busy,
+        SourceProbeError::Deadline => FailureCode::DeadlineExceeded,
+        SourceProbeError::Cancelled => FailureCode::Cancelled,
+        SourceProbeError::ResourceLimit => FailureCode::ResourceLimit,
+        SourceProbeError::Io => FailureCode::MissingCapability,
+    }
+}
+
+/// Why a supplied transcript file could not be opened or read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TranscriptSourceError {
+    /// The path is not an absolute, local, directly named file.
+    InvalidPath,
+    /// The path names something other than a regular file.
+    NotRegularFile,
+    /// The file could not be read.
+    Io,
+}
+
+impl fmt::Display for TranscriptSourceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidPath => "supplied transcript path is invalid",
+            Self::NotRegularFile => "supplied transcript is not a regular file",
+            Self::Io => "supplied transcript could not be read",
+        })
+    }
+}
+
+impl Error for TranscriptSourceError {}
 
 /// Why the disposable-session root could not be used.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

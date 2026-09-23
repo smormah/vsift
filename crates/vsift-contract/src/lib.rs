@@ -17,6 +17,9 @@
 //!   [`BundleData`] and their item types.
 //! - **Evidence:** [`ConfidenceResponse`] and [`FrameTimingResponse`], frozen
 //!   before the packets that produce them.
+//! - **Transcript:** [`TranscriptSegmentData`] (the published evidence
+//!   record), [`TranscriptRevisionData`], the `transcript.get` page
+//!   [`TranscriptPageData`], and fixed-prose import warnings and remediation.
 //! - **Text:** [`sanitize_untrusted_text`], the one rule for placing untrusted
 //!   provider text in public output.
 //!
@@ -35,6 +38,7 @@ mod evidence;
 mod session;
 mod setup;
 mod text;
+mod transcript;
 
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, OperationResponse,
@@ -50,3 +54,8 @@ pub use setup::{
     SetupCheckResponse, SetupPlanResponse, explicit_path_option,
 };
 pub use text::{MAX_PROVIDER_DETAIL_BYTES, sanitize_untrusted_text};
+pub use transcript::{
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, SourceSegmentData, TranscriptPageData,
+    TranscriptRevisionData, TranscriptSegmentData, transcript_rejection_summary,
+    transcript_warning_messages,
+};

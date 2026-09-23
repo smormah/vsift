@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/transcript-revision.schema.json",
+  "title": "VSift transcript revision summary v1",
+  "description": "Identity, alignment and import outcome of one immutable transcript revision. Warnings are typed; a warning with excluded_cues true means those cues are not in the revision and cannot be cited.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "revision_id",
+    "revision",
+    "source_id",
+    "source_segments",
+    "alignment",
+    "sidecar",
+    "language",
+    "segment_count",
+    "warnings"
+  ],
+  "properties": {
+    "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "source_segments": {
+      "description": "Ordered source segments the revision covers; a finite file is one closed segment.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_segment_id", "index", "start_us", "end_us", "state"],
+        "properties": {
+          "source_segment_id": { "type": "string", "pattern": "^sgm_[a-z0-9]{16,64}$" },
+          "index": { "type": "integer", "minimum": 0 },
+          "start_us": { "type": "integer", "minimum": 0 },
+          "end_us": { "type": "integer", "minimum": 1 },
+          "state": { "enum": ["closed"] }
+        }
+      }
+    },
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "offset_us"],
+      "properties": {
+        "origin": { "enum": ["imported_srt", "imported_webvtt"] },
+        "offset_us": {
+          "type": "integer",
+          "minimum": -86400000000,
+          "maximum": 86400000000
+        }
+      }
+    },
+    "sidecar": {
+      "description": "Identity of the exact supplied bytes that were parsed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "sha256", "bytes"],
+      "properties": {
+        "format": { "enum": ["srt", "webvtt"] },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 }
+      }
+    },
+    "language": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$" }
+      ]
+    },
+    "segment_count": { "type": "integer", "minimum": 1, "maximum": 20000 },
+    "warnings": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "count", "first_cue", "excluded_cues"],
+        "properties": {
+          "code": {
+            "enum": [
+              "empty_cues_skipped",
+              "markup_removed",
+              "speaker_label_discarded",
+              "overlapping_cues",
+              "cues_outside_source",
+              "cues_crossing_source_boundary"
+            ]
+          },
+          "count": { "type": "integer", "minimum": 1 },
+          "first_cue": { "type": "integer", "minimum": 1 },
+          "excluded_cues": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

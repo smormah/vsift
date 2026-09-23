@@ -33,6 +33,9 @@
 //!   [`Engine::session_status`], [`Engine::renew_session`],
 //!   [`Engine::close_session`], [`Engine::retain_session`] and
 //!   [`Engine::clean_sessions`].
+//! - **Transcripts:** [`Engine::ingest`] with a [`SuppliedTranscriptRequest`]
+//!   imports a `SubRip` or `WebVTT` sidecar; [`Engine::transcript`] pages the
+//!   committed revision.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these yet.
@@ -56,20 +59,26 @@ mod engine;
 mod error;
 mod sessions;
 mod setup;
+mod transcripts;
 mod verification;
 
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, SessionRootLocation,
     UserConfigurationLocation,
 };
-pub use error::{EngineError, ExecutableRejection, SessionRootError, UserConfigurationError};
+pub use error::{
+    EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError,
+    UserConfigurationError,
+};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    IngestRequest, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
+    IngestOutcome, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
+    SuppliedTranscriptRequest,
 };
 pub use setup::{
     EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport, SetupCheckRequest, SetupPlanRequest,
 };
+pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
@@ -78,6 +87,15 @@ pub use vsift_application::{
     Clock, ClockError, IdentifierGenerationError, IdentifierSource, MediaToolCheck,
     MediaToolFailure, MediaToolVerification, ModelVerification, OpenSessionError,
     OpenSessionOutcome, PlanAcceptanceError, RuntimeDiagnosis, SessionStorageError, SetupProfile,
+    SourceProbeError, TranscriptQueryError,
+};
+/// Transcript evidence values that appear in this API.
+pub use vsift_domain::{
+    AlignmentOrigin, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText, CueTiming,
+    CursorError, LanguageTag, MediaTime, SidecarIdentity, SourceSegment, SourceSegmentId,
+    SourceSegmentState, SpeakerLabel, TimeRange, TranscriptImportError, TranscriptOffset,
+    TranscriptRejection, TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
+    TranscriptSegmentId, TranscriptWarning, TranscriptWarningKind, TranscriptWarnings,
 };
 pub use vsift_domain::{
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,

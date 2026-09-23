@@ -150,24 +150,28 @@ fn disposable_open_status_export_close_and_cleanup_survive_process_restarts() ->
 }
 
 #[test]
-fn reserved_transcription_and_invalid_bundle_fail_with_typed_v1_results_without_mutation()
+fn unreadable_transcript_and_invalid_bundle_fail_with_typed_v1_results_without_mutation()
 -> TestResult {
     let temp = OwnedRoot::new()?;
     let root = temp.0.join("private sessions");
     let source = temp.0.join("original.mp4");
     fs::write(&source, b"\0\0\0\x18ftypisomsource-content")?;
 
-    let reserved = Command::cargo_bin("vsift")?
+    // Supplied-transcript import shipped in P07; an unreadable sidecar is now a
+    // typed input failure, still reported before the session root exists.
+    let unreadable = Command::cargo_bin("vsift")?
         .arg("--session-root")
         .arg(&root)
         .arg("ingest")
         .arg(&source)
-        .args(["--transcript", "auto", "--json"])
+        .arg("--transcript")
+        .arg(temp.0.join("missing-captions.srt"))
+        .arg("--json")
         .output()?;
-    assert_eq!(reserved.status.code(), Some(2));
-    let reserved: Value = serde_json::from_slice(&reserved.stdout)?;
-    assert_eq!(reserved["command"], "ingest");
-    assert_eq!(reserved["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
+    assert_eq!(unreadable.status.code(), Some(7));
+    let unreadable: Value = serde_json::from_slice(&unreadable.stdout)?;
+    assert_eq!(unreadable["command"], "ingest");
+    assert_eq!(unreadable["error"]["code"], "STORAGE_IO");
     assert!(!root.exists());
 
     let invalid = Command::cargo_bin("vsift")?

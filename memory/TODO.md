@@ -8,30 +8,40 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
-complete. P07 is in progress; its two refactor increments are done and transcription is
-next. Nothing public can yet read a video's content; P07 transcription starts that.
+complete. P07 is in progress: three increments are done, the packet is not.
 
-1. **P07 increment 1a (done, PR #126, `00e707f`):** `vsift-contract` owns the v1 JSON
-   wire types and their mapping from domain and application values.
-2. **P07 increment 1b (done, in review):** the `vsift` engine facade. The CLI is now a
-   thin host over `Engine`; clock and identifiers are injected ports. No behaviour
-   change: the CLI contract and schema suites pass unchanged, and a differential run of
-   86 CLI invocations against `00e707f` gave identical output and exit codes.
-3. **P07 transcription (next), built on the engine:**
-   - segment-first processing: ordered, identified segments; transcript revisions carry
-     segment identity and normalized source time (ADR 0016 decision 4);
-   - SRT/VTT import and alignment, with `cargo-fuzz` targets for both parsers;
-   - the whisper.cpp adapter and its functional verification (the model is already
-     identifiable with `Engine::identify_model`);
-   - a preflight that calls `Engine::verify_media_tools` (the P06 fixture verifier)
-     before the first media stage;
-   - published transcript record schemas and conformance examples in `schemas/v1`,
-     with the JSON Lines evidence surface fixed by contract tests;
-   - `ingest --transcript` stops returning `COMMAND_NOT_IMPLEMENTED` only when import
-     ships (today the engine rejects it before any work).
+1. **Increment 1a (done, PR #126, `00e707f`):** `vsift-contract` owns the v1 wire types.
+2. **Increment 1b (done, PR #127, `0e5a0cd`):** the `vsift` engine facade; the CLI is a
+   thin host.
+3. **Increment 2 (done, in review):** supplied-transcript path, the transcript stage of
+   A-09. `ingest --transcript <srt|vtt> [--transcript-offset <us>]` and
+   `transcript get <session> --from --to [--limit] [--cursor]`. Policies are in
+   `docs/contracts/cli-v1.md` ("P07 supplied transcripts"). T-01/T-02 evidence is in
+   `docs/planning/verification.md`; the opt-in `p07_transcript_e2e` stage passed.
+4. **Increment 3 (next): local ASR.** Blocked on the maintainer's choice of
+   speech-fixture source (F01-F09/F12 scripts need real speech audio; the corpus has
+   tone sentinels only). Scope once unblocked:
+   - whisper.cpp adapter over the process supervisor, output validated and offset to
+     source time; imported and ASR revisions share `TranscriptRevision`;
+   - bounded PCM chunking with overlap and deterministic duplicate removal at seams;
+   - an automatic preflight calling `Engine::verify_media_tools` before the first
+     media stage (including the transcript-import probe, which runs without it today);
+   - whisper functional verification reported by `setup check`;
+   - `transcript retranscribe` (still `COMMAND_NOT_IMPLEMENTED`) as a new revision;
+   - T-03..T-06 and the `p07_local_asr` E2E stage.
+5. **Still owed by P07 before the packet closes:**
+   - the JSON Lines evidence stream decision (ADR 0016 decision 5): today
+     `transcript get --events jsonl` is one terminal event;
+   - `cargo-fuzz` targets for the SRT/VTT parsers (ADR 0016 decision 6) need a
+     nightly-toolchain decision; `proptest` properties cover them now;
+   - a published schema for the bundle's `transcript_record` artifact (today a strict,
+     versioned internal storage record);
+   - the packet completion record in the ledger once increment 3 merges.
 
 ## Open decisions (maintainer)
 
+- Speech-fixture source for local ASR (blocks increment 3).
+- Whether fuzzing may use a nightly toolchain in CI, or stays a scheduled job.
 - Crate names are confirmed (`vsift` facade, `vsift-contract`); a crates.io
   availability check still precedes first publication.
 - Minimum-supported-Rust-version policy before the library is first published.
@@ -41,14 +51,17 @@ next. Nothing public can yet read a video's content; P07 transcription starts th
 
 ## Known issues and gates
 
-- Issue #125 (open): schema drift found during 1a. `operation-response.schema.json`
-  has no `ISOLATION_UNAVAILABLE` error code although `FailureCode::IsolationUnavailable`
-  exists, and its `command` pattern rejects `setup.configure-model`, which the CLI
-  already emits. Neither refactor increment was allowed to change schemas.
-- The unchanged P06 checkpoint test (`crates/vsift-cli/tests/p06_setup_e2e.rs`) still
-  uses application and infrastructure types directly, so the CLI keeps both as
-  development dependencies. Moving it onto the engine API is a candidate follow-up.
-- #66 is closed. A recurrence of lock `Busy` is a new finding, not a re-run candidate.
+- Issue #125 (open): `operation-response.schema.json` has no `ISOLATION_UNAVAILABLE`
+  code, and its `command` pattern rejects `setup.configure-model`. Increment 2 did
+  not change that schema.
+- Supplied-transcript success paths through the engine and the binary need real
+  FFprobe, so they are opt-in (`--ignored`); hosted CI covers them only through the
+  application, contract, store and parser tests. Rejections are covered everywhere.
+- One full local `cargo test --workspace` run on Windows saw four
+  `process_supervisor` tests fail (child exit status), then pass on rerun and alone.
+  Not caused by increment 2; open an issue before treating a recurrence as noise.
+- The unchanged P06 checkpoint test still uses application and infrastructure types,
+  so the CLI keeps both as development dependencies.
 - FS-01: strict OS/storage-crash durability is unqualified. Durable requests fail
   closed until P10/P11/P14 run the Ubuntu/ext4 campaign (ADR 0010).
 - Baseline findings B-01..B-11 close through their mapped packets.

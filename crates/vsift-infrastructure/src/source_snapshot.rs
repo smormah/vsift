@@ -130,6 +130,12 @@ impl SourceSnapshot {
         &self.session_id
     }
 
+    /// The held artifact directory the snapshot lives in, for installing
+    /// evidence published together with activation.
+    pub(crate) const fn artifact_directory(&self) -> &Dir {
+        &self.directory
+    }
+
     pub(crate) fn file_name(&self) -> &str {
         &self.file_name
     }
@@ -253,9 +259,34 @@ impl ForegroundSessionPort for FilesystemSessionStore {
         )
         .map_err(OpenSessionError::Storage)
     }
+
+    fn activate_with_transcript(
+        &self,
+        snapshot: &Self::Snapshot,
+        operation_id: &OperationId,
+        expected_generation: vsift_domain::StorageGeneration,
+        now_unix_seconds: u64,
+        transcript: &vsift_domain::TranscriptRevision,
+    ) -> Result<vsift_domain::StorageGeneration, OpenSessionError> {
+        let record =
+            crate::encode_transcript_record(transcript).map_err(OpenSessionError::Storage)?;
+        self.activate_source_with_artifact(
+            snapshot,
+            operation_id,
+            expected_generation,
+            now_unix_seconds,
+            vsift_domain::SessionArtifactKind::TranscriptRecord,
+            &record,
+        )
+        .map_err(OpenSessionError::Storage)
+    }
 }
 
-fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), SourceError> {
+/// Opens one directly named, local regular file without following a final link.
+///
+/// Shared by source staging and supplied-transcript import so every
+/// caller-selected input passes the same path policy.
+pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), SourceError> {
     if !path.is_absolute() || !local_path(path) {
         return Err(SourceError::InvalidPath);
     }
