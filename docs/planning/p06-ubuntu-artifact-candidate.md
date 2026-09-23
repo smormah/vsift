@@ -264,3 +264,18 @@ KiB on Linux `6.17.0-1022-azure` x64 with glibc 2.39. F01 remains tone-only,
 and the resource figure is not an isolated provider measurement. The run does
 not exercise plan acceptance, atomic activation, repair/rollback/uninstall or
 the D-01..D-10/P06 E2E matrix.
+
+## Reviewed production-smoke policy
+
+Catalogue revision `ubuntu-24.04-x86_64-2026-09-22-r2` converts the successful
+candidate inputs into a typed, digest-bound policy for the future production
+executor. It pins F01 at 76,500 bytes and SHA-256
+`65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070`,
+the observed FFmpeg and FFprobe build prefixes, 64 KiB per captured stream and
+transcript, 256 KiB for generated WAV audio, 60 seconds for media work, 180
+seconds for inference, and 16-kHz mono audio. The exact build prefixes are
+`ffmpeg version n9.0.1-11-ge47273f4d9-20260831` and
+`ffprobe version n9.0.1-11-ge47273f4d9-20260831`.
+All values participate in plan acceptance. This is a reviewed decision derived
+from the hosted observations, not a production smoke result; D-06 stays open
+until the Rust transaction executes and cleans up this policy before activation.

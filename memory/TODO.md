@@ -2,6 +2,34 @@
 
 ## Current checkpoint
 
+2026-09-23 parking handoff: park P06 after the reviewed compatibility-policy
+change reaches protected `main`. No partially wired installer path should be
+left enabled: a valid accepted plan must continue to return
+`COMMAND_NOT_IMPLEMENTED`, with no transfer or managed-root mutation. Resume in
+this order: implement a production Ubuntu smoke workspace/executor using the
+existing `ProcessSupervisor` and the digest-bound stream, generated-file and
+deadline limits; prove failure cleanup before activation; compose the guarded
+download/stage/smoke/publish transaction; expose install, rollback and uninstall;
+add bounded version cleanup; run process-kill/power-loss qualification; then close
+D-01..D-10 and the P06 E2E checkpoint. The policy is complete enough to park;
+the executor and transaction are deliberately not started in this change.
+
+2026-09-22: P06 reviewed compatibility-policy implementation `440f42d` and
+generated-artifact bounds `799bfc7`
+advances the accepted Ubuntu catalogue to revision
+`ubuntu-24.04-x86_64-2026-09-22-r2`. The policy fixes the checked-in F01
+fixture identity, expected FFmpeg/FFprobe build prefixes, 64-KiB per-stream and
+transcript limits, 256-KiB generated-audio limit, 60-second media and 180-second
+inference deadlines, and 16-kHz mono audio.
+Catalogue completeness rejects absent or out-of-bounds policy values, and the
+canonical setup-plan digest binds every value so a policy change requires fresh
+acceptance. Focused application and infrastructure tests pass, including
+changed-policy digest rejection and invalid-policy no-action/no-digest behavior.
+This checkpoint accepts decision inputs only: the production smoke executor,
+result/failure cleanup, activation, public install/lifecycle commands, bounded
+cleanup, power-loss qualification and D-01..D-10/P06 E2E remain open. P06 stays
+planned.
+
 2026-09-22: Protected [PR #115](https://github.com/smormah/vsift/pull/115)
 merged P06 accepted-plan revalidation implementation `39fb72d` and documentation
 record `71bb29d` as `a7180d7` from protected predecessor `c982d84`.

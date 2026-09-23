@@ -99,7 +99,12 @@ actions needed by the current probe and configured-model presence, with exact
 publisher URL, sizes, SHA-256, archive inventory, installed files, licence and
 notice/source links, known trust limits, private destination and permissions.
 Its lowercase SHA-256 `plan_digest` binds profile, exact target, catalogue
-revision, current probe results, configured selections and all planned actions.
+revision, current probe results, configured selections, all planned actions and
+the revision's reviewed compatibility policy. For the current Ubuntu revision,
+that policy fixes the exact F01 fixture identity, expected FFmpeg/FFprobe build
+identities, per-stream and generated-file limits, media and inference deadlines,
+and 16-kHz mono audio contract. The policy remains an installer safety constraint rather than a claim
+that compatibility execution has passed.
 The same unchanged observations produce the same digest. Any changed catalogue
 or observed selection requires a fresh plan and acceptance. No configured paths
 are echoed in the response. The plan is **read-only**: `setup install` still
@@ -139,7 +144,7 @@ is retained as historical v1 evidence. An abbreviated current response follows.
     "target": "ubuntu_24_04_x86_64",
     "local_asr_model": {"status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed model action and its digest. Setup install remains unavailable until the complete installer qualifies."},
     "managed_install": "catalogue_accepted_install_pending",
-    "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-21-r1",
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
     "stop_new_plans_at": "2028-08-01T00:00:00Z",
     "plan_digest": "<64 lowercase hex characters>",
     "actions": ["<exact reviewed artifact actions>"],

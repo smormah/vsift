@@ -152,3 +152,15 @@ changed observations and digest mismatch fail before network or managed-storage
 work. Even an accepted plan still returns `COMMAND_NOT_IMPLEMENTED`: production
 compatibility smoke and the complete guarded transfer/publication transaction
 remain prerequisites for enabling installation.
+
+## 2026-09-22 implementation note: compatibility decision inputs
+
+The current Ubuntu catalogue revision fixes one bounded compatibility policy:
+the exact checked-in F01 fixture, expected FFmpeg/FFprobe build identities,
+64-KiB per-stream and transcript limits, a 256-KiB generated-audio limit,
+60-second media deadline, 180-second inference deadline, and 16-kHz mono
+extraction. Catalogue completeness and plan acceptance
+both depend on these values. A changed policy therefore requires a fresh plan;
+an invalid policy yields no managed actions or digest. Execution, result
+recording, cleanup after smoke failure and activation remain later transaction
+steps.

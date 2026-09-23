@@ -18,8 +18,9 @@ pub use session::{
 pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedPlanAvailability, ManagedSetupAction,
     ManagedSetupPlan, PlanAcceptanceError, ReviewedArchiveLimits, ReviewedArchiveLink,
-    ReviewedArchiveSelection, ReviewedManagedFile, ReviewedRuntimeCopy, SetupDependencyDisposition,
-    SetupModelDisposition, SetupProfile, SetupSelectionState, plan_managed_setup,
+    ReviewedArchiveSelection, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+    ReviewedRuntimeCopy, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    SetupSelectionState, plan_managed_setup,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

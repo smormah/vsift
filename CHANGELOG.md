@@ -17,6 +17,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P06 now fixes the Ubuntu managed candidate's compatibility policy in the
+  reviewed catalogue: the exact checked-in F01 fixture, expected FFmpeg build
+  and FFprobe identities, 64-KiB per-stream and transcript limits, 256-KiB
+  generated-audio limit, 60-second media deadline, 180-second inference
+  deadline, and 16-kHz mono audio contract. Catalogue
+  completeness and the accepted plan digest bind these values; an invalid or
+  changed policy cannot reuse prior acceptance. Production smoke execution and
+  activation remain pending.
 - P06 can now strictly and boundedly decode a saved `setup plan --json`
   document, rebuild the plan from current target, catalogue, configuration,
   probes and time, require the entire presentation to remain unchanged, and

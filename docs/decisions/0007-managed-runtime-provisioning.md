@@ -303,3 +303,14 @@ detects catalogue expiry, target, configuration, probe, model and presentation
 changes without trusting the saved document as authority. The valid path still
 returns `COMMAND_NOT_IMPLEMENTED` and invokes no transfer, staging, compatibility
 smoke, publication or activation primitive.
+
+## 2026-09-22 implementation note: digest-bound compatibility policy
+
+The accepted Ubuntu catalogue now carries the exact F01 identity, expected
+FFmpeg and FFprobe build lines, bounded stream/generated-file output and process
+deadlines, and 16-kHz mono audio
+contract that a production smoke executor must enforce. Catalogue validation
+fails closed when those limits are absent or outside the reviewed bounds. The
+canonical plan digest includes every policy value, making a policy revision a
+new acceptance decision even when artifact identities are unchanged. This note
+accepts the policy only; no candidate is executed or activated yet.
