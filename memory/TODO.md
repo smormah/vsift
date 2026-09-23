@@ -7,26 +7,17 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
-[ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)) when work
-moved to attended implementation with maintainer review. Nothing public can yet read
-a video's content; this order gets there:
+[ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
+complete; P06 closed on detect, select, verify and guide (PR #123, `b73df52`). Nothing
+public can yet read a video's content; P07 starts that:
 
-1. **Close P06 (narrowed by ADR 0015).** Every P06 increment has landed or is in
-   review: detection, BYO selection, read-only plans, typed guidance, engine
-   verification of the selected FFmpeg/FFprobe (`FixtureMediaToolVerifier`) and
-   model identity (`verify_model_file`). The final increment audits D-01, D-07
-   (unavailable-target guidance), D-09 and D-10 case by case, closes the gaps
-   (denied configuration storage, read-only tool install, saved-plan revalidation
-   through the binary, manual guidance on every unavailable target) and adds the
-   opt-in P06 E2E stage (`p06_setup_e2e`), which passed locally on Windows 11.
-   By design there is no `setup verify` command (ADR 0015 note). Remaining:
-   - Merge the final increment once protected checks pass.
-   - Then the one-off ledger completion record and an issue #9 update. P06 is
-     not complete until that record lands.
-2. **P07 increment 1:** extract the embeddable engine facade and contract crate
-   with no behaviour change (ADR 0016).
-3. **P07 transcription:** segment-first, with published transcript schemas and
-   SRT/VTT fuzz targets.
+1. **P07 increment 1:** extract the embeddable engine facade and contract crate
+   with no behaviour change (ADR 0016). The existing CLI contract and schema
+   tests must pass unchanged.
+2. **P07 transcription:** segment-first, with published transcript schemas and
+   SRT/VTT fuzz targets. Includes the preflight that calls
+   `FixtureMediaToolVerifier` before the first media stage, and whisper.cpp
+   functional verification.
 
 ## Open decisions (maintainer)
 

@@ -62,8 +62,8 @@ Those arrive with P07–P09.
 | Packet | Status in plain terms |
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
-| P06 | Open. Final increment (D-01/D-07/D-09/D-10 audit, gap tests, E2E stage) in review; complete only after merge and the ledger record ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md)) |
-| P07 | Not started; next after P06, begins with the engine boundary |
+| P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`; [ADR 0015](../docs/decisions/0015-r0-delivery-replan.md)) |
+| P07 | Next; begins with the engine boundary (ADR 0016), then transcription |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
