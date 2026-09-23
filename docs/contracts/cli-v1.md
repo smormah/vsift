@@ -18,7 +18,7 @@ workspace; otherwise P05 uses the per-user application cache.
 | `setup configure` | Persist an explicit user-managed executable path without running it | Partial P06 |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
 | `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
-| `setup install/repair/list/remove/rollback` | Explicit managed dependency lifecycle, still reserved | P06 |
+| `setup install/repair/list/remove/rollback` | Explicit managed dependency lifecycle, still reserved | P13 ([ADR 0015](../decisions/0015-r0-delivery-replan.md)) |
 | `ingest` | Open a disposable source-bound session; transcription remains P07 | Implemented in P05 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get/retranscribe` | Timestamped transcript evidence | P07 |

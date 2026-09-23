@@ -7,7 +7,7 @@ Status: accepted scope mapping. The machine-readable source is
 | --- | --- | --- | --- |
 | R-01 agent video investigation | P04, P07-P09, P12 | M, T, V, A | F01-F10, F12 |
 | R-02 stable CLI/JSON | P01 | C-01..C-10 | F01 |
-| R-03 dependency lifecycle | P02, P06 | P, D | F01, F08 |
+| R-03 dependency lifecycle | P02, P06, P13 | P, D | F01, F08 |
 | R-04 transcript import/local ASR | P07 | T-01..T-06 | F08-F10 |
 | R-05 source visual/audio retrieval | P04, P08, P09 | M, V | F01-F07, F09 |
 | R-06 provenance and uncertainty | P01, P04, P07-P09 | C-10, M-05, T, V | F02-F10 |
@@ -18,7 +18,7 @@ Status: accepted scope mapping. The machine-readable source is
 | R-11 resource budgets | P02, P04, P11 | P-03..P-08, M-02..M-03, X-07..X-09 | F06, F11 |
 | R-12 headless observability | P01, P11 | C, O | F01, F05, F11 |
 | R-13 agent skill/handoff | P12 | A-01..A-09, SEC-T02 | F01, F03-F10, F12 |
-| R-14 distribution/provenance | P06, P13, P14 | D, R-SEC01..03 | F01 |
+| R-14 distribution/provenance | P13, P14 | D, R-SEC01..03 | F01 |
 
 The ledger also records decision status, packet dependencies, issue/PR evidence and
 the immutable project invariants. A requirement is complete only after every primary

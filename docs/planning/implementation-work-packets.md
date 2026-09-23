@@ -1,16 +1,12 @@
 # Implementation work packets
 
-Status: accepted R0 sequence with scoped R1 packets. P04 completed in protected
-PR #44 (`4fc859b`); its [qualification record](p04-media-qualification.md) describes
-the internal boundary and evidence. P05 is active under issue #8; its
-[qualification record](p05-session-qualification.md) describes the implementation
-under review, without claiming protected completion. P02 completed in PR #22
-(`4e9ef08`); P03 completed in PR #42 (`3eef9b7`) under accepted ADR 0010. Its
-feasibility evidence merged in PR #24 (`cbc531e`), PR #35 added typed guarantees,
-and PR #36 added the first internal filesystem-session increment. PR #42 completed
-private roots, coordination, admission, generation publication and recovery without
-exposing a session command. Tests reference [verification](verification.md), and CI
-enforces the [delivery ledger](delivery-ledger.json).
+Status: accepted R0 sequence with scoped R1 packets, re-planned by
+[ADR 0015](../decisions/0015-r0-delivery-replan.md) and
+[ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) on 2026-09-23.
+P00-P05 are complete. P06 closes on detection, bring-your-own selection,
+verification and guidance; managed installation moved to P13. P07 is next after
+P06 and begins with the embeddable engine boundary. Tests reference
+[verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes
 must not be hidden in a hardening PR.
@@ -78,14 +74,14 @@ This cross-packet test work does not authorize implementing a later packet early
 | P03 — Storage and coordination | Domain source/job/session IDs; application storage ports; safe filesystem adapter, stable OS locks, admission slots, generation commit and read holds; durable mode fails closed | P01/P02 | S-01..03/S-07/S-08/S-12, X-01..05; ADR 0010 ephemeral desktop profile passes; no strict durable claim or unsafe shortcut |
 | P04 — Source and media primitives | Source binding/staging; FFprobe parsing; source timeline; FFmpeg audio/frame operations; provider conformance registry | P02/P03 | M-01..06, V-01; bounded operations with source identity, actual times and allowed protocol policy |
 | P05 — Session lifecycle | Open/status/renew/close/clean, expiry, source-inclusive/evidence-only retain, bundle validation, private permissions | P03/P04 | S-04..11; no source deletion, active-session GC race, explicit persistence and restart semantics |
-| P06 — Dependency setup | Detect suitable existing tools; explicit plan/install of qualified missing components; off-PATH BYO selection; typed manual guidance for unavailable/failed installs; pinned provider/model manifests and bounded staging/activation | P02/P03/P04 | D-01..10; fresh/partial/off-PATH and denied/offline flows; at least one qualified managed-install target, guidance on every named target; no automatic install or elevation; B-04 closed |
-| P07 — Transcription | SRT/VTT import and alignment, PCM chunks, whisper.cpp adapter, transcript revisions, bounded records | P04/P05/P06 | T-01..06; measured default model profile; imports avoid unnecessary ASR; chunk seams verified |
+| P06 — Dependency setup | Detect suitable existing tools; off-PATH BYO executable/model selection; read-only plans; bounded compatibility check of selected FFmpeg/FFprobe against F01 under the reviewed policy limits; model digest check or explicit unverified state; typed manual guidance. Managed installation moved to P13 (ADR 0015) | P02/P03/P04 | D-01, D-07 (unavailable-target guidance), D-09, D-10; preinstalled/partial/off-PATH/denied/offline/unqualified journeys on every named target; no automatic install or elevation; B-04 closed |
+| P07 — Engine boundary and transcription | First increment: extract the embeddable engine facade and contract crate with no behaviour change (ADR 0016). Then SRT/VTT import and alignment, segment-identified PCM chunks, whisper.cpp adapter and its functional verification in `setup check`, transcript revisions, bounded records, published transcript schemas, SRT/VTT fuzz targets | P04/P05/P06 | Existing C-suite and schema tests unchanged by the refactor; T-01..06; measured default model profile; imports avoid unnecessary ASR; chunk seams verified |
 | P08 — Candidate/search index | Streaming visual signal extraction, periodic coverage, dedupe with time preservation, local transcript search, cursor paging | P04/P05/P07 | V-02..05, C-03, S-11; fixture recall report and honest gap metadata |
 | P09 — Evidence navigation | Exact frames, neighbours, bursts, source audio ranges, native crops, artifact reuse and lineage | P04/P05/P08 | V-01/V-06..08; identical request reuses compatible evidence; requested/actual time and dimensions visible |
 | P10 — Recovery integration | Stage checkpoints, operation-key handling, interrupted-job discovery/resume, cancellation/commit ordering and retry policy; Ubuntu/ext4 durable publication qualification | P03/P05/P07/P08/P09 | X-01..06/X-09/X-10, S-07/S-08; owned OS/storage crash campaign demonstrates no lost acknowledged durable evidence before enablement |
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualifies only after P10 durable evidence; repeated external-delivery simulation passes |
 | P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic |
-| P13 — Distribution | Native artifacts and thin npm launcher; architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs | P06/P11/P12 | Fresh OS install without Rust; offline/script-disabled recovery; signal/exit forwarding; R-SEC01/R-SEC02 |
+| P13 — Distribution and managed installation | Native artifacts and thin npm launcher; architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target | P06/P11/P12 | Fresh OS install without Rust; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02 |
 | P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
 
 ### P00/P03 feasibility decisions
@@ -109,6 +105,11 @@ set config. Worker requests select approved provider/policy IDs rather than exec
 paths. Define unknown-key/version rejection and secret handling before a config command.
 
 ### P06 provisioning details
+
+Since [ADR 0015](../decisions/0015-r0-delivery-replan.md), P06 owns detection,
+selection, verification and guidance; the download, extraction, activation,
+repair/rollback and uninstall substeps below are delivered by P13 in the order
+recorded at the 2026-09-23 parking checkpoint. The rules still apply unchanged.
 
 Follow [ADR 0014](../decisions/0014-progressive-dependency-setup.md): check
 first, install only missing/selected qualified components after separate explicit
@@ -191,8 +192,10 @@ have reviewed maintenance/licence/target/security impact. Cross-platform behavio
 tested on affected targets. API/schema changes include compatibility fixtures. Security
 fixes add regression tests that fail on the previous behavior.
 
-Update `memory/TODO.md` and `memory/project_current_status.md` with state and predecessor
-or merged commit references; add the final merge hash in the next record update if it
-cannot be known before merge. Never invent a commit hash. Keep work pending until the
-observable acceptance criteria pass. Review and merge through existing protected-main
-checks. Do not disable checks to complete a packet.
+Rewrite `memory/TODO.md` and `memory/project_current_status.md` in the same PR so
+they describe the current state in plain English and stay within the size limits
+the governance checker enforces. Put verification commands and results in the PR
+description; do not open separate evidence-record PRs. Record the ledger merge
+commit once, when a whole packet completes. Never invent a commit hash. Keep work
+pending until the observable acceptance criteria pass. Review and merge through
+existing protected-main checks. Do not disable checks to complete a packet.

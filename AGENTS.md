@@ -58,6 +58,7 @@ Before completing a change, run:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --locked
+cargo run --locked -p vsift-governance -- check
 ```
 
 Add tests at the lowest useful layer. Public CLI JSON changes require contract tests and documentation.
@@ -66,9 +67,13 @@ Add tests at the lowest useful layer. Public CLI JSON changes require contract t
 
 Architecture, public behaviour, storage lifecycle, provider configuration, security assumptions, and contributor workflow changes must update the corresponding repository documentation and ADR in the same change.
 
-Update the two project memory files with implementation progress, pending decisions,
-test evidence and known commit references in the same change. Findings close only
-with implementation and regression-test evidence. Preserve accepted ADRs; record
-superseding decisions explicitly.
+Rewrite the two project memory files in the same change so they state the current
+position in plain English: what works, what is in progress, open decisions and known
+issues. They are current-state documents within the governance checker's size
+limits, not logs. History lives in git, `CHANGELOG.md`, qualification records and
+`docs/history/`. Say whether an increment or a whole packet is complete. Put
+verification evidence in the pull request description rather than a follow-up pull
+request. Findings close only with implementation and regression-test evidence.
+Preserve accepted ADRs; record superseding decisions explicitly.
 
 Do not leave unexplained TODO comments. Track deferred work in a GitHub issue and reference the issue from the code only when a local marker is necessary.

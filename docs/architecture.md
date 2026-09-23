@@ -46,7 +46,8 @@ A child process or Unix process group alone does not provide filesystem/network
 isolation or kernel CPU/memory/PID caps. Required strict-worker isolation therefore
 fails with `ISOLATION_UNAVAILABLE` unless a trusted Linux host attests inherited
 container/cgroup controls. Ambient `PATH` discovery remains bring-your-own,
-unverified provenance until P06 adds managed identity and compatibility policy.
+unverified provenance until P06 verifies selected tools and P13 adds managed
+identity ([ADR 0015](decisions/0015-r0-delivery-replan.md)).
 See the [baseline review](planning/baseline-review.md) and
 [process contract](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
 

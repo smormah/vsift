@@ -120,7 +120,8 @@ Do not silently equate a memory estimate or timeout with a kernel-enforced cap.
 Qualification evidence must cover nested Windows jobs and Linux container limits.
 P02 reports Windows Job Object and Unix process-group lifecycle containment separately
 from inherited hard isolation. Ambient provider discovery is explicitly unverified
-bring-your-own provenance; P06 owns managed identity and version trust. The strict
+bring-your-own provenance; P06 verifies selected tools and P13 owns managed identity
+and version trust ([ADR 0015](../decisions/0015-r0-delivery-replan.md)). The strict
 Linux CI profile supplies read-only filesystem, no-network, CPU, memory and PID
 controls externally and exercises group escape plus bounded resource pressure, while
 ordinary desktop probes make no such claim.

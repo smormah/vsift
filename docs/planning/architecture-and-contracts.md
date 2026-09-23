@@ -17,7 +17,7 @@ provider, logging, or network dependencies.
 | Application | setup, ingest, retrieve, export, recover, run_job | Orchestration, authorization-policy checks, operation outcomes, cancellation flow |
 | Infrastructure | process, filesystem, runtime_registry, ffmpeg, whisper, serialization, telemetry | OS APIs, provider adapters, byte formats, physical storage, transport |
 | CLI host | commands, config, output, composition | Parse and validate requests, compose adapters, select presentation, return exit status |
-| Future hosts | worker service, MCP, index consumer | Adapt external requests to published use cases; never import infrastructure internals |
+| Future hosts | worker service, MCP, index consumer, desktop application | Use the engine facade and contract crate of [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md); never import infrastructure internals |
 
 Application ports are deliberately narrow: `SourceReader`, `MediaProbe`,
 `AudioExtractor`, `FrameExtractor`, `Transcriber`, `SessionStore`, `ArtifactStore`,

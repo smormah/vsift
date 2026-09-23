@@ -20,6 +20,17 @@ const EXPECTED_PACKETS: usize = 15;
 const EXPECTED_INVARIANTS: usize = 10;
 const CORPUS_MANIFEST: &str = "fixtures/corpus/manifest.json";
 
+/// Session handoff files and their maximum line counts.
+///
+/// These files are read at the start of every implementation session. When they
+/// were allowed to grow as append-only logs they reached hundreds of lines, and an
+/// agreement to keep them short did not survive because nothing enforced it
+/// (ADR 0015). History belongs in git, the changelog and `docs/history/`.
+const HANDOFF_FILE_LIMITS: [(&str, usize); 2] = [
+    ("memory/TODO.md", 100),
+    ("memory/project_current_status.md", 150),
+];
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DeliveryLedger {
@@ -271,8 +282,36 @@ fn validate(
     validate_decisions(&mut messages, &ledger.decisions, repository_root);
     validate_requirements_and_packets(&mut messages, &ledger.requirements, &ledger.packets);
     validate_corpus(&mut messages, corpus);
+    validate_handoff_files(&mut messages, repository_root);
 
     messages
+}
+
+fn validate_handoff_files(messages: &mut Vec<String>, root: &Path) {
+    for (relative_path, maximum_lines) in HANDOFF_FILE_LIMITS {
+        match fs::read_to_string(root.join(relative_path)) {
+            Ok(text) => check_handoff_length(messages, relative_path, &text, maximum_lines),
+            Err(error) => messages.push(format!(
+                "handoff file {relative_path} could not be read: {error}"
+            )),
+        }
+    }
+}
+
+fn check_handoff_length(
+    messages: &mut Vec<String>,
+    relative_path: &str,
+    text: &str,
+    maximum_lines: usize,
+) {
+    let lines = text.lines().count();
+    if lines > maximum_lines {
+        messages.push(format!(
+            "handoff file {relative_path} has {lines} lines, above its limit of \
+             {maximum_lines}; rewrite it as current state and move history to git, \
+             CHANGELOG.md or docs/history/"
+        ));
+    }
 }
 
 fn validate_corpus(messages: &mut Vec<String>, corpus: &CorpusManifest) {
@@ -718,9 +757,33 @@ fn require_count(messages: &mut Vec<String>, field: &str, actual: usize, expecte
 #[cfg(test)]
 mod tests {
     use super::{
-        CORPUS_MANIFEST, CorpusManifest, DEFAULT_LEDGER, DeliveryLedger, PacketStatus, validate,
+        CORPUS_MANIFEST, CorpusManifest, DEFAULT_LEDGER, DeliveryLedger, PacketStatus,
+        check_handoff_length, validate,
     };
     use std::{error::Error, fs, io, path::PathBuf};
+
+    #[test]
+    fn handoff_file_within_its_limit_is_accepted() {
+        let mut messages = Vec::new();
+
+        check_handoff_length(&mut messages, "memory/TODO.md", &"line\n".repeat(10), 10);
+
+        assert!(messages.is_empty(), "{messages:#?}");
+    }
+
+    #[test]
+    fn oversized_handoff_file_is_rejected() {
+        let mut messages = Vec::new();
+
+        check_handoff_length(&mut messages, "memory/TODO.md", &"line\n".repeat(11), 10);
+
+        assert!(
+            messages
+                .iter()
+                .any(|message| message.contains("memory/TODO.md has 11 lines")),
+            "{messages:#?}"
+        );
+    }
 
     #[test]
     fn checked_in_governance_records_are_valid() -> Result<(), Box<dyn Error>> {

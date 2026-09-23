@@ -1,6 +1,6 @@
 # ADR 0007: Managed runtime provisioning
 
-- Status: Accepted
+- Status: Accepted; delivered by P13 per [ADR 0015](0015-r0-delivery-replan.md)
 - Date: 2026-09-10
 - Resolves: DEC-07
 

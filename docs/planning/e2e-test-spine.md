@@ -1,7 +1,8 @@
 # Incremental end-to-end test spine
 
-Status: P04 real-media checkpoint implemented; the complete journey remains
-`not_implemented`. Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
+Status: P04 and P05 real-media checkpoints implemented; the complete journey remains
+`not_implemented`. Managed installation moved from P06 to P13 under
+[ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
 ## Purpose
 
@@ -36,14 +37,14 @@ agent cannot satisfy those trials.
 | --- | --- | --- |
 | P04 | Generate the approved synthetic media; bind its identity; run real FFprobe and bounded FFmpeg frame/audio operations | Video-to-timestamped-media artifacts |
 | P05 | Open a disposable session, publish artifacts, and prove explicit retain/cleanup behavior | Repeatable session-scoped media run |
-| P06 | Check preinstalled/partial/off-PATH tools, perform one qualified explicit managed install, and exercise typed manual recovery on denied/offline/unqualified paths without agent overreach | Fresh/BYO/managed dependency run |
+| P06 | Check preinstalled/partial/off-PATH tools, verify the selected FFmpeg/FFprobe against F01, and exercise typed manual recovery on denied/offline/unqualified paths without agent overreach | Fresh/BYO dependency run |
 | P07 | Attach supplied-transcript and local-ASR paths to the same fixture truth | Video-to-timestamped-transcript run |
 | P08 | Produce bounded visual candidates and transcript search results with coverage metadata | Video-to-searchable-candidates run |
 | P09 | Refine exact frames, neighbours, crops and audio; validate requested versus actual timestamps and lineage | Complete mechanical video-to-evidence run |
 | P10 | Kill and resume at stage/commit boundaries without accepting corrupt evidence | Recoverable mechanical run |
 | P11 | Exercise finite batch, admission, cancellation and structured result behavior | Single-host worker run |
 | P12 | Run A-01..A-09 through named Codex and Claude Code clients | Complete video-to-grounded-handoff run |
-| P13 | Repeat from clean native/npm installation without a Rust toolchain | Installed-user run |
+| P13 | Repeat from clean native/npm installation without a Rust toolchain, including one qualified explicit managed dependency install | Installed-user and managed-dependency run |
 | P14 | Execute the supported release matrix and preserve reviewed evidence | R0 release qualification |
 
 Every P04-P13 completion record must identify the attached stage and its checkpoint

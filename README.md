@@ -5,8 +5,10 @@ VSift gives AI coding agents local, structured access to the evidence inside tec
 The initial use case is a recorded QA walkthrough: VSift combines timestamped speech with relevant visual states so an agent can investigate the demonstrated problem without requiring the user to transcribe the recording or capture screenshots manually.
 
 > **Project status:** P04 source/media primitives and P05 disposable sessions are
-> implemented. Transcription, candidate search, source reinspection, worker
-> execution and the complete agent handoff remain future R0 packets.
+> implemented, and dependency detection, bring-your-own selection and read-only setup
+> plans work today. Transcription, candidate search, source reinspection, worker
+> execution, managed dependency installation and the complete agent handoff remain
+> future R0 packets. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.
