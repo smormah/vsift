@@ -1,6 +1,6 @@
 # Incremental end-to-end test spine
 
-Status: P04 and P05 real-media checkpoints implemented; the complete journey remains
+Status: P04, P05 and P06 checkpoints implemented; the complete journey remains
 `not_implemented`. Managed installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -69,15 +69,35 @@ It uses project-owned F01 media, real FFprobe/FFmpeg operations, committed
 frame/audio artifacts, evidence-only and source-inclusive retained bundles,
 explicit close/cleanup and source-preservation checks. It records a bounded
 JSON report under `.vsift/e2e-runs/<run-id>/report.json` and leaves P06-P14
-and the complete journey `not_implemented`. P06's read-only detection/guidance
-increment has contract tests, but has not yet added its managed-install E2E stage;
-the checkpoint's P06 label remains `not_implemented`. The P04 checkpoint still covers
-seven source/media scenarios. See the [P04](p04-media-qualification.md) and
-[P05](p05-session-qualification.md) qualification records.
+and the complete journey `not_implemented`, because it does not run them. The
+P04 checkpoint still covers seven source/media scenarios. See the
+[P04](p04-media-qualification.md) and [P05](p05-session-qualification.md)
+qualification records.
+
+P06 adds the dependency detect/select/verify/guide checkpoint:
+
+```console
+cargo test -p vsift-cli --locked --test p06_setup_e2e -- --ignored --nocapture
+```
+
+It needs FFmpeg and FFprobe on `PATH` and deliberately does not need whisper.cpp.
+Setup journeys drive the compiled `vsift` binary with an isolated per-user
+configuration base: tools found on `PATH`; off-`PATH` tools selected per call or
+persisted; whisper missing (degraded, typed remedy naming the supplied-transcript
+route); no media tools (blocked, headless single JSONL record); the host target's
+plan (manual guidance with no actions or digest on unqualified targets, reviewable
+but uninstallable actions on Ubuntu 24.04 x86-64); and a denied configuration write
+(typed `STORAGE_IO`, record unchanged). The last journey reads the configured pair
+back from storage and runs `FixtureMediaToolVerifier` on it, then shows that FFmpeg
+standing in for FFprobe fails at the probe check. Missing FFmpeg/FFprobe makes the
+affected journeys `blocked`, and the test fails unless every journey passed. It
+writes `.vsift/e2e-runs/p06-<run-id>/report.json` and leaves P07-P14 and the complete
+journey `not_implemented`. Offline behaviour is inferred rather than sandboxed: no
+P06 command opens a network connection while `setup install` stays reserved.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
-F01 tone audio. It is **not** the managed-install P06 E2E stage, a real-speech
+F01 tone audio. It is **not** the P06 stage, a P13 managed-install stage, a real-speech
 transcription test or a substitute for the cumulative journey.
 
 The following rules apply:

@@ -45,7 +45,8 @@ Those arrive with P07–P09.
 - **Tool verification (P06):** the engine can prove selected FFmpeg/FFprobe work
   by running the embedded F01 fixture through the real probe, frame and audio
   steps, and can identify a registered model against the reviewed pin. Nothing
-  calls it from the CLI yet; a P07 preflight will.
+  calls it from the CLI yet; a P07 preflight will. The P06 E2E stage runs it on
+  tools configured through the CLI.
 - **P04:** restricted FFprobe/FFmpeg metadata, frame and audio operations that
   report observed timestamps.
 - **Managed-installer foundations** (built under P06, now owned by P13):
@@ -61,7 +62,7 @@ Those arrive with P07–P09.
 | Packet | Status in plain terms |
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
-| P06 | Open, closing on verification and guidance ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md)) |
+| P06 | Open. Final increment (D-01/D-07/D-09/D-10 audit, gap tests, E2E stage) in review; complete only after merge and the ledger record ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md)) |
 | P07 | Not started; next after P06, begins with the engine boundary |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
@@ -85,8 +86,11 @@ the start of P07. The largest modules are `filesystem_session_store.rs` and
   - dependency policy and review, CodeQL and Rust analysis.
   - Merges go through protected `main`: eight required checks, squash merges and
     linear history.
-- Opt-in real-media checkpoints exist for P04 and P05
-  ([E2E spine](../docs/planning/e2e-test-spine.md)).
+- Opt-in checkpoints exist for P04, P05 and P06
+  ([E2E spine](../docs/planning/e2e-test-spine.md)). The P06 stage passed
+  locally on Windows 11 with FFmpeg/FFprobe 9.0 and no whisper.cpp.
+- P06 ledger tests D-01, the D-07 guidance clause, D-09 and D-10 map to named
+  tests in `docs/planning/verification.md`; their managed-install parts are P13's.
 - Qualification records are in `docs/planning/`: `p03-storage-feasibility.md`,
   `p04-media-qualification.md`, `p05-session-qualification.md`,
   `p06-provisioning-source-review.md` and the P06 Ubuntu and Windows candidate
