@@ -17,6 +17,7 @@ use vsift_domain::RuntimeDependency;
 
 use crate::{
     ExplicitProbePaths, TrustedExecutable,
+    file_lock::HeldFileLock,
     private_user_root::{PrivateRootError, open_private_root},
 };
 
@@ -201,8 +202,7 @@ impl UserDependencyConfigStore {
         if !metadata.is_file() || metadata.nlink() != 1 {
             return Err(UserDependencyConfigError::UnsafeStorage);
         }
-        let lock = lock.into_std();
-        lock.try_lock().map_err(|error| match error {
+        let _lock = HeldFileLock::try_exclusive(lock.into_std()).map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => UserDependencyConfigError::Busy,
             std::fs::TryLockError::Error(_) => UserDependencyConfigError::Io,
         })?;

@@ -1,0 +1,45 @@
+name: Lock stress
+
+# Manually dispatched stress for OS file-lock release (issue #66). It repeats the
+# whole infrastructure library and P05 lifecycle test binaries at their default
+# parallelism, so lock tests run while other tests spawn child processes. The
+# earlier version repeated one test in isolation and therefore removed the
+# concurrent fork/exec activity that kept released locks held.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Number of repetitions per operating system
+        required: false
+        default: "40"
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build test binaries once
+        run: cargo test --locked -p vsift-infrastructure --lib --test p05_lifecycle --no-run
+
+      - name: Repeat lock tests alongside process-spawning tests
+        shell: bash
+        env:
+          RUNS: ${{ inputs.runs }}
+        run: |
+          set -euo pipefail
+          case "$RUNS" in ''|*[!0-9]*) echo "runs must be a positive integer"; exit 1;; esac
+          for run in $(seq 1 "$RUNS"); do
+            cargo test --locked --quiet -p vsift-infrastructure --lib --test p05_lifecycle
+          done
+          echo "$RUNS parallel lock/lifecycle repetitions passed"

@@ -11,17 +11,12 @@ Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-deli
 moved to attended implementation with maintainer review. Nothing public can yet read
 a video's content; this order gets there:
 
-1. **Fix the intermittent lock `Busy` failure ([#66](https://github.com/smormah/vsift/issues/66))**
-   before feature work. Leading hypothesis:
-   - On Unix, `File::try_lock` is `flock`, which belongs to the open file
-     description. A child spawned by another thread holds a duplicate descriptor
-     between fork and exec.
-   - So a lock released only by dropping the `File` can stay held briefly. 17 of 18
-     production lock sites release that way; only the root-initialization lock
-     calls `unlock()`.
-   - Fix: a guard that calls `unlock()` on drop for every lock; the existing
-     `try_clone` regression for each lock kind; and a stress workflow that runs
-     whole test binaries, not one `--exact` test. Confirm on a Linux runner.
+1. **Confirm the #66 lock fix and close [#66](https://github.com/smormah/vsift/issues/66).**
+   Every lock now goes through `HeldFileLock` (`crates/vsift-infrastructure/src/file_lock.rs`),
+   which unlocks explicitly rather than relying on closing the file. On Unix an
+   `flock` survives in a child spawned by another thread between fork and exec.
+   Regression tests fail without the fix. After merge, run the manual "Lock stress"
+   workflow on Ubuntu and macOS, then close #66 if it and routine CI stay green.
 2. **Close P06 (narrowed by ADR 0015):**
    - A bounded compatibility check of the selected FFmpeg/FFprobe against F01
      through `ProcessSupervisor`, under the reviewed policy limits. The same
@@ -47,7 +42,8 @@ a video's content; this order gets there:
 
 ## Known issues and gates
 
-- #66: intermittent `Busy` on Ubuntu/macOS CI (item 1).
+- #66: fixed in code; awaiting stress-run confirmation (item 1). A recurrence is a
+  new finding, not a re-run candidate.
 - FS-01: strict OS/storage-crash durability is unqualified. Durable requests fail
   closed until P10/P11/P14 run the Ubuntu/ext4 campaign (ADR 0010).
 - Baseline findings B-01..B-11 close through their mapped packets.

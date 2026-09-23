@@ -40,6 +40,8 @@ Those arrive with P07–P09.
 - **P03:** private storage roots, cross-process locks, weighted admission,
   immutable generations and process-crash recovery. The desktop ephemeral profile
   only; strict durability is gated (FS-01).
+- **Locks:** every OS file lock goes through one type that unlocks explicitly
+  on release, so a lock never outlives its owner (issue #66).
 - **P04:** restricted FFprobe/FFmpeg metadata, frame and audio operations that
   report observed timestamps.
 - **Managed-installer foundations** (built under P06, now owned by P13):
