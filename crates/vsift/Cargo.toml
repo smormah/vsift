@@ -1,0 +1,24 @@
+[package]
+name = "vsift"
+description = "Embeddable VSift engine: the one library API every VSift host uses"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+vsift-application.workspace = true
+vsift-contract.workspace = true
+vsift-domain.workspace = true
+vsift-infrastructure.workspace = true
+
+[dev-dependencies]
+jsonschema.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

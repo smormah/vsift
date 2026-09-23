@@ -20,7 +20,8 @@ capability as implemented. Work only on an active packet whose predecessors are 
 
 ## Architecture
 
-- Dependencies point inward: `domain <- application <- infrastructure <- cli`.
+- Dependencies point inward: `domain <- application <- infrastructure <- vsift (engine) <- cli`.
+  `vsift-contract` sits beside the engine; hosts depend only on `vsift` and `vsift-contract`.
 - Crates expose published contracts only. Never import another crate's internal modules.
 - Business concepts have one home in the domain. Orchestration belongs in application use cases.
 - Infrastructure owns filesystem, process, network, database, and provider details.

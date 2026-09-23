@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/vsift",
   "crates/vsift-application",
   "crates/vsift-cli",
   "crates/vsift-contract",
@@ -40,6 +41,7 @@ sha2 = { version = "0.11", default-features = false }
 tar = { version = "=0.4.46", default-features = false }
 time = { version = "0.3", features = ["formatting"] }
 tokio = { version = "1.48", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
+vsift = { version = "0.1.0", path = "crates/vsift" }
 vsift-application = { version = "0.1.0", path = "crates/vsift-application" }
 vsift-contract = { version = "0.1.0", path = "crates/vsift-contract" }
 vsift-domain = { version = "0.1.0", path = "crates/vsift-domain" }

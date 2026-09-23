@@ -117,3 +117,38 @@ and nothing has been released.
   tests validate its values against `schemas/v1` and match the frozen examples.
 - Increment 1b adds the `vsift` facade: engine use cases with injected clock and
   identifier ports, leaving `vsift-cli` a thin host.
+
+## 2026-09-23 implementation note: engine facade extracted
+
+- P07 increment 1b added `crates/vsift`, the embeddable engine. A host builds an
+  `Engine` from an explicit `EngineConfig` (session-root location, per-user
+  configuration location, host isolation) and `EnginePorts` (clock and identifier
+  source). Construction performs no I/O; each location is resolved by the operation
+  that first needs it, so every failure keeps its previous timing and code.
+- Operations: `check_setup`, `plan_setup` with `EvaluatedSetupPlan::validate_acceptance`
+  for saved-plan revalidation, `configure_executable`, `configure_model`, `ingest`,
+  `list_sessions`, `session_status`, `renew_session`, `close_session`,
+  `retain_session`, `clean_sessions` and `validate_bundle`. `verify_media_tools`
+  (the P06 fixture verifier) and `identify_model` are exposed for later hosts and the
+  P07 preflight; no CLI command calls them.
+- Results are typed engine values (`SessionSnapshot`, `SessionPage`, `CleanPage`,
+  `BundleSummary`, `SetupCheckReport`, `EvaluatedSetupPlan`) or re-exported
+  application values. Every operation fails with one `EngineError` that keeps its
+  typed cause; `EngineError::failure_code` is the single mapping to public codes.
+  Infrastructure errors are mirrored, not re-exported.
+- New application ports `Clock` and `IdentifierSource`, with `SystemClock` and
+  `RandomIdentifierSource` in infrastructure. Session-root location and first-use
+  provisioning moved from the CLI into infrastructure (`platform_session_root`,
+  `open_session_root`).
+- `vsift-cli` is now a thin host. It keeps clap parsing, effective-configuration
+  precedence, presentation through `vsift-contract`, RFC 3339 formatting, exit codes,
+  the bounded writer and reading the saved-plan file. Its normal dependencies are
+  `vsift` and `vsift-contract` (plus clap, serde, serde_json, time and tokio); it no
+  longer depends on `vsift-application`, `vsift-domain` or `vsift-infrastructure`.
+  The unchanged opt-in P06 checkpoint test still uses application and infrastructure
+  types, so both remain CLI development dependencies.
+- The `vsift` library API is 0.x and unstable, as decision 3 states. The CLI binary
+  target is excluded from rustdoc because it shares the `vsift` name with the library.
+- No behaviour change: the CLI contract and schema suites passed unchanged, and a
+  differential run of 86 CLI invocations against `00e707f` gave identical output and
+  exit codes after normalizing random identifiers, timestamps and index placement.

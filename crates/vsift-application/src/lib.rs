@@ -6,11 +6,15 @@ use std::future::Future;
 
 use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, RuntimeReadiness};
 
+mod clock;
+mod identifiers;
 mod provisioning;
 mod session;
 mod storage;
 mod verification;
 
+pub use clock::{Clock, ClockError};
+pub use identifiers::{IdentifierGenerationError, IdentifierSource};
 pub use session::{
     ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
     StagedSessionSource,

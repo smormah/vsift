@@ -28,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Internal reorganisation with no behaviour change: the v1 JSON response types moved
   from the CLI into a new `vsift-contract` crate that every future host will share.
   Command output, exit codes and schemas are unchanged.
+- Internal reorganisation with no behaviour change: VSift's engine is now a Rust
+  library, the `vsift` crate, and the command-line tool is a thin layer over it.
+  Future hosts such as a worker or a desktop app will use the same library. Command
+  output, exit codes and schemas are unchanged; the library API is not yet stable.
 - The governance check now keeps the two session handoff files to a current-state
   size. The earlier day-by-day log is archived in `docs/history/`.
 

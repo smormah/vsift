@@ -6,8 +6,9 @@ the [delivery ledger](delivery-ledger.json) marks their packet complete.
 
 ## 1. Ownership and module boundaries
 
-Retain the four existing crates. Introduce named feature modules inside them as work
-ships; do not pre-create dozens of empty crates or framework abstractions. The domain
+Keep the four layer crates plus ADR 0016's engine facade (`vsift`) and wire contract
+(`vsift-contract`). Introduce named feature modules inside them as work ships; do not
+pre-create dozens of empty crates or framework abstractions. The domain
 uses standard-library value types and has no filesystem, runtime, serialization,
 provider, logging, or network dependencies.
 
@@ -16,13 +17,15 @@ provider, logging, or network dependencies.
 | Domain | source, timeline, evidence, session, job, policy | Validated IDs, ranges, lifecycle transitions, provenance, admission policy values |
 | Application | setup, ingest, retrieve, export, recover, run_job | Orchestration, authorization-policy checks, operation outcomes, cancellation flow |
 | Infrastructure | process, filesystem, runtime_registry, ffmpeg, whisper, serialization, telemetry | OS APIs, provider adapters, byte formats, physical storage, transport |
-| CLI host | commands, config, output, composition | Parse and validate requests, compose adapters, select presentation, return exit status |
+| Engine (`vsift`) | engine, sessions, setup, verification | Compose use cases and adapters behind typed operations, results and one typed error; explicit configuration and injected clock/identifier ports |
+| CLI host | commands, config, output, composition | Parse and validate requests, resolve configuration, build the engine, select presentation, return exit status |
 | Future hosts | worker service, MCP, index consumer, desktop application | Use the engine facade and contract crate of [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md); never import infrastructure internals |
 
 Application ports are deliberately narrow: `SourceReader`, `MediaProbe`,
 `AudioExtractor`, `FrameExtractor`, `Transcriber`, `SessionStore`, `ArtifactStore`,
 `JobStore`, `AdmissionController`, `RuntimeResolver`, `RuntimeInstaller`, `Clock`,
-`OperationEvents`. Introduce each with its first consumer and conformance tests.
+`IdentifierSource`, `OperationEvents`. `Clock` and `IdentifierSource` exist since P07
+increment 1b; hosts inject them through the engine. Introduce each with its first consumer and conformance tests.
 The infrastructure `ProcessSupervisor` is shared by provider adapters and installation
 smoke tests. Domain and application never construct FFmpeg arguments.
 

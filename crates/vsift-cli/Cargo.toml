@@ -12,23 +12,29 @@ homepage.workspace = true
 [[bin]]
 name = "vsift"
 path = "src/main.rs"
+# The executable shares its name with the `vsift` engine library; rustdoc would
+# write both to `target/doc/vsift` (cargo issue 6313). The binary is a one-line
+# entry point, so only the library is documented.
+doc = false
 
 [dependencies]
 clap.workspace = true
-getrandom.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 tokio.workspace = true
-vsift-application.workspace = true
+vsift.workspace = true
 vsift-contract.workspace = true
-vsift-domain.workspace = true
-vsift-infrastructure.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
+getrandom.workspace = true
 jsonschema.workspace = true
 predicates.workspace = true
+# The opt-in P06 checkpoint drives tool verification through the engine's
+# internal crates directly; the CLI itself depends only on `vsift`.
+vsift-application.workspace = true
+vsift-infrastructure.workspace = true
 
 [lints]
 workspace = true

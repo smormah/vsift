@@ -5,31 +5,49 @@ VSift is a local-first Rust application that converts technical video into evide
 ## Dependency rule
 
 ```text
-vsift-cli ------------------------+----------------> vsift-contract
-    |                             |                    |       |
-    v                             v                    |       |
-vsift-infrastructure ------> vsift-application <-------+       |
-                                  |                            |
-                                  v                            |
-                             vsift-domain <--------------------+
+          vsift-cli (host)
+            |          |
+            v          v
+   vsift (engine) --> vsift-contract
+            |               |
+            v               |
+ vsift-infrastructure       |
+            |               |
+            v               v
+        vsift-application <-+
+            |
+            v
+       vsift-domain
 ```
 
 - `vsift-domain` owns stable business concepts and invariants. It has no infrastructure dependencies.
-- `vsift-application` owns use cases and the ports required from infrastructure.
-- `vsift-infrastructure` implements process, filesystem, provider, and persistence ports.
+- `vsift-application` owns use cases and the ports required from infrastructure, including
+  the `Clock` and `IdentifierSource` ports that keep time and identity out of use cases.
+- `vsift-infrastructure` implements process, filesystem, provider, and persistence ports,
+  plus the system clock, random identifiers and session-root location.
 - `vsift-contract` owns the versioned v1 JSON wire types and the mapping from domain and
   application values into them, so every host emits identical JSON
   ([ADR 0016](decisions/0016-embeddable-engine-and-evidence-contract.md)). It depends only
   on `vsift-domain`, `vsift-application`, `serde` and `serde_json`; never on
   infrastructure or a host.
-- `vsift-cli` is the composition root. It parses arguments, composes adapters, and
-  presents results: human text, exit codes and the output byte budget. It emits JSON only
-  through `vsift-contract` types.
+- `vsift` is the embeddable engine and the composition root for use cases. A host builds
+  an `Engine` from explicit configuration (session root, per-user configuration location,
+  host isolation) and injected clock and identifier ports, then calls typed operations
+  that return typed results and a typed `EngineError`. It re-exports the domain and
+  application value types its API uses and mirrors infrastructure errors, so hosts never
+  depend on the inner crates. Its Rust API is 0.x and unstable.
+- `vsift-cli` is a thin host. It parses arguments, resolves effective configuration,
+  builds one engine per invocation and presents results: human text, JSON through
+  `vsift-contract` types, exit codes and the output byte budget. Its normal dependencies
+  are `vsift` and `vsift-contract` only; the opt-in P06 checkpoint test still reaches
+  `vsift-application` and `vsift-infrastructure` as development dependencies.
 
 Arrows show the only permitted dependency directions; every path ends at
-`vsift-domain`. Cross-crate access uses each crate's public root exports; implementation
-modules remain private. ADR 0016's engine facade crate (`vsift`) is the next step and
-will sit between the hosts and the application and infrastructure crates.
+`vsift-domain`, and a crate may also use any crate further down its path (the engine
+names domain types directly, for example). Cross-crate access uses each crate's public
+root exports; implementation modules remain private. Future hosts (an MCP adapter, a
+worker, an indexing service, a desktop application) sit beside `vsift-cli` and use only
+`vsift` and `vsift-contract`.
 
 ## Runtime boundary
 
@@ -151,6 +169,10 @@ their owning packets ship.
 ## Error model
 
 Expected outcomes are represented by exhaustive enums and typed `Result` values. Examples include missing dependencies, changed source media, expired sessions, invalid time ranges, and insufficient evidence.
+
+Engine operations fail with a typed `EngineError` that keeps its cause;
+`EngineError::failure_code` is the single mapping to public failure codes, which a host
+applies only at its presentation boundary.
 
 Unexpected failures are translated only at the outer CLI boundary. They must retain a causal chain for diagnostics without exposing sensitive data.
 

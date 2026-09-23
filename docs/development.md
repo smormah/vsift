@@ -42,7 +42,13 @@ Before adding code, identify its owner:
 | Use-case orchestration or provider port | `vsift-application` |
 | Filesystem, process, network, model, or storage implementation | `vsift-infrastructure` |
 | Versioned JSON wire type, or mapping a domain/application value into one | `vsift-contract` |
-| Argument parsing, human output, exit codes, or dependency composition | `vsift-cli` |
+| Composing use cases and adapters into an operation every host can call, or its typed result and error | `vsift` (engine) |
+| Argument parsing, configuration precedence, human output, exit codes, or building the engine | `vsift-cli` |
+
+A host depends on `vsift` and `vsift-contract` only. When a host needs a new capability,
+add a typed engine operation rather than reaching into the application or
+infrastructure crates. The `vsift` library API is 0.x and unstable; only the CLI and its
+v1 JSON are stable public surfaces.
 
 Do not create a general-purpose `utils` or `helpers` module. Name modules after the capability or concept they own.
 
@@ -51,6 +57,9 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
 - Domain tests verify invariants without I/O.
 - Application tests use small explicit fakes for ports.
 - Infrastructure tests exercise real boundaries using isolated temporary directories and rights-safe fixtures.
+- Engine tests use `vsift` as a library, without the CLI, with an injected controlled
+  clock, a sequential identifier source and temporary directories, so identities and
+  expiry are exact. Tests that need real FFmpeg/FFprobe are `#[ignore]`d and opt-in.
 - Contract tests serialize `vsift-contract` values and validate them against
   `schemas/v1` and its frozen examples, without running the CLI.
 - CLI tests execute the compiled binary and verify public output and exit codes.
