@@ -140,3 +140,39 @@ passed, and the previously affected P06 PR #57 passed Ubuntu Quality after
 including the fix. This verifies the intended explicit lock lifetime and
 mitigates the observed failure; it does not prove which process or descriptor
 held the lock in the original failed CI run.
+
+## 2026-09-24 concurrent first-use provisioning (#131)
+
+Several processes opening a missing session root at once raced: the process whose
+exclusive `create_dir` won wrote the layout with the ownership marker last, and the
+others validated the still-unmarked root and failed with `InvalidOwnership`.
+
+- **Creator.** Exclusive creation of the root still elects exactly one creator. Its
+  first steps are now the `coordination` directory and a transient
+  `coordination/root-provisioning.lock`, held exclusively until the marker is
+  written, synced and the root validated; the lock file is then removed, so the
+  published layout is unchanged. Failure releases the lock and rolls back as before.
+- **Openers.** `open_session_root` (both `CreateIfMissing` and `ExistingOnly`) treats
+  `InvalidOwnership`/`InvalidLayout` as possibly unfinished only while the provisioning
+  lock is held, or while the root changed within 10 s and holds nothing beyond the
+  creator's first steps. It then retries the complete `open_existing` validation with
+  a 2 ms doubling backoff (50 ms cap) for at most 5 s, then fails with the typed
+  `ProvisioningInProgress` (`BUSY`, retryable). Every other root, including an old
+  empty directory, foreign content, a foreign marker or a hard-linked marker, is
+  rejected at once with the store's own error. Nothing seen while waiting authorizes
+  adoption; the owner, mode/DACL, marker, layout and no-link checks all run again.
+- **Busy on open (decision).** Opening an existing root takes no lock and never
+  returns busy, so no retry is added there. Session writers (registration's root
+  initialization lock, publication and probe admission) keep their non-blocking locks
+  and report contention as `BUSY` under the P03 admission contract; retry belongs to
+  the caller.
+- **Residual.** A creator killed mid-provisioning still leaves an unmarked root that
+  is refused until removed by the user, as before.
+
+Evidence (Windows 11, NTFS): new cross-process test (6 creating + 2 existing-only
+child processes behind a start gate, root and its parent both missing) and threaded
+test assert every opener succeeds and exactly one complete root with one marker and
+no stray files; both failed 5/5 on the previous code and passed 50/50 afterwards,
+and 200/200 with four test binaries racing in parallel. Unit tests cover wait-then-
+adopt, bounded `BUSY`, a stopped creator and fresh versus old empty directories. The
+preflight concurrency test no longer pre-provisions the root and passed 50/50.

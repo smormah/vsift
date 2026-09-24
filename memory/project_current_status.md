@@ -102,6 +102,8 @@ bounded SRT/VTT parsers, `FfprobeSourceDuration` and the `transcript_record` art
   process-group containment, bounded output, one deadline and cancellation.
 - **P03:** private storage roots, cross-process locks, weighted admission,
   immutable generations and process-crash recovery (ephemeral profile only; FS-01).
+  Fix #131: racing first uses of a root converge on one creator (held
+  `root-provisioning.lock`); openers retry full validation <= 5 s, else `BUSY`.
 - **P04:** restricted FFprobe/FFmpeg metadata, frame and audio operations.
 - **P06:** model identification (not yet consumed); its F01 verifier feeds the preflight.
 - **Managed-installer foundations** (owned by P13): reviewed Ubuntu catalogue,
@@ -131,15 +133,9 @@ of these files. The largest modules are `filesystem_session_store.rs` and
 
 - Evidence-stream increment, Windows 11: fmt, strict Clippy (pedantic as errors),
   `cargo test --workspace` (403 passed, 22 opt-in ignored), warning-denied rustdoc and the
-  governance check pass. New tests: 2 contract unit, 10 contract stream conformance
-  (byte-exact example, every line schema-valid, records equal `--json` items,
-  cursor continuation, empty range, page-limit bound, unknown fields and foreign
-  keys rejected, `EventKind`/`EvidenceRecordType` drift guards, failure event),
-  3 CLI output unit (`JsonLines` order, oversized line writes nothing, broken pipe),
-  4 CLI binary contract on a store-seeded session (records then one terminal,
-  continuation, limits 1/2/3/100, empty range, failures), 3 infrastructure
-  (frozen record example, real retained record conforms, `bundle validate` rejects
-  six non-conforming records and accepts the rewritten original).
+  governance check pass, with 22 new contract, CLI and infrastructure tests.
+- Fix #131, Windows 11: process and thread race tests failed 5/5 before the fix and
+  passed 50/50 after (200/200 with four binaries in parallel); details in the P05 note.
 - Opt-in with FFmpeg/FFprobe 9.0: the P07 transcript E2E now also consumes each
   import as a JSONL stream, retains it, runs `bundle validate` and checks the record
   schema; SRT, WebVTT and wrong-offset journeys all pass.

@@ -402,6 +402,9 @@ pub enum SessionRootError {
     InvalidLayout,
     /// The root exists but cannot be opened safely.
     Unavailable,
+    /// Another process was still creating the root when the bounded wait for
+    /// it ended; a retry is expected to succeed.
+    ProvisioningInProgress,
 }
 
 impl SessionRootError {
@@ -418,6 +421,7 @@ impl SessionRootError {
             Self::PlatformDefaultUnavailable => FailureCode::MissingCapability,
             Self::ParentUnavailable | Self::Missing | Self::Unavailable => FailureCode::StorageIo,
             Self::InvalidOwnership | Self::InvalidLayout => FailureCode::IntegrityFailure,
+            Self::ProvisioningInProgress => FailureCode::Busy,
         }
     }
 }
@@ -437,6 +441,9 @@ impl fmt::Display for SessionRootError {
             Self::InvalidOwnership => "session root ownership marker is invalid",
             Self::InvalidLayout => "session root layout is invalid",
             Self::Unavailable => "session root is unavailable",
+            Self::ProvisioningInProgress => {
+                "session root is still being created by another process"
+            }
         })
     }
 }
@@ -464,6 +471,7 @@ impl From<InfrastructureSessionRootError> for SessionRootError {
             InfrastructureSessionRootError::RootMustBeAbsolute => Self::NotAbsolute,
             InfrastructureSessionRootError::RootWithoutParent => Self::WithoutParent,
             InfrastructureSessionRootError::ParentUnavailable => Self::ParentUnavailable,
+            InfrastructureSessionRootError::ProvisioningInProgress => Self::ProvisioningInProgress,
             InfrastructureSessionRootError::Store(error) => Self::from(error),
         }
     }
@@ -638,6 +646,17 @@ mod tests {
                 code
             );
         }
+    }
+
+    #[test]
+    fn a_root_still_being_created_is_retryable_busy() {
+        let error =
+            SessionRootError::from(vsift_infrastructure::SessionRootError::ProvisioningInProgress);
+        assert_eq!(error, SessionRootError::ProvisioningInProgress);
+        assert_eq!(
+            EngineError::SessionRoot(error).failure_code(),
+            FailureCode::Busy
+        );
     }
 
     #[test]

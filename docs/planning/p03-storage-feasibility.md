@@ -181,6 +181,15 @@ admission, general publication, recovery, ACL and adversarial coverage and passe
 revised ephemeral-profile gates. P03 is complete and P04 is now eligible, but remains
 planned.
 
+2026-09-24 (issue #131): concurrent first-use provisioning of one root let losers
+read the creator's unmarked root as `InvalidOwnership`. Building a root under a
+temporary name and renaming it into place was rejected: on local Windows 11 / NTFS,
+cap-std and std directory rename silently replaced an existing empty directory or
+regular file at the target (and returned error 32 while any handle inside was open).
+Provisioning keeps exclusive creation, marker last, and now holds a provisioning
+lock while it writes; openers wait boundedly and still validate in full. Details:
+[P05 note](p05-session-qualification.md#2026-09-24-concurrent-first-use-provisioning-131).
+
 ## Primary-source basis
 
 - [cap-std 4.0.3 source](https://github.com/bytecodealliance/cap-std/tree/v4.0.3),
