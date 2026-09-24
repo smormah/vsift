@@ -8,20 +8,19 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
-complete. P07 is in progress: five increments are done, the packet is not.
+complete. P07 is in progress: five increments and the speech fixtures are done,
+the packet is not.
 Local checks: CI is the default Linux/macOS check; Docker only for platform code.
 
 1. **Done:** 1a `vsift-contract` wire types (PR #126, `00e707f`); 1b `vsift` engine
    facade, thin CLI (PR #127, `0e5a0cd`); 2 supplied transcripts (PR #129,
    `4aa4ae0`); 2b automatic media-tool preflight (PR #133, `27f9416`); 2c JSONL
    evidence stream and bundle transcript-record schema (PR #134, `08d9830`).
-2. **Speech fixtures for local ASR (in progress, test-only).** The maintainer chose
-   Kokoro-82M, pinned, for test clips only. Generator, verifier and the
-   `p07-speech-fixtures.yml` workflow merged (PR #138, `44613df`); F09 speaks at 1.3x
-   to fit its frozen window (PR #139, `3305400`). Run 36049056343 passed; whisper.cpp
-   review found F08's English "AB" spoken as "ob". PR #140 adds a reviewed
-   pronunciation hint. Next: re-run the workflow, repeat the whisper review, commit
-   the clips with provenance in one PR citing the run, and pin the spaCy wheel hash.
+2. **Done: speech fixtures for local ASR, test-only.** Kokoro-82M, pinned, speaks each
+   speech-bearing fixture's frozen script (tooling PRs #138-#140, #142; clips PR #143).
+   F09 speaks at 1.3x to fit its window; F08's "AB-731" has a reviewed whole-word
+   pronunciation hint. Clips from run 36052657304 passed phoneme, clipping and
+   whisper.cpp v1.9.2 review (`docs/planning/p07-speech-fixtures.md`); spaCy wheel pinned.
 3. **Increment 3 (next): local ASR** with whisper.cpp v1.9.2 (official build), the
    maintainer's choice:
    - whisper.cpp adapter over the process supervisor, output validated and offset to
@@ -32,7 +31,8 @@ Local checks: CI is the default Linux/macOS check; Docker only for platform code
    - a lightweight (quantized) model option alongside the pinned base model;
    - `transcript retranscribe` (still `COMMAND_NOT_IMPLEMENTED`) as a new revision;
      decide then whether superseded revisions need tombstone events in the stream;
-   - T-03..T-06 and the `p07_local_asr` E2E stage.
+   - T-03..T-06 and the `p07_local_asr` E2E stage over the committed speech clips;
+     tests tolerate base-model differences (number formatting, "E4A9" under noise).
 4. **Still owed by P07 before the packet closes:**
    - `cargo-fuzz` targets for the SRT/VTT parsers (ADR 0016 decision 6) as a scheduled
      nightly-toolchain CI job (maintainer approved); `proptest` covers them now;
@@ -40,7 +40,7 @@ Local checks: CI is the default Linux/macOS check; Docker only for platform code
 5. **Fixed outside the packet:** #131 racing first uses converge on one session root
    (PR #135, `a5d799a`); #136 verification-record reader classification and bounded
    lock retries, #132 stale verification workspaces swept (PR #137, `617d631`).
-   Private folders (this change): every folder VSift creates is made private itself,
+   Private folders (PR #141, `dadefbc`): every folder VSift creates is made private,
    so a Windows profile whose `%LOCALAPPDATA%` passes other accounts' entries no
    longer breaks `setup configure`; an existing non-private folder fails `STORAGE_IO`
    with remediation naming the folder kind.
@@ -68,6 +68,8 @@ Local checks: CI is the default Linux/macOS check; Docker only for platform code
   a transcript session straight through the session store.
 - #128: one local Windows run saw four `process_supervisor` tests fail (child exit
   status), then pass. Treat a recurrence as evidence and add it to #128.
+- #144: on one throttled Windows runner the concurrent-preflight test exceeded the 5 s
+  session-root provisioning wait (not a regression; 60/60 stress passes). Add recurrences.
 - The unchanged P06 checkpoint test and the stream contract tests use application
   and infrastructure types, so the CLI keeps both as development dependencies.
 - FS-01: strict OS/storage-crash durability is unqualified. Durable requests fail

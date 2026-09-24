@@ -43,7 +43,7 @@ agent. Local ASR is the next P07 increment; search and visuals are P08-P09.
 - Still `COMMAND_NOT_IMPLEMENTED`: `transcript retranscribe`, search, candidates,
   frame, audio, crop, job and setup install/repair/list/rollback/remove.
 
-## Private folders (fix, this change)
+## Private folders (fix, PR #141, `dadefbc`)
 
 Every folder VSift creates (per-user configuration and its missing parents, session
 root and its parent, retained bundles, managed data) is made private before use: a
@@ -65,6 +65,13 @@ folder a concurrent creator is still restricting. Threat model SEC-18.
 - `bundle validate` decodes every `transcript_record` strictly
   (`bundle-transcript-record.schema.json`): non-conforming is `IntegrityFailure`,
   newer is `UnsupportedVersion`.
+
+## Speech fixtures (P07, test-only)
+
+`fixtures/corpus/generated/` holds Kokoro-spoken variants of F01-F09 and F12 (`speech/`,
+`*-speech.mp4`, `F09-speech.mkv`, `speech-provenance.json`, `speech-verification.json`)
+from workflow run 36052657304. The P04 tone fixtures are
+unchanged. Kokoro is never a VSift dependency (`docs/planning/p07-speech-fixtures.md`).
 
 ## Media-tool preflight (P07 increment 2b)
 
@@ -101,8 +108,7 @@ bounded SRT/VTT parsers, `FfprobeSourceDuration` and the `transcript_record` art
   process-group containment, bounded output, one deadline and cancellation.
 - **P03:** private storage roots, cross-process locks, weighted admission,
   immutable generations and process-crash recovery (ephemeral profile only; FS-01).
-  Fix #131: racing first uses of a root converge on one creator (held
-  `root-provisioning.lock`); openers retry full validation <= 5 s, else `BUSY`.
+  Racing first uses of a root converge on one creator; openers wait <= 5 s (#131).
 - **P04:** restricted FFprobe/FFmpeg metadata, frame and audio operations.
 - **P06:** model identification (not yet consumed); its F01 verifier feeds the preflight.
 - **Managed-installer foundations** (owned by P13): reviewed Ubuntu catalogue,
@@ -115,7 +121,7 @@ bounded SRT/VTT parsers, `FfprobeSourceDuration` and the `transcript_record` art
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
-| P07 | In progress: increments 1a-2c done; speech fixtures in progress; local ASR next |
+| P07 | In progress: increments 1a-2c and speech fixtures done; local ASR next |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
