@@ -184,7 +184,9 @@ of the noise.
 - Kokoro's decoder draws random noise and phase at inference. The recipe fixes the
   seed, the thread count and deterministic algorithms. The workflow synthesizes a
   second time on the same runner and requires byte-identical output. Bit-identical
-  output across different CPUs or PyTorch builds is **not** guaranteed. The committed
+  output across different CPUs or PyTorch builds is **not** guaranteed: runs 36049056343
+  and 36051020432 on two hosted runners gave equal lengths but samples differing by a
+  mean of 5-9 of 32,767 levels. The provenance records the runner's `cpu`. The committed
   bytes and their recorded digests are authoritative. The verifier checks committed
   files against the record; it never compares them with a fresh regeneration.
 
@@ -273,3 +275,24 @@ window F09-E02 (4.0-6.0 s). Truth is not moved to fit the voice; instead the rec
 reviewed per-fixture speaking rate, `FIXTURE_SPEED = {"F09": 1.3}` (about 1.87 s), recorded per
 utterance and as `speed_overrides` in the provenance. The generator now also reports every
 fixture that does not fit in one error, before writing anything.
+
+## 2026-09-24 note: F08 pronunciation hint
+
+Run https://github.com/smormah/vsift/actions/runs/36049056343 succeeded, including the
+repeatability check. A listening and whisper.cpp v1.9.2 review of every clip found one defect:
+F08's English sentence spoke the "AB" of "AB-731" as the word "ob" (recorded phonemes `ˈɑb`)
+instead of the letters A B; the Spanish sentence already spelt it (`ˌaβˈe`). The recipe gains
+reviewed pronunciation hints, `SPOKEN_FORMS`, applied only to the text handed to Kokoro in
+misaki's explicit-pronunciation syntax `[word](/phonemes/)`. The frozen script is unchanged:
+it is still recorded as each segment's `text` and still what the verifier joins back to the
+manifest. The engine text is recorded as `engine_text`, and the hints as
+`pronunciation_hints` in the provenance.
+
+The first hint, `[AB](/ˌAbˈi/)-731`, spelt the letters but run
+https://github.com/smormah/vsift/actions/runs/36051020432 dropped "731" (phonemes
+`ˌAbˈi fˈAlz`): misaki applies an explicit pronunciation to the whole space-delimited word.
+A hint therefore names exactly one whole word of its script and gives phonemes for all of
+it; F08 en-US sends `[AB-731](/ˌAbˈi sˈɛvən θˈɜɹTi wˈʌn/)`, the number's phonemes being
+misaki's own from the first run. A hint that is not exactly one word of its script stops
+generation. Listening or ASR review of every clip, not the verifier, catches this kind of
+defect, so it is repeated after every recipe change.

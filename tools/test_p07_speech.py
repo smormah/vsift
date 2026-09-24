@@ -224,6 +224,29 @@ class SynthesisAndArgvTests(unittest.TestCase):
         self.assertIsNotNone(first["words"])
         self.assertIsNone(second["words"])
 
+    def test_pronunciation_hints_change_only_the_engine_text(self) -> None:
+        script = "Request AB-731 fails with code E-409 after 2.5 seconds."
+        self.assertEqual(generator.engine_text("F08", "en-US", script),
+                         "Request [AB-731](/ˌAbˈi sˈɛvən θˈɜɹTi wˈʌn/) fails with code E-409 after 2.5 seconds.")
+        self.assertEqual(generator.engine_text("F08", "en-US", "Ends with AB-731."),
+                         "Ends with [AB-731](/ˌAbˈi sˈɛvən θˈɜɹTi wˈʌn/).")
+        self.assertEqual(generator.engine_text("F08", "es", "El identificador es AB-731."), "El identificador es AB-731.")
+        self.assertEqual(generator.engine_text("F01", "en-US", script), script)
+        with self.assertRaises(generator.GenerationError):
+            generator.engine_text("F08", "en-US", "No identifier here.")
+        with self.assertRaises(generator.GenerationError):  # Only part of a word: misaki would replace all of it.
+            generator.engine_text("F08", "en-US", "Request XAB-731 fails.")
+        with self.assertRaises(generator.GenerationError):
+            generator.engine_text("F08", "en-US", "AB-731 and AB-731.")
+
+    def test_recorded_text_stays_the_frozen_script_when_a_hint_applies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            record = generator.synthesize(Path(temporary), FakeSynthesizer(), facts())
+            f08 = next(entry for entry in record["synthesis"]["utterances"] if entry["fixture"] == "F08")
+            english = f08["segments"][0]
+            self.assertIn("AB-731", english["text"])
+            self.assertIn("[AB-731](/", english["engine_text"])
+
     def test_only_reviewed_fixtures_override_the_speaking_rate(self) -> None:
         self.assertEqual(generator.speed_for("F09"), 1.3)
         self.assertEqual(generator.speed_for("F01"), generator.SPEED)
