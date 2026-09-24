@@ -21,12 +21,14 @@ mod random_identifiers;
 mod session_root;
 mod source_duration_probe;
 mod source_snapshot;
+mod speech_audio;
 mod system_clock;
 mod transcript_record;
 mod transcript_sidecar;
 mod user_dependency_config;
 mod verified_artifact_transfer;
 mod whisper_build;
+mod whisper_cli;
 mod xz_tar_inventory;
 
 pub use archive_inventory::{
@@ -43,7 +45,8 @@ pub use executable::{
 };
 pub use ffmpeg_media::{
     ExtractedAudio, ExtractedFrame, FfmpegMedia, MAX_AUDIO_BYTES, MAX_DIAGNOSTIC_BYTES,
-    MAX_FRAME_BYTES, MAX_PROBE_BYTES, MediaError, MediaProviderConformance,
+    MAX_FRAME_BYTES, MAX_PROBE_BYTES, MAX_SPEECH_PCM_BYTES, MAX_SPEECH_PCM_MICROS, MediaError,
+    MediaProviderConformance,
 };
 pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ExclusiveSessionLifetimeHold,
@@ -93,6 +96,7 @@ pub use source_duration_probe::FfprobeSourceDuration;
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
 };
+pub use speech_audio::FfmpegSpeechAudio;
 pub use system_clock::SystemClock;
 pub use transcript_record::{
     MAX_TRANSCRIPT_RECORD_BYTES, decode_transcript_record, encode_transcript_record,
@@ -103,6 +107,11 @@ pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use whisper_build::{
     MAX_WHISPER_EXECUTABLE_BYTES, WhisperBuildError, WhisperBuildIdentity, WhisperBuildRecognition,
     identify_whisper_build,
+};
+pub use whisper_cli::{
+    MAX_WHISPER_MODEL_BYTES, WHISPER_CHUNK_DEADLINE, WHISPER_STDERR_LIMIT, WHISPER_STDOUT_LIMIT,
+    WhisperCli, WhisperError, WhisperOutputError, WhisperOutputLimits, WhisperSpeechRecognizer,
+    encode_speech_wav, parse_whisper_full_json,
 };
 pub use xz_tar_inventory::{
     MAX_XZ_ARCHIVE_BYTES, XzTarInventoryError, inspect_xz_tar_inventory,

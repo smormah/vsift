@@ -6,6 +6,7 @@ use std::future::Future;
 
 use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, RuntimeReadiness};
 
+mod asr;
 mod clock;
 mod identifiers;
 mod provisioning;
@@ -14,6 +15,11 @@ mod storage;
 mod transcript;
 mod verification;
 
+pub use asr::{
+    AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
+    RecognizerIdentity, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
+    SpeechRecognizer, TranscribeRangeRequest, build_asr_revision, transcribe_range,
+};
 pub use clock::{Clock, ClockError};
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
 pub use session::{

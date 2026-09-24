@@ -390,7 +390,7 @@ pub fn transcript_query_digest(
     ))
 }
 
-fn derived_identity(prefix: &str, domain: &str, parts: &[&str]) -> String {
+pub(crate) fn derived_identity(prefix: &str, domain: &str, parts: &[&str]) -> String {
     let mut material = String::from(domain);
     for part in parts {
         material.push('\n');

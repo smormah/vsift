@@ -7,7 +7,7 @@
 //! never contains a path, and it is the identity a transcript's provenance
 //! records.
 
-use std::{error::Error, fmt, io};
+use std::{error::Error, fmt, io, path::Path};
 
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncReadExt;
@@ -127,11 +127,29 @@ impl Error for WhisperBuildError {
 pub async fn identify_whisper_build(
     executable: &TrustedExecutable,
 ) -> Result<WhisperBuildIdentity, WhisperBuildError> {
-    let file = tokio::fs::File::open(executable.path())
+    let (bytes, sha256) =
+        hash_file_bounded(executable.path(), MAX_WHISPER_EXECUTABLE_BYTES).await?;
+    Ok(WhisperBuildIdentity { bytes, sha256 })
+}
+
+/// Size and SHA-256 of a regular file of at most `max_bytes`, read once.
+///
+/// # Errors
+///
+/// Fails for an oversized, non-regular, changing or unreadable file.
+pub(crate) async fn hash_file_bounded(
+    path: &Path,
+    max_bytes: u64,
+) -> Result<(u64, [u8; 32]), WhisperBuildError> {
+    let file = tokio::fs::File::open(path)
         .await
         .map_err(WhisperBuildError::Io)?;
-    let length = file.metadata().await.map_err(WhisperBuildError::Io)?.len();
-    if length > MAX_WHISPER_EXECUTABLE_BYTES {
+    let metadata = file.metadata().await.map_err(WhisperBuildError::Io)?;
+    if !metadata.is_file() {
+        return Err(WhisperBuildError::Changed);
+    }
+    let length = metadata.len();
+    if length > max_bytes {
         return Err(WhisperBuildError::TooLarge);
     }
     let mut reader = file.take(length.saturating_add(1));
@@ -152,10 +170,7 @@ pub async fn identify_whisper_build(
     if total != length {
         return Err(WhisperBuildError::Changed);
     }
-    Ok(WhisperBuildIdentity {
-        bytes: length,
-        sha256: hasher.finalize().into(),
-    })
+    Ok((length, hasher.finalize().into()))
 }
 
 pub(crate) fn hex(bytes: &[u8]) -> String {

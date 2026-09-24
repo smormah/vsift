@@ -1,0 +1,464 @@
+{
+	"systeminfo": "[scrubbed]",
+	"model": {
+		"type": "base",
+		"multilingual": true,
+		"vocab": 51865,
+		"audio": {
+			"ctx": 1500,
+			"state": 512,
+			"head": 8,
+			"layer": 6
+		},
+		"text": {
+			"ctx": 448,
+			"state": 512,
+			"head": 8,
+			"layer": 6
+		},
+		"mels": 80,
+		"ftype": 1
+	},
+	"params": {
+		"model": "[scrubbed]",
+		"language": "auto",
+		"translate": false
+	},
+	"result": {
+		"language": "en"
+	},
+	"transcription": [
+		{
+			"timestamps": {
+				"from": "00:00:00,000",
+				"to": "00:00:03,000"
+			},
+			"offsets": {
+				"from": 0,
+				"to": 3000
+			},
+			"text": " I submit Invoice407.",
+			"tokens": [
+				{
+					"text": "[_BEG_]",
+					"timestamps": {
+						"from": "00:00:00,000",
+						"to": "00:00:00,000"
+					},
+					"offsets": {
+						"from": 0,
+						"to": 0
+					},
+					"id": 50364,
+					"p": 0.590264,
+					"t_dtw": -1
+				},
+				{
+					"text": " I",
+					"timestamps": {
+						"from": "00:00:00,000",
+						"to": "00:00:00,130"
+					},
+					"offsets": {
+						"from": 0,
+						"to": 130
+					},
+					"id": 286,
+					"p": 0.959009,
+					"t_dtw": -1
+				},
+				{
+					"text": " submit",
+					"timestamps": {
+						"from": "00:00:00,810",
+						"to": "00:00:00,910"
+					},
+					"offsets": {
+						"from": 810,
+						"to": 910
+					},
+					"id": 10315,
+					"p": 0.986207,
+					"t_dtw": -1
+				},
+				{
+					"text": " In",
+					"timestamps": {
+						"from": "00:00:00,910",
+						"to": "00:00:01,170"
+					},
+					"offsets": {
+						"from": 910,
+						"to": 1170
+					},
+					"id": 682,
+					"p": 0.136036,
+					"t_dtw": -1
+				},
+				{
+					"text": "voice",
+					"timestamps": {
+						"from": "00:00:01,170",
+						"to": "00:00:01,800"
+					},
+					"offsets": {
+						"from": 1170,
+						"to": 1800
+					},
+					"id": 42268,
+					"p": 0.713431,
+					"t_dtw": -1
+				},
+				{
+					"text": "40",
+					"timestamps": {
+						"from": "00:00:01,900",
+						"to": "00:00:02,580"
+					},
+					"offsets": {
+						"from": 1900,
+						"to": 2580
+					},
+					"id": 5254,
+					"p": 0.328156,
+					"t_dtw": -1
+				},
+				{
+					"text": "7",
+					"timestamps": {
+						"from": "00:00:02,620",
+						"to": "00:00:02,960"
+					},
+					"offsets": {
+						"from": 2620,
+						"to": 2960
+					},
+					"id": 22,
+					"p": 0.808642,
+					"t_dtw": -1
+				},
+				{
+					"text": ".",
+					"timestamps": {
+						"from": "00:00:03,000",
+						"to": "00:00:03,000"
+					},
+					"offsets": {
+						"from": 3000,
+						"to": 3000
+					},
+					"id": 13,
+					"p": 0.830938,
+					"t_dtw": -1
+				},
+				{
+					"text": "[_TT_150]",
+					"timestamps": {
+						"from": "00:00:03,000",
+						"to": "00:00:03,000"
+					},
+					"offsets": {
+						"from": 3000,
+						"to": 3000
+					},
+					"id": 50514,
+					"p": 0.0299909,
+					"t_dtw": -1
+				}
+			]
+		},
+		{
+			"timestamps": {
+				"from": "00:00:03,000",
+				"to": "00:00:10,000"
+			},
+			"offsets": {
+				"from": 3000,
+				"to": 10000
+			},
+			"text": " We expect a success banner, but the page shows error e409 and leaves submit enabled.",
+			"tokens": [
+				{
+					"text": " We",
+					"timestamps": {
+						"from": "00:00:03,000",
+						"to": "00:00:03,180"
+					},
+					"offsets": {
+						"from": 3000,
+						"to": 3180
+					},
+					"id": 492,
+					"p": 0.996614,
+					"t_dtw": -1
+				},
+				{
+					"text": " expect",
+					"timestamps": {
+						"from": "00:00:03,720",
+						"to": "00:00:03,720"
+					},
+					"offsets": {
+						"from": 3720,
+						"to": 3720
+					},
+					"id": 2066,
+					"p": 0.998595,
+					"t_dtw": -1
+				},
+				{
+					"text": " a",
+					"timestamps": {
+						"from": "00:00:03,810",
+						"to": "00:00:03,810"
+					},
+					"offsets": {
+						"from": 3810,
+						"to": 3810
+					},
+					"id": 257,
+					"p": 0.950744,
+					"t_dtw": -1
+				},
+				{
+					"text": " success",
+					"timestamps": {
+						"from": "00:00:03,810",
+						"to": "00:00:04,440"
+					},
+					"offsets": {
+						"from": 3810,
+						"to": 4440
+					},
+					"id": 2245,
+					"p": 0.946158,
+					"t_dtw": -1
+				},
+				{
+					"text": " banner",
+					"timestamps": {
+						"from": "00:00:04,440",
+						"to": "00:00:05,000"
+					},
+					"offsets": {
+						"from": 4440,
+						"to": 5000
+					},
+					"id": 24348,
+					"p": 0.989849,
+					"t_dtw": -1
+				},
+				{
+					"text": ",",
+					"timestamps": {
+						"from": "00:00:05,000",
+						"to": "00:00:05,150"
+					},
+					"offsets": {
+						"from": 5000,
+						"to": 5150
+					},
+					"id": 11,
+					"p": 0.746051,
+					"t_dtw": -1
+				},
+				{
+					"text": " but",
+					"timestamps": {
+						"from": "00:00:05,270",
+						"to": "00:00:05,410"
+					},
+					"offsets": {
+						"from": 5270,
+						"to": 5410
+					},
+					"id": 457,
+					"p": 0.637419,
+					"t_dtw": -1
+				},
+				{
+					"text": " the",
+					"timestamps": {
+						"from": "00:00:05,410",
+						"to": "00:00:05,660"
+					},
+					"offsets": {
+						"from": 5410,
+						"to": 5660
+					},
+					"id": 264,
+					"p": 0.968114,
+					"t_dtw": -1
+				},
+				{
+					"text": " page",
+					"timestamps": {
+						"from": "00:00:05,660",
+						"to": "00:00:05,960"
+					},
+					"offsets": {
+						"from": 5660,
+						"to": 5960
+					},
+					"id": 3028,
+					"p": 0.964904,
+					"t_dtw": -1
+				},
+				{
+					"text": " shows",
+					"timestamps": {
+						"from": "00:00:06,260",
+						"to": "00:00:06,260"
+					},
+					"offsets": {
+						"from": 6260,
+						"to": 6260
+					},
+					"id": 3110,
+					"p": 0.966389,
+					"t_dtw": -1
+				},
+				{
+					"text": " error",
+					"timestamps": {
+						"from": "00:00:06,480",
+						"to": "00:00:06,520"
+					},
+					"offsets": {
+						"from": 6480,
+						"to": 6520
+					},
+					"id": 6713,
+					"p": 0.474787,
+					"t_dtw": -1
+				},
+				{
+					"text": " e",
+					"timestamps": {
+						"from": "00:00:06,520",
+						"to": "00:00:06,560"
+					},
+					"offsets": {
+						"from": 6520,
+						"to": 6560
+					},
+					"id": 308,
+					"p": 0.499674,
+					"t_dtw": -1
+				},
+				{
+					"text": "40",
+					"timestamps": {
+						"from": "00:00:06,560",
+						"to": "00:00:06,840"
+					},
+					"offsets": {
+						"from": 6560,
+						"to": 6840
+					},
+					"id": 5254,
+					"p": 0.937385,
+					"t_dtw": -1
+				},
+				{
+					"text": "9",
+					"timestamps": {
+						"from": "00:00:06,840",
+						"to": "00:00:07,000"
+					},
+					"offsets": {
+						"from": 6840,
+						"to": 7000
+					},
+					"id": 24,
+					"p": 0.998582,
+					"t_dtw": -1
+				},
+				{
+					"text": " and",
+					"timestamps": {
+						"from": "00:00:07,000",
+						"to": "00:00:07,830"
+					},
+					"offsets": {
+						"from": 7000,
+						"to": 7830
+					},
+					"id": 293,
+					"p": 0.763816,
+					"t_dtw": -1
+				},
+				{
+					"text": " leaves",
+					"timestamps": {
+						"from": "00:00:08,200",
+						"to": "00:00:08,500"
+					},
+					"offsets": {
+						"from": 8200,
+						"to": 8500
+					},
+					"id": 5510,
+					"p": 0.789026,
+					"t_dtw": -1
+				},
+				{
+					"text": " submit",
+					"timestamps": {
+						"from": "00:00:08,520",
+						"to": "00:00:09,000"
+					},
+					"offsets": {
+						"from": 8520,
+						"to": 9000
+					},
+					"id": 10315,
+					"p": 0.510301,
+					"t_dtw": -1
+				},
+				{
+					"text": " enabled",
+					"timestamps": {
+						"from": "00:00:09,000",
+						"to": "00:00:09,700"
+					},
+					"offsets": {
+						"from": 9000,
+						"to": 9700
+					},
+					"id": 15172,
+					"p": 0.962898,
+					"t_dtw": -1
+				},
+				{
+					"text": ".",
+					"timestamps": {
+						"from": "00:00:09,700",
+						"to": "00:00:10,000"
+					},
+					"offsets": {
+						"from": 9700,
+						"to": 10000
+					},
+					"id": 13,
+					"p": 0.985913,
+					"t_dtw": -1
+				},
+				{
+					"text": "[_TT_500]",
+					"timestamps": {
+						"from": "00:00:10,000",
+						"to": "00:00:10,000"
+					},
+					"offsets": {
+						"from": 10000,
+						"to": 10000
+					},
+					"id": 50864,
+					"p": 0.14769,
+					"t_dtw": -1
+				}
+			]
+		}
+	]
+}
