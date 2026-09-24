@@ -49,9 +49,9 @@ is not. Local checks: CI is the default Linux/macOS check; Docker only for platf
   <= 400 MiB, WER <= 10% clean / 25% F08]; D7 progress events [none yet]; D8 stream
   tombstones [none: superseded revisions stay valid and readable].
 - Fuzz harness licence (asked 2026-09-24): `libfuzzer-sys` declares `(MIT OR
-  Apache-2.0) AND NCSA` and `deny.toml` does not allow NCSA, so `Dependency policy`
-  does not yet check `fuzz/Cargo.lock` [allow NCSA for that crate only, in
-  `exceptions`, and add a cargo-deny step for `fuzz/Cargo.toml`].
+  Apache-2.0) AND NCSA`, which `deny.toml` did not allow. The fuzz PR adds an NCSA
+  exception for that crate only and a cargo-deny step for `fuzz/Cargo.toml` (both
+  graphs pass); it merges only once the maintainer approves [approve].
 - Whether to open a backlog issue for a faster-whisper adapter (proposed; awaiting
   the maintainer). whisper.cpp stays the default.
 - Crate names are confirmed (`vsift` facade, `vsift-contract`); a crates.io
