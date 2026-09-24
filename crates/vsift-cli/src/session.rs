@@ -9,12 +9,12 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
     Engine, FailureCode, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot,
-    SourceRetention, SuppliedTranscriptRequest, TranscriptQuery,
+    SourceRetention, SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, SessionState,
-    StatusData, TranscriptPageData, transcript_warning_messages,
+    StatusData, TranscriptEvidenceStream, TranscriptPageData, transcript_warning_messages,
 };
 
 use crate::{
@@ -184,18 +184,25 @@ pub(crate) async fn ingest(
         .with_warnings(&warnings))
 }
 
-/// Reads one bounded page of a session's transcript.
-pub(crate) fn transcript_get(
+fn read_transcript(
     engine: &Engine,
     arguments: TranscriptGetArguments,
-) -> Result<Response, CommandFailure> {
-    let excerpt = engine.transcript(TranscriptQuery {
+) -> Result<TranscriptExcerpt, CommandFailure> {
+    Ok(engine.transcript(TranscriptQuery {
         session: arguments.session,
         from_micros: arguments.from,
         to_micros: arguments.to,
         limit: arguments.limit,
         cursor: arguments.cursor,
-    })?;
+    })?)
+}
+
+/// Reads one bounded page of a session's transcript as one result.
+pub(crate) fn transcript_get(
+    engine: &Engine,
+    arguments: TranscriptGetArguments,
+) -> Result<Response, CommandFailure> {
+    let excerpt = read_transcript(engine, arguments)?;
     let data = TranscriptPageData::new(
         excerpt.session().session_id(),
         excerpt.revision(),
@@ -206,6 +213,25 @@ pub(crate) fn transcript_get(
     let expires_at = rfc3339(excerpt.session().lifetime().expires_at_unix_seconds())?;
     Ok(response(CommandName::TranscriptGet, &data)?
         .with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
+}
+
+/// Reads one bounded page of a session's transcript as an evidence stream:
+/// one evidence event per segment, then the terminal event.
+pub(crate) fn transcript_stream(
+    engine: &Engine,
+    arguments: TranscriptGetArguments,
+) -> Result<TranscriptEvidenceStream, CommandFailure> {
+    let excerpt = read_transcript(engine, arguments)?;
+    let expires_at = rfc3339(excerpt.session().lifetime().expires_at_unix_seconds())?;
+    TranscriptEvidenceStream::new(
+        excerpt.session().session_id(),
+        excerpt.revision(),
+        excerpt.range(),
+        excerpt.segments(),
+        excerpt.next_cursor(),
+        LifecycleResponse::ephemeral(expires_at),
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Executes one visible P05 session operation.

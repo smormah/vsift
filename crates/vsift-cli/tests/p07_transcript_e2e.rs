@@ -6,8 +6,11 @@
 //! therefore absent, which proves the supplied-transcript path never needs
 //! local ASR. The F10 fixture video and its sidecars are imported with the
 //! explicit +500 ms offset, and the cited segment is compared with the frozen
-//! truth in `fixtures/corpus/manifest.json`. The local-ASR stage stays
-//! `not_implemented` until the whisper.cpp adapter lands.
+//! truth in `fixtures/corpus/manifest.json`. Each journey then consumes the
+//! whole transcript as the `--events jsonl` evidence stream, retains the
+//! session, validates the bundle and checks its transcript record against the
+//! published bundle schema. The local-ASR stage stays `not_implemented` until
+//! the whisper.cpp adapter lands.
 //!
 //! `cargo test -p vsift-cli --locked --test p07_transcript_e2e -- --ignored --nocapture`
 //!
@@ -27,6 +30,7 @@ use std::{
 };
 
 use assert_cmd::Command;
+use jsonschema::{Retrieve, Uri};
 use serde_json::{Value, json};
 use vsift_infrastructure::{
     ExecutableResolver, HostIsolation, ProcessCancellation, ProcessRequest, ProcessSupervisor,
@@ -40,6 +44,7 @@ const CLI_DEADLINE: Duration = Duration::from_secs(60);
 const OWNED_PREFIX: &str = "vsift-p07-e2e-";
 const MAX_DIAGNOSTIC_CHARS: usize = 240;
 const OFFSET_US: &str = "500000";
+const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
 const MISSING_MEDIA_TOOLS: &str = "FFmpeg or FFprobe is not on PATH; install or locate trusted builds, then run setup configure ffmpeg|ffprobe --executable <absolute-path>";
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
@@ -174,6 +179,179 @@ fn run_json(command: &mut Command) -> Result<(Option<i32>, Value), StageStop> {
     ))
 }
 
+/// Resolves sibling `$ref`s by their published identifier to the local copy.
+struct PublishedSchemas;
+
+impl Retrieve for PublishedSchemas {
+    fn retrieve(&self, uri: &Uri<String>) -> Result<Value, Box<dyn Error + Send + Sync>> {
+        let name = uri
+            .as_str()
+            .strip_prefix(SCHEMA_BASE)
+            .filter(|name| !name.contains(['/', '\\']))
+            .ok_or_else(|| format!("unpublished schema reference: {uri}"))?;
+        Ok(serde_json::from_slice(&fs::read(
+            repository().join("schemas/v1").join(name),
+        )?)?)
+    }
+}
+
+/// Requires `instance` to conform to the published v1 schema `schema`.
+fn conforms(schema: &str, instance: &Value) -> Result<(), StageStop> {
+    let definition: Value =
+        serde_json::from_slice(&fs::read(repository().join("schemas/v1").join(schema))?)?;
+    let validator = jsonschema::options()
+        .with_retriever(PublishedSchemas)
+        .build(&definition)
+        .map_err(|error| StageStop::Failed(bounded(&error.to_string())))?;
+    ensure(
+        validator.is_valid(instance),
+        &format!("an emitted document does not conform to {schema}"),
+    )
+}
+
+/// Streams the whole transcript with `--events jsonl` and returns the upsert
+/// keys of its evidence events, after proving the stream's shape: contiguous
+/// sequence numbers, schema-valid records, and exactly one terminal event last
+/// whose record count matches.
+fn stream_transcript(base: &Path, session: &str, duration: u64) -> Result<Vec<String>, StageStop> {
+    let output = vsift(base)?
+        .args(["transcript", "get", session, "--from", "0", "--to"])
+        .arg(duration.to_string())
+        .args(["--events", "jsonl"])
+        .output()?;
+    ensure(
+        output.status.code() == Some(0),
+        "the JSON Lines transcript stream failed",
+    )?;
+    ensure(
+        output.stderr.is_empty(),
+        "the JSON Lines stream wrote to standard error",
+    )?;
+    let text = std::str::from_utf8(&output.stdout)?;
+    let body = text
+        .strip_suffix('\n')
+        .ok_or_else(|| StageStop::Failed("the stream does not end with a newline".to_owned()))?;
+    let lines = body
+        .split('\n')
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let (terminal, records) = lines
+        .split_last()
+        .ok_or_else(|| StageStop::Failed("the stream is empty".to_owned()))?;
+    let mut keys = Vec::new();
+    for (sequence, record) in (0_u64..).zip(records) {
+        conforms("evidence-event.schema.json", record)?;
+        ensure(
+            record["sequence"].as_u64() == Some(sequence),
+            "evidence sequence numbers are not contiguous",
+        )?;
+        ensure(
+            record["key"] == record["record"]["segment_id"],
+            "an evidence key is not its segment identity",
+        )?;
+        keys.push(record["key"].as_str().unwrap_or_default().to_owned());
+    }
+    let count = u64::try_from(records.len()).ok();
+    conforms("terminal-event.schema.json", terminal)?;
+    conforms(
+        "transcript-get-stream-data.schema.json",
+        &terminal["result"]["data"],
+    )?;
+    ensure(
+        terminal["sequence"].as_u64() == count
+            && terminal["result"]["data"]["record_count"].as_u64() == count,
+        "the terminal event does not count the streamed records",
+    )?;
+    ensure(
+        terminal["result"]["data"]["next_cursor"].is_null(),
+        "one default page did not cover the whole F10 transcript",
+    )?;
+    Ok(keys)
+}
+
+/// Retains the session, validates the bundle through the binary and proves
+/// its transcript record conforms to the published bundle schema. Returns the
+/// record's segment identities.
+fn retain_and_validate(base: &Path, session: &str) -> Result<Vec<String>, StageStop> {
+    let bundle = base.join("bundle");
+    let (code, retained) = run_json(
+        vsift(base)?
+            .args(["session", "retain", session, "--output"])
+            .arg(&bundle)
+            .arg("--json"),
+    )?;
+    ensure(
+        code == Some(0),
+        &format!("session retain failed: {}", retained["error"]["code"]),
+    )?;
+    let (code, validated) = run_json(
+        vsift(base)?
+            .args(["bundle", "validate"])
+            .arg(&bundle)
+            .arg("--json"),
+    )?;
+    ensure(
+        code == Some(0),
+        &format!("bundle validate failed: {}", validated["error"]["code"]),
+    )?;
+    ensure(
+        validated["data"]["artifact_count"] == 1,
+        "the bundle does not hold exactly the transcript record",
+    )?;
+    let manifest: Value = serde_json::from_slice(&fs::read(bundle.join("bundle.json"))?)?;
+    let artifact = &manifest["artifacts"][0];
+    ensure(
+        artifact["kind"] == "transcript_record",
+        "the retained artifact is not a transcript record",
+    )?;
+    let name = artifact["name"].as_str().unwrap_or_default();
+    ensure(
+        name.starts_with("artifact-") && !name.contains(['/', '\\']),
+        "the transcript record has an unexpected name",
+    )?;
+    let record: Value = serde_json::from_slice(&fs::read(bundle.join(name))?)?;
+    conforms("bundle-transcript-record.schema.json", &record)?;
+    Ok(record["segments"]
+        .as_array()
+        .map(|segments| {
+            segments
+                .iter()
+                .filter_map(|segment| segment["id"].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Consumes the imported transcript as an evidence stream, then retains and
+/// validates the session as a bundle. The stream must carry every segment of
+/// `revision`, including the `cited` one, and name exactly the segments of the
+/// bundle's transcript record. Returns the number of streamed records.
+fn stream_and_retain(
+    base: &Path,
+    session: &str,
+    duration: u64,
+    revision: &Value,
+    cited: &Value,
+) -> Result<usize, StageStop> {
+    let streamed = stream_transcript(base, session, duration)?;
+    ensure(
+        u64::try_from(streamed.len()).ok() == revision["segment_count"].as_u64(),
+        "the stream did not carry every segment of the revision",
+    )?;
+    ensure(
+        streamed
+            .iter()
+            .any(|key| cited["segment_id"].as_str() == Some(key.as_str())),
+        "the stream does not contain the cited segment",
+    )?;
+    let retained = retain_and_validate(base, session)?;
+    ensure(
+        retained == streamed,
+        "the bundle's transcript record and the stream name different segments",
+    )?;
+    Ok(streamed.len())
+}
+
 fn prepare(base: &Path, tools: &MediaTools) -> Result<Value, StageStop> {
     for (dependency, tool) in [("ffmpeg", &tools.ffmpeg), ("ffprobe", &tools.ffprobe)] {
         let (code, _) = run_json(
@@ -276,6 +454,7 @@ fn import_and_cite(
             && segment["confidence"]["origin"] == "unavailable",
         "imported text claimed a confidence",
     )?;
+    let streamed = stream_and_retain(&base, &session, truth.duration, transcript, segment)?;
     Ok(json!({
         "session_id_prefix": "ses_",
         "revision_id": transcript["revision_id"],
@@ -290,6 +469,9 @@ fn import_and_cite(
         "ffmpeg_version": check["dependencies"][0]["detail"],
         "ffprobe_version": check["dependencies"][1]["detail"],
         "ingest_ms": ingest_ms,
+        "jsonl_evidence_records": streamed,
+        "bundle_validated": true,
+        "bundle_transcript_record_schema": "conforms",
     }))
 }
 
@@ -482,8 +664,7 @@ async fn supplied_transcript_checkpoint() -> TestResult {
         "prior_checkpoints": ["P04: p04_media_e2e", "P05: p05_session_e2e", "P06: p06_setup_e2e"],
         "stages": stages,
         "coverage_gaps": [
-            "Local ASR (whisper.cpp adapter, chunking, preflight) is P07 increment 3",
-            "The automatic media-tool preflight does not yet run before the probe",
+            "Local ASR (whisper.cpp adapter, chunking) is P07 increment 3",
             "Search, candidates and visual refinement belong to P08 and P09"
         ],
         "future_stages": future_stages,

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/evidence-event.schema.json",
+  "title": "VSift JSONL evidence record event v1",
+  "description": "One evidence record in an --events jsonl stream. Evidence events precede the single terminal event (terminal-event.schema.json) that ends the stream; sequence numbers start at 0 and are contiguous across every event of the stream. record_type names the schema of record. key is the record's upsert key: evidence records are immutable, so the same (record_type, key) always carries the same record and a consumer may upsert by it idempotently.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event",
+    "sequence",
+    "command",
+    "operation_id",
+    "record_type",
+    "key",
+    "record"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "event": { "const": "evidence" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "command": {
+      "type": "string",
+      "pattern": "^[a-z]+(?:-[a-z]+)*(?:[.][a-z]+(?:-[a-z]+)*)?$",
+      "maxLength": 64
+    },
+    "operation_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" }
+      ]
+    },
+    "record_type": { "enum": ["transcript_segment"] },
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z]+_[a-z0-9_]+$",
+      "maxLength": 128
+    },
+    "record": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "record_type": { "const": "transcript_segment" } },
+        "required": ["record_type"]
+      },
+      "then": {
+        "properties": {
+          "key": {
+            "description": "The record's segment_id.",
+            "pattern": "^tsg_[a-z0-9]{16,64}$"
+          },
+          "record": { "$ref": "transcript-segment.schema.json" }
+        }
+      }
+    }
+  ]
+}

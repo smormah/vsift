@@ -6,19 +6,20 @@ use std::{
     error::Error,
     fs,
     num::NonZeroU32,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use sha2::{Digest, Sha256};
 use vsift_application::{
     ForegroundSessionPort, ImportedRevisionRequest, InitializeSessionStorage,
     InitializeSessionStorageRequest, OpenSessionError, SessionStorageError,
     build_imported_revision,
 };
 use vsift_domain::{
-    DurabilityRequirement, MediaTime, OperationId, SessionId, StorageGeneration, TranscriptOffset,
-    TranscriptRevision,
+    DurabilityRequirement, MediaTime, OperationId, SessionId, SourceId, StorageGeneration,
+    TranscriptOffset, TranscriptRevision,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, FilesystemSessionStore, SourceSnapshot, decode_transcript_record,
@@ -60,8 +61,68 @@ impl Drop for OwnedRoot {
     }
 }
 
+fn repository(relative: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(relative)
+}
+
 fn f10_sidecar() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/corpus/transcripts/F10.vtt")
+    repository("fixtures/corpus/transcripts/F10.vtt")
+}
+
+fn load_json(relative: &str) -> Result<serde_json::Value, Box<dyn Error>> {
+    Ok(serde_json::from_slice(&fs::read(repository(relative))?)?)
+}
+
+/// Whether `instance` conforms to the published bundle transcript record schema.
+fn conforms_to_record_schema(instance: &serde_json::Value) -> Result<bool, Box<dyn Error>> {
+    let schema = load_json("schemas/v1/bundle-transcript-record.schema.json")?;
+    Ok(jsonschema::validator_for(&schema)?.is_valid(instance))
+}
+
+/// The one transcript record artifact of a retained bundle: its file name and
+/// its content as JSON.
+fn bundle_record(bundle: &Path) -> Result<(String, serde_json::Value), Box<dyn Error>> {
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(bundle.join("bundle.json"))?)?;
+    let artifact = &manifest["artifacts"][0];
+    if artifact["kind"] != "transcript_record" {
+        return Err("the bundle's first artifact is not a transcript record".into());
+    }
+    let name = artifact["name"]
+        .as_str()
+        .ok_or("artifact name missing")?
+        .to_owned();
+    let record = serde_json::from_slice(&fs::read(bundle.join(&name))?)?;
+    Ok((name, record))
+}
+
+/// Replaces the bundle's transcript record with `record` and rewrites the
+/// manifest so every recorded name, size and digest matches the new bytes:
+/// only the record's content can then make validation fail.
+fn rewrite_bundle_record(bundle: &Path, old_name: &str, record: &serde_json::Value) -> TestResult {
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let bytes = serde_json::to_vec(record)?;
+    let sha256: String = Sha256::digest(&bytes)
+        .iter()
+        .flat_map(|byte| {
+            [
+                char::from(HEX_DIGITS[usize::from(byte >> 4)]),
+                char::from(HEX_DIGITS[usize::from(byte & 0x0f)]),
+            ]
+        })
+        .collect();
+    let name = format!("artifact-{sha256}.json");
+    fs::remove_file(bundle.join(old_name))?;
+    fs::write(bundle.join(&name), &bytes)?;
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(bundle.join("bundle.json"))?)?;
+    manifest["artifacts"][0]["name"] = serde_json::Value::from(name);
+    manifest["artifacts"][0]["sha256"] = serde_json::Value::from(sha256);
+    manifest["artifacts"][0]["bytes"] = serde_json::Value::from(bytes.len());
+    fs::write(bundle.join("bundle.json"), serde_json::to_vec(&manifest)?)?;
+    Ok(())
 }
 
 /// An initialized session with a staged, not yet activated source.
@@ -292,6 +353,138 @@ async fn stored_records_are_strict_and_versioned() -> TestResult {
     assert_eq!(
         decode_transcript_record(&serde_json::to_vec(&srt_speaker)?),
         Err(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
+/// The session and source identities of the published v1 examples: the F10
+/// fixture video, whose real source digest this is.
+const EXAMPLE_SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
+const F10_SOURCE: &str =
+    "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4";
+
+#[test]
+fn the_frozen_bundle_record_example_is_the_encoded_f10_revision() -> TestResult {
+    let supplied = read_supplied_transcript(&repository("fixtures/corpus/transcripts/F10.srt"))?;
+    let revision = build_imported_revision(ImportedRevisionRequest {
+        session_id: &SessionId::parse(EXAMPLE_SESSION)?,
+        source_id: &SourceId::parse(F10_SOURCE)?,
+        source_duration: MediaTime::from_micros(12_000_000),
+        supplied: &supplied,
+        offset: TranscriptOffset::from_micros(500_000)?,
+        number: NonZeroU32::MIN,
+    })?;
+    let encoded: serde_json::Value = serde_json::from_slice(&encode_transcript_record(&revision)?)?;
+    let example = load_json("schemas/v1/examples/bundle-transcript-record.json")?;
+
+    assert!(
+        encoded == example,
+        "the encoded record differs from the frozen example"
+    );
+    assert!(conforms_to_record_schema(&example)?);
+    assert!(
+        decode_transcript_record(&serde_json::to_vec(&example)?)? == revision,
+        "the frozen example does not decode to the revision"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_retained_transcript_record_conforms_to_its_published_schema() -> TestResult {
+    let staged = staged().await?;
+    let revision = f10_revision(&staged)?;
+    activate(&staged, &revision)?;
+    let bundle = staged.root.0.join("bundle");
+    staged.store.retain_bundle(
+        &staged.session_id,
+        &bundle,
+        BundleSourcePolicy::EvidenceOnly,
+    )?;
+
+    let (_, record) = bundle_record(&bundle)?;
+    assert!(conforms_to_record_schema(&record)?);
+    for pointer in ["", "/segments/0", "/source_segment", "/sidecar"] {
+        let mut extended = record.clone();
+        extended
+            .pointer_mut(pointer)
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or("not an object")?
+            .insert("unreviewed".to_owned(), serde_json::Value::Bool(true));
+        assert!(!conforms_to_record_schema(&extended)?, "{pointer}");
+    }
+    Ok(())
+}
+
+/// `bundle validate` decodes every transcript record: a record whose bytes
+/// match a rewritten manifest but whose content does not conform is rejected,
+/// while the unmodified record rewritten the same way still validates.
+#[tokio::test]
+async fn bundle_validation_rejects_a_nonconforming_transcript_record() -> TestResult {
+    let staged = staged().await?;
+    let revision = f10_revision(&staged)?;
+    activate(&staged, &revision)?;
+    let bundle = staged.root.0.join("bundle");
+    staged.store.retain_bundle(
+        &staged.session_id,
+        &bundle,
+        BundleSourcePolicy::EvidenceOnly,
+    )?;
+    let (mut name, original) = bundle_record(&bundle)?;
+
+    let mut extended = original.clone();
+    extended["segments"][0]["unreviewed"] = serde_json::Value::Bool(true);
+    let mut shifted = original.clone();
+    shifted["segments"][0]["start_us"] = serde_json::json!(1_000_001);
+    let mut foreign_source = original.clone();
+    foreign_source["source_id"] = serde_json::Value::from(F10_SOURCE);
+    let mut renamed_format = original.clone();
+    renamed_format["format"] = serde_json::Value::from("vsift.other_record");
+    let mut empty = original.clone();
+    empty["segments"] = serde_json::json!([]);
+    let mut future = original.clone();
+    future["schema_version"] = serde_json::json!(2);
+
+    for (label, record, expected) in [
+        (
+            "unknown field",
+            extended,
+            SessionStorageError::IntegrityFailure,
+        ),
+        (
+            "shifted segment",
+            shifted,
+            SessionStorageError::IntegrityFailure,
+        ),
+        (
+            "foreign source",
+            foreign_source,
+            SessionStorageError::IntegrityFailure,
+        ),
+        (
+            "other format",
+            renamed_format,
+            SessionStorageError::IntegrityFailure,
+        ),
+        ("no segments", empty, SessionStorageError::IntegrityFailure),
+        (
+            "future version",
+            future,
+            SessionStorageError::UnsupportedVersion,
+        ),
+    ] {
+        rewrite_bundle_record(&bundle, &name, &record)?;
+        name = bundle_record(&bundle)?.0;
+        assert_eq!(
+            FilesystemSessionStore::validate_bundle(&bundle).map(|status| status.artifact_count()),
+            Err(expected),
+            "{label}"
+        );
+    }
+
+    rewrite_bundle_record(&bundle, &name, &original)?;
+    assert_eq!(
+        FilesystemSessionStore::validate_bundle(&bundle).map(|status| status.artifact_count()),
+        Ok(1)
     );
     Ok(())
 }

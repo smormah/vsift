@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/terminal-event.schema.json",
   "title": "VSift JSONL terminal event v1",
+  "description": "The last line of every --events jsonl stream; exactly one per stream. Its sequence is the number of events before it (0 when it is the only line, as for every failure). Validate result with operation-response.schema.json and result.data with the command's data schema; a transcript.get stream ends with transcript-get-stream-data.schema.json data after its evidence events (evidence-event.schema.json).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "event", "sequence", "command", "operation_id", "result"],

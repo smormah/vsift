@@ -5,11 +5,17 @@
 //! `#[ignore]`d and opt-in (it needs `ffmpeg` and `ffprobe` on `PATH`):
 //!
 //! `cargo test -p vsift-cli --locked --test transcript_cli_contract -- --ignored`
+//!
+//! The `--events jsonl` evidence stream is read from a transcript session
+//! committed directly through the session store (see [`seed_f10_session`]), so
+//! the stream contract runs everywhere without `FFprobe`.
 
 use std::{
+    collections::BTreeSet,
     env,
     error::Error,
     fs, io,
+    num::NonZeroU32,
     path::{Path, PathBuf},
     process::Output,
     sync::atomic::{AtomicU64, Ordering},
@@ -19,6 +25,14 @@ use std::{
 use assert_cmd::Command;
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
+use vsift::{
+    DurabilityRequirement, MediaTime, OperationId, SessionId, StorageGeneration, TranscriptOffset,
+};
+use vsift_application::{
+    ForegroundSessionPort, ImportedRevisionRequest, InitializeSessionStorage,
+    InitializeSessionStorageRequest, build_imported_revision,
+};
+use vsift_infrastructure::{FilesystemSessionStore, SourceSnapshot, read_supplied_transcript};
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -405,5 +419,279 @@ fn f10_import_and_paged_retrieval_through_the_binary() -> TestResult {
 
     let status = json(&vsift(&root, &["session", "status", &session, "--json"])?)?;
     assert_eq!(status["data"]["artifact_count"], 1);
+    Ok(())
+}
+
+/// Commits the F10 `SubRip` transcript (+500 ms) into the root's session store.
+///
+/// Importing through the binary needs a real `FFprobe` to measure the video,
+/// so this commits the same state through the store with F10's known 12 s
+/// duration. The binary then reads it exactly as it reads an imported session;
+/// the opt-in journeys cover the import itself.
+async fn seed_f10_session(root: &OwnedRoot) -> Result<String, Box<dyn Error>> {
+    let source = root.write("f10-stand-in.mp4", b"\0\0\0\x18ftypisomtranscript-stream")?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let session_id = SessionId::parse("ses_0123456789abcdef0123456789abcdef")?;
+    let opener = OperationId::parse("op_0123456789abcdef")?;
+    let store = FilesystemSessionStore::provision_default(root.sessions())?;
+    let registration = store.register_session(&session_id, &opener, now)?;
+    InitializeSessionStorage::new(store)
+        .execute(InitializeSessionStorageRequest::new(
+            session_id.clone(),
+            opener,
+            DurabilityRequirement::Ephemeral,
+        ))
+        .await?;
+    drop(registration);
+    let store = FilesystemSessionStore::open_existing(root.sessions())?;
+    let snapshot = SourceSnapshot::stage(
+        &store,
+        &session_id,
+        &OperationId::parse("op_1111111111111111")?,
+        &source,
+    )?;
+    let supplied = read_supplied_transcript(&repository("fixtures/corpus/transcripts/F10.srt"))?;
+    let revision = build_imported_revision(ImportedRevisionRequest {
+        session_id: &session_id,
+        source_id: snapshot.id(),
+        source_duration: MediaTime::from_micros(12_000_000),
+        supplied: &supplied,
+        offset: TranscriptOffset::from_micros(500_000)?,
+        number: NonZeroU32::MIN,
+    })?;
+    store.activate_with_transcript(
+        &snapshot,
+        &OperationId::parse("op_2222222222222222")?,
+        StorageGeneration::INITIAL,
+        now,
+        &revision,
+    )?;
+    Ok(session_id.as_str().to_owned())
+}
+
+/// Splits `--events jsonl` stdout into its lines, proving each is a complete,
+/// newline-terminated JSON value that validates against its event schemas.
+fn stream(output: &Output) -> Result<Vec<Value>, Box<dyn Error>> {
+    assert!(
+        output.stderr.is_empty(),
+        "a JSON Lines command wrote to stderr"
+    );
+    let text = std::str::from_utf8(&output.stdout)?;
+    let body = text
+        .strip_suffix('\n')
+        .ok_or("the stream does not end with a newline")?;
+    let mut lines = Vec::new();
+    for line in body.split('\n') {
+        let value: Value = serde_json::from_str(line)?;
+        match value["event"].as_str() {
+            Some("evidence") => {
+                validate("evidence-event.schema.json", &value)?;
+                validate("transcript-segment.schema.json", &value["record"])?;
+                assert!(
+                    value["key"] == value["record"]["segment_id"],
+                    "an evidence key is not its segment identity"
+                );
+            }
+            Some("terminal") => {
+                validate("terminal-event.schema.json", &value)?;
+                validate("operation-response.schema.json", &value["result"])?;
+                if value["result"]["status"] == "complete" {
+                    validate(
+                        "transcript-get-stream-data.schema.json",
+                        &value["result"]["data"],
+                    )?;
+                }
+            }
+            _ => return Err("a stream line has no published event kind".into()),
+        }
+        lines.push(value);
+    }
+    for (index, line) in lines.iter().enumerate() {
+        assert_eq!(line["sequence"], index, "sequence is not contiguous");
+        assert_eq!(line["command"], "transcript.get");
+    }
+    let (terminal, records) = lines.split_last().ok_or("empty stream")?;
+    assert_eq!(
+        terminal["event"], "terminal",
+        "the last line is not terminal"
+    );
+    assert!(
+        records.iter().all(|line| line["event"] == "evidence"),
+        "an event other than evidence precedes the terminal event"
+    );
+    Ok(lines)
+}
+
+fn transcript_get<'a>(session: &'a str, range: [&'a str; 2], extra: &[&'a str]) -> Vec<&'a str> {
+    let mut arguments = vec![
+        "transcript",
+        "get",
+        session,
+        "--from",
+        range[0],
+        "--to",
+        range[1],
+    ];
+    arguments.extend_from_slice(extra);
+    arguments
+}
+
+/// `--events jsonl` streams one evidence event per segment, then exactly one
+/// terminal event whose cursor continues the stream on the next call; the
+/// records are the `--json` page items, which keep their existing shape.
+#[tokio::test]
+async fn transcript_get_streams_records_then_one_terminal_event() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_f10_session(&root).await?;
+    let full = ["0", "12000000"];
+
+    let first = vsift(
+        &root,
+        &transcript_get(&session, full, &["--limit", "2", "--events", "jsonl"]),
+    )?;
+    assert_eq!(first.status.code(), Some(0));
+    let first = stream(&first)?;
+    assert_eq!(first.len(), 3);
+    let terminal = &first[2]["result"];
+    assert_eq!(terminal["status"], "complete");
+    assert_eq!(terminal["data"]["record_count"], 2);
+    assert!(
+        terminal["data"]["session_id"] == session.as_str(),
+        "the terminal event names another session"
+    );
+    assert_eq!(terminal["lifecycle"]["mode"], "ephemeral");
+    let cursor = terminal["data"]["next_cursor"]
+        .as_str()
+        .ok_or("the first page has no cursor")?;
+
+    let second = vsift(
+        &root,
+        &transcript_get(
+            &session,
+            full,
+            &["--limit", "2", "--cursor", cursor, "--events", "jsonl"],
+        ),
+    )?;
+    assert_eq!(second.status.code(), Some(0));
+    let second = stream(&second)?;
+    assert_eq!(second.len(), 2);
+    assert_eq!(second[1]["result"]["data"]["record_count"], 1);
+    assert!(second[1]["result"]["data"]["next_cursor"].is_null());
+
+    let streamed: Vec<&Value> = first[..2]
+        .iter()
+        .chain(&second[..1])
+        .map(|line| &line["record"])
+        .collect();
+    let keys: BTreeSet<&str> = first[..2]
+        .iter()
+        .chain(&second[..1])
+        .filter_map(|line| line["key"].as_str())
+        .collect();
+    assert_eq!(keys.len(), 3);
+
+    let page = json(&vsift(
+        &root,
+        &transcript_get(&session, full, &["--limit", "100", "--json"]),
+    )?)?;
+    validate("transcript-get-data.schema.json", &page["data"])?;
+    assert!(page["data"].get("record_count").is_none());
+    let items: Vec<&Value> = page["data"]["items"]
+        .as_array()
+        .ok_or("items missing")?
+        .iter()
+        .collect();
+    assert!(
+        streamed == items,
+        "the streamed records differ from the --json page items"
+    );
+    assert!(
+        first[2]["result"]["data"]["revision"] == page["data"]["revision"],
+        "the stream and the page describe different revisions"
+    );
+    Ok(())
+}
+
+/// The stream never holds more records than the page limit.
+#[tokio::test]
+async fn the_stream_is_bounded_by_the_page_limit() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_f10_session(&root).await?;
+
+    for limit in ["1", "2", "3", "100"] {
+        let output = vsift(
+            &root,
+            &transcript_get(
+                &session,
+                ["0", "12000000"],
+                &["--limit", limit, "--events", "jsonl"],
+            ),
+        )?;
+        assert_eq!(output.status.code(), Some(0), "limit {limit}");
+        let lines = stream(&output)?;
+        let expected = limit.parse::<usize>()?.min(3);
+        assert_eq!(lines.len(), expected + 1, "limit {limit}");
+        assert_eq!(
+            lines[expected]["result"]["data"]["record_count"], expected,
+            "limit {limit}"
+        );
+    }
+    Ok(())
+}
+
+/// A range no segment intersects is a complete stream of one terminal event.
+#[tokio::test]
+async fn an_empty_range_streams_only_the_terminal_event() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_f10_session(&root).await?;
+
+    let output = vsift(
+        &root,
+        &transcript_get(&session, ["4000000", "5000000"], &["--events", "jsonl"]),
+    )?;
+    assert_eq!(output.status.code(), Some(0));
+    let lines = stream(&output)?;
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["result"]["status"], "complete");
+    assert_eq!(lines[0]["result"]["data"]["record_count"], 0);
+    assert!(lines[0]["result"]["data"]["next_cursor"].is_null());
+    Ok(())
+}
+
+/// Requests that fail stay a single terminal failure event at sequence 0.
+#[tokio::test]
+async fn rejected_stream_requests_are_one_terminal_failure_event() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_f10_session(&root).await?;
+
+    for (label, arguments) in [
+        (
+            "empty range",
+            transcript_get(&session, ["5", "5"], &["--events", "jsonl"]),
+        ),
+        (
+            "foreign cursor",
+            transcript_get(
+                &session,
+                ["0", "12000000"],
+                &["--cursor", "v1|not-a-cursor", "--events", "jsonl"],
+            ),
+        ),
+        (
+            "unknown session",
+            transcript_get(
+                "ses_ffffffffffffffffffffffffffffffff",
+                ["0", "12000000"],
+                &["--events", "jsonl"],
+            ),
+        ),
+    ] {
+        let output = vsift(&root, &arguments)?;
+        assert_ne!(output.status.code(), Some(0), "{label}");
+        let lines = stream(&output)?;
+        assert_eq!(lines.len(), 1, "{label}");
+        assert_eq!(lines[0]["result"]["status"], "failed", "{label}");
+        assert!(lines[0]["result"]["data"].is_null(), "{label}");
+    }
     Ok(())
 }

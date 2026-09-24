@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Evidence stream: `vsift transcript get ... --events jsonl` now writes one line per
+  transcript segment, each a self-describing evidence event with the segment record
+  and an upsert key (its `segment_id`), followed by exactly one terminal event that
+  carries the paging cursor and the number of records sent. An indexer can upsert
+  records by key and knows the stream is complete when the terminal event arrives.
+  Previously this mode returned the whole page as a single terminal event. `--json`
+  and human output are unchanged. New v1 schemas `evidence-event` and
+  `transcript-get-stream-data`, with a frozen example stream.
+- The transcript record stored in retained bundles now has a published v1 schema,
+  `bundle-transcript-record`, with a frozen example. `bundle validate` now decodes
+  every transcript record and rejects a bundle whose record does not conform, even
+  when its size and digest match the manifest. Bundles made by `session retain` are
+  unaffected.
 - Automatic media-tool check: before `ingest --transcript` measures the video,
   VSift runs its small built-in test video through the selected FFmpeg and FFprobe
   and checks the results. It runs once per tool pair (about 1–2 seconds the first

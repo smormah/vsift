@@ -16,7 +16,7 @@ use command::{
     BundleCommand, Cli, Command, EventFormat, ExecutionProfile, SetupCommand, TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
-use output::{OutputMode, OutputWriter, ProcessExit};
+use output::{JsonLines, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
     Engine, EngineConfig, EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections,
     FailureCode, HostIsolation, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
@@ -25,7 +25,7 @@ use vsift::{
 use vsift_contract::{
     CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, OperationResponse, TerminalEventResponse,
-    media_tool_verification_summary, transcript_rejection_summary,
+    TranscriptEvidenceStream, media_tool_verification_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -280,6 +280,10 @@ where
         Command::Transcript(arguments) => {
             let operation = arguments.command.operation_name();
             match arguments.command {
+                TranscriptCommand::Get(arguments) if mode == OutputMode::JsonLines => {
+                    let result = session::transcript_stream(&engine, arguments);
+                    write_evidence_stream(&mut writer, operation, result)
+                }
                 TranscriptCommand::Get(arguments) => {
                     let result = session::transcript_get(&engine, arguments);
                     write_session_result(&mut writer, mode, operation, result)
@@ -430,6 +434,39 @@ where
         },
     };
     match write {
+        Ok(()) => ProcessExit::Success,
+        Err(error) => {
+            writer.write_safe_diagnostic(&error.to_string());
+            ProcessExit::StorageOrIo
+        }
+    }
+}
+
+/// Writes an evidence stream in `--events jsonl` mode: its evidence events in
+/// order, then its terminal event. A failure before the stream exists is the
+/// usual single terminal failure event.
+fn write_evidence_stream<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    command: CommandName,
+    result: Result<TranscriptEvidenceStream, CommandFailure>,
+) -> ProcessExit
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    let stream = match result {
+        Ok(stream) => stream,
+        Err(failure) => {
+            return write_command_failure(writer, OutputMode::JsonLines, command, failure);
+        }
+    };
+    let mut lines = JsonLines::new();
+    let assembled = stream
+        .records()
+        .iter()
+        .try_for_each(|record| lines.push(record))
+        .and_then(|()| lines.push(stream.terminal()));
+    match assembled.and_then(|()| writer.write_json_lines(&lines)) {
         Ok(()) => ProcessExit::Success,
         Err(error) => {
             writer.write_safe_diagnostic(&error.to_string());

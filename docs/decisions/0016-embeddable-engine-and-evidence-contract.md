@@ -175,3 +175,39 @@ and nothing has been released.
   and takes an optional `SuppliedTranscriptRequest`; `Engine::transcript` pages a
   revision. The CLI keeps its thin-host shape and gained `CommandFailure`, which
   carries a typed fixed-prose remediation for transcript rejections.
+
+## 2026-09-24 implementation note: the JSON Lines evidence stream
+
+This note fixes the CLI surface decision 5 left to P07.
+
+- `transcript get --events jsonl` writes one evidence event per segment of the page,
+  then exactly one terminal event. `--json` and human output are unchanged, and every
+  other command still writes its terminal event alone.
+- An evidence event (`evidence-event.schema.json`) carries the envelope's version,
+  `event: "evidence"`, a `sequence` that is contiguous from 0 across the whole stream,
+  `command` and `operation_id`. It adds `record_type`, an upsert `key` and the `record`
+  itself. For `transcript_segment` the key is the record's `segment_id` and the record
+  is exactly the published transcript segment.
+- The terminal event ends the stream. Its sequence equals the number of records, and
+  its data (`transcript-get-stream-data.schema.json`) is the page without `items`:
+  `session_id`, `revision`, `range`, `record_count` and `next_cursor`.
+- A distinct terminal data schema was chosen over repeating `items` or sending an
+  empty `items` array. Repeating would double the output. An empty array would let a
+  reader that ignores the event kind conclude, silently, that the page was empty.
+  This way such a reader fails validation instead.
+- Records are immutable and their identities are derived from content, so upserting
+  by (`record_type`, `key`) is idempotent. A stream is complete only once its terminal
+  event is read; a gap in `sequence` or a missing terminal event means it is
+  incomplete. No delete or tombstone events exist yet; they arrive with the first
+  operation that supersedes evidence.
+- No progress events: the read is local and bounded. Readers skip unknown event kinds
+  within v1, so progress can be added later without a new major version.
+- The whole stream is bounded by the page limit (at most 100 records plus the
+  terminal event, each line within the 1 MiB result budget). It is assembled before
+  its first byte is written, so a line over budget writes nothing.
+- The sequencing lives in `vsift-contract` (`TranscriptEvidenceStream`), so every host
+  emits the same stream. `EventKind::ALL` and `EvidenceRecordType::ALL` are guarded
+  against drift from the published schemas, as `CommandName` and `FailureCode::ALL` are.
+- The retained bundle's `transcript_record` artifact now has a published schema,
+  `bundle-transcript-record.schema.json`, with a frozen example, and `bundle validate`
+  decodes every transcript record strictly (see the ADR 0013 note of the same date).

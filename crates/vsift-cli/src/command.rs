@@ -19,7 +19,7 @@ pub(crate) struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
-    /// Emit versioned progress and terminal records as JSON Lines.
+    /// Emit versioned evidence, progress and terminal records as JSON Lines.
     #[arg(long, global = true, value_enum)]
     pub events: Option<EventFormat>,
 
