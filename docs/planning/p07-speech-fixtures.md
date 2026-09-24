@@ -73,7 +73,7 @@ provenance, because that is good practice.
 | `espeakng-loader` (bundles eSpeak NG) | 0.2.4 | MIT loader; eSpeak NG GPL-3.0-or-later | Phonemizer backend | No |
 | `num2words` | 0.5.14 | LGPL | Number expansion | No |
 | `spacy` / `en_core_web_sm` | 3.8.7 / 3.8.0 | MIT / MIT | English tokenization | No |
-| `torch` (CPU wheel) | 2.7.1+cpu | BSD-3-Clause | Tensor runtime | No |
+| `torch` (CPU wheel) | 2.14.0+cpu | BSD-3-Clause | Tensor runtime | No |
 | `transformers` / `huggingface-hub` / `tokenizers` | 5.17.0 / 1.33.0 / 0.23.2 | Apache-2.0 | Model classes / hub client / tokenizer | No |
 | `numpy` | 2.2.6 | BSD-3-Clause | Arrays | No |
 | FFmpeg (BtbN `n9.0.1-11-ge47273f4d9` LGPL build, as reviewed for P06) | archive SHA-256 pinned in `tools/p06_ubuntu_candidate_smoke.py` | LGPL-2.1-or-later | Mux and AAC/PCM encode | No |
@@ -259,5 +259,7 @@ GitHub dependency review flagged `transformers` 4.51.3 (high-severity code-execu
 path-traversal advisories, plus ReDoS). All are fixed only from 5.10.0, so the generator now
 pins `transformers` 5.17.0 with `huggingface-hub` 1.33.0 and `tokenizers` 0.23.2 (required by
 transformers 5.x). Kokoro 0.9.4 declares `transformers` without a version bound; its
-compatibility with 5.x is proven only by the first workflow run, which must pass the
+compatibility with 5.x, and with `torch` 2.14.0 (moved from 2.7.1 for the same reason:
+memory-corruption and resource-release advisories fixed by 2.13.0), is proven only by the first
+workflow run, which must pass the
 repeatability step before any clip is committed.

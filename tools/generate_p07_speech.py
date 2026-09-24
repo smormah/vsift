@@ -177,7 +177,7 @@ PINNED_DISTRIBUTIONS = {
     "phonemizer-fork": "3.3.2",
     "spacy": "3.8.7",
     "tokenizers": "0.23.2",
-    "torch": "2.7.1+cpu",
+    "torch": "2.14.0+cpu",
     "transformers": "5.17.0",
 }
 

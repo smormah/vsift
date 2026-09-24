@@ -64,7 +64,7 @@ jobs:
           "$venv_python" -m pip install --no-input --disable-pip-version-check \
             --index-url https://download.pytorch.org/whl/cpu \
             --report "$RUNNER_TEMP/p07-environment/pip-report-torch.json" \
-            "torch==2.7.1+cpu"
+            "torch==2.14.0+cpu"
           "$venv_python" -m pip install --no-input --disable-pip-version-check \
             --report "$RUNNER_TEMP/p07-environment/pip-report-requirements.json" \
             -r tools/p07-speech-requirements.txt \
