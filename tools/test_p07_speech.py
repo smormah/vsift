@@ -38,9 +38,9 @@ class FakeSynthesizer:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
 
-    def synthesize(self, text: str, voice: generator.Voice) -> generator.SynthesizedSegment:
+    def synthesize(self, text: str, voice: generator.Voice, speed: float) -> generator.SynthesizedSegment:
         self.calls.append((text, voice.voice_id))
-        rate = generator.SAMPLE_RATE
+        rate = round(generator.SAMPLE_RATE / speed)  # Faster speech yields fewer frames.
         samples: list[float] = [0.0] * (rate // 20)
         words = []
         for index, word in enumerate(text.split()):
@@ -223,6 +223,23 @@ class SynthesisAndArgvTests(unittest.TestCase):
         self.assertEqual(len(utterance), second["start_frame"] + second["frames"])
         self.assertIsNotNone(first["words"])
         self.assertIsNone(second["words"])
+
+    def test_only_reviewed_fixtures_override_the_speaking_rate(self) -> None:
+        self.assertEqual(generator.speed_for("F09"), 1.3)
+        self.assertEqual(generator.speed_for("F01"), generator.SPEED)
+        self.assertTrue(set(generator.FIXTURE_SPEED) <= {plan.fixture_id for plan in generator.speech_plans(generator.load_json(generator.MANIFEST))})
+
+    def test_every_fixture_that_does_not_fit_is_named_before_anything_is_written(self) -> None:
+        class Slow(FakeSynthesizer):
+            def synthesize(self, text: str, voice: generator.Voice, speed: float) -> generator.SynthesizedSegment:
+                return super().synthesize(text, voice, speed / 8)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            with self.assertRaises(generator.GenerationError) as raised:
+                generator.synthesize(output, Slow(), facts())
+            self.assertGreater(str(raised.exception).count("does not fit"), 1)
+            self.assertFalse((output / generator.UTTERANCE_DIRECTORY).exists() and any((output / generator.UTTERANCE_DIRECTORY).iterdir()))
 
     def test_synthesize_writes_every_utterance_and_refuses_an_existing_record(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

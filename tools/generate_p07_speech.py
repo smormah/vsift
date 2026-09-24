@@ -68,6 +68,10 @@ INT16_SCALE = 32_767.0
 # Synthesis parameters. The seed is reset before every segment so a clip never depends
 # on the order in which other clips were generated.
 SPEED = 1.0
+# Reviewed per-fixture speaking-rate overrides. A manifest speech event fixes the window
+# speech must fit; truth is never moved to fit the voice. F09's 'Marker beta is visible
+# now.' measured 2.425 s at 1.0 on the first run against a 2.0 s window (F09-E02).
+FIXTURE_SPEED = {"F09": 1.3}
 SEED = 731
 TORCH_THREADS = 1
 INTER_SEGMENT_PAUSE_US = 400_000
@@ -243,7 +247,7 @@ class SynthesizedSegment:
 class Synthesizer(Protocol):
     """The only boundary the recipe needs from a text-to-speech engine."""
 
-    def synthesize(self, text: str, voice: Voice) -> SynthesizedSegment:
+    def synthesize(self, text: str, voice: Voice, speed: float) -> SynthesizedSegment:
         ...
 
 
@@ -474,6 +478,11 @@ def build_track(plan: SpeechPlan, placement: Placement,
     return track, record
 
 
+def speed_for(fixture_id: str) -> float:
+    """The reviewed speaking rate for one fixture."""
+    return FIXTURE_SPEED.get(fixture_id, SPEED)
+
+
 def synthesize_utterance(plan: SpeechPlan, synthesizer: Synthesizer) -> tuple[array.array, int, list[dict]]:
     """Speak every segment, joined by a fixed pause, and record engine-side facts."""
     pause = exact_frames(INTER_SEGMENT_PAUSE_US)
@@ -483,7 +492,7 @@ def synthesize_utterance(plan: SpeechPlan, synthesizer: Synthesizer) -> tuple[ar
         if index:
             samples.extend([0.0] * pause)
         voice = VOICES[segment.language]
-        result = synthesizer.synthesize(segment.text, voice)
+        result = synthesizer.synthesize(segment.text, voice, speed_for(plan.fixture_id))
         if not result.samples:
             raise GenerationError(f"{plan.fixture_id} segment {index} produced no audio")
         start_frame = len(samples)
@@ -491,6 +500,7 @@ def synthesize_utterance(plan: SpeechPlan, synthesizer: Synthesizer) -> tuple[ar
         records.append({
             "language": segment.language,
             "voice": voice.voice_id,
+            "speed": speed_for(plan.fixture_id),
             "text": segment.text,
             "start_frame": start_frame,
             "frames": len(result.samples),
@@ -533,10 +543,19 @@ def synthesize(output: Path, synthesizer: Synthesizer, synthesis_facts: dict) ->
     """Write every utterance WAV and a provenance file holding the synthesis section."""
     manifest = load_json(MANIFEST)
     (output / UTTERANCE_DIRECTORY).mkdir(parents=True, exist_ok=True)
-    utterances = []
+    spoken = []
+    misfits = []
     for plan in speech_plans(manifest):
         utterance, clipped, segments = synthesize_utterance(plan, synthesizer)
-        place(plan, len(utterance))  # Fail before writing anything that cannot be placed.
+        try:
+            place(plan, len(utterance))
+        except GenerationError as error:
+            misfits.append(str(error))
+        spoken.append((plan, utterance, clipped, segments))
+    if misfits:  # Fail before writing anything, naming every fixture that does not fit.
+        raise GenerationError("; ".join(misfits))
+    utterances = []
+    for plan, utterance, clipped, segments in spoken:
         relative = utterance_path(plan.fixture_id)
         write_wav(output / relative, utterance)
         utterances.append({"fixture": plan.fixture_id, "file": relative,
@@ -791,7 +810,7 @@ class KokoroSynthesizer:
         self._model = KModel(repo_id=KOKORO_REPOSITORY, config=config, model=str(weights_path)).to("cpu").eval()
         self._pipelines: dict[str, object] = {}
 
-    def synthesize(self, text: str, voice: Voice) -> SynthesizedSegment:
+    def synthesize(self, text: str, voice: Voice, speed: float) -> SynthesizedSegment:
         from kokoro import KPipeline
 
         pipeline = self._pipelines.get(voice.lang_code)
@@ -803,7 +822,7 @@ class KokoroSynthesizer:
         phonemes: list[str] = []
         words: list[Word] = []
         timed = True
-        for result in pipeline(text, voice=str(self._voice_paths[voice.language]), speed=SPEED,
+        for result in pipeline(text, voice=str(self._voice_paths[voice.language]), speed=speed,
                                split_pattern=None):
             audio = result.output.audio if result.output is not None else None
             if audio is None:
@@ -858,6 +877,7 @@ def synthesis_facts(assets: Path, reports: Sequence[Path]) -> dict:
                    for language, voice in VOICES.items()},
         "sentence_languages": {fixture: list(languages) for fixture, languages in SENTENCE_LANGUAGES.items()},
         "speed": SPEED,
+        "speed_overrides": dict(sorted(FIXTURE_SPEED.items())),
         "seed": SEED,
         "seed_policy": "torch.manual_seed reset before every segment",
         "torch_threads": TORCH_THREADS,

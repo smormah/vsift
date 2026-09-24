@@ -263,3 +263,13 @@ compatibility with 5.x, and with `torch` 2.14.0 (moved from 2.7.1 for the same r
 memory-corruption and resource-release advisories fixed by 2.13.0), is proven only by the first
 workflow run, which must pass the
 repeatability step before any clip is committed.
+
+## 2026-09-24 note: F09 speaking rate
+
+The first workflow run (https://github.com/smormah/vsift/actions/runs/36047602726) proved
+Kokoro works with the patched `transformers`/`torch` pins, then stopped as designed: F09's
+"Marker beta is visible now." measured 2.425 s at speed 1.0 against the 2.0 s manifest event
+window F09-E02 (4.0-6.0 s). Truth is not moved to fit the voice; instead the recipe gains a
+reviewed per-fixture speaking rate, `FIXTURE_SPEED = {"F09": 1.3}` (about 1.87 s), recorded per
+utterance and as `speed_overrides` in the provenance. The generator now also reports every
+fixture that does not fit in one error, before writing anything.
