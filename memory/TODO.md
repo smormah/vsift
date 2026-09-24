@@ -8,19 +8,17 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
-complete. P07 is in progress: increment 3a (local ASR core) is done, the packet is not.
-Local checks: CI is the default Linux/macOS check; Docker only for platform code.
+complete. P07 is in progress: increment 3a and the fuzz targets are done, the packet
+is not. Local checks: CI is the default Linux/macOS check; Docker only for platform code.
 
 1. **Done:** 1a `vsift-contract` wire types (PR #126); 1b engine facade, thin CLI
    (PR #127); 2 supplied transcripts (PR #129); 2b media-tool preflight (PR #133); 2c
    JSONL evidence stream and bundle record schema (PR #134); speech fixtures (PRs
-   #138-#140, #142, #143; `docs/planning/p07-speech-fixtures.md`).
-2. **Done: increment 3a, local ASR core (this PR, branch `p07/asr-core`).** Not
-   reachable from any command. Revision provenance generalised (import or local ASR
-   run, per-segment origin), domain chunking/validation/silence/seam merge, the
-   `transcribe_range` and `build_asr_revision` use cases, `FfmpegMedia::speech_pcm`,
-   the whisper.cpp CLI adapter and `-ojf` parser, transcript record version 2. Also
-   fixed: `setup check` no longer echoes whisper's loader line (it held a path).
+   #138-#140, #142, #143); 3a local ASR core, not reachable from any command (PR #145).
+2. **Done: `cargo-fuzz` targets (this PR, branch `p07/fuzz-targets`).** Six targets in
+   `fuzz/` (SRT, WebVTT, whisper `-ojf`, transcript records, FFprobe metadata, cursors);
+   weekly pinned-nightly `Fuzz` workflow; per-PR stable seed replay; FFprobe parser now
+   public. Skipped decoders: ADR 0016 note. Merge waits for the NCSA decision below.
 3. **Next: increment 3b, pending maintainer decisions D1-D8** (below):
    `transcript retranscribe` through the engine (both preflights first, private ASR
    work directory in the session), public schemas for ASR revisions and the v2 record,
@@ -30,9 +28,8 @@ Local checks: CI is the default Linux/macOS check; Docker only for platform code
 4. **Then: increment 3c:** `setup check` reports `local_asr` functional verification
    (model and provider actually transcribe F01); a quantized model profile beside the
    pinned base; measure and set the default profile (ADR 0005 gates).
-5. **Still owed by P07 before the packet closes:** `cargo-fuzz` targets for the SRT/VTT
-   parsers (and now the whisper `-ojf` parser) as a scheduled nightly-toolchain CI job;
-   the packet completion record in the ledger.
+5. **Still owed by P07 before the packet closes:** the packet completion record in the
+   ledger.
 
 ## Follow-ups (open issues before relying on them)
 
@@ -51,6 +48,10 @@ Local checks: CI is the default Linux/macOS check; Docker only for platform code
   unpinned models [refuse for R0]; D6 light profile and gates [`base-q5_1`; RTF <= 0.5,
   <= 400 MiB, WER <= 10% clean / 25% F08]; D7 progress events [none yet]; D8 stream
   tombstones [none: superseded revisions stay valid and readable].
+- Fuzz harness licence (asked 2026-09-24): `libfuzzer-sys` declares `(MIT OR
+  Apache-2.0) AND NCSA` and `deny.toml` does not allow NCSA, so `Dependency policy`
+  does not yet check `fuzz/Cargo.lock` [allow NCSA for that crate only, in
+  `exceptions`, and add a cargo-deny step for `fuzz/Cargo.toml`].
 - Whether to open a backlog issue for a faster-whisper adapter (proposed; awaiting
   the maintainer). whisper.cpp stays the default.
 - Crate names are confirmed (`vsift` facade, `vsift-contract`); a crates.io

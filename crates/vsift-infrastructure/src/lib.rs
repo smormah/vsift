@@ -46,7 +46,7 @@ pub use executable::{
 pub use ffmpeg_media::{
     ExtractedAudio, ExtractedFrame, FfmpegMedia, MAX_AUDIO_BYTES, MAX_DIAGNOSTIC_BYTES,
     MAX_FRAME_BYTES, MAX_PROBE_BYTES, MAX_SPEECH_PCM_BYTES, MAX_SPEECH_PCM_MICROS, MediaError,
-    MediaProviderConformance,
+    MediaProviderConformance, parse_ffprobe_metadata,
 };
 pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ExclusiveSessionLifetimeHold,

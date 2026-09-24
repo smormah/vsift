@@ -1,0 +1,6 @@
+# cargo-fuzz build output and the working corpus, crash artifacts and coverage it
+# writes. Only the reviewed seeds in `seeds/` are committed.
+/target/
+/corpus/
+/artifacts/
+/coverage/

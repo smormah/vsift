@@ -90,6 +90,26 @@ jobs:
       - name: Build documentation
         run: cargo doc --workspace --no-deps --locked
 
+  fuzz-harness:
+    # The fuzz crate is outside the workspace, so the Quality job does not see
+    # it. This replays every fuzz target over its committed seeds on the stable
+    # toolchain; libFuzzer itself runs in the scheduled Fuzz workflow.
+    name: Fuzz harness replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path fuzz/Cargo.toml --check
+
+      - name: Lint, including the libFuzzer entry points
+        run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --all-features --locked -- -D warnings
+
+      - name: Replay every target over its seeds
+        run: cargo test --manifest-path fuzz/Cargo.toml --locked
+
   strict-worker-boundary:
     name: Strict worker boundary (Ubuntu 24.04)
     runs-on: ubuntu-latest

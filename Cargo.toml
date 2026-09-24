@@ -9,6 +9,8 @@ members = [
   "tools/vsift-governance",
 ]
 default-members = ["crates/vsift-cli"]
+# The cargo-fuzz harness has its own nightly-only workspace and lockfile.
+exclude = ["fuzz"]
 resolver = "3"
 
 [workspace.package]

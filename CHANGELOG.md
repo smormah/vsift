@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Fuzzing: `cargo-fuzz` targets in `fuzz/` for the parsers of untrusted input, namely
+  SRT and WebVTT sidecars, whisper.cpp `-ojf` output, stored transcript records,
+  FFprobe metadata and `transcript get --cursor` tokens. The new `Fuzz` workflow runs
+  each for five minutes a week (or on demand) on a pinned nightly toolchain, and every
+  pull request replays them over their committed seeds on the normal stable toolchain.
+  No command or output changes. For library users, the FFprobe metadata parser is now
+  public as `vsift_infrastructure::parse_ffprobe_metadata`, unchanged in behaviour.
 - Internal local speech recognition core (P07 increment 3a), not yet reachable from
   any command: `transcript retranscribe` still returns `COMMAND_NOT_IMPLEMENTED` and
   no public output changes. The engine library can now cut a range into overlapping

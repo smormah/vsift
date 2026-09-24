@@ -1,0 +1,95 @@
+[package]
+name = "vsift-fuzz"
+description = "cargo-fuzz targets for VSift's untrusted-input parsers (test harness, never published)"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Deliberately outside the repository workspace (the root manifest excludes this
+# directory): libFuzzer needs a nightly toolchain and sanitizer flags, and the
+# stable workspace checks must not depend on either. Its own `Cargo.lock` is
+# committed so `--locked` works here too.
+[workspace]
+
+[features]
+# The libFuzzer entry points (`fuzz_targets/`). Off by default so the stable
+# replay tests build without libFuzzer's C++ runtime; `cargo fuzz` passes
+# `--features libfuzzer` (see "Fuzzing" in docs/development.md).
+libfuzzer = ["dep:libfuzzer-sys"]
+
+[dependencies]
+libfuzzer-sys = { version = "0.4.13", optional = true }
+vsift-domain = { version = "0.1.0", path = "../crates/vsift-domain" }
+vsift-infrastructure = { version = "0.1.0", path = "../crates/vsift-infrastructure" }
+
+[dev-dependencies]
+# Re-derives the local-ASR record seed in the replay tests.
+vsift-application = { version = "0.1.0", path = "../crates/vsift-application" }
+
+[[bin]]
+name = "transcript_srt"
+path = "fuzz_targets/transcript_srt.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "transcript_webvtt"
+path = "fuzz_targets/transcript_webvtt.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "whisper_full_json"
+path = "fuzz_targets/whisper_full_json.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "transcript_record"
+path = "fuzz_targets/transcript_record.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "ffprobe_metadata"
+path = "fuzz_targets/ffprobe_metadata.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "transcript_cursor"
+path = "fuzz_targets/transcript_cursor.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+# The workspace lints, repeated because this package cannot inherit them.
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+dbg_macro = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"

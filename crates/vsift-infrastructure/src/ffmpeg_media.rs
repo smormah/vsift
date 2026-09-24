@@ -127,7 +127,7 @@ impl<'a> FfmpegMedia<'a> {
             .await
             .map_err(MediaError::Process)?;
         validate_outcome(&output)?;
-        parse_probe(&output.stdout.bytes, source.container())
+        parse_ffprobe_metadata(&output.stdout.bytes, source.container())
     }
 
     /// Returns the first displayed frame at or after the requested normalized time.
@@ -650,8 +650,27 @@ struct RawSideData {
     rotation: Option<i32>,
 }
 
+/// Parses and validates the `FFprobe` JSON metadata document that
+/// [`FfmpegMedia::probe`] requests.
+///
+/// The document is untrusted provider output, so it is published beside the
+/// other pure provider parsers ([`parse_whisper_full_json`](crate::parse_whisper_full_json),
+/// [`parse_supplied_transcript`](crate::parse_supplied_transcript)) where fuzz
+/// targets and tests can reach it without running `FFprobe` (ADR 0016,
+/// decision 6). Only the fields named in the probe's `-show_entries` are read.
+/// The whole description is validated before any of it is returned: at most
+/// [`MAX_PROBE_BYTES`], 32 streams with unique indexes, a positive duration of
+/// at most four hours (Matroska's reported end is normalized by the earliest
+/// stream start), a positive time base for every stream, dimensions of at most
+/// 16 megapixels for every video stream, a quarter-turn display rotation, and
+/// short ASCII codec and language names.
+///
+/// # Errors
+///
+/// Returns the first [`MediaError`] describing why the document is unusable;
+/// parsing never partially succeeds.
 #[allow(clippy::too_many_lines)] // Parse and validate the provider document before exposing any stream metadata.
-fn parse_probe(
+pub fn parse_ffprobe_metadata(
     bytes: &[u8],
     container: crate::SourceContainer,
 ) -> Result<MediaDescription, MediaError> {
@@ -922,7 +941,7 @@ impl Error for MediaError {
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaError, parse_probe, parse_showinfo};
+    use super::{MediaError, parse_ffprobe_metadata, parse_showinfo};
     use crate::SourceContainer;
     use vsift_domain::{DisplayRotation, MediaDecodeSupport, MediaSelection, MediaStreamKind};
 
@@ -931,7 +950,7 @@ mod tests {
     #[test]
     fn parses_nonzero_origin_rotation_and_explicit_tracks() -> Result<(), Box<dyn std::error::Error>>
     {
-        let parsed = parse_probe(VALID.as_bytes(), SourceContainer::IsoMedia)?;
+        let parsed = parse_ffprobe_metadata(VALID.as_bytes(), SourceContainer::IsoMedia)?;
         assert_eq!(parsed.origin_micros, 1_250_000);
         assert_eq!(parsed.duration.as_micros(), 2_000_000);
         assert_eq!(parsed.streams[0].rotation, DisplayRotation::Clockwise90);
@@ -956,12 +975,12 @@ mod tests {
     fn rejects_bomb_dimensions_and_missing_duration() {
         let huge = VALID.replace("\"width\":320", "\"width\":100000");
         assert!(matches!(
-            parse_probe(huge.as_bytes(), SourceContainer::IsoMedia),
+            parse_ffprobe_metadata(huge.as_bytes(), SourceContainer::IsoMedia),
             Err(MediaError::InvalidDimensions)
         ));
         let missing = VALID.replace("\"duration\":\"2.000000\"", "\"duration\":\"N/A\"");
         assert!(matches!(
-            parse_probe(missing.as_bytes(), SourceContainer::IsoMedia),
+            parse_ffprobe_metadata(missing.as_bytes(), SourceContainer::IsoMedia),
             Err(MediaError::InvalidDuration)
         ));
     }
@@ -979,11 +998,11 @@ mod tests {
         let huge =
             include_bytes!("../../../fixtures/corpus/generated/F11-oversized-dimensions.json");
         assert!(matches!(
-            parse_probe(many, SourceContainer::IsoMedia),
+            parse_ffprobe_metadata(many, SourceContainer::IsoMedia),
             Err(MediaError::TooManyStreams)
         ));
         assert!(matches!(
-            parse_probe(huge, SourceContainer::IsoMedia),
+            parse_ffprobe_metadata(huge, SourceContainer::IsoMedia),
             Err(MediaError::InvalidDimensions)
         ));
     }
@@ -992,7 +1011,7 @@ mod tests {
     fn preserves_missing_capabilities_and_marks_unknown_codec_unsupported()
     -> Result<(), Box<dyn std::error::Error>> {
         let no_video = br#"{"format":{"duration":"1.000000"},"streams":[{"index":3,"codec_type":"audio","codec_name":"future-codec","time_base":"1/1000"}]}"#;
-        let description = parse_probe(no_video, SourceContainer::IsoMedia)?;
+        let description = parse_ffprobe_metadata(no_video, SourceContainer::IsoMedia)?;
         assert!(
             description
                 .validate_selection(MediaSelection {

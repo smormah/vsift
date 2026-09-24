@@ -1,0 +1,19 @@
+WEBVTT
+Kind: captions
+Language: en-GB
+
+STYLE
+::cue { color: yellow; }
+
+cue-1
+00:00:01.000 --> 00:00:02.500 align:start position:10%
+<v.loud Narrator><b>Bold</b> &amp; <i>italic</i> <c.code>R-17</c> &lt;tag&gt;
+
+00:00:03.000 --> 00:00:04.000
+Karaoke <00:00:03.500>timing &#x263A; &unknown; a < b
+
+00:00:05.000 --> 00:00:06.000
+<v Alice>One</v> <v Bob>Two</v>
+
+00:00:07.000 --> 00:00:08.000
+<i></i>
