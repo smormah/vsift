@@ -273,3 +273,16 @@ window F09-E02 (4.0-6.0 s). Truth is not moved to fit the voice; instead the rec
 reviewed per-fixture speaking rate, `FIXTURE_SPEED = {"F09": 1.3}` (about 1.87 s), recorded per
 utterance and as `speed_overrides` in the provenance. The generator now also reports every
 fixture that does not fit in one error, before writing anything.
+
+## 2026-09-24 note: F08 pronunciation hint
+
+Run https://github.com/smormah/vsift/actions/runs/36049056343 succeeded, including the
+repeatability check. A listening and whisper.cpp v1.9.2 review of every clip found one defect:
+F08's English sentence spoke the "AB" of "AB-731" as the word "ob" (recorded phonemes `ˈɑb`)
+instead of the letters A B; the Spanish sentence already spelt it (`ˌaβˈe`). The recipe gains
+reviewed pronunciation hints, `SPOKEN_FORMS`, applied only to the text handed to Kokoro. F08
+en-US sends `[AB](/ˌAbˈi/)-731`, misaki's explicit-pronunciation syntax for "ay-bee". The
+frozen script is unchanged: it is still recorded as each segment's `text` and still what the
+verifier joins back to the manifest. The engine text is recorded as `engine_text`, and the
+hints as `pronunciation_hints` in the provenance. A hint whose script text is missing stops
+generation.

@@ -72,6 +72,11 @@ SPEED = 1.0
 # speech must fit; truth is never moved to fit the voice. F09's 'Marker beta is visible
 # now.' measured 2.425 s at 1.0 on the first run against a 2.0 s window (F09-E02).
 FIXTURE_SPEED = {"F09": 1.3}
+# Reviewed pronunciation hints, applied only to the text handed to the engine; the frozen
+# script (recorded as "text") never changes and remains what the verifier checks. Kokoro's
+# misaki front end reads "[word](/phonemes/)" as an explicit pronunciation. The first run
+# spoke the English "AB" of "AB-731" as the word "ob" (phonemes "ˈɑb"), not the letters.
+SPOKEN_FORMS = {("F08", "en-US"): (("AB-731", "[AB](/ˌAbˈi/)-731"),)}
 SEED = 731
 TORCH_THREADS = 1
 INTER_SEGMENT_PAUSE_US = 400_000
@@ -478,6 +483,15 @@ def build_track(plan: SpeechPlan, placement: Placement,
     return track, record
 
 
+def engine_text(fixture_id: str, language: str, text: str) -> str:
+    """The text handed to the engine: the script with any reviewed pronunciation hints."""
+    for original, spoken in SPOKEN_FORMS.get((fixture_id, language), ()):
+        if original not in text:
+            raise GenerationError(f"{fixture_id} pronunciation hint {original!r} does not occur in its script")
+        text = text.replace(original, spoken)
+    return text
+
+
 def speed_for(fixture_id: str) -> float:
     """The reviewed speaking rate for one fixture."""
     return FIXTURE_SPEED.get(fixture_id, SPEED)
@@ -492,7 +506,8 @@ def synthesize_utterance(plan: SpeechPlan, synthesizer: Synthesizer) -> tuple[ar
         if index:
             samples.extend([0.0] * pause)
         voice = VOICES[segment.language]
-        result = synthesizer.synthesize(segment.text, voice, speed_for(plan.fixture_id))
+        spoken = engine_text(plan.fixture_id, segment.language, segment.text)
+        result = synthesizer.synthesize(spoken, voice, speed_for(plan.fixture_id))
         if not result.samples:
             raise GenerationError(f"{plan.fixture_id} segment {index} produced no audio")
         start_frame = len(samples)
@@ -502,6 +517,7 @@ def synthesize_utterance(plan: SpeechPlan, synthesizer: Synthesizer) -> tuple[ar
             "voice": voice.voice_id,
             "speed": speed_for(plan.fixture_id),
             "text": segment.text,
+            "engine_text": spoken,
             "start_frame": start_frame,
             "frames": len(result.samples),
             "phonemes": list(result.phonemes),
@@ -878,6 +894,9 @@ def synthesis_facts(assets: Path, reports: Sequence[Path]) -> dict:
         "sentence_languages": {fixture: list(languages) for fixture, languages in SENTENCE_LANGUAGES.items()},
         "speed": SPEED,
         "speed_overrides": dict(sorted(FIXTURE_SPEED.items())),
+        "pronunciation_hints": [{"fixture": fixture, "language": language, "script": original, "engine": spoken}
+                                for (fixture, language), hints in sorted(SPOKEN_FORMS.items())
+                                for original, spoken in hints],
         "seed": SEED,
         "seed_policy": "torch.manual_seed reset before every segment",
         "torch_threads": TORCH_THREADS,
