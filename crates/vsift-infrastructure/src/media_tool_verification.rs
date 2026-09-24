@@ -322,7 +322,8 @@ const fn map_media_error(error: &MediaError) -> MediaToolFailure {
         | MediaError::StreamUnavailable
         | MediaError::UnsupportedCodec
         | MediaError::NoFrameWithinTolerance
-        | MediaError::InvalidDecodedOutput => MediaToolFailure::UnexpectedResult,
+        | MediaError::InvalidDecodedOutput
+        | MediaError::NoDecodedAudio => MediaToolFailure::UnexpectedResult,
     }
 }
 

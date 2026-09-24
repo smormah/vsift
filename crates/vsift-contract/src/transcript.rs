@@ -12,9 +12,9 @@
 
 use serde::Serialize;
 use vsift_domain::{
-    AlignmentOrigin, MAX_CUE_TEXT_BYTES, SessionId, SourceSegment, TimeRange,
-    TranscriptImportError, TranscriptRejection, TranscriptRevision, TranscriptSegment,
-    TranscriptWarningKind,
+    AlignmentOrigin, MAX_CUE_TEXT_BYTES, SegmentOrigin, SessionId, SourceSegment, TimeRange,
+    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRejection,
+    TranscriptRevision, TranscriptSegment, TranscriptWarningKind,
 };
 
 use crate::{ConfidenceResponse, sanitize_untrusted_text};
@@ -24,6 +24,11 @@ use crate::{ConfidenceResponse, sanitize_untrusted_text};
 const MAX_PRESENTED_TEXT_BYTES: usize = MAX_CUE_TEXT_BYTES * 3;
 
 /// Summary of one transcript revision: identity, alignment and import outcome.
+///
+/// No public command returns a local-ASR revision yet. Its presentation here
+/// omits the import-only fields (`sidecar`, the offset and cue location), so
+/// imported revisions serialize exactly as before; the v1 schemas describe only
+/// imports until retranscription publishes its own contract.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TranscriptRevisionData {
     revision_id: String,
@@ -31,7 +36,8 @@ pub struct TranscriptRevisionData {
     source_id: String,
     source_segments: Vec<SourceSegmentData>,
     alignment: RevisionAlignmentData,
-    sidecar: SidecarData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sidecar: Option<SidecarData>,
     language: Option<String>,
     segment_count: usize,
     warnings: Vec<TranscriptWarningData>,
@@ -41,6 +47,21 @@ impl TranscriptRevisionData {
     /// Presents a committed revision.
     #[must_use]
     pub fn new(revision: &TranscriptRevision) -> Self {
+        let (offset, sidecar) = match revision.provenance() {
+            TranscriptProvenance::Imported {
+                format,
+                sidecar,
+                offset,
+            } => (
+                Some(offset.as_micros()),
+                Some(SidecarData {
+                    format: format.identifier(),
+                    sha256: sidecar.sha256().to_owned(),
+                    bytes: sidecar.bytes(),
+                }),
+            ),
+            TranscriptProvenance::LocalAsr(_) => (None, None),
+        };
         Self {
             revision_id: revision.id().as_str().to_owned(),
             revision: revision.number(),
@@ -48,13 +69,9 @@ impl TranscriptRevisionData {
             source_segments: vec![SourceSegmentData::new(revision.source_segment())],
             alignment: RevisionAlignmentData {
                 origin: revision.origin().identifier(),
-                offset_us: revision.offset().as_micros(),
+                offset_us: offset,
             },
-            sidecar: SidecarData {
-                format: sidecar_format(revision.origin()),
-                sha256: revision.sidecar().sha256().to_owned(),
-                bytes: revision.sidecar().bytes(),
-            },
+            sidecar,
             language: revision.language().map(|tag| tag.as_str().to_owned()),
             segment_count: revision.segments().len(),
             warnings: revision
@@ -97,7 +114,8 @@ impl SourceSegmentData {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct RevisionAlignmentData {
     origin: &'static str,
-    offset_us: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    offset_us: Option<i64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -131,13 +149,41 @@ pub struct TranscriptSegmentData {
     confidence: ConfidenceResponse,
     language: Option<String>,
     alignment: SegmentAlignmentData,
-    cue: CueData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cue: Option<CueData>,
 }
 
 impl TranscriptSegmentData {
     /// Presents one segment of `revision`.
     #[must_use]
     pub fn new(revision: &TranscriptRevision, segment: &TranscriptSegment) -> Self {
+        let offset = match revision.provenance() {
+            TranscriptProvenance::Imported { offset, .. } => Some(*offset),
+            TranscriptProvenance::LocalAsr(_) => None,
+        };
+        let (alignment, cue) = match segment.origin() {
+            SegmentOrigin::ImportedCue { cue, timing } => (
+                SegmentAlignmentData {
+                    origin: revision.origin().identifier(),
+                    offset_us: offset.map(TranscriptOffset::as_micros),
+                    cue_start_us: Some(timing.start_micros()),
+                    cue_end_us: Some(timing.end_micros()),
+                },
+                Some(CueData {
+                    ordinal: cue.ordinal(),
+                    line: cue.line(),
+                }),
+            ),
+            SegmentOrigin::Asr { .. } => (
+                SegmentAlignmentData {
+                    origin: revision.origin().identifier(),
+                    offset_us: None,
+                    cue_start_us: None,
+                    cue_end_us: None,
+                },
+                None,
+            ),
+        };
         Self {
             segment_id: segment.id().as_str().to_owned(),
             revision_id: revision.id().as_str().to_owned(),
@@ -154,16 +200,8 @@ impl TranscriptSegmentData {
             }),
             confidence: ConfidenceResponse::from(segment.confidence()),
             language: revision.language().map(|tag| tag.as_str().to_owned()),
-            alignment: SegmentAlignmentData {
-                origin: revision.origin().identifier(),
-                offset_us: revision.offset().as_micros(),
-                cue_start_us: segment.cue_timing().start_micros(),
-                cue_end_us: segment.cue_timing().end_micros(),
-            },
-            cue: CueData {
-                ordinal: segment.cue().ordinal(),
-                line: segment.cue().line(),
-            },
+            alignment,
+            cue,
         }
     }
 }
@@ -177,9 +215,12 @@ struct SpeakerData {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct SegmentAlignmentData {
     origin: &'static str,
-    offset_us: i64,
-    cue_start_us: u64,
-    cue_end_us: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    offset_us: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cue_start_us: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cue_end_us: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -266,6 +307,21 @@ pub fn transcript_warning_messages(revision: &TranscriptRevision) -> Vec<&'stati
             TranscriptWarningKind::CuesCrossingSourceBoundary => {
                 "Some supplied transcript cues cross the start or end of the source and were not imported."
             }
+            TranscriptWarningKind::ProviderSegmentsRejected => {
+                "Some recognised segments had times outside their audio and were not used."
+            }
+            TranscriptWarningKind::ProviderEndTrimmed => {
+                "Some recognised segments ended just after their audio and were cut at its end."
+            }
+            TranscriptWarningKind::NonSpeechMarkersRemoved => {
+                "Non-speech markers such as [BLANK_AUDIO] were removed from the transcript."
+            }
+            TranscriptWarningKind::SeamDuplicatesRemoved => {
+                "Text recognised twice where audio chunks overlap was kept once."
+            }
+            TranscriptWarningKind::SilentChunksSkipped => {
+                "Some audio had no audible signal and was not transcribed."
+            }
         })
         .collect()
 }
@@ -332,16 +388,12 @@ fn sanitize_lines(text: &str) -> String {
         .join("\n")
 }
 
-const fn sidecar_format(origin: AlignmentOrigin) -> &'static str {
-    match origin {
-        AlignmentOrigin::ImportedSrt => "srt",
-        AlignmentOrigin::ImportedWebVtt => "webvtt",
-    }
-}
-
 const fn speaker_origin(origin: AlignmentOrigin) -> &'static str {
     match origin {
         AlignmentOrigin::ImportedSrt => "imported_srt",
         AlignmentOrigin::ImportedWebVtt => "imported_webvtt_voice",
+        // The domain rejects speaker labels on local-ASR segments; this arm
+        // exists only because the match is exhaustive.
+        AlignmentOrigin::LocalAsr => "local_asr",
     }
 }

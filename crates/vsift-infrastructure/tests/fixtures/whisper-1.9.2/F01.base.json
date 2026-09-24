@@ -1,0 +1,241 @@
+{
+	"systeminfo": "[scrubbed]",
+	"model": {
+		"type": "base",
+		"multilingual": true,
+		"vocab": 51865,
+		"audio": {
+			"ctx": 1500,
+			"state": 512,
+			"head": 8,
+			"layer": 6
+		},
+		"text": {
+			"ctx": 448,
+			"state": 512,
+			"head": 8,
+			"layer": 6
+		},
+		"mels": 80,
+		"ftype": 1
+	},
+	"params": {
+		"model": "[scrubbed]",
+		"language": "auto",
+		"translate": false
+	},
+	"result": {
+		"language": "en"
+	},
+	"transcription": [
+		{
+			"timestamps": {
+				"from": "00:00:00,000",
+				"to": "00:00:05,260"
+			},
+			"offsets": {
+				"from": 0,
+				"to": 5260
+			},
+			"text": " The service status is healthy and the build is 2048.",
+			"tokens": [
+				{
+					"text": "[_BEG_]",
+					"timestamps": {
+						"from": "00:00:00,000",
+						"to": "00:00:00,000"
+					},
+					"offsets": {
+						"from": 0,
+						"to": 0
+					},
+					"id": 50364,
+					"p": 0.570934,
+					"t_dtw": -1
+				},
+				{
+					"text": " The",
+					"timestamps": {
+						"from": "00:00:00,000",
+						"to": "00:00:00,280"
+					},
+					"offsets": {
+						"from": 0,
+						"to": 280
+					},
+					"id": 440,
+					"p": 0.941864,
+					"t_dtw": -1
+				},
+				{
+					"text": " service",
+					"timestamps": {
+						"from": "00:00:00,810",
+						"to": "00:00:00,950"
+					},
+					"offsets": {
+						"from": 810,
+						"to": 950
+					},
+					"id": 2643,
+					"p": 0.945296,
+					"t_dtw": -1
+				},
+				{
+					"text": " status",
+					"timestamps": {
+						"from": "00:00:00,950",
+						"to": "00:00:01,500"
+					},
+					"offsets": {
+						"from": 950,
+						"to": 1500
+					},
+					"id": 6558,
+					"p": 0.997615,
+					"t_dtw": -1
+				},
+				{
+					"text": " is",
+					"timestamps": {
+						"from": "00:00:01,520",
+						"to": "00:00:01,710"
+					},
+					"offsets": {
+						"from": 1520,
+						"to": 1710
+					},
+					"id": 307,
+					"p": 0.997786,
+					"t_dtw": -1
+				},
+				{
+					"text": " healthy",
+					"timestamps": {
+						"from": "00:00:01,710",
+						"to": "00:00:02,290"
+					},
+					"offsets": {
+						"from": 1710,
+						"to": 2290
+					},
+					"id": 4627,
+					"p": 0.991866,
+					"t_dtw": -1
+				},
+				{
+					"text": " and",
+					"timestamps": {
+						"from": "00:00:02,610",
+						"to": "00:00:02,710"
+					},
+					"offsets": {
+						"from": 2610,
+						"to": 2710
+					},
+					"id": 293,
+					"p": 0.624885,
+					"t_dtw": -1
+				},
+				{
+					"text": " the",
+					"timestamps": {
+						"from": "00:00:02,710",
+						"to": "00:00:03,010"
+					},
+					"offsets": {
+						"from": 2710,
+						"to": 3010
+					},
+					"id": 264,
+					"p": 0.993331,
+					"t_dtw": -1
+				},
+				{
+					"text": " build",
+					"timestamps": {
+						"from": "00:00:03,010",
+						"to": "00:00:03,530"
+					},
+					"offsets": {
+						"from": 3010,
+						"to": 3530
+					},
+					"id": 1322,
+					"p": 0.899405,
+					"t_dtw": -1
+				},
+				{
+					"text": " is",
+					"timestamps": {
+						"from": "00:00:03,630",
+						"to": "00:00:03,740"
+					},
+					"offsets": {
+						"from": 3630,
+						"to": 3740
+					},
+					"id": 307,
+					"p": 0.997801,
+					"t_dtw": -1
+				},
+				{
+					"text": " 20",
+					"timestamps": {
+						"from": "00:00:03,740",
+						"to": "00:00:04,180"
+					},
+					"offsets": {
+						"from": 3740,
+						"to": 4180
+					},
+					"id": 945,
+					"p": 0.957387,
+					"t_dtw": -1
+				},
+				{
+					"text": "48",
+					"timestamps": {
+						"from": "00:00:04,400",
+						"to": "00:00:04,450"
+					},
+					"offsets": {
+						"from": 4400,
+						"to": 4450
+					},
+					"id": 13318,
+					"p": 0.97009,
+					"t_dtw": -1
+				},
+				{
+					"text": ".",
+					"timestamps": {
+						"from": "00:00:05,000",
+						"to": "00:00:05,260"
+					},
+					"offsets": {
+						"from": 5000,
+						"to": 5260
+					},
+					"id": 13,
+					"p": 0.926434,
+					"t_dtw": -1
+				},
+				{
+					"text": "[_TT_263]",
+					"timestamps": {
+						"from": "00:00:05,260",
+						"to": "00:00:05,260"
+					},
+					"offsets": {
+						"from": 5260,
+						"to": 5260
+					},
+					"id": 50627,
+					"p": 0.00535126,
+					"t_dtw": -1
+				}
+			]
+		}
+	]
+}

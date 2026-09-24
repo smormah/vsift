@@ -115,7 +115,13 @@ The revision is stored as a `transcript_record` session artifact, counted by
 it strictly with the same rules as a session read (unknown fields or values, broken
 import invariants such as a segment not at its cue timing plus the offset, or a
 record naming another source): a non-conforming record fails the bundle with
-`INTEGRITY_FAILURE`, and a newer record version with `UNSUPPORTED_SCHEMA`.
+`INTEGRITY_FAILURE`, and a newer record version with `UNSUPPORTED_SCHEMA`. Imports
+write record version 1, the version the published schema describes. Version 2 is
+reserved for revisions produced by local speech recognition; the reader already
+decodes it with the same strictness (its run provenance and every segment's
+provider times must reproduce the stored ranges), but no command writes it yet and
+its schema is published with the command that does. Versions above 2 are
+`UNSUPPORTED_SCHEMA`.
 
 **Malformed-data policy.** A rejection is a typed failure; nothing is imported.
 
@@ -323,7 +329,12 @@ typed manual/BYO remediation for missing, unhealthy and timed-out tools. The leg
 `--version`/`--help` response does **not** prove provider compatibility or a
 working transcription model. Those checks and verified
 managed installation remain P06 work. Provider `detail` is not an instruction
-channel. Paths are not echoed in the response.
+channel. Paths are not echoed in the response. `detail` for FFmpeg and FFprobe is
+only their `ffmpeg version ...` / `ffprobe version ...` banner line, or `detected`
+when none is safe to show; whisper output is never echoed, and its `detail` is
+`whisper.cpp v1.9.2 (reviewed build)` when the executable is byte-identical to a
+build reviewed in P06, otherwise `whisper-cli (build not recognised)`. No line that
+looks like a path or a ggml loader log is ever shown.
 
 `setup plan --profile <desktop|worker>` probes configured executables or filtered
 `PATH` like `setup check`, without per-call path options. On **Ubuntu 24.04

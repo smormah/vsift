@@ -23,12 +23,20 @@ use std::{
 use vsift::{
     Clock, ClockError, CueMarkup, Engine, EngineConfig, EngineError, EnginePorts, FailureCode,
     HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest, OperationId,
-    RuntimeDependency, SessionId, SessionListEntry, SessionRootError, SessionRootLocation,
-    SuppliedTranscriptRequest, TranscriptImportError, TranscriptQuery, TranscriptRejection,
-    UserConfigurationLocation,
+    RuntimeDependency, SegmentOrigin, SessionId, SessionListEntry, SessionRootError,
+    SessionRootLocation, SuppliedTranscriptRequest, TranscriptImportError, TranscriptProvenance,
+    TranscriptQuery, TranscriptRejection, TranscriptSegment, UserConfigurationLocation,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
+
+/// Ordinal of the supplied cue an imported segment was read from.
+fn cue_ordinal(segment: &TranscriptSegment) -> Option<u32> {
+    match segment.origin() {
+        SegmentOrigin::ImportedCue { cue, .. } => Some(cue.ordinal()),
+        SegmentOrigin::Asr { .. } => None,
+    }
+}
 
 /// 2027-01-15T08:00:00Z: an arbitrary fixed start for deterministic expiry.
 const T0: u64 = 1_800_000_000;
@@ -361,7 +369,11 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
     assert_eq!(harness.identifiers.issued(), 4);
     let revision = opened.transcript.ok_or("no transcript revision")?;
     assert_eq!(revision.number(), 1);
-    assert_eq!(revision.offset().as_micros(), 500_000);
+    let TranscriptProvenance::Imported { offset, .. } = revision.provenance() else {
+        return Err("an import produced another provenance".into());
+    };
+    assert_eq!(offset.as_micros(), 500_000);
+    assert_eq!(revision.supersedes(), None);
     assert_eq!(
         revision.source_segment().range().end().as_micros(),
         12_000_000
@@ -415,7 +427,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
     })?;
     assert_eq!(cited.segments().len(), 1);
     assert_eq!(cited.segments()[0].text().markup(), CueMarkup::None);
-    assert_eq!(cited.segments()[0].cue().ordinal(), 2);
+    assert_eq!(cue_ordinal(&cited.segments()[0]), Some(2));
 
     // A cursor survives renewal (it is bound to the revision, not the
     // storage generation) and is refused once the session has expired.
@@ -436,7 +448,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
         limit: Some(1),
         cursor: Some(continuation),
     })?;
-    assert_eq!(resumed.segments()[0].cue().ordinal(), 2);
+    assert_eq!(cue_ordinal(&resumed.segments()[0]), Some(2));
     let expiry = harness
         .engine
         .session_status(&session)?

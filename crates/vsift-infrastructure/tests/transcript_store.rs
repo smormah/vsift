@@ -318,10 +318,26 @@ async fn stored_records_are_strict_and_versioned() -> TestResult {
     let value: serde_json::Value = serde_json::from_slice(&encoded)?;
 
     let mut future = value.clone();
-    future["schema_version"] = serde_json::json!(2);
+    future["schema_version"] = serde_json::json!(3);
     assert_eq!(
         decode_transcript_record(&serde_json::to_vec(&future)?),
         Err(SessionStorageError::UnsupportedVersion)
+    );
+    // Version 2 is the local-ASR record; an import's fields do not satisfy it.
+    let mut relabelled = value.clone();
+    relabelled["schema_version"] = serde_json::json!(2);
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&relabelled)?),
+        Err(SessionStorageError::IntegrityFailure)
+    );
+    // Version 1 is the import record: a local-ASR warning kind cannot appear in it.
+    let mut asr_warning = value.clone();
+    asr_warning["warnings"] = serde_json::json!([
+        {"kind": "seam_duplicates_removed", "count": 1, "first_cue": 1}
+    ]);
+    assert_eq!(
+        decode_transcript_record(&serde_json::to_vec(&asr_warning)?),
+        Err(SessionStorageError::IntegrityFailure)
     );
 
     for pointer in ["", "/segments/0", "/source_segment", "/sidecar"] {
@@ -389,6 +405,70 @@ fn the_frozen_bundle_record_example_is_the_encoded_f10_revision() -> TestResult 
     Ok(())
 }
 
+/// Local ASR changed the revision model; imports must not notice. These
+/// identities, record sizes and record digests were produced by the importer
+/// at `9dad79e`, before the change, from the same inputs.
+#[test]
+fn imports_keep_their_identities_and_version_1_record_bytes() -> TestResult {
+    let pinned = [
+        (
+            "fixtures/corpus/transcripts/F10.srt",
+            500_000,
+            1_304,
+            "87d3d79e8dc9b5dff33eb1fc23b6bc9622e31d022f2049f5e0db5bedc9b3685f",
+            "trv_663ae41bbedc740b651fe61999d395b0",
+            [
+                "tsg_e88330d57e140d6e7e2ed4447950c5b8",
+                "tsg_f9644c630cd9023d38e2eb89741c9b7e",
+                "tsg_a394939677bf53f290007e39739ab6fd",
+            ],
+        ),
+        (
+            "fixtures/corpus/transcripts/F10.vtt",
+            -250_000,
+            1_308,
+            "9ba06a100478c6ae55bbc15a9d65caed798bd5f3858878b24e588085019dd1a5",
+            "trv_d8bc2bf3ed6ac22bbe54eed00d9e2549",
+            [
+                "tsg_aa421509341dbf835be55b9475a2d084",
+                "tsg_882aa4faec47f96751298cd45cc1570b",
+                "tsg_c5ebe6b131ed38f3ab0100ec0e642f02",
+            ],
+        ),
+    ];
+    for (sidecar, offset, bytes, digest, revision_id, segment_ids) in pinned {
+        let supplied = read_supplied_transcript(&repository(sidecar))?;
+        let revision = build_imported_revision(ImportedRevisionRequest {
+            session_id: &SessionId::parse(EXAMPLE_SESSION)?,
+            source_id: &SourceId::parse(F10_SOURCE)?,
+            source_duration: MediaTime::from_micros(12_000_000),
+            supplied: &supplied,
+            offset: TranscriptOffset::from_micros(offset)?,
+            number: NonZeroU32::MIN,
+        })?;
+        assert_eq!(revision.id().as_str(), revision_id, "{sidecar}");
+        assert_eq!(
+            revision.source_segment().id().as_str(),
+            "sgm_813c2dbd740e3afc0f67a52278553bf6"
+        );
+        let segments: Vec<&str> = revision
+            .segments()
+            .iter()
+            .map(|segment| segment.id().as_str())
+            .collect();
+        assert_eq!(segments, segment_ids, "{sidecar}");
+        let encoded = encode_transcript_record(&revision)?;
+        let encoded_digest: String = Sha256::digest(&encoded)
+            .iter()
+            .flat_map(|byte| [byte >> 4, byte & 0x0f])
+            .filter_map(|nibble| char::from_digit(u32::from(nibble), 16))
+            .collect();
+        assert_eq!((encoded.len(), encoded_digest.as_str()), (bytes, digest));
+        assert_eq!(decode_transcript_record(&encoded)?, revision);
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn a_retained_transcript_record_conforms_to_its_published_schema() -> TestResult {
     let staged = staged().await?;
@@ -442,7 +522,7 @@ async fn bundle_validation_rejects_a_nonconforming_transcript_record() -> TestRe
     let mut empty = original.clone();
     empty["segments"] = serde_json::json!([]);
     let mut future = original.clone();
-    future["schema_version"] = serde_json::json!(2);
+    future["schema_version"] = serde_json::json!(3);
 
     for (label, record, expected) in [
         (

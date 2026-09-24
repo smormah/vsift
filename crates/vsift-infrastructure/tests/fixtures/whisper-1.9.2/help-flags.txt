@@ -1,0 +1,26 @@
+whisper-cli --help, whisper.cpp v1.9.2 official Windows x64 CPU build
+(Release/whisper-cli.exe, 479,232 bytes, SHA-256
+95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d), run 2026-09-24.
+Only the lines for flags the adapter passes, plus -tr (never passed) and -oj
+(the fallback without token probabilities), are kept; the usage line names an
+absolute path and is omitted. `whisper-cli --version` printed
+"whisper.cpp version: 1.9.2" after the same loader line setup check no longer echoes.
+
+  -t N,      --threads N            [4      ] number of threads to use during computation
+  -p N,      --processors N         [1      ] number of processors to use during computation
+  -bo N,     --best-of N            [5      ] number of best candidates to keep
+  -bs N,     --beam-size N          [5      ] beam size for beam search
+  -tr,       --translate            [false  ] translate from source language to english
+  -oj,       --output-json          [false  ] output result in a JSON file
+  -ojf,      --output-json-full     [false  ] include more information in the JSON file
+  -of FNAME, --output-file FNAME    [       ] output file path (without file extension)
+  -np,       --no-prints            [false  ] do not print anything other than the results
+  -l LANG,   --language LANG        [en     ] spoken language ('auto' for auto-detect)
+  -m FNAME,  --model FNAME          [models/ggml-base.en.bin] model path
+  -f FNAME,  --file FNAME           [       ] input audio file path
+  -ng,       --no-gpu               [false  ] disable GPU
+  -sns,      --suppress-nst         [false  ] suppress non-speech tokens
+
+Observed: -np does not stop the transcript lines on stdout, and loader, audio and
+output-path logs (with absolute paths) go to stderr. The adapter bounds and
+ignores both streams and reads only the -ojf file.

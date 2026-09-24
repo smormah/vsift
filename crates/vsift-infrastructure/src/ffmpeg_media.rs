@@ -22,6 +22,13 @@ pub const MAX_DIAGNOSTIC_BYTES: usize = 64 * 1024;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
 /// Hard bound for one extracted PCM chunk.
 pub const MAX_AUDIO_BYTES: usize = 4 * 1024 * 1024;
+/// Hard bound for one speech-recognition PCM chunk: thirty seconds of mono
+/// 16 kHz signed 16-bit audio is 960,000 bytes.
+pub const MAX_SPEECH_PCM_BYTES: usize = 1024 * 1024;
+/// Longest window [`FfmpegMedia::speech_pcm`] decodes.
+pub const MAX_SPEECH_PCM_MICROS: u64 = 30_000_000;
+/// Largest clip [`FfmpegMedia::audio`] decodes: ten seconds at 16 kHz mono.
+const MAX_CLIP_PCM_BYTES: usize = 320_000;
 const MAX_STREAMS: usize = 32;
 const MAX_DURATION_MICROS: u64 = 4 * 60 * 60 * 1_000_000;
 const MAX_FRAME_PIXELS: u64 = 16_000_000;
@@ -252,9 +259,59 @@ impl<'a> FfmpegMedia<'a> {
     ///
     /// # Errors
     /// Rejects unsupported ranges, missing audio, exceeded budgets, or invalid decoded bytes.
-    #[allow(clippy::too_many_lines)] // The bounded chunk and timestamp checks form one operation contract.
     pub async fn audio(
         &self,
+        source: &SourceSnapshot,
+        description: &MediaDescription,
+        selection: MediaSelection,
+        range: TimeRange,
+        cancellation: ProcessCancellation,
+    ) -> Result<ExtractedAudio, MediaError> {
+        self.decode_pcm(
+            PcmProfile::Clip,
+            source,
+            description,
+            selection,
+            range,
+            cancellation,
+        )
+        .await
+    }
+
+    /// Decodes at most thirty seconds of mono 16 kHz signed 16-bit PCM for
+    /// local speech recognition, reporting the first decoded sample's time.
+    ///
+    /// Unlike [`Self::audio`], a window in which the stream has no audio at
+    /// all is reported as [`MediaError::NoDecodedAudio`] so a recognizer can
+    /// record the gap, and the timestamp diagnostic is reported per 65,536
+    /// samples rather than per codec frame, so thirty seconds of any source
+    /// rate stays well inside the diagnostic bound.
+    ///
+    /// # Errors
+    /// Rejects unsupported ranges, missing streams, exceeded budgets, or invalid decoded bytes.
+    pub async fn speech_pcm(
+        &self,
+        source: &SourceSnapshot,
+        description: &MediaDescription,
+        selection: MediaSelection,
+        range: TimeRange,
+        cancellation: ProcessCancellation,
+    ) -> Result<ExtractedAudio, MediaError> {
+        self.decode_pcm(
+            PcmProfile::Speech,
+            source,
+            description,
+            selection,
+            range,
+            cancellation,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_lines)] // The bounded chunk and timestamp checks form one operation contract.
+    async fn decode_pcm(
+        &self,
+        profile: PcmProfile,
         source: &SourceSnapshot,
         description: &MediaDescription,
         selection: MediaSelection,
@@ -278,31 +335,29 @@ impl<'a> FfmpegMedia<'a> {
         if stream.decode_support == MediaDecodeSupport::Unsupported {
             return Err(MediaError::UnsupportedCodec);
         }
-        if range.end() > description.duration || range.duration_micros() > 10_000_000 {
+        if range.end() > description.duration
+            || range.duration_micros() > profile.max_range_micros()
+        {
             return Err(MediaError::InvalidAudioRange);
         }
         let seek =
             i64::try_from(range.start().as_micros()).map_err(|_| MediaError::InvalidAudioRange)?;
-        let request = Self::request(
-            source,
-            self.registry.ffmpeg.clone(),
-            Duration::from_secs(30),
-        )?
-        .with_arguments([
-            "-hide_banner",
-            "-nostdin",
-            "-loglevel",
-            "info",
-            "-nostats",
-            "-xerror",
-            "-max_alloc",
-            "67108864",
-            "-threads",
-            "2",
-            "-ss",
-        ])
-        .with_argument(seconds_arg(seek))
-        .with_arguments(["-protocol_whitelist", "file"]);
+        let request = Self::request(source, self.registry.ffmpeg.clone(), profile.deadline())?
+            .with_arguments([
+                "-hide_banner",
+                "-nostdin",
+                "-loglevel",
+                "info",
+                "-nostats",
+                "-xerror",
+                "-max_alloc",
+                "67108864",
+                "-threads",
+                "2",
+                "-ss",
+            ])
+            .with_argument(seconds_arg(seek))
+            .with_arguments(["-protocol_whitelist", "file"]);
         let request = restrict_mov_references(request, source)
             .with_arguments(["-f", source.container().demuxer(), "-i"])
             .with_argument(source.provider_path().as_os_str())
@@ -315,7 +370,7 @@ impl<'a> FfmpegMedia<'a> {
             ))
             .with_arguments([
                 "-af",
-                "ashowinfo",
+                profile.filter(),
                 "-ac",
                 "1",
                 "-ar",
@@ -325,14 +380,17 @@ impl<'a> FfmpegMedia<'a> {
                 "pipe:1",
             ]);
         let output = self
-            .supervisor(MAX_AUDIO_BYTES)
+            .supervisor(profile.stdout_limit())
             .run(request, cancellation)
             .await
             .map_err(MediaError::Process)?;
         validate_outcome(&output)?;
+        if output.stdout.bytes.is_empty() && profile == PcmProfile::Speech {
+            return Err(MediaError::NoDecodedAudio);
+        }
         if output.stdout.bytes.is_empty()
             || output.stdout.bytes.len() % 2 != 0
-            || output.stdout.bytes.len() > 320_000
+            || output.stdout.bytes.len() > profile.max_pcm_bytes()
         {
             return Err(MediaError::InvalidDecodedOutput);
         }
@@ -371,6 +429,56 @@ impl<'a> FfmpegMedia<'a> {
         let stderr = NonZeroUsize::new(MAX_DIAGNOSTIC_BYTES).unwrap_or(NonZeroUsize::MIN);
         let policy = SupervisorPolicy::default().with_stream_limits(stdout, stderr);
         ProcessSupervisor::new(policy, self.host_isolation)
+    }
+}
+
+/// The two bounded PCM operations: a short evidence clip and a speech chunk.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PcmProfile {
+    /// [`FfmpegMedia::audio`]: at most ten seconds, per-frame timestamp log.
+    Clip,
+    /// [`FfmpegMedia::speech_pcm`]: at most thirty seconds for recognition.
+    Speech,
+}
+
+impl PcmProfile {
+    const fn max_range_micros(self) -> u64 {
+        match self {
+            Self::Clip => 10_000_000,
+            Self::Speech => MAX_SPEECH_PCM_MICROS,
+        }
+    }
+
+    const fn deadline(self) -> Duration {
+        match self {
+            Self::Clip => Duration::from_secs(30),
+            Self::Speech => Duration::from_secs(60),
+        }
+    }
+
+    const fn stdout_limit(self) -> usize {
+        match self {
+            Self::Clip => MAX_AUDIO_BYTES,
+            Self::Speech => MAX_SPEECH_PCM_BYTES,
+        }
+    }
+
+    const fn max_pcm_bytes(self) -> usize {
+        match self {
+            Self::Clip => MAX_CLIP_PCM_BYTES,
+            Self::Speech => MAX_SPEECH_PCM_BYTES,
+        }
+    }
+
+    /// The timestamp diagnostic filter. `ashowinfo` logs one line per frame,
+    /// which for thirty seconds of a 48 kHz source would exceed the 64 KiB
+    /// diagnostic bound; regrouping into 65,536-sample frames first keeps the
+    /// first frame's timestamp and logs a few dozen lines at most.
+    const fn filter(self) -> &'static str {
+        match self {
+            Self::Clip => "ashowinfo",
+            Self::Speech => "asetnsamples=n=65536:p=0,ashowinfo",
+        }
     }
 }
 
@@ -768,6 +876,8 @@ pub enum MediaError {
     NoFrameWithinTolerance,
     /// Decoded output was malformed or exceeded its pixel/byte budget.
     InvalidDecodedOutput,
+    /// The selected stream has no audio in the requested speech window.
+    NoDecodedAudio,
 }
 
 impl fmt::Display for MediaError {
@@ -793,6 +903,7 @@ impl fmt::Display for MediaError {
             Self::UnsupportedCodec => "selected media codec is unsupported",
             Self::NoFrameWithinTolerance => "no displayed frame met the requested tolerance",
             Self::InvalidDecodedOutput => "decoded media output is invalid",
+            Self::NoDecodedAudio => "no audio was decoded in the requested window",
         };
         formatter.write_str(message)
     }

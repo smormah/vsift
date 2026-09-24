@@ -98,10 +98,17 @@ pub use vsift_application::{
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
     AlignmentOrigin, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText, CueTiming,
-    CursorError, LanguageTag, MediaTime, SidecarIdentity, SourceSegment, SourceSegmentId,
-    SourceSegmentState, SpeakerLabel, TimeRange, TranscriptImportError, TranscriptOffset,
-    TranscriptRejection, TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
-    TranscriptSegmentId, TranscriptWarning, TranscriptWarningKind, TranscriptWarnings,
+    CursorError, LanguageTag, MediaTime, ProviderEndTrim, SegmentOrigin, SidecarIdentity,
+    SourceSegment, SourceSegmentId, SourceSegmentState, SpeakerLabel, TimeRange, TranscriptFormat,
+    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRejection,
+    TranscriptRevision, TranscriptRevisionId, TranscriptSegment, TranscriptSegmentId,
+    TranscriptWarning, TranscriptWarningKind, TranscriptWarnings,
+};
+/// Local-ASR provenance values reachable from [`TranscriptProvenance`]. No
+/// engine operation produces a local-ASR revision yet.
+pub use vsift_domain::{
+    AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
+    AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, Sha256Hex,
 };
 pub use vsift_domain::{
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,

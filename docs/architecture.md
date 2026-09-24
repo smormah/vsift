@@ -178,6 +178,18 @@ per segment, then the terminal event), so every host streams identically. The st
 `transcript_record` has its own published bundle schema, and `bundle validate`
 decodes it strictly.
 
+Local speech recognition (P07 increment 3a, not yet reachable from a command) uses
+the same revision type. A revision's provenance is either an import (sidecar, format,
+offset) or one local ASR run (provider build and model digests, decoding profile,
+chunk plan, threads, audio stream and every chunk's outcome), and each segment names
+its own origin, so `TranscriptRevision::new` can re-derive every segment's range. The
+domain `asr` module owns chunk planning, provider-output validation, silence and the
+seam merge; the application's `transcribe_range` drives the `SpeechAudioSource` and
+`SpeechRecognizer` ports and checks the recognizer's identity before and after a
+run; infrastructure provides `FfmpegMedia::speech_pcm`, the whisper.cpp CLI adapter
+(closed argument list, supervised per-chunk runs, a bounded parser of its `-ojf`
+file) and version 2 of the `transcript_record` format. Imports still write version 1.
+
 ## Error model
 
 Expected outcomes are represented by exhaustive enums and typed `Result` values. Examples include missing dependencies, changed source media, expired sessions, invalid time ranges, and insufficient evidence.

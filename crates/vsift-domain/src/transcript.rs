@@ -2,23 +2,27 @@
 //!
 //! A transcript revision is an immutable, identified set of timestamped
 //! segments for one source segment (ADR 0016 decision 4). This module owns the
-//! business rules that decide which supplied cues become citable evidence:
+//! business rules that decide which text becomes citable evidence:
 //!
 //! - cue order and overlap policy for imported sidecars;
 //! - the one implementation of offset alignment (C-10);
 //! - the rule that nothing outside the probed source timeline is imported, and
 //!   nothing is clamped or shifted to make it fit (T-02);
 //! - the rule that imported and unscored text never carries a manufactured
-//!   confidence or speaker identity.
+//!   confidence or speaker identity;
+//! - the rule that every segment's source time is re-derivable from its own
+//!   origin: an imported cue's timing plus the offset, or a local-ASR chunk's
+//!   decoded start plus the provider's chunk-relative times.
 //!
 //! Byte parsing belongs to infrastructure adapters; they hand this module
-//! validated values and let it decide.
+//! validated values and let it decide. The local-ASR rules for chunks,
+//! provider output and seams live in [`crate::asr`].
 
 use std::{collections::HashSet, error::Error, fmt, num::NonZeroU32};
 
 use crate::{
-    Confidence, MediaTime, PageLimit, SourceId, SourceSegmentId, SpeakerLabel, TimeRange,
-    TranscriptRevisionId, TranscriptSegmentId,
+    AsrChunkOutcome, AsrRun, ChunkTime, Confidence, ConfidenceOrigin, MediaTime, PageLimit,
+    SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptRevisionId, TranscriptSegmentId,
 };
 
 /// Largest supplied transcript file accepted for import.
@@ -68,6 +72,9 @@ pub enum AlignmentOrigin {
     ImportedSrt,
     /// Timestamps written in a supplied `WebVTT` file, plus the explicit offset.
     ImportedWebVtt,
+    /// Timestamps reported by a local speech recognizer for one decoded audio
+    /// chunk, plus that chunk's observed first decoded timestamp.
+    LocalAsr,
 }
 
 impl AlignmentOrigin {
@@ -77,6 +84,7 @@ impl AlignmentOrigin {
         match self {
             Self::ImportedSrt => "imported_srt",
             Self::ImportedWebVtt => "imported_webvtt",
+            Self::LocalAsr => "local_asr",
         }
     }
 
@@ -347,6 +355,20 @@ pub enum TranscriptWarningKind {
     CuesOutsideSource,
     /// Cues cross the start or end of the source and were not imported.
     CuesCrossingSourceBoundary,
+    /// Local ASR: provider segments with an empty or reversed range, or a range
+    /// outside their chunk's decoded audio or the source, were not used.
+    ProviderSegmentsRejected,
+    /// Local ASR: provider segments ending less than one second past their
+    /// chunk's decoded audio were cut at the audio end; raw times are kept.
+    ProviderEndTrimmed,
+    /// Local ASR: whole-segment non-speech markers such as `[BLANK_AUDIO]`, or
+    /// segments with no text, were removed.
+    NonSpeechMarkersRemoved,
+    /// Local ASR: text repeated by both chunks of an overlap was kept once.
+    SeamDuplicatesRemoved,
+    /// Local ASR: chunks with no audible signal were not transcribed and are
+    /// recorded as silent gaps.
+    SilentChunksSkipped,
 }
 
 impl TranscriptWarningKind {
@@ -360,15 +382,42 @@ impl TranscriptWarningKind {
             Self::OverlappingCues => "overlapping_cues",
             Self::CuesOutsideSource => "cues_outside_source",
             Self::CuesCrossingSourceBoundary => "cues_crossing_source_boundary",
+            Self::ProviderSegmentsRejected => "provider_segments_rejected",
+            Self::ProviderEndTrimmed => "provider_end_trimmed",
+            Self::NonSpeechMarkersRemoved => "non_speech_markers_removed",
+            Self::SeamDuplicatesRemoved => "seam_duplicates_removed",
+            Self::SilentChunksSkipped => "silent_chunks_skipped",
         }
     }
 
-    /// Whether cues of this kind were left out of the imported revision.
+    /// Whether cues or provider segments of this kind were left out of the revision.
     #[must_use]
     pub const fn excludes_cues(self) -> bool {
         matches!(
             self,
-            Self::EmptyCuesSkipped | Self::CuesOutsideSource | Self::CuesCrossingSourceBoundary
+            Self::EmptyCuesSkipped
+                | Self::CuesOutsideSource
+                | Self::CuesCrossingSourceBoundary
+                | Self::ProviderSegmentsRejected
+                | Self::NonSpeechMarkersRemoved
+                | Self::SeamDuplicatesRemoved
+                | Self::SilentChunksSkipped
+        )
+    }
+
+    /// Whether this kind can only arise from local ASR.
+    ///
+    /// Imported revisions never carry these kinds, which is what keeps their
+    /// stored record and public presentation unchanged.
+    #[must_use]
+    pub const fn is_local_asr(self) -> bool {
+        matches!(
+            self,
+            Self::ProviderSegmentsRejected
+                | Self::ProviderEndTrimmed
+                | Self::NonSpeechMarkersRemoved
+                | Self::SeamDuplicatesRemoved
+                | Self::SilentChunksSkipped
         )
     }
 }
@@ -414,7 +463,8 @@ impl TranscriptWarning {
         self.count
     }
 
-    /// Ordinal of the first affected cue.
+    /// Ordinal of the first affected cue; for local-ASR kinds, the 1-based
+    /// ordinal of the first affected chunk.
     #[must_use]
     pub const fn first_cue(self) -> u32 {
         self.first_cue
@@ -428,14 +478,34 @@ pub struct TranscriptWarnings(Vec<TranscriptWarning>);
 impl TranscriptWarnings {
     /// Counts one occurrence of `kind` at cue `ordinal`.
     pub fn record(&mut self, kind: TranscriptWarningKind, ordinal: CueSource) {
+        self.add(kind, 1, ordinal.ordinal);
+    }
+
+    /// Counts `count` occurrences of `kind`, first seen at 1-based position
+    /// `first` (a cue ordinal, or a chunk ordinal for local-ASR kinds).
+    ///
+    /// A zero count records nothing, so callers can add tallies unconditionally.
+    pub fn add(&mut self, kind: TranscriptWarningKind, count: u32, first: NonZeroU32) {
+        if count == 0 {
+            return;
+        }
         if let Some(existing) = self.0.iter_mut().find(|warning| warning.kind == kind) {
-            existing.count = existing.count.saturating_add(1);
+            existing.count = existing.count.saturating_add(count);
         } else {
             self.0.push(TranscriptWarning {
                 kind,
-                count: 1,
-                first_cue: ordinal.ordinal(),
+                count,
+                first_cue: first.get(),
             });
+        }
+    }
+
+    /// Adds every warning of `other`, keeping this set's first-seen order.
+    pub fn extend(&mut self, other: &Self) {
+        for warning in &other.0 {
+            if let Some(first) = NonZeroU32::new(warning.first_cue) {
+                self.add(warning.kind, warning.count, first);
+            }
         }
     }
 
@@ -729,6 +799,70 @@ impl SidecarIdentity {
     }
 }
 
+/// Whether a local-ASR segment's end was cut at its chunk's decoded audio end.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProviderEndTrim {
+    /// The source range ends exactly at the provider's reported end.
+    Unchanged,
+    /// The provider reported an end less than one second past the decoded
+    /// audio; the source range ends at the audio end and the raw provider end
+    /// is kept beside it.
+    TrimmedToAudioEnd,
+}
+
+/// Where one segment's text and timing came from.
+///
+/// Each variant carries what is needed to re-derive the segment's source range,
+/// so a stored segment can be checked against the rule that produced it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SegmentOrigin {
+    /// A cue written in a supplied sidecar.
+    ImportedCue {
+        /// Where the cue was written in the supplied file.
+        cue: CueSource,
+        /// Timing as written, before the offset.
+        timing: CueTiming,
+    },
+    /// A segment reported by a local speech recognizer for one audio chunk.
+    Asr {
+        /// Zero-based index of the chunk in the revision's ASR run.
+        chunk: u32,
+        /// Provider start, relative to the chunk's first decoded sample.
+        provider_start: ChunkTime,
+        /// Provider end as reported, relative to the chunk's first decoded sample.
+        provider_end: ChunkTime,
+        /// Whether the end was cut at the chunk's decoded audio end.
+        trimmed: ProviderEndTrim,
+    },
+}
+
+/// Provenance of a whole revision: a supplied file, or one local ASR run.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TranscriptProvenance {
+    /// Cues imported from a supplied sidecar.
+    Imported {
+        /// Sidecar syntax.
+        format: TranscriptFormat,
+        /// Identity of the exact supplied bytes.
+        sidecar: SidecarIdentity,
+        /// Explicit offset applied to every cue.
+        offset: TranscriptOffset,
+    },
+    /// Segments recognised locally from the source's own audio.
+    LocalAsr(AsrRun),
+}
+
+impl TranscriptProvenance {
+    /// How the revision's timestamps were placed on the source timeline.
+    #[must_use]
+    pub const fn alignment_origin(&self) -> AlignmentOrigin {
+        match self {
+            Self::Imported { format, .. } => format.alignment_origin(),
+            Self::LocalAsr(_) => AlignmentOrigin::LocalAsr,
+        }
+    }
+}
+
 /// One citable, timestamped transcript segment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TranscriptSegment {
@@ -738,8 +872,7 @@ pub struct TranscriptSegment {
     text: CueText,
     speaker: Option<SpeakerLabel>,
     confidence: Confidence,
-    cue: CueSource,
-    cue_timing: CueTiming,
+    origin: SegmentOrigin,
 }
 
 /// Every field of a [`TranscriptSegment`], validated together by its revision.
@@ -757,10 +890,8 @@ pub struct TranscriptSegmentParts {
     pub speaker: Option<SpeakerLabel>,
     /// Provider confidence; unknown for imported text.
     pub confidence: Confidence,
-    /// Where the cue was written in the supplied file.
-    pub cue: CueSource,
-    /// Timing as written, before the offset.
-    pub cue_timing: CueTiming,
+    /// Where the text and timing came from.
+    pub origin: SegmentOrigin,
 }
 
 impl TranscriptSegment {
@@ -774,8 +905,7 @@ impl TranscriptSegment {
             text: parts.text,
             speaker: parts.speaker,
             confidence: parts.confidence,
-            cue: parts.cue,
-            cue_timing: parts.cue_timing,
+            origin: parts.origin,
         }
     }
 
@@ -815,16 +945,10 @@ impl TranscriptSegment {
         self.confidence
     }
 
-    /// Where the cue was written in the supplied file.
+    /// Where the text and timing came from.
     #[must_use]
-    pub const fn cue(&self) -> CueSource {
-        self.cue
-    }
-
-    /// Timing as written in the supplied file, before the offset.
-    #[must_use]
-    pub const fn cue_timing(&self) -> CueTiming {
-        self.cue_timing
+    pub const fn origin(&self) -> SegmentOrigin {
+        self.origin
     }
 
     fn intersects(&self, window: TimeRange) -> bool {
@@ -843,17 +967,18 @@ pub struct TranscriptRevisionParts {
     pub source_id: SourceId,
     /// Source segment the revision covers.
     pub source_segment: SourceSegment,
-    /// How timestamps were placed.
-    pub origin: AlignmentOrigin,
-    /// Explicit offset applied to every cue.
-    pub offset: TranscriptOffset,
-    /// Supplied file identity.
-    pub sidecar: SidecarIdentity,
-    /// Declared language, if known.
+    /// Where the revision's segments came from.
+    pub provenance: TranscriptProvenance,
+    /// The revision this one replaces, if any; imports never supersede.
+    pub supersedes: Option<TranscriptRevisionId>,
+    /// The source range whose text this revision replaced in the superseded
+    /// revision; present only with `supersedes`.
+    pub replaced_range: Option<TimeRange>,
+    /// Declared or detected language, if known.
     pub language: Option<LanguageTag>,
     /// Segments in start order.
     pub segments: Vec<TranscriptSegment>,
-    /// Import warnings.
+    /// Import or recognition warnings.
     pub warnings: TranscriptWarnings,
 }
 
@@ -864,19 +989,23 @@ pub struct TranscriptRevision {
     number: NonZeroU32,
     source_id: SourceId,
     source_segment: SourceSegment,
-    origin: AlignmentOrigin,
-    offset: TranscriptOffset,
-    sidecar: SidecarIdentity,
+    provenance: TranscriptProvenance,
+    supersedes: Option<TranscriptRevisionId>,
+    replaced_range: Option<TimeRange>,
     language: Option<LanguageTag>,
     segments: Vec<TranscriptSegment>,
     warnings: TranscriptWarnings,
 }
 
 impl TranscriptRevision {
-    /// Validates every cross-segment invariant of an imported revision.
+    /// Validates every cross-segment invariant of a revision.
     ///
-    /// Stored revisions are rebuilt through this constructor too, so a
-    /// modified record cannot bypass the rules that governed its import.
+    /// Each segment is checked against its own origin: an imported cue's range
+    /// must be its written timing plus the revision offset, and a local-ASR
+    /// segment's range must be its chunk's decoded start plus the provider's
+    /// times (or the audio end when trimmed). Stored revisions are rebuilt
+    /// through this constructor too, so a modified record cannot bypass the
+    /// rules that produced it.
     ///
     /// # Errors
     ///
@@ -889,6 +1018,11 @@ impl TranscriptRevision {
             return Err(TranscriptRevisionError::TooManySegments);
         }
         let bounds = parts.source_segment.range();
+        validate_supersession(&parts, bounds)?;
+        if let TranscriptProvenance::LocalAsr(run) = &parts.provenance {
+            run.validate_within(&parts.source_segment)?;
+        }
+        let origin = parts.provenance.alignment_origin();
         let mut identities = HashSet::with_capacity(parts.segments.len());
         let mut previous_start = bounds.start();
         for (index, segment) in parts.segments.iter().enumerate() {
@@ -904,17 +1038,8 @@ impl TranscriptRevision {
             if segment.range.start() < bounds.start() || segment.range.end() > bounds.end() {
                 return Err(TranscriptRevisionError::OutsideSourceSegment);
             }
-            if parts.offset.shift(segment.cue_timing.start_micros())
-                != i128::from(segment.range.start().as_micros())
-                || parts.offset.shift(segment.cue_timing.end_micros())
-                    != i128::from(segment.range.end().as_micros())
-            {
-                return Err(TranscriptRevisionError::AlignmentMismatch);
-            }
-            if segment.confidence != Confidence::unknown() {
-                return Err(TranscriptRevisionError::ManufacturedConfidence);
-            }
-            if segment.speaker.is_some() && !parts.origin.carries_speaker_labels() {
+            validate_segment_origin(segment, &parts.provenance)?;
+            if segment.speaker.is_some() && !origin.carries_speaker_labels() {
                 return Err(TranscriptRevisionError::UnsupportedSpeaker);
             }
             if !identities.insert(segment.id.clone()) {
@@ -926,9 +1051,9 @@ impl TranscriptRevision {
             number: parts.number,
             source_id: parts.source_id,
             source_segment: parts.source_segment,
-            origin: parts.origin,
-            offset: parts.offset,
-            sidecar: parts.sidecar,
+            provenance: parts.provenance,
+            supersedes: parts.supersedes,
+            replaced_range: parts.replaced_range,
             language: parts.language,
             segments: parts.segments,
             warnings: parts.warnings,
@@ -962,22 +1087,28 @@ impl TranscriptRevision {
     /// How timestamps were placed.
     #[must_use]
     pub const fn origin(&self) -> AlignmentOrigin {
-        self.origin
+        self.provenance.alignment_origin()
     }
 
-    /// Explicit offset applied to every cue.
+    /// Where the revision's segments came from.
     #[must_use]
-    pub const fn offset(&self) -> TranscriptOffset {
-        self.offset
+    pub const fn provenance(&self) -> &TranscriptProvenance {
+        &self.provenance
     }
 
-    /// Supplied file identity.
+    /// The revision this one replaces, if any.
     #[must_use]
-    pub const fn sidecar(&self) -> &SidecarIdentity {
-        &self.sidecar
+    pub const fn supersedes(&self) -> Option<&TranscriptRevisionId> {
+        self.supersedes.as_ref()
     }
 
-    /// Declared language, if known.
+    /// The source range whose text this revision replaced, if any.
+    #[must_use]
+    pub const fn replaced_range(&self) -> Option<TimeRange> {
+        self.replaced_range
+    }
+
+    /// Declared or detected language, if known.
     #[must_use]
     pub const fn language(&self) -> Option<&LanguageTag> {
         self.language.as_ref()
@@ -1026,6 +1157,84 @@ impl TranscriptRevision {
             segments.push(segment);
         }
         TranscriptSlice { segments, has_more }
+    }
+}
+
+/// A superseding revision names what it replaces; imports replace nothing.
+fn validate_supersession(
+    parts: &TranscriptRevisionParts,
+    bounds: TimeRange,
+) -> Result<(), TranscriptRevisionError> {
+    let invalid = match (&parts.supersedes, parts.replaced_range, &parts.provenance) {
+        (Some(_), _, TranscriptProvenance::Imported { .. }) | (None, Some(_), _) => true,
+        (Some(previous), replaced, TranscriptProvenance::LocalAsr(_)) => {
+            *previous == parts.id
+                || replaced.is_some_and(|range| {
+                    range.start() < bounds.start() || range.end() > bounds.end()
+                })
+        }
+        (None, None, _) => false,
+    };
+    if invalid {
+        return Err(TranscriptRevisionError::InvalidSupersession);
+    }
+    Ok(())
+}
+
+/// Re-derives a segment's source range from its own origin.
+fn validate_segment_origin(
+    segment: &TranscriptSegment,
+    provenance: &TranscriptProvenance,
+) -> Result<(), TranscriptRevisionError> {
+    match (segment.origin, provenance) {
+        (
+            SegmentOrigin::ImportedCue { timing, .. },
+            TranscriptProvenance::Imported { offset, .. },
+        ) => {
+            if offset.shift(timing.start_micros()) != i128::from(segment.range.start().as_micros())
+                || offset.shift(timing.end_micros()) != i128::from(segment.range.end().as_micros())
+            {
+                return Err(TranscriptRevisionError::AlignmentMismatch);
+            }
+            // A supplied file states no score, so any number would be invented.
+            if segment.confidence != Confidence::unknown() {
+                return Err(TranscriptRevisionError::ManufacturedConfidence);
+            }
+            Ok(())
+        }
+        (
+            SegmentOrigin::Asr {
+                chunk,
+                provider_start,
+                provider_end,
+                trimmed,
+            },
+            TranscriptProvenance::LocalAsr(run),
+        ) => {
+            let record = run
+                .chunks()
+                .get(usize::try_from(chunk).map_err(|_| TranscriptRevisionError::OriginMismatch)?)
+                .ok_or(TranscriptRevisionError::OriginMismatch)?;
+            let AsrChunkOutcome::Transcribed { audio } = record.outcome() else {
+                return Err(TranscriptRevisionError::OriginMismatch);
+            };
+            let expected =
+                crate::asr::asr_source_range(audio, provider_start, provider_end, trimmed)
+                    .ok_or(TranscriptRevisionError::AlignmentMismatch)?;
+            if expected != segment.range {
+                return Err(TranscriptRevisionError::AlignmentMismatch);
+            }
+            // whisper.cpp token probabilities are not calibrated; claiming
+            // calibration would overstate what the provider measured.
+            if segment.confidence.origin() == ConfidenceOrigin::ProviderCalibrated {
+                return Err(TranscriptRevisionError::ManufacturedConfidence);
+            }
+            Ok(())
+        }
+        (SegmentOrigin::ImportedCue { .. }, TranscriptProvenance::LocalAsr(_))
+        | (SegmentOrigin::Asr { .. }, TranscriptProvenance::Imported { .. }) => {
+            Err(TranscriptRevisionError::OriginMismatch)
+        }
     }
 }
 
@@ -1203,9 +1412,11 @@ pub enum TranscriptRevisionError {
     OutOfOrder,
     /// A segment lies outside its source segment.
     OutsideSourceSegment,
-    /// A segment's range is not its cue timing plus the revision offset.
+    /// A segment's range is not the one its origin determines: cue timing plus
+    /// the revision offset, or chunk decoded start plus provider times.
     AlignmentMismatch,
-    /// An imported segment carries a numeric confidence it was never given.
+    /// An imported segment carries a numeric confidence it was never given, or
+    /// a local-ASR segment claims a calibrated one.
     ManufacturedConfidence,
     /// A speaker label is attached to an origin without voice syntax.
     UnsupportedSpeaker,
@@ -1219,6 +1430,15 @@ pub enum TranscriptRevisionError {
     InvalidWarning,
     /// A derived revision, segment or source-segment identity is not canonical.
     InvalidIdentity,
+    /// A segment's origin does not belong to the revision's provenance, or
+    /// names a chunk that was not transcribed.
+    OriginMismatch,
+    /// Superseding metadata is inconsistent: a replaced range without a
+    /// superseded revision, a revision superseding itself, a range outside
+    /// the source segment, or an import that claims to supersede.
+    InvalidSupersession,
+    /// A local-ASR run's chunk records do not follow its chunk plan.
+    InvalidAsrRun,
 }
 
 impl fmt::Display for TranscriptRevisionError {
@@ -1229,14 +1449,19 @@ impl fmt::Display for TranscriptRevisionError {
             Self::OrdinalGap => "transcript segment ordinals are not contiguous",
             Self::OutOfOrder => "transcript segments are not in start order",
             Self::OutsideSourceSegment => "transcript segment lies outside its source segment",
-            Self::AlignmentMismatch => "transcript segment does not match its offset cue timing",
-            Self::ManufacturedConfidence => "imported transcript segment claims a confidence",
+            Self::AlignmentMismatch => "transcript segment does not match its origin's timing",
+            Self::ManufacturedConfidence => {
+                "transcript segment claims a confidence its origin cannot give"
+            }
             Self::UnsupportedSpeaker => "transcript origin cannot carry speaker labels",
             Self::DuplicateSegment => "transcript segment identity is repeated",
             Self::EmptySourceSegment => "source segment has no duration",
             Self::InvalidSidecar => "supplied transcript identity is invalid",
             Self::InvalidWarning => "transcript warning is invalid",
             Self::InvalidIdentity => "transcript identity is not canonical",
+            Self::OriginMismatch => "transcript segment origin does not match its revision",
+            Self::InvalidSupersession => "transcript supersession metadata is inconsistent",
+            Self::InvalidAsrRun => "local ASR run does not follow its chunk plan",
         })
     }
 }
@@ -1250,11 +1475,12 @@ mod tests {
     use proptest::prelude::{prop_assert, prop_assert_eq, proptest};
 
     use super::{
-        AlignmentOrigin, CueMarkup, CueSource, CueText, CueTiming, ImportedCue, LanguageTag,
-        MAX_TRANSCRIPT_OFFSET_MICROS, ParsedTranscript, SidecarIdentity, SourceSegment,
-        TranscriptFormat, TranscriptImportError, TranscriptOffset, TranscriptRejection,
-        TranscriptRevision, TranscriptRevisionError, TranscriptRevisionParts, TranscriptSegment,
-        TranscriptSegmentParts, TranscriptWarningKind, TranscriptWarnings, align_imported_cues,
+        CueMarkup, CueSource, CueText, CueTiming, ImportedCue, LanguageTag,
+        MAX_TRANSCRIPT_OFFSET_MICROS, ParsedTranscript, SegmentOrigin, SidecarIdentity,
+        SourceSegment, TranscriptFormat, TranscriptImportError, TranscriptOffset,
+        TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptRevisionError,
+        TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptWarningKind,
+        TranscriptWarnings, align_imported_cues,
     };
     use crate::{
         Confidence, ConfidenceOrigin, MediaTime, PageLimit, SourceId, SourceSegmentId,
@@ -1315,8 +1541,10 @@ mod tests {
                 text: CueText::new(format!("segment {ordinal}"), format!("segment {ordinal}"))?,
                 speaker: None,
                 confidence: Confidence::unknown(),
-                cue: position(ordinal, ordinal)?,
-                cue_timing: CueTiming::new(start - shift, end - shift)?,
+                origin: SegmentOrigin::ImportedCue {
+                    cue: position(ordinal, ordinal)?,
+                    timing: CueTiming::new(start - shift, end - shift)?,
+                },
             }));
         }
         Ok(TranscriptRevision::new(TranscriptRevisionParts {
@@ -1324,13 +1552,56 @@ mod tests {
             number: NonZeroU32::MIN,
             source_id: SourceId::from_sha256(DIGEST)?,
             source_segment: twelve_second_source()?,
-            origin: AlignmentOrigin::ImportedSrt,
-            offset,
-            sidecar: SidecarIdentity::new(DIGEST, 10)?,
+            provenance: imported(TranscriptFormat::Srt, offset)?,
+            supersedes: None,
+            replaced_range: None,
             language: None,
             segments,
             warnings: TranscriptWarnings::default(),
         })?)
+    }
+
+    fn imported(
+        format: TranscriptFormat,
+        offset: TranscriptOffset,
+    ) -> Result<TranscriptProvenance, Box<dyn std::error::Error>> {
+        Ok(TranscriptProvenance::Imported {
+            format,
+            sidecar: SidecarIdentity::new(DIGEST, 10)?,
+            offset,
+        })
+    }
+
+    fn parts_of(revision: &TranscriptRevision) -> TranscriptRevisionParts {
+        TranscriptRevisionParts {
+            id: revision.id().clone(),
+            number: NonZeroU32::MIN,
+            source_id: revision.source_id().clone(),
+            source_segment: revision.source_segment().clone(),
+            provenance: revision.provenance().clone(),
+            supersedes: None,
+            replaced_range: None,
+            language: None,
+            segments: revision.segments().to_vec(),
+            warnings: TranscriptWarnings::default(),
+        }
+    }
+
+    fn with_segment(
+        original: &TranscriptSegment,
+        speaker: Option<SpeakerLabel>,
+        confidence: Confidence,
+        range: TimeRange,
+    ) -> TranscriptSegment {
+        TranscriptSegment::new(TranscriptSegmentParts {
+            id: original.id().clone(),
+            ordinal: NonZeroU32::MIN,
+            range,
+            text: original.text().clone(),
+            speaker,
+            confidence,
+            origin: original.origin(),
+        })
     }
 
     #[test]
@@ -1521,50 +1792,30 @@ mod tests {
             ConfidenceOrigin::Unavailable
         );
 
-        let mut parts = TranscriptRevisionParts {
-            id: valid.id().clone(),
-            number: NonZeroU32::MIN,
-            source_id: valid.source_id().clone(),
-            source_segment: valid.source_segment().clone(),
-            origin: valid.origin(),
-            offset: valid.offset(),
-            sidecar: valid.sidecar().clone(),
-            language: None,
-            segments: valid.segments().to_vec(),
-            warnings: TranscriptWarnings::default(),
-        };
+        let mut parts = parts_of(&valid);
         let original = parts.segments[0].clone();
-        let certain = TranscriptSegment::new(TranscriptSegmentParts {
-            id: original.id().clone(),
-            ordinal: NonZeroU32::MIN,
-            range: original.range(),
-            text: original.text().clone(),
-            speaker: None,
-            confidence: Confidence::provider_score(10_000, ConfidenceOrigin::ProviderCalibrated)?,
-            cue: original.cue(),
-            cue_timing: original.cue_timing(),
-        });
-        parts.segments[0] = certain;
-        assert_eq!(
-            TranscriptRevision::new(parts.clone()),
-            Err(TranscriptRevisionError::ManufacturedConfidence)
-        );
+        for confidence in [
+            Confidence::provider_score(10_000, ConfidenceOrigin::ProviderCalibrated)?,
+            Confidence::provider_score(9_000, ConfidenceOrigin::ProviderUncalibrated)?,
+        ] {
+            parts.segments[0] = with_segment(&original, None, confidence, original.range());
+            assert_eq!(
+                TranscriptRevision::new(parts.clone()),
+                Err(TranscriptRevisionError::ManufacturedConfidence)
+            );
+        }
 
-        parts.segments[0] = TranscriptSegment::new(TranscriptSegmentParts {
-            id: original.id().clone(),
-            ordinal: NonZeroU32::MIN,
-            range: original.range(),
-            text: original.text().clone(),
-            speaker: Some(SpeakerLabel::parse("Narrator")?),
-            confidence: Confidence::unknown(),
-            cue: original.cue(),
-            cue_timing: original.cue_timing(),
-        });
+        parts.segments[0] = with_segment(
+            &original,
+            Some(SpeakerLabel::parse("Narrator")?),
+            Confidence::unknown(),
+            original.range(),
+        );
         assert_eq!(
             TranscriptRevision::new(parts.clone()),
             Err(TranscriptRevisionError::UnsupportedSpeaker)
         );
-        parts.origin = AlignmentOrigin::ImportedWebVtt;
+        parts.provenance = imported(TranscriptFormat::WebVtt, TranscriptOffset::ZERO)?;
         assert!(TranscriptRevision::new(parts).is_ok());
         Ok(())
     }
@@ -1575,34 +1826,49 @@ mod tests {
         let offset = TranscriptOffset::from_micros(500_000)?;
         let valid = revision(offset, &[(1_000_000, 2_000_000)])?;
         let segment = &valid.segments()[0];
-        assert_eq!(segment.cue_timing().start_micros(), 500_000);
+        let SegmentOrigin::ImportedCue { timing, .. } = segment.origin() else {
+            return Err("imported segment has another origin".into());
+        };
+        assert_eq!(timing.start_micros(), 500_000);
 
-        let shifted = TranscriptSegment::new(TranscriptSegmentParts {
-            id: segment.id().clone(),
-            ordinal: NonZeroU32::MIN,
-            range: TimeRange::new(
+        let mut parts = parts_of(&valid);
+        parts.segments = vec![with_segment(
+            segment,
+            None,
+            Confidence::unknown(),
+            TimeRange::new(
                 MediaTime::from_micros(1_000_001),
                 MediaTime::from_micros(2_000_000),
             )?,
-            text: segment.text().clone(),
-            speaker: None,
-            confidence: Confidence::unknown(),
-            cue: segment.cue(),
-            cue_timing: segment.cue_timing(),
-        });
-        let result = TranscriptRevision::new(TranscriptRevisionParts {
-            id: valid.id().clone(),
-            number: NonZeroU32::MIN,
-            source_id: valid.source_id().clone(),
-            source_segment: valid.source_segment().clone(),
-            origin: valid.origin(),
-            offset,
-            sidecar: valid.sidecar().clone(),
-            language: None,
-            segments: vec![shifted],
-            warnings: TranscriptWarnings::default(),
-        });
-        assert_eq!(result, Err(TranscriptRevisionError::AlignmentMismatch));
+        )];
+        assert_eq!(
+            TranscriptRevision::new(parts),
+            Err(TranscriptRevisionError::AlignmentMismatch)
+        );
+        Ok(())
+    }
+
+    /// Imports never supersede, and a replaced range needs a superseded revision.
+    #[test]
+    fn imports_carry_no_supersession() -> TestResult {
+        let valid = revision(TranscriptOffset::ZERO, &[(0, 1_000)])?;
+        assert_eq!(valid.supersedes(), None);
+        assert_eq!(valid.replaced_range(), None);
+        let mut parts = parts_of(&valid);
+        parts.supersedes = Some(TranscriptRevisionId::parse("trv_fedcba9876543210")?);
+        assert_eq!(
+            TranscriptRevision::new(parts.clone()),
+            Err(TranscriptRevisionError::InvalidSupersession)
+        );
+        parts.supersedes = None;
+        parts.replaced_range = Some(TimeRange::new(
+            MediaTime::from_micros(0),
+            MediaTime::from_micros(1_000),
+        )?);
+        assert_eq!(
+            TranscriptRevision::new(parts),
+            Err(TranscriptRevisionError::InvalidSupersession)
+        );
         Ok(())
     }
 
