@@ -115,6 +115,13 @@ Missing tools make the journeys `blocked`. It writes
 `.vsift/e2e-runs/p07-<run-id>/report.json` and leaves `p07_local_asr`, P08-P14 and the
 complete journey `not_implemented`.
 
+The `p07_local_asr` stage will run on the P07 speech variants
+(`fixtures/corpus/generated/<id>-speech.*`) rather than the tone sentinels. They are
+generated from the frozen scripts by a test-only Kokoro workflow and verified
+independently ([p07-speech-fixtures.md](p07-speech-fixtures.md)). Expected speech
+windows come from the manifest; Kokoro's word timings in the provenance are
+engine-reported and need a tolerance, and no expectation is taken from an ASR run.
+
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
 F01 tone audio. It is **not** the P06 stage, a P13 managed-install stage, a real-speech

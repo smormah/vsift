@@ -28,9 +28,47 @@ P00 defines truth. P04 generates F01-F10/F12 visual media, F11 malformed variant
 tone-based audio sentinels and rotated/audio-track variants. The verifier independently
 checks generated hashes, timestamps and selected decoded pixels. The source recipes
 are reproducible with the same FFmpeg build; `generated/provenance.json` records that
-build's version and hash. P07 adds speech artifacts matching the frozen scripts.
-P08/P12 use the frozen corpus for measured retrieval and agent evaluation. See the
+build's version and hash. P07 adds speech variants of the speech-bearing fixtures
+(below); the tone fixtures stay unchanged. P08/P12 use the frozen corpus for measured retrieval and agent evaluation. See the
 [P04 qualification record](../../docs/planning/p04-media-qualification.md).
+
+## Speech variants (P07)
+
+Local-ASR tests need real speech; the P04 tone sentinels stay as they are, byte for
+byte. `tools/generate_p07_speech.py` speaks each speech-bearing fixture's frozen
+`audio.script` with the [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech
+model (Apache-2.0; voices `af_heart` and, for F08's Spanish sentence, `ef_dora`).
+**Kokoro is test tooling only**: it runs in the manually dispatched
+`.github/workflows/p07-speech-fixtures.yml` on a disposable runner, is never a VSift
+dependency, and is never shipped. The licence review and the full recipe are in
+[p07-speech-fixtures.md](../../docs/planning/p07-speech-fixtures.md).
+
+| Files | Content |
+| --- | --- |
+| `generated/speech/<id>-utterance.wav` | Clean Kokoro utterance, mono 16-bit 24 kHz |
+| `generated/<id>-speech.mp4` (F01-F08, F12) | P04 video stream copied unchanged plus the placed speech as AAC, mono 16 kHz |
+| `generated/F09-speech.mkv` | P04 VFR video, 2 s origin, speech as PCM on the 750 ms delayed audio stream |
+| `generated/speech-provenance.json` | Model revision, voices, pinned environment, parameters, FFmpeg build, placement, noise, hashes and sizes |
+| `generated/speech-verification.json` | Result of the independent `tools/verify_p07_speech.py` |
+
+The manifest remains the truth source. Speech starts at the manifest speech event where
+one exists (F08, F09) and must end inside it; otherwise it starts after a fixed 500 ms
+lead-in, which is a generation policy and not timing truth. F08 carries deterministic
+office noise at 10 dB SNR. The provenance records where each utterance was placed
+(exact by construction) and Kokoro's own word timings, labelled as engine-reported; no
+expected time is ever derived by running an ASR on the output.
+
+To regenerate, dispatch the workflow, check that the job (including its repeatability
+step) is green, copy the `p07-speech-fixtures` artifact into `generated/`, listen to the
+clips and review the recorded phonemes, then run the verifier locally, which needs no
+PyTorch:
+
+```console
+python tools/verify_p07_speech.py --ffmpeg /absolute/path/to/ffmpeg --ffprobe /absolute/path/to/ffprobe
+```
+
+`python -m unittest discover -s tools -p test_p07_speech.py` tests the recipe and the
+verifier without the model (the assembly tests also need FFmpeg and FFprobe).
 
 ## Supplied-transcript sidecars (P07)
 
