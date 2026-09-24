@@ -18,7 +18,8 @@ Today it can:
 - prove, automatically and once per tool pair, that FFmpeg/FFprobe really work
   before it runs them on a user's video;
 - manage the session's lifetime and retention, and validate retained bundles,
-  including the content of their transcript records.
+  including the content of their transcript records;
+- keep every folder it creates private to the user, whatever the parent folder grants.
 
 It cannot yet transcribe speech itself, search, or hand frames, crops or audio to an
 agent. Local ASR is the next P07 increment; search and visuals are P08-P09.
@@ -42,30 +43,28 @@ agent. Local ASR is the next P07 increment; search and visuals are P08-P09.
 - Still `COMMAND_NOT_IMPLEMENTED`: `transcript retranscribe`, search, candidates,
   frame, audio, crop, job and setup install/repair/list/rollback/remove.
 
+## Private folders (fix, this change)
+
+Every folder VSift creates (per-user configuration and its missing parents, session
+root and its parent, retained bundles, managed data) is made private before use: a
+protected DACL for the user, SYSTEM and Administrators on Windows (`windows-acl`, no
+`unsafe`), 0o700 on Unix. Existing folders are never changed; a non-private one fails
+`STORAGE_IO` with `vsift-contract::non_private_folder_summary` naming its kind
+(session root: was `INVALID_ARGUMENT`). Openers wait up to 2 s for a fresh empty
+folder a concurrent creator is still restricting. Threat model SEC-18.
+
 ## Evidence stream and bundle record (P07 increment 2c)
 
-- `transcript get --events jsonl`: one evidence event per segment, then exactly one
-  terminal event. Evidence event = `schema_version`, `event: "evidence"`, contiguous
-  `sequence` from 0, `command`, `operation_id`, `record_type: "transcript_segment"`,
-  upsert `key` (= `segment_id`) and `record` (the published segment). The terminal
-  event has `sequence` = record count; its data is the page without `items`, plus
-  `record_count` and `next_cursor` (`transcript-get-stream-data.schema.json`).
-  Failures and other commands stay one terminal event; empty ranges are one complete
-  terminal event with `record_count: 0`. No progress events. `--json` and human
-  output unchanged. The stream is assembled (each line within 1 MiB) before writing.
-- Contract: `vsift-contract::stream` owns `EventKind`, `EvidenceRecordType` (both
-  with `ALL` and compile-time ordinal guards), `EvidenceEventResponse`,
-  `TranscriptStreamData` and `TranscriptEvidenceStream` (the sequencing).
-  `TerminalEventResponse::at_sequence` is crate-private. The CLI's `JsonLines`
-  buffer and `write_evidence_stream` only serialize and write.
-- Bundle: `bundle-transcript-record.schema.json` publishes the stored record.
-  `FilesystemSessionStore::validate_bundle` now decodes every `transcript_record`
-  through the shared `read_transcript_artifact` (size, digest, strict decode, same
-  source); non-conforming is `IntegrityFailure`, newer is `UnsupportedVersion`.
-- Schemas/examples: `evidence-event`, `transcript-get-stream-data`,
-  `bundle-transcript-record`; `examples/transcript-get.events.jsonl` (byte-exact)
-  and `examples/bundle-transcript-record.json`. `terminal-event` gained only a
-  description.
+- `transcript get --events jsonl`: one keyed evidence event per segment
+  (`record_type: "transcript_segment"`, upsert `key` = `segment_id`, contiguous
+  `sequence` from 0), then one terminal event carrying the page without `items`,
+  `record_count` and `next_cursor`. Failures stay one terminal event; `--json` and
+  human output are unchanged. Full rules: `cli-v1.md` ("Evidence stream").
+- Contract: `vsift-contract::stream` owns `EventKind`, `EvidenceRecordType` (with
+  `ALL` guards) and the sequencing; the CLI only serializes and writes.
+- `bundle validate` decodes every `transcript_record` strictly
+  (`bundle-transcript-record.schema.json`): non-conforming is `IntegrityFailure`,
+  newer is `UnsupportedVersion`.
 
 ## Media-tool preflight (P07 increment 2b)
 
@@ -116,7 +115,7 @@ bounded SRT/VTT parsers, `FfprobeSourceDuration` and the `transcript_record` art
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
-| P07 | In progress: increments 1a, 1b, 2, 2b and 2c (evidence stream) done; local ASR next |
+| P07 | In progress: increments 1a-2c done; speech fixtures in progress; local ASR next |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
@@ -131,9 +130,9 @@ of these files. The largest modules are `filesystem_session_store.rs` and
 
 ## Quality evidence
 
-- Evidence-stream increment, Windows 11: fmt, strict Clippy (pedantic as errors),
-  `cargo test --workspace` (403 passed, 22 opt-in ignored), warning-denied rustdoc and the
-  governance check pass, with 22 new contract, CLI and infrastructure tests.
+- Private-folders fix, Windows 11: fmt, strict Clippy (pedantic as errors),
+  `cargo test --workspace` (448 passed, 23 opt-in ignored), warning-denied rustdoc and the
+  governance check pass; ACL tests build a hostile parent with the system `icacls.exe`.
 - Fix #131, Windows 11: process and thread race tests failed 5/5 before the fix and
   passed 50/50 after (200/200 with four binaries in parallel); details in the P05 note.
 - Opt-in with FFmpeg/FFprobe 9.0: the P07 transcript E2E now also consumes each

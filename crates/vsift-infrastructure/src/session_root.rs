@@ -11,7 +11,7 @@
 //! full validation as any other open (issue #131).
 
 use std::{
-    env, fs, io,
+    env,
     path::{Path, PathBuf},
     thread,
     time::{Duration, Instant, SystemTime},
@@ -20,6 +20,7 @@ use std::{
 use crate::{
     FilesystemSessionStore, SessionStoreOpenError,
     filesystem_session_store::{RootProvisioningState, root_provisioning_state},
+    private_user_root::create_private_directory,
 };
 
 /// Longest time an open waits for a concurrent creator to finish a root.
@@ -107,14 +108,15 @@ pub fn platform_session_root() -> Option<PathBuf> {
 ///
 /// Returns `Ok(None)` only for [`SessionRootProvisioning::ExistingOnly`] when the
 /// root does not exist, so read-only operations never create state. When a
-/// missing root is created, one missing parent directory is created with
-/// owner-only permissions on Unix; deeper missing ancestry is refused rather
-/// than silently built.
+/// missing root is created, one missing parent directory is created private to
+/// the current user (owner-only mode on Unix, its own protected DACL on
+/// Windows, whatever its parent grants); deeper missing ancestry is refused
+/// rather than silently built.
 ///
 /// Concurrent creators are safe. The store's exclusive directory creation
 /// elects one creator, which holds a provisioning lock inside the root until
 /// its ownership marker is complete. Any open that finds the root present but
-/// failing ownership or layout validation checks for that creator: while the
+/// failing ownership, layout or privacy validation checks for that creator: while the
 /// lock is held, or while a just-created root holds nothing beyond the
 /// creator's first steps, it validates again with a short, doubling backoff for
 /// at most five seconds. The root is adopted only when the full validation of
@@ -162,11 +164,9 @@ pub(crate) fn open_session_root_within(
         if !grandparent.is_dir() {
             return Err(SessionRootError::ParentUnavailable);
         }
-        match create_private_directory(parent) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(_) => return Err(SessionRootError::ParentUnavailable),
-        }
+        // A concurrent creator's parent is left as it is: an existing
+        // directory is never modified, and the root's own validation decides.
+        create_private_directory(parent).map_err(|_| SessionRootError::ParentUnavailable)?;
     }
     match FilesystemSessionStore::provision_default(root) {
         Ok(store) => Ok(Some(store)),
@@ -177,10 +177,12 @@ pub(crate) fn open_session_root_within(
 
 /// Opens an existing root, waiting within `wait` for an active creator.
 ///
-/// Only an ownership or layout failure can come from a root that is still
-/// being provisioned; every other failure is final at once. Each attempt
-/// repeats the complete validation, so nothing observed while waiting is
-/// trusted on its own.
+/// Only an ownership, layout or privacy failure can come from a root that is
+/// still being provisioned (a new root is briefly empty with its inherited
+/// DACL before the creator makes it private); every other failure is final at
+/// once. Each attempt repeats the complete validation, so nothing observed
+/// while waiting is trusted on its own, and a settled non-private root is
+/// still rejected at once.
 fn adopt_existing_root(
     root: &Path,
     wait: Duration,
@@ -192,7 +194,8 @@ fn adopt_existing_root(
             Ok(store) => return Ok(store),
             Err(
                 rejection @ (SessionStoreOpenError::InvalidOwnership
-                | SessionStoreOpenError::InvalidLayout),
+                | SessionStoreOpenError::InvalidLayout
+                | SessionStoreOpenError::RootNotPrivate),
             ) => rejection,
             Err(error) => return Err(SessionRootError::Store(error)),
         };
@@ -213,20 +216,6 @@ fn adopt_existing_root(
         thread::sleep(backoff);
         backoff = backoff.saturating_mul(2).min(MAX_BACKOFF);
     }
-}
-
-#[cfg(unix)]
-fn create_private_directory(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::DirBuilderExt;
-
-    let mut builder = fs::DirBuilder::new();
-    builder.mode(0o700);
-    builder.create(path)
-}
-
-#[cfg(windows)]
-fn create_private_directory(path: &Path) -> io::Result<()> {
-    fs::create_dir(path)
 }
 
 #[cfg(test)]

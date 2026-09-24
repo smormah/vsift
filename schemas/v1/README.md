@@ -58,6 +58,10 @@ retained bundle's record).
 `media-tool-verification-failed.json` is the `ingest` failure an agent receives when
 the automatic media-tool preflight fails (here FFmpeg selected as FFprobe, stopped at
 the probe check); it is checked by `vsift-contract`'s `media_tool_preflight_contract`.
+`storage-not-private.json` is the `setup configure` failure an agent receives when
+the per-user configuration folder already exists and other accounts can access it;
+it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows
+`private_storage_cli_contract`.
 
 The Rust types that produce these documents live in the `vsift-contract` crate
 (`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.

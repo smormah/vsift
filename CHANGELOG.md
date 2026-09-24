@@ -81,6 +81,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- On a Windows profile whose `%LOCALAPPDATA%` gives other accounts access to new
+  folders (for example a sandbox group or an app-container capability), `setup
+  configure`, `setup configure-model` and `setup check` failed with `STORAGE_IO`
+  and no explanation, because the folder VSift had just created inherited that
+  access and VSift then correctly refused it. Every folder VSift creates for itself
+  (the per-user configuration folder and its missing parents, the session folder
+  and its parent, retained bundles, the managed-data folder) now gets its own
+  permissions before anything is written: only you, SYSTEM and Administrators, with
+  inheritance from the parent turned off. On Linux and macOS these folders were
+  already created owner-only; a missing parent of a private folder is now owner-only
+  too. A folder that already exists is never changed: if other accounts can access
+  it, the command still stops, now with a remediation naming the folder
+  (`user_configuration` or `session_root`) and how to fix it. A session folder in
+  that state is now `STORAGE_IO` instead of `INVALID_ARGUMENT`. A folder another
+  VSift process has only just created is given a moment to become private before
+  it is judged, so commands started together do not trip over each other.
 - Media-tool check record: a reader that caught another process replacing the
   record could mistake the replacement for an unsafe record (issue #136). On
   Windows this made a concurrency test fail in about half of its runs. The read

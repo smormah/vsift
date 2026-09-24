@@ -107,6 +107,34 @@ seconds for it, but only while the creator's provisioning lock is held or the ro
 is freshly created and still nearly empty; adoption always repeats the full owner,
 privacy, marker, layout and no-link validation, so waiting never widens SEC-08.
 
+Since 2026-09-24 private-root creation no longer trusts the parent's ACL (SEC-18).
+A Windows directory inherits every inheritable ACE of its parent, and a real
+profile's `%LOCALAPPDATA%` was found passing a sandbox group
+(`(OI)(CI)(RX)`) and two `AppContainer` capability SIDs (`(OI)(CI)(F)`) to every new
+child, so each root VSift created there failed its own DACL validation. Every
+directory VSift creates as a private root (per-user configuration and its missing
+ancestors, session root and its created parent, retained bundle, managed root) now
+receives, before any content is written, a protected DACL (inheritance disabled)
+granting full control only to the current user, `LocalSystem` and Administrators, the
+principals the validator trusts; inherited and foreign entries are removed. The
+change uses the existing `windows-acl` 0.3.0 dependency, whose DACL writes always set
+`PROTECTED_DACL_SECURITY_INFORMATION`; VSift stays free of `unsafe`. It is path-based
+while VSift holds a no-delete-share handle to the new directory, so the path cannot be
+swapped, and the post-creation validation still runs. Unix keeps mode 0o700 at
+creation (a umask can only clear bits), now also for missing ancestors of a private
+root. An existing directory is never modified: when other accounts can access it the
+operation fails with `STORAGE_IO` and fixed-prose remediation naming the folder kind,
+never its path. Because a concurrent creator's new directory briefly carries its
+inherited DACL, an opener that finds a directory which is empty, created within the
+last 10 s and not yet private re-validates it with a short backoff (at most 2 s for the
+configuration root; the session root's existing 5 s provisioning wait); content or age
+ends the wait at once, and nothing observed while waiting is trusted. Residual: DACL replacement follows creation rather than being atomic
+with it (that needs `CreateDirectoryW` security attributes, i.e. `unsafe` or a new
+dependency), so a principal the parent already trusted could open a handle to the
+still-empty directory in that window and keep it. Such a handle could list the names
+of entries created later but not open them, because every later child inherits only
+the private DACL.
+
 No-shell execution addresses one injection route. It does not confine a vulnerable
 decoder. Unix process groups aid termination; Windows Job Objects group processes;
 neither should be presented as a complete filesystem/network security boundary.

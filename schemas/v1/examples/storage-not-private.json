@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "setup.configure",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "STORAGE_IO",
+    "message": "Storage or output I/O prevented completion.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The VSift user_configuration folder is accessible to other accounts, so VSift did not use it and changed nothing. It is the per-user VSift configuration folder: vsift under LOCALAPPDATA on Windows, under Application Support on macOS, or under the XDG configuration directory on Linux. Delete that folder and retry; VSift recreates it private to you, and dependencies are then registered again with setup configure. Alternatively remove the other accounts' access yourself; on Windows, disable inherited permissions on the folder so only you, SYSTEM and Administrators keep access.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

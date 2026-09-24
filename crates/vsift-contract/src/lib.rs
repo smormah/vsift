@@ -26,6 +26,8 @@
 //!   published [`EventKind`] and [`EvidenceRecordType`] identifiers.
 //! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
 //!   remediation for a failed automatic media-tool preflight.
+//! - **Storage:** [`non_private_folder_summary`], the fixed-prose remediation
+//!   for an existing [`PrivateFolder`] that other accounts can access.
 //! - **Text:** [`sanitize_untrusted_text`], the one rule for placing untrusted
 //!   provider text in public output.
 //!
@@ -44,6 +46,7 @@ mod envelope;
 mod evidence;
 mod session;
 mod setup;
+mod storage;
 mod stream;
 mod text;
 mod transcript;
@@ -63,6 +66,7 @@ pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, SavedSetupPlan,
     SetupCheckResponse, SetupPlanResponse, explicit_path_option,
 };
+pub use storage::{PrivateFolder, non_private_folder_summary};
 pub use stream::{
     EventKind, EvidenceEventResponse, EvidenceRecordType, TranscriptEvidenceStream,
     TranscriptStreamData,
