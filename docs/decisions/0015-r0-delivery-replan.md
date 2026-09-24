@@ -142,3 +142,22 @@ and ADR 0008 keeps that payload compatible, so that wording is corrected:
 - Still no CLI command: `setup check` keeps `executable_probe_only`.
   `EnginePorts::with_media_tool_verifier` lets tests and other hosts replace the
   fixture verifier; such passes are recorded under a separate identity.
+
+## 2026-09-24 amendment: record readers and leftover verification workspaces
+
+- Readers of the verification record take no lock and can catch a writer's
+  rename: the file they opened is already unlinked (link count zero), or on
+  Windows the name briefly refuses opens while the replaced file is pending
+  deletion. Both were misread as an unsafe record (issue #136). They are now a
+  transient replacement: the read is retried a bounded number of times and
+  otherwise counts as "not verified". A record with more than one link is still
+  unsafe. Flushing the new record before the rename is best effort, because a
+  record lost or torn by a crash already reads as "not verified".
+- A verification killed mid-run left its `vsift-tool-verification-<16 hex>`
+  workspace in the state directory (issue #132). Each workspace now holds an
+  exclusive lock on its `workspace.lock` for its whole life, and each preflight,
+  holding the record lock without waiting, removes workspaces that are exactly
+  so named, real directories, unchanged for at least an hour and not locked by a
+  live verification (at most eight per preflight). Nothing else in the state
+  directory is touched, links are never followed, and a workspace whose lock is
+  held is kept whatever its age.

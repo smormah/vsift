@@ -490,6 +490,54 @@ impl Harness {
     }
 }
 
+/// Issue #132: a verification killed mid-run leaves its workspace in the state
+/// directory. The next preflight removes it once it is an hour old, but keeps a
+/// workspace a live verification still holds and everything else there.
+#[tokio::test]
+async fn a_preflight_removes_workspaces_left_by_killed_verifications() -> TestResult {
+    /// The documented one-hour staleness age of a verification workspace.
+    const STALE_WORKSPACE_AGE: u64 = 60 * 60;
+    let harness = Harness::new()?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    harness.clock.set(now);
+    let verifier = CountingVerifier::passing();
+    let engine = harness.engine(Some(&verifier));
+    harness.configure_stand_in_tools(&engine)?;
+    assert_preflight_passed(&engine.ingest(harness.transcript_request()?).await);
+
+    let leftover = harness
+        .state()
+        .join("vsift-tool-verification-0123456789abcdef");
+    fs::create_dir(&leftover)?;
+    fs::write(leftover.join("F01.mp4"), b"fixture copy")?;
+    let live = harness
+        .state()
+        .join("vsift-tool-verification-fedcba9876543210");
+    fs::create_dir(&live)?;
+    let live_lock = fs::File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(live.join("workspace.lock"))?;
+    live_lock.try_lock()?;
+    let unrelated = harness.state().join("notes");
+    fs::create_dir(&unrelated)?;
+
+    // Still recent: a killed verification's workspace is kept for an hour.
+    assert_preflight_passed(&engine.ingest(harness.transcript_request()?).await);
+    assert!(leftover.is_dir());
+
+    harness.clock.set(now + 2 * STALE_WORKSPACE_AGE);
+    assert_preflight_passed(&engine.ingest(harness.transcript_request()?).await);
+
+    assert!(!leftover.exists(), "the leftover workspace was kept");
+    assert!(live.is_dir(), "a live workspace was removed");
+    assert!(unrelated.is_dir(), "an unrelated directory was removed");
+    assert!(harness.record().is_file());
+    live_lock.unlock()?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn plain_ingest_setup_and_rejected_transcripts_never_run_the_preflight() -> TestResult {
     let harness = Harness::new()?;
