@@ -28,6 +28,11 @@ const COORDINATION_DIRECTORY: &str = "coordination";
 const SESSIONS_DIRECTORY: &str = "sessions";
 const SESSION_INDEX_DIRECTORY: &str = "session-index";
 const INITIALIZATION_LOCK: &str = "session-initialize.lock";
+/// Held exclusively by the one process provisioning a new root, from just after
+/// the root and its coordination directory exist until the ownership marker is
+/// complete, then removed. Concurrent openers read a held lock as "a creator is
+/// still working" and wait, instead of rejecting the unmarked root (issue #131).
+const PROVISIONING_LOCK: &str = "root-provisioning.lock";
 const CURRENT_FILE: &str = "current.json";
 const GENERATIONS_DIRECTORY: &str = "generations";
 const RECORDS_DIRECTORY: &str = "records";
@@ -1304,6 +1309,14 @@ impl FilesystemSessionStore {
     /// DACL is inspected and provisioning fails unless every allow ACE belongs to
     /// the current user, `LocalSystem`, or the local Administrators group.
     ///
+    /// The exclusive creation of the final component elects exactly one creator
+    /// among concurrent callers; the others receive
+    /// [`SessionStoreOpenError::RootAlreadyExists`]. Until its ownership marker is
+    /// complete the creator holds a provisioning lock inside the root, which lets
+    /// [`crate::open_session_root`] wait for it instead of rejecting a root that
+    /// is merely unfinished. The marker is written last, so an unmarked root is
+    /// never valid.
+    ///
     /// # Errors
     ///
     /// Returns a typed error without adopting an existing or non-private root.
@@ -1336,20 +1349,34 @@ impl FilesystemSessionStore {
             .open_dir_nofollow(Path::new(name))
             .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
 
-        let provision_result = provision_layout(&root, admission_capacity).and_then(|()| {
-            let canonical =
-                fs::canonicalize(root_path).map_err(|_| SessionStoreOpenError::RootUnavailable)?;
-            validate_platform_root_permissions(&canonical, &root)?;
-            Ok(canonical)
+        // The exclusive directory creation above makes this process the one
+        // creator. Everything else it writes is covered by the provisioning lock,
+        // so a concurrent opener can tell this root from an abandoned one.
+        let provision_result = begin_provisioning(&root).and_then(|provisioning| {
+            let layout = provision_layout(&root, admission_capacity).and_then(|()| {
+                let canonical = fs::canonicalize(root_path)
+                    .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+                validate_platform_root_permissions(&canonical, &root)?;
+                Ok(canonical)
+            });
+            match layout {
+                Ok(canonical) => Ok((canonical, provisioning)),
+                Err(error) => {
+                    // Released before rollback so the anchor can be removed.
+                    drop(provisioning);
+                    Err(error)
+                }
+            }
         });
-        let canonical = match provision_result {
-            Ok(canonical) => canonical,
+        let (canonical, provisioning) = match provision_result {
+            Ok(provisioned) => provisioned,
             Err(error) => {
                 rollback_unpublished_root(&root, &parent, Path::new(name), admission_capacity);
                 return Err(error);
             }
         };
         validate_root_layout(&root)?;
+        finish_provisioning(&root, provisioning);
         Ok(Self {
             root,
             root_path: canonical,
@@ -1652,9 +1679,144 @@ fn create_private_child_directory(parent: &Dir, name: &Path) -> io::Result<()> {
     parent.create_dir_with(name, &builder)
 }
 
-fn provision_layout(root: &Dir, admission_capacity: u16) -> Result<(), SessionStoreOpenError> {
+/// Creates the coordination directory and takes the provisioning lock in it.
+///
+/// These are the creator's first two steps, so a concurrent opener that finds
+/// the root holding nothing else knows a creator may be about to take the lock.
+fn begin_provisioning(root: &Dir) -> Result<HeldFileLock, SessionStoreOpenError> {
     create_private_child_directory(root, Path::new(COORDINATION_DIRECTORY))
         .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+    let coordination = root
+        .open_dir_nofollow(COORDINATION_DIRECTORY)
+        .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .follow(FollowSymlinks::No);
+    let anchor = coordination
+        .open_with(PROVISIONING_LOCK, &options)
+        .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+    HeldFileLock::try_exclusive(anchor.into_std())
+        .map_err(|_| SessionStoreOpenError::RootUnavailable)
+}
+
+/// Releases the provisioning lock of a complete, validated root and removes it.
+///
+/// Neither step can make the root invalid: the marker is already complete and
+/// validation never reads the anchor. A failed release is still followed by the
+/// file closing, and an anchor that cannot be removed stays as an inert empty
+/// file, so both failures are tolerated rather than failing a usable root.
+fn finish_provisioning(root: &Dir, provisioning: HeldFileLock) {
+    let _ = provisioning.release();
+    if let Ok(coordination) = root.open_dir_nofollow(COORDINATION_DIRECTORY) {
+        let _ = coordination.remove_file(PROVISIONING_LOCK);
+    }
+}
+
+/// What a root that failed ownership validation shows about a concurrent creator.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RootProvisioningState {
+    /// Recently created and holding at most the creator's first two steps: the
+    /// creator may not have taken the provisioning lock yet.
+    Starting,
+    /// A creator holds the provisioning lock.
+    InProgress,
+    /// No creator is at work, so the root's validation result is final.
+    Settled,
+}
+
+/// Classifies a root that failed ownership or layout validation.
+///
+/// The answer only decides whether an opener waits and validates again; it never
+/// authorizes use of the root, which still requires [`FilesystemSessionStore::open_existing`]
+/// to pass in full. The recent-activity check reads the root's modification time,
+/// which each of the creator's root-level entries refreshes; an old, empty
+/// directory is therefore settled at once rather than waited on.
+pub(crate) fn root_provisioning_state(
+    root_path: &Path,
+    now: std::time::SystemTime,
+    recent: std::time::Duration,
+) -> RootProvisioningState {
+    let (Some(parent), Some(name)) = (root_path.parent(), root_path.file_name()) else {
+        return RootProvisioningState::Settled;
+    };
+    let Ok(parent) = Dir::open_ambient_dir(parent, cap_std::ambient_authority()) else {
+        return RootProvisioningState::Settled;
+    };
+    let Ok(root) = parent.open_dir_nofollow(Path::new(name)) else {
+        return RootProvisioningState::Settled;
+    };
+    // The first steps are checked before the lock: a creator takes the lock
+    // before it adds anything beyond them, so a root seen past them with a free
+    // lock has a finished (or failed) creator, never one about to start.
+    let recently_modified = fs::symlink_metadata(root_path)
+        .and_then(|metadata| metadata.modified())
+        .is_ok_and(|modified| {
+            now.duration_since(modified)
+                .map_or(true, |elapsed| elapsed <= recent)
+        });
+    if recently_modified && holds_only_first_provisioning_steps(&root) {
+        return RootProvisioningState::Starting;
+    }
+    if provisioning_lock_is_held(&root) {
+        RootProvisioningState::InProgress
+    } else {
+        RootProvisioningState::Settled
+    }
+}
+
+/// Whether the root is empty, or holds only an empty coordination directory or
+/// one containing just the provisioning anchor. At most two entries are read.
+fn holds_only_first_provisioning_steps(root: &Dir) -> bool {
+    let Some(names) = bounded_entry_names(root) else {
+        return false;
+    };
+    match names.as_slice() {
+        [] => true,
+        [only] if only == COORDINATION_DIRECTORY => root
+            .open_dir_nofollow(COORDINATION_DIRECTORY)
+            .ok()
+            .and_then(|coordination| bounded_entry_names(&coordination))
+            .is_some_and(|names| names.iter().all(|name| name == PROVISIONING_LOCK)),
+        _ => false,
+    }
+}
+
+/// Names of a directory holding at most one entry; `None` when it holds more
+/// or cannot be read.
+fn bounded_entry_names(directory: &Dir) -> Option<Vec<String>> {
+    let mut names = Vec::with_capacity(1);
+    for entry in directory.entries().ok()? {
+        if names.len() == 1 {
+            return None;
+        }
+        names.push(entry.ok()?.file_name().into_string().ok()?);
+    }
+    Some(names)
+}
+
+/// Whether another holder has the provisioning lock. Probing takes a shared
+/// lock for an instant and releases it explicitly; it never blocks.
+fn provisioning_lock_is_held(root: &Dir) -> bool {
+    let Ok(coordination) = root.open_dir_nofollow(COORDINATION_DIRECTORY) else {
+        return false;
+    };
+    let Ok(anchor) = open_regular_file(&coordination, PROVISIONING_LOCK, false) else {
+        return false;
+    };
+    match HeldFileLock::try_shared(anchor.into_std()) {
+        Ok(probe) => {
+            let _ = probe.release();
+            false
+        }
+        Err(fs::TryLockError::WouldBlock) => true,
+        Err(fs::TryLockError::Error(_)) => false,
+    }
+}
+
+fn provision_layout(root: &Dir, admission_capacity: u16) -> Result<(), SessionStoreOpenError> {
     create_private_child_directory(root, Path::new(SESSIONS_DIRECTORY))
         .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
     let coordination = root
@@ -1689,6 +1851,7 @@ fn provision_layout(root: &Dir, admission_capacity: u16) -> Result<(), SessionSt
 fn rollback_unpublished_root(root: &Dir, parent: &Dir, name: &Path, capacity: u16) {
     let _ = root.remove_file(OWNERSHIP_FILE);
     if let Ok(coordination) = root.open_dir_nofollow(COORDINATION_DIRECTORY) {
+        let _ = coordination.remove_file(PROVISIONING_LOCK);
         let _ = coordination.remove_file(INITIALIZATION_LOCK);
         for index in 0..capacity.min(MAX_ADMISSION_CAPACITY) {
             let _ = coordination.remove_file(admission_slot_name(index));
@@ -2963,14 +3126,18 @@ mod tests {
         path::{Path, PathBuf},
         process::{Command, Stdio},
         sync::atomic::{AtomicU64, Ordering},
-        time::{Duration, SystemTime, UNIX_EPOCH},
+        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     };
 
     use super::{
         ATTEMPTS_DIRECTORY, COORDINATION_DIRECTORY, CURRENT_FILE, DEFAULT_ADMISSION_CAPACITY,
         FilesystemSessionStore, GENERATIONS_DIRECTORY, INITIALIZATION_LOCK, OWNERSHIP_FILE,
-        PublicationBoundary, SESSIONS_DIRECTORY, SessionStoreOpenError, admission_slot_name,
-        map_storage_io, publication_boundary_name, publish_generation,
+        PROVISIONING_LOCK, PublicationBoundary, RootProvisioningState, SESSIONS_DIRECTORY,
+        SessionStoreOpenError, admission_slot_name, map_storage_io, publication_boundary_name,
+        publish_generation, root_provisioning_state,
+    };
+    use crate::{
+        SessionRootError, SessionRootProvisioning, session_root::open_session_root_within,
     };
     use vsift_application::{
         InitializeSessionStorage, InitializeSessionStorageRequest, PublishSessionGeneration,
@@ -3318,6 +3485,13 @@ mod tests {
         let path = fixture_path(stamp, sequence);
         let store = FilesystemSessionStore::provision(&path, 3)?;
         assert_eq!(store.admission_capacity(), 3);
+        // The transient provisioning lock is gone once the root is complete.
+        assert!(
+            !path
+                .join(COORDINATION_DIRECTORY)
+                .join(PROVISIONING_LOCK)
+                .exists()
+        );
         assert_eq!(
             FilesystemSessionStore::provision(&path, 3).err(),
             Some(SessionStoreOpenError::RootAlreadyExists)
@@ -3328,6 +3502,211 @@ mod tests {
         );
         drop(store);
         fs::remove_dir_all(path)?;
+        Ok(())
+    }
+
+    /// A root caught mid-provisioning: the creator's directories and held
+    /// provisioning lock exist, the ownership marker does not yet.
+    struct CreatorInProgress {
+        path: PathBuf,
+        lock: StdFile,
+    }
+
+    impl CreatorInProgress {
+        fn new() -> Result<Self, Box<dyn Error>> {
+            let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+            let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = fixture_path(stamp, sequence);
+            create_private_directory(&path)?;
+            create_private_directory(&path.join(COORDINATION_DIRECTORY))?;
+            let lock = StdFile::options()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(path.join(COORDINATION_DIRECTORY).join(PROVISIONING_LOCK))?;
+            lock.try_lock()?;
+            create_private_directory(&path.join(SESSIONS_DIRECTORY))?;
+            Ok(Self { path, lock })
+        }
+
+        /// Writes the rest of the layout, marker last, then lets go of the lock.
+        fn finish(&self) -> Result<(), Box<dyn Error>> {
+            let coordination = self.path.join(COORDINATION_DIRECTORY);
+            write_new(
+                &coordination.join(INITIALIZATION_LOCK),
+                b"vsift stable lock anchor\n",
+            )?;
+            for index in 0..DEFAULT_ADMISSION_CAPACITY {
+                write_new(
+                    &coordination.join(admission_slot_name(index)),
+                    b"vsift stable admission slot\n",
+                )?;
+            }
+            write_new(
+                &self.path.join(OWNERSHIP_FILE),
+                br#"{"schema_version":1,"application":"vsift","layout_version":1,"admission_capacity":4}"#,
+            )?;
+            self.lock.unlock()?;
+            fs::remove_file(coordination.join(PROVISIONING_LOCK))?;
+            Ok(())
+        }
+    }
+
+    impl Drop for CreatorInProgress {
+        fn drop(&mut self) {
+            let _ = self.lock.unlock();
+            if self
+                .path
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .is_some_and(|name| name.starts_with("vsift-p03-store-"))
+            {
+                let _ = fs::remove_dir_all(&self.path);
+            }
+        }
+    }
+
+    fn fresh_directory() -> Result<Fixture, Box<dyn Error>> {
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = fixture_path(stamp, sequence);
+        create_private_directory(&path)?;
+        Ok(Fixture { path })
+    }
+
+    #[test]
+    fn an_opener_waits_for_an_active_creator_and_then_adopts_the_root() -> TestResult {
+        let creator = CreatorInProgress::new()?;
+        assert_eq!(
+            FilesystemSessionStore::open_existing(&creator.path).err(),
+            Some(SessionStoreOpenError::InvalidOwnership)
+        );
+        assert_eq!(
+            root_provisioning_state(&creator.path, SystemTime::now(), Duration::from_secs(10)),
+            RootProvisioningState::InProgress
+        );
+
+        let opened = std::thread::scope(|scope| {
+            let opener = scope.spawn(|| {
+                open_session_root_within(
+                    &creator.path,
+                    SessionRootProvisioning::ExistingOnly,
+                    Duration::from_secs(30),
+                )
+            });
+            std::thread::sleep(Duration::from_millis(150));
+            let finished = creator.finish().map_err(|error| error.to_string());
+            (finished, opener.join())
+        });
+
+        let (finished, joined) = opened;
+        finished?;
+        let store = joined
+            .map_err(|_| "opener thread panicked")?
+            .map_err(|error| error.to_string())?
+            .ok_or("an existing root was reported missing")?;
+        assert_eq!(store.admission_capacity(), DEFAULT_ADMISSION_CAPACITY);
+        Ok(())
+    }
+
+    #[test]
+    fn an_opener_reports_busy_when_the_creator_outlasts_the_bound() -> TestResult {
+        let creator = CreatorInProgress::new()?;
+        let started = Instant::now();
+
+        let result = open_session_root_within(
+            &creator.path,
+            SessionRootProvisioning::CreateIfMissing,
+            Duration::from_millis(100),
+        );
+
+        assert!(
+            matches!(result, Err(SessionRootError::ProvisioningInProgress)),
+            "expected ProvisioningInProgress"
+        );
+        assert!(started.elapsed() >= Duration::from_millis(100));
+        // Nothing was adopted or written: the marker is still absent.
+        assert!(!creator.path.join(OWNERSHIP_FILE).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn a_creator_that_stopped_leaves_a_root_that_is_rejected_at_once() -> TestResult {
+        let creator = CreatorInProgress::new()?;
+        creator.lock.unlock()?;
+        let started = Instant::now();
+
+        let result = open_session_root_within(
+            &creator.path,
+            SessionRootProvisioning::CreateIfMissing,
+            Duration::from_secs(30),
+        );
+
+        assert!(
+            matches!(
+                result,
+                Err(SessionRootError::Store(
+                    SessionStoreOpenError::InvalidOwnership
+                ))
+            ),
+            "expected InvalidOwnership"
+        );
+        assert!(started.elapsed() < Duration::from_secs(5));
+        Ok(())
+    }
+
+    #[test]
+    fn an_empty_unmarked_directory_is_never_adopted() -> TestResult {
+        let fresh = fresh_directory()?;
+        // Just created, it could be a creator's first step: waited on, then rejected.
+        assert_eq!(
+            root_provisioning_state(&fresh.path, SystemTime::now(), Duration::from_secs(10)),
+            RootProvisioningState::Starting
+        );
+        let started = Instant::now();
+        let result = open_session_root_within(
+            &fresh.path,
+            SessionRootProvisioning::CreateIfMissing,
+            Duration::from_millis(100),
+        );
+        assert!(
+            matches!(
+                result,
+                Err(SessionRootError::Store(
+                    SessionStoreOpenError::InvalidOwnership
+                ))
+            ),
+            "expected InvalidOwnership"
+        );
+        assert!(started.elapsed() >= Duration::from_millis(100));
+        assert_eq!(fs::read_dir(&fresh.path)?.count(), 0, "nothing was written");
+
+        // Long unchanged, it is settled at once.
+        assert_eq!(
+            root_provisioning_state(
+                &fresh.path,
+                SystemTime::now() + Duration::from_secs(3_600),
+                Duration::from_secs(10),
+            ),
+            RootProvisioningState::Settled
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn foreign_content_is_settled_even_when_recent() -> TestResult {
+        let fresh = fresh_directory()?;
+        write_new(&fresh.path.join("notes.txt"), b"not vsift")?;
+        assert_eq!(
+            root_provisioning_state(&fresh.path, SystemTime::now(), Duration::from_secs(10)),
+            RootProvisioningState::Settled
+        );
+        create_private_directory(&fresh.path.join("other"))?;
+        fs::remove_file(fresh.path.join("notes.txt"))?;
+        assert_eq!(
+            root_provisioning_state(&fresh.path, SystemTime::now(), Duration::from_secs(10)),
+            RootProvisioningState::Settled
+        );
         Ok(())
     }
 

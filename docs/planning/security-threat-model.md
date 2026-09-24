@@ -102,6 +102,10 @@ complete. P05 adds the public ephemeral lifecycle, private retained export,
 bounded session index, held-lock cleanup and source-preservation regressions;
 see its [qualification record](p05-session-qualification.md). P10/P11/P14 still own
 durable stage acknowledgement and SEC-24's Ubuntu/ext4 OS/storage evidence.
+Since 2026-09-24 (#131) an opener that races the root's creator waits at most five
+seconds for it, but only while the creator's provisioning lock is held or the root
+is freshly created and still nearly empty; adoption always repeats the full owner,
+privacy, marker, layout and no-link validation, so waiting never widens SEC-08.
 
 No-shell execution addresses one injection route. It does not confine a vulnerable
 decoder. Unix process groups aid termination; Windows Job Objects group processes;

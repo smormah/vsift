@@ -11,7 +11,11 @@ command does not claim its media, provisioning, or worker behavior is implemente
 Global output options are `--json` for one terminal JSON document and
 `--events jsonl` for a JSON Lines stream. They are mutually exclusive.
 `--session-root <absolute-dir>` explicitly selects a private disposable
-workspace; otherwise P05 uses the per-user application cache.
+workspace; otherwise P05 uses the per-user application cache. The first command
+that needs the root creates it. Commands that race to create it converge on one
+root: the others wait at most five seconds for the creator and use the root only
+after the full ownership and privacy checks, failing with `BUSY` if it is still
+being created. An existing directory that VSift did not create is never adopted.
 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |

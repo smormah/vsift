@@ -426,14 +426,8 @@ async fn concurrent_preflights_all_proceed_and_leave_one_valid_record() -> TestR
     verifier.rendezvous = Some(Arc::new(Barrier::new(ENGINES)));
     let setup = harness.engine(None);
     harness.configure_stand_in_tools(&setup)?;
-    // Provision the session root first: this test is about the preflight, and
-    // first-use root provisioning is not designed for concurrent creators.
-    setup
-        .ingest(IngestRequest {
-            source: harness.write("provision.mp4", PLACEHOLDER_SOURCE)?,
-            transcript: None,
-        })
-        .await?;
+    // The session root does not exist yet: every engine races to create it on
+    // first use, and all of them must adopt the one root (issue #131).
 
     let mut tasks = Vec::with_capacity(ENGINES);
     for _ in 0..ENGINES {
@@ -442,8 +436,10 @@ async fn concurrent_preflights_all_proceed_and_leave_one_valid_record() -> TestR
         tasks.push(tokio::spawn(async move { engine.ingest(request).await }));
     }
     for task in tasks {
-        // Past the preflight, the session store's own admission may refuse a
-        // concurrent open as busy; either way the preflight let it through.
+        // Past the preflight and the shared root, a session writer's
+        // non-blocking registration or admission lock may refuse a concurrent
+        // open as busy (by design); either way the preflight let it through.
+        // A root-provisioning failure would surface as a session-root error.
         let result = task.await?;
         assert!(
             matches!(

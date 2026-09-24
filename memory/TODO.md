@@ -25,8 +25,7 @@ complete. P07 is in progress: five increments are done, the packet is not.
    - `bundle validate` now decodes every `transcript_record` strictly and requires
      it to name the bundle's source (`INTEGRITY_FAILURE`, or `UNSUPPORTED_SCHEMA`
      for a newer record). Retained bundles from `session retain` are unaffected.
-   - Details: `docs/contracts/cli-v1.md` ("Evidence stream"), the ADR 0016 and
-     ADR 0013 notes of 2026-09-24.
+   - Details: `cli-v1.md` ("Evidence stream"), ADR 0016/0013 notes of 2026-09-24.
 3. **Increment 3 (next): local ASR.** Blocked on the maintainer's choice of
    speech-fixture source (F01-F09/F12 scripts need real speech audio; the corpus has
    tone sentinels only). Scope once unblocked:
@@ -42,14 +41,14 @@ complete. P07 is in progress: five increments are done, the packet is not.
    - `cargo-fuzz` targets for the SRT/VTT parsers (ADR 0016 decision 6) need a
      nightly-toolchain decision; `proptest` properties cover them now;
    - the packet completion record in the ledger once increment 3 merges.
+5. **Fixed outside the packet:** #131 racing first uses converge on one session root
+   (provisioning lock, bounded 5 s wait, typed `BUSY`); #136 verification-record reader
+   classification and bounded lock retries (PR #137, `617d631`, macOS/Ubuntu stress 40/40);
+   #132 stale verification workspaces swept after 1 h when unlocked.
 
 ## Follow-ups (open issues before relying on them)
 
-- A process killed mid-verification leaves one `vsift-tool-verification-<hex>`
-  workspace (fixture-sized, private) in the state directory; nothing sweeps it yet.
-  Track in an issue; a bounded age-based sweep of positively named entries fits.
-- First-use session-root provisioning is not safe for concurrent creators
-  (`InvalidOwnership` seen in a test); pre-existing.
+- A creator killed mid-provisioning leaves an unmarked root refused until removed.
 - The evidence stream has no delete/tombstone events; the first operation that
   supersedes evidence (retranscription) must define them or document why not.
 
@@ -62,16 +61,14 @@ complete. P07 is in progress: five increments are done, the packet is not.
 - Minimum-supported-Rust-version policy before the library is first published.
 - Whether and when to cut 0.x pre-releases after P09.
 - Whether a local MCP adapter is wanted after P12. The CLI and skill stay primary.
-- Removing leftover local worktrees and squash-merged `codex/*` branches.
 
 ## Known issues and gates
 
 - Supplied-transcript import needs real FFprobe, so import success paths are opt-in
   (`--ignored`). The JSONL stream and bundle checks run everywhere: their tests commit
   a transcript session straight through the session store.
-- One full local `cargo test --workspace` run on Windows saw four
-  `process_supervisor` tests fail (child exit status), then pass on rerun and alone.
-  Open an issue before treating a recurrence as noise.
+- #128: one local Windows run saw four `process_supervisor` tests fail (child exit
+  status), then pass. Treat a recurrence as evidence and add it to #128.
 - The unchanged P06 checkpoint test and the stream contract tests use application
   and infrastructure types, so the CLI keeps both as development dependencies.
 - FS-01: strict OS/storage-crash durability is unqualified. Durable requests fail

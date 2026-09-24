@@ -89,6 +89,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   now removed by a later check, once they are an hour old and no running check
   holds them (issue #132). Only exactly named VSift workspaces in the private
   per-user state directory are removed, and links are never followed.
+- Several VSift commands started at the same moment on a machine that has no
+  session directory yet no longer fail with `INTEGRITY_FAILURE` ("ownership marker
+  is invalid") (issue #131). One of them creates the session directory; the others
+  wait for it to finish, for at most five seconds, and then use it only after the
+  usual ownership and privacy checks. If it is still being created after five
+  seconds they fail with the retryable `BUSY`. A directory VSift did not create is
+  still refused at once.
 - The published v1 schemas now accept `ISOLATION_UNAVAILABLE` and
   `setup.configure-model`, which the CLI already emitted (issue #125).
 - Locks are now always released explicitly instead of by closing their file
