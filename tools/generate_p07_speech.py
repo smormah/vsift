@@ -169,15 +169,16 @@ FETCHED_FILES = MODEL_FILES + (SPACY_MODEL_WHEEL,)
 PINNED_DISTRIBUTIONS = {
     "espeakng-loader": "0.2.4",
     "en-core-web-sm": "3.8.0",
-    "huggingface-hub": "0.30.2",
+    "huggingface-hub": "1.33.0",
     "kokoro": "0.9.4",
     "misaki": "0.9.4",
     "num2words": "0.5.14",
     "numpy": "2.2.6",
     "phonemizer-fork": "3.3.2",
     "spacy": "3.8.7",
+    "tokenizers": "0.23.2",
     "torch": "2.7.1+cpu",
-    "transformers": "4.51.3",
+    "transformers": "5.17.0",
 }
 
 SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")

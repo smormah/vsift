@@ -74,7 +74,7 @@ provenance, because that is good practice.
 | `num2words` | 0.5.14 | LGPL | Number expansion | No |
 | `spacy` / `en_core_web_sm` | 3.8.7 / 3.8.0 | MIT / MIT | English tokenization | No |
 | `torch` (CPU wheel) | 2.7.1+cpu | BSD-3-Clause | Tensor runtime | No |
-| `transformers` / `huggingface-hub` | 4.51.3 / 0.30.2 | Apache-2.0 | Model classes / hub client | No |
+| `transformers` / `huggingface-hub` / `tokenizers` | 5.17.0 / 1.33.0 / 0.23.2 | Apache-2.0 | Model classes / hub client / tokenizer | No |
 | `numpy` | 2.2.6 | BSD-3-Clause | Arrays | No |
 | FFmpeg (BtbN `n9.0.1-11-ge47273f4d9` LGPL build, as reviewed for P06) | archive SHA-256 pinned in `tools/p06_ubuntu_candidate_smoke.py` | LGPL-2.1-or-later | Mux and AAC/PCM encode | No |
 | Generated utterances and speech variants | recorded in `speech-provenance.json` | MIT OR Apache-2.0 | Test fixtures | In the repository |
@@ -99,8 +99,8 @@ comes from `pip install --report` and carries its download URL and SHA-256.
 - `num2words`: <https://pypi.org/project/num2words/0.5.14/>
 - spaCy and `en_core_web_sm`: <https://pypi.org/project/spacy/3.8.7/>,
   <https://github.com/explosion/spacy-models/releases/tag/en_core_web_sm-3.8.0>
-- `transformers`: <https://pypi.org/project/transformers/4.51.3/>; `huggingface-hub`:
-  <https://pypi.org/project/huggingface-hub/0.30.2/>; `numpy`: <https://pypi.org/project/numpy/2.2.6/>
+- `transformers`: <https://pypi.org/project/transformers/5.17.0/>; `huggingface-hub`:
+  <https://pypi.org/project/huggingface-hub/1.33.0/>; `numpy`: <https://pypi.org/project/numpy/2.2.6/>
 - Apache License 2.0: <https://www.apache.org/licenses/LICENSE-2.0>
 
 ## Recipe
@@ -252,3 +252,12 @@ reviewed recipe change recorded here.
 - Clean fixtures' speech is not aligned with their visual events. Cross-modal timing
   truth for those fixtures does not exist in the manifest and is not implied.
 - The Spanish segment has no word timings.
+
+## 2026-09-24 note: patched transformers
+
+GitHub dependency review flagged `transformers` 4.51.3 (high-severity code-execution and
+path-traversal advisories, plus ReDoS). All are fixed only from 5.10.0, so the generator now
+pins `transformers` 5.17.0 with `huggingface-hub` 1.33.0 and `tokenizers` 0.23.2 (required by
+transformers 5.x). Kokoro 0.9.4 declares `transformers` without a version bound; its
+compatibility with 5.x is proven only by the first workflow run, which must pass the
+repeatability step before any clip is committed.
