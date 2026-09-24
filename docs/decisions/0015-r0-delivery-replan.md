@@ -114,3 +114,31 @@ and ADR 0008 keeps that payload compatible, so that wording is corrected:
   arrives with P07. No separate CLI command is added until an operator-facing
   consumer needs one, such as worker readiness (P11) or the installer (P13).
 - `setup check` keeps its fast executable probe and its v1 contract unchanged.
+
+## 2026-09-24 implementation note: the media-tool preflight is wired
+
+- P07 wires the preflight named above. `preflight_media_tools` (application)
+  reuses a recorded pass for an unchanged tool identity or runs the
+  `MediaToolVerifier`; only passes are offered to the new
+  `MediaToolVerificationCache` port, which fails closed and never returns an error.
+- The engine runs it inside operations that execute FFmpeg/FFprobe on user media,
+  before their first media stage and before the session root is touched: today
+  `ingest --transcript`. Plain `ingest`, setup commands and `transcript get` do
+  not run it. Local ASR, frames and audio will call the same hook.
+- The record lives beside the `setup configure` selections in the private per-user
+  directory (`media-tool-verification/verified-v1.json`), holding at most eight
+  SHA-256 fingerprints with their verification times. A fingerprint binds both
+  canonical executable paths and their on-disk identity, the reviewed policy and
+  fixture digest, the adapter profile, host isolation, verifier authority, a
+  verification-profile version and the VSift version. Executable contents are
+  not hashed (cost on every operation, and shared libraries would be missed
+  anyway); passes age out after seven days instead. Details and the failure
+  result are in `docs/contracts/cli-v1.md`.
+- A failure is `EngineError::MediaToolVerificationFailed` with the failed check
+  and reason. It maps to existing codes (`MISSING_CAPABILITY` for an unusable
+  tool; `DEADLINE_EXCEEDED`, `STORAGE_IO`, `CANCELLED` or `INTERNAL` where those
+  are the truthful cause), so no new failure code or schema change was needed;
+  the check and reason travel as typed identifiers in the fixed-prose remediation.
+- Still no CLI command: `setup check` keeps `executable_probe_only`.
+  `EnginePorts::with_media_tool_verifier` lets tests and other hosts replace the
+  fixture verifier; such passes are recorded under a separate identity.

@@ -38,7 +38,13 @@
 //!   committed revision.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
-//!   [`Engine::identify_model`]; no CLI command calls these yet.
+//!   [`Engine::identify_model`]; no CLI command calls these. Operations that
+//!   run `FFmpeg`/`FFprobe` on user media (today [`Engine::ingest`] with a
+//!   transcript) first run an automatic preflight that verifies the resolved
+//!   tools once per tool identity and records the pass in private per-user
+//!   state; a failure is [`EngineError::MediaToolVerificationFailed`] and
+//!   nothing is written. [`EnginePorts::with_media_tool_verifier`] replaces the
+//!   reviewed fixture verifier for tests and hosts with their own authority.
 //!
 //! # Errors
 //!
@@ -85,9 +91,9 @@ pub use verification::{
 
 pub use vsift_application::{
     Clock, ClockError, IdentifierGenerationError, IdentifierSource, MediaToolCheck,
-    MediaToolFailure, MediaToolVerification, ModelVerification, OpenSessionError,
-    OpenSessionOutcome, PlanAcceptanceError, RuntimeDiagnosis, SessionStorageError, SetupProfile,
-    SourceProbeError, TranscriptQueryError,
+    MediaToolFailure, MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier,
+    ModelVerification, OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RuntimeDiagnosis,
+    SessionStorageError, SetupProfile, SourceProbeError, TranscriptQueryError,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{

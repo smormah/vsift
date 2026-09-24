@@ -125,6 +125,20 @@ and version trust ([ADR 0015](../decisions/0015-r0-delivery-replan.md)). The str
 Linux CI profile supplies read-only filesystem, no-network, CPU, memory and PID
 controls externally and exercises group escape plus bounded resource pressure, while
 ordinary desktop probes make no such claim.
+
+Since P07 (2026-09-24) the automatic media-tool preflight runs the P06 fixture
+verification before the first media stage and records each pass in a per-user
+verification record, so a planted or stale record could try to skip the check
+(SEC-02). The record is an optimisation, never an authority: it lives in the private
+per-user `VSift` directory (owner-only, no-follow and single-link checks), is strict,
+versioned and at most 4 KiB, and any defect reads as "unverified" and is replaced. A
+pass is keyed to a SHA-256 fingerprint of both canonical executable paths and their
+on-disk identity, the reviewed compatibility policy and fixture digest, the adapter
+profile, host isolation, verifier authority, verification profile and `VSift` version,
+and ages out after seven days. Executable contents are not hashed; a same-user process
+that rewrites a selected tool in place while preserving size and timestamps is outside
+the desktop threat model above. Failures are never recorded, and the record holds
+digests and times only, never paths or media (SEC-18).
 Provider versions remain in the vulnerability inventory even though they run outside
 the Rust process. Security fixes can revoke a managed version for new jobs, with a
 documented handling policy for already running jobs.

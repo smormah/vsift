@@ -93,7 +93,8 @@ Import never needs whisper.cpp or model weights (ADR 0014). It does need FFmpeg 
 FFprobe, resolved like `setup check` (a `setup configure` selection first, then the
 filtered `PATH`), because the staged video is probed with the P04 adapter to learn its
 duration. Everything that can fail without touching the session root runs first:
-offset bounds, reading and parsing the sidecar, and locating the tools. Then the
+offset bounds, reading and parsing the sidecar, locating the tools and the automatic
+media-tool preflight described below. Then the
 source is staged and probed, the cues are aligned, and the source binding and the
 transcript revision are committed in **one** generation. A rejected import therefore
 never leaves an open session. When the rejection comes after staging (the probe or
@@ -146,6 +147,62 @@ command and requires no authority. See
 missing FFmpeg/FFprobe is `MISSING_CAPABILITY` with a remediation explaining that
 import needs them but not Whisper; an unreadable sidecar is `STORAGE_IO`, and a
 non-regular or unsafe sidecar path is `INVALID_SOURCE`, as for source media.
+
+**Automatic media-tool preflight.** Before the first media stage of an operation that
+runs FFmpeg/FFprobe on user media (today only `ingest --transcript`; later local ASR,
+frames and audio use the same hook), VSift proves the resolved pair works by running a
+small reviewed test video built into VSift (F01) through the same probe, frame and
+audio steps an investigation uses and comparing each result with its known answers
+(ADR 0015). It runs after the sidecar is parsed and the tools are located, and before
+the session root is created or touched, so a failure writes nothing. There is no
+separate command. Plain `ingest`, `setup` commands and `transcript get` never run it,
+and it never needs Whisper or a model.
+
+The first media operation with a given pair takes about 1–2 seconds longer (measured
+on Windows 11 with FFmpeg 9.0: 2.5 s for the first F10 import, 0.7 s for the next).
+A pass is recorded and reused while all of these stay the same: the canonical paths
+of both executables and their size and modification time (plus device, inode, mode,
+owner and change time on Unix, creation time and attributes on Windows), the
+reviewed compatibility policy and test-video digest, the adapter profile, the
+verification profile and the VSift version. Reinstalling, upgrading or reselecting
+either tool therefore triggers one new check, and every pass ages out after seven
+days. Executable contents are not hashed: hashing two ~100 MiB static builds would
+cost every operation what the record saves, and would still miss shared libraries.
+
+The record is `media-tool-verification/verified-v1.json` inside the private per-user
+VSift directory that also holds `setup configure` selections (`%LOCALAPPDATA%\vsift`
+on Windows, `~/Library/Application Support/vsift` on macOS,
+`${XDG_CONFIG_HOME:-~/.config}/vsift` elsewhere). It holds at most eight
+`{fingerprint, verified_at_unix_seconds}` entries of SHA-256 digests and times, never
+paths, tool output or media, and is at most 4 KiB. The same directory is the parent of
+the short-lived private workspace each check creates and removes. The record is an
+optimisation, never an authority: a missing, corrupt, oversized, linked or
+foreign-version record reads as "not verified", the check runs, and the record is
+replaced. Writers use a non-blocking lock; a process that finds it held verifies
+without recording rather than waiting. Failures are never recorded, and no record
+problem can fail an operation. Deleting the directory is always safe.
+
+A failed check is a failed operation (`status: "failed"`, `data: null`) with one
+`remediation` item (`required_authority: "none"`, `command: null`) whose summary
+begins with the fixed sentence `The selected FFmpeg and FFprobe failed VSift's
+media-tool check at the <check> step (<reason>).`, where `<check>` is `preparation`,
+`probe`, `frame` or `audio` and `<reason>` is `process_failure`, `provider_rejected`,
+`output_limit`, `unexpected_result`, `deadline`, `workspace`, `cancelled` or
+`fixture_integrity`. Fixed prose for the reason and the next step follows; no path or
+tool output is ever included. See
+[`media-tool-verification-failed.json`](../../schemas/v1/examples/media-tool-verification-failed.json).
+
+| Reason | Code | Next step in the remediation |
+| --- | --- | --- |
+| `process_failure`, `provider_rejected`, `output_limit`, `unexpected_result` | `MISSING_CAPABILITY` | Reinstall FFmpeg/FFprobe from a trusted build or register a working pair with `setup configure ffmpeg\|ffprobe --executable <path>`, then retry |
+| `deadline` | `DEADLINE_EXCEEDED` | Retry when the machine is less busy; otherwise register a different pair |
+| `workspace` (no private place to run the check) | `STORAGE_IO` | Make the per-user VSift directory private, writable and not full, then retry |
+| `cancelled` | `CANCELLED` | Retry |
+| `fixture_integrity` (the built-in test video is corrupt) | `INTERNAL` | Reinstall VSift |
+
+`setup check` still reports only the fast executable probe
+(`verification_scope: executable_probe_only`), so FFmpeg selected as FFprobe passes
+`setup check` but fails this preflight at the `probe` step.
 
 **Retrieval.** `transcript get <session> --from <us> --to <us> [--limit 1..100]
 [--cursor <token>]` returns the segments of the session's latest revision that

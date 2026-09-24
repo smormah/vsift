@@ -72,8 +72,11 @@ explicit canonical FFmpeg, FFprobe or whisper.cpp executable path in private
 per-user configuration; a per-check path overrides it. `setup configure-model`
 saves a canonical nonempty model file path in the same record without reading its
 bytes. Configuration does not run a tool or download anything. The check's
-`ready` status means executable probes passed; it does not yet verify
-compatibility or model weights. Managed plans and installation remain gated by
+`ready` status means executable probes passed; it does not verify
+compatibility or model weights. Instead, the first media operation with a given
+FFmpeg/FFprobe pair (today `ingest --transcript`) runs a small built-in test video
+through them, adding about 1–2 seconds once; a pair that fails stops the operation
+before anything is written, with typed remediation. Managed plans and installation remain gated by
 reviewed, pinned artifacts; no target is qualified yet. A supplied transcript
 avoids the local Whisper/model requirement.
 
