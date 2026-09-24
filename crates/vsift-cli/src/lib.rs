@@ -23,8 +23,9 @@ use vsift::{
     UserConfigurationLocation,
 };
 use vsift_contract::{
-    ConfiguredModelResponse, ConfiguredSelectionResponse, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
-    OperationResponse, TerminalEventResponse, transcript_rejection_summary,
+    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, OperationResponse, TerminalEventResponse,
+    transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -92,7 +93,7 @@ where
             return write_failure(
                 &mut writer,
                 requested_mode,
-                "parse",
+                CommandName::Parse,
                 FailureCode::InvalidArgument,
                 Some(&detail),
             );
@@ -103,7 +104,13 @@ where
     let mode = match OutputMode::resolve(cli.json, json_lines) {
         Ok(mode) => mode,
         Err(code) => {
-            return write_failure(&mut writer, OutputMode::Json, "parse", code, None);
+            return write_failure(
+                &mut writer,
+                OutputMode::Json,
+                CommandName::Parse,
+                code,
+                None,
+            );
         }
     };
 
@@ -130,7 +137,7 @@ where
                         return write_failure(
                             &mut writer,
                             mode,
-                            "setup.check",
+                            CommandName::SetupCheck,
                             FailureCode::InvalidArgument,
                             Some(&detail),
                         );
@@ -150,7 +157,7 @@ where
                         return write_failure(
                             &mut writer,
                             mode,
-                            "setup.check",
+                            CommandName::SetupCheck,
                             error.failure_code(),
                             None,
                         );
@@ -171,26 +178,29 @@ where
                     .map_err(FailureCode::from)
                     .and_then(|()| {
                         complete(
-                            "setup.configure",
+                            CommandName::SetupConfigure,
                             &ConfiguredSelectionResponse::new(dependency),
                         )
                     });
-                write_session_result(&mut writer, mode, "setup.configure", result)
+                write_session_result(&mut writer, mode, CommandName::SetupConfigure, result)
             }
             Some(SetupCommand::ConfigureModel(arguments)) => {
                 let result = engine
                     .configure_model(&arguments.file)
                     .map_err(FailureCode::from)
                     .and_then(|()| {
-                        complete("setup.configure-model", &ConfiguredModelResponse::new())
+                        complete(
+                            CommandName::SetupConfigureModel,
+                            &ConfiguredModelResponse::new(),
+                        )
                     });
-                write_session_result(&mut writer, mode, "setup.configure-model", result)
+                write_session_result(&mut writer, mode, CommandName::SetupConfigureModel, result)
             }
             Some(SetupCommand::Plan(arguments)) => {
                 let result = current_setup_plan(&engine, arguments.profile)
                     .await
-                    .and_then(|plan| complete("setup.plan", plan.presentation()));
-                write_session_result(&mut writer, mode, "setup.plan", result)
+                    .and_then(|plan| complete(CommandName::SetupPlan, plan.presentation()));
+                write_session_result(&mut writer, mode, CommandName::SetupPlan, result)
             }
             Some(SetupCommand::Install(arguments)) => {
                 let saved = match setup::read_saved_plan(&arguments.plan) {
@@ -199,32 +209,50 @@ where
                         return write_failure(
                             &mut writer,
                             mode,
-                            "setup.install",
+                            CommandName::SetupInstall,
                             FailureCode::CommandNotImplemented,
                             None,
                         );
                     }
                     Err(code) => {
-                        return write_failure(&mut writer, mode, "setup.install", code, None);
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            CommandName::SetupInstall,
+                            code,
+                            None,
+                        );
                     }
                 };
                 let profile = match saved.profile() {
                     Ok(profile) => ExecutionProfile::from(profile),
                     Err(code) => {
-                        return write_failure(&mut writer, mode, "setup.install", code, None);
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            CommandName::SetupInstall,
+                            code,
+                            None,
+                        );
                     }
                 };
                 let current = match current_setup_plan(&engine, profile).await {
                     Ok(current) => current,
                     Err(code) => {
-                        return write_failure(&mut writer, mode, "setup.install", code, None);
+                        return write_failure(
+                            &mut writer,
+                            mode,
+                            CommandName::SetupInstall,
+                            code,
+                            None,
+                        );
                     }
                 };
                 if let Err(error) = current.validate_acceptance(&saved, &arguments.accept_plan) {
                     return write_failure(
                         &mut writer,
                         mode,
-                        "setup.install",
+                        CommandName::SetupInstall,
                         error.failure_code(),
                         None,
                     );
@@ -232,65 +260,77 @@ where
                 write_failure(
                     &mut writer,
                     mode,
-                    "setup.install",
+                    CommandName::SetupInstall,
                     FailureCode::CommandNotImplemented,
                     None,
                 )
             }
             None => write_setup_help(&mut writer),
-            Some(unimplemented) => {
-                let operation = command::SetupArguments {
-                    command: Some(unimplemented),
-                }
-                .operation_name();
-                write_failure(
-                    &mut writer,
-                    mode,
-                    operation,
-                    FailureCode::CommandNotImplemented,
-                    None,
-                )
-            }
+            Some(
+                reserved @ (SetupCommand::Repair(_)
+                | SetupCommand::List
+                | SetupCommand::Remove(_)
+                | SetupCommand::Rollback(_)),
+            ) => not_implemented(&mut writer, mode, reserved.operation_name()),
         },
         Command::Ingest(arguments) => {
             let result = session::ingest(&engine, arguments).await;
-            write_session_result(&mut writer, mode, "ingest", result)
+            write_session_result(&mut writer, mode, CommandName::Ingest, result)
         }
         Command::Transcript(arguments) => {
-            let operation = arguments.operation_name();
+            let operation = arguments.command.operation_name();
             match arguments.command {
                 TranscriptCommand::Get(arguments) => {
                     let result = session::transcript_get(&engine, arguments);
                     write_session_result(&mut writer, mode, operation, result)
                 }
-                TranscriptCommand::Retranscribe(_) => write_failure(
-                    &mut writer,
-                    mode,
-                    operation,
-                    FailureCode::CommandNotImplemented,
-                    None,
-                ),
+                TranscriptCommand::Retranscribe(_) => not_implemented(&mut writer, mode, operation),
             }
         }
         Command::Session(arguments) => {
-            let operation = arguments.operation_name();
+            let operation = arguments.command.operation_name();
             let result = session::execute_session(&engine, arguments.command);
             write_session_result(&mut writer, mode, operation, result)
         }
-        Command::Bundle(arguments) => match arguments.command {
-            BundleCommand::Validate(arguments) => {
-                let result = session::validate_bundle(&engine, &arguments.directory);
-                write_session_result(&mut writer, mode, "bundle.validate", result)
+        Command::Bundle(arguments) => {
+            let operation = arguments.command.operation_name();
+            match arguments.command {
+                BundleCommand::Validate(arguments) => {
+                    let result = session::validate_bundle(&engine, &arguments.directory);
+                    write_session_result(&mut writer, mode, operation, result)
+                }
             }
-        },
-        command => write_failure(
-            &mut writer,
-            mode,
-            command.operation_name(),
-            FailureCode::CommandNotImplemented,
-            None,
-        ),
+        }
+        Command::Search(_) => not_implemented(&mut writer, mode, CommandName::Search),
+        Command::Candidates(_) => not_implemented(&mut writer, mode, CommandName::Candidates),
+        Command::Frame(arguments) => {
+            not_implemented(&mut writer, mode, arguments.command.operation_name())
+        }
+        Command::Audio(_) => not_implemented(&mut writer, mode, CommandName::Audio),
+        Command::Crop(_) => not_implemented(&mut writer, mode, CommandName::Crop),
+        Command::Job(arguments) => {
+            not_implemented(&mut writer, mode, arguments.command.operation_name())
+        }
     }
+}
+
+/// Answers a reserved command whose implementation packet is incomplete.
+fn not_implemented<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    mode: OutputMode,
+    command: CommandName,
+) -> ProcessExit
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    write_failure(
+        writer,
+        mode,
+        command,
+        FailureCode::CommandNotImplemented,
+        None,
+    )
 }
 
 /// Resolves the effective probe deadline for `profile`, then asks the engine
@@ -318,10 +358,10 @@ async fn current_setup_plan(
 }
 
 fn complete<T: serde::Serialize>(
-    command: &'static str,
+    command: CommandName,
     data: &T,
 ) -> Result<OperationResponse<serde_json::Value>, FailureCode> {
-    OperationResponse::complete(command, data).map_err(|_| FailureCode::Internal)
+    OperationResponse::complete(command.identifier(), data).map_err(|_| FailureCode::Internal)
 }
 
 /// A failed command's public code and, when a typed cause allows one, a
@@ -361,7 +401,7 @@ impl From<EngineError> for CommandFailure {
 fn write_session_result<StandardOutput, StandardError, Failure>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     mode: OutputMode,
-    command: &'static str,
+    command: CommandName,
     result: Result<OperationResponse<serde_json::Value>, Failure>,
 ) -> ProcessExit
 where
@@ -460,7 +500,7 @@ where
 fn write_command_failure<StandardOutput, StandardError>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     mode: OutputMode,
-    command: &'static str,
+    command: CommandName,
     failure: CommandFailure,
 ) -> ProcessExit
 where
@@ -470,7 +510,8 @@ where
     let Some(summary) = failure.remediation else {
         return write_failure(writer, mode, command, failure.code, None);
     };
-    let response = OperationResponse::failure_with_remediation(command, failure.code, summary);
+    let response =
+        OperationResponse::failure_with_remediation(command.identifier(), failure.code, summary);
     let result = match mode {
         OutputMode::Human => {
             writer.write_safe_diagnostic(response.error_message());
@@ -493,7 +534,7 @@ where
 fn write_failure<StandardOutput, StandardError>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     mode: OutputMode,
-    command: &'static str,
+    command: CommandName,
     code: FailureCode,
     human_detail: Option<&str>,
 ) -> ProcessExit
@@ -501,7 +542,7 @@ where
     StandardOutput: Write,
     StandardError: Write,
 {
-    let response = OperationResponse::failure(command, code);
+    let response = OperationResponse::failure(command.identifier(), code);
     let result = match mode {
         OutputMode::Human => {
             let message = match human_detail {

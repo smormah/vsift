@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use vsift::{EvidenceId, JobId, RuntimeDependency, SessionId, SetupProfile};
+use vsift_contract::CommandName;
 
 /// Complete public R0 command parser.
 #[derive(Debug, Parser)]
@@ -64,48 +65,11 @@ pub(crate) enum Command {
     Job(JobArguments),
 }
 
-impl Command {
-    /// Returns the stable operation identifier used in public responses.
-    #[must_use]
-    pub(crate) const fn operation_name(&self) -> &'static str {
-        match self {
-            Self::Setup(arguments) => arguments.operation_name(),
-            Self::Ingest(_) => "ingest",
-            Self::Session(arguments) => arguments.operation_name(),
-            Self::Transcript(arguments) => arguments.operation_name(),
-            Self::Search(_) => "search",
-            Self::Candidates(_) => "candidates",
-            Self::Frame(arguments) => arguments.operation_name(),
-            Self::Audio(_) => "audio",
-            Self::Crop(_) => "crop",
-            Self::Bundle(arguments) => arguments.operation_name(),
-            Self::Job(arguments) => arguments.operation_name(),
-        }
-    }
-}
-
 /// Setup namespace arguments.
 #[derive(Args, Debug)]
 pub(crate) struct SetupArguments {
     #[command(subcommand)]
     pub command: Option<SetupCommand>,
-}
-
-impl SetupArguments {
-    pub(crate) const fn operation_name(&self) -> &'static str {
-        match self.command {
-            Some(SetupCommand::Check(_)) => "setup.check",
-            Some(SetupCommand::Plan(_)) => "setup.plan",
-            Some(SetupCommand::Install(_)) => "setup.install",
-            Some(SetupCommand::Repair(_)) => "setup.repair",
-            Some(SetupCommand::List) => "setup.list",
-            Some(SetupCommand::Remove(_)) => "setup.remove",
-            Some(SetupCommand::Rollback(_)) => "setup.rollback",
-            Some(SetupCommand::Configure(_)) => "setup.configure",
-            Some(SetupCommand::ConfigureModel(_)) => "setup.configure-model",
-            None => "setup",
-        }
-    }
 }
 
 /// Setup lifecycle operations.
@@ -129,6 +93,24 @@ pub(crate) enum SetupCommand {
     Configure(SetupConfigureArguments),
     /// Register an explicit user-managed local ASR model file.
     ConfigureModel(SetupConfigureModelArguments),
+}
+
+impl SetupCommand {
+    /// Returns the public operation identifier. Bare `setup` has none: it only
+    /// prints help.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::Check(_) => CommandName::SetupCheck,
+            Self::Plan(_) => CommandName::SetupPlan,
+            Self::Install(_) => CommandName::SetupInstall,
+            Self::Repair(_) => CommandName::SetupRepair,
+            Self::List => CommandName::SetupList,
+            Self::Remove(_) => CommandName::SetupRemove,
+            Self::Rollback(_) => CommandName::SetupRollback,
+            Self::Configure(_) => CommandName::SetupConfigure,
+            Self::ConfigureModel(_) => CommandName::SetupConfigureModel,
+        }
+    }
 }
 
 /// Read-only setup-check options.
@@ -292,19 +274,6 @@ pub(crate) struct SessionArguments {
     pub command: SessionCommand,
 }
 
-impl SessionArguments {
-    pub(crate) const fn operation_name(&self) -> &'static str {
-        match self.command {
-            SessionCommand::List(_) => "session.list",
-            SessionCommand::Status(_) => "session.status",
-            SessionCommand::Close(_) => "session.close",
-            SessionCommand::Renew(_) => "session.renew",
-            SessionCommand::Retain(_) => "session.retain",
-            SessionCommand::Clean(_) => "session.clean",
-        }
-    }
-}
-
 /// Session lifecycle operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum SessionCommand {
@@ -320,6 +289,20 @@ pub(crate) enum SessionCommand {
     Retain(SessionRetainArguments),
     /// Find or remove expired owned sessions.
     Clean(SessionCleanArguments),
+}
+
+impl SessionCommand {
+    /// Returns the public operation identifier.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::List(_) => CommandName::SessionList,
+            Self::Status(_) => CommandName::SessionStatus,
+            Self::Close(_) => CommandName::SessionClose,
+            Self::Renew(_) => CommandName::SessionRenew,
+            Self::Retain(_) => CommandName::SessionRetain,
+            Self::Clean(_) => CommandName::SessionClean,
+        }
+    }
 }
 
 /// One bounded bucket from the disposable-session index.
@@ -371,15 +354,6 @@ pub(crate) struct TranscriptArguments {
     pub command: TranscriptCommand,
 }
 
-impl TranscriptArguments {
-    pub(crate) const fn operation_name(&self) -> &'static str {
-        match self.command {
-            TranscriptCommand::Get(_) => "transcript.get",
-            TranscriptCommand::Retranscribe(_) => "transcript.retranscribe",
-        }
-    }
-}
-
 /// Transcript operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum TranscriptCommand {
@@ -387,6 +361,16 @@ pub(crate) enum TranscriptCommand {
     Get(TranscriptGetArguments),
     /// Produce a new transcription revision for a bounded range.
     Retranscribe(SessionRangeArguments),
+}
+
+impl TranscriptCommand {
+    /// Returns the public operation identifier.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::Get(_) => CommandName::TranscriptGet,
+            Self::Retranscribe(_) => CommandName::TranscriptRetranscribe,
+        }
+    }
 }
 
 /// Bounded, pageable transcript read.
@@ -457,16 +441,6 @@ pub(crate) struct FrameArguments {
     pub command: FrameCommand,
 }
 
-impl FrameArguments {
-    const fn operation_name(&self) -> &'static str {
-        match self.command {
-            FrameCommand::Get(_) => "frame.get",
-            FrameCommand::Neighbours(_) => "frame.neighbours",
-            FrameCommand::Burst(_) => "frame.burst",
-        }
-    }
-}
-
 /// Source-grounded frame operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum FrameCommand {
@@ -476,6 +450,17 @@ pub(crate) enum FrameCommand {
     Neighbours(NeighbourArguments),
     /// Extract a finite sequence over a bounded range.
     Burst(FrameBurstArguments),
+}
+
+impl FrameCommand {
+    /// Returns the public operation identifier.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::Get(_) => CommandName::FrameGet,
+            Self::Neighbours(_) => CommandName::FrameNeighbours,
+            Self::Burst(_) => CommandName::FrameBurst,
+        }
+    }
 }
 
 /// Exact frame request.
@@ -544,19 +529,20 @@ pub(crate) struct BundleArguments {
     pub command: BundleCommand,
 }
 
-impl BundleArguments {
-    const fn operation_name(&self) -> &'static str {
-        match self.command {
-            BundleCommand::Validate(_) => "bundle.validate",
-        }
-    }
-}
-
 /// Portable-bundle operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum BundleCommand {
     /// Validate a bundle as bounded data without executing its contents.
     Validate(BundleValidateArguments),
+}
+
+impl BundleCommand {
+    /// Returns the public operation identifier.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::Validate(_) => CommandName::BundleValidate,
+        }
+    }
 }
 
 /// Local bundle path.
@@ -573,18 +559,6 @@ pub(crate) struct JobArguments {
     pub command: JobCommand,
 }
 
-impl JobArguments {
-    const fn operation_name(&self) -> &'static str {
-        match self.command {
-            JobCommand::Run(_) => "job.run",
-            JobCommand::Batch(_) => "job.batch",
-            JobCommand::Status(_) => "job.status",
-            JobCommand::Resume(_) => "job.resume",
-            JobCommand::Cancel(_) => "job.cancel",
-        }
-    }
-}
-
 /// Recoverable worker-job operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum JobCommand {
@@ -598,6 +572,19 @@ pub(crate) enum JobCommand {
     Resume(JobIdentityArguments),
     /// Request cancellation of one job.
     Cancel(JobIdentityArguments),
+}
+
+impl JobCommand {
+    /// Returns the public operation identifier.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::Run(_) => CommandName::JobRun,
+            Self::Batch(_) => CommandName::JobBatch,
+            Self::Status(_) => CommandName::JobStatus,
+            Self::Resume(_) => CommandName::JobResume,
+            Self::Cancel(_) => CommandName::JobCancel,
+        }
+    }
 }
 
 /// One request document.
@@ -621,6 +608,48 @@ pub(crate) struct JobBatchArguments {
 pub(crate) struct JobIdentityArguments {
     /// Job to inspect or change.
     pub job: JobId,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use clap::CommandFactory;
+    use vsift_contract::CommandName;
+
+    use super::Cli;
+
+    /// Every operation identifier the parser can produce: the command path of
+    /// each leaf subcommand joined with `.`, as `CommandName` documents it.
+    fn parsed_operation_identifiers() -> BTreeSet<String> {
+        let root = Cli::command();
+        let mut identifiers = BTreeSet::new();
+        for namespace in root.get_subcommands() {
+            if namespace.has_subcommands() {
+                for operation in namespace.get_subcommands() {
+                    identifiers.insert(format!(
+                        "{}.{}",
+                        namespace.get_name(),
+                        operation.get_name()
+                    ));
+                }
+            } else {
+                identifiers.insert(namespace.get_name().to_owned());
+            }
+        }
+        identifiers
+    }
+
+    #[test]
+    fn contract_command_names_are_exactly_the_parsed_operations_plus_parse() {
+        let published: BTreeSet<String> = CommandName::ALL
+            .into_iter()
+            .filter(|name| *name != CommandName::Parse)
+            .map(|name| name.identifier().to_owned())
+            .collect();
+
+        assert_eq!(published, parsed_operation_identifiers());
+    }
 }
 
 #[cfg(all(test, unix))]

@@ -11,7 +11,7 @@
     "sequence": { "type": "integer", "minimum": 0 },
     "command": {
       "type": "string",
-      "pattern": "^[a-z]+(?:[.][a-z]+)?$",
+      "pattern": "^[a-z]+(?:-[a-z]+)*(?:[.][a-z]+(?:-[a-z]+)*)?$",
       "maxLength": 64
     },
     "operation_id": {

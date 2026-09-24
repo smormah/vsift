@@ -51,6 +51,53 @@ pub enum FailureCode {
 }
 
 impl FailureCode {
+    /// Every public failure code, in declaration order.
+    ///
+    /// Contract tests iterate this list to prove each identifier is published in
+    /// the v1 schemas. An exhaustive private `ordinal` match and a compile-time
+    /// assertion keep it in step with the variants.
+    pub const ALL: [Self; 13] = [
+        Self::Internal,
+        Self::InvalidArgument,
+        Self::UnsupportedSchema,
+        Self::MissingCapability,
+        Self::IsolationUnavailable,
+        Self::CommandNotImplemented,
+        Self::InvalidSource,
+        Self::Busy,
+        Self::DeadlineExceeded,
+        Self::ResourceLimit,
+        Self::Cancelled,
+        Self::StorageIo,
+        Self::IntegrityFailure,
+    ];
+
+    /// Returns the variant's position in [`FailureCode::ALL`].
+    ///
+    /// This exhaustive match is the completeness guard for `ALL`: a new variant
+    /// does not compile until it is given a position here, and the constant
+    /// assertion after this `impl` block requires `ALL` to hold each position
+    /// exactly once, in order. Give a new variant the next position and append
+    /// it to `ALL`; the schema conformance tests then fail until the published
+    /// schemas list its identifier.
+    const fn ordinal(self) -> usize {
+        match self {
+            Self::Internal => 0,
+            Self::InvalidArgument => 1,
+            Self::UnsupportedSchema => 2,
+            Self::MissingCapability => 3,
+            Self::IsolationUnavailable => 4,
+            Self::CommandNotImplemented => 5,
+            Self::InvalidSource => 6,
+            Self::Busy => 7,
+            Self::DeadlineExceeded => 8,
+            Self::ResourceLimit => 9,
+            Self::Cancelled => 10,
+            Self::StorageIo => 11,
+            Self::IntegrityFailure => 12,
+        }
+    }
+
     /// Returns the stable uppercase JSON identifier.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
@@ -95,6 +142,16 @@ impl FailureCode {
         matches!(self, Self::Busy)
     }
 }
+
+// Compile-time guard for `FailureCode::ALL` (see `ordinal`): every listed code
+// sits at its own position, so the list has no duplicate, gap or reordering.
+const _: () = {
+    let mut index = 0;
+    while index < FailureCode::ALL.len() {
+        assert!(FailureCode::ALL[index].ordinal() == index);
+        index += 1;
+    }
+};
 
 /// Terminal status represented by public JSON and JSONL contracts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -162,6 +219,26 @@ mod tests {
             FailureCode::IntegrityFailure,
         ] {
             assert!(!code.retryable());
+        }
+    }
+
+    #[test]
+    fn every_listed_failure_code_has_a_distinct_screaming_snake_identifier() {
+        for (index, code) in FailureCode::ALL.into_iter().enumerate() {
+            let identifier = code.identifier();
+            assert!(
+                !identifier.is_empty()
+                    && identifier
+                        .bytes()
+                        .all(|byte| byte.is_ascii_uppercase() || byte == b'_'),
+                "{identifier}"
+            );
+            assert!(
+                FailureCode::ALL[index + 1..]
+                    .iter()
+                    .all(|other| other.identifier() != identifier),
+                "{identifier} is listed twice"
+            );
         }
     }
 

@@ -7,7 +7,7 @@ use std::{io::Write, path::Path};
 
 use vsift::{DependencyState, FailureCode, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness};
 use vsift_contract::{
-    DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, OperationResponse, SavedSetupPlan,
+    CommandName, DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, OperationResponse, SavedSetupPlan,
     SetupCheckResponse, TerminalEventResponse, explicit_path_option, sanitize_untrusted_text,
 };
 
@@ -38,10 +38,12 @@ where
             writer.write_trusted_stdout(&human_result(diagnosis, profile, &lookup))
         }
         OutputMode::Json => writer.write_json(&response),
-        OutputMode::JsonLines => OperationResponse::complete("setup.check", &response)
-            .map(TerminalEventResponse::new)
-            .map_err(crate::output::OutputError::Serialization)
-            .and_then(|event| writer.write_json(&event)),
+        OutputMode::JsonLines => {
+            OperationResponse::complete(CommandName::SetupCheck.identifier(), &response)
+                .map(TerminalEventResponse::new)
+                .map_err(crate::output::OutputError::Serialization)
+                .and_then(|event| writer.write_json(&event))
+        }
     };
 
     if let Err(error) = output_result {

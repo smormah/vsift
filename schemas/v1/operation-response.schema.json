@@ -22,7 +22,7 @@
         "schema_version": { "const": "1" },
         "command": {
           "type": "string",
-          "pattern": "^[a-z]+(?:[.][a-z]+)?$",
+          "pattern": "^[a-z]+(?:-[a-z]+)*(?:[.][a-z]+(?:-[a-z]+)*)?$",
           "maxLength": 64
         },
         "operation_id": {
@@ -84,6 +84,7 @@
             "INVALID_ARGUMENT",
             "UNSUPPORTED_SCHEMA",
             "MISSING_CAPABILITY",
+            "ISOLATION_UNAVAILABLE",
             "COMMAND_NOT_IMPLEMENTED",
             "INVALID_SOURCE",
             "BUSY",

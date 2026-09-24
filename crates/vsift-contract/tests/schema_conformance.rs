@@ -10,7 +10,7 @@ use std::{fs, io, path::PathBuf};
 use serde_json::Value;
 use vsift_application::{RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup};
 use vsift_contract::{
-    BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome,
+    BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     ConfiguredSelectionResponse, DependencyLookup, LifecycleResponse, ListedSession,
     OperationResponse, PageData, SavedSetupPlan, SessionState, SetupCheckResponse,
     SetupPlanResponse, StatusData, TerminalEventResponse,
@@ -374,5 +374,118 @@ fn listed_session_shape_is_stable() -> TestResult {
             "next_cursor": null
         })
     );
+    Ok(())
+}
+
+/// The members of the published `error.code` enum.
+fn published_failure_codes() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    load("operation-response.schema.json")?
+        .pointer("/$defs/error/properties/code/enum")
+        .and_then(Value::as_array)
+        .ok_or("operation-response.schema.json has no error code enum")?
+        .iter()
+        .map(|code| {
+            code.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "error code enum member is not a string".into())
+        })
+        .collect()
+}
+
+#[test]
+fn every_failure_code_is_published_and_nothing_else_is() -> TestResult {
+    let published = published_failure_codes()?;
+
+    for code in FailureCode::ALL {
+        assert!(
+            published.iter().any(|member| member == code.identifier()),
+            "{} is missing from the published error code enum",
+            code.identifier()
+        );
+    }
+    for member in &published {
+        assert!(
+            FailureCode::ALL
+                .iter()
+                .any(|code| code.identifier() == member),
+            "{member} is published but no failure code produces it"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn every_failure_code_produces_schema_valid_json_and_jsonl_failures() -> TestResult {
+    for code in FailureCode::ALL {
+        let event = serde_json::to_value(TerminalEventResponse::new(OperationResponse::failure(
+            CommandName::SessionStatus.identifier(),
+            code,
+        )))?;
+
+        validate("terminal-event.schema.json", &event)?;
+        validate("operation-response.schema.json", &event["result"])?;
+        assert_eq!(event["result"]["error"]["code"], code.identifier());
+    }
+    Ok(())
+}
+
+#[test]
+fn every_command_name_produces_schema_valid_json_and_jsonl_envelopes() -> TestResult {
+    for name in CommandName::ALL {
+        let complete = serde_json::to_value(OperationResponse::complete(
+            name.identifier(),
+            &serde_json::json!({}),
+        )?)?;
+        let event = serde_json::to_value(TerminalEventResponse::new(OperationResponse::failure(
+            name.identifier(),
+            FailureCode::CommandNotImplemented,
+        )))?;
+
+        validate("operation-response.schema.json", &complete)?;
+        validate("terminal-event.schema.json", &event)?;
+        validate("operation-response.schema.json", &event["result"])?;
+        assert_eq!(complete["command"], name.identifier());
+        assert_eq!(event["command"], name.identifier());
+    }
+    Ok(())
+}
+
+#[test]
+fn command_patterns_still_reject_malformed_identifiers() -> TestResult {
+    let original = serde_json::to_value(TerminalEventResponse::new(OperationResponse::failure(
+        CommandName::SetupConfigureModel.identifier(),
+        FailureCode::CommandNotImplemented,
+    )))?;
+    let operation_validator = jsonschema::validator_for(&load("operation-response.schema.json")?)?;
+    let event_validator = jsonschema::validator_for(&load("terminal-event.schema.json")?)?;
+
+    for malformed in [
+        "",
+        "Setup.check",
+        "setup.",
+        ".check",
+        "setup..check",
+        "setup.check.extra",
+        "-setup",
+        "setup-",
+        "setup.configure-",
+        "setup.-model",
+        "setup.configure--model",
+        "setup.configure_model",
+        "setup check",
+    ] {
+        let mut event = original.clone();
+        event["command"] = Value::from(malformed);
+        event["result"]["command"] = Value::from(malformed);
+
+        assert!(
+            !event_validator.is_valid(&event),
+            "event accepted {malformed:?}"
+        );
+        assert!(
+            !operation_validator.is_valid(&event["result"]),
+            "operation accepted {malformed:?}"
+        );
+    }
     Ok(())
 }

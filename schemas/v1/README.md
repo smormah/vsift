@@ -35,7 +35,10 @@ examples `ingest.transcript.json`, `transcript-get.json` and
 The Rust types that produce these documents live in the `vsift-contract` crate
 (`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.
 Its `schema_conformance` tests validate serialized values against these schemas and
-compare them with the examples.
+compare them with the examples. They also prove that every `FailureCode` identifier
+is in the envelope's `error.code` enum, and that every `CommandName` identifier
+(`setup.configure-model`, `transcript.get`, ...) satisfies the `command` pattern of
+both envelope schemas; the CLI's tests prove `CommandName` matches its commands.
 
 Every file under `examples/` is a frozen valid instance checked by the Rust contract
 suites in `vsift-contract` (`schema_conformance`, `transcript_contract`) and `vsift-cli`. Response readers must tolerate additive fields within major v1. Strict request

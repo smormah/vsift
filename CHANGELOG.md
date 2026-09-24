@@ -54,6 +54,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The published v1 schemas now accept `ISOLATION_UNAVAILABLE` and
+  `setup.configure-model`, which the CLI already emitted (issue #125).
 - Locks are now always released explicitly instead of by closing their file
   (issue #66). On Linux and macOS a child process started by another thread
   briefly holds copies of every open file, so a lock released only by closing

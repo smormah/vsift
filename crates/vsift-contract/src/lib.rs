@@ -9,8 +9,8 @@
 //! The crate is organised by concern:
 //!
 //! - **Envelope:** [`OperationResponse`], its [`ErrorResponse`],
-//!   [`CoverageResponse`] and [`LifecycleResponse`] parts, and the JSON Lines
-//!   [`TerminalEventResponse`].
+//!   [`CoverageResponse`] and [`LifecycleResponse`] parts, the JSON Lines
+//!   [`TerminalEventResponse`], and the [`CommandName`] identifiers they carry.
 //! - **Setup:** [`SetupCheckResponse`], [`SetupPlanResponse`], the strict
 //!   [`SavedSetupPlan`] input, and the configured-selection responses.
 //! - **Session:** [`OpenData`], [`StatusData`], [`PageData`], [`CleanData`],
@@ -33,6 +33,7 @@
 
 #![forbid(unsafe_code)]
 
+mod command;
 mod envelope;
 mod evidence;
 mod session;
@@ -40,6 +41,7 @@ mod setup;
 mod text;
 mod transcript;
 
+pub use command::CommandName;
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, OperationResponse,
     TerminalEventResponse,
