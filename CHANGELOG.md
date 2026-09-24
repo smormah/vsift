@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Internal local speech recognition core (P07 increment 3a), not yet reachable from
+  any command: `transcript retranscribe` still returns `COMMAND_NOT_IMPLEMENTED` and
+  no public output changes. The engine library can now cut a range into overlapping
+  30-second chunks, decode each with FFmpeg, recognise it with whisper.cpp v1.9.2,
+  check every reported time against the audio actually decoded, skip silent chunks,
+  and merge the chunks back into one transcript without dropping or doubling speech
+  at the seams. Each result records exactly which whisper build, model file and
+  settings produced it, and a run whose model changes part-way fails instead of
+  mixing outputs. Supplied-transcript imports are unchanged: same identities, and
+  the same stored record byte for byte. `bundle validate` now also accepts, and
+  checks strictly, the version-2 transcript record that local recognition will
+  write; no command writes one yet.
 - Test fixtures tooling: `tools/generate_p07_speech.py` and the manually dispatched
   `P07 speech fixtures` workflow generate speech variants of the synthetic corpus
   videos from their frozen scripts, using the Kokoro text-to-speech model on a

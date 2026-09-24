@@ -115,7 +115,13 @@ The revision is stored as a `transcript_record` session artifact, counted by
 it strictly with the same rules as a session read (unknown fields or values, broken
 import invariants such as a segment not at its cue timing plus the offset, or a
 record naming another source): a non-conforming record fails the bundle with
-`INTEGRITY_FAILURE`, and a newer record version with `UNSUPPORTED_SCHEMA`.
+`INTEGRITY_FAILURE`, and a newer record version with `UNSUPPORTED_SCHEMA`. Imports
+write record version 1, the version the published schema describes. Version 2 is
+reserved for revisions produced by local speech recognition; the reader already
+decodes it with the same strictness (its run provenance and every segment's
+provider times must reproduce the stored ranges), but no command writes it yet and
+its schema is published with the command that does. Versions above 2 are
+`UNSUPPORTED_SCHEMA`.
 
 **Malformed-data policy.** A rejection is a typed failure; nothing is imported.
 

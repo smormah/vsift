@@ -5,7 +5,9 @@
 //! pinned multilingual base model, for the committed F01, F05, F08 and F09
 //! speech clips decoded to 16 kHz mono. Only `params.model` and `systeminfo`
 //! were replaced, because they held a local path and host details; the parser
-//! never reads either. Mutated variants are derived from them here.
+//! never reads either. The build wrote CRLF line endings, which the repository
+//! stores as LF; JSON whitespace does not affect parsing. Mutated variants are
+//! derived from them here.
 
 use std::{
     env,

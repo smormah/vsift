@@ -21,14 +21,16 @@ Today it can:
   including the content of their transcript records;
 - keep every folder it creates private to the user, whatever the parent folder grants.
 
-It cannot yet transcribe speech itself, search, or hand frames, crops or audio to an
-agent. Local ASR is the next P07 increment; search and visuals are P08-P09.
+Internally (P07 increment 3a) it can now also transcribe speech itself with
+whisper.cpp, but no command exposes that yet: `transcript retranscribe` is the next
+increment. Search and visuals are P08-P09.
 
 ## What works (public CLI)
 
 - `setup check`, `setup configure`, `setup configure-model` and the read-only
-  `setup plan`, unchanged since P06 (`setup check` still reports only
-  `executable_probe_only`).
+  `setup plan` (`setup check` still reports only `executable_probe_only`). Its
+  `detail` is now only a tool's version banner; whisper's output is never echoed and
+  its detail says whether the executable is the reviewed v1.9.2 build (fix in 3a).
 - `ingest <video>`: stages and hashes one local MP4/Matroska source into a disposable
   session (24 idle hours, at most 7 days). Runs no provider.
 - `ingest <video> --transcript <file> [--transcript-offset <signed us>]`: parses the
@@ -39,9 +41,32 @@ agent. Local ASR is the next P07 increment; search and visuals are P08-P09.
 - `transcript get <session> --from --to [--limit 1..100] [--cursor]`: a bounded page
   of self-describing segment records; cursors bound to session, revision, range and
   expiry. With `--events jsonl` the page is an evidence stream (below).
-- `session list/status/renew/close/retain/clean` and `bundle validate`.
+- `session list/status/renew/close/retain/clean` and `bundle validate` (which now also
+  decodes, strictly, the version-2 transcript record no command writes yet).
 - Still `COMMAND_NOT_IMPLEMENTED`: `transcript retranscribe`, search, candidates,
   frame, audio, crop, job and setup install/repair/list/rollback/remove.
+
+## Local ASR core (P07 increment 3a, internal)
+
+- **Domain:** a revision's provenance is an import or one `AsrRun` (whisper build and
+  model digests, decoding profile `r0-v1`, chunk plan, threads, audio stream, every
+  chunk's outcome: transcribed, silent or no audio). Each segment names its origin;
+  ASR segments re-derive their range from the chunk's observed decoded start plus
+  provider times. `asr` module: R0 chunks (30 s windows, 5 s overlap), provider-output
+  validation (reject/trim/fail rules of T-05/T-06), integer -50 dBFS silence test, and
+  a deterministic seam merge (core ownership, edge-cut replacement, >= 2-word
+  duplicate trimming, genuine repeats kept).
+- **Application:** `SpeechAudioSource`/`SpeechRecognizer` ports, `transcribe_range`
+  (identity checked before and after; typed `AsrFailure { stage, reason }`; nothing
+  returned on failure or cancellation) and `build_asr_revision`.
+- **Infrastructure:** `FfmpegMedia::speech_pcm` (<= 30 s, 1 MiB, 60 s, first decoded
+  PTS), `FfmpegSpeechAudio`, `whisper_cli` (closed argv checked against v1.9.2
+  `--help`, 120 s per chunk, stdout/stderr bounded and ignored, bounded no-follow read
+  of the `-ojf` file), `WhisperSpeechRecognizer`, transcript record version 2.
+- **Real run (opt-in, Windows 11, whisper.cpp v1.9.2 official build, base model):**
+  F01, F05, F08 and F09 transcribed with required words present; F01 reads "The
+  service status is healthy and the build is 2048." F09's audio starts at 0.75 s.
+- Imports unchanged: identities and version-1 record bytes pinned against `9dad79e`.
 
 ## Private folders (fix, PR #141, `dadefbc`)
 
@@ -49,71 +74,44 @@ Every folder VSift creates (per-user configuration and its missing parents, sess
 root and its parent, retained bundles, managed data) is made private before use: a
 protected DACL for the user, SYSTEM and Administrators on Windows (`windows-acl`, no
 `unsafe`), 0o700 on Unix. Existing folders are never changed; a non-private one fails
-`STORAGE_IO` with `vsift-contract::non_private_folder_summary` naming its kind
-(session root: was `INVALID_ARGUMENT`). Openers wait up to 2 s for a fresh empty
-folder a concurrent creator is still restricting. Threat model SEC-18.
+`STORAGE_IO` naming its kind. Threat model SEC-18.
 
 ## Evidence stream and bundle record (P07 increment 2c)
 
 - `transcript get --events jsonl`: one keyed evidence event per segment
   (`record_type: "transcript_segment"`, upsert `key` = `segment_id`, contiguous
   `sequence` from 0), then one terminal event carrying the page without `items`,
-  `record_count` and `next_cursor`. Failures stay one terminal event; `--json` and
-  human output are unchanged. Full rules: `cli-v1.md` ("Evidence stream").
-- Contract: `vsift-contract::stream` owns `EventKind`, `EvidenceRecordType` (with
-  `ALL` guards) and the sequencing; the CLI only serializes and writes.
+  `record_count` and `next_cursor`. Full rules: `cli-v1.md` ("Evidence stream").
 - `bundle validate` decodes every `transcript_record` strictly
-  (`bundle-transcript-record.schema.json`): non-conforming is `IntegrityFailure`,
-  newer is `UnsupportedVersion`.
+  (`bundle-transcript-record.schema.json` describes version 1).
 
-## Speech fixtures (P07, test-only)
+## Speech fixtures and preflight
 
-`fixtures/corpus/generated/` holds Kokoro-spoken variants of F01-F09 and F12 (`speech/`,
-`*-speech.mp4`, `F09-speech.mkv`, `speech-provenance.json`, `speech-verification.json`)
-from workflow run 36052657304. The P04 tone fixtures are
-unchanged. Kokoro is never a VSift dependency (`docs/planning/p07-speech-fixtures.md`).
-
-## Media-tool preflight (P07 increment 2b)
-
-- Engine `ensure_media_tools_verified` runs in `ingest` with a transcript, after
-  parsing and tool resolution, before the session root. It runs the F01 fixture
-  through probe, frame and audio checks once per tool identity and records the pass
-  in `<per-user vsift dir>/media-tool-verification/verified-v1.json` (strict, <= 8
-  entries, <= 4 KiB, 7-day age limit, fails closed, non-blocking lock).
-- Failures map by reason to `MISSING_CAPABILITY`, `DEADLINE_EXCEEDED`, `STORAGE_IO`,
-  `CANCELLED` or `INTERNAL`, with fixed-prose remediation naming check and reason.
-- Measured on Windows 11, FFmpeg 9.0: first F10 import 2.5 s, cached 0.7 s.
+- Kokoro-spoken F01-F09/F12 clips (run 36052657304; test-only,
+  `docs/planning/p07-speech-fixtures.md`); recorded whisper v1.9.2 `-ojf` outputs in
+  `crates/vsift-infrastructure/tests/fixtures/whisper-1.9.2/`.
+- `ensure_media_tools_verified` runs once per tool identity before `ingest
+  --transcript` touches the session root; local ASR must call it too (3b).
 
 ## The engine library and contract
 
-- **`crates/vsift`:** `Engine::new(EngineConfig, EnginePorts)` with injected `Clock`,
-  `IdentifierSource` and optional media-tool verifier. Operations: setup
-  (`check_setup`, `plan_setup`, `configure_executable`, `configure_model`), sessions
-  (`ingest` -> `IngestOutcome`, `list_sessions`, `session_status`, `renew_session`,
-  `close_session`, `retain_session`, `clean_sessions`), `transcript`,
-  `validate_bundle`, `verify_media_tools`, `identify_model`. One typed
-  `EngineError`; `failure_code()` is the single public-code mapping. The API is 0.x.
-- **`crates/vsift-contract`:** every v1 wire type, the evidence stream sequencing,
-  fixed-prose warnings and remediation.
-- **`vsift-cli`** is a thin host: parsing, configuration precedence, presentation,
-  exit codes and `CommandFailure` (code plus optional typed remediation).
-
-Transcripts (increment 2): domain `transcript` (alignment clamps nothing; content-
-derived `trv_`, `tsg_`, `sgm_`), application `page_transcript`, infrastructure
-bounded SRT/VTT parsers, `FfprobeSourceDuration` and the `transcript_record` artifact.
+- **`crates/vsift`:** `Engine::new(EngineConfig, EnginePorts)`; setup, session,
+  `transcript`, `validate_bundle`, `verify_media_tools`, `identify_model`. One typed
+  `EngineError`; `failure_code()` is the single public-code mapping. It re-exports the
+  provenance types (`TranscriptProvenance`, `SegmentOrigin`, `AsrRun`, ...). API is 0.x.
+- **`crates/vsift-contract`:** every v1 wire type, the stream sequencing, fixed-prose
+  warnings and remediation. Import-only fields are omitted for local-ASR revisions,
+  so imports serialize exactly as before.
+- **`vsift-cli`** is a thin host.
 
 ## What exists internally (not exposed by the CLI)
 
-- **P02:** shell-free process supervision with Windows Job Object and Unix
-  process-group containment, bounded output, one deadline and cancellation.
-- **P03:** private storage roots, cross-process locks, weighted admission,
-  immutable generations and process-crash recovery (ephemeral profile only; FS-01).
-  Racing first uses of a root converge on one creator; openers wait <= 5 s (#131).
-- **P04:** restricted FFprobe/FFmpeg metadata, frame and audio operations.
-- **P06:** model identification (not yet consumed); its F01 verifier feeds the preflight.
-- **Managed-installer foundations** (owned by P13): reviewed Ubuntu catalogue,
-  plan acceptance, bounded transfer and archive inspection, staging, install guard,
-  immutable versions, rollback selection and removal fencing.
+- **P02:** shell-free process supervision with containment, bounded output, deadline
+  and cancellation. **P03:** private storage roots, locks, admission, immutable
+  generations, process-crash recovery (ephemeral profile only; FS-01).
+- **P04:** restricted FFprobe/FFmpeg metadata, frame, audio and now speech PCM.
+- **P06:** model identification; its F01 verifier feeds the preflight.
+- **Managed-installer foundations** (owned by P13).
 
 ## Packet status
 
@@ -121,7 +119,7 @@ bounded SRT/VTT parsers, `FfprobeSourceDuration` and the `transcript_record` art
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
-| P07 | In progress: increments 1a-2c and speech fixtures done; local ASR next |
+| P07 | In progress: 1a-2c, speech fixtures and 3a (ASR core) done; 3b and 3c next |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
@@ -130,20 +128,21 @@ bounded SRT/VTT parsers, `FfprobeSourceDuration` and the `transcript_record` art
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <-
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
 <- `vsift-cli` (parse, present). `vsift-contract` sits beside the engine and depends on
-domain and application only. `tools/vsift-governance` checks the ledger and the size
-of these files. The largest modules are `filesystem_session_store.rs` and
-`managed_artifact_store.rs`, about 3.8k and 3.6k lines including tests.
+domain and application only. `tools/vsift-governance` checks the ledger and these
+files' sizes. Largest modules: `filesystem_session_store.rs` and
+`managed_artifact_store.rs` (about 3.8k and 3.6k lines with tests), then the domain
+`transcript.rs` and `asr.rs`.
 
 ## Quality evidence
 
-- Private-folders fix, Windows 11: fmt, strict Clippy (pedantic as errors),
-  `cargo test --workspace` (448 passed, 23 opt-in ignored), warning-denied rustdoc and the
-  governance check pass; ACL tests build a hostile parent with the system `icacls.exe`.
-- Fix #131, Windows 11: process and thread race tests failed 5/5 before the fix and
-  passed 50/50 after (200/200 with four binaries in parallel); details in the P05 note.
-- Opt-in with FFmpeg/FFprobe 9.0: the P07 transcript E2E now also consumes each
-  import as a JSONL stream, retains it, runs `bundle validate` and checks the record
-  schema; SRT, WebVTT and wrong-offset journeys all pass.
+- Increment 3a, Windows 11: fmt, strict Clippy (pedantic as errors), `cargo test
+  --workspace` (486 passed, 24 opt-in ignored), warning-denied rustdoc and the
+  governance check pass. Opt-in `p07_local_asr` passed with the reviewed whisper build
+  (SHA-256 `95e3c0b0...`, verified) and base model: about 8 s per clip in release,
+  46 s in debug (mostly hashing the model twice); `setup check` against it reports
+  `whisper.cpp v1.9.2 (reviewed build)`.
+- Earlier: the P07 transcript E2E consumes each import as a JSONL stream, retains it
+  and validates the bundle; fix #131 race tests 50/50; private-folder ACL tests.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance,
   strict worker boundary, dependency policy and CodeQL; squash merges to protected
   `main`. Qualification records are in `docs/planning/`; history in git,

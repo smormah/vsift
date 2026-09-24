@@ -211,3 +211,19 @@ This note fixes the CLI surface decision 5 left to P07.
 - The retained bundle's `transcript_record` artifact now has a published schema,
   `bundle-transcript-record.schema.json`, with a frozen example, and `bundle validate`
   decodes every transcript record strictly (see the ADR 0013 note of the same date).
+
+## 2026-09-24 implementation note: one revision type for imports and local ASR
+
+- P07 increment 3a keeps decision 4's single `TranscriptRevision` for both paths. Its
+  provenance is either an import (format, sidecar identity, offset) or one local ASR
+  run (provider and model digests, decoding profile, chunk plan, threads, audio
+  stream, every chunk's outcome), and each segment carries its own origin, so the
+  revision constructor re-derives every range on every read. Optional `supersedes`
+  and `replaced_range` are reserved for retranscription; imports never set them.
+- Imports are unaffected: their `trv_`/`tsg_`/`sgm_` identities and their version-1
+  `transcript_record` bytes are pinned by tests against the pre-change importer.
+  Local-ASR revisions use record version 2, which readers (including `bundle
+  validate`) already decode strictly; no command writes it yet.
+- No public command, schema or event kind changed. Retranscription, its schemas,
+  the stream's treatment of superseded revisions and the next ADR follow in
+  increment 3b.
