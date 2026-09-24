@@ -226,8 +226,9 @@ fn path_bytes(path: &OsStr) -> Vec<u8> {
 #[cfg(unix)]
 fn platform_identity(hasher: &mut Sha256, metadata: &fs::Metadata) {
     use std::os::unix::fs::MetadataExt as _;
-    number(hasher, metadata.dev());
-    number(hasher, metadata.ino());
+    // `cap_fs_ext::MetadataExt` also defines `dev` and `ino`; name the std trait.
+    number(hasher, std::os::unix::fs::MetadataExt::dev(metadata));
+    number(hasher, std::os::unix::fs::MetadataExt::ino(metadata));
     number(hasher, u64::from(metadata.mode()));
     number(hasher, u64::from(metadata.uid()));
     field(hasher, &metadata.ctime().to_le_bytes());
