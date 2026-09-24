@@ -296,3 +296,25 @@ it; F08 en-US sends `[AB-731](/ˌAbˈi sˈɛvən θˈɜɹTi wˈʌn/)`, the numbe
 misaki's own from the first run. A hint that is not exactly one word of its script stops
 generation. Listening or ASR review of every clip, not the verifier, catches this kind of
 defect, so it is repeated after every recipe change.
+
+## 2026-09-24 note: committed clips
+
+The committed speech clips, `speech-provenance.json` and `speech-verification.json` come
+from https://github.com/smormah/vsift/actions/runs/36052657304 (green, repeatability
+included; `cpu` AMD EPYC 9V45). Review before committing:
+
+- `clipped_samples` is zero for every utterance.
+- The recorded phonemes spell every identifier: F08 `ˌAbˈi sˈɛvən θˈɜɹTi wˈʌn` in English
+  and `ˌaβˈe` in Spanish, `E-409` as "E four oh nine", `p95` as "P ninety-five", `10:32`
+  as "ten thirty-two", `4407` as "forty-four oh seven".
+- whisper.cpp v1.9.2 (official build, `ggml-base.bin`, language auto-detected) on 16 kHz
+  mono extracts of each variant reproduces every script. Its only differences are
+  ones the local-ASR tests must tolerate from a base model: number formatting
+  (`twelve` as "12", `125.00` as "125"), "queued" heard as "Q", `4407` as "407", and
+  F08's `E-409` under office noise as "E4A9". F05 speaks the same phonemes without
+  noise and is heard as "e409".
+- `python tools/verify_p07_speech.py` on Windows 11 with FFmpeg 9.0 reproduced the
+  workflow's `speech-verification.json` byte for byte.
+
+The spaCy model wheel's SHA-256 (`1932429d…0fb85`), identical in all three runs, is now
+pinned in `SPACY_MODEL_WHEEL`; later runs check the digest, not just the size.
