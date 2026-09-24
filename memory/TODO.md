@@ -9,42 +9,41 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
 complete. P07 is in progress: five increments are done, the packet is not.
+Local checks: CI is the default Linux/macOS check; Docker only for platform code.
 
 1. **Done:** 1a `vsift-contract` wire types (PR #126, `00e707f`); 1b `vsift` engine
    facade, thin CLI (PR #127, `0e5a0cd`); 2 supplied transcripts (PR #129,
-   `4aa4ae0`); 2b automatic media-tool preflight (PR #133, `27f9416`).
-2. **Increment 2c (done, in review): evidence stream and bundle record schema.**
-   - `transcript get --events jsonl` streams one evidence event per segment
-     (`record_type`, upsert `key` = `segment_id`, the published segment `record`),
-     then one terminal event whose data is the page without items plus
-     `record_count` and `next_cursor`. Sequence numbers are contiguous from 0.
-     `--json` and human output are unchanged; failures stay one terminal event.
-   - New schemas `evidence-event`, `transcript-get-stream-data` and
-     `bundle-transcript-record`, with frozen examples
-     (`transcript-get.events.jsonl`, `bundle-transcript-record.json`).
-   - `bundle validate` now decodes every `transcript_record` strictly and requires
-     it to name the bundle's source (`INTEGRITY_FAILURE`, or `UNSUPPORTED_SCHEMA`
-     for a newer record). Retained bundles from `session retain` are unaffected.
-   - Details: `cli-v1.md` ("Evidence stream"), ADR 0016/0013 notes of 2026-09-24.
-3. **Increment 3 (next): local ASR.** Blocked on the maintainer's choice of
-   speech-fixture source (F01-F09/F12 scripts need real speech audio; the corpus has
-   tone sentinels only). Scope once unblocked:
+   `4aa4ae0`); 2b automatic media-tool preflight (PR #133, `27f9416`); 2c JSONL
+   evidence stream and bundle transcript-record schema (PR #134, `08d9830`).
+2. **Speech fixtures for local ASR (in progress, test-only).** The maintainer chose
+   Kokoro-82M, pinned, for test clips only. Generator, verifier and the
+   `p07-speech-fixtures.yml` workflow merged (PR #138, `44613df`); F09 speaks at 1.3x
+   to fit its frozen window (PR #139, `3305400`). Run 36049056343 passed; whisper.cpp
+   review found F08's English "AB" spoken as "ob". PR #140 adds a reviewed
+   pronunciation hint. Next: re-run the workflow, repeat the whisper review, commit
+   the clips with provenance in one PR citing the run, and pin the spaCy wheel hash.
+3. **Increment 3 (next): local ASR** with whisper.cpp v1.9.2 (official build), the
+   maintainer's choice:
    - whisper.cpp adapter over the process supervisor, output validated and offset to
      source time; imported and ASR revisions share `TranscriptRevision`;
    - bounded PCM chunking with overlap and deterministic duplicate removal at seams;
    - call `Engine::ensure_media_tools_verified` before its first media stage;
    - whisper functional verification reported by `setup check`;
+   - a lightweight (quantized) model option alongside the pinned base model;
    - `transcript retranscribe` (still `COMMAND_NOT_IMPLEMENTED`) as a new revision;
      decide then whether superseded revisions need tombstone events in the stream;
    - T-03..T-06 and the `p07_local_asr` E2E stage.
 4. **Still owed by P07 before the packet closes:**
-   - `cargo-fuzz` targets for the SRT/VTT parsers (ADR 0016 decision 6) need a
-     nightly-toolchain decision; `proptest` properties cover them now;
+   - `cargo-fuzz` targets for the SRT/VTT parsers (ADR 0016 decision 6) as a scheduled
+     nightly-toolchain CI job (maintainer approved); `proptest` covers them now;
    - the packet completion record in the ledger once increment 3 merges.
 5. **Fixed outside the packet:** #131 racing first uses converge on one session root
-   (provisioning lock, bounded 5 s wait, typed `BUSY`); #136 verification-record reader
-   classification and bounded lock retries (PR #137, `617d631`, macOS/Ubuntu stress 40/40);
-   #132 stale verification workspaces swept after 1 h when unlocked.
+   (PR #135, `a5d799a`); #136 verification-record reader classification and bounded
+   lock retries, #132 stale verification workspaces swept (PR #137, `617d631`).
+   Private folders (this change): every folder VSift creates is made private itself,
+   so a Windows profile whose `%LOCALAPPDATA%` passes other accounts' entries no
+   longer breaks `setup configure`; an existing non-private folder fails `STORAGE_IO`
+   with remediation naming the folder kind.
 
 ## Follow-ups (open issues before relying on them)
 
@@ -54,8 +53,8 @@ complete. P07 is in progress: five increments are done, the packet is not.
 
 ## Open decisions (maintainer)
 
-- Speech-fixture source for local ASR (blocks increment 3).
-- Whether fuzzing may use a nightly toolchain in CI, or stays a scheduled job.
+- Whether to open a backlog issue for a faster-whisper adapter (proposed; awaiting
+  the maintainer). whisper.cpp stays the default.
 - Crate names are confirmed (`vsift` facade, `vsift-contract`); a crates.io
   availability check still precedes first publication.
 - Minimum-supported-Rust-version policy before the library is first published.

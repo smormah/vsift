@@ -234,8 +234,9 @@ pub(crate) fn restrict_new_directory(_path: &Path) -> Result<(), PrivateRootErro
 /// `windows-acl` writes each DACL change with
 /// `PROTECTED_DACL_SECURITY_INFORMATION`, so the first added entry already
 /// disables inheritance; the entries it copied from the inherited DACL are
-/// removed afterwards. No step grants any principal more access than the
-/// inherited DACL did. The caller must hold a handle to the new directory,
+/// removed afterwards. The result grants full control to the three trusted
+/// principals, even where the parent granted them less, and nothing to any
+/// other principal. The caller must hold a handle to the new directory,
 /// which stops the path from being replaced while the DACL is changed.
 ///
 /// Never call this for a directory `VSift` did not just create.
