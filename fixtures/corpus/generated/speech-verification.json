@@ -1,0 +1,299 @@
+{
+  "verifier": "tools/verify_p07_speech.py v1",
+  "status": "passed",
+  "manifest_sha256": "dfae6419dba8b8bbbf00e18185c7580e1a9b935a61e9abbb82c9c549481e8187",
+  "provenance_sha256": "e1efd0525af7ce1da3d625a5b05e72caf62360ab661b9a4ef1e4f345b72a7d13",
+  "utterances": [
+    {
+      "fixture": "F01",
+      "file": "speech/F01-utterance.wav",
+      "frames": 100200,
+      "duration_us": 4175000
+    },
+    {
+      "fixture": "F02",
+      "file": "speech/F02-utterance.wav",
+      "frames": 128400,
+      "duration_us": 5350000
+    },
+    {
+      "fixture": "F03",
+      "file": "speech/F03-utterance.wav",
+      "frames": 193800,
+      "duration_us": 8075000
+    },
+    {
+      "fixture": "F04",
+      "file": "speech/F04-utterance.wav",
+      "frames": 160800,
+      "duration_us": 6700000
+    },
+    {
+      "fixture": "F05",
+      "file": "speech/F05-utterance.wav",
+      "frames": 222600,
+      "duration_us": 9275000
+    },
+    {
+      "fixture": "F06",
+      "file": "speech/F06-utterance.wav",
+      "frames": 76800,
+      "duration_us": 3200000
+    },
+    {
+      "fixture": "F07",
+      "file": "speech/F07-utterance.wav",
+      "frames": 222000,
+      "duration_us": 9250000
+    },
+    {
+      "fixture": "F08",
+      "file": "speech/F08-utterance.wav",
+      "frames": 240600,
+      "duration_us": 10025000
+    },
+    {
+      "fixture": "F09",
+      "file": "speech/F09-utterance.wav",
+      "frames": 47400,
+      "duration_us": 1975000
+    },
+    {
+      "fixture": "F12",
+      "file": "speech/F12-utterance.wav",
+      "frames": 222600,
+      "duration_us": 9275000
+    }
+  ],
+  "variants": [
+    {
+      "fixture": "F01",
+      "file": "F01-speech.mp4",
+      "sha256": "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881",
+      "video_packets_match": "F01.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 6000000,
+      "speech_span_us": [
+        500000,
+        4675000
+      ],
+      "manifest_window_us": [
+        0,
+        6000000
+      ],
+      "energy": {
+        "first_active_us": 800000,
+        "last_active_us": 4200000,
+        "active_fraction": 0.685
+      }
+    },
+    {
+      "fixture": "F02",
+      "file": "F02-speech.mp4",
+      "sha256": "d654d6aefcdffb6e86875190a8b5b82bfcac56192b1946baff4725264046ff29",
+      "video_packets_match": "F02.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 12000000,
+      "speech_span_us": [
+        500000,
+        5850000
+      ],
+      "manifest_window_us": [
+        0,
+        12000000
+      ],
+      "energy": {
+        "first_active_us": 840000,
+        "last_active_us": 5360000,
+        "active_fraction": 0.68
+      }
+    },
+    {
+      "fixture": "F03",
+      "file": "F03-speech.mp4",
+      "sha256": "179eb2931444a48d0238a1547a72c5f6b969a1c7196246e39a3703d74b885be2",
+      "video_packets_match": "F03.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 9000000,
+      "speech_span_us": [
+        500000,
+        8575000
+      ],
+      "manifest_window_us": [
+        0,
+        9000000
+      ],
+      "energy": {
+        "first_active_us": 800000,
+        "last_active_us": 8080000,
+        "active_fraction": 0.746
+      }
+    },
+    {
+      "fixture": "F04",
+      "file": "F04-speech.mp4",
+      "sha256": "c93562cb3cdf32b266edbd1faf56e3df61fb0b604ae352cd0fc2fd5ccaf14629",
+      "video_packets_match": "F04.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 14000000,
+      "speech_span_us": [
+        500000,
+        7200000
+      ],
+      "manifest_window_us": [
+        0,
+        14000000
+      ],
+      "energy": {
+        "first_active_us": 760000,
+        "last_active_us": 6760000,
+        "active_fraction": 0.728
+      }
+    },
+    {
+      "fixture": "F05",
+      "file": "F05-speech.mp4",
+      "sha256": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+      "video_packets_match": "F05.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 20000000,
+      "speech_span_us": [
+        500000,
+        9775000
+      ],
+      "manifest_window_us": [
+        0,
+        20000000
+      ],
+      "energy": {
+        "first_active_us": 800000,
+        "last_active_us": 9280000,
+        "active_fraction": 0.735
+      }
+    },
+    {
+      "fixture": "F06",
+      "file": "F06-speech.mp4",
+      "sha256": "60eac9e14d7b5724d418d3e25fe58eb95ec7d9d7cc3a61d05df98b09763cabf8",
+      "video_packets_match": "F06.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 10000000,
+      "speech_span_us": [
+        500000,
+        3700000
+      ],
+      "manifest_window_us": [
+        0,
+        10000000
+      ],
+      "energy": {
+        "first_active_us": 820000,
+        "last_active_us": 3200000,
+        "active_fraction": 0.637
+      }
+    },
+    {
+      "fixture": "F07",
+      "file": "F07-speech.mp4",
+      "sha256": "bf9469cd53a74da801eaf53af244d7de40d4014ef0beb960119aad4ad55faccf",
+      "video_packets_match": "F07.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 10000000,
+      "speech_span_us": [
+        500000,
+        9750000
+      ],
+      "manifest_window_us": [
+        0,
+        10000000
+      ],
+      "energy": {
+        "first_active_us": 800000,
+        "last_active_us": 9220000,
+        "active_fraction": 0.752
+      }
+    },
+    {
+      "fixture": "F08",
+      "file": "F08-speech.mp4",
+      "sha256": "c5911c91e4eb12ab3daa658111424811e439a05bbadce7f76f665ba5f70e37de",
+      "video_packets_match": "F08.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 18000000,
+      "speech_span_us": [
+        1000000,
+        11025000
+      ],
+      "manifest_window_us": [
+        1000000,
+        17000000
+      ],
+      "energy": {
+        "noise_coverage": 1.0,
+        "speech_to_noise_power_ratio": 11.05
+      }
+    },
+    {
+      "fixture": "F09",
+      "file": "F09-speech.mkv",
+      "sha256": "659ca2ca70931d689d38dfda760e108a9ba2f4628b0078a6edba9ee1b2ef4662",
+      "video_packets_match": "F09.mkv",
+      "audio_codec": "pcm_s16le",
+      "origin_us": 2000000,
+      "audio_offset_us": 750000,
+      "duration_us": 12000000,
+      "speech_span_us": [
+        4000000,
+        5975000
+      ],
+      "manifest_window_us": [
+        4000000,
+        6000000
+      ],
+      "energy": {
+        "first_active_us": 4270000,
+        "last_active_us": 5590000,
+        "active_fraction": 0.608
+      }
+    },
+    {
+      "fixture": "F12",
+      "file": "F12-speech.mp4",
+      "sha256": "2d0ed350283e69fe57443d0684fb767af25ea3f2c889bebdff410140883d1233",
+      "video_packets_match": "F12.mp4",
+      "audio_codec": "aac",
+      "origin_us": 0,
+      "audio_offset_us": 0,
+      "duration_us": 12000000,
+      "speech_span_us": [
+        500000,
+        9775000
+      ],
+      "manifest_window_us": [
+        0,
+        12000000
+      ],
+      "energy": {
+        "first_active_us": 780000,
+        "last_active_us": 9280000,
+        "active_fraction": 0.733
+      }
+    }
+  ]
+}

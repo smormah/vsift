@@ -126,8 +126,8 @@ class PinnedFile:
     """A reviewed download: exact byte count plus a digest published by its source.
 
     Hugging Face publishes SHA-256 for LFS files and a git blob SHA-1 for small files.
-    GitHub publishes no digest for the spaCy model asset, so that pin is size-only and
-    the observed SHA-256 is recorded in the provenance for review.
+    GitHub publishes no digest for the spaCy model asset. Its SHA-256 was recorded by
+    runs 36049056343, 36051020432 and 36052657304 (all equal) and is now pinned.
     """
 
     path: str
@@ -150,6 +150,7 @@ SPACY_MODEL_WHEEL = PinnedFile(
     "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/"
     "en_core_web_sm-3.8.0-py3-none-any.whl",
     12_806_118,
+    sha256="1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85",
 )
 
 
