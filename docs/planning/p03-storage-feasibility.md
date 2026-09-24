@@ -44,6 +44,18 @@ and adds no locked package because cap-std already uses the same 1.1 line. Full
 workspace cargo-deny passes with development dependencies included; no advisory,
 package exception or source exception was added.
 
+Amended 2026-09-24: VSift now also mutates DACLs through `windows-acl` 0.3.0, only
+on a directory it has just created as a private root (see the
+[threat model](security-threat-model.md)). It uses `ACL::allow` and
+`ACL::remove_entry`, whose DACL writes always set
+`PROTECTED_DACL_SECURITY_INFORMATION` (verified in the 0.3.0 source,
+`SecurityDescriptor::apply`), so inheritance is disabled without new unsafe code or a
+new dependency. Raw SIDs passed to it are built with its `string_to_sid`, because the
+raw SID the crate stores per enumerated entry is a vector whose length is not set.
+The version pin and licence review are unchanged; the low-maintenance finding now
+covers a write path, which remains a reason to replace the crate if an audited,
+maintained safe ACL API becomes available.
+
 The lockfile adds 34 development-only packages, including multiple versions of
 Windows support crates. No existing package version was upgraded. Initial
 `cargo deny check` passed advisories, bans, licences and sources. Post-test review

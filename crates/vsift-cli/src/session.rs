@@ -238,21 +238,25 @@ pub(crate) fn transcript_stream(
 pub(crate) fn execute_session(
     engine: &Engine,
     command: SessionCommand,
-) -> Result<Response, FailureCode> {
+) -> Result<Response, CommandFailure> {
+    // Engine errors convert through `CommandFailure`, so a typed cause keeps
+    // its remediation; presentation failures stay bare codes.
     match command {
-        SessionCommand::List(arguments) => list_response(engine.list_sessions(arguments.cursor)?),
-        SessionCommand::Status(arguments) => status_response(
+        SessionCommand::List(arguments) => {
+            Ok(list_response(engine.list_sessions(arguments.cursor)?)?)
+        }
+        SessionCommand::Status(arguments) => Ok(status_response(
             CommandName::SessionStatus,
             &engine.session_status(&arguments.session)?,
-        ),
-        SessionCommand::Renew(arguments) => status_response(
+        )?),
+        SessionCommand::Renew(arguments) => Ok(status_response(
             CommandName::SessionRenew,
             &engine.renew_session(&arguments.session)?,
-        ),
-        SessionCommand::Close(arguments) => status_response(
+        )?),
+        SessionCommand::Close(arguments) => Ok(status_response(
             CommandName::SessionClose,
             &engine.close_session(&arguments.session)?,
-        ),
+        )?),
         SessionCommand::Retain(arguments) => {
             let retention = if arguments.include_source {
                 SourceRetention::IncludeSource
@@ -277,7 +281,7 @@ pub(crate) fn execute_session(
                 },
                 cursor: arguments.cursor,
             })?;
-            clean_response(page)
+            Ok(clean_response(page)?)
         }
     }
 }

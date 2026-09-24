@@ -20,7 +20,7 @@ use vsift_domain::{
     SessionPhase, SourceId, StorageGeneration, TranscriptRevision,
 };
 
-use crate::{SourceSnapshot, file_lock::HeldFileLock};
+use crate::{SourceSnapshot, file_lock::HeldFileLock, private_user_root::restrict_new_directory};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
 const OWNERSHIP_FILE: &str = "ownership.json";
@@ -809,6 +809,12 @@ impl FilesystemSessionStore {
         let bundle = parent
             .open_dir_nofollow(Path::new(name))
             .map_err(map_storage_io)?;
+        // The export is private whatever the chosen parent would pass on.
+        if restrict_new_directory(&canonical_parent.join(name)).is_err() {
+            drop(bundle);
+            let _ = parent.remove_dir(Path::new(name));
+            return Err(SessionStorageError::Io);
+        }
         if let Err(error) = validate_platform_root_permissions(output_path, &bundle) {
             drop(bundle);
             let _ = parent.remove_dir(Path::new(name));
@@ -1305,9 +1311,12 @@ impl FilesystemSessionStore {
     /// Provisions a new private, explicitly selected VSift-owned root.
     ///
     /// The final path component is created relative to a held canonical parent.
-    /// Existing paths are never adopted or overwritten. On Windows the inherited
-    /// DACL is inspected and provisioning fails unless every allow ACE belongs to
-    /// the current user, `LocalSystem`, or the local Administrators group.
+    /// Existing paths are never adopted or overwritten. The new root is made
+    /// private before anything is written into it: owner-only mode on Unix,
+    /// and on Windows its own protected DACL, so entries the parent would pass
+    /// on are never inherited. The finished root is then validated: on Windows
+    /// every allow ACE must belong to the current user, `LocalSystem`, or the
+    /// local Administrators group.
     ///
     /// The exclusive creation of the final component elects exactly one creator
     /// among concurrent callers; the others receive
@@ -1341,13 +1350,20 @@ impl FilesystemSessionStore {
             .ok_or(SessionStoreOpenError::RootUnavailable)?;
         let canonical_parent =
             fs::canonicalize(parent_path).map_err(|_| SessionStoreOpenError::RootUnavailable)?;
-        let parent = Dir::open_ambient_dir(canonical_parent, cap_std::ambient_authority())
+        let parent = Dir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
             .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
         create_private_child_directory(&parent, Path::new(name))
             .map_err(map_provision_create_error)?;
         let root = parent
             .open_dir_nofollow(Path::new(name))
             .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+        // Made private before anything is written into it, whatever the
+        // parent's permissions would have passed on. The held handle pins it.
+        if restrict_new_directory(&canonical_parent.join(name)).is_err() {
+            drop(root);
+            let _ = parent.remove_dir(Path::new(name));
+            return Err(SessionStoreOpenError::RootUnavailable);
+        }
 
         // The exclusive directory creation above makes this process the one
         // creator. Everything else it writes is covered by the provisioning lock,
@@ -3690,6 +3706,53 @@ mod tests {
             ),
             RootProvisioningState::Settled
         );
+        Ok(())
+    }
+
+    /// A creator makes a new root private just after creating it, so an opener
+    /// that meets a fresh, empty root which is not yet private waits for it;
+    /// a root with content is refused at once, and neither is ever changed.
+    #[cfg(windows)]
+    #[test]
+    fn a_fresh_root_that_is_not_yet_private_is_waited_on_then_refused() -> TestResult {
+        let fresh = fresh_directory()?;
+        let system_root = std::env::var_os("SystemRoot").ok_or("SystemRoot is not set")?;
+        let granted = Command::new(PathBuf::from(system_root).join("System32/icacls.exe"))
+            .arg(&fresh.path)
+            .args(["/grant", "*S-1-5-32-545:(RX)", "/Q"])
+            .output()?
+            .status;
+        assert!(granted.success());
+
+        let started = Instant::now();
+        let result = open_session_root_within(
+            &fresh.path,
+            SessionRootProvisioning::ExistingOnly,
+            Duration::from_millis(100),
+        );
+        assert!(matches!(
+            result,
+            Err(SessionRootError::Store(
+                SessionStoreOpenError::RootNotPrivate
+            ))
+        ));
+        assert!(started.elapsed() >= Duration::from_millis(100));
+        assert_eq!(fs::read_dir(&fresh.path)?.count(), 0, "nothing was written");
+
+        write_new(&fresh.path.join("notes.txt"), b"not vsift")?;
+        let started = Instant::now();
+        let result = open_session_root_within(
+            &fresh.path,
+            SessionRootProvisioning::ExistingOnly,
+            Duration::from_secs(5),
+        );
+        assert!(matches!(
+            result,
+            Err(SessionRootError::Store(
+                SessionStoreOpenError::RootNotPrivate
+            ))
+        ));
+        assert!(started.elapsed() < Duration::from_secs(5));
         Ok(())
     }
 

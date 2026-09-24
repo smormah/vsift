@@ -2376,7 +2376,12 @@ fn check_marker(directory: &Dir, name: &str, expected: &[u8]) -> Result<(), Mana
 fn map_private_error(error: PrivateRootError) -> ManagedArtifactError {
     match error {
         PrivateRootError::Unavailable => ManagedArtifactError::Unavailable,
-        PrivateRootError::UnsafeStorage => ManagedArtifactError::UnsafeStorage,
+        // The managed store is not yet reachable from a host, so a
+        // non-private root keeps the store's existing single unsafe-storage
+        // outcome rather than growing a public variant no caller can see.
+        PrivateRootError::UnsafeStorage | PrivateRootError::NotPrivate => {
+            ManagedArtifactError::UnsafeStorage
+        }
         PrivateRootError::Busy => ManagedArtifactError::Busy,
         PrivateRootError::Io => ManagedArtifactError::Io,
     }

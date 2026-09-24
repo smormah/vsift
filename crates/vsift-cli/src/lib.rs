@@ -25,7 +25,8 @@ use vsift::{
 use vsift_contract::{
     CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, OperationResponse, TerminalEventResponse,
-    TranscriptEvidenceStream, media_tool_verification_summary, transcript_rejection_summary,
+    TranscriptEvidenceStream, media_tool_verification_summary, non_private_folder_summary,
+    transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -154,12 +155,11 @@ where
                 let report = match engine.check_setup(request).await {
                     Ok(report) => report,
                     Err(error) => {
-                        return write_failure(
+                        return write_command_failure(
                             &mut writer,
                             mode,
                             CommandName::SetupCheck,
-                            error.failure_code(),
-                            None,
+                            CommandFailure::from(error),
                         );
                     }
                 };
@@ -175,31 +175,36 @@ where
                 let dependency = arguments.dependency.into();
                 let result = engine
                     .configure_executable(dependency, &arguments.executable)
-                    .map_err(FailureCode::from)
+                    .map_err(CommandFailure::from)
                     .and_then(|()| {
                         complete(
                             CommandName::SetupConfigure,
                             &ConfiguredSelectionResponse::new(dependency),
                         )
+                        .map_err(CommandFailure::from)
                     });
                 write_session_result(&mut writer, mode, CommandName::SetupConfigure, result)
             }
             Some(SetupCommand::ConfigureModel(arguments)) => {
                 let result = engine
                     .configure_model(&arguments.file)
-                    .map_err(FailureCode::from)
+                    .map_err(CommandFailure::from)
                     .and_then(|()| {
                         complete(
                             CommandName::SetupConfigureModel,
                             &ConfiguredModelResponse::new(),
                         )
+                        .map_err(CommandFailure::from)
                     });
                 write_session_result(&mut writer, mode, CommandName::SetupConfigureModel, result)
             }
             Some(SetupCommand::Plan(arguments)) => {
                 let result = current_setup_plan(&engine, arguments.profile)
                     .await
-                    .and_then(|plan| complete(CommandName::SetupPlan, plan.presentation()));
+                    .and_then(|plan| {
+                        complete(CommandName::SetupPlan, plan.presentation())
+                            .map_err(CommandFailure::from)
+                    });
                 write_session_result(&mut writer, mode, CommandName::SetupPlan, result)
             }
             Some(SetupCommand::Install(arguments)) => {
@@ -238,13 +243,12 @@ where
                 };
                 let current = match current_setup_plan(&engine, profile).await {
                     Ok(current) => current,
-                    Err(code) => {
-                        return write_failure(
+                    Err(failure) => {
+                        return write_command_failure(
                             &mut writer,
                             mode,
                             CommandName::SetupInstall,
-                            code,
-                            None,
+                            failure,
                         );
                     }
                 };
@@ -342,7 +346,7 @@ where
 async fn current_setup_plan(
     engine: &Engine,
     profile: ExecutionProfile,
-) -> Result<EvaluatedSetupPlan, FailureCode> {
+) -> Result<EvaluatedSetupPlan, CommandFailure> {
     let config = EffectiveConfig::resolve(
         ConfigLayer {
             profile: Some(profile),
@@ -399,7 +403,8 @@ impl From<EngineError> for CommandFailure {
                 error
                     .media_tool_verification_failure()
                     .map(media_tool_verification_summary)
-            });
+            })
+            .or_else(|| error.non_private_folder().map(non_private_folder_summary));
         Self {
             code: error.failure_code(),
             remediation,

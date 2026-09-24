@@ -176,3 +176,26 @@ no stray files; both failed 5/5 on the previous code and passed 50/50 afterwards
 and 200/200 with four test binaries racing in parallel. Unit tests cover wait-then-
 adopt, bounded `BUSY`, a stopped creator and fresh versus old empty directories. The
 preflight concurrency test no longer pre-provisions the root and passed 50/50.
+
+## 2026-09-24 private roots under a permissive parent
+
+On the maintainer's Windows 11 profile `%LOCALAPPDATA%` passes a sandbox group and
+two `AppContainer` capability SIDs to every new child, so a root VSift created there
+inherited them and failed its own DACL validation (`STORAGE_IO` for `setup
+configure`/`check`). Earlier evidence ran under `%TEMP%`, whose DACL is protected and
+private, which hid this. Now the session root, the parent `open_session_root` creates
+for it, and each retained bundle receive a protected DACL (current user, SYSTEM,
+Administrators; nothing inherited) right after exclusive creation and before any
+layout is written; failure removes the empty directory and reports
+`RootUnavailable`/`Io`. Validation is unchanged and still runs. An existing root that
+other accounts can access is still refused, untouched; the CLI now reports it as
+`STORAGE_IO` with a `session_root` remediation instead of `INVALID_ARGUMENT`. Since a
+racing creator's root is briefly empty with its inherited DACL, `RootNotPrivate` joins
+`InvalidOwnership`/`InvalidLayout` as a failure an opener may wait on, under the same
+#131 rule (lock held, or recent and holding only first steps); a settled root is
+refused at once.
+Evidence: Windows tests under a temporary parent granting `BUILTIN\Users` inheritable
+read (`private_root_acl`, `private_storage_cli_contract`) check the SDDL is protected,
+has no inherited entry and no `BUILTIN\Users` entry, and that a pre-existing
+permissive root is refused with its DACL and contents unchanged; the creation tests
+fail when the DACL replacement is disabled.

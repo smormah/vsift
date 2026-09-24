@@ -435,6 +435,36 @@ rather than claiming contention. Every VSift lock is released with an explicit
 unlock rather than by closing its file, so a lock never stays held after its
 owner lets go ([issue #66](https://github.com/smormah/vsift/issues/66)).
 
+### Private per-user folders
+
+Every folder VSift creates for itself is private to the current user whatever its
+parent grants: the per-user configuration folder and any missing parent of it, the
+session root and its created parent, each retained bundle, and the managed-data
+folder. On Windows each gets its own protected DACL (no inheritance from the parent)
+granting only the current user, SYSTEM and Administrators; on Unix it is created
+owner-only (0o700). This happens before anything is written into the folder, and the
+result is still validated.
+
+An existing folder is never changed. When the per-user configuration folder or the
+session root exists but another account can access it (on Unix: group or other mode
+bits, or another owner), the command fails before using it with `STORAGE_IO`
+(exit 7, not retryable) and one `remediation` item (`required_authority: "none"`,
+`command: null`). Its summary begins with the fixed sentence `The VSift <kind> folder
+is accessible to other accounts, so VSift did not use it and changed nothing.`, where
+`<kind>` is `user_configuration` or `session_root`, followed by fixed prose saying
+where that folder is by default and to delete it and retry (or remove the other
+accounts' access). The folder's path is never included. Every command that reads the
+configuration (`setup check`, `setup plan`, `setup configure`, `setup
+configure-model`) or opens the session root (`ingest`, `session ...`,
+`transcript get`) reports it this way. Before 2026-09-24 the configuration case was
+`STORAGE_IO` without remediation and the session-root case was `INVALID_ARGUMENT`.
+See [`storage-not-private.json`](../../schemas/v1/examples/storage-not-private.json).
+Storage that is a link, unreadable or not writable remains `STORAGE_IO` without this
+remediation. A folder another VSift process created a moment ago can briefly look
+non-private while that process restricts it, so a folder that is still empty and was
+created within the last 10 seconds is checked again for up to 2 seconds (the session
+root keeps its existing 5-second wait for a creator) before it is refused.
+
 ```json
 {
   "schema_version": "1",

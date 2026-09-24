@@ -34,8 +34,13 @@ pub enum UserDependencyConfigError {
     InvalidExecutable,
     /// A selected model is not an absolute, nonempty regular file.
     InvalidModel,
-    /// The configuration directory or file is not private and regular.
+    /// The configuration directory or file is a link, not regular, or cannot
+    /// be inspected or written safely.
     UnsafeStorage,
+    /// The existing configuration directory is accessible to other accounts
+    /// (or, on Unix, owned by another user). It was left unchanged; a
+    /// directory `VSift` creates is always made private first.
+    StorageNotPrivate,
     /// The stored schema, paths or keys are invalid.
     InvalidRecord,
     /// A concurrent writer holds the configuration lock.
@@ -51,6 +56,9 @@ impl fmt::Display for UserDependencyConfigError {
             Self::InvalidExecutable => "selected executable is not an absolute regular file",
             Self::InvalidModel => "selected model is not an absolute nonempty regular file",
             Self::UnsafeStorage => "per-user configuration storage is not private",
+            Self::StorageNotPrivate => {
+                "per-user configuration directory is accessible to other accounts"
+            }
             Self::InvalidRecord => "per-user dependency configuration is invalid",
             Self::Busy => "per-user dependency configuration is busy",
             Self::Io => "per-user dependency configuration I/O failed",
@@ -270,6 +278,7 @@ impl UserDependencyConfigStore {
         open_private_root(&self.root_path, create).map_err(|error| match error {
             PrivateRootError::Unavailable => UserDependencyConfigError::Unavailable,
             PrivateRootError::UnsafeStorage => UserDependencyConfigError::UnsafeStorage,
+            PrivateRootError::NotPrivate => UserDependencyConfigError::StorageNotPrivate,
             PrivateRootError::Busy => UserDependencyConfigError::Busy,
             PrivateRootError::Io => UserDependencyConfigError::Io,
         })
@@ -667,7 +676,7 @@ mod tests {
             fs::set_permissions(parent.join("config"), fs::Permissions::from_mode(0o750))?;
             assert!(matches!(
                 config.read(),
-                Err(UserDependencyConfigError::UnsafeStorage)
+                Err(UserDependencyConfigError::StorageNotPrivate)
             ));
             Ok::<(), Box<dyn std::error::Error>>(())
         })();

@@ -13,6 +13,7 @@ use vsift_application::{
     OpenSessionError, PlanAcceptanceError, SessionStorageError, SourceProbeError,
     TranscriptQueryError,
 };
+use vsift_contract::PrivateFolder;
 use vsift_domain::{FailureCode, RuntimeDependency, TranscriptImportError};
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
@@ -142,6 +143,23 @@ impl EngineError {
             | Self::OpenSession(OpenSessionError::TranscriptRejected(rejection)) => {
                 Some(*rejection)
             }
+            _ => None,
+        }
+    }
+
+    /// The existing `VSift` folder that was refused because other accounts
+    /// can access it, if that is why the operation failed.
+    ///
+    /// Hosts use it to explain which folder to fix; the folder was not used
+    /// or changed. Only the observed permission finding qualifies: links,
+    /// unreadable permissions and I/O failures are not reported here.
+    #[must_use]
+    pub const fn non_private_folder(&self) -> Option<PrivateFolder> {
+        match self {
+            Self::UserConfiguration(UserConfigurationError::StorageNotPrivate) => {
+                Some(PrivateFolder::UserConfiguration)
+            }
+            Self::SessionRoot(SessionRootError::NotPrivate) => Some(PrivateFolder::SessionRoot),
             _ => None,
         }
     }
@@ -415,11 +433,15 @@ impl SessionRootError {
             Self::NotAbsolute
             | Self::WithoutParent
             | Self::NotDirectory
-            | Self::NotPrivate
             | Self::AlreadyExists
             | Self::InvalidAdmissionCapacity => FailureCode::InvalidArgument,
             Self::PlatformDefaultUnavailable => FailureCode::MissingCapability,
-            Self::ParentUnavailable | Self::Missing | Self::Unavailable => FailureCode::StorageIo,
+            // A root other accounts can access is storage that cannot be used,
+            // whether it was selected or is the platform default, reported like
+            // a non-private per-user configuration folder.
+            Self::ParentUnavailable | Self::Missing | Self::Unavailable | Self::NotPrivate => {
+                FailureCode::StorageIo
+            }
             Self::InvalidOwnership | Self::InvalidLayout => FailureCode::IntegrityFailure,
             Self::ProvisioningInProgress => FailureCode::Busy,
         }
@@ -486,8 +508,12 @@ pub enum UserConfigurationError {
     InvalidExecutable,
     /// A selected model is not an absolute, nonempty regular file.
     InvalidModel,
-    /// The configuration directory or file is not private and regular.
+    /// The configuration directory or file is a link, not regular, or cannot
+    /// be inspected or written safely.
     UnsafeStorage,
+    /// The existing configuration directory is accessible to other accounts.
+    /// It was left unchanged.
+    StorageNotPrivate,
     /// The stored record is malformed.
     InvalidRecord,
     /// A concurrent writer holds the configuration lock.
@@ -503,7 +529,10 @@ impl UserConfigurationError {
         match self {
             Self::Unavailable => FailureCode::MissingCapability,
             Self::InvalidExecutable | Self::InvalidModel => FailureCode::InvalidArgument,
-            Self::UnsafeStorage | Self::Io => FailureCode::StorageIo,
+            // A folder other accounts can access is storage that cannot be
+            // used, not a malformed record or a missing capability; it is not
+            // retryable until the user fixes it, which the remediation explains.
+            Self::UnsafeStorage | Self::StorageNotPrivate | Self::Io => FailureCode::StorageIo,
             Self::InvalidRecord => FailureCode::IntegrityFailure,
             Self::Busy => FailureCode::Busy,
         }
@@ -517,6 +546,9 @@ impl fmt::Display for UserConfigurationError {
             Self::InvalidExecutable => "selected executable is not an absolute regular file",
             Self::InvalidModel => "selected model is not an absolute nonempty regular file",
             Self::UnsafeStorage => "per-user configuration storage is not private",
+            Self::StorageNotPrivate => {
+                "per-user configuration folder is accessible to other accounts"
+            }
             Self::InvalidRecord => "per-user dependency configuration is invalid",
             Self::Busy => "per-user dependency configuration is busy",
             Self::Io => "per-user dependency configuration I/O failed",
@@ -533,6 +565,7 @@ impl From<UserDependencyConfigError> for UserConfigurationError {
             UserDependencyConfigError::InvalidExecutable => Self::InvalidExecutable,
             UserDependencyConfigError::InvalidModel => Self::InvalidModel,
             UserDependencyConfigError::UnsafeStorage => Self::UnsafeStorage,
+            UserDependencyConfigError::StorageNotPrivate => Self::StorageNotPrivate,
             UserDependencyConfigError::InvalidRecord => Self::InvalidRecord,
             UserDependencyConfigError::Busy => Self::Busy,
             UserDependencyConfigError::Io => Self::Io,
@@ -630,7 +663,7 @@ mod tests {
         for (error, code) in [
             (
                 SessionStoreOpenError::RootNotPrivate,
-                FailureCode::InvalidArgument,
+                FailureCode::StorageIo,
             ),
             (
                 SessionStoreOpenError::InvalidLayout,
@@ -712,8 +745,37 @@ mod tests {
             ),
             (UserDependencyConfigError::Busy, FailureCode::Busy),
             (UserDependencyConfigError::Io, FailureCode::StorageIo),
+            (
+                UserDependencyConfigError::StorageNotPrivate,
+                FailureCode::StorageIo,
+            ),
         ] {
             assert_eq!(EngineError::from(error).failure_code(), code);
+        }
+    }
+
+    #[test]
+    fn only_a_folder_other_accounts_can_access_is_reported_as_not_private() {
+        use vsift_contract::PrivateFolder;
+
+        assert_eq!(
+            EngineError::from(UserDependencyConfigError::StorageNotPrivate).non_private_folder(),
+            Some(PrivateFolder::UserConfiguration)
+        );
+        assert_eq!(
+            EngineError::SessionRoot(SessionRootError::from(
+                SessionStoreOpenError::RootNotPrivate
+            ))
+            .non_private_folder(),
+            Some(PrivateFolder::SessionRoot)
+        );
+        for error in [
+            EngineError::from(UserDependencyConfigError::UnsafeStorage),
+            EngineError::from(UserDependencyConfigError::Io),
+            EngineError::SessionRoot(SessionRootError::Unavailable),
+            EngineError::Storage(SessionStorageError::AccessDenied),
+        ] {
+            assert_eq!(error.non_private_folder(), None);
         }
     }
 }
