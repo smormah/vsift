@@ -74,9 +74,12 @@ SPEED = 1.0
 FIXTURE_SPEED = {"F09": 1.3}
 # Reviewed pronunciation hints, applied only to the text handed to the engine; the frozen
 # script (recorded as "text") never changes and remains what the verifier checks. Kokoro's
-# misaki front end reads "[word](/phonemes/)" as an explicit pronunciation. The first run
-# spoke the English "AB" of "AB-731" as the word "ob" (phonemes "ˈɑb"), not the letters.
-SPOKEN_FORMS = {("F08", "en-US"): (("AB-731", "[AB](/ˌAbˈi/)-731"),)}
+# misaki front end reads "[word](/phonemes/)" as an explicit pronunciation of the whole
+# space-delimited word, so a hint names a whole word and gives phonemes for all of it.
+# Run 36049056343 spoke the "AB" of "AB-731" as the word "ob" ("ˈɑb"); run 36051020432,
+# hinting only "[AB](...)-731", dropped "731". The number's phonemes are misaki's own
+# from the first run.
+SPOKEN_FORMS = {("F08", "en-US"): (("AB-731", "ˌAbˈi sˈɛvən θˈɜɹTi wˈʌn"),)}
 SEED = 731
 TORCH_THREADS = 1
 INTER_SEGMENT_PAUSE_US = 400_000
@@ -485,11 +488,14 @@ def build_track(plan: SpeechPlan, placement: Placement,
 
 def engine_text(fixture_id: str, language: str, text: str) -> str:
     """The text handed to the engine: the script with any reviewed pronunciation hints."""
-    for original, spoken in SPOKEN_FORMS.get((fixture_id, language), ()):
-        if original not in text:
-            raise GenerationError(f"{fixture_id} pronunciation hint {original!r} does not occur in its script")
-        text = text.replace(original, spoken)
-    return text
+    words = text.split(" ")
+    for original, phonemes in SPOKEN_FORMS.get((fixture_id, language), ()):
+        matches = [index for index, word in enumerate(words) if word.rstrip(".,;:!?") == original]
+        if len(matches) != 1:
+            raise GenerationError(f"{fixture_id} pronunciation hint {original!r} is not exactly one word of its script")
+        word = words[matches[0]]
+        words[matches[0]] = f"[{original}](/{phonemes}/){word[len(original):]}"
+    return " ".join(words)
 
 
 def speed_for(fixture_id: str) -> float:
@@ -871,6 +877,18 @@ def installed_distributions() -> dict[str, str]:
     return installed
 
 
+def cpu_model() -> str:
+    """The CPU model, recorded because synthesis is bit-identical only on the same hardware."""
+    try:
+        for line in Path("/proc/cpuinfo").read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition(":")
+            if key.strip() == "model name":
+                return value.strip()
+    except OSError:
+        pass
+    return platform.processor() or "unknown"
+
+
 def espeak_version() -> str:
     """Best-effort phonemizer backend version for provenance; never affects output."""
     try:
@@ -894,9 +912,9 @@ def synthesis_facts(assets: Path, reports: Sequence[Path]) -> dict:
         "sentence_languages": {fixture: list(languages) for fixture, languages in SENTENCE_LANGUAGES.items()},
         "speed": SPEED,
         "speed_overrides": dict(sorted(FIXTURE_SPEED.items())),
-        "pronunciation_hints": [{"fixture": fixture, "language": language, "script": original, "engine": spoken}
+        "pronunciation_hints": [{"fixture": fixture, "language": language, "word": original, "phonemes": phonemes}
                                 for (fixture, language), hints in sorted(SPOKEN_FORMS.items())
-                                for original, spoken in hints],
+                                for original, phonemes in hints],
         "seed": SEED,
         "seed_policy": "torch.manual_seed reset before every segment",
         "torch_threads": TORCH_THREADS,
@@ -908,6 +926,7 @@ def synthesis_facts(assets: Path, reports: Sequence[Path]) -> dict:
             "python": platform.python_version(),
             "platform": platform.platform(),
             "machine": platform.machine(),
+            "cpu": cpu_model(),
             "distributions": installed_distributions(),
             "espeak_ng": espeak_version(),
             "spacy_model_wheel": next(entry for entry in fetch_record["files"]
