@@ -76,6 +76,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Media-tool check record: a reader that caught another process replacing the
+  record could mistake the replacement for an unsafe record (issue #136). On
+  Windows this made a concurrency test fail in about half of its runs. The read
+  is now retried and otherwise counts as "not verified"; a record with more than
+  one link is still refused. A failed flush of a new record no longer discards the
+  pass, since a record lost to a crash already just means one more check. Taking
+  the record's write lock now retries brief failures a few times instead of
+  skipping the pass (seen on macOS); a linked or non-regular lock file is still
+  refused and is never reported as busy.
+- Media-tool check workspaces left behind when VSift was killed during a check are
+  now removed by a later check, once they are an hour old and no running check
+  holds them (issue #132). Only exactly named VSift workspaces in the private
+  per-user state directory are removed, and links are never followed.
 - The published v1 schemas now accept `ISOLATION_UNAVAILABLE` and
   `setup.configure-model`, which the CLI already emitted (issue #125).
 - Locks are now always released explicitly instead of by closing their file

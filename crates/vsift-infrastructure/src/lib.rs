@@ -68,8 +68,10 @@ pub use managed_catalogue::{
 pub use media_tool_verification::{FixtureMediaToolVerifier, verify_model_file};
 pub use media_tool_verification_cache::{
     FilesystemMediaToolVerificationCache, MAX_MEDIA_TOOL_VERIFICATION_ENTRIES,
-    MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES, MEDIA_TOOL_VERIFICATION_MAX_AGE_SECONDS,
-    MEDIA_TOOL_VERIFICATION_PROFILE, MediaToolVerificationAuthority, media_tool_fingerprint,
+    MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES, MAX_REMOVED_VERIFICATION_WORKSPACES,
+    MEDIA_TOOL_VERIFICATION_MAX_AGE_SECONDS, MEDIA_TOOL_VERIFICATION_PROFILE,
+    MediaToolVerificationAuthority, STALE_VERIFICATION_WORKSPACE_AGE_SECONDS, StaleWorkspaceSweep,
+    media_tool_fingerprint,
 };
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{

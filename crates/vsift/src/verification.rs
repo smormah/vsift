@@ -169,7 +169,8 @@ impl Engine {
     /// verification; otherwise the reviewed fixture (or a host-supplied
     /// verifier) runs in a private workspace under the per-user state
     /// directory. Recording problems never fail the operation; they only mean
-    /// the next preflight verifies again.
+    /// the next preflight verifies again. Each preflight first removes stale
+    /// workspaces left there by killed verifications.
     pub(crate) async fn ensure_media_tools_verified(
         &self,
         tools: &MediaProviderConformance,
@@ -188,6 +189,10 @@ impl Engine {
                     failure: MediaToolFailure::Workspace,
                 })
             })?;
+        // Reclaims workspaces of verifications that were killed before they
+        // could remove them (issue #132). It never waits and never fails the
+        // operation; a skipped sweep is simply retried by the next preflight.
+        let _ = state.remove_stale_workspaces(now);
         let outcome = if let Some(verifier) = self.host_media_tool_verifier() {
             let fingerprint = media_tool_fingerprint(
                 tools,

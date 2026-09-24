@@ -25,7 +25,7 @@ use vsift_domain::{
 
 use crate::{
     ExtractedAudio, ExtractedFrame, FfmpegMedia, FilesystemSessionStore, HostIsolation, MediaError,
-    MediaProviderConformance, ProcessCancellation, SourceSnapshot,
+    MediaProviderConformance, ProcessCancellation, SourceSnapshot, file_lock::HeldFileLock,
 };
 
 /// The reviewed synthetic F01 fixture, identical to `fixtures/corpus/generated/F01.mp4`.
@@ -48,7 +48,13 @@ const AUDIO_SPAN_MICROS: u64 = 1_000_000;
 /// Extracted PCM may be slightly shorter or longer than the span at codec edges.
 const AUDIO_LENGTH_TOLERANCE_PERCENT: u64 = 10;
 const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+/// Every verification workspace is named this prefix followed by exactly
+/// [`WORKSPACE_RANDOM_BYTES`] random bytes in lowercase hex, and nothing else.
 const WORKSPACE_PREFIX: &str = "vsift-tool-verification-";
+const WORKSPACE_RANDOM_BYTES: usize = 8;
+/// File inside a workspace that its verification holds an exclusive lock on for
+/// the whole run, so a sweep can tell a live workspace from a leftover.
+pub(crate) const WORKSPACE_LOCK_FILE: &str = "workspace.lock";
 const HASH_CHUNK_BYTES: usize = 1 << 20;
 
 /// Verifies selected `FFmpeg`/`FFprobe` against the embedded reviewed fixture.
@@ -334,6 +340,19 @@ fn random_hex() -> Result<String, ()> {
     Ok(lowercase_hex(&random))
 }
 
+/// Reports whether `name` is exactly a verification workspace name.
+///
+/// A sweep of leftover workspaces removes only positively identified names, so
+/// a look-alike (other length, uppercase or extra characters) is never touched.
+pub(crate) fn is_verification_workspace_name(name: &str) -> bool {
+    name.strip_prefix(WORKSPACE_PREFIX).is_some_and(|random| {
+        random.len() == WORKSPACE_RANDOM_BYTES * 2
+            && random
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
 fn lowercase_hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
@@ -348,21 +367,54 @@ fn lowercase_hex(bytes: &[u8]) -> String {
 ///
 /// It is created with `create_dir`, so an existing path is never adopted, and it
 /// is removed on drop. Standard-library removal does not follow symbolic links.
-struct VerificationWorkspace {
+///
+/// A process killed mid-verification never runs the drop, so the workspace
+/// also holds an exclusive lock on [`WORKSPACE_LOCK_FILE`] for its whole life.
+/// The operating system releases that lock when the process ends, which lets a
+/// later sweep tell a leftover from a workspace still in use (issue #132).
+pub(crate) struct VerificationWorkspace {
     path: PathBuf,
+    owner: Option<HeldFileLock>,
 }
 
 impl VerificationWorkspace {
-    fn create(parent: &Path) -> io::Result<Self> {
-        let suffix = random_hex().map_err(|()| io::Error::other("randomness unavailable"))?;
-        let path = parent.join(format!("{WORKSPACE_PREFIX}{suffix}"));
+    /// Creates a fresh workspace in `parent` and takes its lock.
+    ///
+    /// # Errors
+    ///
+    /// Fails when randomness, the directory or its lock is unavailable; any
+    /// directory already created is removed again.
+    pub(crate) fn create(parent: &Path) -> io::Result<Self> {
+        let mut random = [0_u8; WORKSPACE_RANDOM_BYTES];
+        getrandom::fill(&mut random).map_err(|_| io::Error::other("randomness unavailable"))?;
+        let path = parent.join(format!("{WORKSPACE_PREFIX}{}", lowercase_hex(&random)));
         fs::create_dir(&path)?;
-        Ok(Self { path })
+        // From here on, dropping the value removes the directory again.
+        let mut workspace = Self { path, owner: None };
+        let lock = fs::File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(workspace.path.join(WORKSPACE_LOCK_FILE))?;
+        workspace.owner = Some(HeldFileLock::try_exclusive(lock).map_err(io::Error::from)?);
+        Ok(workspace)
+    }
+
+    /// The workspace directory.
+    #[cfg(test)]
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
     }
 }
 
 impl Drop for VerificationWorkspace {
     fn drop(&mut self) {
+        // Windows cannot remove a directory holding an open file, so the lock
+        // is released and closed first. Nothing adopts an existing workspace,
+        // so no other verification can start using it in between.
+        if let Some(owner) = self.owner.take() {
+            let _ = owner.release();
+        }
         let _ = fs::remove_dir_all(&self.path);
     }
 }
@@ -386,10 +438,13 @@ mod tests {
 
     use super::{
         AUDIO_SPAN_MICROS, F01, F01_DURATION_MICROS, F01_HEIGHT, F01_WIDTH, FRAME_AT_MICROS,
-        PNG_SIGNATURE, check_audio, check_description, check_frame, lowercase_hex,
-        matches_integrity, verify_model_file,
+        PNG_SIGNATURE, VerificationWorkspace, WORKSPACE_LOCK_FILE, check_audio, check_description,
+        check_frame, is_verification_workspace_name, lowercase_hex, matches_integrity,
+        verify_model_file,
     };
-    use crate::{ExtractedAudio, ExtractedFrame, reviewed_compatibility_policy};
+    use crate::{
+        ExtractedAudio, ExtractedFrame, file_lock::HeldFileLock, reviewed_compatibility_policy,
+    };
 
     type TestResult = Result<(), Box<dyn Error>>;
 
@@ -476,6 +531,51 @@ mod tests {
             channels: 1,
             pcm_s16le: vec![0; bytes],
         })
+    }
+
+    #[test]
+    fn workspace_names_are_recognised_exactly() {
+        assert!(is_verification_workspace_name(
+            "vsift-tool-verification-0123456789abcdef"
+        ));
+        for name in [
+            "vsift-tool-verification-",
+            "vsift-tool-verification-0123456789abcde",
+            "vsift-tool-verification-0123456789abcdef0",
+            "vsift-tool-verification-0123456789ABCDEF",
+            "vsift-tool-verification-0123456789abcdeg",
+            "vsift-tool-verification-test-1-2-3",
+            "vsift-tool-verification",
+            "VSIFT-TOOL-VERIFICATION-0123456789abcdef",
+            "x-vsift-tool-verification-0123456789abcdef",
+        ] {
+            assert!(!is_verification_workspace_name(name), "{name}");
+        }
+    }
+
+    /// Issue #132: a workspace holds its lock for its whole life, so a sweep
+    /// can tell it from a leftover, and still removes itself when dropped.
+    #[test]
+    fn a_workspace_holds_its_lock_until_it_removes_itself() -> TestResult {
+        let parent = TempDir::new()?;
+        let workspace = VerificationWorkspace::create(&parent.0)?;
+        let path = workspace.path().to_path_buf();
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("workspace name is not UTF-8")?;
+        assert!(is_verification_workspace_name(name));
+        let probe = fs::File::open(path.join(WORKSPACE_LOCK_FILE))?;
+        assert!(matches!(
+            HeldFileLock::try_exclusive(probe),
+            Err(fs::TryLockError::WouldBlock)
+        ));
+
+        drop(workspace);
+
+        assert!(!path.exists());
+        assert_eq!(fs::read_dir(&parent.0)?.count(), 0);
+        Ok(())
     }
 
     #[test]

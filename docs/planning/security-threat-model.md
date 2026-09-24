@@ -138,7 +138,15 @@ profile, host isolation, verifier authority, verification profile and `VSift` ve
 and ages out after seven days. Executable contents are not hashed; a same-user process
 that rewrites a selected tool in place while preserving size and timestamps is outside
 the desktop threat model above. Failures are never recorded, and the record holds
-digests and times only, never paths or media (SEC-18).
+digests and times only, never paths or media (SEC-18). Lock-free readers that catch a
+writer's rename (an opened record already unlinked, or a Windows delete-pending name)
+retry a bounded number of times and otherwise read "unverified"; a record with more
+than one link stays unsafe, and flushing before the rename is best effort because a
+lost or torn record already reads "unverified" (issue #136). Automatic cleanup of
+verification workspaces left by killed checks (issue #132) removes only directories
+named exactly `vsift-tool-verification-<16 hex>` inside the private state directory
+that are real directories, at least an hour old and not locked by a live check, with
+no-follow removal.
 Provider versions remain in the vulnerability inventory even though they run outside
 the Rust process. Security fixes can revoke a managed version for new jobs, with a
 documented handling policy for already running jobs.

@@ -182,7 +182,11 @@ on Windows, `~/Library/Application Support/vsift` on macOS,
 `${XDG_CONFIG_HOME:-~/.config}/vsift` elsewhere). It holds at most eight
 `{fingerprint, verified_at_unix_seconds}` entries of SHA-256 digests and times, never
 paths, tool output or media, and is at most 4 KiB. The same directory is the parent of
-the short-lived private workspace each check creates and removes. The record is an
+the short-lived private workspace each check creates and removes. A check that is
+killed cannot remove its workspace, so every preflight removes leftovers: only
+directories named exactly `vsift-tool-verification-<16 hex>`, unchanged for at least
+an hour and not locked by a running check, at most eight at a time, never following
+links and never touching anything else. The record is an
 optimisation, never an authority: a missing, corrupt, oversized, linked or
 foreign-version record reads as "not verified", the check runs, and the record is
 replaced. Writers use a non-blocking lock; a process that finds it held verifies

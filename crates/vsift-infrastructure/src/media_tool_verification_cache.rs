@@ -16,6 +16,26 @@
 //! passes are recorded, and each entry holds a digest and a time, never a path,
 //! so the record reveals nothing about the user's files or media.
 //!
+//! # Concurrent readers
+//!
+//! Readers take no lock. A writer replaces the record by renaming a complete
+//! new file over it, so a reader sees either the old or the new record, never a
+//! mixture. A reader can still catch the replacement itself: the file it opened
+//! is unlinked before it checks the link count (the count is then zero), or, on
+//! Windows, the name briefly refuses opens while the replaced file is pending
+//! deletion. Neither is a defect of the record, so the read is retried a few
+//! times, and if a replacement is still in the way it counts as "unverified"
+//! like any other unreadable record (issue #136). A record with more than one
+//! link is still rejected as unsafe.
+//!
+//! # Leftover verification workspaces
+//!
+//! Each verification runs in its own `vsift-tool-verification-<16 hex>`
+//! directory inside the state directory and removes it when done. A process
+//! killed mid-verification leaves it behind (issue #132), so each preflight,
+//! holding the record lock, removes stale ones: see
+//! [`FilesystemMediaToolVerificationCache::remove_stale_workspaces`].
+//!
 //! # What the fingerprint binds
 //!
 //! A pass is valid only for the exact inputs it was produced with: the
@@ -30,7 +50,7 @@
 use std::{
     ffi::OsStr,
     fs,
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
 };
@@ -38,7 +58,7 @@ use std::{
 use cap_fs_ext::{DirExt, FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
 #[cfg(unix)]
 use cap_std::fs::OpenOptionsExt;
-use cap_std::fs::{Dir, DirBuilder, OpenOptions};
+use cap_std::fs::{Dir, DirBuilder, File, OpenOptions};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use vsift_application::{
@@ -49,6 +69,7 @@ use vsift_application::{
 use crate::{
     HostIsolation, MediaProviderConformance,
     file_lock::HeldFileLock,
+    media_tool_verification::{WORKSPACE_LOCK_FILE, is_verification_workspace_name},
     private_user_root::{validate_private_root, validate_same_directory_object},
 };
 
@@ -70,6 +91,20 @@ pub const MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES: u64 = 4096;
 /// Most recorded passes kept; older passes are evicted first.
 pub const MAX_MEDIA_TOOL_VERIFICATION_ENTRIES: usize = 8;
 
+/// How long a verification workspace must have been unchanged before a sweep
+/// may remove it.
+///
+/// A verification is bounded by three media deadlines of at most 60 seconds
+/// each, so a workspace this old that nobody holds can only be a leftover.
+/// The age alone never removes a workspace whose verification still holds its
+/// lock (for example one suspended with the machine); it covers the instant
+/// between creating a workspace and locking it, and workspaces made before
+/// workspaces were locked.
+pub const STALE_VERIFICATION_WORKSPACE_AGE_SECONDS: u64 = 60 * 60;
+
+/// Most leftover workspaces one sweep removes, so a preflight stays quick.
+pub const MAX_REMOVED_VERIFICATION_WORKSPACES: usize = 8;
+
 const STATE_DIRECTORY: &str = "media-tool-verification";
 const RECORD_FILE: &str = "verified-v1.json";
 const LOCK_FILE: &str = "verified.lock";
@@ -78,6 +113,9 @@ const PENDING_SUFFIX: &str = ".pending";
 const PENDING_RANDOM_BYTES: usize = 16;
 /// Bounds the stale-pending sweep so a hostile directory cannot stall a write.
 const MAX_SWEPT_ENTRIES: usize = 256;
+/// Reads attempted when a concurrent writer replaces the record mid-read. Each
+/// replacement is complete, so the next attempt normally succeeds at once.
+const MAX_RECORD_READ_ATTEMPTS: usize = 4;
 const SCHEMA_VERSION: u8 = 1;
 const FINGERPRINT_DOMAIN: &[u8] = b"vsift-media-tool-verification";
 
@@ -284,6 +322,57 @@ impl FilesystemMediaToolVerificationCache {
     pub const fn is_recording(&self) -> bool {
         self.state.is_some()
     }
+
+    /// Removes verification workspaces left behind by verifications that were
+    /// killed before they could clean up (issue #132).
+    ///
+    /// A child of the state directory is removed only when all of these hold:
+    ///
+    /// - its name is exactly `vsift-tool-verification-` and 16 lowercase hex
+    ///   digits, the only name a verification creates;
+    /// - it is a real directory, not a symbolic link, junction or file;
+    /// - it has been unchanged for at least
+    ///   [`STALE_VERIFICATION_WORKSPACE_AGE_SECONDS`] at `now_unix_seconds`
+    ///   (a modification time in the future counts as recent);
+    /// - no verification holds its lock: the lock file can be locked right now,
+    ///   because the process that held it has ended, or the directory has no
+    ///   lock file at all.
+    ///
+    /// A workspace whose lock is held, or whose lock cannot be probed safely, is
+    /// kept whatever its age. Removal never follows links, inside or out.
+    /// Nothing else in the state directory is examined or touched, and the
+    /// private root used when the state directory is unusable is never swept.
+    ///
+    /// The sweep holds the record lock so two preflights never sweep at once.
+    /// It never waits: when the lock is held or the state directory is
+    /// unavailable, it is skipped and the next preflight tries again. At most
+    /// [`MAX_REMOVED_VERIFICATION_WORKSPACES`] workspaces are removed per call.
+    #[must_use]
+    pub fn remove_stale_workspaces(&self, now_unix_seconds: u64) -> StaleWorkspaceSweep {
+        let Some(state) = self.state.as_ref() else {
+            return StaleWorkspaceSweep::Skipped;
+        };
+        let Ok(held) = acquire_record_lock(state) else {
+            return StaleWorkspaceSweep::Skipped;
+        };
+        let removed = sweep_stale_workspaces(state, now_unix_seconds);
+        // The sweep is complete either way; a failed unlock is released on close.
+        let _ = held.release();
+        StaleWorkspaceSweep::Completed { removed }
+    }
+}
+
+/// What one sweep for leftover verification workspaces did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaleWorkspaceSweep {
+    /// The state directory was examined and this many workspaces were removed.
+    Completed {
+        /// Stale workspaces removed.
+        removed: usize,
+    },
+    /// Nothing was examined: the state directory is unavailable or another
+    /// process holds its lock. The next preflight sweeps instead.
+    Skipped,
 }
 
 impl MediaToolVerificationCache for FilesystemMediaToolVerificationCache {
@@ -319,7 +408,7 @@ impl MediaToolVerificationCache for FilesystemMediaToolVerificationCache {
         };
         match record_pass(state, &hex(fingerprint.digest()), now_unix_seconds) {
             Ok(()) => VerificationRecord::Recorded,
-            Err(skip) => VerificationRecord::Skipped(skip),
+            Err(failure) => VerificationRecord::Skipped(failure.skip()),
         }
     }
 }
@@ -388,26 +477,109 @@ impl StoredRecord {
 /// Why the record could not be read; every variant means "unverified".
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RecordDefect {
+    /// There is no record.
     Missing,
+    /// A concurrent writer was replacing the record on every attempt. The
+    /// replacement is complete, so this is transient, never a torn record.
+    Replaced,
+    /// The name is a link, not a regular file, or a file with other links.
     Unsafe,
+    /// The record could not be read.
     Unreadable,
+    /// The content is oversized, malformed or from another schema.
     Invalid,
 }
 
+/// Win32 `ERROR_ACCESS_DENIED`: how opening a name whose previous file is still
+/// pending deletion (`STATUS_DELETE_PENDING`) surfaces during a replacement.
+#[cfg(windows)]
+const ERROR_ACCESS_DENIED: i32 = 5;
+/// Win32 `ERROR_SHARING_VIOLATION`.
+#[cfg(windows)]
+const ERROR_SHARING_VIOLATION: i32 = 32;
+/// Win32 `ERROR_DELETE_PENDING`.
+#[cfg(windows)]
+const ERROR_DELETE_PENDING: i32 = 303;
+
 fn read_record(state: &Dir) -> Result<StoredRecord, RecordDefect> {
-    let mut options = OpenOptions::new();
-    options.read(true).follow(FollowSymlinks::No);
-    let file = match state.open_with(RECORD_FILE, &options) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(RecordDefect::Missing);
+    read_record_with(|| {
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        state.open_with(RECORD_FILE, &options)
+    })
+}
+
+/// Reads through `open`, retrying while a concurrent replacement is in the way.
+fn read_record_with(
+    mut open: impl FnMut() -> io::Result<File>,
+) -> Result<StoredRecord, RecordDefect> {
+    let mut outcome = Err(RecordDefect::Replaced);
+    for attempt in 0..MAX_RECORD_READ_ATTEMPTS {
+        if attempt > 0 {
+            // Let the writer finish its rename; no sleep, which could stall a
+            // preflight for no benefit.
+            std::thread::yield_now();
         }
-        Err(_) => return Err(RecordDefect::Unsafe),
-    };
+        outcome = open()
+            .map_err(|error| classify_open_error(&error))
+            .and_then(read_opened_record);
+        if !matches!(outcome, Err(RecordDefect::Replaced)) {
+            break;
+        }
+    }
+    outcome
+}
+
+/// Classifies a failure to open the record without following links.
+///
+/// Anything but a missing file or a known transient replacement stays unsafe,
+/// as before: a link, a directory or an unexpected error all mean "unverified".
+fn classify_open_error(error: &io::Error) -> RecordDefect {
+    if error.kind() == io::ErrorKind::NotFound {
+        RecordDefect::Missing
+    } else if is_transient_replacement(error) {
+        RecordDefect::Replaced
+    } else {
+        RecordDefect::Unsafe
+    }
+}
+
+/// Windows refuses opens of a name while the file it replaced is pending
+/// deletion (issue #136); the refusal ends when the replacement completes.
+#[cfg(windows)]
+fn is_transient_replacement(error: &io::Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(ERROR_ACCESS_DENIED | ERROR_SHARING_VIOLATION | ERROR_DELETE_PENDING)
+    )
+}
+
+/// A POSIX rename swaps the name atomically, so an open never sees it midway.
+#[cfg(not(windows))]
+const fn is_transient_replacement(_error: &io::Error) -> bool {
+    false
+}
+
+/// Classifies the link count of an opened regular file.
+///
+/// Zero means the file was replaced (unlinked) after it was opened: its
+/// content is a complete earlier record, but a newer one exists, so the read is
+/// retried. More than one link means another name reaches the same file, which
+/// a writer never creates, so it is unsafe.
+const fn check_link_count(links: u64) -> Result<(), RecordDefect> {
+    match links {
+        0 => Err(RecordDefect::Replaced),
+        1 => Ok(()),
+        _ => Err(RecordDefect::Unsafe),
+    }
+}
+
+fn read_opened_record(file: File) -> Result<StoredRecord, RecordDefect> {
     let metadata = file.metadata().map_err(|_| RecordDefect::Unreadable)?;
-    if !metadata.is_file() || metadata.nlink() != 1 {
+    if !metadata.is_file() {
         return Err(RecordDefect::Unsafe);
     }
+    check_link_count(metadata.nlink())?;
     if metadata.len() > MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES {
         return Err(RecordDefect::Invalid);
     }
@@ -426,16 +598,148 @@ fn read_record(state: &Dir) -> Result<StoredRecord, RecordDefect> {
     }
 }
 
+/// Which step of recording a pass failed.
+///
+/// Only [`Self::Busy`] is a designed outcome of concurrent writers; every other
+/// variant means the storage could not be used, and all of them only cost a
+/// later re-verification. Tests name the step; the port reports the skip.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecordWriteFailure {
+    /// Another writer holds the record lock.
+    Busy,
+    /// The record lock could not be taken for a reason other than another
+    /// holder; the cause names the sub-step and the operating-system error.
+    Lock(LockFailure),
+    /// The record could not be encoded within its size bound.
+    Encode,
+    /// No randomness for the pending file name.
+    Randomness,
+    /// The pending file could not be created or written.
+    Pending,
+    /// The pending file could not replace the record.
+    Replace,
+}
+
+impl RecordWriteFailure {
+    const fn skip(self) -> VerificationRecordSkip {
+        match self {
+            Self::Busy => VerificationRecordSkip::Busy,
+            Self::Lock(_) | Self::Encode | Self::Randomness | Self::Pending | Self::Replace => {
+                VerificationRecordSkip::Unavailable
+            }
+        }
+    }
+}
+
+/// An operating-system error reduced to what is safe to report: its kind and
+/// raw code, never a path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct IoCause {
+    kind: io::ErrorKind,
+    os_code: Option<i32>,
+}
+
+impl IoCause {
+    fn of(error: &io::Error) -> Self {
+        Self {
+            kind: error.kind(),
+            os_code: error.raw_os_error(),
+        }
+    }
+}
+
+/// Why the record lock could not be taken (issue #136).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LockFailure {
+    /// Opening or creating the lock file without following links failed.
+    Open(IoCause),
+    /// Reading the opened lock file's metadata failed.
+    Inspect(IoCause),
+    /// The lock file is not a regular file with exactly one link. Linked or
+    /// foreign lock files are never used and never reported as busy.
+    Shape {
+        /// Whether it is a regular file.
+        regular_file: bool,
+        /// Its link count.
+        links: u64,
+    },
+    /// The operating system refused the lock for a reason other than another
+    /// holder.
+    Acquire(IoCause),
+}
+
+impl LockFailure {
+    /// Whether a bounded retry may resolve the failure.
+    ///
+    /// Retried: an interrupted open, or the lock file being created by another
+    /// writer at the same moment (not found, already exists); a just-created
+    /// regular file that does not yet report its link; and any failure to
+    /// inspect an opened lock file or to lock one proven to be a single-link
+    /// regular file (an interrupted call, or a kernel short of lock records).
+    /// A retry reopens and rechecks everything, so it can never make an unsafe
+    /// lock file usable. Every other open failure (a link, a directory, no
+    /// permission) and every other shape is final.
+    const fn is_transient(self) -> bool {
+        match self {
+            Self::Open(cause) => matches!(
+                cause.kind,
+                io::ErrorKind::Interrupted | io::ErrorKind::NotFound | io::ErrorKind::AlreadyExists
+            ),
+            Self::Inspect(_) | Self::Acquire(_) => true,
+            Self::Shape {
+                regular_file,
+                links,
+            } => regular_file && links == 0,
+        }
+    }
+}
+
+/// Attempts to take the record lock before a transient failure is final.
+const MAX_LOCK_ATTEMPTS: usize = 4;
+
+/// Takes the record lock without waiting.
+fn acquire_record_lock(state: &Dir) -> Result<HeldFileLock, RecordWriteFailure> {
+    acquire_record_lock_with(|| open_lock(state), HeldFileLock::try_exclusive)
+}
+
+/// Takes the record lock through `open` and `lock`, retrying transient
+/// failures a bounded number of times without sleeping. A holder is reported
+/// as [`RecordWriteFailure::Busy`] at once and never retried.
+fn acquire_record_lock_with(
+    mut open: impl FnMut() -> Result<fs::File, LockFailure>,
+    mut lock: impl FnMut(fs::File) -> Result<HeldFileLock, fs::TryLockError>,
+) -> Result<HeldFileLock, RecordWriteFailure> {
+    let mut attempt = 1;
+    loop {
+        // `None` is another holder; `Some` is why the lock could not be taken.
+        let attempted = match open() {
+            Err(cause) => Err(Some(cause)),
+            Ok(file) => lock(file).map_err(|error| match error {
+                fs::TryLockError::WouldBlock => None,
+                // `WouldBlock` is how std reports a holder; the same kind in
+                // an error still means a holder, not a storage problem.
+                fs::TryLockError::Error(error) if error.kind() == io::ErrorKind::WouldBlock => None,
+                fs::TryLockError::Error(error) => Some(LockFailure::Acquire(IoCause::of(&error))),
+            }),
+        };
+        match attempted {
+            Ok(held) => return Ok(held),
+            Err(None) => return Err(RecordWriteFailure::Busy),
+            Err(Some(cause)) if cause.is_transient() && attempt < MAX_LOCK_ATTEMPTS => {
+                attempt += 1;
+                std::thread::yield_now();
+            }
+            Err(Some(cause)) => return Err(RecordWriteFailure::Lock(cause)),
+        }
+    }
+}
+
 fn record_pass(
     state: &Dir,
     fingerprint: &str,
     now_unix_seconds: u64,
-) -> Result<(), VerificationRecordSkip> {
-    let lock = open_lock(state)?;
-    let held = HeldFileLock::try_exclusive(lock).map_err(|error| match error {
-        fs::TryLockError::WouldBlock => VerificationRecordSkip::Busy,
-        fs::TryLockError::Error(_) => VerificationRecordSkip::Unavailable,
-    })?;
+) -> Result<(), RecordWriteFailure> {
+    let held = acquire_record_lock(state)?;
     // Only a lock holder creates pending files, so any found now are debris
     // from a writer that was killed mid-write.
     remove_stale_pending(state);
@@ -456,13 +760,14 @@ fn record_pass(
             schema_version: SCHEMA_VERSION,
             entries,
         },
+        File::sync_all,
     );
     // The record is complete either way; a failed unlock is released on close.
     let _ = held.release();
     written
 }
 
-fn open_lock(state: &Dir) -> Result<fs::File, VerificationRecordSkip> {
+fn open_lock(state: &Dir) -> Result<fs::File, LockFailure> {
     let mut options = OpenOptions::new();
     options
         .read(true)
@@ -473,24 +778,46 @@ fn open_lock(state: &Dir) -> Result<fs::File, VerificationRecordSkip> {
     options.mode(0o600);
     let lock = state
         .open_with(LOCK_FILE, &options)
-        .map_err(|_| VerificationRecordSkip::Unavailable)?;
+        .map_err(|error| LockFailure::Open(IoCause::of(&error)))?;
     let metadata = lock
         .metadata()
-        .map_err(|_| VerificationRecordSkip::Unavailable)?;
-    if !metadata.is_file() || metadata.nlink() != 1 {
-        return Err(VerificationRecordSkip::Unavailable);
-    }
+        .map_err(|error| LockFailure::Inspect(IoCause::of(&error)))?;
+    check_lock_shape(metadata.is_file(), metadata.nlink())?;
     Ok(lock.into_std())
 }
 
-fn write_record(state: &Dir, record: &StoredRecord) -> Result<(), VerificationRecordSkip> {
-    let unavailable = VerificationRecordSkip::Unavailable;
-    let bytes = serde_json::to_vec(record).map_err(|_| unavailable)?;
+/// Accepts only a regular file with exactly one link as the record lock.
+const fn check_lock_shape(regular_file: bool, links: u64) -> Result<(), LockFailure> {
+    if regular_file && links == 1 {
+        Ok(())
+    } else {
+        Err(LockFailure::Shape {
+            regular_file,
+            links,
+        })
+    }
+}
+
+/// Writes `record` to a fresh pending file and renames it over the record.
+///
+/// `flush` asks the file system to make the pending file durable before the
+/// rename. It is best effort: a failed flush does not abandon the write. The
+/// record is an optimisation whose every defect reads as "unverified", so a
+/// crash that loses or tears an unflushed record only costs one re-verification,
+/// whereas giving up guarantees one. A flush can fail where the write did not:
+/// on macOS it is `F_FULLFSYNC`, which asks the disk itself to flush and which
+/// not every volume or virtual disk honours (issue #136).
+fn write_record(
+    state: &Dir,
+    record: &StoredRecord,
+    flush: impl FnOnce(&File) -> io::Result<()>,
+) -> Result<(), RecordWriteFailure> {
+    let bytes = serde_json::to_vec(record).map_err(|_| RecordWriteFailure::Encode)?;
     if bytes.len() as u64 > MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES {
-        return Err(unavailable);
+        return Err(RecordWriteFailure::Encode);
     }
     let mut random = [0_u8; PENDING_RANDOM_BYTES];
-    getrandom::fill(&mut random).map_err(|_| unavailable)?;
+    getrandom::fill(&mut random).map_err(|_| RecordWriteFailure::Randomness)?;
     let pending = format!("{PENDING_PREFIX}{}{PENDING_SUFFIX}", hex(&random));
     let mut options = OpenOptions::new();
     options
@@ -501,24 +828,109 @@ fn write_record(state: &Dir, record: &StoredRecord) -> Result<(), VerificationRe
     options.mode(0o600);
     let mut file = state
         .open_with(&pending, &options)
-        .map_err(|_| unavailable)?;
-    if file
-        .write_all(&bytes)
-        .and_then(|()| file.sync_all())
-        .is_err()
-    {
+        .map_err(|_| RecordWriteFailure::Pending)?;
+    if file.write_all(&bytes).is_err() {
         drop(file);
         let _ = state.remove_file(&pending);
-        return Err(unavailable);
+        return Err(RecordWriteFailure::Pending);
     }
+    let _ = flush(&file);
     drop(file);
     // Rename replaces the directory entry itself, so a planted link or a
     // hard-linked record is swapped out rather than written through.
     if state.rename(&pending, state, RECORD_FILE).is_err() {
         let _ = state.remove_file(&pending);
-        return Err(unavailable);
+        return Err(RecordWriteFailure::Replace);
     }
     Ok(())
+}
+
+/// Removes stale verification workspaces from the locked state directory and
+/// returns how many were removed; see
+/// [`FilesystemMediaToolVerificationCache::remove_stale_workspaces`].
+fn sweep_stale_workspaces(state: &Dir, now_unix_seconds: u64) -> usize {
+    let Ok(entries) = state.entries() else {
+        return 0;
+    };
+    // Names are collected first so removal never disturbs the listing.
+    let candidates = entries
+        .take(MAX_SWEPT_ENTRIES)
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| is_verification_workspace_name(name))
+        .collect::<Vec<_>>();
+    let mut removed = 0;
+    for name in candidates {
+        if removed == MAX_REMOVED_VERIFICATION_WORKSPACES {
+            break;
+        }
+        if workspace_disposition(state, &name, now_unix_seconds) == WorkspaceDisposition::Stale
+            && state.remove_dir_all(&name).is_ok()
+        {
+            removed += 1;
+        }
+    }
+    removed
+}
+
+/// Whether a positively named workspace may be removed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WorkspaceDisposition {
+    /// Unchanged for the stale age and held by no verification.
+    Stale,
+    /// Changed too recently, or its modification time is unknown or ahead.
+    Recent,
+    /// A verification holds its lock.
+    InUse,
+    /// Not a real directory, or its lock cannot be probed safely; left alone.
+    Untouchable,
+}
+
+fn workspace_disposition(state: &Dir, name: &str, now_unix_seconds: u64) -> WorkspaceDisposition {
+    // Not following links: a symbolic link or junction is not a directory here.
+    let Ok(metadata) = state.symlink_metadata(name) else {
+        return WorkspaceDisposition::Untouchable;
+    };
+    if !metadata.is_dir() {
+        return WorkspaceDisposition::Untouchable;
+    }
+    let old_enough = metadata
+        .modified()
+        .ok()
+        .and_then(|modified| modified.into_std().duration_since(UNIX_EPOCH).ok())
+        .and_then(|modified| now_unix_seconds.checked_sub(modified.as_secs()))
+        .is_some_and(|age| age >= STALE_VERIFICATION_WORKSPACE_AGE_SECONDS);
+    if !old_enough {
+        return WorkspaceDisposition::Recent;
+    }
+    let Ok(workspace) = state.open_dir_nofollow(name) else {
+        return WorkspaceDisposition::Untouchable;
+    };
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let lock = match workspace.open_with(WORKSPACE_LOCK_FILE, &options) {
+        Ok(lock) => lock,
+        // Made before workspaces were locked, or its verification was killed
+        // between creating it and locking it.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return WorkspaceDisposition::Stale;
+        }
+        Err(_) => return WorkspaceDisposition::Untouchable,
+    };
+    if !lock.metadata().is_ok_and(|metadata| metadata.is_file()) {
+        return WorkspaceDisposition::Untouchable;
+    }
+    // The probe is released and every handle closed before removal, because
+    // Windows cannot remove a directory with open handles. No verification
+    // adopts an existing workspace, so none can claim it in between.
+    match HeldFileLock::try_exclusive(lock.into_std()) {
+        Ok(probe) => {
+            let _ = probe.release();
+            WorkspaceDisposition::Stale
+        }
+        Err(fs::TryLockError::WouldBlock) => WorkspaceDisposition::InUse,
+        Err(fs::TryLockError::Error(_)) => WorkspaceDisposition::Untouchable,
+    }
 }
 
 fn remove_stale_pending(state: &Dir) {
@@ -569,11 +981,14 @@ mod tests {
     use std::{
         error::Error,
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::{Arc, Barrier},
         thread,
-        time::{Duration, SystemTime},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
+
+    use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+    use cap_std::fs::{Dir, File, OpenOptions};
 
     use vsift_application::{
         CachedMediaToolVerification, MediaToolFingerprint, MediaToolVerificationCache,
@@ -581,11 +996,16 @@ mod tests {
     };
 
     use super::{
-        FilesystemMediaToolVerificationCache, LOCK_FILE, MAX_MEDIA_TOOL_VERIFICATION_ENTRIES,
-        MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES, MEDIA_TOOL_VERIFICATION_MAX_AGE_SECONDS,
-        MediaToolVerificationAuthority, RECORD_FILE, RecordDefect, STATE_DIRECTORY, hex,
-        is_pending_name, media_tool_fingerprint, read_record,
+        FilesystemMediaToolVerificationCache, IoCause, LOCK_FILE, LockFailure, MAX_LOCK_ATTEMPTS,
+        MAX_MEDIA_TOOL_VERIFICATION_ENTRIES, MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES,
+        MAX_RECORD_READ_ATTEMPTS, MAX_REMOVED_VERIFICATION_WORKSPACES,
+        MEDIA_TOOL_VERIFICATION_MAX_AGE_SECONDS, MediaToolVerificationAuthority, RECORD_FILE,
+        RecordDefect, RecordWriteFailure, SCHEMA_VERSION, STALE_VERIFICATION_WORKSPACE_AGE_SECONDS,
+        STATE_DIRECTORY, StaleWorkspaceSweep, StoredPass, StoredRecord, acquire_record_lock_with,
+        check_link_count, check_lock_shape, classify_open_error, hex, is_pending_name,
+        media_tool_fingerprint, read_record, read_record_with, record_pass, write_record,
     };
+    use crate::media_tool_verification::{VerificationWorkspace, WORKSPACE_LOCK_FILE};
     use crate::{
         HostIsolation, MediaProviderConformance, TrustedExecutable, UserDependencyConfigStore,
         file_lock::HeldFileLock, reviewed_compatibility_policy,
@@ -909,6 +1329,12 @@ mod tests {
         Ok(())
     }
 
+    /// Readers take no lock, so they race writers' renames. The contract is
+    /// that a reader never sees a torn record: every read is a complete valid
+    /// record, no record, or a replacement still in the way after the bounded
+    /// retries, which reads as "unverified" (issue #136). Content defects and
+    /// unsafe files never appear. Writers only ever skip because another
+    /// writer holds the lock; the failing step is named if one does not.
     #[test]
     fn concurrent_writers_and_readers_never_see_a_torn_record() -> TestResult {
         const WRITERS: u8 = 8;
@@ -924,19 +1350,20 @@ mod tests {
                     let cache = UserDependencyConfigStore::at(config)
                         .and_then(|store| store.media_tool_verification_state())
                         .map_err(|error| error.to_string())?;
+                    let state = cache.state.as_ref().ok_or("state unavailable")?;
                     barrier.wait();
                     let mut recorded = 0;
                     for round in 0..ROUNDS {
-                        match cache.record_verified(&digest(writer * ROUNDS + round), NOW) {
-                            VerificationRecord::Recorded => recorded += 1,
-                            VerificationRecord::Skipped(VerificationRecordSkip::Busy) => {}
-                            other @ VerificationRecord::Skipped(_) => {
-                                return Err(format!("unexpected outcome {other:?}"));
+                        let fingerprint = hex(digest(writer * ROUNDS + round).digest());
+                        match record_pass(state, &fingerprint, NOW) {
+                            Ok(()) => recorded += 1,
+                            Err(RecordWriteFailure::Busy) => {}
+                            Err(failure) => {
+                                return Err(format!("writer failed at step {failure:?}"));
                             }
                         }
-                        let state = cache.state.as_ref().ok_or("state unavailable")?;
                         match read_record(state) {
-                            Ok(_) | Err(RecordDefect::Missing) => {}
+                            Ok(_) | Err(RecordDefect::Missing | RecordDefect::Replaced) => {}
                             Err(defect) => return Err(format!("torn record: {defect:?}")),
                         }
                     }
@@ -1016,6 +1443,12 @@ mod tests {
             cache.lookup(&digest(1), NOW),
             CachedMediaToolVerification::Unverified
         );
+        // The fallback workspace parent is the private root itself, which is
+        // never swept.
+        assert_eq!(
+            cache.remove_stale_workspaces(NOW),
+            StaleWorkspaceSweep::Skipped
+        );
         Ok(())
     }
 
@@ -1034,5 +1467,567 @@ mod tests {
         ] {
             assert!(!is_pending_name(&name), "{name}");
         }
+    }
+
+    fn open_record(state: &Dir) -> std::io::Result<File> {
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        state.open_with(RECORD_FILE, &options)
+    }
+
+    fn fingerprints(record: &StoredRecord) -> Vec<String> {
+        record
+            .entries
+            .iter()
+            .map(|entry| entry.fingerprint.clone())
+            .collect()
+    }
+
+    /// Issue #136, deterministically: a reader that opened the record before a
+    /// writer renamed a new one over it holds an unlinked file. That is a
+    /// replacement to retry, not an unsafe record.
+    #[test]
+    fn a_record_replaced_after_it_was_opened_is_reread_not_rejected() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let state = cache_state(&cache)?;
+        assert_eq!(
+            cache.record_verified(&digest(1), NOW),
+            VerificationRecord::Recorded
+        );
+        let replaced = open_record(&state)?;
+        let reread_later = open_record(&state)?;
+
+        assert_eq!(
+            cache.record_verified(&digest(2), NOW),
+            VerificationRecord::Recorded
+        );
+
+        // The old handle alone reports the replacement.
+        assert_eq!(
+            read_record_with(|| reread_later.try_clone()).err(),
+            Some(RecordDefect::Replaced)
+        );
+        // With the retry, the next open reads the complete new record.
+        let mut handles = vec![replaced].into_iter();
+        let mut opens = 0;
+        let record = read_record_with(|| {
+            opens += 1;
+            handles.next().map_or_else(|| open_record(&state), Ok)
+        })
+        .map_err(|defect| std::io::Error::other(format!("{defect:?}")))?;
+        assert_eq!(opens, 2);
+        assert_eq!(
+            fingerprints(&record),
+            [hex(digest(2).digest()), hex(digest(1).digest())]
+        );
+        assert_eq!(
+            cache.lookup(&digest(2), NOW),
+            CachedMediaToolVerification::Verified
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_replacement_in_the_way_of_every_attempt_reads_as_unverified() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let state = cache_state(&cache)?;
+        assert_eq!(
+            cache.record_verified(&digest(1), NOW),
+            VerificationRecord::Recorded
+        );
+        let mut replaced_handles = (0..=MAX_RECORD_READ_ATTEMPTS)
+            .map(|_| open_record(&state))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter();
+        assert_eq!(
+            cache.record_verified(&digest(2), NOW),
+            VerificationRecord::Recorded
+        );
+
+        let mut opens = 0;
+        let outcome = read_record_with(|| {
+            opens += 1;
+            replaced_handles
+                .next()
+                .ok_or_else(|| std::io::Error::other("no replaced handle left"))
+        });
+
+        assert_eq!(outcome.err(), Some(RecordDefect::Replaced));
+        assert_eq!(opens, MAX_RECORD_READ_ATTEMPTS, "retries are bounded");
+        Ok(())
+    }
+
+    #[test]
+    fn open_failures_and_link_counts_are_classified() {
+        assert_eq!(
+            classify_open_error(&std::io::Error::from(std::io::ErrorKind::NotFound)),
+            RecordDefect::Missing
+        );
+        for other in [
+            std::io::Error::other("unexpected"),
+            std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        ] {
+            assert_eq!(classify_open_error(&other), RecordDefect::Unsafe);
+        }
+        // Windows refuses opens of a name whose previous file is pending
+        // deletion: access denied, sharing violation or delete pending.
+        #[cfg(windows)]
+        for code in [5, 32, 303] {
+            assert_eq!(
+                classify_open_error(&std::io::Error::from_raw_os_error(code)),
+                RecordDefect::Replaced,
+                "{code}"
+            );
+        }
+        assert_eq!(check_link_count(0), Err(RecordDefect::Replaced));
+        assert_eq!(check_link_count(1), Ok(()));
+        assert_eq!(check_link_count(2), Err(RecordDefect::Unsafe));
+    }
+
+    /// A flush that fails where the write succeeded (macOS `F_FULLFSYNC` on
+    /// some volumes) must not skip the pass: the record stays strict either way.
+    #[test]
+    fn a_failed_flush_still_records_the_pass() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let state = cache_state(&cache)?;
+        let record = StoredRecord {
+            schema_version: SCHEMA_VERSION,
+            entries: vec![StoredPass {
+                fingerprint: hex(digest(7).digest()),
+                verified_at_unix_seconds: NOW,
+            }],
+        };
+
+        assert_eq!(
+            write_record(&state, &record, |_| Err(std::io::Error::other(
+                "flush unsupported"
+            ))),
+            Ok(())
+        );
+
+        assert_eq!(
+            cache.lookup(&digest(7), NOW),
+            CachedMediaToolVerification::Verified
+        );
+        assert!(
+            state_entries(&parent)?
+                .iter()
+                .all(|name| !is_pending_name(name))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn only_a_held_lock_is_reported_busy() {
+        assert_eq!(
+            RecordWriteFailure::Busy.skip(),
+            VerificationRecordSkip::Busy
+        );
+        for failure in [
+            RecordWriteFailure::Lock(LockFailure::Shape {
+                regular_file: true,
+                links: 2,
+            }),
+            RecordWriteFailure::Encode,
+            RecordWriteFailure::Randomness,
+            RecordWriteFailure::Pending,
+            RecordWriteFailure::Replace,
+        ] {
+            assert_eq!(failure.skip(), VerificationRecordSkip::Unavailable);
+        }
+    }
+
+    fn cause(kind: std::io::ErrorKind) -> IoCause {
+        IoCause::of(&std::io::Error::from(kind))
+    }
+
+    /// Opens the real lock file of `parent`, as the writer does.
+    fn lock_file(parent: &Parent) -> Result<fs::File, LockFailure> {
+        fs::File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(parent.state().join(LOCK_FILE))
+            .map_err(|error| LockFailure::Open(IoCause::of(&error)))
+    }
+
+    fn outcome_name(outcome: &Result<HeldFileLock, RecordWriteFailure>) -> String {
+        match outcome {
+            Ok(_) => String::from("acquired"),
+            Err(failure) => format!("{failure:?}"),
+        }
+    }
+
+    /// Issue #136 on macOS: a writer reported a non-busy failure while taking
+    /// the record lock. Failures a concurrent writer causes for an instant are
+    /// retried a bounded number of times; everything else keeps its precise
+    /// cause, and nothing but a holder is ever reported as busy.
+    #[test]
+    fn transient_lock_failures_are_retried_and_others_keep_their_cause() -> TestResult {
+        let parent = Parent::new()?;
+        let _ = parent.cache()?;
+
+        // The lock file being created by another writer at the same moment.
+        for transient in [
+            LockFailure::Open(cause(std::io::ErrorKind::AlreadyExists)),
+            LockFailure::Open(cause(std::io::ErrorKind::NotFound)),
+            LockFailure::Open(cause(std::io::ErrorKind::Interrupted)),
+            LockFailure::Inspect(cause(std::io::ErrorKind::Interrupted)),
+            LockFailure::Shape {
+                regular_file: true,
+                links: 0,
+            },
+        ] {
+            let mut opens = 0;
+            let outcome = acquire_record_lock_with(
+                || {
+                    opens += 1;
+                    if opens == 1 {
+                        Err(transient)
+                    } else {
+                        lock_file(&parent)
+                    }
+                },
+                HeldFileLock::try_exclusive,
+            );
+            assert_eq!(outcome_name(&outcome), "acquired", "{transient:?}");
+            assert_eq!(opens, 2, "{transient:?}");
+        }
+
+        // A transient failure that persists is reported with its cause.
+        let mut opens = 0;
+        let persistent = LockFailure::Open(cause(std::io::ErrorKind::AlreadyExists));
+        let outcome = acquire_record_lock_with(
+            || {
+                opens += 1;
+                Err(persistent)
+            },
+            HeldFileLock::try_exclusive,
+        );
+        assert_eq!(outcome.err(), Some(RecordWriteFailure::Lock(persistent)));
+        assert_eq!(opens, MAX_LOCK_ATTEMPTS, "retries are bounded");
+
+        // Final failures are reported at once, never as busy.
+        for final_failure in [
+            LockFailure::Open(IoCause::of(&std::io::Error::from_raw_os_error(24))),
+            LockFailure::Open(cause(std::io::ErrorKind::PermissionDenied)),
+            LockFailure::Shape {
+                regular_file: true,
+                links: 2,
+            },
+            LockFailure::Shape {
+                regular_file: false,
+                links: 1,
+            },
+        ] {
+            let mut opens = 0;
+            let outcome = acquire_record_lock_with(
+                || {
+                    opens += 1;
+                    Err(final_failure)
+                },
+                HeldFileLock::try_exclusive,
+            );
+            assert_eq!(outcome.err(), Some(RecordWriteFailure::Lock(final_failure)));
+            assert_eq!(opens, 1, "{final_failure:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn refused_lock_calls_are_retried_and_only_holders_are_busy() -> TestResult {
+        let parent = Parent::new()?;
+        let _ = parent.cache()?;
+
+        // An interrupted lock call is retried; a refused one keeps its code.
+        let mut locks = 0;
+        let outcome = acquire_record_lock_with(
+            || lock_file(&parent),
+            |file| {
+                locks += 1;
+                if locks == 1 {
+                    Err(fs::TryLockError::Error(std::io::Error::from(
+                        std::io::ErrorKind::Interrupted,
+                    )))
+                } else {
+                    HeldFileLock::try_exclusive(file)
+                }
+            },
+        );
+        assert_eq!(outcome_name(&outcome), "acquired");
+        drop(outcome);
+        // A lock that keeps being refused (for example ENOLCK) is retried a
+        // bounded number of times, then reported with its raw code.
+        let refused = std::io::Error::from_raw_os_error(77);
+        let expected = LockFailure::Acquire(IoCause::of(&refused));
+        let mut locks = 0;
+        let outcome = acquire_record_lock_with(
+            || lock_file(&parent),
+            |_| {
+                locks += 1;
+                Err(fs::TryLockError::Error(std::io::Error::from_raw_os_error(
+                    77,
+                )))
+            },
+        );
+        assert_eq!(outcome.err(), Some(RecordWriteFailure::Lock(expected)));
+        assert_eq!(locks, MAX_LOCK_ATTEMPTS);
+
+        // A holder is busy at once, however std reports it.
+        for held in [
+            fs::TryLockError::WouldBlock,
+            fs::TryLockError::Error(std::io::Error::from(std::io::ErrorKind::WouldBlock)),
+        ] {
+            let mut slot = Some(held);
+            let outcome = acquire_record_lock_with(
+                || lock_file(&parent),
+                |_| Err(slot.take().unwrap_or(fs::TryLockError::WouldBlock)),
+            );
+            assert_eq!(outcome.err(), Some(RecordWriteFailure::Busy));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_hard_linked_lock_file_is_refused_with_its_shape_never_as_busy() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let state = cache_state(&cache)?;
+        let outside = parent.0.join("outside.lock");
+        fs::write(&outside, b"")?;
+        fs::hard_link(&outside, parent.state().join(LOCK_FILE))?;
+
+        assert_eq!(
+            record_pass(&state, &hex(digest(1).digest()), NOW).err(),
+            Some(RecordWriteFailure::Lock(LockFailure::Shape {
+                regular_file: true,
+                links: 2,
+            }))
+        );
+        assert_eq!(
+            cache.record_verified(&digest(1), NOW),
+            VerificationRecord::Skipped(VerificationRecordSkip::Unavailable)
+        );
+        assert_eq!(
+            cache.remove_stale_workspaces(NOW),
+            StaleWorkspaceSweep::Skipped
+        );
+        assert_eq!(check_lock_shape(true, 1), Ok(()));
+        Ok(())
+    }
+
+    const LEFTOVER: &str = "vsift-tool-verification-0123456789abcdef";
+    const UNLOCKED: &str = "vsift-tool-verification-1111111111111111";
+    const LIVE: &str = "vsift-tool-verification-2222222222222222";
+
+    fn real_now() -> Result<u64, Box<dyn Error>> {
+        Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
+    }
+
+    /// A leftover workspace as a killed verification leaves it.
+    fn leftover(parent: &Parent, name: &str) -> Result<PathBuf, Box<dyn Error>> {
+        let workspace = parent.state().join(name);
+        fs::create_dir(&workspace)?;
+        fs::write(workspace.join("F01.mp4"), b"fixture")?;
+        fs::create_dir(workspace.join("store"))?;
+        fs::write(workspace.join("store").join("marker"), b"session")?;
+        Ok(workspace)
+    }
+
+    fn with_lock_file(workspace: &Path) -> Result<fs::File, Box<dyn Error>> {
+        Ok(fs::File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(workspace.join(WORKSPACE_LOCK_FILE))?)
+    }
+
+    /// Issue #132: leftovers are removed; live workspaces, look-alikes and
+    /// everything else in the state directory are kept.
+    #[test]
+    fn stale_leftover_workspaces_are_removed_and_nothing_else() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        assert_eq!(
+            cache.record_verified(&digest(1), NOW),
+            VerificationRecord::Recorded
+        );
+        let lockless = leftover(&parent, LEFTOVER)?;
+        let unlocked = leftover(&parent, UNLOCKED)?;
+        drop(with_lock_file(&unlocked)?);
+        let live = leftover(&parent, LIVE)?;
+        let held = HeldFileLock::try_exclusive(with_lock_file(&live)?)
+            .map_err(|_| std::io::Error::other("lock unavailable"))?;
+        let lookalikes = [
+            "vsift-tool-verification-ABCDEF0123456789",
+            "vsift-tool-verification-0123",
+            "vsift-tool-verification-0123456789abcdef0",
+            "vsift-tool-verification-test",
+            "other",
+        ];
+        for name in lookalikes {
+            leftover(&parent, name)?;
+        }
+        let file_named_like_a_workspace = parent
+            .state()
+            .join("vsift-tool-verification-3333333333333333");
+        fs::write(&file_named_like_a_workspace, b"not a directory")?;
+        // A hard link inside a leftover is removed as a link; its target stays.
+        let outside = parent.0.join("outside-evidence");
+        fs::write(&outside, b"keep me")?;
+        fs::hard_link(&outside, lockless.join("linked"))?;
+
+        let later = real_now()? + STALE_VERIFICATION_WORKSPACE_AGE_SECONDS + 60;
+        assert_eq!(
+            cache.remove_stale_workspaces(later),
+            StaleWorkspaceSweep::Completed { removed: 2 }
+        );
+
+        assert!(!lockless.exists());
+        assert!(!unlocked.exists());
+        assert!(
+            live.join("store").join("marker").is_file(),
+            "live workspace removed"
+        );
+        for name in lookalikes {
+            assert!(
+                parent.state().join(name).join("F01.mp4").is_file(),
+                "{name}"
+            );
+        }
+        assert!(file_named_like_a_workspace.is_file());
+        assert_eq!(fs::read(&outside)?, b"keep me");
+        assert_eq!(
+            cache.lookup(&digest(1), NOW),
+            CachedMediaToolVerification::Verified,
+            "the record was disturbed"
+        );
+
+        // Once its verification has ended, the workspace is a leftover too.
+        held.release()?;
+        assert_eq!(
+            cache.remove_stale_workspaces(later),
+            StaleWorkspaceSweep::Completed { removed: 1 }
+        );
+        assert!(!live.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn recent_workspaces_are_kept_until_they_age() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let created = real_now()?;
+        let workspace = leftover(&parent, LEFTOVER)?;
+
+        for now in [
+            created,
+            created + STALE_VERIFICATION_WORKSPACE_AGE_SECONDS - 1,
+            // A modification time ahead of the clock is never old.
+            created - STALE_VERIFICATION_WORKSPACE_AGE_SECONDS,
+        ] {
+            assert_eq!(
+                cache.remove_stale_workspaces(now),
+                StaleWorkspaceSweep::Completed { removed: 0 },
+                "{now}"
+            );
+            assert!(workspace.is_dir());
+        }
+
+        assert_eq!(
+            cache.remove_stale_workspaces(created + STALE_VERIFICATION_WORKSPACE_AGE_SECONDS + 5),
+            StaleWorkspaceSweep::Completed { removed: 1 }
+        );
+        assert!(!workspace.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn a_sweep_never_waits_for_the_record_lock_and_is_bounded() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let total = MAX_REMOVED_VERIFICATION_WORKSPACES + 2;
+        for index in 0..total {
+            leftover(&parent, &format!("vsift-tool-verification-{index:016x}"))?;
+        }
+        let later = real_now()? + STALE_VERIFICATION_WORKSPACE_AGE_SECONDS + 60;
+        let lock_file = fs::File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(parent.state().join(LOCK_FILE))?;
+        let held = HeldFileLock::try_exclusive(lock_file)
+            .map_err(|_| std::io::Error::other("lock unavailable"))?;
+
+        assert_eq!(
+            cache.remove_stale_workspaces(later),
+            StaleWorkspaceSweep::Skipped
+        );
+        held.release()?;
+        assert_eq!(
+            cache.remove_stale_workspaces(later),
+            StaleWorkspaceSweep::Completed {
+                removed: MAX_REMOVED_VERIFICATION_WORKSPACES
+            }
+        );
+        assert_eq!(
+            cache.remove_stale_workspaces(later),
+            StaleWorkspaceSweep::Completed { removed: 2 }
+        );
+        assert_eq!(state_entries(&parent)?, [LOCK_FILE.to_owned()]);
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn links_named_or_nested_like_workspaces_are_never_followed() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let outside = parent.0.join("outside");
+        fs::create_dir(&outside)?;
+        fs::write(outside.join("evidence"), b"keep me")?;
+        std::os::unix::fs::symlink(&outside, parent.state().join(LEFTOVER))?;
+        let workspace = leftover(&parent, UNLOCKED)?;
+        std::os::unix::fs::symlink(&outside, workspace.join("escape"))?;
+
+        let later = real_now()? + STALE_VERIFICATION_WORKSPACE_AGE_SECONDS + 60;
+        assert_eq!(
+            cache.remove_stale_workspaces(later),
+            StaleWorkspaceSweep::Completed { removed: 1 }
+        );
+
+        assert!(!workspace.exists());
+        assert!(
+            fs::symlink_metadata(parent.state().join(LEFTOVER))?
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read(outside.join("evidence"))?, b"keep me");
+        Ok(())
+    }
+
+    /// A workspace made by a running verification is never swept, however old
+    /// the clock says it is.
+    #[test]
+    fn a_live_verification_workspace_is_never_swept() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let workspace = VerificationWorkspace::create(cache.workspace_parent())?;
+        let path = workspace.path().to_path_buf();
+        let later = real_now()? + 10 * STALE_VERIFICATION_WORKSPACE_AGE_SECONDS;
+
+        assert_eq!(
+            cache.remove_stale_workspaces(later),
+            StaleWorkspaceSweep::Completed { removed: 0 }
+        );
+        assert!(path.join(WORKSPACE_LOCK_FILE).is_file());
+
+        drop(workspace);
+        assert!(!path.exists());
+        Ok(())
     }
 }
