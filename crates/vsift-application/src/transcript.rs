@@ -12,10 +12,10 @@ use std::{error::Error, fmt, future::Future, num::NonZeroU32};
 use sha2::{Digest, Sha256};
 use vsift_domain::{
     Confidence, CursorError, CursorToken, MediaTime, PageLimit, ParsedTranscript, QueryDigest,
-    SessionId, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId, TimeRange,
-    TranscriptImportError, TranscriptOffset, TranscriptRevision, TranscriptRevisionError,
-    TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentId,
-    TranscriptSegmentParts, align_imported_cues,
+    SegmentOrigin, SessionId, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId, TimeRange,
+    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRevision,
+    TranscriptRevisionError, TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment,
+    TranscriptSegmentId, TranscriptSegmentParts, align_imported_cues,
 };
 
 const IDENTITY_HEX_LENGTH: usize = 32;
@@ -215,8 +215,10 @@ pub fn build_imported_revision(
             text: aligned.cue.text,
             speaker: aligned.cue.speaker,
             confidence: Confidence::unknown(),
-            cue: aligned.cue.source,
-            cue_timing: aligned.cue.timing,
+            origin: SegmentOrigin::ImportedCue {
+                cue: aligned.cue.source,
+                timing: aligned.cue.timing,
+            },
         }));
     }
     TranscriptRevision::new(TranscriptRevisionParts {
@@ -224,9 +226,13 @@ pub fn build_imported_revision(
         number: request.number,
         source_id: request.source_id.clone(),
         source_segment,
-        origin: transcript.format().alignment_origin(),
-        offset: request.offset,
-        sidecar: request.supplied.sidecar.clone(),
+        provenance: TranscriptProvenance::Imported {
+            format: transcript.format(),
+            sidecar: request.supplied.sidecar.clone(),
+            offset: request.offset,
+        },
+        supersedes: None,
+        replaced_range: None,
         language: transcript.language().cloned(),
         segments,
         warnings,
@@ -501,6 +507,43 @@ mod tests {
             other_session.source_segment().id()
         );
         assert_ne!(first.segments()[0].id(), first.segments()[1].id());
+        Ok(())
+    }
+
+    /// Imports keep the identities they had before local ASR generalised the
+    /// revision; these values were produced at `9dad79e` from the same inputs.
+    #[test]
+    fn import_identities_are_unchanged_by_local_asr() -> TestResult {
+        let supplied = supplied(3)?;
+        let revision = build_imported_revision(ImportedRevisionRequest {
+            session_id: &session("0123456789abcdef")?,
+            source_id: &SourceId::from_sha256(DIGEST)?,
+            source_duration: MediaTime::from_micros(60_000_000),
+            supplied: &supplied,
+            offset: TranscriptOffset::from_micros(-250_000)?,
+            number: NonZeroU32::new(2).ok_or("zero")?,
+        })?;
+        assert_eq!(
+            revision.id().as_str(),
+            "trv_ea4a6b5614be9356a5daafc1890b41d9"
+        );
+        assert_eq!(
+            revision.source_segment().id().as_str(),
+            "sgm_02f1ec5104b39a416aa8182970f01c81"
+        );
+        let segments: Vec<&str> = revision
+            .segments()
+            .iter()
+            .map(|segment| segment.id().as_str())
+            .collect();
+        assert_eq!(
+            segments,
+            [
+                "tsg_68a55109af1c26447a71653ebf333eb5",
+                "tsg_75678973319a6b1132c1176788ae52dd",
+                "tsg_49c33566f7c37a138f67ce1941e7f561",
+            ]
+        );
         Ok(())
     }
 
