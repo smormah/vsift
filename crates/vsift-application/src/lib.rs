@@ -41,7 +41,10 @@ pub use transcript::{
     transcript_query_digest, transcript_segment_id, whole_file_source_segment,
 };
 pub use verification::{
-    MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier, ModelVerification,
+    CachedMediaToolVerification, MediaToolCheck, MediaToolFailure, MediaToolFingerprint,
+    MediaToolPreflightFailure, MediaToolPreflightOutcome, MediaToolVerification,
+    MediaToolVerificationCache, MediaToolVerifier, ModelVerification, VerificationRecord,
+    VerificationRecordSkip, preflight_media_tools,
 };
 
 /// Port used to inspect one specialist runtime dependency.

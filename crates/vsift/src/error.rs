@@ -9,8 +9,9 @@
 use std::{error::Error, fmt};
 
 use vsift_application::{
-    ClockError, IdentifierGenerationError, OpenSessionError, PlanAcceptanceError,
-    SessionStorageError, SourceProbeError, TranscriptQueryError,
+    ClockError, IdentifierGenerationError, MediaToolFailure, MediaToolPreflightFailure,
+    OpenSessionError, PlanAcceptanceError, SessionStorageError, SourceProbeError,
+    TranscriptQueryError,
 };
 use vsift_domain::{FailureCode, RuntimeDependency, TranscriptImportError};
 use vsift_infrastructure::{
@@ -68,6 +69,9 @@ pub enum EngineError {
     Clock(ClockError),
     /// The injected identifier source could not issue a fresh identifier.
     Identifier(IdentifierGenerationError),
+    /// The automatic preflight could not verify the selected `FFmpeg` and
+    /// `FFprobe` before the first media stage, so nothing was written.
+    MediaToolVerificationFailed(MediaToolPreflightFailure),
 }
 
 impl EngineError {
@@ -119,6 +123,9 @@ impl EngineError {
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
             | Self::Identifier(_) => FailureCode::Internal,
+            Self::MediaToolVerificationFailed(failure) => {
+                media_tool_verification_failure_code(failure.failure)
+            }
         }
     }
 }
@@ -146,6 +153,37 @@ impl EngineError {
             Self::MediaToolUnavailable(dependency) => Some(*dependency),
             _ => None,
         }
+    }
+
+    /// The check and reason that stopped the automatic media-tool preflight.
+    ///
+    /// Hosts use it to tell the caller which check failed and how to select
+    /// working tools; the operation wrote nothing.
+    #[must_use]
+    pub const fn media_tool_verification_failure(&self) -> Option<MediaToolPreflightFailure> {
+        match self {
+            Self::MediaToolVerificationFailed(failure) => Some(*failure),
+            _ => None,
+        }
+    }
+}
+
+/// Public code for a failed media-tool preflight.
+///
+/// A tool that cannot be started, rejects the reviewed fixture, floods its
+/// output or returns wrong results means no working media capability is
+/// available. A workspace that cannot be prepared is local storage, a deadline
+/// is a deadline, and a corrupt embedded fixture is a defect in this build.
+const fn media_tool_verification_failure_code(failure: MediaToolFailure) -> FailureCode {
+    match failure {
+        MediaToolFailure::ProcessFailure
+        | MediaToolFailure::ProviderRejected
+        | MediaToolFailure::OutputLimit
+        | MediaToolFailure::UnexpectedResult => FailureCode::MissingCapability,
+        MediaToolFailure::Workspace => FailureCode::StorageIo,
+        MediaToolFailure::Deadline => FailureCode::DeadlineExceeded,
+        MediaToolFailure::Cancelled => FailureCode::Cancelled,
+        MediaToolFailure::FixtureIntegrity => FailureCode::Internal,
     }
 }
 
@@ -197,6 +235,12 @@ impl fmt::Display for EngineError {
             }
             Self::Clock(error) => error.fmt(formatter),
             Self::Identifier(error) => error.fmt(formatter),
+            Self::MediaToolVerificationFailed(failure) => write!(
+                formatter,
+                "selected FFmpeg and FFprobe failed verification at the {} check ({})",
+                failure.check.identifier(),
+                failure.failure.identifier()
+            ),
         }
     }
 }
@@ -216,6 +260,7 @@ impl Error for EngineError {
             Self::TranscriptQuery(error) => Some(error),
             Self::WorkingDirectoryUnavailable
             | Self::MediaToolUnavailable(_)
+            | Self::MediaToolVerificationFailed(_)
             | Self::TranscriptUnavailable
             | Self::InvalidTimeRange
             | Self::InvalidPageLimit
@@ -592,6 +637,42 @@ mod tests {
                 EngineError::SessionRoot(SessionRootError::from(error)).failure_code(),
                 code
             );
+        }
+    }
+
+    #[test]
+    fn media_tool_preflight_failures_map_by_reason() {
+        use vsift_application::{MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure};
+
+        for (failure, code) in [
+            (
+                MediaToolFailure::ProcessFailure,
+                FailureCode::MissingCapability,
+            ),
+            (
+                MediaToolFailure::ProviderRejected,
+                FailureCode::MissingCapability,
+            ),
+            (
+                MediaToolFailure::OutputLimit,
+                FailureCode::MissingCapability,
+            ),
+            (
+                MediaToolFailure::UnexpectedResult,
+                FailureCode::MissingCapability,
+            ),
+            (MediaToolFailure::Workspace, FailureCode::StorageIo),
+            (MediaToolFailure::Deadline, FailureCode::DeadlineExceeded),
+            (MediaToolFailure::Cancelled, FailureCode::Cancelled),
+            (MediaToolFailure::FixtureIntegrity, FailureCode::Internal),
+        ] {
+            let preflight = MediaToolPreflightFailure {
+                check: MediaToolCheck::Probe,
+                failure,
+            };
+            let error = EngineError::MediaToolVerificationFailed(preflight);
+            assert_eq!(error.failure_code(), code);
+            assert_eq!(error.media_tool_verification_failure(), Some(preflight));
         }
     }
 

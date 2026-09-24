@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use vsift_domain::RuntimeDependency;
 
 use crate::{
-    ExplicitProbePaths, TrustedExecutable,
+    ExplicitProbePaths, FilesystemMediaToolVerificationCache, TrustedExecutable,
     file_lock::HeldFileLock,
     private_user_root::{PrivateRootError, open_private_root},
 };
@@ -180,6 +180,30 @@ impl UserDependencyConfigStore {
             return Err(UserDependencyConfigError::InvalidModel);
         }
         self.update_record(|record| record.model = Some(selected))
+    }
+
+    /// Opens the private media-tool verification state kept beside the
+    /// selections, creating the per-user root and the state directory when
+    /// missing.
+    ///
+    /// The state holds only fingerprints of verified tool setups and the parent
+    /// directory for short-lived verification workspaces; it never holds media.
+    /// A state directory that cannot be used safely only disables recording.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the per-user root itself is unavailable or unsafe, because
+    /// verification then has no private place to run.
+    pub fn media_tool_verification_state(
+        &self,
+    ) -> Result<FilesystemMediaToolVerificationCache, UserDependencyConfigError> {
+        let root = self
+            .open_root(true)?
+            .ok_or(UserDependencyConfigError::Unavailable)?;
+        Ok(FilesystemMediaToolVerificationCache::open(
+            &root,
+            &self.root_path,
+        ))
     }
 
     fn update_record(

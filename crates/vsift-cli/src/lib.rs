@@ -25,7 +25,7 @@ use vsift::{
 use vsift_contract::{
     CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, OperationResponse, TerminalEventResponse,
-    transcript_rejection_summary,
+    media_tool_verification_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -390,6 +390,11 @@ impl From<EngineError> for CommandFailure {
                 error
                     .missing_media_tool()
                     .map(|_| MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION.to_owned())
+            })
+            .or_else(|| {
+                error
+                    .media_tool_verification_failure()
+                    .map(media_tool_verification_summary)
             });
         Self {
             code: error.failure_code(),

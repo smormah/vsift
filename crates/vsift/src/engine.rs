@@ -2,10 +2,12 @@
 
 use std::{
     env,
+    future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
 };
 
-use vsift_application::{Clock, IdentifierSource};
+use vsift_application::{Clock, IdentifierSource, MediaToolVerification, MediaToolVerifier};
 use vsift_domain::{OperationId, SessionId};
 use vsift_infrastructure::{
     FilesystemSessionStore, RandomIdentifierSource, SessionRootProvisioning, SystemClock,
@@ -68,11 +70,12 @@ pub struct EngineConfig {
     pub host_isolation: HostIsolation,
 }
 
-/// Time and identity ports the engine uses for every decision that would
-/// otherwise read ambient process state.
+/// Time, identity and verification ports the engine uses for every decision
+/// that would otherwise read ambient process state or run the reviewed fixture.
 pub struct EnginePorts {
     clock: Box<dyn Clock>,
     identifiers: Box<dyn IdentifierSource>,
+    media_tool_verifier: Option<Box<dyn HostMediaToolVerifier>>,
 }
 
 impl EnginePorts {
@@ -85,7 +88,23 @@ impl EnginePorts {
         Self {
             clock: Box::new(clock),
             identifiers: Box::new(identifiers),
+            media_tool_verifier: None,
         }
+    }
+
+    /// Replaces the reviewed fixture verifier that the automatic media-tool
+    /// preflight runs.
+    ///
+    /// The tools are still resolved and fingerprinted as usual, but a pass from
+    /// a host-supplied verifier is recorded under a separate identity, so it
+    /// never stands in for the reviewed fixture check of an engine built
+    /// without one. Intended for tests and for hosts with their own
+    /// verification authority; a verifier that always passes disables the
+    /// protection the preflight gives.
+    #[must_use]
+    pub fn with_media_tool_verifier(mut self, verifier: impl MediaToolVerifier + 'static) -> Self {
+        self.media_tool_verifier = Some(Box::new(verifier));
+        self
     }
 
     /// Uses the operating-system clock and unguessable random identifiers.
@@ -134,6 +153,11 @@ impl Engine {
         Ok(self.ports.identifiers.operation_id()?)
     }
 
+    /// The host-supplied media-tool verifier, when one replaced the fixture.
+    pub(crate) fn host_media_tool_verifier(&self) -> Option<HostVerifier<'_>> {
+        self.ports.media_tool_verifier.as_deref().map(HostVerifier)
+    }
+
     pub(crate) fn session_root_path(&self) -> Result<PathBuf, EngineError> {
         match &self.config.session_root {
             SessionRootLocation::Explicit(path) if path.is_absolute() => Ok(path.clone()),
@@ -176,5 +200,32 @@ pub(crate) fn absolute_selection(path: &Path) -> Result<PathBuf, EngineError> {
         env::current_dir()
             .map(|working_directory| working_directory.join(path))
             .map_err(|_| EngineError::WorkingDirectoryUnavailable)
+    }
+}
+
+/// A future returned by a type-erased host verifier.
+type VerificationFuture<'a> = Pin<Box<dyn Future<Output = MediaToolVerification> + Send + 'a>>;
+
+/// Object-safe form of [`MediaToolVerifier`].
+///
+/// The application port returns `impl Future`, which cannot sit behind `dyn`,
+/// and `EnginePorts` must stay non-generic so hosts keep one engine type.
+/// Every verifier implements this through the blanket implementation.
+trait HostMediaToolVerifier: Send + Sync {
+    fn verify_boxed(&self) -> VerificationFuture<'_>;
+}
+
+impl<Verifier: MediaToolVerifier> HostMediaToolVerifier for Verifier {
+    fn verify_boxed(&self) -> VerificationFuture<'_> {
+        Box::pin(self.verify())
+    }
+}
+
+/// A borrowed host verifier presented through the application port again.
+pub(crate) struct HostVerifier<'a>(&'a dyn HostMediaToolVerifier);
+
+impl MediaToolVerifier for HostVerifier<'_> {
+    fn verify(&self) -> impl Future<Output = MediaToolVerification> + Send {
+        self.0.verify_boxed()
     }
 }

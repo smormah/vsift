@@ -376,21 +376,29 @@ impl Engine {
     /// The session root is provisioned on first use. Without a transcript no
     /// provider runs. With one, everything that can fail without touching the
     /// session root runs first (offset bounds, reading and parsing the sidecar,
-    /// locating `FFmpeg` and `FFprobe`); then the source is staged, its duration
-    /// probed, the transcript aligned, and source and transcript are committed
-    /// in one generation. Whisper and model weights are never needed for this.
+    /// locating `FFmpeg` and `FFprobe`, and the automatic media-tool preflight,
+    /// which verifies them once per tool identity); then the source is staged,
+    /// its duration probed, the transcript aligned, and source and transcript
+    /// are committed in one generation. Whisper and model weights are never
+    /// needed for this.
     ///
     /// # Errors
     ///
-    /// Fails with the transcript, tool, root, clock, identifier, source, probe
-    /// or storage failure that stopped the open. A rejected transcript never
-    /// leaves an open session.
+    /// Fails with the transcript, tool, verification, root, clock, identifier,
+    /// source, probe or storage failure that stopped the open. A rejected
+    /// transcript or a failed verification never leaves an open session, and a
+    /// failed verification happens before the session root is touched.
     pub async fn ingest(&self, request: IngestRequest) -> Result<IngestOutcome, EngineError> {
         let source = absolute_selection(&request.source)?;
         let import = match &request.transcript {
             Some(transcript) => Some(self.prepare_transcript_import(transcript)?),
             None => None,
         };
+        // Only the transcript path runs FFprobe on the source, so only it
+        // needs verified tools; a plain ingest runs no provider.
+        if let Some((_, tools)) = &import {
+            self.ensure_media_tools_verified(tools).await?;
+        }
         let root = self.session_root_path()?;
         let store = Self::open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;

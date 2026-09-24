@@ -31,6 +31,9 @@ names, not download locations, so validators map them to these local files. The
 examples `ingest.transcript.json`, `transcript-get.json` and
 `transcript-rejected.json` describe the F10 fixture imported from
 `fixtures/corpus/transcripts/F10.srt` with a +500 ms offset.
+`media-tool-verification-failed.json` is the `ingest` failure an agent receives when
+the automatic media-tool preflight fails (here FFmpeg selected as FFprobe, stopped at
+the probe check); it is checked by `vsift-contract`'s `media_tool_preflight_contract`.
 
 The Rust types that produce these documents live in the `vsift-contract` crate
 (`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.

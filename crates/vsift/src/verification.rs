@@ -1,16 +1,21 @@
-//! Functional verification of selected tools and identification of a
-//! registered speech model.
+//! Functional verification of selected tools, the automatic media-tool
+//! preflight, and identification of a registered speech model.
 //!
-//! These operations are exposed for hosts and for the P07 preflight that will
-//! run before the first media stage. No CLI command calls them yet.
+//! [`Engine::verify_media_tools`] and [`Engine::identify_model`] are exposed for
+//! hosts; no CLI command calls them. The preflight runs inside operations that
+//! use `FFmpeg`/`FFprobe` on user media, before their first media stage.
 
 use std::path::PathBuf;
 
-use vsift_application::{MediaToolVerification, MediaToolVerifier, ModelVerification};
+use vsift_application::{
+    MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure, MediaToolPreflightOutcome,
+    MediaToolVerification, MediaToolVerifier, ModelVerification, preflight_media_tools,
+};
 use vsift_domain::RuntimeDependency;
 use vsift_infrastructure::{
-    FixtureMediaToolVerifier, MediaProviderConformance, ProcessCancellation, TrustedExecutable,
-    pinned_whisper_model, reviewed_compatibility_policy, verify_model_file,
+    FixtureMediaToolVerifier, MediaProviderConformance, MediaToolVerificationAuthority,
+    ProcessCancellation, TrustedExecutable, media_tool_fingerprint, pinned_whisper_model,
+    reviewed_compatibility_policy, verify_model_file,
 };
 
 use crate::{
@@ -155,6 +160,59 @@ impl Engine {
         };
         let pinned = pinned_whisper_model().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
         Ok(verify_model_file(&path, pinned))
+    }
+
+    /// Ensures the resolved media tools are verified before an operation's
+    /// first media stage touches user media or the session root.
+    ///
+    /// A still-valid recorded pass for the same tool identity skips
+    /// verification; otherwise the reviewed fixture (or a host-supplied
+    /// verifier) runs in a private workspace under the per-user state
+    /// directory. Recording problems never fail the operation; they only mean
+    /// the next preflight verifies again.
+    pub(crate) async fn ensure_media_tools_verified(
+        &self,
+        tools: &MediaProviderConformance,
+    ) -> Result<MediaToolPreflightOutcome, EngineError> {
+        let policy =
+            reviewed_compatibility_policy().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        let now = self.now_unix_seconds()?;
+        let isolation = self.config().host_isolation.into_infrastructure();
+        // Without a private place to run, verification cannot run at all.
+        let state = self
+            .user_configuration()?
+            .media_tool_verification_state()
+            .map_err(|_| {
+                EngineError::MediaToolVerificationFailed(MediaToolPreflightFailure {
+                    check: MediaToolCheck::Preparation,
+                    failure: MediaToolFailure::Workspace,
+                })
+            })?;
+        let outcome = if let Some(verifier) = self.host_media_tool_verifier() {
+            let fingerprint = media_tool_fingerprint(
+                tools,
+                isolation,
+                &policy,
+                MediaToolVerificationAuthority::HostSupplied,
+            );
+            preflight_media_tools(&verifier, &state, fingerprint.as_ref(), now).await
+        } else {
+            let fingerprint = media_tool_fingerprint(
+                tools,
+                isolation,
+                &policy,
+                MediaToolVerificationAuthority::ReviewedFixture,
+            );
+            let verifier = FixtureMediaToolVerifier::new(
+                tools.clone(),
+                isolation,
+                state.workspace_parent().to_path_buf(),
+                policy,
+                ProcessCancellation::new(),
+            );
+            preflight_media_tools(&verifier, &state, fingerprint.as_ref(), now).await
+        };
+        outcome.map_err(EngineError::MediaToolVerificationFailed)
     }
 }
 

@@ -12,6 +12,7 @@ mod gzip_tar_inventory;
 mod managed_artifact_store;
 mod managed_catalogue;
 mod media_tool_verification;
+mod media_tool_verification_cache;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -65,6 +66,11 @@ pub use managed_catalogue::{
     reviewed_compatibility_policy,
 };
 pub use media_tool_verification::{FixtureMediaToolVerifier, verify_model_file};
+pub use media_tool_verification_cache::{
+    FilesystemMediaToolVerificationCache, MAX_MEDIA_TOOL_VERIFICATION_ENTRIES,
+    MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES, MEDIA_TOOL_VERIFICATION_MAX_AGE_SECONDS,
+    MEDIA_TOOL_VERIFICATION_PROFILE, MediaToolVerificationAuthority, media_tool_fingerprint,
+};
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{
     CapturedOutput, ControlStatus, DEFAULT_STREAM_LIMIT, EffectiveControls, HardIsolation,

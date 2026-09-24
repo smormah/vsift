@@ -3,8 +3,9 @@
 //! `setup check` only proves an executable responds to a version probe. The
 //! types here describe a stronger result: the selected tools processed a
 //! reviewed fixture through `VSift`'s real media pipeline and produced its
-//! recorded truth. Hosts call the port directly; a preflight will call it
-//! before the first media stage (ADR 0015, P06).
+//! recorded truth. Hosts call the port directly, and [`preflight_media_tools`]
+//! calls it before the first media stage of an operation, reusing a cached pass
+//! for an unchanged tool identity (ADR 0015).
 
 use std::future::Future;
 
@@ -100,6 +101,144 @@ pub trait MediaToolVerifier: Send + Sync {
     fn verify(&self) -> impl Future<Output = MediaToolVerification> + Send;
 }
 
+/// Identity of everything that makes one media-tool verification valid.
+///
+/// Infrastructure derives it from the executables' on-disk identity, the
+/// reviewed compatibility policy, the verification profile and the `VSift`
+/// version. The application only compares fingerprints, so it never needs to
+/// know which inputs were bound, and a cache that stores fingerprints stores
+/// digests rather than paths.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct MediaToolFingerprint([u8; 32]);
+
+impl MediaToolFingerprint {
+    /// Wraps a SHA-256 digest computed over the bound inputs.
+    #[must_use]
+    pub const fn from_digest(digest: [u8; 32]) -> Self {
+        Self(digest)
+    }
+
+    /// Returns the digest.
+    #[must_use]
+    pub const fn digest(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// Whether a cache holds a still-valid pass for one fingerprint.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CachedMediaToolVerification {
+    /// A pass for exactly this fingerprint is on record and has not aged out.
+    Verified,
+    /// No trustworthy pass is on record; the tools must be verified.
+    Unverified,
+}
+
+/// Why a passing verification was not recorded.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VerificationRecordSkip {
+    /// The tools' identity could not be read, so a pass could not be keyed.
+    IdentityUnavailable,
+    /// Another process held the cache lock; recording is never waited for.
+    Busy,
+    /// The cache storage could not be used safely.
+    Unavailable,
+}
+
+/// What happened when a passing verification was offered to the cache.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VerificationRecord {
+    /// The pass was recorded; the next preflight for the same identity is free.
+    Recorded,
+    /// The pass was not recorded; the next preflight verifies again.
+    Skipped(VerificationRecordSkip),
+}
+
+/// Port for the per-user record of media-tool setups that already passed.
+///
+/// Implementations fail closed: anything unreadable, corrupt, oversized,
+/// linked or otherwise untrustworthy is reported as
+/// [`CachedMediaToolVerification::Unverified`], and a pass that cannot be
+/// recorded is [`VerificationRecord::Skipped`]. Neither method returns an
+/// error because no cache failure may stop an operation; it only costs a later
+/// re-verification. Failures are never recorded.
+pub trait MediaToolVerificationCache: Send + Sync {
+    /// Reports whether a pass for `fingerprint` is on record and still valid at
+    /// `now_unix_seconds`.
+    fn lookup(
+        &self,
+        fingerprint: &MediaToolFingerprint,
+        now_unix_seconds: u64,
+    ) -> CachedMediaToolVerification;
+
+    /// Records that `fingerprint` passed verification at `now_unix_seconds`.
+    fn record_verified(
+        &self,
+        fingerprint: &MediaToolFingerprint,
+        now_unix_seconds: u64,
+    ) -> VerificationRecord;
+}
+
+/// How a preflight established that the selected media tools work.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MediaToolPreflightOutcome {
+    /// A still-valid pass for the same identity was on record; no tool ran.
+    AlreadyVerified,
+    /// Verification ran and passed; the record says whether it was cached.
+    VerifiedNow(VerificationRecord),
+}
+
+/// A preflight whose verification did not pass.
+///
+/// It names the check that stopped verification and the reason, so a caller
+/// can tell an unusable tool from an unusable workspace.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MediaToolPreflightFailure {
+    /// Operation that did not pass.
+    pub check: MediaToolCheck,
+    /// Reason it did not pass.
+    pub failure: MediaToolFailure,
+}
+
+/// Ensures the selected media tools are verified before a media stage runs.
+///
+/// A still-valid cached pass for `fingerprint` skips verification. Otherwise
+/// the verifier runs; a pass is offered to the cache and a failure is returned
+/// without being recorded. Without a fingerprint (the tools' identity could not
+/// be read) verification always runs and nothing is recorded, because a pass
+/// that cannot be keyed to an identity must not be reused.
+///
+/// # Errors
+///
+/// Returns the failed check and its reason when verification does not pass.
+pub async fn preflight_media_tools<V, C>(
+    verifier: &V,
+    cache: &C,
+    fingerprint: Option<&MediaToolFingerprint>,
+    now_unix_seconds: u64,
+) -> Result<MediaToolPreflightOutcome, MediaToolPreflightFailure>
+where
+    V: MediaToolVerifier,
+    C: MediaToolVerificationCache,
+{
+    if let Some(fingerprint) = fingerprint
+        && cache.lookup(fingerprint, now_unix_seconds) == CachedMediaToolVerification::Verified
+    {
+        return Ok(MediaToolPreflightOutcome::AlreadyVerified);
+    }
+    match verifier.verify().await {
+        MediaToolVerification::Verified => {
+            Ok(MediaToolPreflightOutcome::VerifiedNow(fingerprint.map_or(
+                VerificationRecord::Skipped(VerificationRecordSkip::IdentityUnavailable),
+                |fingerprint| cache.record_verified(fingerprint, now_unix_seconds),
+            )))
+        }
+        MediaToolVerification::Failed { check, failure } => {
+            Err(MediaToolPreflightFailure { check, failure })
+        }
+    }
+}
+
 /// Outcome of checking a registered speech model file.
 ///
 /// Only identity is checked. Whether the model transcribes with the selected
@@ -128,7 +267,166 @@ impl ModelVerification {
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaToolCheck, MediaToolFailure, MediaToolVerification, ModelVerification};
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::{
+        CachedMediaToolVerification, MediaToolCheck, MediaToolFailure, MediaToolFingerprint,
+        MediaToolPreflightFailure, MediaToolPreflightOutcome, MediaToolVerification,
+        MediaToolVerificationCache, MediaToolVerifier, ModelVerification, VerificationRecord,
+        VerificationRecordSkip, preflight_media_tools,
+    };
+
+    struct ScriptedVerifier {
+        result: MediaToolVerification,
+        calls: AtomicUsize,
+    }
+
+    impl ScriptedVerifier {
+        const fn new(result: MediaToolVerification) -> Self {
+            Self {
+                result,
+                calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn calls(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl MediaToolVerifier for ScriptedVerifier {
+        fn verify(&self) -> impl Future<Output = MediaToolVerification> + Send {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            std::future::ready(self.result)
+        }
+    }
+
+    /// An in-memory cache that honours a fixed record outcome.
+    struct MemoryCache {
+        passes: Mutex<Vec<(MediaToolFingerprint, u64)>>,
+        record_outcome: VerificationRecord,
+    }
+
+    impl MemoryCache {
+        const fn new(record_outcome: VerificationRecord) -> Self {
+            Self {
+                passes: Mutex::new(Vec::new()),
+                record_outcome,
+            }
+        }
+
+        fn recorded(&self) -> usize {
+            self.passes.lock().map_or(usize::MAX, |passes| passes.len())
+        }
+    }
+
+    impl MediaToolVerificationCache for MemoryCache {
+        fn lookup(
+            &self,
+            fingerprint: &MediaToolFingerprint,
+            _now_unix_seconds: u64,
+        ) -> CachedMediaToolVerification {
+            let known = self
+                .passes
+                .lock()
+                .is_ok_and(|passes| passes.iter().any(|(known, _)| known == fingerprint));
+            if known {
+                CachedMediaToolVerification::Verified
+            } else {
+                CachedMediaToolVerification::Unverified
+            }
+        }
+
+        fn record_verified(
+            &self,
+            fingerprint: &MediaToolFingerprint,
+            now_unix_seconds: u64,
+        ) -> VerificationRecord {
+            if self.record_outcome == VerificationRecord::Recorded
+                && let Ok(mut passes) = self.passes.lock()
+            {
+                passes.push((*fingerprint, now_unix_seconds));
+            }
+            self.record_outcome
+        }
+    }
+
+    const FIRST: MediaToolFingerprint = MediaToolFingerprint::from_digest([1; 32]);
+    const SECOND: MediaToolFingerprint = MediaToolFingerprint::from_digest([2; 32]);
+    const PROBE_FAILURE: MediaToolVerification = MediaToolVerification::Failed {
+        check: MediaToolCheck::Probe,
+        failure: MediaToolFailure::UnexpectedResult,
+    };
+
+    #[tokio::test]
+    async fn a_recorded_pass_is_reused_only_for_the_same_identity() {
+        let verifier = ScriptedVerifier::new(MediaToolVerification::Verified);
+        let cache = MemoryCache::new(VerificationRecord::Recorded);
+
+        let miss = preflight_media_tools(&verifier, &cache, Some(&FIRST), 10).await;
+        let hit = preflight_media_tools(&verifier, &cache, Some(&FIRST), 11).await;
+        let other = preflight_media_tools(&verifier, &cache, Some(&SECOND), 12).await;
+
+        assert_eq!(
+            miss,
+            Ok(MediaToolPreflightOutcome::VerifiedNow(
+                VerificationRecord::Recorded
+            ))
+        );
+        assert_eq!(hit, Ok(MediaToolPreflightOutcome::AlreadyVerified));
+        assert_eq!(
+            other,
+            Ok(MediaToolPreflightOutcome::VerifiedNow(
+                VerificationRecord::Recorded
+            ))
+        );
+        assert_eq!(verifier.calls(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_failed_verification_is_returned_and_never_recorded() {
+        let verifier = ScriptedVerifier::new(PROBE_FAILURE);
+        let cache = MemoryCache::new(VerificationRecord::Recorded);
+
+        for _ in 0..2 {
+            assert_eq!(
+                preflight_media_tools(&verifier, &cache, Some(&FIRST), 10).await,
+                Err(MediaToolPreflightFailure {
+                    check: MediaToolCheck::Probe,
+                    failure: MediaToolFailure::UnexpectedResult,
+                })
+            );
+        }
+        assert_eq!(verifier.calls(), 2);
+        assert_eq!(cache.recorded(), 0);
+    }
+
+    #[tokio::test]
+    async fn an_unkeyed_or_unrecorded_pass_verifies_every_time() {
+        let verifier = ScriptedVerifier::new(MediaToolVerification::Verified);
+        let recording = MemoryCache::new(VerificationRecord::Recorded);
+        let busy = MemoryCache::new(VerificationRecord::Skipped(VerificationRecordSkip::Busy));
+
+        for _ in 0..2 {
+            assert_eq!(
+                preflight_media_tools(&verifier, &recording, None, 10).await,
+                Ok(MediaToolPreflightOutcome::VerifiedNow(
+                    VerificationRecord::Skipped(VerificationRecordSkip::IdentityUnavailable)
+                ))
+            );
+            assert_eq!(
+                preflight_media_tools(&verifier, &busy, Some(&FIRST), 10).await,
+                Ok(MediaToolPreflightOutcome::VerifiedNow(
+                    VerificationRecord::Skipped(VerificationRecordSkip::Busy)
+                ))
+            );
+        }
+        assert_eq!(verifier.calls(), 4);
+        assert_eq!(recording.recorded(), 0);
+    }
 
     #[test]
     fn only_a_complete_pass_counts_as_verified() {

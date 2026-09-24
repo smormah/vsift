@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Automatic media-tool check: before `ingest --transcript` measures the video,
+  VSift runs its small built-in test video through the selected FFmpeg and FFprobe
+  and checks the results. It runs once per tool pair (about 1–2 seconds the first
+  time) and is repeated only when a tool is reinstalled, upgraded or reselected,
+  when VSift is updated, or after seven days. A pair that fails, such as FFmpeg
+  selected as FFprobe, stops the import before anything is written with
+  `MISSING_CAPABILITY` (or another typed code) and a remediation that names the
+  failed check and reason and says how to select working tools. The pass is kept
+  in the private per-user VSift directory as digests and times only; there is no
+  new command. Plain `ingest` and `setup` commands are unaffected.
 - Supplied transcript import: `vsift ingest <video> --transcript <file.srt|file.vtt>
   [--transcript-offset <signed microseconds>]` imports an existing SubRip or WebVTT
   transcript into the new disposable session. The video is measured with FFprobe and
@@ -29,9 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   It runs a small reviewed test video, built into VSift, through the same
   metadata, frame and audio steps an investigation uses and checks each result
   against the video's known answers. It can also identify whether a registered
-  Whisper model is the reviewed pinned model. Nothing new appears on the command
-  line yet: a later step runs this automatically before the first media
-  operation.
+  Whisper model is the reviewed pinned model. It now runs automatically before
+  the first media operation (see the media-tool check above).
 
 ### Changed
 

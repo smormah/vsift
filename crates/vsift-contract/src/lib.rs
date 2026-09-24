@@ -20,6 +20,8 @@
 //! - **Transcript:** [`TranscriptSegmentData`] (the published evidence
 //!   record), [`TranscriptRevisionData`], the `transcript.get` page
 //!   [`TranscriptPageData`], and fixed-prose import warnings and remediation.
+//! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
+//!   remediation for a failed automatic media-tool preflight.
 //! - **Text:** [`sanitize_untrusted_text`], the one rule for placing untrusted
 //!   provider text in public output.
 //!
@@ -40,6 +42,7 @@ mod session;
 mod setup;
 mod text;
 mod transcript;
+mod verification;
 
 pub use command::CommandName;
 pub use envelope::{
@@ -61,3 +64,4 @@ pub use transcript::{
     TranscriptRevisionData, TranscriptSegmentData, transcript_rejection_summary,
     transcript_warning_messages,
 };
+pub use verification::media_tool_verification_summary;
