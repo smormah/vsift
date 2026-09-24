@@ -1,0 +1,20 @@
+# P07 speech-fixture generation environment. Test tooling only: none of these
+# packages is a VSift runtime dependency, and none is shipped or vendored.
+# Reviewed in docs/planning/p07-speech-fixtures.md. Installed only on the disposable
+# runner of .github/workflows/p07-speech-fixtures.yml, after torch has been installed
+# from the PyTorch CPU index; the pip install reports record every resolved artifact
+# and its SHA-256 in fixtures/corpus/generated/speech-provenance.json.
+# The spaCy English pipeline wheel (en-core-web-sm 3.8.0) is fetched and size-checked
+# by `tools/generate_p07_speech.py fetch` and installed from that local file.
+# tools/generate_p07_speech.py (PINNED_DISTRIBUTIONS) must agree; a unit test checks it.
+espeakng-loader==0.2.4
+huggingface-hub==1.33.0
+kokoro==0.9.4
+misaki[en]==0.9.4
+num2words==0.5.14
+numpy==2.2.6
+phonemizer-fork==3.3.2
+spacy==3.8.7
+tokenizers==0.23.2
+torch==2.14.0
+transformers==5.17.0

@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Test fixtures tooling: `tools/generate_p07_speech.py` and the manually dispatched
+  `P07 speech fixtures` workflow generate speech variants of the synthetic corpus
+  videos from their frozen scripts, using the Kokoro text-to-speech model on a
+  disposable CI runner, and `tools/verify_p07_speech.py` checks them independently.
+  Kokoro is used only to make test data and is not a VSift dependency.
 - Evidence stream: `vsift transcript get ... --events jsonl` now writes one line per
   transcript segment, each a self-describing evidence event with the segment record
   and an upsert key (its `segment_id`), followed by exactly one terminal event that

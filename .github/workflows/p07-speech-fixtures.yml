@@ -1,0 +1,133 @@
+name: P07 speech fixtures
+
+on:
+  workflow_dispatch:
+
+# Generates speech test-fixture candidates on a disposable runner. Nothing is committed
+# from CI: the maintainer reviews the uploaded artifact and commits it in a pull request.
+# Kokoro, PyTorch and their dependencies are test tooling only (see
+# docs/planning/p07-speech-fixtures.md) and never reach a VSift build.
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out corpus truth and fixture tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Test the recipe and verifier without the model
+        run: python -m unittest discover -s tools -p test_p07_speech.py
+
+      - name: Download and extract the pinned P06 FFmpeg build
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd() / "tools"))
+          from p06_ubuntu_candidate_smoke import ARCHIVES, FFMPEG_SELECTED, extract_candidate
+          from p06_windows_candidate_smoke import verified_download
+
+          temporary = Path(os.environ["RUNNER_TEMP"])
+          url, size, digest = ARCHIVES["ffmpeg"]
+          archive = temporary / "p07-ffmpeg.tar.xz"
+          verified_download(url, archive, size, digest)
+          extract_candidate(archive, temporary / "p07-ffmpeg", FFMPEG_SELECTED, {})
+          archive.unlink()
+          PY
+
+      - name: Run the FFmpeg-backed recipe tests with the pinned build
+        env:
+          VSIFT_P07_FFMPEG: ${{ runner.temp }}/p07-ffmpeg/bin/ffmpeg
+          VSIFT_P07_FFPROBE: ${{ runner.temp }}/p07-ffmpeg/bin/ffprobe
+        run: python -m unittest discover -s tools -p test_p07_speech.py -v
+
+      - name: Fetch the pinned Kokoro revision, voices and spaCy English pipeline
+        run: python tools/generate_p07_speech.py fetch --assets "$RUNNER_TEMP/p07-assets"
+
+      - name: Install the pinned generation environment
+        run: |
+          python -m venv "$RUNNER_TEMP/p07-venv"
+          venv_python="$RUNNER_TEMP/p07-venv/bin/python"
+          mkdir -- "$RUNNER_TEMP/p07-environment"
+          "$venv_python" -m pip install --no-input --disable-pip-version-check \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --report "$RUNNER_TEMP/p07-environment/pip-report-torch.json" \
+            "torch==2.14.0+cpu"
+          "$venv_python" -m pip install --no-input --disable-pip-version-check \
+            --report "$RUNNER_TEMP/p07-environment/pip-report-requirements.json" \
+            -r tools/p07-speech-requirements.txt \
+            "$RUNNER_TEMP/p07-assets/wheels/en_core_web_sm-3.8.0-py3-none-any.whl"
+          "$venv_python" -m pip freeze --all > "$RUNNER_TEMP/p07-environment/pip-freeze.txt"
+          cp -- "$RUNNER_TEMP/p07-assets/fetch-record.json" "$RUNNER_TEMP/p07-environment/"
+
+      - name: Synthesize the frozen scripts offline
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: >-
+          "$RUNNER_TEMP/p07-venv/bin/python" tools/generate_p07_speech.py synthesize
+          --assets "$RUNNER_TEMP/p07-assets"
+          --output-dir "$RUNNER_TEMP/p07-speech"
+          --pip-report "$RUNNER_TEMP/p07-environment/pip-report-torch.json"
+          --pip-report "$RUNNER_TEMP/p07-environment/pip-report-requirements.json"
+
+      - name: Assemble the speech variants without PyTorch
+        run: >-
+          python tools/generate_p07_speech.py assemble
+          --output-dir "$RUNNER_TEMP/p07-speech"
+          --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
+
+      - name: Verify the speech variants independently
+        run: >-
+          python tools/verify_p07_speech.py
+          --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
+          --ffprobe "$RUNNER_TEMP/p07-ffmpeg/bin/ffprobe"
+          --generated-dir "$RUNNER_TEMP/p07-speech"
+
+      - name: Upload the speech fixtures for review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p07-speech-fixtures
+          path: ${{ runner.temp }}/p07-speech
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the resolved generation environment
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p07-speech-environment
+          path: ${{ runner.temp }}/p07-environment
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Regenerate and require identical bytes
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: |
+          "$RUNNER_TEMP/p07-venv/bin/python" tools/generate_p07_speech.py synthesize \
+            --assets "$RUNNER_TEMP/p07-assets" \
+            --output-dir "$RUNNER_TEMP/p07-speech-repeat" \
+            --pip-report "$RUNNER_TEMP/p07-environment/pip-report-torch.json" \
+            --pip-report "$RUNNER_TEMP/p07-environment/pip-report-requirements.json"
+          python tools/generate_p07_speech.py assemble \
+            --output-dir "$RUNNER_TEMP/p07-speech-repeat" \
+            --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg"
+          python tools/verify_p07_speech.py \
+            --ffmpeg "$RUNNER_TEMP/p07-ffmpeg/bin/ffmpeg" \
+            --ffprobe "$RUNNER_TEMP/p07-ffmpeg/bin/ffprobe" \
+            --generated-dir "$RUNNER_TEMP/p07-speech-repeat" \
+            --provenance "$RUNNER_TEMP/p07-speech/speech-provenance.json" \
+            --report "$RUNNER_TEMP/p07-repeat-verification.json"
