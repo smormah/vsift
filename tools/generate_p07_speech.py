@@ -877,6 +877,18 @@ def installed_distributions() -> dict[str, str]:
     return installed
 
 
+def cpu_model() -> str:
+    """The CPU model, recorded because synthesis is bit-identical only on the same hardware."""
+    try:
+        for line in Path("/proc/cpuinfo").read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition(":")
+            if key.strip() == "model name":
+                return value.strip()
+    except OSError:
+        pass
+    return platform.processor() or "unknown"
+
+
 def espeak_version() -> str:
     """Best-effort phonemizer backend version for provenance; never affects output."""
     try:
@@ -914,6 +926,7 @@ def synthesis_facts(assets: Path, reports: Sequence[Path]) -> dict:
             "python": platform.python_version(),
             "platform": platform.platform(),
             "machine": platform.machine(),
+            "cpu": cpu_model(),
             "distributions": installed_distributions(),
             "espeak_ng": espeak_version(),
             "spacy_model_wheel": next(entry for entry in fetch_record["files"]

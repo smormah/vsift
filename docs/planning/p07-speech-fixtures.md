@@ -184,7 +184,9 @@ of the noise.
 - Kokoro's decoder draws random noise and phase at inference. The recipe fixes the
   seed, the thread count and deterministic algorithms. The workflow synthesizes a
   second time on the same runner and requires byte-identical output. Bit-identical
-  output across different CPUs or PyTorch builds is **not** guaranteed. The committed
+  output across different CPUs or PyTorch builds is **not** guaranteed: runs 36049056343
+  and 36051020432 on two hosted runners gave equal lengths but samples differing by a
+  mean of 5-9 of 32,767 levels. The provenance records the runner's `cpu`. The committed
   bytes and their recorded digests are authoritative. The verifier checks committed
   files against the record; it never compares them with a fresh regeneration.
 
