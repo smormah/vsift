@@ -81,6 +81,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `setup check` no longer echoes a provider's first output line as `detail`. With
+  whisper.cpp v1.9.2 that line was a library-loader log naming an absolute folder,
+  which broke the promise that paths are not echoed. FFmpeg and FFprobe now report
+  only their `ffmpeg version ...` / `ffprobe version ...` banner line (or
+  `detected`). Whisper's output is never echoed: `detail` is
+  `whisper.cpp v1.9.2 (reviewed build)` when the executable's bytes match a build
+  reviewed for P06, otherwise `whisper-cli (build not recognised)`. As a second
+  guard, no line that looks like a path or a ggml loader log is ever shown.
 - On a Windows profile whose `%LOCALAPPDATA%` gives other accounts access to new
   folders (for example a sandbox group or an app-container capability), `setup
   configure`, `setup configure-model` and `setup check` failed with `STORAGE_IO`

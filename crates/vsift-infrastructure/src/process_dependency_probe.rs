@@ -9,10 +9,16 @@ use vsift_domain::{DependencyState, DependencyStatus, RuntimeDependency};
 use crate::{
     ExecutableResolutionError, ExecutableResolver, ProcessCancellation, ProcessError,
     ProcessRequest, ProcessSupervisor, ProcessWorkingDirectory, TerminationReason,
-    TrustedExecutable,
+    TrustedExecutable, WhisperBuildRecognition, identify_whisper_build,
 };
 
 const MAX_DIAGNOSTIC_LENGTH: usize = 240;
+/// Detail when a tool responded but printed no line that is safe to echo.
+const DETECTED_DETAIL: &str = "detected";
+const REVIEWED_WHISPER_DETAIL: &str = "whisper.cpp v1.9.2 (reviewed build)";
+const UNRECOGNISED_WHISPER_DETAIL: &str = "whisper-cli (build not recognised)";
+/// Log prefixes of the ggml backend loader, whose lines name absolute library paths.
+const LOADER_LOG_PREFIXES: [&str; 3] = ["load_backend:", "ggml_", "register_backend"];
 
 /// Explicit executable selections resolved for one read-only diagnostic operation.
 ///
@@ -165,7 +171,7 @@ impl ProcessDependencyProbe {
         if remaining.is_zero() {
             return DependencyState::TimedOut;
         }
-        let request = match ProcessRequest::new(executable, working_directory, remaining) {
+        let request = match ProcessRequest::new(executable.clone(), working_directory, remaining) {
             Ok(request) => request.with_arguments(specification.arguments.iter().copied()),
             Err(error) => {
                 return DependencyState::Unhealthy {
@@ -183,7 +189,12 @@ impl ProcessDependencyProbe {
                 DependencyState::TimedOut
             }
             Ok(outcome) if outcome.status.success() => DependencyState::Available {
-                version: first_non_empty_line(&outcome.stdout.bytes, &outcome.stderr.bytes),
+                version: match specification.detail {
+                    ProbeDetailPolicy::VersionLine { prefix } => {
+                        version_line(prefix, &outcome.stdout.bytes, &outcome.stderr.bytes)
+                    }
+                    ProbeDetailPolicy::BuildIdentity => build_identity_detail(&executable).await,
+                },
             },
             Ok(outcome) => DependencyState::Unhealthy {
                 message: process_failure_message(outcome.termination, outcome.status),
@@ -202,6 +213,23 @@ impl ProcessDependencyProbe {
 struct ProbeSpecification {
     executable: &'static str,
     arguments: &'static [&'static str],
+    detail: ProbeDetailPolicy,
+}
+
+/// What a successful probe may report as its `detail`.
+///
+/// Provider output is untrusted and can name absolute paths, which the setup
+/// contract never echoes, so no tool's output is passed through wholesale.
+/// Each tool states the one line shape it may contribute, or that it
+/// contributes none.
+#[derive(Clone, Copy)]
+enum ProbeDetailPolicy {
+    /// Only the first line starting with this reviewed version banner.
+    VersionLine { prefix: &'static str },
+    /// Never the tool's output: fixed prose saying whether the executable's
+    /// bytes are a reviewed build. whisper.cpp prints loader logs naming
+    /// absolute library paths first and has no version banner on `--help`.
+    BuildIdentity,
 }
 
 impl ProbeSpecification {
@@ -210,14 +238,21 @@ impl ProbeSpecification {
             RuntimeDependency::Ffmpeg => Self {
                 executable: "ffmpeg",
                 arguments: &["-version"],
+                detail: ProbeDetailPolicy::VersionLine {
+                    prefix: "ffmpeg version ",
+                },
             },
             RuntimeDependency::Ffprobe => Self {
                 executable: "ffprobe",
                 arguments: &["-version"],
+                detail: ProbeDetailPolicy::VersionLine {
+                    prefix: "ffprobe version ",
+                },
             },
             RuntimeDependency::Whisper => Self {
                 executable: "whisper-cli",
                 arguments: &["--help"],
+                detail: ProbeDetailPolicy::BuildIdentity,
             },
         }
     }
@@ -237,15 +272,59 @@ fn process_failure_message(
     }
 }
 
-fn first_non_empty_line(stdout: &[u8], stderr: &[u8]) -> String {
+/// Returns the first line starting with `prefix` that is safe to echo.
+fn version_line(prefix: &str, stdout: &[u8], stderr: &[u8]) -> String {
     let stdout_text = String::from_utf8_lossy(stdout);
     let stderr_text = String::from_utf8_lossy(stderr);
 
     stdout_text
         .lines()
         .chain(stderr_text.lines())
-        .find(|line| !line.trim().is_empty())
-        .map_or_else(|| String::from("detected"), |line| truncate(line.trim()))
+        .map(str::trim)
+        .find(|line| line.starts_with(prefix) && safe_to_echo(line))
+        .map_or_else(|| String::from(DETECTED_DETAIL), truncate)
+}
+
+/// Defence in depth for every tool: a line that looks like it names a path,
+/// or that carries a ggml loader log, is never echoed whatever selected it.
+fn safe_to_echo(line: &str) -> bool {
+    !LOADER_LOG_PREFIXES
+        .iter()
+        .any(|prefix| line.contains(prefix))
+        && !contains_path_shape(line)
+}
+
+/// Whether text contains a drive-letter path (`C:\` or `C:/`), a UNC or
+/// escaped separator pair (`\\`), or a `/segment/` run.
+fn contains_path_shape(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let drive = bytes.windows(3).any(|window| {
+        window[0].is_ascii_alphabetic() && window[1] == b':' && matches!(window[2], b'\\' | b'/')
+    });
+    let doubled_backslash = text.contains("\\\\");
+    let mut slash_segment = false;
+    let mut segment_length: Option<usize> = None;
+    for character in text.chars() {
+        match (character, segment_length) {
+            ('/', Some(length)) if length > 0 => slash_segment = true,
+            ('/', _) => segment_length = Some(0),
+            (character, Some(length)) if !character.is_whitespace() => {
+                segment_length = Some(length + 1);
+            }
+            (_, _) => segment_length = None,
+        }
+    }
+    drive || doubled_backslash || slash_segment
+}
+
+async fn build_identity_detail(executable: &TrustedExecutable) -> String {
+    match identify_whisper_build(executable).await {
+        Ok(identity) => match identity.recognition() {
+            WhisperBuildRecognition::ReviewedV1_9_2 => String::from(REVIEWED_WHISPER_DETAIL),
+            WhisperBuildRecognition::Unrecognised => String::from(UNRECOGNISED_WHISPER_DETAIL),
+        },
+        Err(_) => String::from(UNRECOGNISED_WHISPER_DETAIL),
+    }
 }
 
 fn truncate(value: &str) -> String {
@@ -254,20 +333,70 @@ fn truncate(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_DIAGNOSTIC_LENGTH, first_non_empty_line, truncate};
+    use super::{MAX_DIAGNOSTIC_LENGTH, contains_path_shape, safe_to_echo, truncate, version_line};
+
+    /// The first line whisper-cli v1.9.2 printed on Windows, verbatim.
+    const WHISPER_LOADER_LINE: &str = r"load_backend: loaded CPU backend from C:\tools\whisper.cpp\v1.9.2\Release\ggml-cpu-haswell.dll";
 
     #[test]
-    fn returns_first_non_empty_line_from_standard_output() {
-        let result = first_non_empty_line(b"\nffmpeg version 1\nmore", b"ignored");
+    fn returns_the_version_banner_from_standard_output() {
+        let result = version_line(
+            "ffmpeg version ",
+            b"\nffmpeg version 9.0-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with gcc",
+            b"ignored",
+        );
 
-        assert_eq!(result, "ffmpeg version 1");
+        assert_eq!(
+            result,
+            "ffmpeg version 9.0-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
+        );
     }
 
     #[test]
-    fn falls_back_to_standard_error() {
-        let result = first_non_empty_line(b"", b"whisper help\nmore");
+    fn falls_back_to_standard_error_for_the_banner() {
+        let result = version_line("ffprobe version ", b"", b"ffprobe version 7.1\nmore");
 
-        assert_eq!(result, "whisper help");
+        assert_eq!(result, "ffprobe version 7.1");
+    }
+
+    /// The observed whisper-cli first line is neither a banner nor echoable.
+    #[test]
+    fn the_observed_whisper_loader_line_is_never_a_detail() {
+        assert!(!safe_to_echo(WHISPER_LOADER_LINE));
+        let stderr = format!("{WHISPER_LOADER_LINE}\n\nusage: whisper-cli [options]");
+        assert_eq!(
+            version_line("ffmpeg version ", b"", stderr.as_bytes()),
+            "detected"
+        );
+        let disguised = format!("ffmpeg version {WHISPER_LOADER_LINE}");
+        assert_eq!(
+            version_line("ffmpeg version ", disguised.as_bytes(), b""),
+            "detected"
+        );
+    }
+
+    #[test]
+    fn lines_with_path_shapes_or_loader_logs_are_not_echoed() {
+        assert!(contains_path_shape(WHISPER_LOADER_LINE));
+        for unsafe_line in [
+            "ffmpeg version 7 C:/tools/ffmpeg.exe",
+            r"ffmpeg version 7 \\server\share",
+            "ffmpeg version 7 --prefix=/usr/local/bin",
+            "ffmpeg version 7 ggml_backend x",
+            "ffmpeg version 7 register_backend: cpu",
+        ] {
+            assert!(!safe_to_echo(unsafe_line), "{unsafe_line}");
+            assert_eq!(
+                version_line("ffmpeg version ", unsafe_line.as_bytes(), b""),
+                "detected"
+            );
+        }
+        for safe_line in [
+            "ffmpeg version n9.0.1-11-ge47273f4d9 Copyright (c) 2000-2026 the FFmpeg developers",
+            "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 and/or later",
+        ] {
+            assert!(safe_to_echo(safe_line), "{safe_line}");
+        }
     }
 
     #[test]

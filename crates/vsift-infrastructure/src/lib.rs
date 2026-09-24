@@ -26,6 +26,7 @@ mod transcript_record;
 mod transcript_sidecar;
 mod user_dependency_config;
 mod verified_artifact_transfer;
+mod whisper_build;
 mod xz_tar_inventory;
 
 pub use archive_inventory::{
@@ -99,6 +100,10 @@ pub use transcript_record::{
 pub use transcript_sidecar::{MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript};
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
+pub use whisper_build::{
+    MAX_WHISPER_EXECUTABLE_BYTES, WhisperBuildError, WhisperBuildIdentity, WhisperBuildRecognition,
+    identify_whisper_build,
+};
 pub use xz_tar_inventory::{
     MAX_XZ_ARCHIVE_BYTES, XzTarInventoryError, inspect_xz_tar_inventory,
     inspect_xz_tar_selected_files, stage_xz_tar_selected_files,

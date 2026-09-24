@@ -323,7 +323,12 @@ typed manual/BYO remediation for missing, unhealthy and timed-out tools. The leg
 `--version`/`--help` response does **not** prove provider compatibility or a
 working transcription model. Those checks and verified
 managed installation remain P06 work. Provider `detail` is not an instruction
-channel. Paths are not echoed in the response.
+channel. Paths are not echoed in the response. `detail` for FFmpeg and FFprobe is
+only their `ffmpeg version ...` / `ffprobe version ...` banner line, or `detected`
+when none is safe to show; whisper output is never echoed, and its `detail` is
+`whisper.cpp v1.9.2 (reviewed build)` when the executable is byte-identical to a
+build reviewed in P06, otherwise `whisper-cli (build not recognised)`. No line that
+looks like a path or a ggml loader log is ever shown.
 
 `setup plan --profile <desktop|worker>` probes configured executables or filtered
 `PATH` like `setup check`, without per-call path options. On **Ubuntu 24.04
