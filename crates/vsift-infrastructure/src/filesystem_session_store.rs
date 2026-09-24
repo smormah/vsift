@@ -958,10 +958,19 @@ impl FilesystemSessionStore {
         let mut artifact_bytes = 0_u64;
         for artifact in &manifest.artifacts {
             validate_artifact_record(artifact)?;
-            let file = open_regular_file(&bundle, &artifact.name, false)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
-            if hash_bounded(file, artifact.bytes)? != artifact.sha256 {
-                return Err(SessionStorageError::IntegrityFailure);
+            if artifact.kind == StoredArtifactKind::TranscriptRecord {
+                // A matching digest only proves the file is the one the manifest
+                // names; both could have been rewritten together. Decoding
+                // applies the same strict record and import rules as a session
+                // read, so a bundle validates only if its transcript could be
+                // cited.
+                read_transcript_artifact(&bundle, artifact, &source_id)?;
+            } else {
+                let file = open_regular_file(&bundle, &artifact.name, false)
+                    .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                if hash_bounded(file, artifact.bytes)? != artifact.sha256 {
+                    return Err(SessionStorageError::IntegrityFailure);
+                }
             }
             artifact_bytes = artifact_bytes
                 .checked_add(artifact.bytes)
@@ -1128,21 +1137,7 @@ impl FilesystemSessionStore {
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let file = open_regular_file(&artifacts, &artifact.name, false)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let mut bytes = Vec::new();
-        file.take(artifact.bytes.saturating_add(1))
-            .read_to_end(&mut bytes)
-            .map_err(map_storage_io)?;
-        if u64::try_from(bytes.len()).ok() != Some(artifact.bytes)
-            || sha256_hex(&bytes) != artifact.sha256
-        {
-            return Err(SessionStorageError::IntegrityFailure);
-        }
-        let revision = crate::decode_transcript_record(&bytes)?;
-        if revision.source_id() != status.source_id() {
-            return Err(SessionStorageError::IntegrityFailure);
-        }
+        let revision = read_transcript_artifact(&artifacts, artifact, status.source_id())?;
         Ok(Some((revision, status)))
     }
 
@@ -2000,6 +1995,34 @@ fn update_lifecycle(
             Ok(Some(record))
         }
     }
+}
+
+/// Reads, verifies and decodes one transcript record artifact.
+///
+/// The recorded size and digest are checked before any byte is interpreted;
+/// the record is then decoded strictly and must describe `source_id`. The
+/// artifact record's size was already bounded by its kind, so the read is too.
+fn read_transcript_artifact(
+    directory: &Dir,
+    artifact: &StoredArtifact,
+    source_id: &SourceId,
+) -> Result<TranscriptRevision, SessionStorageError> {
+    let file = open_regular_file(directory, &artifact.name, false)
+        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let mut bytes = Vec::new();
+    file.take(artifact.bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(map_storage_io)?;
+    if u64::try_from(bytes.len()).ok() != Some(artifact.bytes)
+        || sha256_hex(&bytes) != artifact.sha256
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let revision = crate::decode_transcript_record(&bytes)?;
+    if revision.source_id() != source_id {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(revision)
 }
 
 fn validate_artifact_record(artifact: &StoredArtifact) -> Result<(), SessionStorageError> {

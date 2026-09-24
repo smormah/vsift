@@ -26,6 +26,9 @@ vsift-application.workspace = true
 vsift-domain.workspace = true
 
 [dev-dependencies]
+# Already a workspace development dependency; here it proves that the stored
+# transcript record matches its published bundle schema.
+jsonschema.workspace = true
 lzma-rust2 = { workspace = true, features = ["encoder"] }
 proptest.workspace = true
 

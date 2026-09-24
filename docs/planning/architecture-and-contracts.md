@@ -116,8 +116,11 @@ targets retain an explicit BYO path. See
 ### Output and errors
 
 Ordinary `--json` writes exactly one bounded JSON result on stdout. Explicit
-`--events jsonl` writes a sequence of versioned progress and terminal records instead;
-there is one terminal result with an operation ID. Diagnostics go to stderr. A
+`--events jsonl` writes a sequence of versioned evidence, progress and terminal records
+instead; there is one terminal result with an operation ID, and it is always the last
+line. Since P07, `transcript get` streams one evidence record per segment, each with an
+upsert key, before its terminal record (see the
+[v1 CLI contract](../contracts/cli-v1.md)). Diagnostics go to stderr. A
 broken output pipe triggers bounded cancellation and a documented I/O exit, not a
 panic. Data already committed is discoverable by operation ID after a lost response.
 
@@ -465,7 +468,9 @@ printed on stdout is not an external queue acknowledgement or remote storage com
 The retained bundle is the public index handoff: manifest version, source identity,
 artifact/segment IDs, normalized timestamps, typed content, provenance, hashes and
 capability/coverage flags. Future index consumers use upsert keys plus explicit
-delete/tombstone events within their own transaction model. An index can be rebuilt
+delete/tombstone events within their own transaction model. The same records are
+also available without a bundle as the `--events jsonl` evidence stream, whose
+events carry the upsert key (P07; tombstone events are not defined yet). An index can be rebuilt
 from retained bundles; it does not alter authoritative evidence. Remote adapters
 must add scoped authorization, consistency and deletion semantics before release.
 

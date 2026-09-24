@@ -20,6 +20,10 @@
 //! - **Transcript:** [`TranscriptSegmentData`] (the published evidence
 //!   record), [`TranscriptRevisionData`], the `transcript.get` page
 //!   [`TranscriptPageData`], and fixed-prose import warnings and remediation.
+//! - **Evidence stream:** the JSON Lines form of a page, a
+//!   [`TranscriptEvidenceStream`] of [`EvidenceEventResponse`] records ended by
+//!   one terminal event whose data is [`TranscriptStreamData`], with the
+//!   published [`EventKind`] and [`EvidenceRecordType`] identifiers.
 //! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
 //!   remediation for a failed automatic media-tool preflight.
 //! - **Text:** [`sanitize_untrusted_text`], the one rule for placing untrusted
@@ -40,6 +44,7 @@ mod envelope;
 mod evidence;
 mod session;
 mod setup;
+mod stream;
 mod text;
 mod transcript;
 mod verification;
@@ -57,6 +62,10 @@ pub use session::{
 pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, SavedSetupPlan,
     SetupCheckResponse, SetupPlanResponse, explicit_path_option,
+};
+pub use stream::{
+    EventKind, EvidenceEventResponse, EvidenceRecordType, TranscriptEvidenceStream,
+    TranscriptStreamData,
 };
 pub use text::{MAX_PROVIDER_DETAIL_BYTES, sanitize_untrusted_text};
 pub use transcript::{

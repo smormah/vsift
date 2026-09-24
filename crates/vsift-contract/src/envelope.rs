@@ -3,6 +3,8 @@
 use serde::Serialize;
 use vsift_domain::{FailureCode, OperationStatus};
 
+use crate::EventKind;
+
 /// Public major version carried by every v1 payload.
 ///
 /// Consumers reject unknown majors instead of guessing compatibility, so this
@@ -256,8 +258,10 @@ impl OperationResponse<serde_json::Value> {
 
 /// One terminal JSON Lines event.
 ///
-/// Future progress records use the same version and identity fields, so a stream
-/// reader can dispatch on `event` without knowing the command in advance.
+/// Evidence events ([`crate::EvidenceEventResponse`]) and future progress
+/// records use the same version and identity fields, so a stream reader can
+/// dispatch on `event` without knowing the command in advance. The terminal
+/// event is always the last line of a stream.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TerminalEventResponse {
     schema_version: &'static str,
@@ -269,13 +273,21 @@ pub struct TerminalEventResponse {
 }
 
 impl TerminalEventResponse {
-    /// Wraps exactly one operation result as the terminal stream record.
+    /// Wraps exactly one operation result as the only record of a stream.
     #[must_use]
     pub const fn new(result: OperationResponse<serde_json::Value>) -> Self {
+        Self::at_sequence(result, 0)
+    }
+
+    /// Wraps the result that ends a stream after `sequence` earlier events.
+    pub(crate) const fn at_sequence(
+        result: OperationResponse<serde_json::Value>,
+        sequence: u64,
+    ) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
-            event: "terminal",
-            sequence: 0,
+            event: EventKind::Terminal.identifier(),
+            sequence,
             command: result.command,
             operation_id: None,
             result,

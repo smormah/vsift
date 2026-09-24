@@ -172,7 +172,11 @@ source and source-segment identity as well as normalized source time. The domain
 the transcript values and the order, overlap and alignment rules; infrastructure owns
 the bounded SubRip/WebVTT parsers, the FFprobe duration probe and the versioned
 `transcript_record` storage format; the application derives identities and pages
-revisions; `vsift-contract` publishes the segment as the first evidence record.
+revisions; `vsift-contract` publishes the segment as the first evidence record and
+sequences a page as the `--events jsonl` evidence stream (one keyed evidence event
+per segment, then the terminal event), so every host streams identically. The stored
+`transcript_record` has its own published bundle schema, and `bundle validate`
+decodes it strictly.
 
 ## Error model
 

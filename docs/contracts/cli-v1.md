@@ -104,7 +104,14 @@ abandoned after the idle interval. On success `data.transcript` (schema
 [`transcript-revision.schema.json`](../../schemas/v1/transcript-revision.schema.json))
 describes the revision; a plain ingest omits the member, so its output is unchanged.
 The revision is stored as a `transcript_record` session artifact, counted by
-`session status` and copied into retained bundles.
+`session status` and copied into retained bundles. Its content is published as
+[`bundle-transcript-record.schema.json`](../../schemas/v1/bundle-transcript-record.schema.json)
+(frozen example [`bundle-transcript-record.json`](../../schemas/v1/examples/bundle-transcript-record.json)).
+`bundle validate` checks every transcript record's size and digest and then decodes
+it strictly with the same rules as a session read (unknown fields or values, broken
+import invariants such as a segment not at its cue timing plus the offset, or a
+record naming another source): a non-conforming record fails the bundle with
+`INTEGRITY_FAILURE`, and a newer record version with `UNSUPPORTED_SCHEMA`.
 
 **Malformed-data policy.** A rejection is a typed failure; nothing is imported.
 
@@ -222,9 +229,71 @@ continuation lose or repeat segments. Pass `next_cursor` back with the same sess
 and range; it is bound to the revision (not the storage generation, so a renewal
 keeps it valid), the range and the session expiry, and any other use is
 `INVALID_ARGUMENT`. A session without a transcript, a closed or expired session, or an
-empty range is `INVALID_ARGUMENT`. `--events jsonl` returns the page as one terminal
-event; a per-record evidence stream is not yet defined. `transcript retranscribe`
-remains `COMMAND_NOT_IMPLEMENTED` until local ASR ships.
+empty range is `INVALID_ARGUMENT`. With `--events jsonl` the page is streamed as one
+evidence event per segment followed by one terminal event (below). `transcript
+retranscribe` remains `COMMAND_NOT_IMPLEMENTED` until local ASR ships.
+
+**Evidence stream (`--events jsonl`).** ADR 0016 decision 5 makes evidence records
+available as JSON Lines, so a pipeline or indexer can consume them without reading a
+page or a bundle. `vsift transcript get <session> --from <us> --to <us> [--limit]
+[--cursor] --events jsonl` writes, in order:
+
+1. one **evidence event** per segment of the page, in start order
+   ([`evidence-event.schema.json`](../../schemas/v1/evidence-event.schema.json));
+2. exactly one **terminal event**
+   ([`terminal-event.schema.json`](../../schemas/v1/terminal-event.schema.json)) whose
+   complete `result.data` is the page without its items
+   ([`transcript-get-stream-data.schema.json`](../../schemas/v1/transcript-get-stream-data.schema.json)):
+   `session_id`, `revision`, `range`, `record_count` and `next_cursor`.
+
+Every line is one complete JSON object and a newline, with `schema_version: "1"`, its
+`event` kind, `sequence` (0, 1, 2, ... across the whole stream; the terminal event's
+`sequence` equals `record_count`), `command` and `operation_id`. An evidence event adds
+`record_type` (`transcript_segment`), `key` (the upsert key; for a transcript segment,
+its `segment_id`) and `record`, which is exactly the transcript segment of
+[`transcript-segment.schema.json`](../../schemas/v1/transcript-segment.schema.json) that
+`--json` returns in `items`. The first page of F10 with `--limit 2`, from the frozen
+example [`transcript-get.events.jsonl`](../../schemas/v1/examples/transcript-get.events.jsonl)
+(records shortened here with `...`):
+
+```json
+{"schema_version":"1","event":"evidence","sequence":0,"command":"transcript.get","operation_id":null,"record_type":"transcript_segment","key":"tsg_e88330d57e140d6e7e2ed4447950c5b8","record":{"segment_id":"tsg_e88330d57e140d6e7e2ed4447950c5b8","revision_id":"trv_663ae41bbedc740b651fe61999d395b0","start_us":1000000,"end_us":4000000,"text":"This synthetic sidecar is aligned with\nan explicit 500 millisecond offset.",...}}
+{"schema_version":"1","event":"evidence","sequence":1,"command":"transcript.get","operation_id":null,"record_type":"transcript_segment","key":"tsg_f9644c630cd9023d38e2eb89741c9b7e","record":{"segment_id":"tsg_f9644c630cd9023d38e2eb89741c9b7e","revision_id":"trv_663ae41bbedc740b651fe61999d395b0","start_us":5000000,"end_us":9000000,"text":"Dialog R-17 is displayed now.",...}}
+{"schema_version":"1","event":"terminal","sequence":2,"command":"transcript.get","operation_id":null,"result":{"schema_version":"1","command":"transcript.get","operation_id":null,"status":"complete","data":{"next_cursor":"v1|ses_0123456789abcdef0123456789abcdef|1|06ff...9b04|2|1790294400000000","range":{"from_us":0,"to_us":12000000},"record_count":2,"revision":{...},"session_id":"ses_0123456789abcdef0123456789abcdef"},"warnings":[],"error":null,"coverage":null,"lifecycle":{"mode":"ephemeral","expires_at":"2026-09-25T00:00:00Z"}}}
+```
+
+How a consumer reads it:
+
+- **Upsert by key.** Evidence records are immutable and their identities are derived
+  from content (the session, the revision and the segment ordinal), so the same
+  (`record_type`, `key`) always carries the same record. Upserting by it is idempotent:
+  re-reading a page, overlapping pages or a retry never duplicate evidence. A new
+  revision of the same transcript has new keys; VSift emits no delete or tombstone
+  events yet, and a consumer that wants only the latest revision filters on
+  `record.revision_id` against the terminal event's `revision.revision_id`.
+- **End of stream.** The stream is complete only when its terminal event has been
+  read. Its `result.status` says whether the operation succeeded, and on success
+  `record_count` must equal the number of evidence events received and the terminal
+  `sequence`; a gap in `sequence` or a missing terminal event (for example a closed
+  pipe) means the stream is incomplete. Records already upserted remain valid because
+  they are immutable.
+- **Paging.** `next_cursor` in the terminal data continues the stream: pass it back
+  with `--cursor` and the same session and range; `null` means the range is exhausted.
+  Cursor rules are those of `--json`.
+- **Failures and empty pages.** A request that fails (bad range, cursor or session,
+  no transcript) writes only one terminal failure event with `sequence: 0`, exactly as
+  before. A valid range that no segment intersects writes one complete terminal event
+  with `record_count: 0`.
+- **Unknown events.** Within v1 new event kinds (such as progress) may appear before
+  the terminal event. Dispatch on `event`, skip a kind you do not know and still count
+  its `sequence`. `transcript get` emits no progress events: the read is bounded and
+  local.
+
+The stream is bounded by the page limit: at most `--limit` evidence events (1 to 100,
+default 20) and one terminal event, each line within the 1 MiB result budget. The
+whole stream is assembled before its first byte is written, so a line over budget
+fails the command like an oversized `--json` result: exit 7 and a diagnostic on
+stderr, with nothing on stdout. `--json` and human output are unchanged: one result with the page's `items`.
 
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
@@ -317,7 +386,9 @@ is retained as historical v1 evidence. An abbreviated current response follows.
 Human output is readable terminal text on stdout (P05 session operations use
 indented JSON). In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
-line is one bounded v1 event and exactly one terminal event ends the stream. stderr is
+line is one bounded v1 event and exactly one terminal event ends the stream; for
+`transcript get` evidence events precede it (see "Evidence stream" above), and every
+other command writes the terminal event alone. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.
 
 Output limits apply before writing:
@@ -396,7 +467,8 @@ New operations use these required terminal fields:
 The authoritative field definitions and complete examples are in
 [`schemas/v1`](../../schemas/v1/README.md). Consumers of a terminal event validate
 the event wrapper against `terminal-event.schema.json` and its `result` member
-against `operation-response.schema.json`.
+against `operation-response.schema.json`; evidence events validate against
+`evidence-event.schema.json`.
 
 ## Exit and error taxonomy
 

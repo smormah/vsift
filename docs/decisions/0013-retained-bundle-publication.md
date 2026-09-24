@@ -47,3 +47,24 @@ guarantee. Strict durable requests still fail before mutation on every profile.
 - Bundle validation never executes embedded content, fetches references, or
   trusts unbounded filenames, counts, sizes, hashes, links, or future versions.
 - P10/P11/P14 still own strict Ubuntu/ext4 OS/storage-crash qualification.
+
+## 2026-09-24 implementation note: transcript records are validated as data
+
+P07 adds the artifact kind `transcript_record`. Its content is now published as
+`schemas/v1/bundle-transcript-record.schema.json`. Before this change,
+`bundle validate` checked only its size and SHA-256 against `bundle.json`. That
+proves the file is the one the manifest names, but both could have been rewritten
+together.
+
+`bundle validate` now also reads every transcript record (bounded by the 24 MiB
+kind limit) and decodes it with the same strict rules as a session read:
+- unknown fields, values and formats are rejected;
+- every domain import invariant is re-checked, such as each segment lying at its
+  cue timing plus the offset;
+- the record must name the bundle's source.
+
+A non-conforming record fails with `INTEGRITY_FAILURE`, and a newer record version
+with `UNSUPPORTED_SCHEMA`. This remains data-only validation: nothing is executed or
+fetched. Bundles that `session retain` produced are unaffected, because their records
+already satisfy these rules. `session retain` itself revalidates the finished bundle,
+so it applies the same check.

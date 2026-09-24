@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/transcript-get-stream-data.schema.json",
+  "title": "VSift transcript.get JSON Lines terminal data v1",
+  "description": "The data member of the complete terminal result that ends a transcript.get --events jsonl stream. It is the page of transcript-get-data.schema.json without its items: the page's segments were the preceding evidence events, in start order, and record_count says how many there were. Pass next_cursor back with the same session and range to stream the next page; null means the range is exhausted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "revision", "range", "record_count", "next_cursor"],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "revision": { "$ref": "transcript-revision.schema.json" },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "record_count": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "next_cursor": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 512 }
+      ]
+    }
+  }
+}

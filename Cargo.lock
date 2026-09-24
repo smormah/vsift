@@ -2154,6 +2154,7 @@ dependencies = [
  "cap-std",
  "flate2",
  "getrandom 0.4.3",
+ "jsonschema",
  "lzma-rust2",
  "process-wrap",
  "proptest",

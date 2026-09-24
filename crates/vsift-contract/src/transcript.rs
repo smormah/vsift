@@ -190,9 +190,18 @@ struct CueData {
 
 /// The requested half-open source range of a page.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-struct RangeData {
+pub(crate) struct RangeData {
     from_us: u64,
     to_us: u64,
+}
+
+impl RangeData {
+    pub(crate) const fn new(range: TimeRange) -> Self {
+        Self {
+            from_us: range.start().as_micros(),
+            to_us: range.end().as_micros(),
+        }
+    }
 }
 
 /// Data of a `transcript.get` result: one bounded page of segments.
@@ -218,10 +227,7 @@ impl TranscriptPageData {
         Self {
             session_id: session_id.as_str().to_owned(),
             revision: TranscriptRevisionData::new(revision),
-            range: RangeData {
-                from_us: range.start().as_micros(),
-                to_us: range.end().as_micros(),
-            },
+            range: RangeData::new(range),
             items: segments
                 .iter()
                 .map(|segment| TranscriptSegmentData::new(revision, segment))

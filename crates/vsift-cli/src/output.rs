@@ -107,17 +107,19 @@ where
     where
         T: Serialize,
     {
-        let mut buffer = BoundedBuffer::new(MAX_RESULT_BYTES.saturating_sub(1));
-        if let Err(error) = serde_json::to_writer(&mut buffer, value) {
-            return if buffer.exceeded {
-                Err(OutputError::TooLarge)
-            } else {
-                Err(OutputError::Serialization(error))
-            };
-        }
-        buffer.bytes.push(b'\n');
+        let line = encode_line(value)?;
         self.standard_output
-            .write_all(&buffer.bytes)
+            .write_all(&line)
+            .map_err(OutputError::Io)
+    }
+
+    /// Writes a complete, already bounded JSON Lines stream.
+    ///
+    /// Every line was serialized before this call, so a line over the budget
+    /// fails the command before any byte of the stream reaches stdout.
+    pub(crate) fn write_json_lines(&mut self, lines: &JsonLines) -> Result<(), OutputError> {
+        self.standard_output
+            .write_all(&lines.bytes)
             .map_err(OutputError::Io)
     }
 
@@ -137,6 +139,51 @@ where
         safe.push('\n');
         let _ignored = self.standard_error.write_all(safe.as_bytes());
     }
+}
+
+/// A JSON Lines stream assembled in memory before it is written.
+///
+/// Each line obeys the same per-result byte budget as a `--json` result. The
+/// number of lines is bounded by the producer (a page holds at most its limit
+/// of evidence events plus one terminal event), so the whole stream is bounded
+/// too. Assembling first means a stream is either written complete or not at
+/// all when a line is over budget.
+pub(crate) struct JsonLines {
+    bytes: Vec<u8>,
+}
+
+impl JsonLines {
+    /// Starts an empty stream.
+    pub(crate) const fn new() -> Self {
+        Self { bytes: Vec::new() }
+    }
+
+    /// Appends one bounded JSON value and its newline.
+    pub(crate) fn push<T>(&mut self, value: &T) -> Result<(), OutputError>
+    where
+        T: Serialize,
+    {
+        let line = encode_line(value)?;
+        self.bytes.extend_from_slice(&line);
+        Ok(())
+    }
+}
+
+/// Serializes one value as a newline-terminated line within the result budget.
+fn encode_line<T>(value: &T) -> Result<Vec<u8>, OutputError>
+where
+    T: Serialize,
+{
+    let mut buffer = BoundedBuffer::new(MAX_RESULT_BYTES.saturating_sub(1));
+    if let Err(error) = serde_json::to_writer(&mut buffer, value) {
+        return if buffer.exceeded {
+            Err(OutputError::TooLarge)
+        } else {
+            Err(OutputError::Serialization(error))
+        };
+    }
+    buffer.bytes.push(b'\n');
+    Ok(buffer.bytes)
 }
 
 struct BoundedBuffer {
@@ -225,7 +272,7 @@ mod tests {
     use vsift::{FailureClass, FailureCode};
     use vsift_contract::OperationResponse;
 
-    use super::{OutputError, OutputMode, OutputWriter, ProcessExit};
+    use super::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 
     struct BrokenWriter;
 
@@ -288,6 +335,51 @@ mod tests {
 
         assert!(matches!(result, Err(OutputError::TooLarge)));
         assert!(stdout.is_empty());
+    }
+
+    #[test]
+    fn json_lines_are_newline_terminated_and_written_in_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut lines = JsonLines::new();
+        lines.push(&serde_json::json!({"sequence": 0}))?;
+        lines.push(&serde_json::json!({"sequence": 1}))?;
+        let mut stdout = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, Vec::<u8>::new());
+
+        writer.write_json_lines(&lines)?;
+
+        assert_eq!(stdout, b"{\"sequence\":0}\n{\"sequence\":1}\n");
+        Ok(())
+    }
+
+    #[test]
+    fn an_oversized_line_is_rejected_before_anything_is_written()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut lines = JsonLines::new();
+        lines.push(&serde_json::json!({"sequence": 0}))?;
+
+        let oversized = lines.push(&"a".repeat(1_048_576));
+
+        assert!(matches!(oversized, Err(OutputError::TooLarge)));
+        let mut stdout = Vec::new();
+        OutputWriter::new(&mut stdout, Vec::<u8>::new()).write_json_lines(&lines)?;
+        assert_eq!(stdout, b"{\"sequence\":0}\n");
+        Ok(())
+    }
+
+    #[test]
+    fn broken_stdout_fails_a_json_lines_stream_with_a_typed_io_error()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut lines = JsonLines::new();
+        lines.push(&serde_json::json!({"sequence": 0}))?;
+        let mut writer = OutputWriter::new(BrokenWriter, Vec::<u8>::new());
+
+        let result = writer.write_json_lines(&lines);
+
+        assert!(
+            matches!(result, Err(OutputError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
+        );
+        Ok(())
     }
 
     #[test]
