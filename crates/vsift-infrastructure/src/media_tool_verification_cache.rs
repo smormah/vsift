@@ -352,9 +352,7 @@ impl FilesystemMediaToolVerificationCache {
         let Some(state) = self.state.as_ref() else {
             return StaleWorkspaceSweep::Skipped;
         };
-        let Ok(held) = open_lock(state).and_then(|lock| {
-            HeldFileLock::try_exclusive(lock).map_err(|_| RecordWriteFailure::Lock)
-        }) else {
+        let Ok(held) = acquire_record_lock(state) else {
             return StaleWorkspaceSweep::Skipped;
         };
         let removed = sweep_stale_workspaces(state, now_unix_seconds);
@@ -609,9 +607,9 @@ fn read_opened_record(file: File) -> Result<StoredRecord, RecordDefect> {
 enum RecordWriteFailure {
     /// Another writer holds the record lock.
     Busy,
-    /// The lock file could not be opened, was not a single-link regular file,
-    /// or the operating system refused the lock.
-    Lock,
+    /// The record lock could not be taken for a reason other than another
+    /// holder; the cause names the sub-step and the operating-system error.
+    Lock(LockFailure),
     /// The record could not be encoded within its size bound.
     Encode,
     /// No randomness for the pending file name.
@@ -626,9 +624,112 @@ impl RecordWriteFailure {
     const fn skip(self) -> VerificationRecordSkip {
         match self {
             Self::Busy => VerificationRecordSkip::Busy,
-            Self::Lock | Self::Encode | Self::Randomness | Self::Pending | Self::Replace => {
+            Self::Lock(_) | Self::Encode | Self::Randomness | Self::Pending | Self::Replace => {
                 VerificationRecordSkip::Unavailable
             }
+        }
+    }
+}
+
+/// An operating-system error reduced to what is safe to report: its kind and
+/// raw code, never a path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct IoCause {
+    kind: io::ErrorKind,
+    os_code: Option<i32>,
+}
+
+impl IoCause {
+    fn of(error: &io::Error) -> Self {
+        Self {
+            kind: error.kind(),
+            os_code: error.raw_os_error(),
+        }
+    }
+}
+
+/// Why the record lock could not be taken (issue #136).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LockFailure {
+    /// Opening or creating the lock file without following links failed.
+    Open(IoCause),
+    /// Reading the opened lock file's metadata failed.
+    Inspect(IoCause),
+    /// The lock file is not a regular file with exactly one link. Linked or
+    /// foreign lock files are never used and never reported as busy.
+    Shape {
+        /// Whether it is a regular file.
+        regular_file: bool,
+        /// Its link count.
+        links: u64,
+    },
+    /// The operating system refused the lock for a reason other than another
+    /// holder.
+    Acquire(IoCause),
+}
+
+impl LockFailure {
+    /// Whether a bounded retry may resolve the failure.
+    ///
+    /// Retried: an interrupted open, or the lock file being created by another
+    /// writer at the same moment (not found, already exists); a just-created
+    /// regular file that does not yet report its link; and any failure to
+    /// inspect an opened lock file or to lock one proven to be a single-link
+    /// regular file (an interrupted call, or a kernel short of lock records).
+    /// A retry reopens and rechecks everything, so it can never make an unsafe
+    /// lock file usable. Every other open failure (a link, a directory, no
+    /// permission) and every other shape is final.
+    const fn is_transient(self) -> bool {
+        match self {
+            Self::Open(cause) => matches!(
+                cause.kind,
+                io::ErrorKind::Interrupted | io::ErrorKind::NotFound | io::ErrorKind::AlreadyExists
+            ),
+            Self::Inspect(_) | Self::Acquire(_) => true,
+            Self::Shape {
+                regular_file,
+                links,
+            } => regular_file && links == 0,
+        }
+    }
+}
+
+/// Attempts to take the record lock before a transient failure is final.
+const MAX_LOCK_ATTEMPTS: usize = 4;
+
+/// Takes the record lock without waiting.
+fn acquire_record_lock(state: &Dir) -> Result<HeldFileLock, RecordWriteFailure> {
+    acquire_record_lock_with(|| open_lock(state), HeldFileLock::try_exclusive)
+}
+
+/// Takes the record lock through `open` and `lock`, retrying transient
+/// failures a bounded number of times without sleeping. A holder is reported
+/// as [`RecordWriteFailure::Busy`] at once and never retried.
+fn acquire_record_lock_with(
+    mut open: impl FnMut() -> Result<fs::File, LockFailure>,
+    mut lock: impl FnMut(fs::File) -> Result<HeldFileLock, fs::TryLockError>,
+) -> Result<HeldFileLock, RecordWriteFailure> {
+    let mut attempt = 1;
+    loop {
+        // `None` is another holder; `Some` is why the lock could not be taken.
+        let attempted = match open() {
+            Err(cause) => Err(Some(cause)),
+            Ok(file) => lock(file).map_err(|error| match error {
+                fs::TryLockError::WouldBlock => None,
+                // `WouldBlock` is how std reports a holder; the same kind in
+                // an error still means a holder, not a storage problem.
+                fs::TryLockError::Error(error) if error.kind() == io::ErrorKind::WouldBlock => None,
+                fs::TryLockError::Error(error) => Some(LockFailure::Acquire(IoCause::of(&error))),
+            }),
+        };
+        match attempted {
+            Ok(held) => return Ok(held),
+            Err(None) => return Err(RecordWriteFailure::Busy),
+            Err(Some(cause)) if cause.is_transient() && attempt < MAX_LOCK_ATTEMPTS => {
+                attempt += 1;
+                std::thread::yield_now();
+            }
+            Err(Some(cause)) => return Err(RecordWriteFailure::Lock(cause)),
         }
     }
 }
@@ -638,11 +739,7 @@ fn record_pass(
     fingerprint: &str,
     now_unix_seconds: u64,
 ) -> Result<(), RecordWriteFailure> {
-    let lock = open_lock(state)?;
-    let held = HeldFileLock::try_exclusive(lock).map_err(|error| match error {
-        fs::TryLockError::WouldBlock => RecordWriteFailure::Busy,
-        fs::TryLockError::Error(_) => RecordWriteFailure::Lock,
-    })?;
+    let held = acquire_record_lock(state)?;
     // Only a lock holder creates pending files, so any found now are debris
     // from a writer that was killed mid-write.
     remove_stale_pending(state);
@@ -670,7 +767,7 @@ fn record_pass(
     written
 }
 
-fn open_lock(state: &Dir) -> Result<fs::File, RecordWriteFailure> {
+fn open_lock(state: &Dir) -> Result<fs::File, LockFailure> {
     let mut options = OpenOptions::new();
     options
         .read(true)
@@ -681,12 +778,24 @@ fn open_lock(state: &Dir) -> Result<fs::File, RecordWriteFailure> {
     options.mode(0o600);
     let lock = state
         .open_with(LOCK_FILE, &options)
-        .map_err(|_| RecordWriteFailure::Lock)?;
-    let metadata = lock.metadata().map_err(|_| RecordWriteFailure::Lock)?;
-    if !metadata.is_file() || metadata.nlink() != 1 {
-        return Err(RecordWriteFailure::Lock);
-    }
+        .map_err(|error| LockFailure::Open(IoCause::of(&error)))?;
+    let metadata = lock
+        .metadata()
+        .map_err(|error| LockFailure::Inspect(IoCause::of(&error)))?;
+    check_lock_shape(metadata.is_file(), metadata.nlink())?;
     Ok(lock.into_std())
+}
+
+/// Accepts only a regular file with exactly one link as the record lock.
+const fn check_lock_shape(regular_file: bool, links: u64) -> Result<(), LockFailure> {
+    if regular_file && links == 1 {
+        Ok(())
+    } else {
+        Err(LockFailure::Shape {
+            regular_file,
+            links,
+        })
+    }
 }
 
 /// Writes `record` to a fresh pending file and renames it over the record.
@@ -887,14 +996,14 @@ mod tests {
     };
 
     use super::{
-        FilesystemMediaToolVerificationCache, LOCK_FILE, MAX_MEDIA_TOOL_VERIFICATION_ENTRIES,
-        MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES, MAX_RECORD_READ_ATTEMPTS,
-        MAX_REMOVED_VERIFICATION_WORKSPACES, MEDIA_TOOL_VERIFICATION_MAX_AGE_SECONDS,
-        MediaToolVerificationAuthority, RECORD_FILE, RecordDefect, RecordWriteFailure,
-        SCHEMA_VERSION, STALE_VERIFICATION_WORKSPACE_AGE_SECONDS, STATE_DIRECTORY,
-        StaleWorkspaceSweep, StoredPass, StoredRecord, check_link_count, classify_open_error, hex,
-        is_pending_name, media_tool_fingerprint, read_record, read_record_with, record_pass,
-        write_record,
+        FilesystemMediaToolVerificationCache, IoCause, LOCK_FILE, LockFailure, MAX_LOCK_ATTEMPTS,
+        MAX_MEDIA_TOOL_VERIFICATION_ENTRIES, MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES,
+        MAX_RECORD_READ_ATTEMPTS, MAX_REMOVED_VERIFICATION_WORKSPACES,
+        MEDIA_TOOL_VERIFICATION_MAX_AGE_SECONDS, MediaToolVerificationAuthority, RECORD_FILE,
+        RecordDefect, RecordWriteFailure, SCHEMA_VERSION, STALE_VERIFICATION_WORKSPACE_AGE_SECONDS,
+        STATE_DIRECTORY, StaleWorkspaceSweep, StoredPass, StoredRecord, acquire_record_lock_with,
+        check_link_count, check_lock_shape, classify_open_error, hex, is_pending_name,
+        media_tool_fingerprint, read_record, read_record_with, record_pass, write_record,
     };
     use crate::media_tool_verification::{VerificationWorkspace, WORKSPACE_LOCK_FILE};
     use crate::{
@@ -1518,7 +1627,10 @@ mod tests {
             VerificationRecordSkip::Busy
         );
         for failure in [
-            RecordWriteFailure::Lock,
+            RecordWriteFailure::Lock(LockFailure::Shape {
+                regular_file: true,
+                links: 2,
+            }),
             RecordWriteFailure::Encode,
             RecordWriteFailure::Randomness,
             RecordWriteFailure::Pending,
@@ -1526,6 +1638,186 @@ mod tests {
         ] {
             assert_eq!(failure.skip(), VerificationRecordSkip::Unavailable);
         }
+    }
+
+    fn cause(kind: std::io::ErrorKind) -> IoCause {
+        IoCause::of(&std::io::Error::from(kind))
+    }
+
+    /// Opens the real lock file of `parent`, as the writer does.
+    fn lock_file(parent: &Parent) -> Result<fs::File, LockFailure> {
+        fs::File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(parent.state().join(LOCK_FILE))
+            .map_err(|error| LockFailure::Open(IoCause::of(&error)))
+    }
+
+    fn outcome_name(outcome: &Result<HeldFileLock, RecordWriteFailure>) -> String {
+        match outcome {
+            Ok(_) => String::from("acquired"),
+            Err(failure) => format!("{failure:?}"),
+        }
+    }
+
+    /// Issue #136 on macOS: a writer reported a non-busy failure while taking
+    /// the record lock. Failures a concurrent writer causes for an instant are
+    /// retried a bounded number of times; everything else keeps its precise
+    /// cause, and nothing but a holder is ever reported as busy.
+    #[test]
+    fn transient_lock_failures_are_retried_and_others_keep_their_cause() -> TestResult {
+        let parent = Parent::new()?;
+        let _ = parent.cache()?;
+
+        // The lock file being created by another writer at the same moment.
+        for transient in [
+            LockFailure::Open(cause(std::io::ErrorKind::AlreadyExists)),
+            LockFailure::Open(cause(std::io::ErrorKind::NotFound)),
+            LockFailure::Open(cause(std::io::ErrorKind::Interrupted)),
+            LockFailure::Inspect(cause(std::io::ErrorKind::Interrupted)),
+            LockFailure::Shape {
+                regular_file: true,
+                links: 0,
+            },
+        ] {
+            let mut opens = 0;
+            let outcome = acquire_record_lock_with(
+                || {
+                    opens += 1;
+                    if opens == 1 {
+                        Err(transient)
+                    } else {
+                        lock_file(&parent)
+                    }
+                },
+                HeldFileLock::try_exclusive,
+            );
+            assert_eq!(outcome_name(&outcome), "acquired", "{transient:?}");
+            assert_eq!(opens, 2, "{transient:?}");
+        }
+
+        // A transient failure that persists is reported with its cause.
+        let mut opens = 0;
+        let persistent = LockFailure::Open(cause(std::io::ErrorKind::AlreadyExists));
+        let outcome = acquire_record_lock_with(
+            || {
+                opens += 1;
+                Err(persistent)
+            },
+            HeldFileLock::try_exclusive,
+        );
+        assert_eq!(outcome.err(), Some(RecordWriteFailure::Lock(persistent)));
+        assert_eq!(opens, MAX_LOCK_ATTEMPTS, "retries are bounded");
+
+        // Final failures are reported at once, never as busy.
+        for final_failure in [
+            LockFailure::Open(IoCause::of(&std::io::Error::from_raw_os_error(24))),
+            LockFailure::Open(cause(std::io::ErrorKind::PermissionDenied)),
+            LockFailure::Shape {
+                regular_file: true,
+                links: 2,
+            },
+            LockFailure::Shape {
+                regular_file: false,
+                links: 1,
+            },
+        ] {
+            let mut opens = 0;
+            let outcome = acquire_record_lock_with(
+                || {
+                    opens += 1;
+                    Err(final_failure)
+                },
+                HeldFileLock::try_exclusive,
+            );
+            assert_eq!(outcome.err(), Some(RecordWriteFailure::Lock(final_failure)));
+            assert_eq!(opens, 1, "{final_failure:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn refused_lock_calls_are_retried_and_only_holders_are_busy() -> TestResult {
+        let parent = Parent::new()?;
+        let _ = parent.cache()?;
+
+        // An interrupted lock call is retried; a refused one keeps its code.
+        let mut locks = 0;
+        let outcome = acquire_record_lock_with(
+            || lock_file(&parent),
+            |file| {
+                locks += 1;
+                if locks == 1 {
+                    Err(fs::TryLockError::Error(std::io::Error::from(
+                        std::io::ErrorKind::Interrupted,
+                    )))
+                } else {
+                    HeldFileLock::try_exclusive(file)
+                }
+            },
+        );
+        assert_eq!(outcome_name(&outcome), "acquired");
+        drop(outcome);
+        // A lock that keeps being refused (for example ENOLCK) is retried a
+        // bounded number of times, then reported with its raw code.
+        let refused = std::io::Error::from_raw_os_error(77);
+        let expected = LockFailure::Acquire(IoCause::of(&refused));
+        let mut locks = 0;
+        let outcome = acquire_record_lock_with(
+            || lock_file(&parent),
+            |_| {
+                locks += 1;
+                Err(fs::TryLockError::Error(std::io::Error::from_raw_os_error(
+                    77,
+                )))
+            },
+        );
+        assert_eq!(outcome.err(), Some(RecordWriteFailure::Lock(expected)));
+        assert_eq!(locks, MAX_LOCK_ATTEMPTS);
+
+        // A holder is busy at once, however std reports it.
+        for held in [
+            fs::TryLockError::WouldBlock,
+            fs::TryLockError::Error(std::io::Error::from(std::io::ErrorKind::WouldBlock)),
+        ] {
+            let mut slot = Some(held);
+            let outcome = acquire_record_lock_with(
+                || lock_file(&parent),
+                |_| Err(slot.take().unwrap_or(fs::TryLockError::WouldBlock)),
+            );
+            assert_eq!(outcome.err(), Some(RecordWriteFailure::Busy));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_hard_linked_lock_file_is_refused_with_its_shape_never_as_busy() -> TestResult {
+        let parent = Parent::new()?;
+        let cache = parent.cache()?;
+        let state = cache_state(&cache)?;
+        let outside = parent.0.join("outside.lock");
+        fs::write(&outside, b"")?;
+        fs::hard_link(&outside, parent.state().join(LOCK_FILE))?;
+
+        assert_eq!(
+            record_pass(&state, &hex(digest(1).digest()), NOW).err(),
+            Some(RecordWriteFailure::Lock(LockFailure::Shape {
+                regular_file: true,
+                links: 2,
+            }))
+        );
+        assert_eq!(
+            cache.record_verified(&digest(1), NOW),
+            VerificationRecord::Skipped(VerificationRecordSkip::Unavailable)
+        );
+        assert_eq!(
+            cache.remove_stale_workspaces(NOW),
+            StaleWorkspaceSweep::Skipped
+        );
+        assert_eq!(check_lock_shape(true, 1), Ok(()));
+        Ok(())
     }
 
     const LEFTOVER: &str = "vsift-tool-verification-0123456789abcdef";

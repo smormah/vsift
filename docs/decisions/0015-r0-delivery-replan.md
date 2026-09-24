@@ -152,7 +152,11 @@ and ADR 0008 keeps that payload compatible, so that wording is corrected:
   transient replacement: the read is retried a bounded number of times and
   otherwise counts as "not verified". A record with more than one link is still
   unsafe. Flushing the new record before the rename is best effort, because a
-  record lost or torn by a crash already reads as "not verified".
+  record lost or torn by a crash already reads as "not verified". Taking the
+  write lock retries brief failures (an interrupted call, the lock file being
+  created concurrently, a refused lock on a proven single-link regular file) a
+  bounded number of times; a linked or non-regular lock file is refused at once
+  and never reported as busy.
 - A verification killed mid-run left its `vsift-tool-verification-<16 hex>`
   workspace in the state directory (issue #132). Each workspace now holds an
   exclusive lock on its `workspace.lock` for its whole life, and each preflight,
