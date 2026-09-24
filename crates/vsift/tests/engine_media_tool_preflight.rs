@@ -244,8 +244,17 @@ fn assert_preflight_passed(result: &Result<vsift::IngestOutcome, EngineError>) {
             result,
             Err(EngineError::OpenSession(OpenSessionError::SourceProbe(_)))
         ),
-        "expected the post-preflight probe failure, got {result:?}"
+        "expected the post-preflight probe failure, got {}",
+        outcome_kind(result)
     );
+}
+
+/// Names the outcome without echoing session identifiers into test logs.
+fn outcome_kind(result: &Result<vsift::IngestOutcome, EngineError>) -> &'static str {
+    match result {
+        Ok(_) => "a completed ingest",
+        Err(error) => error.failure_code().identifier(),
+    }
 }
 
 #[tokio::test]
