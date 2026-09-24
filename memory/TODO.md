@@ -51,9 +51,6 @@ complete. P07 is in progress: three increments are done, the packet is not.
 
 ## Known issues and gates
 
-- Issue #125 (open): `operation-response.schema.json` has no `ISOLATION_UNAVAILABLE`
-  code, and its `command` pattern rejects `setup.configure-model`. Increment 2 did
-  not change that schema.
 - Supplied-transcript success paths through the engine and the binary need real
   FFprobe, so they are opt-in (`--ignored`); hosted CI covers them only through the
   application, contract, store and parser tests. Rejections are covered everywhere.
@@ -90,3 +87,6 @@ through a reviewed catalogue revision. Never resolve a live "latest".
 - Live capture ([#107](https://github.com/smormah/vsift/issues/107),
   [#108](https://github.com/smormah/vsift/issues/108)) waits for the finite-video journey.
 - New features land in the engine (`crates/vsift`) once, never in a host.
+- A new public command or failure code needs a `vsift_contract::CommandName` or
+  `FailureCode::ALL` entry; conformance tests then require the v1 schemas to accept
+  it (the fix for issue #125).

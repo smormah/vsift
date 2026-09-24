@@ -12,9 +12,9 @@ use vsift::{
     SourceRetention, SuppliedTranscriptRequest, TranscriptQuery,
 };
 use vsift_contract::{
-    BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, LifecycleResponse,
-    ListedSession, OpenData, OperationResponse, PageData, SessionState, StatusData,
-    TranscriptPageData, transcript_warning_messages,
+    BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
+    LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, SessionState,
+    StatusData, TranscriptPageData, transcript_warning_messages,
 };
 
 use crate::{
@@ -49,20 +49,21 @@ fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
     })
 }
 
-fn response<T: Serialize>(command: &'static str, data: &T) -> Result<Response, FailureCode> {
-    OperationResponse::complete(command, data).map_err(|_| FailureCode::Internal)
+fn response<T: Serialize>(command: CommandName, data: &T) -> Result<Response, FailureCode> {
+    OperationResponse::complete(command.identifier(), data).map_err(|_| FailureCode::Internal)
 }
 
 fn partial_response<T: Serialize>(
-    command: &'static str,
+    command: CommandName,
     data: &T,
     warning: &'static str,
 ) -> Result<Response, FailureCode> {
-    OperationResponse::partial(command, data, warning).map_err(|_| FailureCode::Internal)
+    OperationResponse::partial(command.identifier(), data, warning)
+        .map_err(|_| FailureCode::Internal)
 }
 
 fn status_response(
-    command: &'static str,
+    command: CommandName,
     snapshot: &SessionSnapshot,
 ) -> Result<Response, FailureCode> {
     let data = status_data(snapshot)?;
@@ -107,12 +108,12 @@ fn list_response(page: SessionPage) -> Result<Response, FailureCode> {
     let data = PageData { items, next_cursor };
     if partial {
         partial_response(
-            "session.list",
+            CommandName::SessionList,
             &data,
             "Some session records could not be read.",
         )
     } else {
-        response("session.list", &data)
+        response(CommandName::SessionList, &data)
     }
 }
 
@@ -146,9 +147,13 @@ fn clean_response(page: CleanPage) -> Result<Response, FailureCode> {
         dry_run,
     };
     if partial {
-        partial_response("session.clean", &data, "Some sessions were not cleaned.")
+        partial_response(
+            CommandName::SessionClean,
+            &data,
+            "Some sessions were not cleaned.",
+        )
     } else {
-        response("session.clean", &data)
+        response(CommandName::SessionClean, &data)
     }
 }
 
@@ -174,7 +179,7 @@ pub(crate) async fn ingest(
         data = data.with_transcript(revision);
         warnings = transcript_warning_messages(revision);
     }
-    Ok(response("ingest", &data)?
+    Ok(response(CommandName::Ingest, &data)?
         .with_lifecycle(LifecycleResponse::ephemeral(expires_at))
         .with_warnings(&warnings))
 }
@@ -199,7 +204,8 @@ pub(crate) fn transcript_get(
         excerpt.next_cursor(),
     );
     let expires_at = rfc3339(excerpt.session().lifetime().expires_at_unix_seconds())?;
-    Ok(response("transcript.get", &data)?.with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
+    Ok(response(CommandName::TranscriptGet, &data)?
+        .with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
 }
 
 /// Executes one visible P05 session operation.
@@ -210,15 +216,17 @@ pub(crate) fn execute_session(
     match command {
         SessionCommand::List(arguments) => list_response(engine.list_sessions(arguments.cursor)?),
         SessionCommand::Status(arguments) => status_response(
-            "session.status",
+            CommandName::SessionStatus,
             &engine.session_status(&arguments.session)?,
         ),
-        SessionCommand::Renew(arguments) => {
-            status_response("session.renew", &engine.renew_session(&arguments.session)?)
-        }
-        SessionCommand::Close(arguments) => {
-            status_response("session.close", &engine.close_session(&arguments.session)?)
-        }
+        SessionCommand::Renew(arguments) => status_response(
+            CommandName::SessionRenew,
+            &engine.renew_session(&arguments.session)?,
+        ),
+        SessionCommand::Close(arguments) => status_response(
+            CommandName::SessionClose,
+            &engine.close_session(&arguments.session)?,
+        ),
         SessionCommand::Retain(arguments) => {
             let retention = if arguments.include_source {
                 SourceRetention::IncludeSource
@@ -226,7 +234,7 @@ pub(crate) fn execute_session(
                 SourceRetention::EvidenceOnly
             };
             let bundle = engine.retain_session(&arguments.session, &arguments.output, retention)?;
-            Ok(response("session.retain", &bundle_data(&bundle))?
+            Ok(response(CommandName::SessionRetain, &bundle_data(&bundle))?
                 .with_lifecycle(LifecycleResponse::retained()))
         }
         SessionCommand::Clean(arguments) => {
@@ -254,6 +262,8 @@ pub(crate) fn validate_bundle(
     directory: &std::path::Path,
 ) -> Result<Response, FailureCode> {
     let bundle = engine.validate_bundle(directory)?;
-    Ok(response("bundle.validate", &bundle_data(&bundle))?
-        .with_lifecycle(LifecycleResponse::retained()))
+    Ok(
+        response(CommandName::BundleValidate, &bundle_data(&bundle))?
+            .with_lifecycle(LifecycleResponse::retained()),
+    )
 }

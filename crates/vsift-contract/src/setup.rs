@@ -8,6 +8,7 @@ use vsift_application::{
 use vsift_domain::{DependencyState, DependencyStatus, FailureCode, RuntimeDependency};
 
 use crate::{
+    command::CommandName,
     envelope::CONTRACT_VERSION,
     text::{MAX_PROVIDER_DETAIL_BYTES, sanitize_untrusted_text},
 };
@@ -66,7 +67,7 @@ impl SetupCheckResponse {
     {
         Self {
             schema_version: CONTRACT_VERSION,
-            command: "setup.check",
+            command: CommandName::SetupCheck.identifier(),
             profile: profile.identifier(),
             status: diagnosis.readiness.identifier(),
             verification_scope: "executable_probe_only",
@@ -466,7 +467,7 @@ impl SavedSetupPlan {
     /// or any envelope field differs from what `setup plan --json` emits.
     pub fn validate_envelope(&self) -> Result<(), FailureCode> {
         if self.schema_version != CONTRACT_VERSION
-            || self.command != "setup.plan"
+            || self.command != CommandName::SetupPlan.identifier()
             || self.operation_id.is_some()
             || self.status != "complete"
             || !self.warnings.is_empty()

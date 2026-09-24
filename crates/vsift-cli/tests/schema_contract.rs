@@ -184,6 +184,48 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     Ok(())
 }
 
+/// Regression for issue #125: the binary emitted `setup.configure-model`
+/// envelopes that the published `command` pattern rejected.
+#[test]
+fn configure_model_json_and_jsonl_output_validate_against_the_schemas()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut random = [0_u8; 16];
+    getrandom::fill(&mut random).map_err(|_| io::Error::other("random source failed"))?;
+    let mut suffix = String::with_capacity(32);
+    for byte in random {
+        write!(&mut suffix, "{byte:02x}")?;
+    }
+    let base = std::env::temp_dir().join(format!("vsift-schema-model-test-{suffix}"));
+    fs::create_dir_all(&base)?;
+    let model = base.join("selected-model.bin");
+    fs::write(&model, b"fixture only; no model parser runs")?;
+    let register = |output_mode: &[&str]| -> Result<Value, Box<dyn std::error::Error>> {
+        let output = Command::cargo_bin("vsift")?
+            .args(["setup", "configure-model", "--file"])
+            .arg(&model)
+            .args(output_mode)
+            .env("LOCALAPPDATA", &base)
+            .env("XDG_CONFIG_HOME", &base)
+            .env("HOME", &base)
+            .output()?;
+        assert!(output.status.success());
+        Ok(serde_json::from_slice::<Value>(&output.stdout)?)
+    };
+    let operation_schema = load("operation-response.schema.json")?;
+
+    let json = register(&["--json"])?;
+    validate(&operation_schema, &json)?;
+    assert_eq!(json["command"], "setup.configure-model");
+
+    let event = register(&["--events", "jsonl"])?;
+    validate(&load("terminal-event.schema.json")?, &event)?;
+    validate(&operation_schema, &event["result"])?;
+    assert_eq!(event["command"], "setup.configure-model");
+
+    fs::remove_dir_all(&base)?;
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct SetupV1OldReader {
     schema_version: String,

@@ -126,6 +126,9 @@ of these files. The largest modules are `filesystem_session_store.rs` and
   `ingest --transcript` returned `COMMAND_NOT_IMPLEMENTED` now asserts the typed
   failure for an unreadable sidecar; all other existing contract and schema tests
   pass unchanged, and plain `ingest` output is byte-identical.
+- Issue #125 fix: envelope schemas widened (compatibly) to the codes and commands the
+  CLI already emitted; `FailureCode::ALL` and `CommandName` conformance tests guard
+  against recurrence. Local gates pass (358 passed, 19 opt-in ignored).
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance and
   the strict worker boundary; dependency policy and review; CodeQL. Merges go through
   protected `main` with squash merges.
