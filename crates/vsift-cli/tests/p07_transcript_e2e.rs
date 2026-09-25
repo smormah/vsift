@@ -9,8 +9,8 @@
 //! truth in `fixtures/corpus/manifest.json`. Each journey then consumes the
 //! whole transcript as the `--events jsonl` evidence stream, retains the
 //! session, validates the bundle and checks its transcript record against the
-//! published bundle schema. The local-ASR stage stays `not_implemented` until
-//! the whisper.cpp adapter lands.
+//! published bundle schema. The local-ASR stage is the separate opt-in
+//! checkpoint `p07_local_asr_e2e`, because it needs whisper.cpp and a model.
 //!
 //! `cargo test -p vsift-cli --locked --test p07_transcript_e2e -- --ignored --nocapture`
 //!
@@ -609,7 +609,6 @@ async fn supplied_transcript_checkpoint() -> TestResult {
         "passed"
     };
     let future_stages: Vec<_> = [
-        "p07_local_asr",
         "p08_candidates_search",
         "p09_source_reinspection",
         "p10_recovery",
@@ -664,7 +663,7 @@ async fn supplied_transcript_checkpoint() -> TestResult {
         "prior_checkpoints": ["P04: p04_media_e2e", "P05: p05_session_e2e", "P06: p06_setup_e2e"],
         "stages": stages,
         "coverage_gaps": [
-            "Local ASR (whisper.cpp adapter, chunking) is P07 increment 3",
+            "Local ASR is the separate p07_local_asr_e2e checkpoint (needs whisper.cpp and the pinned model)",
             "Search, candidates and visual refinement belong to P08 and P09"
         ],
         "future_stages": future_stages,
