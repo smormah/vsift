@@ -19,7 +19,12 @@
 //!   before the packets that produce them.
 //! - **Transcript:** [`TranscriptSegmentData`] (the published evidence
 //!   record), [`TranscriptRevisionData`], the `transcript.get` page
-//!   [`TranscriptPageData`], and fixed-prose import warnings and remediation.
+//!   [`TranscriptPageData`], the `transcript.retranscribe` result
+//!   [`TranscriptRetranscribeData`], and fixed-prose warnings and remediation.
+//! - **Local ASR:** [`local_asr_failure_summary`] and
+//!   [`local_asr_verification_summary`], the fixed-prose remediation for a
+//!   failed retranscription or its automatic verification, and the fixed
+//!   remediation for missing tools, models and audio.
 //! - **Evidence stream:** the JSON Lines form of a page, a
 //!   [`TranscriptEvidenceStream`] of [`EvidenceEventResponse`] records ended by
 //!   one terminal event whose data is [`TranscriptStreamData`], with the
@@ -44,6 +49,7 @@
 mod command;
 mod envelope;
 mod evidence;
+mod local_asr;
 mod session;
 mod setup;
 mod storage;
@@ -58,6 +64,11 @@ pub use envelope::{
     TerminalEventResponse,
 };
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
+pub use local_asr::{
+    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary,
+    local_asr_verification_summary,
+};
 pub use session::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, ListedSession,
     OpenData, PageData, SessionState, StatusData,
@@ -73,8 +84,8 @@ pub use stream::{
 };
 pub use text::{MAX_PROVIDER_DETAIL_BYTES, sanitize_untrusted_text};
 pub use transcript::{
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, SourceSegmentData, TranscriptPageData,
-    TranscriptRevisionData, TranscriptSegmentData, transcript_rejection_summary,
-    transcript_warning_messages,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, SourceSegmentData,
+    TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData, TranscriptSegmentData,
+    transcript_rejection_summary, transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;

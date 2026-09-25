@@ -94,6 +94,23 @@ pub struct MediaSelection {
 }
 
 impl MediaDescription {
+    /// The audio stream local speech recognition transcribes: the first
+    /// audio stream, in original order, whose codec this adapter decodes.
+    ///
+    /// R0 never mixes or chooses between several spoken tracks; the first is
+    /// the one players default to. `None` means the source has no usable
+    /// audio, which a caller reports rather than transcribing silence.
+    #[must_use]
+    pub fn speech_audio_stream(&self) -> Option<u32> {
+        self.streams
+            .iter()
+            .find(|stream| {
+                stream.kind == MediaStreamKind::Audio
+                    && stream.decode_support == MediaDecodeSupport::Supported
+            })
+            .map(|stream| stream.index)
+    }
+
     /// Validates explicit indexes without silently switching tracks.
     ///
     /// # Errors

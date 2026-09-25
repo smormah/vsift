@@ -233,6 +233,7 @@ pub fn build_imported_revision(
         },
         supersedes: None,
         replaced_range: None,
+        inherited: Vec::new(),
         language: transcript.language().cloned(),
         segments,
         warnings,

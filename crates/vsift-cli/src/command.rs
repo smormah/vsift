@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use vsift::{EvidenceId, JobId, RuntimeDependency, SessionId, SetupProfile};
+use vsift::{EvidenceId, JobId, RuntimeDependency, SessionId, SetupProfile, TranscriptRevisionId};
 use vsift_contract::CommandName;
 
 /// Complete public R0 command parser.
@@ -359,8 +359,9 @@ pub(crate) struct TranscriptArguments {
 pub(crate) enum TranscriptCommand {
     /// Read timestamped text from a bounded range.
     Get(TranscriptGetArguments),
-    /// Produce a new transcription revision for a bounded range.
-    Retranscribe(SessionRangeArguments),
+    /// Transcribe the session's speech locally with whisper.cpp into a new
+    /// revision: the whole video, or one range of it.
+    Retranscribe(TranscriptRetranscribeArguments),
 }
 
 impl TranscriptCommand {
@@ -390,19 +391,23 @@ pub(crate) struct TranscriptGetArguments {
     /// Opaque continuation token returned by the previous page of the same query.
     #[arg(long)]
     pub cursor: Option<String>,
+    /// Revision to read (a `trv_` identity); defaults to the newest.
+    #[arg(long)]
+    pub revision: Option<TranscriptRevisionId>,
 }
 
-/// Session and normalized microsecond range.
+/// Local speech recognition of a session, whole or over one range.
 #[derive(Args, Debug)]
-pub(crate) struct SessionRangeArguments {
-    /// Session containing the source.
+pub(crate) struct TranscriptRetranscribeArguments {
+    /// Session whose video is transcribed.
     pub session: SessionId,
-    /// Inclusive source-timeline start in microseconds.
-    #[arg(long)]
-    pub from: u64,
-    /// Exclusive source-timeline end in microseconds.
-    #[arg(long)]
-    pub to: u64,
+    /// Inclusive source-timeline start in microseconds; requires --to. Omit
+    /// both to transcribe the whole video.
+    #[arg(long, requires = "to")]
+    pub from: Option<u64>,
+    /// Exclusive source-timeline end in microseconds; requires --from.
+    #[arg(long, requires = "from")]
+    pub to: Option<u64>,
 }
 
 /// Bounded literal transcript search.

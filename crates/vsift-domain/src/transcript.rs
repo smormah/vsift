@@ -369,6 +369,10 @@ pub enum TranscriptWarningKind {
     /// Local ASR: chunks with no audible signal were not transcribed and are
     /// recorded as silent gaps.
     SilentChunksSkipped,
+    /// Local ASR: the run recognised no speech at all in the range it covered,
+    /// so the revision holds no new segment there. The attempt is still
+    /// recorded, with every chunk's outcome, rather than discarded.
+    NoSpeechRecognised,
 }
 
 impl TranscriptWarningKind {
@@ -387,6 +391,7 @@ impl TranscriptWarningKind {
             Self::NonSpeechMarkersRemoved => "non_speech_markers_removed",
             Self::SeamDuplicatesRemoved => "seam_duplicates_removed",
             Self::SilentChunksSkipped => "silent_chunks_skipped",
+            Self::NoSpeechRecognised => "no_speech_recognised",
         }
     }
 
@@ -418,6 +423,7 @@ impl TranscriptWarningKind {
                 | Self::NonSpeechMarkersRemoved
                 | Self::SeamDuplicatesRemoved
                 | Self::SilentChunksSkipped
+                | Self::NoSpeechRecognised
         )
     }
 }
@@ -863,6 +869,85 @@ impl TranscriptProvenance {
     }
 }
 
+/// The revision and segment a carried segment's text was first produced in.
+///
+/// A bounded retranscription copies the segments of the revision it
+/// supersedes that lie outside the replaced range (ADR 0017). The copy gets a
+/// new identity in the new revision, so evidence already indexed under the
+/// older revision is never overwritten, and names the segment it came from so
+/// a citation can be followed back. It always names the revision that
+/// *originally* produced the text, never an intermediate copy, so chains of
+/// retranscriptions stay one hop deep.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CarriedFrom {
+    revision: TranscriptRevisionId,
+    segment: TranscriptSegmentId,
+}
+
+impl CarriedFrom {
+    /// Names the originating revision and segment.
+    #[must_use]
+    pub const fn new(revision: TranscriptRevisionId, segment: TranscriptSegmentId) -> Self {
+        Self { revision, segment }
+    }
+
+    /// The revision that first produced the text.
+    #[must_use]
+    pub const fn revision(&self) -> &TranscriptRevisionId {
+        &self.revision
+    }
+
+    /// The segment's identity in that revision.
+    #[must_use]
+    pub const fn segment(&self) -> &TranscriptSegmentId {
+        &self.segment
+    }
+}
+
+/// The provenance of an earlier revision whose segments a spliced revision
+/// carries, kept so every carried segment can still be checked against the
+/// rule that produced it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InheritedRevision {
+    id: TranscriptRevisionId,
+    provenance: TranscriptProvenance,
+    language: Option<LanguageTag>,
+}
+
+impl InheritedRevision {
+    /// Records the identity, provenance and language of an originating revision.
+    #[must_use]
+    pub const fn new(
+        id: TranscriptRevisionId,
+        provenance: TranscriptProvenance,
+        language: Option<LanguageTag>,
+    ) -> Self {
+        Self {
+            id,
+            provenance,
+            language,
+        }
+    }
+
+    /// Identity of the originating revision.
+    #[must_use]
+    pub const fn id(&self) -> &TranscriptRevisionId {
+        &self.id
+    }
+
+    /// Where the originating revision's segments came from.
+    #[must_use]
+    pub const fn provenance(&self) -> &TranscriptProvenance {
+        &self.provenance
+    }
+
+    /// The originating revision's declared or detected language.
+    #[must_use]
+    pub const fn language(&self) -> Option<&LanguageTag> {
+        self.language.as_ref()
+    }
+}
+
 /// One citable, timestamped transcript segment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TranscriptSegment {
@@ -873,6 +958,7 @@ pub struct TranscriptSegment {
     speaker: Option<SpeakerLabel>,
     confidence: Confidence,
     origin: SegmentOrigin,
+    carried_from: Option<CarriedFrom>,
 }
 
 /// Every field of a [`TranscriptSegment`], validated together by its revision.
@@ -906,7 +992,24 @@ impl TranscriptSegment {
             speaker: parts.speaker,
             confidence: parts.confidence,
             origin: parts.origin,
+            carried_from: None,
         }
+    }
+
+    /// Marks the segment as carried unchanged from an earlier revision; its
+    /// origin then refers to that revision's provenance.
+    #[must_use]
+    pub fn with_carried_from(mut self, carried_from: CarriedFrom) -> Self {
+        self.carried_from = Some(carried_from);
+        self
+    }
+
+    /// The originating revision and segment when this segment was carried
+    /// into its revision by a bounded retranscription; `None` for text the
+    /// revision produced itself.
+    #[must_use]
+    pub const fn carried_from(&self) -> Option<&CarriedFrom> {
+        self.carried_from.as_ref()
     }
 
     /// Segment identity.
@@ -951,7 +1054,10 @@ impl TranscriptSegment {
         self.origin
     }
 
-    fn intersects(&self, window: TimeRange) -> bool {
+    /// Whether the segment overlaps the half-open `window`: it starts before
+    /// the window ends and ends after it starts.
+    #[must_use]
+    pub fn intersects(&self, window: TimeRange) -> bool {
         self.range.start() < window.end() && self.range.end() > window.start()
     }
 }
@@ -974,6 +1080,9 @@ pub struct TranscriptRevisionParts {
     /// The source range whose text this revision replaced in the superseded
     /// revision; present only with `supersedes`.
     pub replaced_range: Option<TimeRange>,
+    /// Provenance of every revision whose segments this one carries; empty
+    /// unless the revision is spliced from the one it supersedes.
+    pub inherited: Vec<InheritedRevision>,
     /// Declared or detected language, if known.
     pub language: Option<LanguageTag>,
     /// Segments in start order.
@@ -992,6 +1101,7 @@ pub struct TranscriptRevision {
     provenance: TranscriptProvenance,
     supersedes: Option<TranscriptRevisionId>,
     replaced_range: Option<TimeRange>,
+    inherited: Vec<InheritedRevision>,
     language: Option<LanguageTag>,
     segments: Vec<TranscriptSegment>,
     warnings: TranscriptWarnings,
@@ -1001,17 +1111,25 @@ impl TranscriptRevision {
     /// Validates every cross-segment invariant of a revision.
     ///
     /// Each segment is checked against its own origin: an imported cue's range
-    /// must be its written timing plus the revision offset, and a local-ASR
-    /// segment's range must be its chunk's decoded start plus the provider's
-    /// times (or the audio end when trimmed). Stored revisions are rebuilt
-    /// through this constructor too, so a modified record cannot bypass the
-    /// rules that produced it.
+    /// must be its written timing plus the offset of the import it came from,
+    /// and a local-ASR segment's range must be its chunk's decoded start plus
+    /// the provider's times (or the audio end when trimmed). A segment carried
+    /// from an earlier revision is checked against that revision's inherited
+    /// provenance and must lie wholly outside the replaced range. Stored
+    /// revisions are rebuilt through this constructor too, so a modified
+    /// record cannot bypass the rules that produced it.
+    ///
+    /// A local-ASR revision may hold no segment at all: a run that heard no
+    /// speech is still recorded, with every chunk's outcome. An import must
+    /// hold at least one.
     ///
     /// # Errors
     ///
     /// Returns the first violated [`TranscriptRevisionError`].
     pub fn new(parts: TranscriptRevisionParts) -> Result<Self, TranscriptRevisionError> {
-        if parts.segments.is_empty() {
+        if parts.segments.is_empty()
+            && !matches!(parts.provenance, TranscriptProvenance::LocalAsr(_))
+        {
             return Err(TranscriptRevisionError::Empty);
         }
         if parts.segments.len() > MAX_TRANSCRIPT_CUES {
@@ -1022,8 +1140,9 @@ impl TranscriptRevision {
         if let TranscriptProvenance::LocalAsr(run) = &parts.provenance {
             run.validate_within(&parts.source_segment)?;
         }
-        let origin = parts.provenance.alignment_origin();
+        validate_inherited(&parts)?;
         let mut identities = HashSet::with_capacity(parts.segments.len());
+        let mut carried_identities = HashSet::new();
         let mut previous_start = bounds.start();
         for (index, segment) in parts.segments.iter().enumerate() {
             let expected =
@@ -1038,13 +1157,37 @@ impl TranscriptRevision {
             if segment.range.start() < bounds.start() || segment.range.end() > bounds.end() {
                 return Err(TranscriptRevisionError::OutsideSourceSegment);
             }
-            validate_segment_origin(segment, &parts.provenance)?;
-            if segment.speaker.is_some() && !origin.carries_speaker_labels() {
+            let provenance = match &segment.carried_from {
+                None => &parts.provenance,
+                Some(carried) => {
+                    if !carried_identities.insert(carried.segment.clone())
+                        || parts
+                            .replaced_range
+                            .is_none_or(|replaced| segment.intersects(replaced))
+                    {
+                        return Err(TranscriptRevisionError::InvalidCarriedSegment);
+                    }
+                    &inherited_by_id(&parts.inherited, &carried.revision)?.provenance
+                }
+            };
+            validate_segment_origin(segment, provenance)?;
+            if segment.speaker.is_some() && !provenance.alignment_origin().carries_speaker_labels()
+            {
                 return Err(TranscriptRevisionError::UnsupportedSpeaker);
             }
             if !identities.insert(segment.id.clone()) {
                 return Err(TranscriptRevisionError::DuplicateSegment);
             }
+        }
+        if parts.inherited.iter().any(|inherited| {
+            !parts.segments.iter().any(|segment| {
+                segment
+                    .carried_from
+                    .as_ref()
+                    .is_some_and(|carried| carried.revision == inherited.id)
+            })
+        }) {
+            return Err(TranscriptRevisionError::InvalidCarriedSegment);
         }
         Ok(Self {
             id: parts.id,
@@ -1054,6 +1197,7 @@ impl TranscriptRevision {
             provenance: parts.provenance,
             supersedes: parts.supersedes,
             replaced_range: parts.replaced_range,
+            inherited: parts.inherited,
             language: parts.language,
             segments: parts.segments,
             warnings: parts.warnings,
@@ -1108,6 +1252,76 @@ impl TranscriptRevision {
         self.replaced_range
     }
 
+    /// Provenance of every earlier revision whose segments this one carries.
+    #[must_use]
+    pub fn inherited(&self) -> &[InheritedRevision] {
+        &self.inherited
+    }
+
+    /// The provenance that produced `segment`'s text and timing: the
+    /// revision's own, or, for a carried segment, its originating revision's.
+    ///
+    /// The constructor guarantees every carried segment of this revision
+    /// names an inherited revision, so the fallback to the revision's own
+    /// provenance is taken only for its own segments.
+    #[must_use]
+    pub fn segment_provenance(&self, segment: &TranscriptSegment) -> &TranscriptProvenance {
+        self.segment_source(segment)
+            .map_or(&self.provenance, |inherited| &inherited.provenance)
+    }
+
+    /// The language of `segment`'s text: its originating revision's for a
+    /// carried segment, otherwise this revision's.
+    #[must_use]
+    pub fn segment_language(&self, segment: &TranscriptSegment) -> Option<&LanguageTag> {
+        self.segment_source(segment)
+            .map_or(self.language.as_ref(), InheritedRevision::language)
+    }
+
+    fn segment_source(&self, segment: &TranscriptSegment) -> Option<&InheritedRevision> {
+        let carried = segment.carried_from.as_ref()?;
+        self.inherited
+            .iter()
+            .find(|inherited| inherited.id == carried.revision)
+    }
+
+    /// Widens `requested` to whole segments of this revision (ADR 0017).
+    ///
+    /// A bounded retranscription never cuts a segment in two: every segment
+    /// the range intersects, and every segment overlapping one of those in
+    /// turn, is replaced whole. Segments are in start order, so one pass
+    /// builds the chains of mutually overlapping segments and the result is
+    /// `requested` joined with each chain it intersects. A range that
+    /// intersects nothing is returned unchanged.
+    #[must_use]
+    pub fn snap_to_segments(&self, requested: TimeRange) -> TimeRange {
+        let (mut start, mut end) = (requested.start(), requested.end());
+        let mut absorb = |chain: (MediaTime, MediaTime)| {
+            if chain.0 < requested.end() && chain.1 > requested.start() {
+                start = start.min(chain.0);
+                end = end.max(chain.1);
+            }
+        };
+        let mut chain: Option<(MediaTime, MediaTime)> = None;
+        for segment in &self.segments {
+            let (segment_start, segment_end) = (segment.range.start(), segment.range.end());
+            chain = match chain {
+                Some((chain_start, chain_end)) if segment_start < chain_end => {
+                    Some((chain_start, chain_end.max(segment_end)))
+                }
+                Some(finished) => {
+                    absorb(finished);
+                    Some((segment_start, segment_end))
+                }
+                None => Some((segment_start, segment_end)),
+            };
+        }
+        if let Some(finished) = chain {
+            absorb(finished);
+        }
+        TimeRange::new(start, end).unwrap_or(requested)
+    }
+
     /// Declared or detected language, if known.
     #[must_use]
     pub const fn language(&self) -> Option<&LanguageTag> {
@@ -1158,6 +1372,41 @@ impl TranscriptRevision {
         }
         TranscriptSlice { segments, has_more }
     }
+}
+
+fn inherited_by_id<'a>(
+    inherited: &'a [InheritedRevision],
+    id: &TranscriptRevisionId,
+) -> Result<&'a InheritedRevision, TranscriptRevisionError> {
+    inherited
+        .iter()
+        .find(|entry| entry.id == *id)
+        .ok_or(TranscriptRevisionError::InvalidCarriedSegment)
+}
+
+/// Inherited provenance belongs only to a spliced local-ASR revision; each
+/// entry is distinct, is not the revision itself, and any run it records lies
+/// in the same source segment.
+fn validate_inherited(parts: &TranscriptRevisionParts) -> Result<(), TranscriptRevisionError> {
+    if parts.inherited.is_empty() {
+        return Ok(());
+    }
+    let invalid = TranscriptRevisionError::InvalidCarriedSegment;
+    if parts.supersedes.is_none() || !matches!(parts.provenance, TranscriptProvenance::LocalAsr(_))
+    {
+        return Err(invalid);
+    }
+    let mut seen = HashSet::with_capacity(parts.inherited.len());
+    for entry in &parts.inherited {
+        if entry.id == parts.id || !seen.insert(entry.id.clone()) {
+            return Err(invalid);
+        }
+        if let TranscriptProvenance::LocalAsr(run) = &entry.provenance {
+            run.validate_within(&parts.source_segment)
+                .map_err(|_| invalid)?;
+        }
+    }
+    Ok(())
 }
 
 /// A superseding revision names what it replaces; imports replace nothing.
@@ -1439,6 +1688,11 @@ pub enum TranscriptRevisionError {
     InvalidSupersession,
     /// A local-ASR run's chunk records do not follow its chunk plan.
     InvalidAsrRun,
+    /// A carried segment names no inherited revision, is carried twice, or
+    /// lies in the replaced range; or inherited provenance is repeated,
+    /// unreferenced, or present on a revision that is not a spliced local-ASR
+    /// revision.
+    InvalidCarriedSegment,
 }
 
 impl fmt::Display for TranscriptRevisionError {
@@ -1462,6 +1716,9 @@ impl fmt::Display for TranscriptRevisionError {
             Self::OriginMismatch => "transcript segment origin does not match its revision",
             Self::InvalidSupersession => "transcript supersession metadata is inconsistent",
             Self::InvalidAsrRun => "local ASR run does not follow its chunk plan",
+            Self::InvalidCarriedSegment => {
+                "carried transcript segment does not match its inherited provenance"
+            }
         })
     }
 }
@@ -1555,6 +1812,7 @@ mod tests {
             provenance: imported(TranscriptFormat::Srt, offset)?,
             supersedes: None,
             replaced_range: None,
+            inherited: Vec::new(),
             language: None,
             segments,
             warnings: TranscriptWarnings::default(),
@@ -1581,6 +1839,7 @@ mod tests {
             provenance: revision.provenance().clone(),
             supersedes: None,
             replaced_range: None,
+            inherited: Vec::new(),
             language: None,
             segments: revision.segments().to_vec(),
             warnings: TranscriptWarnings::default(),
@@ -1602,6 +1861,55 @@ mod tests {
             confidence,
             origin: original.origin(),
         })
+    }
+
+    /// D3: a bounded range is widened to whole segments, following chains of
+    /// overlapping segments, and never cuts one in two.
+    #[test]
+    fn retranscription_ranges_snap_outward_to_whole_segments() -> TestResult {
+        const SECOND: u64 = 1_000_000;
+        let base = revision(
+            TranscriptOffset::ZERO,
+            &[
+                (SECOND, 3 * SECOND),
+                (2 * SECOND, 5 * SECOND),
+                (6 * SECOND, 8 * SECOND),
+                (8 * SECOND, 9 * SECOND),
+            ],
+        )?;
+        let span = |start: u64, end: u64| {
+            TimeRange::new(MediaTime::from_micros(start), MediaTime::from_micros(end))
+        };
+        // Inside the second segment: the overlapping chain [1 s, 5 s) is replaced.
+        assert_eq!(
+            base.snap_to_segments(span(4 * SECOND, 4_500_000)?),
+            span(SECOND, 5 * SECOND)?
+        );
+        // Partly in a gap: only the intersected segment is added.
+        assert_eq!(
+            base.snap_to_segments(span(5_500_000, 6_500_000)?),
+            span(5_500_000, 8 * SECOND)?
+        );
+        // Touching segments are separate chains; a range across both takes both.
+        assert_eq!(
+            base.snap_to_segments(span(7_900_000, 8_100_000)?),
+            span(6 * SECOND, 9 * SECOND)?
+        );
+        assert_eq!(
+            base.snap_to_segments(span(7 * SECOND, 8 * SECOND)?),
+            span(6 * SECOND, 8 * SECOND)?
+        );
+        // Nothing intersected: unchanged.
+        assert_eq!(
+            base.snap_to_segments(span(9_500_000, 11 * SECOND)?),
+            span(9_500_000, 11 * SECOND)?
+        );
+        // Whole source: unchanged.
+        assert_eq!(
+            base.snap_to_segments(span(0, 12 * SECOND)?),
+            span(0, 12 * SECOND)?
+        );
+        Ok(())
     }
 
     #[test]

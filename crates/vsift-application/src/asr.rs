@@ -6,19 +6,23 @@
 //! decision about that output (validation, silence, seams) is the domain's;
 //! this module sequences the stages, checks the recognizer's identity before
 //! and after the run so output from two different models is never mixed, and
-//! stops at the first typed failure without producing anything.
-//! [`build_asr_revision`] then identifies the result as a transcript revision.
+//! stops at the first typed failure without producing anything. Only a model
+//! identified as a reviewed pinned profile may run (maintainer decision D5).
+//! [`build_asr_revision`] then identifies the result as a transcript revision,
+//! splicing it into the revision it supersedes when the run covered only part
+//! of the source (decision D3, ADR 0017).
 
 use std::{error::Error, fmt, future::Future, num::NonZeroU16, num::NonZeroU32};
 
 use vsift_domain::{
-    AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrProviderBuild, AsrRun,
-    AsrRunParts, ChunkPlan, ChunkPlanError, LanguageTag, MediaTime, MergedSegment, PlannedChunk,
-    ProviderChunkOutput, ProviderOutputError, SegmentOrigin, SessionId, SourceId, SourceSegment,
-    TimeRange, TranscriptProvenance, TranscriptRevision, TranscriptRevisionError,
-    TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts,
-    TranscriptWarningKind, TranscriptWarnings, decoded_audio_range, is_silent_pcm, merge_chunks,
-    plan_chunks, validate_chunk_output,
+    AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile,
+    AsrProviderBuild, AsrRun, AsrRunParts, CarriedFrom, ChunkPlan, ChunkPlanError,
+    InheritedRevision, LanguageTag, MediaTime, MergedSegment, PlannedChunk, ProviderChunkOutput,
+    ProviderOutputError, SegmentOrigin, SessionId, SourceId, SourceSegment, TimeRange,
+    TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
+    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptWarningKind,
+    TranscriptWarnings, decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks,
+    validate_chunk_output,
 };
 
 use crate::{
@@ -99,7 +103,12 @@ pub enum SpeechRecognitionError {
     ProviderFailed,
     /// The provider's output could not be parsed as its documented format.
     UnparseableOutput,
-    /// The provider could not run or its output could not be read.
+    /// The provider ended abnormally (a signal, or an operating-system crash
+    /// status) rather than exiting; exhausted memory is the usual cause.
+    AbnormalTermination,
+    /// The private work directory, or a chunk file in it, could not be used.
+    Workspace,
+    /// The provider could not be started or identified.
     Io,
 }
 
@@ -113,6 +122,8 @@ impl fmt::Display for SpeechRecognitionError {
             Self::ResourceLimit => "speech recognition output exceeded its bound",
             Self::ProviderFailed => "speech recognizer failed",
             Self::UnparseableOutput => "speech recognizer output is unparseable",
+            Self::AbnormalTermination => "speech recognizer terminated abnormally",
+            Self::Workspace => "speech recognition work directory could not be used",
             Self::Io => "speech recognizer could not run",
         })
     }
@@ -202,6 +213,8 @@ pub enum AsrFailureReason {
     ModelChanged,
     /// The model file is missing or unreadable.
     ModelUnavailable,
+    /// The model is not a reviewed pinned profile, so it is not run (D5).
+    UnpinnedModel,
     /// The caller cancelled the run.
     Cancelled,
     /// A stage exceeded its deadline.
@@ -218,7 +231,12 @@ pub enum AsrFailureReason {
     UnparseableOutput,
     /// The recognizer's output violated the domain's output rules.
     MalformedOutput(ProviderOutputError),
-    /// A process or file could not be used.
+    /// The recognizer ended abnormally, usually because memory ran out.
+    AbnormalTermination,
+    /// The private work directory could not be used.
+    Workspace,
+    /// A provider process could not run, or its output or the source copy
+    /// could not be read.
     Io,
     /// The assembled run violated an invariant; an internal fault.
     InvalidRun(TranscriptRevisionError),
@@ -233,6 +251,7 @@ impl AsrFailureReason {
             Self::TooManyChunks => "too_many_chunks",
             Self::ModelChanged => "model_changed",
             Self::ModelUnavailable => "model_unavailable",
+            Self::UnpinnedModel => "unpinned_model",
             Self::Cancelled => "cancelled",
             Self::Deadline => "deadline",
             Self::Busy => "busy",
@@ -241,6 +260,8 @@ impl AsrFailureReason {
             Self::ProviderFailed => "provider_failed",
             Self::UnparseableOutput => "unparseable_output",
             Self::MalformedOutput(_) => "malformed_output",
+            Self::AbnormalTermination => "abnormal_termination",
+            Self::Workspace => "workspace",
             Self::Io => "io",
             Self::InvalidRun(_) => "invalid_run",
         }
@@ -298,6 +319,8 @@ impl From<SpeechRecognitionError> for AsrFailureReason {
             SpeechRecognitionError::ResourceLimit => Self::ResourceLimit,
             SpeechRecognitionError::ProviderFailed => Self::ProviderFailed,
             SpeechRecognitionError::UnparseableOutput => Self::UnparseableOutput,
+            SpeechRecognitionError::AbnormalTermination => Self::AbnormalTermination,
+            SpeechRecognitionError::Workspace => Self::Workspace,
             SpeechRecognitionError::Io => Self::Io,
         }
     }
@@ -333,6 +356,11 @@ pub struct AsrTranscription {
 
 /// Transcribes `range` chunk by chunk and merges the result (T-03, T-05, T-06).
 ///
+/// Only a model identified as a reviewed pinned profile runs: an
+/// [`AsrModelProfile::Unreviewed`] `expected` model is refused before any
+/// work (maintainer decision D5, ADR 0017), because nothing about an
+/// unreviewed model's accuracy, licence or resource use is known.
+///
 /// The recognizer's identity is read before the first chunk and after the
 /// last and must equal `expected` both times, so a model or binary swapped
 /// during the run fails it rather than mixing outputs. A chunk whose decoded
@@ -356,24 +384,7 @@ where
     C: AsrCancellation,
 {
     let bounds = request.source_segment.range();
-    if request.range.start() < bounds.start() || request.range.end() > bounds.end() {
-        return Err(AsrFailure::at(
-            AsrStage::Planning,
-            AsrFailureReason::InvalidRange,
-        ));
-    }
-    let chunks =
-        plan_chunks(request.source_segment.id(), request.range, request.plan).map_err(|error| {
-            AsrFailure::at(
-                AsrStage::Planning,
-                match error {
-                    ChunkPlanError::TooManyChunks => AsrFailureReason::TooManyChunks,
-                    ChunkPlanError::InvalidWindow | ChunkPlanError::InvalidOverlap => {
-                        AsrFailureReason::InvalidRange
-                    }
-                },
-            )
-        })?;
+    let chunks = plan_run(&request)?;
     ensure_identity(recognizer, request.expected).await?;
 
     let mut records = Vec::with_capacity(chunks.len());
@@ -457,6 +468,35 @@ where
     })
 }
 
+/// Refuses a range outside the source and an unpinned model, then cuts the
+/// range into chunks; nothing has run yet.
+fn plan_run(request: &TranscribeRangeRequest<'_>) -> Result<Vec<PlannedChunk>, AsrFailure> {
+    let bounds = request.source_segment.range();
+    if request.range.start() < bounds.start() || request.range.end() > bounds.end() {
+        return Err(AsrFailure::at(
+            AsrStage::Planning,
+            AsrFailureReason::InvalidRange,
+        ));
+    }
+    if request.expected.model.profile() == AsrModelProfile::Unreviewed {
+        return Err(AsrFailure::at(
+            AsrStage::RecognizerIdentity,
+            AsrFailureReason::UnpinnedModel,
+        ));
+    }
+    plan_chunks(request.source_segment.id(), request.range, request.plan).map_err(|error| {
+        AsrFailure::at(
+            AsrStage::Planning,
+            match error {
+                ChunkPlanError::TooManyChunks => AsrFailureReason::TooManyChunks,
+                ChunkPlanError::InvalidWindow | ChunkPlanError::InvalidOverlap => {
+                    AsrFailureReason::InvalidRange
+                }
+            },
+        )
+    })
+}
+
 async fn ensure_identity<R: SpeechRecognizer>(
     recognizer: &R,
     expected: &RecognizerIdentity,
@@ -506,6 +546,17 @@ fn agreed_language(languages: Vec<Option<LanguageTag>>) -> Option<LanguageTag> {
     agreed
 }
 
+/// The revision a retranscription supersedes and the range it replaces there.
+#[derive(Clone, Copy, Debug)]
+pub struct RevisionSplice<'a> {
+    /// The superseded revision: the session's newest when the run started.
+    pub base: &'a TranscriptRevision,
+    /// The replaced range. It is the requested range widened to whole base
+    /// segments ([`TranscriptRevision::snap_to_segments`]) and must be exactly
+    /// the range the run covered.
+    pub replaced_range: TimeRange,
+}
+
 /// Inputs that identify and place one local-ASR revision.
 #[derive(Clone, Debug)]
 pub struct AsrRevisionRequest<'a> {
@@ -519,10 +570,30 @@ pub struct AsrRevisionRequest<'a> {
     pub number: NonZeroU32,
     /// The completed run.
     pub transcription: AsrTranscription,
-    /// The revision this one replaces, if any.
-    pub supersedes: Option<TranscriptRevisionId>,
-    /// The source range this revision replaced in the superseded one.
-    pub replaced_range: Option<TimeRange>,
+    /// The revision this one supersedes and splices into, if the session
+    /// already had one.
+    pub splice: Option<RevisionSplice<'a>>,
+}
+
+/// One segment of a revision being assembled, before ordinals are assigned.
+enum Assembled<'a> {
+    /// Recognised by this run.
+    Own(MergedSegment),
+    /// Carried unchanged from the superseded revision.
+    Carried(&'a TranscriptSegment, CarriedFrom),
+}
+
+impl Assembled<'_> {
+    fn order_key(&self) -> (MediaTime, MediaTime, u8) {
+        match self {
+            Self::Carried(segment, _) => (segment.range().start(), segment.range().end(), 0),
+            Self::Own(merged) => (
+                merged.segment.range().start(),
+                merged.segment.range().end(),
+                1,
+            ),
+        }
+    }
 }
 
 /// Identifies a completed run as a transcript revision.
@@ -533,10 +604,21 @@ pub struct AsrRevisionRequest<'a> {
 /// names itself the same way. Segment identities follow from the revision and
 /// ordinal, as for imports.
 ///
+/// With a [`RevisionSplice`] the result is a complete revision (D3): every
+/// segment of the superseded revision outside the replaced range is carried
+/// with its original text, timing and provenance, and the run's segments fill
+/// the range. Carried segments get new identities in this revision, so the
+/// superseded revision's records stay valid and are never overwritten, and
+/// each names the revision and segment that first produced it
+/// ([`CarriedFrom`]). A run that recognised no speech still yields a revision
+/// (with no new segment and a [`TranscriptWarningKind::NoSpeechRecognised`]
+/// warning), so the attempt and its chunk outcomes are recorded.
+///
 /// # Errors
 ///
-/// Returns [`TranscriptBuildError::Invalid`] when the run found no speech
-/// ([`TranscriptRevisionError::Empty`]) or the assembly violates an invariant.
+/// Returns [`TranscriptBuildError::Invalid`] when the splice does not match
+/// the run (another source, a different range, or a revision number that does
+/// not follow the superseded one) or the assembly violates an invariant.
 pub fn build_asr_revision(
     request: AsrRevisionRequest<'_>,
 ) -> Result<TranscriptRevision, TranscriptBuildError> {
@@ -545,6 +627,17 @@ pub fn build_asr_revision(
     let covered = run.covered_range().ok_or(TranscriptBuildError::Invalid(
         TranscriptRevisionError::InvalidAsrRun,
     ))?;
+    if let Some(splice) = &request.splice
+        && (splice.replaced_range != covered
+            || splice.base.source_id() != request.source_id
+            || splice.base.source_segment() != request.source_segment
+            || request.number.get() <= splice.base.number())
+    {
+        return Err(TranscriptBuildError::Invalid(
+            TranscriptRevisionError::InvalidSupersession,
+        ));
+    }
+    let supersedes = request.splice.map(|splice| splice.base.id().clone());
     let revision_id = TranscriptRevisionId::parse(derived_identity(
         "trv_",
         "vsift.transcript-revision.local-asr.v1",
@@ -563,48 +656,131 @@ pub fn build_asr_revision(
             &run.audio_stream().to_string(),
             &covered.start().as_micros().to_string(),
             &covered.end().as_micros().to_string(),
-            request.supersedes.as_ref().map_or("", |id| id.as_str()),
+            supersedes.as_ref().map_or("", |id| id.as_str()),
         ],
     ))
     .map_err(|_| TranscriptBuildError::Invalid(TranscriptRevisionError::InvalidIdentity))?;
-    let mut segments = Vec::with_capacity(transcription.segments.len());
-    for (index, merged) in transcription.segments.into_iter().enumerate() {
-        let ordinal = u32::try_from(index + 1)
-            .ok()
-            .and_then(NonZeroU32::new)
-            .ok_or(TranscriptBuildError::Invalid(
-                TranscriptRevisionError::TooManySegments,
-            ))?;
-        let segment = merged.segment;
-        segments.push(TranscriptSegment::new(TranscriptSegmentParts {
-            id: transcript_segment_id(&revision_id, ordinal.get())
-                .map_err(TranscriptBuildError::Invalid)?,
-            ordinal,
-            range: segment.range(),
-            text: segment.text().clone(),
-            speaker: None,
-            confidence: segment.confidence(),
-            origin: SegmentOrigin::Asr {
-                chunk: merged.chunk,
-                provider_start: segment.provider_start(),
-                provider_end: segment.provider_end(),
-                trimmed: segment.trimmed(),
-            },
-        }));
+    let mut warnings = transcription.warnings;
+    if transcription.segments.is_empty() {
+        warnings.add(
+            TranscriptWarningKind::NoSpeechRecognised,
+            1,
+            NonZeroU32::MIN,
+        );
     }
+    let (mut assembled, inherited) = match request.splice {
+        Some(splice) => carried_segments(splice)?,
+        None => (Vec::new(), Vec::new()),
+    };
+    assembled.extend(transcription.segments.into_iter().map(Assembled::Own));
+    // Stable: ties keep carried segments first, then provider order.
+    assembled.sort_by_key(Assembled::order_key);
+    let segments = identified_segments(&revision_id, assembled)?;
     TranscriptRevision::new(TranscriptRevisionParts {
         id: revision_id,
         number: request.number,
         source_id: request.source_id.clone(),
         source_segment: request.source_segment.clone(),
         provenance: TranscriptProvenance::LocalAsr(transcription.run),
-        supersedes: request.supersedes,
-        replaced_range: request.replaced_range,
+        supersedes,
+        replaced_range: request.splice.map(|splice| splice.replaced_range),
+        inherited,
         language: transcription.language,
         segments,
-        warnings: transcription.warnings,
+        warnings,
     })
     .map_err(TranscriptBuildError::Invalid)
+}
+
+/// Gives assembled segments their ordinals and identities in `revision_id`.
+fn identified_segments(
+    revision_id: &TranscriptRevisionId,
+    assembled: Vec<Assembled<'_>>,
+) -> Result<Vec<TranscriptSegment>, TranscriptBuildError> {
+    let mut segments = Vec::with_capacity(assembled.len());
+    for (index, entry) in assembled.into_iter().enumerate() {
+        let ordinal = u32::try_from(index + 1)
+            .ok()
+            .and_then(NonZeroU32::new)
+            .ok_or(TranscriptBuildError::Invalid(
+                TranscriptRevisionError::TooManySegments,
+            ))?;
+        let id = transcript_segment_id(revision_id, ordinal.get())
+            .map_err(TranscriptBuildError::Invalid)?;
+        segments.push(match entry {
+            Assembled::Own(merged) => {
+                let segment = merged.segment;
+                TranscriptSegment::new(TranscriptSegmentParts {
+                    id,
+                    ordinal,
+                    range: segment.range(),
+                    text: segment.text().clone(),
+                    speaker: None,
+                    confidence: segment.confidence(),
+                    origin: SegmentOrigin::Asr {
+                        chunk: merged.chunk,
+                        provider_start: segment.provider_start(),
+                        provider_end: segment.provider_end(),
+                        trimmed: segment.trimmed(),
+                    },
+                })
+            }
+            Assembled::Carried(segment, carried_from) => {
+                TranscriptSegment::new(TranscriptSegmentParts {
+                    id,
+                    ordinal,
+                    range: segment.range(),
+                    text: segment.text().clone(),
+                    speaker: segment.speaker().cloned(),
+                    confidence: segment.confidence(),
+                    origin: segment.origin(),
+                })
+                .with_carried_from(carried_from)
+            }
+        });
+    }
+    Ok(segments)
+}
+
+/// The superseded revision's segments outside the replaced range, each naming
+/// its originating revision and segment, and the provenance of every revision
+/// they originate in, in order of first use.
+fn carried_segments(
+    splice: RevisionSplice<'_>,
+) -> Result<(Vec<Assembled<'_>>, Vec<InheritedRevision>), TranscriptBuildError> {
+    let base = splice.base;
+    let mut carried = Vec::new();
+    let mut inherited: Vec<InheritedRevision> = Vec::new();
+    for segment in base.segments() {
+        if segment.intersects(splice.replaced_range) {
+            continue;
+        }
+        let (origin, source) = match segment.carried_from() {
+            Some(carried_from) => (
+                carried_from.clone(),
+                base.inherited()
+                    .iter()
+                    .find(|entry| entry.id() == carried_from.revision())
+                    .cloned()
+                    .ok_or(TranscriptBuildError::Invalid(
+                        TranscriptRevisionError::InvalidCarriedSegment,
+                    ))?,
+            ),
+            None => (
+                CarriedFrom::new(base.id().clone(), segment.id().clone()),
+                InheritedRevision::new(
+                    base.id().clone(),
+                    base.provenance().clone(),
+                    base.language().cloned(),
+                ),
+            ),
+        };
+        if !inherited.iter().any(|entry| entry.id() == source.id()) {
+            inherited.push(source);
+        }
+        carried.push(Assembled::Carried(segment, origin));
+    }
+    Ok((carried, inherited))
 }
 
 #[cfg(test)]

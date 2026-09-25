@@ -163,8 +163,9 @@ JSON fields, error codes, exit codes, and evidence identifiers are public API. C
 The published [v1 CLI contract](contracts/cli-v1.md) and
 [JSON schemas](../schemas/v1/README.md) define the v1 boundary. `setup check`,
 foreground `ingest` (with optional supplied-transcript import), the P05 `session`
-lifecycle, `transcript get` and `bundle validate` are operational; remaining commands
-fail with a typed not-implemented result until their owning packets ship.
+lifecycle, `transcript get`, `transcript retranscribe` and `bundle validate` are
+operational; remaining commands fail with a typed not-implemented result until their
+owning packets ship.
 
 Transcript evidence (P07) follows the segment-first model of ADR 0016: a finite file
 is one closed source segment, and each transcript revision and segment carries its
@@ -178,17 +179,26 @@ per segment, then the terminal event), so every host streams identically. The st
 `transcript_record` has its own published bundle schema, and `bundle validate`
 decodes it strictly.
 
-Local speech recognition (P07 increment 3a, not yet reachable from a command) uses
-the same revision type. A revision's provenance is either an import (sidecar, format,
-offset) or one local ASR run (provider build and model digests, decoding profile,
-chunk plan, threads, audio stream and every chunk's outcome), and each segment names
-its own origin, so `TranscriptRevision::new` can re-derive every segment's range. The
-domain `asr` module owns chunk planning, provider-output validation, silence and the
-seam merge; the application's `transcribe_range` drives the `SpeechAudioSource` and
-`SpeechRecognizer` ports and checks the recognizer's identity before and after a
-run; infrastructure provides `FfmpegMedia::speech_pcm`, the whisper.cpp CLI adapter
-(closed argument list, supervised per-chunk runs, a bounded parser of its `-ojf`
-file) and version 2 of the `transcript_record` format. Imports still write version 1.
+Local speech recognition (P07 increments 3a and 3b, ADR 0017) uses the same revision
+type and is requested only by `transcript retranscribe`. A revision's provenance is
+either an import (sidecar, format, offset) or one local ASR run (provider build and
+model digests, decoding profile, chunk plan, threads, audio stream and every chunk's
+outcome), and each segment names its own origin, so `TranscriptRevision::new` can
+re-derive every segment's range. A revision spliced from the one it supersedes also
+holds `inherited` provenance and carried segments (`carried_from`), each checked
+against the provenance that produced it, and may hold no segment when the run heard
+no speech. The domain `asr` module owns chunk planning, provider-output validation,
+silence and the seam merge, and `TranscriptRevision::snap_to_segments` owns how a
+bounded range widens to whole segments. The application's `transcribe_range` drives
+the `SpeechAudioSource` and `SpeechRecognizer` ports, refuses unpinned models and
+checks the recognizer's identity before and after a run; `build_asr_revision` splices
+the result into the superseded revision; `preflight_local_asr` runs the
+`LocalAsrVerifier` port once per identity. Infrastructure provides
+`FfmpegMedia::speech_pcm`, the whisper.cpp CLI adapter (closed argument list,
+supervised per-chunk runs, a bounded parser of its `-ojf` file), the
+`FixtureAsrVerifier` and its fingerprint, `SourceSnapshot::open_committed`, the
+session work directory and version 2 of the `transcript_record` format. The engine's
+`Engine::retranscribe` composes them; imports still write version 1.
 
 ## Error model
 

@@ -7,14 +7,20 @@ use std::{
     pin::Pin,
 };
 
-use vsift_application::{Clock, IdentifierSource, MediaToolVerification, MediaToolVerifier};
+use vsift_application::{
+    Clock, IdentifierSource, LocalAsrVerifier, MediaToolVerification, MediaToolVerifier,
+    SpeechRecognizer,
+};
 use vsift_domain::{OperationId, SessionId};
 use vsift_infrastructure::{
     FilesystemSessionStore, RandomIdentifierSource, SessionRootProvisioning, SystemClock,
     UserDependencyConfigStore, open_session_root, platform_session_root,
 };
 
-use crate::error::{EngineError, SessionRootError};
+use crate::{
+    asr::{HostAsr, HostLocalAsrVerifier, HostVerifierRef},
+    error::{EngineError, SessionRootError},
+};
 
 /// Where the engine keeps disposable investigation sessions.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -76,6 +82,8 @@ pub struct EnginePorts {
     clock: Box<dyn Clock>,
     identifiers: Box<dyn IdentifierSource>,
     media_tool_verifier: Option<Box<dyn HostMediaToolVerifier>>,
+    local_asr_verifier: Option<Box<dyn HostLocalAsrVerifier>>,
+    speech_recognizer: Option<HostAsr>,
 }
 
 impl EnginePorts {
@@ -89,7 +97,41 @@ impl EnginePorts {
             clock: Box::new(clock),
             identifiers: Box::new(identifiers),
             media_tool_verifier: None,
+            local_asr_verifier: None,
+            speech_recognizer: None,
         }
+    }
+
+    /// Replaces the reviewed speech-fixture verifier that the automatic
+    /// local-ASR preflight runs for the selected whisper.cpp and model.
+    ///
+    /// whisper.cpp and the model are still resolved, identified and
+    /// fingerprinted as usual, but a pass is recorded under a separate
+    /// identity, as for [`EnginePorts::with_media_tool_verifier`]. Intended for
+    /// tests and hosts with their own verification authority.
+    #[must_use]
+    pub fn with_local_asr_verifier(mut self, verifier: impl LocalAsrVerifier + 'static) -> Self {
+        self.local_asr_verifier = Some(Box::new(verifier));
+        self
+    }
+
+    /// Replaces whisper.cpp with the host's own speech recognizer, verified by
+    /// the host's own verifier.
+    ///
+    /// A retranscription then resolves no whisper.cpp executable or model and
+    /// takes the recognizer's reported identity as the run's provenance. The
+    /// recognizer still runs only if its model identifies as a reviewed
+    /// pinned profile, and only after `verifier` passes (recorded under a
+    /// host-supplied identity). `FFmpeg` and `FFprobe` still decode the audio.
+    /// Intended for tests and hosts that embed their own engine.
+    #[must_use]
+    pub fn with_speech_recognizer(
+        mut self,
+        recognizer: impl SpeechRecognizer + 'static,
+        verifier: impl LocalAsrVerifier + 'static,
+    ) -> Self {
+        self.speech_recognizer = Some(HostAsr::new(recognizer, verifier));
+        self
     }
 
     /// Replaces the reviewed fixture verifier that the automatic media-tool
@@ -156,6 +198,19 @@ impl Engine {
     /// The host-supplied media-tool verifier, when one replaced the fixture.
     pub(crate) fn host_media_tool_verifier(&self) -> Option<HostVerifier<'_>> {
         self.ports.media_tool_verifier.as_deref().map(HostVerifier)
+    }
+
+    /// The host-supplied local-ASR verifier, when one replaced the fixture.
+    pub(crate) fn host_local_asr_verifier(&self) -> Option<HostVerifierRef<'_>> {
+        self.ports
+            .local_asr_verifier
+            .as_deref()
+            .map(HostVerifierRef)
+    }
+
+    /// The host-supplied speech recognizer and its verifier, if any.
+    pub(crate) const fn host_asr(&self) -> Option<&HostAsr> {
+        self.ports.speech_recognizer.as_ref()
     }
 
     pub(crate) fn session_root_path(&self) -> Result<PathBuf, EngineError> {

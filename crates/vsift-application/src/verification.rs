@@ -9,6 +9,8 @@
 
 use std::future::Future;
 
+use crate::AsrFailure;
+
 /// The media operation a verification exercised when it stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MediaToolCheck {
@@ -236,6 +238,95 @@ where
         MediaToolVerification::Failed { check, failure } => {
             Err(MediaToolPreflightFailure { check, failure })
         }
+    }
+}
+
+/// Why local speech recognition failed its functional verification.
+///
+/// The verification runs a reviewed speech fixture through the same chain a
+/// retranscription uses (speech PCM, the recognizer, output parsing and
+/// validation) and compares the transcript with the fixture's recorded words
+/// and speech window (ADR 0017).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LocalAsrVerificationFailure {
+    /// The embedded speech fixture failed its own integrity check.
+    FixtureIntegrity,
+    /// The private verification workspace could not be prepared.
+    Workspace,
+    /// The fixture could not be probed or its speech stream is missing, with
+    /// media tools that already passed their own verification.
+    FixtureMedia,
+    /// Transcribing the fixture failed at a typed stage.
+    Transcription(AsrFailure),
+    /// Transcription completed but missed the fixture's recorded words or
+    /// placed them outside its recorded speech window.
+    UnexpectedTranscript,
+}
+
+impl LocalAsrVerificationFailure {
+    /// Stable machine-readable identifier of the failure kind.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::FixtureIntegrity => "fixture_integrity",
+            Self::Workspace => "workspace",
+            Self::FixtureMedia => "fixture_media",
+            Self::Transcription(_) => "transcription",
+            Self::UnexpectedTranscript => "unexpected_transcript",
+        }
+    }
+}
+
+/// Outcome of running local speech recognition on the reviewed fixture.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LocalAsrVerification {
+    /// The fixture's words were recognised inside its speech window.
+    Verified,
+    /// Verification did not pass.
+    Failed(LocalAsrVerificationFailure),
+}
+
+/// Port that proves the selected recognizer and model transcribe speech here.
+pub trait LocalAsrVerifier: Send + Sync {
+    /// Runs the bounded fixture verification, leaving no workspace behind.
+    fn verify(&self) -> impl Future<Output = LocalAsrVerification> + Send;
+}
+
+/// Ensures local speech recognition is verified before it touches user media.
+///
+/// It mirrors [`preflight_media_tools`] and shares its per-user record: the
+/// record stores only digests, and a local-ASR fingerprint is derived in its
+/// own domain (it binds the recognizer, the model, the media tools, the
+/// profile and the fixture), so it never matches a media-tool pass. A
+/// still-valid recorded pass skips verification; otherwise the verifier runs,
+/// a pass is offered to the cache and a failure is returned unrecorded.
+///
+/// # Errors
+///
+/// Returns the verification failure when it does not pass.
+pub async fn preflight_local_asr<V, C>(
+    verifier: &V,
+    cache: &C,
+    fingerprint: Option<&MediaToolFingerprint>,
+    now_unix_seconds: u64,
+) -> Result<MediaToolPreflightOutcome, LocalAsrVerificationFailure>
+where
+    V: LocalAsrVerifier,
+    C: MediaToolVerificationCache,
+{
+    if let Some(fingerprint) = fingerprint
+        && cache.lookup(fingerprint, now_unix_seconds) == CachedMediaToolVerification::Verified
+    {
+        return Ok(MediaToolPreflightOutcome::AlreadyVerified);
+    }
+    match verifier.verify().await {
+        LocalAsrVerification::Verified => {
+            Ok(MediaToolPreflightOutcome::VerifiedNow(fingerprint.map_or(
+                VerificationRecord::Skipped(VerificationRecordSkip::IdentityUnavailable),
+                |fingerprint| cache.record_verified(fingerprint, now_unix_seconds),
+            )))
+        }
+        LocalAsrVerification::Failed(failure) => Err(failure),
     }
 }
 

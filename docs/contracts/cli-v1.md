@@ -1,8 +1,9 @@
 # CLI and JSON contract v1
 
 Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`
-(including supplied-transcript import), the P05 `session` lifecycle, `transcript get`
-and `bundle validate` are operational. Other commands below
+(including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
+`transcript retranscribe` (local speech recognition) and `bundle validate` are
+operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 
@@ -27,7 +28,7 @@ being created. An existing directory that VSift did not create is never adopted.
 | `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
-| `transcript retranscribe` | New local-ASR transcript revision | P07 (local ASR increment) |
+| `transcript retranscribe` | New local-ASR transcript revision, whole source or one range | Implemented in P07 increment 3b |
 | `search`, `candidates` | Bounded text and visual-candidate retrieval | P08 |
 | `frame get/neighbours/burst`, `audio`, `crop` | Source-grounded evidence extraction | P09 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
@@ -119,9 +120,9 @@ record naming another source): a non-conforming record fails the bundle with
 write record version 1, the version the published schema describes. Version 2 is
 reserved for revisions produced by local speech recognition; the reader already
 decodes it with the same strictness (its run provenance and every segment's
-provider times must reproduce the stored ranges), but no command writes it yet and
-its schema is published with the command that does. Versions above 2 are
-`UNSUPPORTED_SCHEMA`.
+provider times must reproduce the stored ranges, and every carried segment must match
+its inherited provenance). `transcript retranscribe` writes it, and the bundle schema
+describes both versions. Versions above 2 are `UNSUPPORTED_SCHEMA`.
 
 **Malformed-data policy.** A rejection is a typed failure; nothing is imported.
 
@@ -166,8 +167,8 @@ import needs them but not Whisper; an unreadable sidecar is `STORAGE_IO`, and a
 non-regular or unsafe sidecar path is `INVALID_SOURCE`, as for source media.
 
 **Automatic media-tool preflight.** Before the first media stage of an operation that
-runs FFmpeg/FFprobe on user media (today only `ingest --transcript`; later local ASR,
-frames and audio use the same hook), VSift proves the resolved pair works by running a
+runs FFmpeg/FFprobe on user media (today `ingest --transcript` and `transcript
+retranscribe`; later frames and audio use the same hook), VSift proves the resolved pair works by running a
 small reviewed test video built into VSift (F01) through the same probe, frame and
 audio steps an investigation uses and comparing each result with its known answers
 (ADR 0015). It runs after the sidecar is parsed and the tools are located, and before
@@ -226,7 +227,8 @@ tool output is ever included. See
 `setup check` but fails this preflight at the `probe` step.
 
 **Retrieval.** `transcript get <session> --from <us> --to <us> [--limit 1..100]
-[--cursor <token>]` returns the segments of the session's latest revision that
+[--cursor <token>] [--revision <trv_id>]` returns the segments of the session's newest
+revision (or, with `--revision`, of that revision) that
 intersect the half-open range (a segment that started earlier but is still running
 is included), in start order, 20 per page by default. `data`
 ([`transcript-get-data.schema.json`](../../schemas/v1/transcript-get-data.schema.json))
@@ -242,10 +244,13 @@ additions to the reserved grammar, needed because overlapping cues make time-bas
 continuation lose or repeat segments. Pass `next_cursor` back with the same session
 and range; it is bound to the revision (not the storage generation, so a renewal
 keeps it valid), the range and the session expiry, and any other use is
-`INVALID_ARGUMENT`. A session without a transcript, a closed or expired session, or an
-empty range is `INVALID_ARGUMENT`. With `--events jsonl` the page is streamed as one
-evidence event per segment followed by one terminal event (below). `transcript
-retranscribe` remains `COMMAND_NOT_IMPLEMENTED` until local ASR ships.
+`INVALID_ARGUMENT`. A session without a transcript, a closed or expired session, an
+empty range, or a `--revision` the session does not hold is `INVALID_ARGUMENT`; the
+first carries a fixed remediation naming `ingest --transcript` and `transcript
+retranscribe`, the last one naming where revision identities come from. A malformed
+`--revision` is a parse error. `transcript get` never runs a provider. With `--events
+jsonl` the page is streamed as one evidence event per segment followed by one
+terminal event (below).
 
 **Evidence stream (`--events jsonl`).** ADR 0016 decision 5 makes evidence records
 available as JSON Lines, so a pipeline or indexer can consume them without reading a
@@ -282,8 +287,11 @@ How a consumer reads it:
   from content (the session, the revision and the segment ordinal), so the same
   (`record_type`, `key`) always carries the same record. Upserting by it is idempotent:
   re-reading a page, overlapping pages or a retry never duplicate evidence. A new
-  revision of the same transcript has new keys; VSift emits no delete or tombstone
-  events yet, and a consumer that wants only the latest revision filters on
+  revision of the same transcript has new keys, including the segments it carries
+  unchanged from an older revision (they name their origin in `carried_from`).
+  VSift emits no delete or tombstone events (ADR 0017): a superseded revision is not
+  deleted evidence, its records stay valid, immutable and readable with
+  `--revision`, and a consumer that wants only one revision filters on
   `record.revision_id` against the terminal event's `revision.revision_id`.
 - **End of stream.** The stream is complete only when its terminal event has been
   read. Its `result.status` says whether the operation succeeded, and on success
@@ -308,6 +316,93 @@ default 20) and one terminal event, each line within the 1 MiB result budget. Th
 whole stream is assembled before its first byte is written, so a line over budget
 fails the command like an oversized `--json` result: exit 7 and a diagnostic on
 stderr, with nothing on stdout. `--json` and human output are unchanged: one result with the page's `items`.
+
+### P07 local speech recognition
+
+```console
+vsift ingest ./recording.mp4 --json
+vsift transcript retranscribe ses_0123456789abcdef --json
+vsift transcript retranscribe ses_0123456789abcdef --from 12000000 --to 18000000 --json
+vsift transcript get ses_0123456789abcdef --from 0 --to 30000000 --json
+vsift transcript get ses_0123456789abcdef --from 0 --to 30000000 --revision trv_0123456789abcdef --json
+```
+
+`transcript retranscribe <session> [--from <us> --to <us>]` transcribes the session's
+speech locally with whisper.cpp and commits a new transcript revision
+([ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md)). Give both range
+flags or neither; neither transcribes the whole video. It is the only command that
+runs speech recognition: `ingest`, with or without `--transcript`, and `transcript
+get` never look for whisper.cpp or a model.
+
+It needs FFmpeg, FFprobe and `whisper-cli`, resolved like `setup check` (a `setup
+configure` selection first, then the filtered `PATH`), and a model registered with
+`setup configure-model`. Only a model identified by size and SHA-256 as a reviewed
+pinned profile runs; today that is the multilingual whisper.cpp `base` model
+(`ggml-base.bin`, 147,951,465 bytes). Any other file is refused before any work with
+`MISSING_CAPABILITY`. The order is part of the contract: the range is checked, the
+tools and model are resolved and identified, the session is checked (it must be open
+and unexpired), the media-tool preflight runs, then the **local-ASR preflight**, and
+only then is the session's committed copy of the video decoded. The local-ASR
+preflight transcribes a short reviewed speech clip built into VSift (F01, "The
+service status is healthy and the build is 2048.") with the selected recognizer and
+model and requires those words inside the clip's speech window; a pass is recorded
+like the media-tool pass (same private record, its own fingerprint over the tools,
+recognizer and model identities, profile and VSift version) and reused for seven
+days. The first run with a new setup therefore takes several seconds longer.
+
+Chunk audio is written only to a private work directory inside the session, removed
+when the run ends; while the run works, `session close` and `session clean` return
+`BUSY`. The video is decoded in 30-second chunks overlapping by 5 seconds; silent
+chunks are recorded and skipped; times are anchored at each chunk's first decoded
+sample; text heard twice where chunks overlap is kept once. Each chunk may take at
+most 120 seconds, and a run at most 1,024 chunks.
+
+**Revisions.** Every run commits one new, immutable, complete revision, numbered after
+the newest, which becomes the default for `transcript get`. With a range, and an
+earlier revision, the range is first widened to whole segments of the newest revision
+(every segment it cuts, and every segment overlapping those), recorded as
+`replaced_range`. Segments outside it are carried with their original text, timing,
+confidence and provenance, under new `segment_id`s and with `carried_from` naming the
+revision and segment that first produced them; the recognised segments fill the range.
+Every earlier revision stays readable with `transcript get --revision`, so an older
+citation always resolves. A run that recognises no speech still commits a revision
+(no new segment, warning `no_speech_recognised`) so the attempt is on record.
+
+`data`
+([`transcript-retranscribe-data.schema.json`](../../schemas/v1/transcript-retranscribe-data.schema.json),
+example [`transcript-retranscribe.json`](../../schemas/v1/examples/transcript-retranscribe.json))
+holds `session_id`, `requested_range` (null for the whole video), the new `revision`
+and `recognised_segment_count`. A local-ASR revision summary has `alignment.origin`
+`local_asr`, `sidecar: null`, `local_asr` (provider and model by SHA-256, the pinned
+profile, decoding profile `r0-v1`, chunk plan, threads, audio stream, covered range and
+chunk counts), `supersedes`, `replaced_range` and `carried_segment_count`. A local-ASR
+segment has `alignment` with its chunk, the chunk's decoded audio range, the provider's
+chunk-relative times, whether the end was trimmed, and the recognizer; `cue` is `null`
+and confidence is the mean token probability, `provider_uncalibrated` (example
+[`transcript-get.asr.json`](../../schemas/v1/examples/transcript-get.asr.json)).
+Warnings use the envelope's fixed prose and the revision's typed codes; for local-ASR
+codes `first_cue` is the first affected chunk. Segments are read with `transcript get`
+(the new revision is the default). With `--events jsonl`, `transcript retranscribe`
+writes its terminal event only; stream the records with `transcript get --revision
+<revision_id> --events jsonl`, page by page. The command-line host does not trap
+Ctrl-C: interrupting it commits nothing, and the work directory is removed by the
+session's next run or cleanup.
+
+**Failures** use existing codes. A failed run carries one fixed-prose remediation
+starting `Local speech recognition failed at the <stage> step (<reason>).`, a failed
+preflight one starting `VSift's local speech-recognition check ... failed (<kind>)`;
+neither contains a path, provider output or transcript text.
+
+| Condition | Code |
+| --- | --- |
+| FFmpeg, FFprobe or whisper-cli not found; no model registered; model unreadable; model not a reviewed pinned profile; whisper-cli failed, produced unparseable or malformed output (times outside its audio, invalid scores) or could not start; the model or executable changed during the run; the preflight transcript missed its words | `MISSING_CAPABILITY` |
+| Empty or reversed range; range past the end of the video; video with no decodable audio stream; closed or expired session | `INVALID_ARGUMENT` |
+| Audio stream present but undecodable | `INVALID_SOURCE` |
+| Output over its bounds, more than 1,024 chunks, a record over 24 MiB, or whisper-cli ended abnormally (usually out of memory) | `RESOURCE_LIMIT` |
+| A chunk exceeded its 120 s deadline | `DEADLINE_EXCEEDED` |
+| Cancelled (library hosts) | `CANCELLED` |
+| Work directory or the session's copy of the video unusable | `STORAGE_IO` |
+| The session changed during the run (a renewal or another revision), is held by cleanup, or every processing slot of the session root is in use; retry | `BUSY` |
 
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
@@ -407,7 +502,7 @@ indented JSON). In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
 `transcript get` evidence events precede it (see "Evidence stream" above), and every
-other command writes the terminal event alone. stderr is
+other command, including `transcript retranscribe`, writes the terminal event alone. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.
 
 Output limits apply before writing:
@@ -603,7 +698,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility |
 | C-09 | legal job and cancellation terminal transitions |
-| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion |
+| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 
 These tests establish the public boundary only. Provider execution, filesystem
 durability, media correctness, concurrency, and load guarantees belong to later

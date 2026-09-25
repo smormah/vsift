@@ -9,6 +9,7 @@ mod ffmpeg_media;
 mod file_lock;
 mod filesystem_session_store;
 mod gzip_tar_inventory;
+mod local_asr_verification;
 mod managed_artifact_store;
 mod managed_catalogue;
 mod media_tool_verification;
@@ -51,11 +52,15 @@ pub use ffmpeg_media::{
 pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ExclusiveSessionLifetimeHold,
     FilesystemAdmissionPermit, FilesystemSessionStore, SessionIndexPage, SessionReadHold,
-    SessionRegistration, SessionStatus, SessionStoreOpenError,
+    SessionRegistration, SessionStatus, SessionStoreOpenError, SessionWorkDirectory,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
     inspect_gzip_tar_selected_files, stage_gzip_tar_selected_files,
+};
+pub use local_asr_verification::{
+    FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
+    local_asr_fixture_sha256,
 };
 pub use managed_artifact_store::{
     ManagedArtifactError, ManagedArtifactStore, ManagedInstallGuard, ManagedPayloadError,

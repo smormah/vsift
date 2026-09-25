@@ -1,8 +1,8 @@
 # Incremental end-to-end test spine
 
-Status: P04, P05 and P06 checkpoints and the P07 supplied-transcript stage are
-implemented; the P07 local-ASR stage and the complete journey remain
-`not_implemented`. Managed installation moved from P06 to P13 under
+Status: P04, P05 and P06 checkpoints and the P07 supplied-transcript and local-ASR
+stages are implemented; the complete journey remains `not_implemented`. Managed
+installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
 ## Purpose
@@ -112,15 +112,39 @@ with `transcript get` and requires exactly one segment saying dialog R-17 on exa
 that window, with unknown confidence. A third journey imports with a wrong offset and
 requires a typed `INVALID_ARGUMENT` naming `no_cues_within_source` and no open session.
 Missing tools make the journeys `blocked`. It writes
-`.vsift/e2e-runs/p07-<run-id>/report.json` and leaves `p07_local_asr`, P08-P14 and the
-complete journey `not_implemented`.
+`.vsift/e2e-runs/p07-<run-id>/report.json` and leaves P08-P14 and the complete journey
+`not_implemented`; the local-ASR stage is the separate checkpoint below.
 
-The `p07_local_asr` stage will run on the P07 speech variants
-(`fixtures/corpus/generated/<id>-speech.*`) rather than the tone sentinels. They are
-generated from the frozen scripts by a test-only Kokoro workflow and verified
-independently ([p07-speech-fixtures.md](p07-speech-fixtures.md)). Expected speech
-windows come from the manifest; Kokoro's word timings in the provenance are
-engine-reported and need a tolerance, and no expectation is taken from an ASR run.
+P07 increment 3b adds the local-ASR stage of A-08:
+
+```console
+VSIFT_TEST_WHISPER_CLI=<absolute whisper-cli path>
+VSIFT_TEST_WHISPER_MODEL=<absolute ggml-base.bin path>
+cargo test --release -p vsift-cli --locked --test p07_local_asr_e2e -- --ignored --nocapture
+```
+
+It runs on the P07 speech variants (`fixtures/corpus/generated/<id>-speech.*`), which
+are generated from the frozen scripts by a test-only Kokoro workflow and verified
+independently ([p07-speech-fixtures.md](p07-speech-fixtures.md)). Speech spans come
+from `speech-provenance.json` and words from the frozen scripts in the manifest; no
+expectation is taken from an ASR run. With an empty `PATH` and FFmpeg, FFprobe,
+whisper.cpp and the model registered in an isolated per-user base, the stages are:
+`p07_local_asr_setup`; `p07_local_asr_whole_file` (plain ingest of F05, then
+`transcript retranscribe`, citing its speech window and words);
+`p07_local_asr_bounded_revision` (a bounded rerun gives revision 2 with the earlier
+segment carried, and revision 1 reads back unchanged with `--revision`);
+`p07_local_asr_stream_and_bundle` (the `--events jsonl` stream, then `session retain`
+and `bundle validate` with both records conforming to the bundle schema);
+`p07_local_asr_f08_noise_spanish`; `p07_local_asr_f09_offset` (times anchored at the
+0.75 s audio start); `p07_local_asr_multi_chunk_seam` (a two-chunk clip built at run
+time from the speech utterances, every checked word heard exactly once);
+`p07_local_asr_whisper_tripwire` (an F10 SubRip import succeeds with whisper
+registered as a program that is not whisper); and `p07_local_asr_missing_model`
+(typed `MISSING_CAPABILITY`, no revision). It prints `p07_local_asr: passed` when every
+stage passed and writes `.vsift/e2e-runs/p07-local-asr-<run-id>/report.json`. A release
+build is recommended because the 148 MB model is hashed three times per run; on
+Windows 11 with the reviewed build the whole checkpoint took about 64 s (about 7.5 s
+per short clip once verified). Missing tools or variables make every stage `blocked`.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

@@ -118,6 +118,55 @@ impl SourceSnapshot {
         })
     }
 
+    /// Reopens the committed private source copy of an open session.
+    ///
+    /// Later operations on a session (local speech recognition today, frames
+    /// and audio later) work on the copy `ingest` committed, never on the
+    /// user's original. The copy is opened no-follow inside the held artifact
+    /// directory and rehashed: its bytes must still be the identity and size
+    /// the session committed, and its container is detected again from them.
+    /// The returned snapshot keeps the session's shared lifetime hold, so the
+    /// session cannot be closed or cleaned while it is in use.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SourceError::Storage`] for a missing, closed, expired or busy
+    /// session, and [`SourceError::SnapshotChanged`] when the copy no longer
+    /// matches its committed identity.
+    pub fn open_committed(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<Self, SourceError> {
+        let committed = store
+            .committed_source(session_id, now_unix_seconds)
+            .map_err(SourceError::Storage)?;
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let mut file = committed
+            .directory
+            .open_with(&committed.file_name, &options)
+            .map_err(|_| SourceError::SnapshotChanged)?;
+        let metadata = file.metadata().map_err(SourceError::Io)?;
+        if !metadata.is_file() || metadata.len() != committed.bytes {
+            return Err(SourceError::SnapshotChanged);
+        }
+        let (id, bytes, container) = copy_bounded(&mut file, &mut std::io::sink())?;
+        if id != committed.source_id || bytes != committed.bytes {
+            return Err(SourceError::SnapshotChanged);
+        }
+        Ok(Self {
+            session_id: session_id.clone(),
+            id,
+            bytes,
+            container,
+            file_name: committed.file_name,
+            directory: committed.directory,
+            directory_path: committed.directory_path,
+            _hold: committed.hold,
+        })
+    }
+
     /// Cryptographic identity of the staged bytes.
     #[must_use]
     pub fn id(&self) -> &SourceId {

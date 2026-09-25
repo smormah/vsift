@@ -228,6 +228,28 @@ This note fixes the CLI surface decision 5 left to P07.
   the stream's treatment of superseded revisions and the next ADR follow in
   increment 3b.
 
+## 2026-09-25 implementation note: local-ASR evidence and superseding revisions
+
+- P07 increment 3b publishes local ASR (`transcript retranscribe`, ADR 0017) on the
+  same revision type. Following maintainer decision D2 the v1 schemas are widened in
+  place, since nothing is released: `transcript-segment` adds the `local_asr`
+  alignment (chunk, provider times, recognizer), a nullable `cue` and an optional
+  `carried_from`; `transcript-revision` adds `local_asr`, `supersedes`,
+  `replaced_range` and `carried_segment_count` for local-ASR revisions (with `sidecar:
+  null`), and the local-ASR warning codes; `bundle-transcript-record` accepts version
+  2. The new `transcript-retranscribe-data` schema has a frozen example. Imports
+  serialize exactly as before and their frozen examples are unchanged.
+- A revision spliced from the one it supersedes carries the older segments under new
+  identities with `carried_from`, so upserting by (`record_type`, `key`) stays
+  idempotent and an older revision's records are never overwritten. This settles the
+  stream question the evidence-stream note left open: there are no delete or
+  tombstone events (decision D8). A superseded revision stays valid, immutable and
+  readable (`transcript get --revision`), and a consumer that wants one revision
+  filters on `revision_id`.
+- `vsift-contract` gained `TranscriptRetranscribeData` and fixed-prose local-ASR
+  remediation; the engine gained `Engine::retranscribe` and the ports
+  `with_local_asr_verifier` and `with_speech_recognizer`.
+
 ## 2026-09-24 implementation note: cargo-fuzz targets (decision 6)
 
 - Maintainer decision of 2026-09-24: `cargo-fuzz` runs on a pinned nightly toolchain
@@ -260,6 +282,9 @@ This note fixes the CLI surface decision 5 left to P07.
   bundle-record and F11 probe fixtures, the inline probe and cursor documents from
   existing tests and examples, and one version-2 record re-derived from the recorded
   F01 whisper output. The replay tests fail if a seed drifts from its origin.
+  (2026-09-25: increment 3b added the spliced version-2 example record,
+  `bundle-transcript-record.asr.json`, as a seed, because version 2 gained carried
+  segments and inherited provenance; the existing F01 seed is unchanged.)
 - Not fuzzed yet, with the reason: the bundle manifest and metadata records and the
   storage ownership marker (private, decoded only inside capability-scoped directory
   reads; reachable publicly only through `validate_bundle` on a real directory tree);

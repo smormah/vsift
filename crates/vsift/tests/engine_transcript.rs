@@ -295,6 +295,7 @@ async fn transcript_reads_are_typed_for_bad_ranges_and_sessions_without_one() ->
     let harness = Harness::new()?;
     let query = |session: SessionId, from: u64, to: u64, limit: Option<u16>| TranscriptQuery {
         session,
+        revision: None,
         from_micros: from,
         to_micros: to,
         limit,
@@ -390,6 +391,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
     loop {
         let page = harness.engine.transcript(TranscriptQuery {
             session: session.clone(),
+            revision: None,
             from_micros: 0,
             to_micros: 12_000_000,
             limit: Some(1),
@@ -420,6 +422,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
     // The truth window of F10-E01 returns exactly the dialog cue.
     let cited = harness.engine.transcript(TranscriptQuery {
         session: session.clone(),
+        revision: None,
         from_micros: 5_000_000,
         to_micros: 9_000_000,
         limit: None,
@@ -433,6 +436,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
     // storage generation) and is refused once the session has expired.
     let first = harness.engine.transcript(TranscriptQuery {
         session: session.clone(),
+        revision: None,
         from_micros: 0,
         to_micros: 12_000_000,
         limit: Some(1),
@@ -443,6 +447,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
     harness.engine.renew_session(&session)?;
     let resumed = harness.engine.transcript(TranscriptQuery {
         session: session.clone(),
+        revision: None,
         from_micros: 0,
         to_micros: 12_000_000,
         limit: Some(1),
@@ -460,6 +465,7 @@ async fn f10_import_pages_and_cites_the_dialog_window() -> TestResult {
             .engine
             .transcript(TranscriptQuery {
                 session,
+                revision: None,
                 from_micros: 0,
                 to_micros: 12_000_000,
                 limit: None,

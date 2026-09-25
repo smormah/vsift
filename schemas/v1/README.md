@@ -22,17 +22,27 @@ These files are the machine-readable public v1 boundary:
 - `transcript-get-data.schema.json` — the `data` member of a complete
   `transcript.get` result: one bounded page with its continuation cursor (P07);
 - `transcript-revision.schema.json` — one transcript revision: identities,
-  alignment origin and offset, sidecar identity and typed import warnings (P07);
+  alignment origin and offset, sidecar identity and typed warnings (P07). A
+  local-ASR revision (origin `local_asr`, P07 increment 3b) has `sidecar: null` and
+  adds `local_asr` (the run), `supersedes`, `replaced_range` and
+  `carried_segment_count`; an import never has those members;
+- `transcript-retranscribe-data.schema.json` — the `data` member of a complete
+  `transcript.retranscribe` result: the new local-ASR revision, the requested range and
+  how many segments the run recognised (P07 increment 3b);
 - `transcript-get-stream-data.schema.json` — the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count` and the continuation cursor (P07);
 - `transcript-segment.schema.json` — one transcript segment, the first published
   evidence record (ADR 0016): self-describing identities, normalized source time,
-  sanitized text, confidence, alignment and cue provenance (P07);
+  sanitized text, confidence, alignment and cue provenance (P07). A local-ASR segment
+  has alignment origin `local_asr` with its chunk, provider times and recognizer, and
+  `cue: null`; a segment carried into a spliced revision adds `carried_from`;
 - `bundle-transcript-record.schema.json` — the content of a retained bundle's
   `transcript_record` artifact: one revision with all its segments, as stored. It is
-  a storage record, not a response (its `schema_version` is the integer `1`), and
-  its text is untrusted and unsanitized (P07).
+  a storage record, not a response: its `schema_version` is the integer record
+  version, `1` for an import and `2` for a local-ASR revision (with its run, what it
+  superseded, inherited provenance and carried segments), and its text is untrusted
+  and unsanitized (P07).
 
 The `--events jsonl` stream is a sequence of events with a contiguous `sequence`
 from 0: for `transcript.get`, one `evidence` event per segment and then one
@@ -58,6 +68,14 @@ retained bundle's record).
 `media-tool-verification-failed.json` is the `ingest` failure an agent receives when
 the automatic media-tool preflight fails (here FFmpeg selected as FFprobe, stopped at
 the probe check); it is checked by `vsift-contract`'s `media_tool_preflight_contract`.
+`transcript-retranscribe.json`, `transcript-get.asr.json` and
+`bundle-transcript-record.asr.json` describe the F01 speech clip
+(`fixtures/corpus/generated/F01-speech.mp4`): revision 1 transcribed the whole clip
+with the reviewed whisper.cpp v1.9.2 build and pinned base model (from its recorded
+output), and revision 2 retranscribed 5.5-6 s, where the clip is silent, so it
+carries revision 1's segment (`carried_from`) and records a silent chunk and
+`no_speech_recognised`. The first two are checked by `vsift-contract`'s
+`local_asr_contract`, the record by `vsift-infrastructure`'s `local_asr_store`.
 `storage-not-private.json` is the `setup configure` failure an agent receives when
 the per-user configuration folder already exists and other accounts can access it;
 it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows

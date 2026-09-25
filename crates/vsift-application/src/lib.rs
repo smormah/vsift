@@ -17,8 +17,9 @@ mod verification;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
-    RecognizerIdentity, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
-    SpeechRecognizer, TranscribeRangeRequest, build_asr_revision, transcribe_range,
+    RecognizerIdentity, RevisionSplice, SpeechAudioError, SpeechAudioSource, SpeechPcm,
+    SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, build_asr_revision,
+    transcribe_range,
 };
 pub use clock::{Clock, ClockError};
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
@@ -47,10 +48,11 @@ pub use transcript::{
     transcript_query_digest, transcript_segment_id, whole_file_source_segment,
 };
 pub use verification::{
-    CachedMediaToolVerification, MediaToolCheck, MediaToolFailure, MediaToolFingerprint,
+    CachedMediaToolVerification, LocalAsrVerification, LocalAsrVerificationFailure,
+    LocalAsrVerifier, MediaToolCheck, MediaToolFailure, MediaToolFingerprint,
     MediaToolPreflightFailure, MediaToolPreflightOutcome, MediaToolVerification,
     MediaToolVerificationCache, MediaToolVerifier, ModelVerification, VerificationRecord,
-    VerificationRecordSkip, preflight_media_tools,
+    VerificationRecordSkip, preflight_local_asr, preflight_media_tools,
 };
 
 /// Port used to inspect one specialist runtime dependency.

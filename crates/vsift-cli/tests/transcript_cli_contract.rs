@@ -281,6 +281,11 @@ fn transcript_get_rejects_bad_requests_and_sessions_without_a_transcript() -> Te
     let value = json(&without)?;
     assert_eq!(value["command"], "transcript.get");
     assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    // D1: the fixed remediation points at both ways to get a transcript.
+    let remedy = value["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("remediation missing")?;
+    assert!(remedy.contains("transcript retranscribe") && remedy.contains("ingest --transcript"));
 
     let empty_range = vsift(
         &root,
@@ -309,7 +314,9 @@ fn transcript_get_rejects_bad_requests_and_sessions_without_a_transcript() -> Te
         assert_eq!(json(&output)?["command"], "parse", "{arguments:?}");
     }
 
-    let retranscribe = vsift(
+    // Local ASR is reachable, and with no tools at all it fails typed before
+    // touching the session: nothing on PATH and nothing configured.
+    let retranscribe = vsift_without_path(
         &root,
         &[
             "transcript",
@@ -325,8 +332,36 @@ fn transcript_get_rejects_bad_requests_and_sessions_without_a_transcript() -> Te
     assert_eq!(retranscribe.status.code(), Some(2));
     let value = json(&retranscribe)?;
     assert_eq!(value["command"], "transcript.retranscribe");
-    assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
+    assert_eq!(value["error"]["code"], "MISSING_CAPABILITY");
+    let remedy = value["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("remediation missing")?;
+    assert!(remedy.contains("whisper") && !remedy.contains(path_text(&root.0)?));
+
+    // Both range flags or neither.
+    for partial in [["--from", "0"], ["--to", "10"]] {
+        let mut full = vec!["transcript", "retranscribe", session];
+        full.extend(partial);
+        full.push("--json");
+        let output = vsift_without_path(&root, &full)?;
+        assert_eq!(output.status.code(), Some(2), "{partial:?}");
+        assert_eq!(json(&output)?["command"], "parse", "{partial:?}");
+    }
     Ok(())
+}
+
+/// Runs `vsift` like [`vsift`] with an empty `PATH`, so no provider is found.
+fn vsift_without_path(root: &OwnedRoot, arguments: &[&str]) -> Result<Output, Box<dyn Error>> {
+    let base = root.path("user");
+    Ok(Command::cargo_bin("vsift")?
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
+        .env("PATH", "")
+        .arg("--session-root")
+        .arg(root.sessions())
+        .args(arguments)
+        .output()?)
 }
 
 fn repository(relative: &str) -> PathBuf {
@@ -534,6 +569,51 @@ fn transcript_get<'a>(session: &'a str, range: [&'a str; 2], extra: &[&'a str]) 
     ];
     arguments.extend_from_slice(extra);
     arguments
+}
+
+/// `--revision` reads a named revision, the same page the default read gives
+/// while it is the newest; an unknown revision is a typed invalid argument,
+/// and a malformed one is a parse error.
+#[tokio::test]
+async fn transcript_get_reads_a_named_revision() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_f10_session(&root).await?;
+    let full = ["0", "12000000"];
+    let newest = json(&vsift(&root, &transcript_get(&session, full, &["--json"]))?)?;
+    let revision = newest["data"]["revision"]["revision_id"]
+        .as_str()
+        .ok_or("revision missing")?
+        .to_owned();
+    let named = json(&vsift(
+        &root,
+        &transcript_get(&session, full, &["--revision", &revision, "--json"]),
+    )?)?;
+    assert_eq!(named["data"], newest["data"]);
+
+    let unknown = vsift(
+        &root,
+        &transcript_get(
+            &session,
+            full,
+            &["--revision", "trv_2222222222222222", "--json"],
+        ),
+    )?;
+    assert_eq!(unknown.status.code(), Some(2));
+    let value = json(&unknown)?;
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        value["error"]["remediation"][0]["summary"]
+            .as_str()
+            .is_some_and(|summary| summary.contains("revision_id"))
+    );
+
+    let malformed = vsift(
+        &root,
+        &transcript_get(&session, full, &["--revision", "latest", "--json"]),
+    )?;
+    assert_eq!(malformed.status.code(), Some(2));
+    assert_eq!(json(&malformed)?["command"], "parse");
+    Ok(())
 }
 
 /// `--events jsonl` streams one evidence event per segment, then exactly one

@@ -143,6 +143,16 @@ and ADR 0008 keeps that payload compatible, so that wording is corrected:
   `EnginePorts::with_media_tool_verifier` lets tests and other hosts replace the
   fixture verifier; such passes are recorded under a separate identity.
 
+## 2026-09-25 implementation note: local-ASR verification before use
+
+P07 increment 3b adds the whisper.cpp functional verification decision 2 promised,
+as a second automatic preflight: before `transcript retranscribe` decodes the user's
+audio, after the media-tool preflight, the selected recognizer and model transcribe
+a reviewed speech clip built into VSift (F01) and must reproduce its words inside its
+speech window. It shares the verification record (a separate fingerprint domain) and
+the leftover-workspace sweep. `setup check` still reports `executable_probe_only`;
+reporting local ASR there is increment 3c (decision D4). Details in ADR 0017.
+
 ## 2026-09-24 amendment: record readers and leftover verification workspaces
 
 - Readers of the verification record take no lock and can catch a writer's

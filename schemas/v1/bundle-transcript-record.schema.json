@@ -2,131 +2,894 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/bundle-transcript-record.schema.json",
   "title": "VSift retained bundle transcript record v1",
-  "description": "The content of a retained bundle artifact whose bundle.json kind is transcript_record: one immutable transcript revision with all of its segments, stored as compact UTF-8 JSON and named artifact-<sha256>.json. This is a storage record, not an operation response: schema_version is the integer 1 and format names the record. Times are integer microseconds on the normalized source timeline; each segment range is its cue timing plus offset_us. text is the stored cue text with recognised markup removed (lines joined with \\n; no other control character); original_text is the payload as written and is present only when it differs from text. Text is untrusted input: sanitize it before display. bundle validate decodes every transcript record strictly (unknown fields, values and newer versions are rejected) and re-checks it against the import rules; this schema describes its shape.",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "format",
-    "revision_id",
-    "revision",
-    "source_id",
-    "source_segment",
-    "origin",
-    "offset_us",
-    "sidecar",
-    "language",
-    "warnings",
-    "segments"
+  "description": "The content of a retained bundle artifact whose bundle.json kind is transcript_record: one immutable transcript revision with all of its segments, stored as compact UTF-8 JSON and named artifact-<sha256>.json. This is a storage record, not an operation response: schema_version is the integer record version (1 for an imported revision, 2 for a local-ASR revision) and format names the record. Times are integer microseconds on the normalized source timeline. text is the stored segment text with recognised markup removed (lines joined with \\n; no other control character). Text is untrusted input: sanitize it before display. bundle validate decodes every transcript record strictly (unknown fields, values and newer versions are rejected) and re-checks every segment against the rule that produced it; this schema describes its shape.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/v1"
+    },
+    {
+      "$ref": "#/$defs/v2"
+    }
   ],
-  "properties": {
-    "schema_version": { "const": 1 },
-    "format": { "const": "vsift.transcript_record" },
-    "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
-    "revision": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
-    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
-    "source_segment": {
-      "description": "The one closed source segment of a finite file: index 0 from time 0 to the probed duration.",
+  "$defs": {
+    "v1": {
+      "description": "Version 1: an imported revision. Each segment range is its cue timing plus offset_us; original_text is the payload as written and is present only when it differs from text.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "index", "start_us", "end_us", "state"],
+      "required": [
+        "schema_version",
+        "format",
+        "revision_id",
+        "revision",
+        "source_id",
+        "source_segment",
+        "origin",
+        "offset_us",
+        "sidecar",
+        "language",
+        "warnings",
+        "segments"
+      ],
       "properties": {
-        "id": { "type": "string", "pattern": "^sgm_[a-z0-9]{16,64}$" },
-        "index": { "const": 0 },
-        "start_us": { "const": 0 },
-        "end_us": { "type": "integer", "minimum": 1 },
-        "state": { "enum": ["closed"] }
-      }
-    },
-    "origin": { "enum": ["imported_srt", "imported_webvtt"] },
-    "offset_us": {
-      "type": "integer",
-      "minimum": -86400000000,
-      "maximum": 86400000000
-    },
-    "sidecar": {
-      "description": "Identity of the exact supplied bytes that were parsed.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["sha256", "bytes"],
-      "properties": {
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 }
-      }
-    },
-    "language": {
-      "oneOf": [
-        { "type": "null" },
-        { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$" }
-      ]
-    },
-    "warnings": {
-      "type": "array",
-      "maxItems": 6,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["kind", "count", "first_cue"],
-        "properties": {
-          "kind": {
-            "enum": [
-              "empty_cues_skipped",
-              "markup_removed",
-              "speaker_label_discarded",
-              "overlapping_cues",
-              "cues_outside_source",
-              "cues_crossing_source_boundary"
-            ]
-          },
-          "count": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
-          "first_cue": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+        "schema_version": {
+          "const": 1
+        },
+        "format": {
+          "const": "vsift.transcript_record"
+        },
+        "revision_id": {
+          "type": "string",
+          "pattern": "^trv_[a-z0-9]{16,64}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^src_sha256_[0-9a-f]{64}$"
+        },
+        "source_segment": {
+          "description": "The one closed source segment of a finite file: index 0 from time 0 to the probed duration.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "index",
+            "start_us",
+            "end_us",
+            "state"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^sgm_[a-z0-9]{16,64}$"
+            },
+            "index": {
+              "const": 0
+            },
+            "start_us": {
+              "const": 0
+            },
+            "end_us": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "state": {
+              "enum": [
+                "closed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "enum": [
+            "imported_srt",
+            "imported_webvtt"
+          ]
+        },
+        "offset_us": {
+          "type": "integer",
+          "minimum": -86400000000,
+          "maximum": 86400000000
+        },
+        "sidecar": {
+          "description": "Identity of the exact supplied bytes that were parsed.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sha256",
+            "bytes"
+          ],
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8388608
+            }
+          }
+        },
+        "language": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "count",
+              "first_cue"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "empty_cues_skipped",
+                  "markup_removed",
+                  "speaker_label_discarded",
+                  "overlapping_cues",
+                  "cues_outside_source",
+                  "cues_crossing_source_boundary"
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "first_cue": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        "segments": {
+          "description": "Every segment of the revision in ordinal order.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "ordinal",
+              "start_us",
+              "end_us",
+              "text",
+              "original_text",
+              "speaker",
+              "cue_ordinal",
+              "cue_line",
+              "cue_start_us",
+              "cue_end_us"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^tsg_[a-z0-9]{16,64}$"
+              },
+              "ordinal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20000
+              },
+              "start_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end_us": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "original_text": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                ]
+              },
+              "speaker": {
+                "description": "A WebVTT voice label (imported_webvtt only), never a verified identity.",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                ]
+              },
+              "cue_ordinal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "cue_line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "cue_start_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cue_end_us": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
         }
       }
     },
-    "segments": {
-      "description": "Every segment of the revision in ordinal order.",
-      "type": "array",
-      "minItems": 1,
-      "maxItems": 20000,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "ordinal",
-          "start_us",
-          "end_us",
-          "text",
-          "original_text",
-          "speaker",
-          "cue_ordinal",
-          "cue_line",
-          "cue_start_us",
-          "cue_end_us"
-        ],
-        "properties": {
-          "id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" },
-          "ordinal": { "type": "integer", "minimum": 1, "maximum": 20000 },
-          "start_us": { "type": "integer", "minimum": 0 },
-          "end_us": { "type": "integer", "minimum": 1 },
-          "text": { "type": "string", "minLength": 1, "maxLength": 4096 },
-          "original_text": {
+    "v2": {
+      "description": "Version 2: a revision produced by local speech recognition (transcript retranscribe). It records its run, what it superseded and replaced, the provenance it inherited, and each segment either as recognised by its run or as carried from an earlier revision. inherited is omitted when the record carries nothing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "format",
+        "revision_id",
+        "revision",
+        "source_id",
+        "source_segment",
+        "origin",
+        "run",
+        "supersedes",
+        "replaced_range",
+        "language",
+        "warnings",
+        "segments"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "format": {
+          "const": "vsift.transcript_record"
+        },
+        "revision_id": {
+          "type": "string",
+          "pattern": "^trv_[a-z0-9]{16,64}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^src_sha256_[0-9a-f]{64}$"
+        },
+        "source_segment": {
+          "description": "The one closed source segment of a finite file: index 0 from time 0 to the probed duration.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "index",
+            "start_us",
+            "end_us",
+            "state"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^sgm_[a-z0-9]{16,64}$"
+            },
+            "index": {
+              "const": 0
+            },
+            "start_us": {
+              "const": 0
+            },
+            "end_us": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "state": {
+              "enum": [
+                "closed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "const": "local_asr"
+        },
+        "run": {
+          "$ref": "#/$defs/run"
+        },
+        "supersedes": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^trv_[a-z0-9]{16,64}$"
+            }
+          ]
+        },
+        "replaced_range": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/range"
+            }
+          ]
+        },
+        "inherited": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "description": "The provenance of a revision whose segments this record carries: an import (origin, offset and sidecar identity) or a local-ASR run, with that revision's language. Present only on a spliced revision; every entry is referenced by at least one carried segment.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "revision_id",
+              "language",
+              "provenance"
+            ],
+            "properties": {
+              "revision_id": {
+                "type": "string",
+                "pattern": "^trv_[a-z0-9]{16,64}$"
+              },
+              "language": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$"
+                  }
+                ]
+              },
+              "provenance": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "imported"
+                    ],
+                    "properties": {
+                      "imported": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "origin",
+                          "offset_us",
+                          "sidecar"
+                        ],
+                        "properties": {
+                          "origin": {
+                            "enum": [
+                              "imported_srt",
+                              "imported_webvtt"
+                            ]
+                          },
+                          "offset_us": {
+                            "type": "integer",
+                            "minimum": -86400000000,
+                            "maximum": 86400000000
+                          },
+                          "sidecar": {
+                            "description": "Identity of the exact supplied bytes that were parsed.",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "sha256",
+                              "bytes"
+                            ],
+                            "properties": {
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{64}$"
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 8388608
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "local_asr"
+                    ],
+                    "properties": {
+                      "local_asr": {
+                        "$ref": "#/$defs/run"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "language": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "count",
+              "first_cue"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "empty_cues_skipped",
+                  "markup_removed",
+                  "speaker_label_discarded",
+                  "overlapping_cues",
+                  "cues_outside_source",
+                  "cues_crossing_source_boundary",
+                  "provider_segments_rejected",
+                  "provider_end_trimmed",
+                  "non_speech_markers_removed",
+                  "seam_duplicates_removed",
+                  "silent_chunks_skipped",
+                  "no_speech_recognised"
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "first_cue": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        "segments": {
+          "description": "Every segment of the revision in ordinal order; empty when the run recognised no speech and nothing was carried.",
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 20000,
+          "items": {
             "oneOf": [
-              { "type": "null" },
-              { "type": "string", "minLength": 1, "maxLength": 4096 }
+              {
+                "description": "A segment recognised by this record's own run: its range is the chunk's decoded audio start plus the provider times (the end is the audio end when trimmed).",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "ordinal",
+                  "start_us",
+                  "end_us",
+                  "text",
+                  "confidence_basis_points",
+                  "chunk",
+                  "provider_start_us",
+                  "provider_end_us",
+                  "end_trim"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^tsg_[a-z0-9]{16,64}$"
+                  },
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20000
+                  },
+                  "start_us": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end_us": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "confidence_basis_points": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000
+                      }
+                    ]
+                  },
+                  "chunk": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1023
+                  },
+                  "provider_start_us": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "provider_end_us": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "end_trim": {
+                    "enum": [
+                      "unchanged",
+                      "trimmed_to_audio_end"
+                    ]
+                  }
+                }
+              },
+              {
+                "description": "A segment carried unchanged from an earlier revision: its new identity, its text, speaker and confidence as there, the revision and segment it came from, and its original origin, checked against that revision's entry in inherited.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "ordinal",
+                  "start_us",
+                  "end_us",
+                  "text",
+                  "original_text",
+                  "speaker",
+                  "confidence_basis_points",
+                  "carried_from",
+                  "origin"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^tsg_[a-z0-9]{16,64}$"
+                  },
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20000
+                  },
+                  "start_us": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end_us": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "original_text": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      }
+                    ]
+                  },
+                  "speaker": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    ]
+                  },
+                  "confidence_basis_points": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000
+                      }
+                    ]
+                  },
+                  "carried_from": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "revision_id",
+                      "segment_id"
+                    ],
+                    "properties": {
+                      "revision_id": {
+                        "type": "string",
+                        "pattern": "^trv_[a-z0-9]{16,64}$"
+                      },
+                      "segment_id": {
+                        "type": "string",
+                        "pattern": "^tsg_[a-z0-9]{16,64}$"
+                      }
+                    }
+                  },
+                  "origin": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "imported_cue"
+                        ],
+                        "properties": {
+                          "imported_cue": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "cue_ordinal",
+                              "cue_line",
+                              "cue_start_us",
+                              "cue_end_us"
+                            ],
+                            "properties": {
+                              "cue_ordinal": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              },
+                              "cue_line": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              },
+                              "cue_start_us": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "cue_end_us": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "local_asr"
+                        ],
+                        "properties": {
+                          "local_asr": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "chunk",
+                              "provider_start_us",
+                              "provider_end_us",
+                              "end_trim"
+                            ],
+                            "properties": {
+                              "chunk": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1023
+                              },
+                              "provider_start_us": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "provider_end_us": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "end_trim": {
+                                "enum": [
+                                  "unchanged",
+                                  "trimmed_to_audio_end"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
             ]
-          },
-          "speaker": {
-            "description": "A WebVTT voice label (imported_webvtt only), never a verified identity.",
-            "oneOf": [
-              { "type": "null" },
-              { "type": "string", "minLength": 1, "maxLength": 128 }
-            ]
-          },
-          "cue_ordinal": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
-          "cue_line": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
-          "cue_start_us": { "type": "integer", "minimum": 0 },
-          "cue_end_us": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "run": {
+      "description": "One local-ASR run: provider build and model by SHA-256, profiles, the chunk plan, recognizer threads, the decoded audio stream and every planned chunk in order with its outcome. Chunks must be exactly the plan of the range they cover; a transcribed or silent chunk records its observed decoded audio range, a chunk with no audio records none.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "executable_sha256",
+        "model_profile",
+        "model_sha256",
+        "decoding_profile",
+        "window_us",
+        "overlap_us",
+        "threads",
+        "audio_stream",
+        "chunks"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "whisper_cpp"
+          ]
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "model_profile": {
+          "enum": [
+            "base",
+            "unreviewed"
+          ]
+        },
+        "model_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "decoding_profile": {
+          "enum": [
+            "r0-v1"
+          ]
+        },
+        "window_us": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000000
+        },
+        "overlap_us": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 14999999
+        },
+        "threads": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "audio_stream": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "chunks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "index",
+              "start_us",
+              "end_us",
+              "outcome",
+              "audio"
+            ],
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1023
+              },
+              "start_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end_us": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "outcome": {
+                "enum": [
+                  "transcribed",
+                  "silent",
+                  "no_audio"
+                ]
+              },
+              "audio": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/range"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_us",
+        "end_us"
+      ],
+      "properties": {
+        "start_us": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_us": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

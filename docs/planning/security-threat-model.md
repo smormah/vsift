@@ -257,6 +257,26 @@ disposable session and retained bundles; nothing is logged. Bidirectional-format
 characters are not rejected and are shown as written; an agent must still treat
 transcript text as evidence, not instruction.
 
+P07 increment 3b (local ASR, ADR 0017) runs whisper.cpp only through `transcript
+retranscribe`, with a closed argument list and no shell (SEC-01), a per-chunk deadline,
+bounded and discarded stdout/stderr and a size-checked, no-follow read of its `-ojf`
+file, whose model path and system information are never parsed into a value
+(SEC-03/SEC-05). Only a model identified by SHA-256 as a reviewed pinned profile runs,
+and the recognizer's identity is checked before and after every run, so a swapped
+model fails the run instead of mixing outputs (SEC-12). Recognised text is untrusted
+evidence: validated against its chunk's decoded audio, kept with uncalibrated
+confidence and full provenance, and never promoted to instruction (SEC-16/SEC-17).
+Chunk audio is user media, written only to a private work directory inside the
+session, removed when the run ends and swept with the session; the run holds the
+session so cleanup cannot remove files in use; remediation is fixed prose without
+paths or text (SEC-18). A run holds one of the session root's admission slots for its
+whole recognition and each chunk's decoding takes another, and it runs one whisper
+process at a time with at most 8 threads (SEC-20). A superseded revision is never
+rewritten or deleted, so an indexed citation cannot silently change (SEC-10/SEC-27).
+Residual: the recognizer is a native process with the user's filesystem access, and
+memory is bounded only by the operating system (an abnormal exit is reported as
+`RESOURCE_LIMIT`).
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.
