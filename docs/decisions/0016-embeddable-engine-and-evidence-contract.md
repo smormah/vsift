@@ -284,7 +284,7 @@ This note fixes the CLI surface decision 5 left to P07.
   (MIT OR Apache-2.0, released 2026-06-09) is installed in CI with `--locked`. `libfuzzer-sys`
   declares `(MIT OR Apache-2.0) AND NCSA`: its vendored libFuzzer files carry
   `Apache-2.0 WITH LLVM-exception` headers, but the declared NCSA term is not in
-  `deny.toml`'s allow list. Whether to allow it for this one crate is an open
-  maintainer decision, so the `Dependency policy` job does not yet check the fuzz
-  lockfile. Checked locally against the repository policy, that lockfile fails only
-  on this term; advisories, sources and bans pass, and it adds no duplicate version.
+  `deny.toml`'s allow list. The maintainer approved (2026-09-25) an NCSA exception
+  for `libfuzzer-sys` alone, and the `Dependency policy` job now also checks the fuzz
+  lockfile; advisories, sources, bans and licences pass, and it adds no duplicate
+  version.

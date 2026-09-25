@@ -18,8 +18,8 @@ is not. Local checks: CI is the default Linux/macOS check; Docker only for platf
 2. **Done: `cargo-fuzz` targets (this PR, branch `p07/fuzz-targets`).** Six targets in
    `fuzz/` (SRT, WebVTT, whisper `-ojf`, transcript records, FFprobe metadata, cursors);
    weekly pinned-nightly `Fuzz` workflow; per-PR stable seed replay; FFprobe parser now
-   public. Skipped decoders: ADR 0016 note. Merge waits for the NCSA decision below.
-3. **Next: increment 3b, pending maintainer decisions D1-D8** (below):
+   public. NCSA allowed for `libfuzzer-sys` only (maintainer, 2026-09-25).
+3. **Next: increment 3b, under maintainer decisions D1-D8** (below):
    `transcript retranscribe` through the engine (both preflights first, private ASR
    work directory in the session), public schemas for ASR revisions and the v2 record,
    what a run that hears no speech produces (today: no revision, typed error), ADR
@@ -40,7 +40,7 @@ is not. Local checks: CI is the default Linux/macOS check; Docker only for platf
 
 ## Open decisions (maintainer)
 
-- Local ASR (asked 2026-09-24; recommendation in brackets). D1 how ASR is requested
+- Local ASR, decided 2026-09-25 (all as recommended). D1 how ASR is requested
   [`transcript retranscribe <session>`, range optional = whole source]; D2 widen v1
   schemas for ASR [yes, unreleased]; D3 bounded retranscribe [complete spliced
   revision; older ones via `transcript get --revision`]; D4 `setup check` reporting
@@ -48,12 +48,8 @@ is not. Local checks: CI is the default Linux/macOS check; Docker only for platf
   unpinned models [refuse for R0]; D6 light profile and gates [`base-q5_1`; RTF <= 0.5,
   <= 400 MiB, WER <= 10% clean / 25% F08]; D7 progress events [none yet]; D8 stream
   tombstones [none: superseded revisions stay valid and readable].
-- Fuzz harness licence (asked 2026-09-24): `libfuzzer-sys` declares `(MIT OR
-  Apache-2.0) AND NCSA`, which `deny.toml` did not allow. The fuzz PR adds an NCSA
-  exception for that crate only and a cargo-deny step for `fuzz/Cargo.toml` (both
-  graphs pass); it merges only once the maintainer approves [approve].
-- Whether to open a backlog issue for a faster-whisper adapter (proposed; awaiting
-  the maintainer). whisper.cpp stays the default.
+- faster-whisper adapter: approved as a backlog issue (2026-09-25); whisper.cpp
+  stays the default.
 - Crate names are confirmed (`vsift` facade, `vsift-contract`); a crates.io
   availability check still precedes first publication.
 - Minimum-supported-Rust-version policy before the library is first published.

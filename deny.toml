@@ -19,7 +19,7 @@ unused-allowed-license = "allow"
 exceptions = [
   # Declared for the vendored LLVM libFuzzer sources (whose files now carry
   # Apache-2.0 WITH LLVM-exception headers); used only by the unpublished fuzz
-  # harness in fuzz/, never by a VSift crate. Maintainer decision required.
+  # harness in fuzz/, never by a VSift crate. Approved by the maintainer on 2026-09-25.
   { crate = "libfuzzer-sys", allow = ["NCSA"] },
 ]
 

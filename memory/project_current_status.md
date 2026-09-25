@@ -78,7 +78,7 @@ increment. Search and visuals are P08-P09.
   dispatch 1-1200 s); every PR's `Fuzz harness replay` runs them over the seeds on stable.
 - Not fuzzed (private decoders, reasons in the ADR 0016 note): bundle manifest and
   ownership marker, verification record, user config, CLI request decoder, showinfo.
-- `libfuzzer-sys` declares NCSA, which `deny.toml` does not allow: open decision.
+- `libfuzzer-sys` declares NCSA: allowed for that crate only (maintainer, 2026-09-25).
 
 ## Private folders (PR #141) and evidence stream (increment 2c)
 
