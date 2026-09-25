@@ -1,0 +1,2 @@
+dialog r 17
+Dialog R-17 is displayed now.
