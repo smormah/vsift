@@ -11,18 +11,23 @@ use std::{
 
 use vsift_domain::{
     AsrChunkOutcome, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild,
-    ChunkPlan, ChunkTime, ConfidenceOrigin, CueText, LanguageTag, MediaTime, PlannedChunk,
-    ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind,
-    SegmentOrigin, SessionId, Sha256Hex, SourceId, SourceSegment, SourceSegmentId, TimeRange,
-    TranscriptRevisionError, TranscriptWarningKind,
+    ChunkPlan, ChunkTime, ConfidenceOrigin, CueSource, CueText, CueTiming, ImportedCue,
+    LanguageTag, MediaTime, ParsedTranscript, PlannedChunk, ProviderChunkOutput,
+    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, SegmentOrigin,
+    SessionId, Sha256Hex, SidecarIdentity, SourceId, SourceSegment, SourceSegmentId, TimeRange,
+    TranscriptFormat, TranscriptOffset, TranscriptProvenance, TranscriptRevision,
+    TranscriptRevisionError, TranscriptWarningKind, TranscriptWarnings,
 };
 
 use super::{
-    AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage,
-    RecognizerIdentity, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
-    SpeechRecognizer, TranscribeRangeRequest, build_asr_revision, transcribe_range,
+    AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
+    RecognizerIdentity, RevisionSplice, SpeechAudioError, SpeechAudioSource, SpeechPcm,
+    SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, build_asr_revision,
+    transcribe_range,
 };
-use crate::TranscriptBuildError;
+use crate::{
+    ImportedRevisionRequest, SuppliedTranscript, TranscriptBuildError, build_imported_revision,
+};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Built<T> = Result<T, Box<dyn std::error::Error>>;
@@ -252,8 +257,7 @@ async fn a_run_transcribes_every_chunk_and_builds_a_valid_revision() -> TestResu
             source_segment: &source,
             number: NonZeroU32::MIN,
             transcription,
-            supersedes: None,
-            replaced_range: None,
+            splice: None,
         })
     };
     let revision = build(transcription.clone())?;
@@ -422,28 +426,303 @@ async fn silent_chunks_are_skipped_and_recorded_as_gaps() -> TestResult {
     Ok(())
 }
 
-/// A run that heard no speech cannot become a revision.
+/// A run that heard no speech is recorded as a revision with no segment, its
+/// silent chunks and a typed warning, so the attempt is not lost (ADR 0017).
 #[tokio::test]
-async fn a_run_without_speech_builds_no_revision() -> TestResult {
+async fn a_run_without_speech_is_recorded_without_segments() -> TestResult {
     let audio = FakeAudio::new(vec![Audio::Silence, Audio::Silence, Audio::Silence]);
     let recognizer = FakeRecognizer::new(identity(DIGEST)?);
     let transcription = run(&audio, &recognizer, &Flag(&NEVER)).await??;
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst), 0);
     let source = source()?;
-    let result = build_asr_revision(AsrRevisionRequest {
+    let revision = build_asr_revision(AsrRevisionRequest {
         session_id: &SessionId::parse("ses_0123456789abcdef")?,
         source_id: &SourceId::from_sha256(DIGEST)?,
         source_segment: &source,
         number: NonZeroU32::MIN,
         transcription,
-        supersedes: None,
-        replaced_range: None,
-    });
+        splice: None,
+    })?;
+    assert!(revision.segments().is_empty());
+    let warnings: Vec<_> = revision
+        .warnings()
+        .as_slice()
+        .iter()
+        .map(|warning| (warning.kind(), warning.count(), warning.first_cue()))
+        .collect();
+    assert_eq!(
+        warnings,
+        [
+            (TranscriptWarningKind::SilentChunksSkipped, 3, 1),
+            (TranscriptWarningKind::NoSpeechRecognised, 1, 1),
+        ]
+    );
+    Ok(())
+}
+
+/// D5: a model that is not a reviewed pinned profile never runs.
+#[tokio::test]
+async fn unpinned_models_are_refused_before_any_work() -> TestResult {
+    let audio = FakeAudio::new(Vec::new());
+    let mut unpinned = identity(DIGEST)?;
+    unpinned.model = AsrModel::new(AsrModelProfile::Unreviewed, Sha256Hex::parse(DIGEST)?);
+    let recognizer = FakeRecognizer::new(unpinned.clone());
+    let source = source()?;
+    let result = transcribe_range(
+        TranscribeRangeRequest {
+            source_segment: &source,
+            range: source.range(),
+            plan: ChunkPlan::R0,
+            audio_stream: 1,
+            expected: &unpinned,
+        },
+        &audio,
+        &recognizer,
+        &Flag(&NEVER),
+    )
+    .await;
     assert_eq!(
         result,
-        Err(TranscriptBuildError::Invalid(
-            TranscriptRevisionError::Empty
-        ))
+        Err(AsrFailure {
+            stage: AsrStage::RecognizerIdentity,
+            reason: AsrFailureReason::UnpinnedModel,
+        })
     );
+    assert_eq!(audio.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(recognizer.calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+/// An imported base revision over the 70 s source: cues at 5-7 s, 12-14 s,
+/// 40-42 s and 60-62 s, aligned with a zero offset.
+fn imported_base(session: &SessionId, source_id: &SourceId) -> Built<TranscriptRevision> {
+    let mut cues = Vec::new();
+    for (ordinal, start) in (1_u32..).zip([5, 12, 40, 60]) {
+        let words = format!("imported cue {ordinal}");
+        cues.push(ImportedCue {
+            source: CueSource::new(
+                NonZeroU32::new(ordinal).ok_or("zero")?,
+                NonZeroU32::new(ordinal * 4).ok_or("zero")?,
+            ),
+            timing: CueTiming::new(start * SECOND, (start + 2) * SECOND)?,
+            text: CueText::new(words.clone(), words)?,
+            speaker: None,
+        });
+    }
+    let supplied = SuppliedTranscript {
+        transcript: ParsedTranscript::new(
+            TranscriptFormat::Srt,
+            LanguageTag::parse("en").ok(),
+            cues,
+            TranscriptWarnings::default(),
+        )?,
+        sidecar: SidecarIdentity::new(DIGEST, 100)?,
+    };
+    Ok(build_imported_revision(ImportedRevisionRequest {
+        session_id: session,
+        source_id,
+        source_duration: MediaTime::from_micros(70 * SECOND),
+        supplied: &supplied,
+        offset: TranscriptOffset::ZERO,
+        number: NonZeroU32::MIN,
+    })?)
+}
+
+/// One segment half a second into each chunk, two seconds long.
+fn early_segment(chunk: &PlannedChunk) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+    let words = format!("recognised in chunk {}", chunk.index());
+    let text = CueText::new(words.clone(), words).map_err(|_| SpeechRecognitionError::Io)?;
+    Ok(ProviderChunkOutput {
+        language: LanguageTag::parse("es").ok(),
+        segments: vec![ProviderSegment {
+            start: ChunkTime::from_millis(500).ok_or(SpeechRecognitionError::Io)?,
+            end: ChunkTime::from_millis(2_500).ok_or(SpeechRecognitionError::Io)?,
+            text: Some(text),
+            tokens: Vec::new(),
+        }],
+    })
+}
+
+async fn transcribe(source: &SourceSegment, requested: TimeRange) -> Built<AsrTranscription> {
+    let audio = FakeAudio::new(Vec::new());
+    let mut recognizer = FakeRecognizer::new(identity(DIGEST)?);
+    recognizer.output = early_segment;
+    let expected = identity(DIGEST)?;
+    Ok(transcribe_range(
+        TranscribeRangeRequest {
+            source_segment: source,
+            range: requested,
+            plan: ChunkPlan::R0,
+            audio_stream: 1,
+            expected: &expected,
+        },
+        &audio,
+        &recognizer,
+        &Flag(&NEVER),
+    )
+    .await?)
+}
+
+fn texts(revision: &TranscriptRevision) -> Vec<(u64, String)> {
+    revision
+        .segments()
+        .iter()
+        .map(|segment| {
+            (
+                segment.range().start().as_micros() / SECOND,
+                segment.text().text().to_owned(),
+            )
+        })
+        .collect()
+}
+
+/// D3/T-06: a bounded retranscription is a complete spliced revision whose
+/// carried segments keep their provenance, and a second one carries text from
+/// both earlier revisions, always naming the revision that first produced it.
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One chain of three revisions, checked as it grows"
+)]
+async fn bounded_retranscriptions_splice_complete_revisions() -> TestResult {
+    let session = SessionId::parse("ses_0123456789abcdef")?;
+    let source_id = SourceId::from_sha256(DIGEST)?;
+    let base = imported_base(&session, &source_id)?;
+    let source = base.source_segment().clone();
+    // 11-13 s cuts the 12-14 s cue, so the range widens to 11-14 s.
+    let replaced = base.snap_to_segments(range(11 * SECOND, 13 * SECOND)?);
+    assert_eq!(replaced, range(11 * SECOND, 14 * SECOND)?);
+    let second = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription: transcribe(&source, replaced).await?,
+        splice: Some(RevisionSplice {
+            base: &base,
+            replaced_range: replaced,
+        }),
+    })?;
+    assert_eq!(
+        texts(&second),
+        [
+            (5, "imported cue 1".to_owned()),
+            (11, "recognised in chunk 0".to_owned()),
+            (40, "imported cue 3".to_owned()),
+            (60, "imported cue 4".to_owned()),
+        ]
+    );
+    assert_eq!(second.supersedes(), Some(base.id()));
+    assert_eq!(second.replaced_range(), Some(replaced));
+    assert_eq!(second.inherited().len(), 1);
+    let carried = &second.segments()[0];
+    let origin = carried.carried_from().ok_or("not carried")?;
+    assert_eq!(origin.revision(), base.id());
+    assert_eq!(origin.segment(), base.segments()[0].id());
+    assert_ne!(carried.id(), base.segments()[0].id());
+    assert_eq!(carried.origin(), base.segments()[0].origin());
+    assert!(matches!(
+        second.segment_provenance(carried),
+        TranscriptProvenance::Imported { .. }
+    ));
+    assert_eq!(
+        second.segment_language(carried).map(LanguageTag::as_str),
+        Some("en")
+    );
+    assert_eq!(
+        second
+            .segment_language(&second.segments()[1])
+            .map(LanguageTag::as_str),
+        Some("es")
+    );
+
+    // A second bounded run over 40-42 s carries from both earlier revisions.
+    let replaced = second.snap_to_segments(range(40_500_000, 41 * SECOND)?);
+    let third = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::new(3).ok_or("zero")?,
+        transcription: transcribe(&source, replaced).await?,
+        splice: Some(RevisionSplice {
+            base: &second,
+            replaced_range: replaced,
+        }),
+    })?;
+    assert_eq!(
+        texts(&third),
+        [
+            (5, "imported cue 1".to_owned()),
+            (11, "recognised in chunk 0".to_owned()),
+            (40, "recognised in chunk 0".to_owned()),
+            (60, "imported cue 4".to_owned()),
+        ]
+    );
+    let origins: Vec<_> = third
+        .segments()
+        .iter()
+        .map(|segment| segment.carried_from().map(|from| from.revision().clone()))
+        .collect();
+    assert_eq!(
+        origins,
+        [
+            Some(base.id().clone()),
+            Some(second.id().clone()),
+            None,
+            Some(base.id().clone()),
+        ]
+    );
+    assert_eq!(third.inherited().len(), 2);
+
+    // The splice must match the run exactly.
+    for (number, replaced_range) in [(4, range(40 * SECOND, 43 * SECOND)?), (2, replaced)] {
+        let mismatched = build_asr_revision(AsrRevisionRequest {
+            session_id: &session,
+            source_id: &source_id,
+            source_segment: &source,
+            number: NonZeroU32::new(number).ok_or("zero")?,
+            transcription: transcribe(&source, replaced).await?,
+            splice: Some(RevisionSplice {
+                base: &third,
+                replaced_range,
+            }),
+        });
+        assert_eq!(
+            mismatched,
+            Err(TranscriptBuildError::Invalid(
+                TranscriptRevisionError::InvalidSupersession
+            ))
+        );
+    }
+    Ok(())
+}
+
+/// A whole-source retranscription supersedes the base and carries nothing.
+#[tokio::test]
+async fn whole_source_retranscription_replaces_everything() -> TestResult {
+    let session = SessionId::parse("ses_0123456789abcdef")?;
+    let source_id = SourceId::from_sha256(DIGEST)?;
+    let base = imported_base(&session, &source_id)?;
+    let source = base.source_segment().clone();
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::new(2).ok_or("zero")?,
+        transcription: transcribe(&source, source.range()).await?,
+        splice: Some(RevisionSplice {
+            base: &base,
+            replaced_range: source.range(),
+        }),
+    })?;
+    assert!(
+        revision
+            .segments()
+            .iter()
+            .all(|segment| segment.carried_from().is_none())
+    );
+    assert!(revision.inherited().is_empty());
+    assert_eq!(revision.supersedes(), Some(base.id()));
     Ok(())
 }
 

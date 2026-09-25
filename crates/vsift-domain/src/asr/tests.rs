@@ -12,10 +12,12 @@ use super::{
     validate_chunk_output,
 };
 use crate::{
-    Confidence, ConfidenceOrigin, CueText, MediaTime, ProviderEndTrim, SegmentOrigin, SourceId,
-    SourceSegment, SourceSegmentId, TimeRange, TranscriptProvenance, TranscriptRevision,
-    TranscriptRevisionError, TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment,
-    TranscriptSegmentId, TranscriptSegmentParts, TranscriptWarningKind, TranscriptWarnings,
+    CarriedFrom, Confidence, ConfidenceOrigin, CueSource, CueText, CueTiming, InheritedRevision,
+    LanguageTag, MediaTime, ProviderEndTrim, SegmentOrigin, SidecarIdentity, SourceId,
+    SourceSegment, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptFormat, TranscriptOffset,
+    TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
+    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentId, TranscriptSegmentParts,
+    TranscriptWarningKind, TranscriptWarnings,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -664,10 +666,196 @@ fn asr_revision(segments: Vec<TranscriptSegment>) -> Built<TranscriptRevisionPar
         ])?),
         supersedes: None,
         replaced_range: None,
+        inherited: Vec::new(),
         language: None,
         segments,
         warnings: TranscriptWarnings::default(),
     })
+}
+
+/// A run that heard no speech is still a revision: its chunk outcomes are
+/// the record of the attempt. An import with nothing in it is never one.
+#[test]
+fn a_local_asr_revision_may_hold_no_segment() -> TestResult {
+    let revision = TranscriptRevision::new(asr_revision(Vec::new())?)?;
+    assert!(revision.segments().is_empty());
+    assert_eq!(
+        revision.provenance().alignment_origin().identifier(),
+        "local_asr"
+    );
+    let mut import = asr_revision(Vec::new())?;
+    import.provenance = TranscriptProvenance::Imported {
+        format: TranscriptFormat::Srt,
+        sidecar: SidecarIdentity::new(DIGEST, 10)?,
+        offset: TranscriptOffset::ZERO,
+    };
+    assert_eq!(
+        TranscriptRevision::new(import),
+        Err(TranscriptRevisionError::Empty)
+    );
+    Ok(())
+}
+
+const BASE_REVISION: &str = "trv_1111111111111111";
+
+/// A cue of an imported base revision, offset by +0.5 s, carried into a
+/// spliced revision at `[start, end)`.
+fn carried_cue(ordinal: u32, start: u64, end: u64, original: u32) -> Built<TranscriptSegment> {
+    Ok(TranscriptSegment::new(TranscriptSegmentParts {
+        id: TranscriptSegmentId::parse(format!("tsg_{ordinal:016x}"))?,
+        ordinal: NonZeroU32::new(ordinal).ok_or("zero")?,
+        range: range(start, end)?,
+        text: text("carried words")?,
+        speaker: None,
+        confidence: Confidence::unknown(),
+        origin: SegmentOrigin::ImportedCue {
+            cue: CueSource::new(
+                NonZeroU32::new(original).ok_or("zero")?,
+                NonZeroU32::new(original * 4).ok_or("zero")?,
+            ),
+            timing: CueTiming::new(start - 500_000, end - 500_000)?,
+        },
+    })
+    .with_carried_from(CarriedFrom::new(
+        TranscriptRevisionId::parse(BASE_REVISION)?,
+        TranscriptSegmentId::parse(format!("tsg_{:016x}", 0xb00_u64 + u64::from(original)))?,
+    )))
+}
+
+fn inherited_import() -> Built<InheritedRevision> {
+    Ok(InheritedRevision::new(
+        TranscriptRevisionId::parse(BASE_REVISION)?,
+        TranscriptProvenance::Imported {
+            format: TranscriptFormat::Srt,
+            sidecar: SidecarIdentity::new(DIGEST, 10)?,
+            offset: TranscriptOffset::from_micros(500_000)?,
+        },
+        Some(LanguageTag::parse("en")?),
+    ))
+}
+
+/// A revision replacing [25 s, 55 s) of the base with chunk 1's speech and
+/// carrying one base cue from before the range and one after it.
+fn spliced(before: TranscriptSegment, after: TranscriptSegment) -> Built<TranscriptRevisionParts> {
+    let own = asr_segment(
+        2,
+        range(26_750_000, 28_750_000)?,
+        1,
+        (SECOND, 3 * SECOND),
+        ProviderEndTrim::Unchanged,
+        Confidence::unknown(),
+    )?;
+    let mut parts = asr_revision(vec![before, own, after])?;
+    parts.supersedes = Some(TranscriptRevisionId::parse(BASE_REVISION)?);
+    parts.replaced_range = Some(range(25 * SECOND, 55 * SECOND)?);
+    parts.inherited = vec![inherited_import()?];
+    Ok(parts)
+}
+
+/// D3/T-06: carried segments keep their original provenance, are checked
+/// against it, and never lie in the replaced range.
+#[test]
+fn spliced_revisions_check_carried_segments_against_their_origin() -> TestResult {
+    let before = carried_cue(1, SECOND, 3 * SECOND, 1)?;
+    let after = carried_cue(3, 60 * SECOND, 62 * SECOND, 7)?;
+    let revision = TranscriptRevision::new(spliced(before.clone(), after.clone())?)?;
+    let carried = &revision.segments()[0];
+    assert!(matches!(
+        revision.segment_provenance(carried),
+        TranscriptProvenance::Imported { .. }
+    ));
+    assert_eq!(
+        revision.segment_language(carried).map(LanguageTag::as_str),
+        Some("en")
+    );
+    let own = &revision.segments()[1];
+    assert!(own.carried_from().is_none());
+    assert!(matches!(
+        revision.segment_provenance(own),
+        TranscriptProvenance::LocalAsr(_)
+    ));
+    assert_eq!(revision.segment_language(own), None);
+
+    let invalid = |parts: TranscriptRevisionParts| TranscriptRevision::new(parts);
+    // A carried segment inside the replaced range.
+    let inside = carried_cue(3, 30 * SECOND, 31 * SECOND, 7)?;
+    assert_eq!(
+        invalid(spliced(before.clone(), inside)?),
+        Err(TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    // A carried segment whose timing is not its cue plus the inherited offset.
+    let shifted = TranscriptSegment::new(TranscriptSegmentParts {
+        id: after.id().clone(),
+        ordinal: NonZeroU32::new(3).ok_or("zero")?,
+        range: range(60 * SECOND + 1, 62 * SECOND)?,
+        text: after.text().clone(),
+        speaker: None,
+        confidence: Confidence::unknown(),
+        origin: after.origin(),
+    })
+    .with_carried_from(after.carried_from().ok_or("carried")?.clone());
+    assert_eq!(
+        invalid(spliced(before.clone(), shifted)?),
+        Err(TranscriptRevisionError::AlignmentMismatch)
+    );
+    // A speaker label on text carried from SubRip, which has no voice syntax.
+    let labelled = TranscriptSegment::new(TranscriptSegmentParts {
+        id: after.id().clone(),
+        ordinal: NonZeroU32::new(3).ok_or("zero")?,
+        range: after.range(),
+        text: after.text().clone(),
+        speaker: Some(SpeakerLabel::parse("Ana")?),
+        confidence: Confidence::unknown(),
+        origin: after.origin(),
+    })
+    .with_carried_from(after.carried_from().ok_or("carried")?.clone());
+    assert_eq!(
+        invalid(spliced(before.clone(), labelled)?),
+        Err(TranscriptRevisionError::UnsupportedSpeaker)
+    );
+    // The same original segment carried twice.
+    let twice = carried_cue(3, 60 * SECOND, 62 * SECOND, 1)?;
+    assert_eq!(
+        invalid(spliced(before.clone(), twice)?),
+        Err(TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    // A carried segment naming a revision with no inherited provenance.
+    let mut unknown = spliced(before.clone(), after.clone())?;
+    unknown.inherited = vec![InheritedRevision::new(
+        TranscriptRevisionId::parse("trv_2222222222222222")?,
+        inherited_import()?.provenance().clone(),
+        None,
+    )];
+    assert_eq!(
+        invalid(unknown),
+        Err(TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    // Inherited provenance nobody refers to.
+    let mut dangling = spliced(before.clone(), after.clone())?;
+    dangling.inherited.push(InheritedRevision::new(
+        TranscriptRevisionId::parse("trv_2222222222222222")?,
+        inherited_import()?.provenance().clone(),
+        None,
+    ));
+    assert_eq!(
+        invalid(dangling),
+        Err(TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    // Carrying needs a superseded revision and a replaced range.
+    let mut unanchored = spliced(before.clone(), after.clone())?;
+    unanchored.replaced_range = None;
+    assert_eq!(
+        invalid(unanchored),
+        Err(TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    let mut orphaned = spliced(before, after)?;
+    orphaned.supersedes = None;
+    orphaned.replaced_range = None;
+    assert_eq!(
+        invalid(orphaned),
+        Err(TranscriptRevisionError::InvalidCarriedSegment)
+    );
+    Ok(())
 }
 
 /// T-06: an ASR segment's range is re-derived from its chunk and provider times.

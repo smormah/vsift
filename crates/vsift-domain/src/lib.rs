@@ -52,14 +52,14 @@ pub use timeline::{
     TimeConversionError, TimeRange, TimeRangeError,
 };
 pub use transcript::{
-    AlignedCue, AlignmentOrigin, CueMarkup, CueSource, CueText, CueTiming, ImportedCue,
-    LanguageTag, LanguageTagError, MAX_CUE_TEXT_BYTES, MAX_SUPPLIED_TRANSCRIPT_BYTES,
-    MAX_TRANSCRIPT_CUES, MAX_TRANSCRIPT_OFFSET_MICROS, ParsedTranscript, ProviderEndTrim,
-    SegmentOrigin, SidecarIdentity, SourceSegment, SourceSegmentState, TranscriptFormat,
-    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRejection,
-    TranscriptRevision, TranscriptRevisionError, TranscriptRevisionParts, TranscriptSegment,
-    TranscriptSegmentParts, TranscriptSlice, TranscriptWarning, TranscriptWarningKind,
-    TranscriptWarnings, align_imported_cues,
+    AlignedCue, AlignmentOrigin, CarriedFrom, CueMarkup, CueSource, CueText, CueTiming,
+    ImportedCue, InheritedRevision, LanguageTag, LanguageTagError, MAX_CUE_TEXT_BYTES,
+    MAX_SUPPLIED_TRANSCRIPT_BYTES, MAX_TRANSCRIPT_CUES, MAX_TRANSCRIPT_OFFSET_MICROS,
+    ParsedTranscript, ProviderEndTrim, SegmentOrigin, SidecarIdentity, SourceSegment,
+    SourceSegmentState, TranscriptFormat, TranscriptImportError, TranscriptOffset,
+    TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptRevisionError,
+    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptSlice,
+    TranscriptWarning, TranscriptWarningKind, TranscriptWarnings, align_imported_cues,
 };
 
 /// A specialist runtime dependency that provides one of `VSift`'s capabilities.
