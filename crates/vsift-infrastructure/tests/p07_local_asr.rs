@@ -1,7 +1,8 @@
 //! Opt-in local-ASR adapter check over the committed P07 speech clips.
 //!
-//! Runs F01, F05, F08 and F09 through the real chain: staged snapshot, `FFprobe`
-//! description, `FfmpegMedia::speech_pcm` chunks, whisper.cpp with the pinned
+//! Runs F01, F05, F08 and F09 through the real chain: staged snapshot bound
+//! for the run (hashed once, identity-checked per call, hashed again at the
+//! end), `FFprobe` description, `FfmpegMedia::speech_pcm` chunks, whisper.cpp with the pinned
 //! decoding profile, `-ojf` parsing, domain validation and seam merge, then
 //! builds a local-ASR revision and round-trips its version-2 record. It needs
 //! `FFmpeg` and `FFprobe` on `PATH` and two environment variables:
@@ -34,10 +35,10 @@ use vsift_domain::{
     AsrChunkOutcome, ChunkPlan, DurabilityRequirement, MediaSelection, OperationId, SessionId,
 };
 use vsift_infrastructure::{
-    ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore, HostIsolation,
-    MediaProviderConformance, ProcessCancellation, ProcessWorkingDirectory, SourceSnapshot,
-    TrustedExecutable, WhisperCli, WhisperSpeechRecognizer, decode_transcript_record,
-    encode_transcript_record,
+    BoundSource, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore,
+    HostIsolation, MediaProviderConformance, ProcessCancellation, ProcessWorkingDirectory,
+    SourceSnapshot, TrustedExecutable, WhisperCli, WhisperSpeechRecognizer,
+    decode_transcript_record, encode_transcript_record,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -152,25 +153,25 @@ async fn speech_clips_are_transcribed_through_the_real_adapters() -> TestResult 
     .enumerate()
     {
         let started = Instant::now();
-        let snapshot = SourceSnapshot::stage(
+        let bound = BoundSource::bind(SourceSnapshot::stage(
             &store,
             &session_id,
             &OperationId::parse(format!("op_{:016x}", index + 1))?,
             &repository(&format!("fixtures/corpus/generated/{file}")),
-        )?;
-        let description = media.probe(&snapshot, ProcessCancellation::new()).await?;
+        )?)?;
+        let description = media.probe(&bound, ProcessCancellation::new()).await?;
         let selection = MediaSelection {
             video: Some(0),
             audio: Some(1),
         };
         let audio = FfmpegSpeechAudio::new(
             &media,
-            &snapshot,
+            &bound,
             &description,
             selection,
             ProcessCancellation::new(),
         );
-        let source = whole_file_source_segment(snapshot.id(), description.duration)?;
+        let source = whole_file_source_segment(bound.snapshot().id(), description.duration)?;
         let transcription = transcribe_range(
             TranscribeRangeRequest {
                 source_segment: &source,
@@ -184,6 +185,8 @@ async fn speech_clips_are_transcribed_through_the_real_adapters() -> TestResult 
             &ProcessCancellation::new(),
         )
         .await?;
+        drop(audio);
+        let snapshot = bound.release_verified()?;
         let outcomes: Vec<String> = transcription
             .run
             .chunks()

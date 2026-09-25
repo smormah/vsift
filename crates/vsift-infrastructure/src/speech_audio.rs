@@ -3,16 +3,21 @@
 //! Each planned chunk is decoded by [`FfmpegMedia::speech_pcm`] with its fixed
 //! arguments, admission, deadline and bounds; this adapter only converts the
 //! little-endian bytes to samples and maps failures to the port's typed errors.
+//!
+//! A recognition run decodes one chunk after another from the same copy, so
+//! the adapter reads a [`BoundSource`]: the copy was hashed once when it was
+//! bound, each chunk's decode compares only its on-disk identity, and the
+//! caller verifies the full hash again before committing (issue #148).
 
 use vsift_application::{SpeechAudioError, SpeechAudioSource, SpeechPcm};
 use vsift_domain::{MediaDescription, MediaSelection, PlannedChunk};
 
-use crate::{FfmpegMedia, MediaError, ProcessCancellation, SourceSnapshot};
+use crate::{BoundSource, FfmpegMedia, MediaError, ProcessCancellation};
 
-/// Decodes speech chunks of one held source snapshot's selected audio stream.
+/// Decodes speech chunks of one bound source's selected audio stream.
 pub struct FfmpegSpeechAudio<'a> {
     media: &'a FfmpegMedia<'a>,
-    source: &'a SourceSnapshot,
+    source: &'a BoundSource,
     description: &'a MediaDescription,
     selection: MediaSelection,
     cancellation: ProcessCancellation,
@@ -23,7 +28,7 @@ impl<'a> FfmpegSpeechAudio<'a> {
     #[must_use]
     pub const fn new(
         media: &'a FfmpegMedia<'a>,
-        source: &'a SourceSnapshot,
+        source: &'a BoundSource,
         description: &'a MediaDescription,
         selection: MediaSelection,
         cancellation: ProcessCancellation,

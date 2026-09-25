@@ -10,8 +10,8 @@ use vsift_domain::{
 
 use crate::{
     FilesystemSessionStore, HostIsolation, ProcessCancellation, ProcessError, ProcessOutcome,
-    ProcessRequest, ProcessRequestError, ProcessSupervisor, ProcessWorkingDirectory, SourceError,
-    SourceSnapshot, SupervisorPolicy, TerminationReason, TrustedExecutable,
+    ProcessRequest, ProcessRequestError, ProcessSupervisor, ProcessWorkingDirectory, SourceBinding,
+    SourceError, SourceSnapshot, SupervisorPolicy, TerminationReason, TrustedExecutable,
 };
 
 /// Hard bound for structured probe output.
@@ -86,18 +86,25 @@ impl<'a> FfmpegMedia<'a> {
 
     /// Runs bounded `FFprobe` against a verified private snapshot and parses selected fields.
     ///
+    /// Every provider call first applies `binding`'s check: a full rehash for
+    /// a plain [`SourceSnapshot`], an identity comparison for a
+    /// [`BoundSource`](crate::BoundSource) (see [`SourceBinding`]).
+    ///
     /// # Errors
     /// Fails on changed bytes, rejected media, oversized metadata, invalid timeline, or process failure.
     pub async fn probe(
         &self,
-        source: &SourceSnapshot,
+        binding: &impl SourceBinding,
         cancellation: ProcessCancellation,
     ) -> Result<MediaDescription, MediaError> {
         let _admission = self
             .store
             .try_admit(1)
             .map_err(|_| MediaError::CapacityUnavailable)?;
-        source.verify().map_err(MediaError::Source)?;
+        binding
+            .check_before_provider_call()
+            .map_err(MediaError::Source)?;
+        let source = binding.snapshot();
         let request = Self::request(
             source,
             self.registry.ffprobe.clone(),
@@ -139,7 +146,7 @@ impl<'a> FfmpegMedia<'a> {
     #[allow(clippy::too_many_lines)] // Keep validation, supervised run, and provenance checks in one auditable path.
     pub async fn frame(
         &self,
-        source: &SourceSnapshot,
+        binding: &impl SourceBinding,
         description: &MediaDescription,
         selection: MediaSelection,
         requested: MediaTime,
@@ -150,7 +157,10 @@ impl<'a> FfmpegMedia<'a> {
             .store
             .try_admit(1)
             .map_err(|_| MediaError::CapacityUnavailable)?;
-        source.verify().map_err(MediaError::Source)?;
+        binding
+            .check_before_provider_call()
+            .map_err(MediaError::Source)?;
+        let source = binding.snapshot();
         description
             .validate_selection(selection)
             .map_err(|_| MediaError::StreamUnavailable)?;
@@ -261,7 +271,7 @@ impl<'a> FfmpegMedia<'a> {
     /// Rejects unsupported ranges, missing audio, exceeded budgets, or invalid decoded bytes.
     pub async fn audio(
         &self,
-        source: &SourceSnapshot,
+        source: &impl SourceBinding,
         description: &MediaDescription,
         selection: MediaSelection,
         range: TimeRange,
@@ -291,7 +301,7 @@ impl<'a> FfmpegMedia<'a> {
     /// Rejects unsupported ranges, missing streams, exceeded budgets, or invalid decoded bytes.
     pub async fn speech_pcm(
         &self,
-        source: &SourceSnapshot,
+        source: &impl SourceBinding,
         description: &MediaDescription,
         selection: MediaSelection,
         range: TimeRange,
@@ -312,7 +322,7 @@ impl<'a> FfmpegMedia<'a> {
     async fn decode_pcm(
         &self,
         profile: PcmProfile,
-        source: &SourceSnapshot,
+        binding: &impl SourceBinding,
         description: &MediaDescription,
         selection: MediaSelection,
         range: TimeRange,
@@ -322,7 +332,10 @@ impl<'a> FfmpegMedia<'a> {
             .store
             .try_admit(1)
             .map_err(|_| MediaError::CapacityUnavailable)?;
-        source.verify().map_err(MediaError::Source)?;
+        binding
+            .check_before_provider_call()
+            .map_err(MediaError::Source)?;
+        let source = binding.snapshot();
         description
             .validate_selection(selection)
             .map_err(|_| MediaError::StreamUnavailable)?;

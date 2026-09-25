@@ -7,8 +7,11 @@
 //! reviewed pinned profile (D5), runs the media-tool preflight and then the
 //! local-ASR preflight, and only then holds the session, decodes speech from
 //! its committed private source copy and recognises it in a private work
-//! directory inside the session. The new revision is committed with one
-//! generation publication; a failure or cancellation commits nothing.
+//! directory inside the session. The copy is bound for the whole run (issue
+//! #148): hashed once when it is opened, compared by on-disk identity before
+//! every `FFprobe` and `FFmpeg` call, and hashed again before the new revision
+//! is committed with one generation publication. A failure, a changed copy or
+//! a cancellation commits nothing.
 
 use std::{
     ffi::OsStr,
@@ -31,11 +34,11 @@ use vsift_domain::{
     RuntimeDependency, SessionArtifactKind, SessionId, SessionPhase, TimeRange, TranscriptRevision,
 };
 use vsift_infrastructure::{
-    ExecutableResolutionError, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio,
+    BoundSource, ExecutableResolutionError, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio,
     FilesystemMediaToolVerificationCache, FilesystemSessionStore, FixtureAsrVerifier,
     LocalAsrFiles, MediaError, MediaProviderConformance, MediaToolVerificationAuthority,
-    ProcessCancellation, ProcessWorkingDirectory, SessionStatus, SourceError, SourceSnapshot,
-    TrustedExecutable, WhisperCli, WhisperError, WhisperSpeechRecognizer, encode_transcript_record,
+    ProcessCancellation, ProcessWorkingDirectory, SessionStatus, SourceError, TrustedExecutable,
+    WhisperCli, WhisperError, WhisperSpeechRecognizer, encode_transcript_record,
     local_asr_fingerprint, media_tool_fingerprint, reviewed_compatibility_policy,
 };
 
@@ -126,7 +129,8 @@ impl Engine {
     /// model, or a model that is not a reviewed pinned profile; then for a
     /// missing, closed or expired session; then for a failed media-tool or
     /// local-ASR preflight; and during the run for a source without audio, a
-    /// typed recognition failure, cancellation or a storage failure. A
+    /// typed recognition failure, cancellation or a storage failure, including
+    /// a session source copy that changed while the run used it. A
     /// concurrent change to the session (a renewal or another revision) fails
     /// the commit with a busy storage error. Nothing is committed on failure.
     #[allow(
@@ -181,7 +185,9 @@ impl Engine {
             .await?;
 
         // 4. Hold the session's committed source and a private work directory.
-        let snapshot = SourceSnapshot::open_committed(&store, &request.session, now)
+        // The copy is hashed once here and compared by identity before each
+        // provider call below (issue #148).
+        let bound = BoundSource::open_committed(&store, &request.session, now)
             .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
         let work = store.session_work_directory(&request.session, now)?;
         let media = FfmpegMedia::new(
@@ -190,13 +196,13 @@ impl Engine {
             &store,
         );
         let description = media
-            .probe(&snapshot, cancellation.clone())
+            .probe(&bound, cancellation.clone())
             .await
             .map_err(|error| EngineError::SourceProbe(probe_error(&error)))?;
         let stream = description
             .speech_audio_stream()
             .ok_or(EngineError::NoAudioStream)?;
-        let source = whole_file_source_segment(snapshot.id(), description.duration)
+        let source = whole_file_source_segment(bound.snapshot().id(), description.duration)
             .map_err(|_| EngineError::SourceProbe(SourceProbeError::InvalidSource))?;
         if let Some(range) = requested
             && range.end() > source.range().end()
@@ -216,7 +222,7 @@ impl Engine {
         let _recognition = store.try_admit(1)?;
         let audio = FfmpegSpeechAudio::new(
             &media,
-            &snapshot,
+            &bound,
             &description,
             MediaSelection {
                 video: None,
@@ -249,6 +255,7 @@ impl Engine {
             }
         }
         .map_err(EngineError::LocalAsrFailed)?;
+        drop(audio);
         let number = base
             .as_ref()
             .map_or(Some(1), |base| base.number().checked_add(1))
@@ -256,7 +263,7 @@ impl Engine {
             .ok_or(EngineError::Storage(SessionStorageError::CapacityExhausted))?;
         let revision = build_asr_revision(AsrRevisionRequest {
             session_id: &request.session,
-            source_id: snapshot.id(),
+            source_id: bound.snapshot().id(),
             source_segment: &source,
             number,
             transcription,
@@ -272,6 +279,13 @@ impl Engine {
                 reason: AsrFailureReason::Cancelled,
             }));
         }
+
+        // The closing full verification: the revision is committed only if
+        // the copy still holds the committed bytes; the snapshot keeps the
+        // session held until the commit is done.
+        let snapshot = bound
+            .release_verified()
+            .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
 
         // 6. Commit against the generation observed before the run.
         let record = encode_transcript_record(&revision)?;

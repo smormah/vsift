@@ -25,7 +25,7 @@ use vsift_domain::{
 };
 
 use crate::{
-    FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore, HostIsolation,
+    BoundSource, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore, HostIsolation,
     MediaProviderConformance, MediaToolVerificationAuthority, ProcessCancellation,
     ProcessWorkingDirectory, SourceSnapshot, WhisperCli, WhisperSpeechRecognizer,
     media_tool_verification::{
@@ -238,15 +238,18 @@ impl FixtureAsrVerifier {
             &fixture_path,
         )
         .map_err(|_| LocalAsrVerificationFailure::Workspace)?;
+        // The fixture check decodes like a run, through a bound copy (#148).
+        let bound =
+            BoundSource::bind(snapshot).map_err(|_| LocalAsrVerificationFailure::Workspace)?;
         let media = FfmpegMedia::new(self.conformance.clone(), self.host_isolation, &store);
         let description = media
-            .probe(&snapshot, self.cancellation.clone())
+            .probe(&bound, self.cancellation.clone())
             .await
             .map_err(|_| LocalAsrVerificationFailure::FixtureMedia)?;
         let stream = description
             .speech_audio_stream()
             .ok_or(LocalAsrVerificationFailure::FixtureMedia)?;
-        let source = whole_file_source_segment(snapshot.id(), description.duration)
+        let source = whole_file_source_segment(bound.snapshot().id(), description.duration)
             .map_err(|_| LocalAsrVerificationFailure::FixtureMedia)?;
         let chunks = workspace.path().join("asr");
         fs::create_dir(&chunks).map_err(|_| LocalAsrVerificationFailure::Workspace)?;
@@ -256,7 +259,7 @@ impl FixtureAsrVerifier {
             WhisperSpeechRecognizer::new(self.whisper.clone(), chunks, self.cancellation.clone());
         let audio = FfmpegSpeechAudio::new(
             &media,
-            &snapshot,
+            &bound,
             &description,
             MediaSelection {
                 video: None,
@@ -278,6 +281,10 @@ impl FixtureAsrVerifier {
         )
         .await
         .map_err(LocalAsrVerificationFailure::Transcription)?;
+        drop(audio);
+        bound
+            .release_verified()
+            .map_err(|_| LocalAsrVerificationFailure::Workspace)?;
         check_transcript(&transcription.segments)
     }
 }

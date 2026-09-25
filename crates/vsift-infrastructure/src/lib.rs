@@ -20,6 +20,7 @@ mod process_supervisor;
 mod publisher_artifact_transfer;
 mod random_identifiers;
 mod session_root;
+mod source_binding;
 mod source_duration_probe;
 mod source_snapshot;
 mod speech_audio;
@@ -99,6 +100,7 @@ pub use random_identifiers::RandomIdentifierSource;
 pub use session_root::{
     SessionRootError, SessionRootProvisioning, open_session_root, platform_session_root,
 };
+pub use source_binding::{BoundSource, SourceBinding};
 pub use source_duration_probe::FfprobeSourceDuration;
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
