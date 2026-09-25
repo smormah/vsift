@@ -46,7 +46,6 @@ use std::{
     ffi::OsStr,
     fmt::Write as _,
     fs,
-    io::Write as _,
     num::NonZeroU16,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -86,6 +85,7 @@ const TIMING_CLIP_TARGET_US: u64 = 180_000_000;
 const UTTERANCE_GAP_US: u64 = 300_000;
 const TIMING_RUNS: usize = 3;
 const LOAD_TIME_RUNS: usize = 3;
+#[cfg(any(windows, target_os = "linux"))]
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(100);
 /// D6 gates for the base profile, in basis points where they are rates.
 const CLEAN_WER_GATE_BP: usize = 1_000;
@@ -550,6 +550,8 @@ type SamplerThread = Option<std::thread::JoinHandle<Option<u64>>>;
 
 #[cfg(windows)]
 fn platform_sampler(work: &Path, stop: Arc<AtomicBool>) -> Built<(SamplerThread, &'static str)> {
+    use std::io::Write as _;
+
     // PowerShell reads the fixed script from standard input and runs until
     // the sentinel file is removed; nothing is interpolated into it. It is one
     // line because `-Command -` parses standard input line by line.
@@ -590,6 +592,10 @@ fn platform_sampler(work: &Path, stop: Arc<AtomicBool>) -> Built<(SamplerThread,
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the Windows sampler can fail to start its PowerShell process"
+)]
 fn platform_sampler(_work: &Path, stop: Arc<AtomicBool>) -> Built<(SamplerThread, &'static str)> {
     let worker = std::thread::spawn(move || {
         let mut peak = 0_u64;
@@ -631,6 +637,10 @@ fn platform_sampler(_work: &Path, stop: Arc<AtomicBool>) -> Built<(SamplerThread
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the Windows sampler can fail to start its PowerShell process"
+)]
 fn platform_sampler(_work: &Path, _stop: Arc<AtomicBool>) -> Built<(SamplerThread, &'static str)> {
     Ok((None, "not measured on this platform"))
 }
