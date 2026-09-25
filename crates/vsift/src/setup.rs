@@ -415,7 +415,7 @@ mod tests {
         );
         assert_eq!(
             data["actions"][1]["files"].as_array().map(Vec::len),
-            Some(12)
+            Some(25)
         );
         assert_eq!(
             data["actions"][1]["archive_links"].as_array().map(Vec::len),
