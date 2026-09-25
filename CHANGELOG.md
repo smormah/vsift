@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Local speech recognition: `vsift transcript retranscribe <session> [--from <us> --to
+  <us>]` transcribes a session's speech with whisper.cpp into a new transcript
+  revision, for the whole video or one range. It needs FFmpeg, FFprobe and
+  `whisper-cli` (registered with `setup configure` or on `PATH`) and the reviewed
+  multilingual base model registered with `setup configure-model`; any other model file
+  is refused with `MISSING_CAPABILITY`. Before touching the video it checks, once per
+  setup, that the recognizer really transcribes a short speech clip built into VSift.
+  A range is widened to whole segments of the newest revision, and the new revision
+  keeps every segment outside it unchanged (new identities, naming the segment they
+  came from), so earlier citations stay valid. The newest revision is what `transcript
+  get` returns; `transcript get --revision <trv_id>` reads any earlier one. A run that
+  hears no speech is still recorded, with the warning `no_speech_recognised`. Failures
+  use existing codes with fixed-prose remediation that names the failed step and
+  reason. `ingest` and `transcript get` still never look for whisper.cpp or a model.
+- Published contract for local ASR: the v1 `transcript-segment`,
+  `transcript-revision` and `bundle-transcript-record` schemas now also describe
+  local-ASR revisions (version-2 records), and a new `transcript-retranscribe-data`
+  schema describes the command's result, with frozen examples. Imported transcripts
+  produce exactly the same output as before.
 - Fuzzing: `cargo-fuzz` targets in `fuzz/` for the parsers of untrusted input, namely
   SRT and WebVTT sidecars, whisper.cpp `-ojf` output, stored transcript records,
   FFprobe metadata and `transcript get --cursor` tokens. The new `Fuzz` workflow runs
@@ -15,9 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   pull request replays them over their committed seeds on the normal stable toolchain.
   No command or output changes. For library users, the FFprobe metadata parser is now
   public as `vsift_infrastructure::parse_ffprobe_metadata`, unchanged in behaviour.
-- Internal local speech recognition core (P07 increment 3a), not yet reachable from
-  any command: `transcript retranscribe` still returns `COMMAND_NOT_IMPLEMENTED` and
-  no public output changes. The engine library can now cut a range into overlapping
+- Internal local speech recognition core (P07 increment 3a), reached through
+  `transcript retranscribe` from increment 3b onward. The engine library can now cut a range into overlapping
   30-second chunks, decode each with FFmpeg, recognise it with whisper.cpp v1.9.2,
   check every reported time against the audio actually decoded, skip silent chunks,
   and merge the chunks back into one transcript without dropping or doubling speech
@@ -25,8 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   settings produced it, and a run whose model changes part-way fails instead of
   mixing outputs. Supplied-transcript imports are unchanged: same identities, and
   the same stored record byte for byte. `bundle validate` now also accepts, and
-  checks strictly, the version-2 transcript record that local recognition will
-  write; no command writes one yet.
+  checks strictly, the version-2 transcript record that local recognition writes.
 - Test fixtures tooling: `tools/generate_p07_speech.py` and the manually dispatched
   `P07 speech fixtures` workflow generate speech variants of the synthetic corpus
   videos from their frozen scripts, using the Kokoro text-to-speech model on a

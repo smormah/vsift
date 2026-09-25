@@ -207,7 +207,11 @@ impl Engine {
             (None, Some(range)) => range,
         };
 
-        // 5. Recognise, then assemble the complete revision.
+        // 5. Recognise, then assemble the complete revision. One admission slot
+        // of the session root is held for the whole run, so concurrent
+        // retranscriptions cannot oversubscribe the machine (SEC-20); each
+        // chunk's decoding takes its own slot as every media stage does.
+        let _recognition = store.try_admit(1)?;
         let audio = FfmpegSpeechAudio::new(
             &media,
             &snapshot,
