@@ -1,0 +1,68 @@
+name: P07 local ASR
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 04:17 UTC: the reviewed binaries and models are pinned,
+    # so a change here means a runner image or VSift change, not new inputs.
+    - cron: "17 4 * * 1"
+
+# Reviewed third-party binaries and models run on disposable runners. The jobs
+# receive no repository token and no secrets; checkout keeps no credentials.
+permissions: {}
+
+concurrency:
+  group: p07-local-asr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  local-asr:
+    name: Local ASR (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test staging guardrails
+        run: python -m unittest discover -s tools -p test_p07_local_asr_tools.py
+
+      - name: Stage pinned FFmpeg, whisper.cpp v1.9.2 and both pinned models
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-p07-local-asr"
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          python -c "import platform, os; print(platform.platform(), platform.processor(), os.cpu_count())"
+
+      - name: Local-ASR adapter over the speech clips (base)
+        run: cargo test --release --locked -p vsift-infrastructure --test p07_local_asr -- --ignored --nocapture
+
+      - name: Local-ASR checkpoint, including setup check verification (base)
+        run: cargo test --release --locked -p vsift-cli --test p07_local_asr_e2e -- --ignored --nocapture
+
+      - name: Local-ASR checkpoint, including setup check verification (base-q5_1)
+        env:
+          VSIFT_TEST_WHISPER_MODEL: ${{ env.VSIFT_TEST_WHISPER_MODEL_Q5_1 }}
+        run: cargo test --release --locked -p vsift-cli --test p07_local_asr_e2e -- --ignored --nocapture
+
+      - name: T-04 accuracy, timing and memory for both profiles
+        run: cargo test --release --locked -p vsift-infrastructure --test p07_asr_qualification -- --ignored --nocapture
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p07-local-asr-${{ matrix.os }}
+          path: .vsift/e2e-runs/
+          if-no-files-found: warn
+          retention-days: 30
