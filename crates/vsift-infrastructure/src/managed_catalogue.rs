@@ -651,50 +651,138 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     })
 }
 
+/// The reviewed regular files selected from the whisper.cpp v1.9.2 Ubuntu x64
+/// archive: name, bytes, SHA-256 and whether it is executable.
+///
+/// The first six are the CLI, its libraries and notice; the alias table in
+/// [`whisper_artifact`] refers to them by position. The rest are ggml's
+/// optimised CPU backends, which it selects at load time for the host CPU;
+/// without them only the generic `libggml-cpu-x64.so` could load, about 11x
+/// slower on hosted runners (issue #153).
+const WHISPER_FILES: [(&str, u64, &str, bool); 19] = [
+    (
+        "LICENSE",
+        1_078,
+        "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+        false,
+    ),
+    (
+        "whisper-cli",
+        976_312,
+        "61fa94d25ba9a4695118883011f35e8521c158145ec73bcd8805a7c11760e6d7",
+        true,
+    ),
+    (
+        "libggml.so.0.18.1",
+        54_936,
+        "1985fa3dc169a16715a0998da0a075b29be8f68ea2501e3c043be53be7f11857",
+        false,
+    ),
+    (
+        "libggml-base.so.0.18.1",
+        910_680,
+        "bc41368cecccc3db8b4f52ad168b51413ee6c005a772b1d3e4f4b3bb47777553",
+        false,
+    ),
+    (
+        "libggml-cpu-x64.so",
+        878_024,
+        "b7c084e19dc63a83acf9d6dac8d2cba089026996bf805659e10d650d5a51c216",
+        false,
+    ),
+    (
+        "libwhisper.so.1.9.2",
+        611_280,
+        "afd9560fa2dd20a7c0f9aa682f9c4f339b2d223f2ad6fa200fc229bc3b1606d6",
+        false,
+    ),
+    (
+        "libggml-cpu-alderlake.so",
+        1_013_360,
+        "53633ffd2a2c668ae08a283b38821a88c61523de2e407096a0c1b6a1cad1d41e",
+        false,
+    ),
+    (
+        "libggml-cpu-cannonlake.so",
+        1_074_912,
+        "b28b1ac4709a87c8868921b30eae141aaf8f4d8fb620b584d453cfef5eb698f0",
+        false,
+    ),
+    (
+        "libggml-cpu-cascadelake.so",
+        1_070_816,
+        "643f51af219a74b86178992eabbcb683d9f37a38b81d1e9ad63605874331477c",
+        false,
+    ),
+    (
+        "libggml-cpu-cooperlake.so",
+        1_070_816,
+        "e02b7d041ddbf19a9f1a0a0f61d54e6d8bb6072b6ee09c001e2dd0b4c3b74398",
+        false,
+    ),
+    (
+        "libggml-cpu-haswell.so",
+        1_017_456,
+        "4e6e0cfe5f94806bf38e3f75d8128df6c65ab8c8c9cf279e392bd9c0b6d5c1f7",
+        false,
+    ),
+    (
+        "libggml-cpu-icelake.so",
+        1_070_816,
+        "89248d02d6aa6f06f64a654139f9c1e7cedf4215407f49c8930af98db2df8bf3",
+        false,
+    ),
+    (
+        "libggml-cpu-ivybridge.so",
+        951_704,
+        "c7b66231986e403482de7ef7474b59523ef5968f1c923f12519a30fdc4567741",
+        false,
+    ),
+    (
+        "libggml-cpu-piledriver.so",
+        951_704,
+        "5e0e0bc4c3ab21bc4ff43386d1f683c9b07f9a7ce0f6786b0dab7a19570991d5",
+        false,
+    ),
+    (
+        "libggml-cpu-sandybridge.so",
+        959_896,
+        "fccf45830c2929fe8261064c987fc94da85afdb7fc57cfaae52132cbbeda825c",
+        false,
+    ),
+    (
+        "libggml-cpu-sapphirerapids.so",
+        1_337_176,
+        "fb4f9e70b2d83220165afad2073be0ea36ad8e91829f84753c7e9bf7e0b38a54",
+        false,
+    ),
+    (
+        "libggml-cpu-skylakex.so",
+        1_074_912,
+        "089070b665ba61e8c34f61c9f6d7cf86df5d71847522ecb434d23afb16d466fb",
+        false,
+    ),
+    (
+        "libggml-cpu-sse42.so",
+        881_976,
+        "f0d5d2cf7dbfd3081be59b6ba97a34399c4954a2f8b1ba8d80d9894545225f8e",
+        false,
+    ),
+    (
+        "libggml-cpu-zen4.so",
+        1_070_816,
+        "d17c9e99888b523b1699603b9453594fd47d1e2e686c77dff32d125f7b0c6c36",
+        false,
+    ),
+];
+
 fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     let integrity = integrity(
         9_497_583,
         "46811a3ecf584307480a220b9ef5ff81b7b22dc41577cbc274ce3afc61f753b1",
     )?;
     validate_source(WHISPER_URL, PublisherOrigin::GitHubRelease, integrity)?;
-    let base_files = [
-        (
-            "LICENSE",
-            1_078,
-            "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
-            false,
-        ),
-        (
-            "whisper-cli",
-            976_312,
-            "61fa94d25ba9a4695118883011f35e8521c158145ec73bcd8805a7c11760e6d7",
-            true,
-        ),
-        (
-            "libggml.so.0.18.1",
-            54_936,
-            "1985fa3dc169a16715a0998da0a075b29be8f68ea2501e3c043be53be7f11857",
-            false,
-        ),
-        (
-            "libggml-base.so.0.18.1",
-            910_680,
-            "bc41368cecccc3db8b4f52ad168b51413ee6c005a772b1d3e4f4b3bb47777553",
-            false,
-        ),
-        (
-            "libggml-cpu-x64.so",
-            878_024,
-            "b7c084e19dc63a83acf9d6dac8d2cba089026996bf805659e10d650d5a51c216",
-            false,
-        ),
-        (
-            "libwhisper.so.1.9.2",
-            611_280,
-            "afd9560fa2dd20a7c0f9aa682f9c4f339b2d223f2ad6fa200fc229bc3b1606d6",
-            false,
-        ),
-    ];
+    let base_files = WHISPER_FILES;
     let mut files = base_files
         .into_iter()
         .map(|(name, bytes, sha256, executable)| file(name, bytes, sha256, executable))

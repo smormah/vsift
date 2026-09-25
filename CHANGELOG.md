@@ -143,6 +143,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The reviewed Ubuntu x64 whisper.cpp v1.9.2 file set now includes ggml's 13
+  optimised CPU backends (`sse42` through `zen4`) from the same pinned archive,
+  each pinned by size and SHA-256. Before, only the generic `libggml-cpu-x64.so`
+  was selected, so local speech recognition on Ubuntu ran about 11 times slower
+  than on Windows (#153). The Ubuntu `setup plan` whisper action now lists 25
+  files instead of 12.
 - Local speech recognition could drop a whole sentence that started exactly
   where a 30-second chunk begins, when the previous sentence ended just after that
   point, without any warning. The sentence is now kept once.

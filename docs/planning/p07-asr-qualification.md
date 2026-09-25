@@ -107,6 +107,27 @@ heard as "Q". An earlier run the same day gave the same accuracy and real-time
 factors of 0.389 and 0.414; its memory sampler did not run (a multi-line PowerShell
 script over standard input), which the recorded runs fix.
 
+## Hosted runners (added 2026-09-26)
+
+The opt-in `P07 local ASR` workflow stages the pinned toolchain on disposable GitHub
+runners (4 vCPUs, 4 recognizer threads, release build). Accuracy was identical to the
+reference machine on every runner.
+
+| Run | Runner | `base` RTF | `base` peak | `base_q5_1` RTF | `base_q5_1` peak |
+| --- | --- | ---: | ---: | ---: | ---: |
+| [36175016465](https://github.com/smormah/vsift/actions/runs/36175016465) | windows-2025, AMD | 0.284 | 335 MiB | 0.338 | 249 MiB |
+| [36175016465](https://github.com/smormah/vsift/actions/runs/36175016465) | ubuntu-24.04, generic CPU backend only | 3.245 | 322 MiB | 2.919 | 235 MiB |
+| [36199691655](https://github.com/smormah/vsift/actions/runs/36199691655) | ubuntu-24.04, optimised backends (#153) | 0.244 | 319 MiB | 0.298 | 232 MiB |
+| [36199691655](https://github.com/smormah/vsift/actions/runs/36199691655) | windows-2025, AMD | 0.264 | 336 MiB | 0.342 | 249 MiB |
+
+The first Ubuntu figures are from before #153, when the reviewed Ubuntu file set
+held only ggml's generic `libggml-cpu-x64.so`. With the optimised backends pinned,
+`base` meets the 0.5 real-time-factor limit on both hosted platforms. Output differs
+slightly between CPU backends. An Intel AVX-512 Windows runner (run
+[36198903762](https://github.com/smormah/vsift/actions/runs/36198903762)) heard F05's
+"invoice" as "in voice" with `base`, a reviewed known miss, so journey tests check only
+words every reviewed host hears (ADR 0017).
+
 ## Seam finding and fix
 
 Running the local-ASR checkpoint with `base_q5_1` lost F07's whole sentence from the

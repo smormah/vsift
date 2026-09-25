@@ -202,6 +202,13 @@ These were not settled by D1–D8; each follows the existing contracts most clos
   examples are unchanged. Version-2 records are part of the published bundle schema.
 - The first retranscription with a new tool, model or VSift version costs one
   fixture transcription (about 6 s on the reference machine) plus the media-tool check.
+- whisper.cpp output is deterministic on one host but not across CPU backends: ggml
+  picks an optimised backend for the CPU at load time (for example AVX2 or AVX-512),
+  and their floating-point results differ slightly. On 2026-09-26 an Intel AVX-512
+  hosted runner heard F05's "invoice" as "in voice" with `base`, where an AMD runner
+  and the reference machine heard "invoice". Content-derived revision ids therefore
+  differ between such hosts, as their transcripts do; the journey tests check only
+  words every reviewed host hears, and T-04 accuracy is measured separately.
 - Known limits, measured on Windows 11 with the reviewed build: a short clip takes
   about 7.5 s end to end with verification cached (release build); the model is hashed
   three times per run (about 0.3 s each in release, so no identity cache was added).
