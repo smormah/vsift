@@ -41,7 +41,7 @@ sequence. Tests that intentionally share a root must do so explicitly.
 | --- | --- | --- |
 | C-01 | Help, version, setup hierarchy, unsupported command, missing option, JSON-mode parse error | No accidental mutation; documented exit and valid error format |
 | C-02 | Ready/degraded/blocked setup; all operation terminal states | Parse complete JSON; validate schema, exact semantic fields and exit; no substring-only success test |
-| C-03 | Page limits 0/1/max/max+1, empty result, cursor reuse/wrong query/wrong session/expired generation | No gaps/duplicates in a fixed snapshot; invalid cursor rejected |
+| C-03 | Page limits 0/1/max/max+1, empty result, cursor reuse/wrong query/wrong session/expired generation | No gaps/duplicates in a fixed snapshot; invalid cursor rejected. P08 search evidence (PR 1): the application's `search` tests cover limits 1 and 100 with 0 and 101 rejected (`page_limits_bound_every_page`), an empty result (`an_empty_result_has_no_cursor_and_keeps_its_coverage`), cursor reuse and normalised-query binding (`cursors_are_reusable_and_bound_to_the_normalised_query`), wrong query, range, session and revision, expiry and a `transcript get` cursor (`cursors_from_another_query_session_revision_or_time_are_rejected`), forged positions (`forged_positions_are_rejected`) and a proptest that paging at any limit visits exactly the single-page ranking with no gap or duplicate (`paging_has_no_gaps_or_duplicates`); the engine proves a cursor expires with the session expiry it was issued under after a renewal (`engine_search`), and the CLI proves limits 0/1/100/101, reuse and wrong query/range through the binary (`search_cli_contract`). |
 | C-04 | Shell metacharacters, spaces, Unicode, newlines, leading dashes, invalid UTF-8 OS paths | Treated as data or typed rejection; never an executed option/command |
 | C-05 | ANSI/OSC controls, long output, closed stdout, broken stderr, interrupted JSONL consumer | Safe display; bounded memory; clean output-I/O outcome and cancellation |
 | C-06 | Missing/unknown fields, unknown schema major, oversized/nested JSON, invalid enums, forged IDs | Strict version and size handling; unsupported input never executes |
@@ -111,12 +111,13 @@ OS/storage crash evidence required to enable strict worker durability.
 | S-08 | Truncated manifest/record, wrong checksum, missing artifact, future format | Explicit integrity/version failure; no silent acceptance or guessed reconstruction |
 | S-09 | Export into existing directory, cross-volume export, interrupted export, malicious imported manifest | Existing destination stays intact; a new interrupted private export fails validation under ADR 0013; no code execution |
 | S-10 | Include/exclude source, moved bundle, missing original, duplicate operation | Portability capability disclosed; hashes validate; re-extraction requires correct source |
-| S-11 | Large session count, long transcript pages, bounded GC scan | No whole-root/whole-corpus load; scan respects budget and continuation |
+| S-11 | Large session count, long transcript pages, bounded GC scan | No whole-root/whole-corpus load; scan respects budget and continuation. P08 search evidence (PR 1): a 20,000-segment revision (the import bound) pages completely at limits 1, 20 and 100 with no gap or duplicate, in memory in every run (`s11_a_20000_segment_revision_pages_completely`, application) and through the store in the opt-in measurement (`engine_search`, `--release --ignored`). Measured 2026-09-26 on Windows 11, Xeon E5-2698 v4, optimised build: p95 page 154 ms (limit 1, 240 pages), 167 ms (limit 20, 12 pages), 145 ms (limit 100, 3 pages), against 142 ms for a `transcript get` page of the same record; within the 250 ms warm-page target, so search stays computed on demand (ADR 0018). |
 
 P05's implemented lifecycle and bundle evidence for S-04..S-11 is recorded in
 the [P05 qualification record](p05-session-qualification.md). S-11's long
-transcript paging remains P07/P08 work because P05 publishes no transcript
-records; the P05 assertion is the bounded session-index/GC scan and cursor.
+transcript paging was P07/P08 work because P05 publishes no transcript records; the
+P05 assertion is the bounded session-index/GC scan and cursor, and the P08 search
+evidence is in the S-11 row.
 | S-12 | Root policy change under load, root permissions, stable lock anchors | No parallel admission bypass or lock inode replacement |
 
 Crash-injection protocol: enumerate each write/flush/publish/ack boundary. In a child

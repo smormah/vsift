@@ -146,6 +146,21 @@ build is recommended because the 148 MB model is hashed three times per run; on
 Windows 11 with the reviewed build the whole checkpoint took about 64 s (about 7.5 s
 per short clip once verified). Missing tools or variables make every stage `blocked`.
 
+P08 PR 1 adds the search stage of A-09, `p08_search_supplied`:
+
+```console
+cargo test -p vsift-cli --locked --test p08_search_e2e -- --ignored --nocapture
+```
+
+With an empty `PATH` and FFmpeg and FFprobe registered (whisper.cpp absent), it imports
+F10 with `F10.srt` and `--transcript-offset 500000`, then searches for `R-17` and for the
+spoken spelling `dialog r 17`. Both must find exactly the segment on F10-E01's frozen
+truth window, as a phrase, with complete coverage whose basis is the supplied transcript;
+the `--events jsonl` stream must carry the same record, and `transcript get` over the
+truth window must cite it. It writes `.vsift/e2e-runs/p08-<run-id>/report.json` and
+reports `p08_candidates` and later stages `not_implemented`. On Windows 11 with FFmpeg 9.0
+it passed on 2026-09-26 in about 4 s (each search about 90 ms through the binary).
+
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
 F01 tone audio. It is **not** the P06 stage, a P13 managed-install stage, a real-speech

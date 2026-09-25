@@ -2,8 +2,8 @@
 
 Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
-`transcript retranscribe` (local speech recognition) and `bundle validate` are
-operational. Other commands below
+`transcript retranscribe` (local speech recognition), `search` (P08 transcript search)
+and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 
@@ -29,7 +29,8 @@ being created. An existing directory that VSift did not create is never adopted.
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range | Implemented in P07 increment 3b |
-| `search`, `candidates` | Bounded text and visual-candidate retrieval | P08 |
+| `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
+| `candidates` | Bounded visual-candidate retrieval | P08 (reserved) |
 | `frame get/neighbours/burst`, `audio`, `crop` | Source-grounded evidence extraction | P09 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job run/batch/status/resume/cancel` | Recoverable worker operations | P10/P11 |
@@ -410,6 +411,94 @@ neither contains a path, provider output or transcript text.
 | Work directory or the session's copy of the video unusable | `STORAGE_IO` |
 | The session changed during the run (a renewal or another revision), is held by cleanup, or every processing slot of the session root is in use; retry | `BUSY` |
 
+### P08 transcript search
+
+```console
+vsift search ses_0123456789abcdef --query "R-17" --json
+vsift search ses_0123456789abcdef --query "dialog r 17" --from 0 --to 30000000 --limit 50 --json
+vsift search ses_0123456789abcdef --query "invoice 4407" --revision trv_0123456789abcdef --events jsonl
+```
+
+`search <session> --query <text> [--from <us> --to <us>] [--limit 1..100] [--cursor
+<token>] [--revision <trv_id>]` finds a literal query in the segments of the session's
+newest transcript revision, or of the revision `--revision` names
+([ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)). The
+query is data only, never a pattern or regular expression; a query that starts with a
+hyphen is written `--query=-17`. `--from` and `--to` go together and restrict the search
+to segments intersecting the half-open range; without them the whole revision is
+searched. It is computed from the immutable revision on each call, never runs a
+provider and writes nothing. It searches transcript text only, never on-screen text.
+
+**Matching.** Query and segment text are normalised the same way: lowercase; a comma
+thousands separator is removed (`2,048` is `2048`); a hyphen between letters or digits
+joins them (`E-409` is `e409`); a colon between digits separates numbers (`10:32` is
+`10 32`); a decimal compares by value (`125.00` is `125`); `zero` to `twenty` and the
+tens are digits; any other punctuation separates words. There is no Unicode
+normalisation or accent folding. A segment matches as a `phrase` when the query words
+joined without spaces equal consecutive segment words joined without spaces (`AB 731`
+finds `AB-731`, `dialog r 17` finds `Dialog R-17`, `407` never finds `4407`), or by
+`all_terms` when every query word is one of its words. A phrase that continues into the
+next segment is not found. Hits are ranked phrase first, then by segment start. A query
+is at most 256 bytes and 1 to 16 words; an empty query, a longer one, more words or a
+control character (tab and newline included) is `INVALID_ARGUMENT` with one fixed
+remediation `The search query was rejected (<reason>). ...`, where `<reason>` is `empty`,
+`too_long`, `too_many_terms` or `control_character`; the query is never repeated.
+
+**Result.** `data` ([`search-data.schema.json`](../../schemas/v1/search-data.schema.json),
+example [`search.json`](../../schemas/v1/examples/search.json)) holds `session_id`, the
+searched `revision` summary, `query.terms` (the normalised words), `range` (null for
+the whole revision), `items`, `hits`, `next_cursor` and `transcript_coverage`. `items`
+are the matching segments as published transcript evidence records, exactly as
+`transcript get` returns them, in rank order; `hits` lists each item's `segment_id`
+and `match` (`phrase` or `all_terms`) in the same order. 20 hits per page by default,
+1 to 100 with `--limit`.
+
+**Coverage.** A search can only find words a transcript holds, so every result says
+what it could not see. `transcript_coverage` holds the `basis` (`supplied_transcript`:
+a supplied file, taken to cover the whole video but not verified complete; `local_asr`:
+what local recognition examined; `mixed`: local recognition spliced into supplied
+text), `scope: "transcript_text"`, the `searched_range` (the request clipped to the
+video, null when wholly outside it), and `transcribed_ranges`, `untranscribed_ranges`
+and `no_speech_ranges` (transcribed parts where recognition found no audible signal or
+no audio), each merged, in start order and at most 100 long (`ranges_truncated` says
+when one was cut). The envelope `coverage` member, frozen since v1 was published, is
+filled by `search`: `truncated` is true exactly when part of the searched range has no
+transcript, `gaps` lists those parts as `"<from_us>-<to_us>"` (merged, at most 100)
+and `reasons` holds distinct identifiers (`untranscribed_range`, plus
+`gap_list_truncated` beyond 100 gaps). Such a result has status `partial`, the fixed
+warning `Part of the searched range has no transcript, so words said there cannot be
+found; ...`, and exits 0 like any supported partial result. A complete search has
+`coverage: {"truncated": false, "gaps": [], "reasons": []}`.
+
+**Paging.** Pass `next_cursor` back with the same session, query (any spelling that
+normalises to the same words), range and revision. It is bound to the revision, the
+normalised query and range, the rank position of the page's last hit and the session
+expiry when it was issued; any other use is `INVALID_ARGUMENT`. Pages never repeat or
+skip a hit.
+
+**Evidence stream.** `search --events jsonl` writes one evidence event per hit, in rank
+order, whose `record_type` is `transcript_segment` and whose record and key are exactly
+those `transcript get` streams, so an indexer upserts records it may already hold, then
+one terminal event whose data
+([`search-stream-data.schema.json`](../../schemas/v1/search-stream-data.schema.json),
+example [`search.events.jsonl`](../../schemas/v1/examples/search.events.jsonl)) is the
+page without its items: `hits`, `record_count`, `transcript_coverage`, the cursor and
+the rest, with the same `status` and envelope `coverage` as `--json`. Stream rules are
+those of `transcript get` (above). The F10 example (records shortened with `...`):
+
+```json
+{"schema_version":"1","event":"evidence","sequence":0,"command":"search","operation_id":null,"record_type":"transcript_segment","key":"tsg_f9644c630cd9023d38e2eb89741c9b7e","record":{"segment_id":"tsg_f9644c630cd9023d38e2eb89741c9b7e","start_us":5000000,"end_us":9000000,"text":"Dialog R-17 is displayed now.",...}}
+{"schema_version":"1","event":"terminal","sequence":1,"command":"search","operation_id":null,"result":{"schema_version":"1","command":"search","operation_id":null,"status":"complete","data":{"hits":[{"match":"phrase","segment_id":"tsg_f9644c630cd9023d38e2eb89741c9b7e"}],"next_cursor":null,"query":{"terms":["r17"]},"range":null,"record_count":1,"revision":{...},"session_id":"ses_0123456789abcdef0123456789abcdef","transcript_coverage":{"basis":"supplied_transcript","scope":"transcript_text",...}},"warnings":[],"error":null,"coverage":{"truncated":false,"gaps":[],"reasons":[]},"lifecycle":{"mode":"ephemeral","expires_at":"2026-09-25T00:00:00Z"}}}
+```
+
+**Failures** use existing codes: `INVALID_ARGUMENT` for a rejected query, an empty
+range, a rejected cursor, a `--revision` the session does not hold (the remediation
+naming where revision identities come from), a session without a transcript (the
+remediation naming `ingest --transcript` and `transcript retranscribe`) and a closed or
+expired session; `--limit 0`, `--limit 101`, a lone `--from` or `--to` and a malformed
+`--revision` are parse errors. A stored record that fails verification is
+`INTEGRITY_FAILURE` or `UNSUPPORTED_SCHEMA`, as for every read.
+
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
 five-second total operation deadline; `--profile worker` and
@@ -551,8 +640,9 @@ Human output is readable terminal text on stdout (P05 session operations use
 indented JSON). In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
-`transcript get` evidence events precede it (see "Evidence stream" above), and every
-other command, including `transcript retranscribe`, writes the terminal event alone. stderr is
+`transcript get` and `search` evidence events precede it (see "Evidence stream" and
+"P08 transcript search" above), and every other command, including `transcript
+retranscribe`, writes the terminal event alone. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.
 
 Output limits apply before writing:
@@ -713,7 +803,7 @@ metadata, not verified human identity.
 
 ## Pagination
 
-Candidate and transcript pages default to 20 items and accept 1 through 100.
+Candidate, transcript and search pages default to 20 items and accept 1 through 100.
 Continuation cursors are opaque, local tokens of at most 512 bytes. They contain no filesystem paths or
 credentials and are bound to session, canonical-query digest, immutable generation,
 last item, and expiry. A cursor from another query/session/generation or an expired
@@ -746,7 +836,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | --- | --- |
 | C-01 | CLI hierarchy, help/version, parse errors, reserved-command failure |
 | C-02 | deterministic ready/degraded/blocked setup and terminal response states |
-| C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages |
+| C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages and search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection |

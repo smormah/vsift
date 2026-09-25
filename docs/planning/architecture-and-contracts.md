@@ -119,8 +119,10 @@ Ordinary `--json` writes exactly one bounded JSON result on stdout. Explicit
 `--events jsonl` writes a sequence of versioned evidence, progress and terminal records
 instead; there is one terminal result with an operation ID, and it is always the last
 line. Since P07, `transcript get` streams one evidence record per segment, each with an
-upsert key, before its terminal record (see the
-[v1 CLI contract](../contracts/cli-v1.md)). Diagnostics go to stderr. A
+upsert key, before its terminal record, and since P08 `search` streams the matching
+segments as the same records, in rank order, before a terminal record that carries the
+hit list and coverage (see the [v1 CLI contract](../contracts/cli-v1.md) and
+[ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)). Diagnostics go to stderr. A
 broken output pipe triggers bounded cancellation and a documented I/O exit, not a
 panic. Data already committed is discoverable by operation ID after a lost response.
 
