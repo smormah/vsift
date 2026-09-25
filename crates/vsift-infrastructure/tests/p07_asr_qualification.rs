@@ -429,8 +429,10 @@ impl Bench {
             format!("{index}:v"),
             "-map".into(),
             "[speech]".into(),
+            // FFmpeg's native MPEG-4 Part 2 encoder is in every build, including the
+            // pinned CI builds that omit libx264; the black video only carries the speech.
             "-c:v".into(),
-            "libx264".into(),
+            "mpeg4".into(),
             "-pix_fmt".into(),
             "yuv420p".into(),
             "-c:a".into(),
