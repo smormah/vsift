@@ -248,7 +248,7 @@ fn modified_spliced_records_are_integrity_failures() -> TestResult {
 }
 
 /// An initialized session with an activated F10 import (revision 1).
-struct Session {
+struct Imported {
     root: OwnedRoot,
     workspace: PathBuf,
     store: FilesystemSessionStore,
@@ -256,7 +256,7 @@ struct Session {
     import: TranscriptRevision,
 }
 
-async fn imported_session() -> Built<Session> {
+async fn imported_session() -> Built<Imported> {
     let root = OwnedRoot::new()?;
     let source = root.0.join("source.mp4");
     fs::write(&source, b"\0\0\0\x18ftypisomlocal-asr-store")?;
@@ -300,7 +300,7 @@ async fn imported_session() -> Built<Session> {
         &import,
     )?;
     drop(snapshot);
-    Ok(Session {
+    Ok(Imported {
         root,
         workspace,
         store,
@@ -326,7 +326,7 @@ fn spoken(words: &str, start_ms: u64, end_ms: u64) -> Built<ProviderChunkOutput>
 }
 
 /// Revision 2: the import's 5-9 s dialog cue retranscribed.
-fn spliced_over_import(session: &Session) -> Built<TranscriptRevision> {
+fn spliced_over_import(session: &Imported) -> Built<TranscriptRevision> {
     let replaced = session
         .import
         .snap_to_segments(range(6 * SECOND, 7 * SECOND)?);

@@ -858,6 +858,131 @@ mod tests {
         }
     }
 
+    /// ADR 0017: local-ASR failures use existing codes only.
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One table of every local-ASR failure"
+    )]
+    fn local_asr_failures_map_to_existing_codes() {
+        use vsift_application::{
+            AsrFailure, AsrFailureReason, AsrStage, LocalAsrVerificationFailure,
+        };
+        use vsift_domain::{ProviderOutputError, TranscriptRevisionError};
+
+        for (reason, code) in [
+            (AsrFailureReason::InvalidRange, FailureCode::InvalidArgument),
+            (AsrFailureReason::TooManyChunks, FailureCode::ResourceLimit),
+            (
+                AsrFailureReason::ModelChanged,
+                FailureCode::MissingCapability,
+            ),
+            (
+                AsrFailureReason::ModelUnavailable,
+                FailureCode::MissingCapability,
+            ),
+            (
+                AsrFailureReason::UnpinnedModel,
+                FailureCode::MissingCapability,
+            ),
+            (AsrFailureReason::Cancelled, FailureCode::Cancelled),
+            (AsrFailureReason::Deadline, FailureCode::DeadlineExceeded),
+            (AsrFailureReason::Busy, FailureCode::Busy),
+            (AsrFailureReason::ResourceLimit, FailureCode::ResourceLimit),
+            (
+                AsrFailureReason::AbnormalTermination,
+                FailureCode::ResourceLimit,
+            ),
+            (
+                AsrFailureReason::AudioUnavailable,
+                FailureCode::InvalidSource,
+            ),
+            (
+                AsrFailureReason::ProviderFailed,
+                FailureCode::MissingCapability,
+            ),
+            (
+                AsrFailureReason::UnparseableOutput,
+                FailureCode::MissingCapability,
+            ),
+            (
+                AsrFailureReason::MalformedOutput(ProviderOutputError::OutOfOrderSegments),
+                FailureCode::MissingCapability,
+            ),
+            (AsrFailureReason::Workspace, FailureCode::StorageIo),
+            (AsrFailureReason::Io, FailureCode::MissingCapability),
+            (
+                AsrFailureReason::InvalidRun(TranscriptRevisionError::InvalidAsrRun),
+                FailureCode::Internal,
+            ),
+        ] {
+            let failure = AsrFailure {
+                stage: AsrStage::Recognition,
+                reason,
+            };
+            assert_eq!(EngineError::LocalAsrFailed(failure).failure_code(), code);
+            assert_eq!(
+                EngineError::LocalAsrVerificationFailed(
+                    LocalAsrVerificationFailure::Transcription(failure)
+                )
+                .failure_code(),
+                code
+            );
+        }
+        let unreadable_audio = AsrFailure {
+            stage: AsrStage::AudioExtraction,
+            reason: AsrFailureReason::Io,
+        };
+        assert_eq!(
+            EngineError::LocalAsrFailed(unreadable_audio).failure_code(),
+            FailureCode::StorageIo
+        );
+        for (failure, code) in [
+            (
+                LocalAsrVerificationFailure::FixtureIntegrity,
+                FailureCode::Internal,
+            ),
+            (
+                LocalAsrVerificationFailure::Workspace,
+                FailureCode::StorageIo,
+            ),
+            (
+                LocalAsrVerificationFailure::FixtureMedia,
+                FailureCode::MissingCapability,
+            ),
+            (
+                LocalAsrVerificationFailure::UnexpectedTranscript,
+                FailureCode::MissingCapability,
+            ),
+        ] {
+            assert_eq!(
+                EngineError::LocalAsrVerificationFailed(failure).failure_code(),
+                code
+            );
+        }
+        for (error, code) in [
+            (EngineError::NoAudioStream, FailureCode::InvalidArgument),
+            (
+                EngineError::RangeOutsideSource,
+                FailureCode::InvalidArgument,
+            ),
+            (
+                EngineError::TranscriptRevisionNotFound,
+                FailureCode::InvalidArgument,
+            ),
+            (
+                EngineError::LocalAsrModelNotPinned,
+                FailureCode::MissingCapability,
+            ),
+            (
+                EngineError::LocalAsrToolUnavailable(vsift_domain::RuntimeDependency::Whisper),
+                FailureCode::MissingCapability,
+            ),
+        ] {
+            assert_eq!(error.failure_code(), code);
+        }
+    }
+
     #[test]
     fn configuration_failures_keep_their_public_codes() {
         for (error, code) in [
