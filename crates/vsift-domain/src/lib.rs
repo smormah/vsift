@@ -21,8 +21,8 @@ pub use asr::{
     ChunkSegments, ChunkTime, DigestError, MAX_CHUNK_WINDOW_MICROS, MAX_PLANNED_CHUNKS,
     MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS, MergedSegment, MergedTranscript,
     PROVIDER_END_TOLERANCE_MICROS, PlannedChunk, ProviderChunkOutput, ProviderOutputError,
-    ProviderSegment, ProviderToken, ProviderTokenKind, SPEECH_SAMPLE_RATE, Sha256Hex,
-    ValidatedChunk, decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks,
+    ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel, SPEECH_SAMPLE_RATE,
+    Sha256Hex, ValidatedChunk, decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks,
     validate_chunk_output,
 };
 pub use evidence::{

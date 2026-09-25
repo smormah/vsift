@@ -126,7 +126,7 @@
             "end_trimmed": { "type": "boolean" },
             "provider": { "enum": ["whisper_cpp"] },
             "executable_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-            "model_profile": { "enum": ["base"] },
+            "model_profile": { "enum": ["base", "base_q5_1"] },
             "model_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
             "decoding_profile": { "enum": ["r0-v1"] }
           }

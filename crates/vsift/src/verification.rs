@@ -14,8 +14,8 @@ use vsift_application::{
 use vsift_domain::RuntimeDependency;
 use vsift_infrastructure::{
     FixtureMediaToolVerifier, MediaProviderConformance, MediaToolVerificationAuthority,
-    ProcessCancellation, TrustedExecutable, media_tool_fingerprint, pinned_whisper_model,
-    reviewed_compatibility_policy, verify_model_file,
+    ProcessCancellation, TrustedExecutable, identify_whisper_model_file, media_tool_fingerprint,
+    reviewed_compatibility_policy,
 };
 
 use crate::{
@@ -136,7 +136,8 @@ impl Engine {
         Ok(verifier.verify().await)
     }
 
-    /// Identifies a model file against the reviewed pinned whisper.cpp model.
+    /// Identifies a model file against the reviewed pinned whisper.cpp
+    /// models, reporting which profile it is.
     ///
     /// Only identity (exact size and SHA-256) is checked. This reads and hashes
     /// the whole file when its size matches, so hosts with a responsive thread
@@ -158,8 +159,7 @@ impl Engine {
                 .read_model()?
                 .ok_or(EngineError::ModelNotSelected)?,
         };
-        let pinned = pinned_whisper_model().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
-        Ok(verify_model_file(&path, pinned))
+        identify_whisper_model_file(&path).map_err(|_| EngineError::ReviewedPolicyInvalid)
     }
 
     /// Ensures the resolved media tools are verified before an operation's

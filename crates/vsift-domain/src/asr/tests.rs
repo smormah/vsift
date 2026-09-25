@@ -8,8 +8,8 @@ use super::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, ChunkPlanError, ChunkSegments, ChunkTime,
     PlannedChunk, ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken,
-    ProviderTokenKind, Sha256Hex, decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks,
-    validate_chunk_output,
+    ProviderTokenKind, ReviewedAsrModel, Sha256Hex, decoded_audio_range, is_silent_pcm,
+    merge_chunks, plan_chunks, validate_chunk_output,
 };
 use crate::{
     CarriedFrom, Confidence, ConfidenceOrigin, CueSource, CueText, CueTiming, InheritedRevision,
@@ -1004,4 +1004,18 @@ fn asr_segments_are_validated_against_their_own_chunk() -> TestResult {
         Err(TranscriptRevisionError::InvalidSupersession)
     );
     Ok(())
+}
+
+/// D6: exactly the reviewed profiles are pinned, and each keeps one stable
+/// identifier on the wire and in records.
+#[test]
+fn only_reviewed_model_profiles_are_pinned() {
+    assert_eq!(AsrModelProfile::Base.identifier(), "base");
+    assert_eq!(AsrModelProfile::BaseQ5_1.identifier(), "base_q5_1");
+    assert_eq!(AsrModelProfile::Unreviewed.reviewed(), None);
+    for reviewed in ReviewedAsrModel::ALL {
+        assert_eq!(reviewed.profile().reviewed(), Some(reviewed));
+        assert_eq!(reviewed.identifier(), reviewed.profile().identifier());
+    }
+    assert_eq!(ReviewedAsrModel::ALL[0], ReviewedAsrModel::Base);
 }

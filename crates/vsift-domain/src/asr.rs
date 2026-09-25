@@ -153,8 +153,12 @@ impl AsrProviderBuild {
 /// Which model profile a model file is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AsrModelProfile {
-    /// The pinned multilingual whisper `base` model (ADR 0005).
+    /// The pinned multilingual whisper `base` model (ADR 0005), the default.
     Base,
+    /// The pinned 5-bit (`q5_1`) quantization of the same multilingual `base`
+    /// model: about 40% of its size, for machines where the default does not
+    /// fit (maintainer decision D6).
+    BaseQ5_1,
     /// A model file whose bytes match no reviewed profile.
     Unreviewed,
 }
@@ -165,8 +169,54 @@ impl AsrModelProfile {
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::Base => "base",
+            Self::BaseQ5_1 => "base_q5_1",
             Self::Unreviewed => "unreviewed",
         }
+    }
+
+    /// The reviewed pinned profile this is, or `None` for an unreviewed model.
+    #[must_use]
+    pub const fn reviewed(self) -> Option<ReviewedAsrModel> {
+        match self {
+            Self::Base => Some(ReviewedAsrModel::Base),
+            Self::BaseQ5_1 => Some(ReviewedAsrModel::BaseQ5_1),
+            Self::Unreviewed => None,
+        }
+    }
+}
+
+/// A reviewed pinned model profile: the only models a local-ASR run uses
+/// (maintainer decision D5).
+///
+/// It is [`AsrModelProfile`] without `Unreviewed`, so a value that claims a
+/// model is pinned can never name an unreviewed one. Which profile runs is
+/// decided by the identity (size and SHA-256) of the registered model file,
+/// never by a configuration field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReviewedAsrModel {
+    /// The multilingual whisper `base` model, the default.
+    Base,
+    /// The `q5_1` quantization of the multilingual `base` model.
+    BaseQ5_1,
+}
+
+impl ReviewedAsrModel {
+    /// Every reviewed profile, default first.
+    pub const ALL: [Self; 2] = [Self::Base, Self::BaseQ5_1];
+
+    /// The model profile recorded in provenance.
+    #[must_use]
+    pub const fn profile(self) -> AsrModelProfile {
+        match self {
+            Self::Base => AsrModelProfile::Base,
+            Self::BaseQ5_1 => AsrModelProfile::BaseQ5_1,
+        }
+    }
+
+    /// Stable machine-readable identifier, the same as its profile's.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        self.profile().identifier()
     }
 }
 

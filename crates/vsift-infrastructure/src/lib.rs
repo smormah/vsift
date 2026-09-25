@@ -70,11 +70,13 @@ pub use managed_artifact_store::{
     StagedManagedPayload,
 };
 pub use managed_catalogue::{
-    ManagedCatalogueError, ReviewedActionStageError, ReviewedUbuntuAction,
+    ManagedCatalogueError, ReviewedActionStageError, ReviewedUbuntuAction, ReviewedWhisperModel,
     accepted_ubuntu_catalogue, detect_managed_target, pinned_whisper_model,
-    reviewed_compatibility_policy,
+    reviewed_compatibility_policy, reviewed_whisper_models, whisper_model_profile,
 };
-pub use media_tool_verification::{FixtureMediaToolVerifier, verify_model_file};
+pub use media_tool_verification::{
+    FixtureMediaToolVerifier, identify_whisper_model_file, verify_model_file,
+};
 pub use media_tool_verification_cache::{
     FilesystemMediaToolVerificationCache, MAX_MEDIA_TOOL_VERIFICATION_ENTRIES,
     MAX_MEDIA_TOOL_VERIFICATION_RECORD_BYTES, MAX_REMOVED_VERIFICATION_WORKSPACES,
