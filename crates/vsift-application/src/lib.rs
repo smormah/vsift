@@ -11,6 +11,7 @@ mod clock;
 mod identifiers;
 mod local_asr_setup;
 mod provisioning;
+mod search;
 mod session;
 mod storage;
 mod transcript;
@@ -24,6 +25,7 @@ pub use asr::{
 };
 pub use clock::{Clock, ClockError};
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
+pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{
     ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
     StagedSessionSource,
