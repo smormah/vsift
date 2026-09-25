@@ -10,6 +10,7 @@ mod job;
 mod media;
 mod pagination;
 mod provisioning;
+mod search;
 mod session;
 mod storage;
 mod timeline;
@@ -42,6 +43,11 @@ pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryD
 pub use provisioning::{
     ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES, ManagedArtifactFormat,
     ManagedComponent, ManagedTarget,
+};
+pub use search::{
+    CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchHit,
+    SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection, SearchSlice,
+    normalise_search_text, search_revision,
 };
 pub use session::{SessionArtifactKind, SessionLifetime, SessionPhase, SessionTransitionError};
 pub use storage::{
