@@ -245,6 +245,20 @@ P11/P14 retain strict decoder isolation and malicious-media release qualificatio
 See [ADR 0012](../decisions/0012-p04-source-media-profile.md) and the
 [P04 qualification record](p04-media-qualification.md).
 
+Since 2026-09-26 (issue #148, SEC-08) an operation that calls a provider many times
+over one session's source copy (local speech recognition today, visual sampling
+next) binds the copy for the whole operation instead of rehashing it before every
+call: one full SHA-256 verification when it is opened, an on-disk identity
+comparison (size, modification time, device and file index, and the Unix
+status-change time or the Windows creation time and attributes) before each provider
+call, and a second full verification before anything derived from it is committed.
+A replaced, resized or retimed copy fails before the provider reads it; any change
+still present at the end fails the commit with a typed integrity failure. The
+residual is ADR 0012's, unchanged: a same-user actor who changes the copy and
+restores it (on Windows, including its modification time) before the closing
+verification is not detected, just as one who changed it between a per-call hash and
+the provider's read was not. Single-call operations keep the per-call rehash.
+
 P07 increment 2 treats a supplied SRT/WebVTT sidecar as untrusted input: the same
 no-follow local path policy as media, an 8 MiB file bound and per-line, per-cue and
 cue-count bounds enforced while streaming (SEC-05); strict UTF-8 with control

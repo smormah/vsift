@@ -142,6 +142,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `transcript retranscribe` now checks the session's copy of the video twice per run
+  instead of before every 30-second chunk: it verifies the copy's SHA-256 when the
+  run starts and again before the new revision is saved, and before each chunk only
+  compares the file's size, modification time and file identity. Long videos no
+  longer pay a full read of the copy per chunk (on an 869 MB, 24-chunk video,
+  decoding took 25.5 s instead of 173.4 s). The integrity guarantee is the same as
+  before (ADR 0012, issue #148); results and schemas are unchanged and no failure code
+  was added.
 - Delivery is re-planned by ADR 0015. Managed dependency installation
   (`setup install` and its repair, list, rollback and remove lifecycle) moves from
   P06 to P13 and remains an R0 release requirement. P06 now closes on detection,
@@ -161,6 +169,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `transcript retranscribe` could save a revision even if the session's copy of the
+  video changed after the last chunk was decoded. The copy is now verified again
+  before the revision is saved; if it changed, the run fails with
+  `INTEGRITY_FAILURE` and saves nothing.
 - The reviewed Ubuntu x64 whisper.cpp v1.9.2 file set now includes ggml's 13
   optimised CPU backends (`sse42` through `zen4`) from the same pinned archive,
   each pinned by size and SHA-256. Before, only the generic `libggml-cpu-x64.so`

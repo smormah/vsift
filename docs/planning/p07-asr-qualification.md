@@ -163,7 +163,8 @@ All three are tracked in [issue #150](https://github.com/smormah/vsift/issues/15
   Windows Server 2025 runners with the reviewed Ubuntu and Windows builds; its reports
   are the Linux evidence once it has run.
 - Long recordings: the timing clip is 3 minutes; the per-chunk source rehash (#148)
-  makes cost grow with source size and is not measured here.
+  makes cost grow with source size and is not measured here. (2026-09-26: #148 is
+  fixed in P08; a run now hashes the source twice in total, see ADR 0012's note.)
 
 ## Decision (maintainer, 2026-09-25)
 

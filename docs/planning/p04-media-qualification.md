@@ -16,7 +16,9 @@ and unsupported container magic. The staged bytes are SHA-256 identified, with a
 20 GiB logical limit and 600-second read limit. Storage admission and lifetime
 holds include the copy. A separate original-source rehash detects byte changes;
 the staged copy is rehashed before provider calls. A same-user mutation race after
-that verification remains outside the desktop guarantee.
+that verification remains outside the desktop guarantee. (2026-09-26, issue #148:
+multi-call operations now hash the copy when they bind it and before they commit,
+and compare its on-disk identity before each call; see the dated note in ADR 0012.)
 
 `FfmpegMedia` uses P02's trusted executable and process supervisor. Its fixed
 profile `p04-r0-v1` accepts `mov` or `matroska` and input protocol `file` only;
