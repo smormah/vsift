@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `setup check` now reports local speech recognition in a new `local_asr` object:
+  whether the registered model is a reviewed pinned model and which profile, and
+  whether whisper.cpp, the model and FFmpeg/FFprobe really transcribe a short speech
+  clip built into VSift. A pass already on record is reported as `recorded`;
+  otherwise the check runs it within its own 60-second budget and records a pass, so
+  the first `transcript retranscribe` afterwards starts straight away. When it cannot
+  run, the reason says what is missing first (media tools, whisper.cpp, a model, or a
+  reviewed model). The existing fields and the exit status are unchanged; no path is
+  shown.
+- A second reviewed model profile, `base_q5_1`: the 5-bit quantization of the
+  multilingual base model (`ggml-base-q5_1.bin`, 59,707,625 bytes, SHA-256
+  `422f1ae4…a8898`), about 40% of the base model's size. Register it with `setup
+  configure-model` like the base model; its identity selects the profile, and every
+  revision records which one ran. The base model stays the default and the only model
+  in the managed setup plan.
+- An opt-in `P07 local ASR` workflow (manual and weekly) runs the local-ASR
+  checkpoint and the new accuracy, timing and memory qualification on Ubuntu 24.04
+  and Windows with the reviewed whisper.cpp v1.9.2 builds and both pinned models,
+  each download checked against its pinned size and SHA-256, and uploads the reports.
 - Local speech recognition: `vsift transcript retranscribe <session> [--from <us> --to
   <us>]` transcribes a session's speech with whisper.cpp into a new transcript
   revision, for the whole video or one range. It needs FFmpeg, FFprobe and

@@ -222,9 +222,11 @@ tool output is ever included. See
 | `cancelled` | `CANCELLED` | Retry |
 | `fixture_integrity` (the built-in test video is corrupt) | `INTERNAL` | Reinstall VSift |
 
-`setup check` still reports only the fast executable probe
-(`verification_scope: executable_probe_only`), so FFmpeg selected as FFprobe passes
-`setup check` but fails this preflight at the `probe` step.
+The executable probes of `setup check` stay fast (`verification_scope:
+executable_probe_only`), so FFmpeg selected as FFprobe passes those probes. `setup
+check` runs this preflight only as part of its local-ASR verification (below), when
+whisper.cpp and a reviewed model are also registered; otherwise the first media
+command reports the failure at the `probe` step.
 
 **Retrieval.** `transcript get <session> --from <us> --to <us> [--limit 1..100]
 [--cursor <token>] [--revision <trv_id>]` returns the segments of the session's newest
@@ -337,9 +339,13 @@ get` never look for whisper.cpp or a model.
 It needs FFmpeg, FFprobe and `whisper-cli`, resolved like `setup check` (a `setup
 configure` selection first, then the filtered `PATH`), and a model registered with
 `setup configure-model`. Only a model identified by size and SHA-256 as a reviewed
-pinned profile runs; today that is the multilingual whisper.cpp `base` model
-(`ggml-base.bin`, 147,951,465 bytes). Any other file is refused before any work with
-`MISSING_CAPABILITY`. The order is part of the contract: the range is checked, the
+pinned profile runs, and its identity decides the profile (no configuration field
+does): `base`, the multilingual whisper.cpp base model (`ggml-base.bin`, 147,951,465
+bytes, the default), or `base_q5_1`, its 5-bit quantization (`ggml-base-q5_1.bin`,
+59,707,625 bytes, SHA-256 `422f1ae4…a8898`, from the same Hugging Face repository at
+revision `5359861`). Any other file is refused before any work with
+`MISSING_CAPABILITY`. The profile is recorded in every revision's `local_asr`
+provenance (`model_profile`). The order is part of the contract: the range is checked, the
 tools and model are resolved and identified, the session is checked (it must be open
 and unexpired), the media-tool preflight runs, then the **local-ASR preflight**, and
 only then is the session's committed copy of the video decoded. The local-ASR
@@ -422,8 +428,52 @@ typed manual/BYO remediation for missing, unhealthy and timed-out tools. The leg
 `status` reflects only executable probe results. `verification_scope` is
 `executable_probe_only`, and `local_asr_model` is `not_checked`: a successful
 `--version`/`--help` response does **not** prove provider compatibility or a
-working transcription model. Those checks and verified
-managed installation remain P06 work. Provider `detail` is not an instruction
+working transcription model. Both fields keep these constant values for v1
+compatibility; the additive `local_asr` object below reports the model and a real
+transcription check. Verified managed installation remains P13 work.
+
+**Local ASR in `setup check`** (P07 increment 3c, maintainer decision D4). The
+response carries a `local_asr` object:
+
+```json
+"local_asr": {
+  "model": {"status": "known_pinned", "profile": "base"},
+  "verification": {"status": "verified", "source": "ran_now", "not_run_reason": null, "check": null, "reason": null}
+}
+```
+
+- `model.status` is `not_selected` (nothing registered with `setup configure-model`),
+  `unreadable`, `unrecognised` (readable but not a reviewed pin) or `known_pinned`,
+  with `profile` `base` or `base_q5_1` (null otherwise). The file is identified by
+  size and SHA-256 on every check; its path is never shown.
+- `verification.status` is `verified`, `failed` or `not_run`. Every detail field is
+  present and null unless it applies. `verified` has `source` `recorded` (a
+  still-valid pass for exactly this setup is on record; nothing ran) or `ran_now`.
+  `failed` has `check` (`preparation`, `fixture_probe`, a transcription stage —
+  `planning`, `recognizer_identity`, `audio_extraction`, `recognition`,
+  `output_validation`, `assembly` — `transcript` or `budget`) and `reason` (the
+  local-ASR verification's typed reason, such as `fixture_media`,
+  `unexpected_transcript`, `deadline` or `abnormal_termination`, or
+  `budget_exceeded`). `not_run` has `not_run_reason`, the first that applies in the
+  order a retranscription resolves its dependencies: `media_tools_unavailable`
+  (FFmpeg or FFprobe missing, rejected or failing its own check),
+  `whisper_unavailable`, `model_not_selected`, `model_not_pinned`.
+- When no pass is recorded and everything is present, `setup check` runs the same
+  media-tool and local-ASR preflights as `transcript retranscribe` (the built-in F01
+  speech clip, with the tools selected for this check: per call, configured, then
+  `PATH`) within its own **60-second budget**, separate from `--timeout-seconds`. A
+  run past the budget is stopped and reported as `failed` / `budget` /
+  `budget_exceeded`. It writes only the per-user verification record, and only for a
+  pass, so the next check or retranscription with the same setup reuses it for up to
+  seven days. It never creates a session.
+- The exit status still reflects only the executable probes: a local-ASR check that
+  did not pass is reported, not a failed `setup check`, because media inspection and
+  supplied transcripts need no speech recognition.
+
+Schema [`setup-check-response.schema.json`](../../schemas/v1/setup-check-response.schema.json)
+(the object is optional for responses from earlier builds); examples
+[`setup-check.local-asr.json`](../../schemas/v1/examples/setup-check.local-asr.json)
+and [`setup-check.blocked.json`](../../schemas/v1/examples/setup-check.blocked.json). Provider `detail` is not an instruction
 channel. Paths are not echoed in the response. `detail` for FFmpeg and FFprobe is
 only their `ffmpeg version ...` / `ffprobe version ...` banner line, or `detected`
 when none is safe to show; whisper output is never echoed, and its `detail` is
@@ -532,8 +582,9 @@ selection on each call. A per-call path takes precedence.
 `setup configure-model --file <absolute-path>` stores a canonical nonempty
 user-managed model path in
 the same private record. Registration does not parse model bytes; `setup check`
-still reports `local_asr_model: not_checked`. Configuration does not authorize
-downloads or establish model/provider compatibility.
+identifies them in its `local_asr` object (the legacy `local_asr_model` field stays
+`not_checked`). Configuration does not authorize downloads or establish
+model/provider compatibility.
 
 Configuration writes use one private lock file. A held lock returns retryable
 `BUSY` without changing the record; an OS lock failure returns `STORAGE_IO`
@@ -581,7 +632,11 @@ root keeps its existing 5-second wait for a creator) before it is refused.
   "local_asr_model": "not_checked",
   "dependencies": [
     {"dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": {"reason": "missing", "managed_install": "unavailable_unqualified", "required_authority": "user", "next_step": "Install or locate a trusted FFmpeg executable, then rerun setup check.", "explicit_path_option": "--ffmpeg"}}
-  ]
+  ],
+  "local_asr": {
+    "model": {"status": "not_selected", "profile": null},
+    "verification": {"status": "not_run", "source": null, "not_run_reason": "media_tools_unavailable", "check": null, "reason": null}
+  }
 }
 ```
 
@@ -696,7 +751,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) |
 | C-09 | legal job and cancellation terminal transitions |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 

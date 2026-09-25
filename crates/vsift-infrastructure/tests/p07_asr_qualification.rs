@@ -548,15 +548,13 @@ type SamplerThread = Option<std::thread::JoinHandle<Option<u64>>>;
 #[cfg(windows)]
 fn platform_sampler(work: &Path, stop: Arc<AtomicBool>) -> Built<(SamplerThread, &'static str)> {
     // PowerShell reads the fixed script from standard input and runs until
-    // the sentinel file is removed; nothing is interpolated into it.
-    const SCRIPT: &str = "$max = [int64]0\n\
-        while (Test-Path -LiteralPath $env:VSIFT_SAMPLER_SENTINEL) {\n\
-          Get-Process -Name 'whisper-cli' -ErrorAction SilentlyContinue | ForEach-Object {\n\
-            if ($_.PeakWorkingSet64 -gt $max) { $max = $_.PeakWorkingSet64 }\n\
-          }\n\
-          Start-Sleep -Milliseconds 100\n\
-        }\n\
-        Write-Output $max\n";
+    // the sentinel file is removed; nothing is interpolated into it. It is one
+    // line because `-Command -` parses standard input line by line.
+    const SCRIPT: &str = "$max = [int64]0; \
+        while (Test-Path -LiteralPath $env:VSIFT_SAMPLER_SENTINEL) { \
+        Get-Process -Name 'whisper-cli' -ErrorAction SilentlyContinue | ForEach-Object { \
+        if ($_.PeakWorkingSet64 -gt $max) { $max = $_.PeakWorkingSet64 } }; \
+        Start-Sleep -Milliseconds 100 }; Write-Output $max\n";
     let sentinel = work.join("memory-sampler.running");
     fs::write(&sentinel, b"")?;
     let mut child = Command::new("powershell")

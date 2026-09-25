@@ -2,7 +2,13 @@
 
 These files are the machine-readable public v1 boundary:
 
-- `setup-check-response.schema.json` — backward-compatible setup diagnosis;
+- `setup-check-response.schema.json` — backward-compatible setup diagnosis. The
+  additive `local_asr` object (P07 increment 3c) reports the registered model's
+  identity (`not_selected`, `unreadable`, `unrecognised` or `known_pinned` with
+  profile `base` or `base_q5_1`) and the local-ASR verification (`verified` from a
+  `recorded` pass or `ran_now`, `failed` with a typed `check` and `reason`, or
+  `not_run` with a `not_run_reason`); the constant `verification_scope` and
+  `local_asr_model` fields are unchanged;
 - `setup-plan.schema.json` — current read-only reviewed-catalogue plan and
   typed managed-unavailable states; a digest never authorizes installation by
   itself;
@@ -76,6 +82,12 @@ output), and revision 2 retranscribed 5.5-6 s, where the clip is silent, so it
 carries revision 1's segment (`carried_from`) and records a silent chunk and
 `no_speech_recognised`. The first two are checked by `vsift-contract`'s
 `local_asr_contract`, the record by `vsift-infrastructure`'s `local_asr_store`.
+`setup-check.local-asr.json` is a ready `setup check` whose local-ASR check ran now
+and passed with the pinned base model, and `setup-check.blocked.json` the check with
+nothing installed (local ASR `not_run`, `media_tools_unavailable`); both are checked
+by `vsift-contract`'s `setup_local_asr_contract` and `schema_conformance`, and the
+blocked one against the binary's output by the CLI's `schema_contract`. Local-ASR
+provenance names the model profile `base` or `base_q5_1` (P07 increment 3c).
 `storage-not-private.json` is the `setup configure` failure an agent receives when
 the per-user configuration folder already exists and other accounts can access it;
 it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows

@@ -48,6 +48,19 @@ against F08 and the wider corpus. It becomes the default only if the recorded ga
 pass. Imported transcripts avoid the model entirely. GPU and larger model profiles
 remain optional, explicit and independently qualified.
 
+Reviewed profiles (P07 increment 3c, decision D6), chosen by the identity of the
+registered model file:
+
+| Profile | File | Gates on 4 threads (base) | Measured 2026-09-25, Windows 11, Xeon E5-2698 v4 |
+| --- | --- | --- | --- |
+| `base` (default) | `ggml-base.bin`, 147,951,465 B | RTF <= 0.5; peak `whisper-cli` memory <= 400 MiB; WER <= 10% clean, <= 25% F08; all spoken critical terms except known misses | RTF 0.388; 338 MiB; WER 3.25% clean, **61.5% F08 (not met)**; no unexpected miss; load 316 ms |
+| `base_q5_1` | `ggml-base-q5_1.bin`, 59,707,625 B | reported only | RTF 0.409; 250 MiB; WER 4.06% clean, 46.2% F08; load 177 ms |
+
+The default is pending a maintainer decision because F08 is not met; see the
+[qualification record](p07-asr-qualification.md). A run's recognizer threads are the
+machine's parallelism, at most 8, and count against CPU admission; the gates are
+measured at 4.
+
 ## Evidence required to claim support
 
 P03's [filesystem feasibility record](p03-storage-feasibility.md) records native API

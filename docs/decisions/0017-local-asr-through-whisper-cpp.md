@@ -9,7 +9,7 @@
   [ADR 0016](0016-embeddable-engine-and-evidence-contract.md) (the evidence contract)
 - Implements maintainer decisions D1, D2, D3, D5, D7 and D8 of 2026-09-25. D4 (`setup
   check` reports local ASR) and D6 (a quantized profile and the measured default) are
-  increment 3c.
+  increment 3c (delivered; see the dated note at the end).
 
 ## Context
 
@@ -171,7 +171,8 @@ threads), the R0 chunk plan, the fixture digest, host isolation, the verifier's
 authority, a verification profile version and the VSift version. Passes age out after
 seven days like media-tool passes. A failure writes nothing and is typed
 (`fixture_integrity`, `workspace`, `fixture_media`, `transcription` with its stage and
-reason, `unexpected_transcript`). `setup check` does not report it yet (D4, 3c).
+reason, `unexpected_transcript`).
+`setup check` reports it (D4; see the increment 3c note below).
 
 ## Decisions recorded for maintainer confirmation
 
@@ -209,3 +210,30 @@ These were not settled by D1–D8; each follows the existing contracts most clos
   in 3c (T-04). Every chunk rehashes the session's source copy before FFmpeg reads it
   (the P04 check-before-use rule), which is linear in source size per chunk; long
   sources need a cheaper binding before the P14 load gates.
+
+## 2026-09-25 note: increment 3c delivered D4 and D6
+
+- **D4.** `setup check` has an additive `local_asr` object: the registered model's
+  identity (`not_selected`, `unreadable`, `unrecognised`, `known_pinned` with its
+  profile) and the local-ASR verification of section 9 (`verified` from a `recorded`
+  pass or `ran_now`, `failed` with a typed `check` and `reason`, or `not_run` with
+  the first missing piece in resolution order). With no recorded pass it runs the
+  media-tool and local-ASR preflights with the tools selected for the check, under
+  its own 60 s budget (`DEFAULT_LOCAL_ASR_CHECK_BUDGET`, separate from
+  `--timeout-seconds`); a run past it is cancelled and reported as `budget` /
+  `budget_exceeded`. It writes only the verification record, only for a pass. The
+  legacy `verification_scope` and `local_asr_model` constants and the exit status
+  are unchanged. With a host-supplied recognizer the model is the one it reports.
+- **D6.** A second reviewed profile, `base_q5_1` (`ggml-base-q5_1.bin`, 59,707,625
+  bytes, SHA-256 `422f1ae4…a8898`). Hugging Face revision `80da2d8` (the base pin)
+  has no quantized files, so this pins revision `5359861` of the same repository,
+  where `ggml-base.bin` is byte-identical to the base pin; the q5_1 LFS SHA-256 was
+  verified against a download from that revision. Section 4 now reads "a reviewed
+  pinned profile" for either; the profile is decided by file identity, recorded in
+  `model_profile` and bound into the verification fingerprint, so a pass for one
+  profile never stands in for the other. Only `base` is in the managed plan.
+- **T-04.** Accuracy, timing and memory are measured by the opt-in
+  `p07_asr_qualification` test ([record](../planning/p07-asr-qualification.md)):
+  `base` meets the clean-speech, critical-term, real-time (0.388) and memory
+  (338 MiB) gates and misses the F08 WER gate (61.5%). The default is a maintainer
+  decision ([ADR 0005 note](0005-r0-scope-and-qualification-profiles.md)).
