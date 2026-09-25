@@ -232,6 +232,11 @@ These were not settled by D1–D8; each follows the existing contracts most clos
   pinned profile" for either; the profile is decided by file identity, recorded in
   `model_profile` and bound into the verification fingerprint, so a pass for one
   profile never stands in for the other. Only `base` is in the managed plan.
+- **Seam merge fix (section 3).** A cut segment is replaced by a neighbour-chunk
+  segment only when that segment spans the cut segment's midpoint; merely
+  overlapping it (the previous sentence ending just inside) no longer counts. With
+  `base_q5_1` the old rule dropped a whole sentence from both chunks without a
+  warning; the regression test and the record describe it.
 - **T-04.** Accuracy, timing and memory are measured by the opt-in
   `p07_asr_qualification` test ([record](../planning/p07-asr-qualification.md)):
   `base` meets the clean-speech, critical-term, real-time (0.388) and memory

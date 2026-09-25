@@ -28,7 +28,8 @@ default Linux/macOS check; Docker only for platform code.
      base revision `80da2d8` has no quantized files: **deviation to confirm**).
    - T-04: test-only scoring and the opt-in `p07_asr_qualification` test; record
      `docs/planning/p07-asr-qualification.md`.
-   - Opt-in `P07 local ASR` workflow (Ubuntu 24.04, Windows 2025), not yet run.
+   - Seam-merge fix: a sentence starting at a chunk's first sample was dropped
+     (found with q5_1). Opt-in `P07 local ASR` workflow (Ubuntu, Windows), not run.
 4. **Measured default outcome (maintainer decision needed):** `base` meets clean WER
    (3.25%), critical terms, RTF (0.388) and memory (338 MiB) but **fails F08 WER
    (61.5% vs 25%)**; `base_q5_1` also fails F08 (46.2%). Options are in the record;
@@ -41,10 +42,9 @@ default Linux/macOS check; Docker only for platform code.
 
 - #148: every speech chunk rehashes the session's whole source copy before FFmpeg
   reads it (linear in source size per chunk); needs a cheaper binding before P14.
-- #147: faster-whisper adapter (backlog); whisper.cpp stays the default.
-- A creator killed mid-provisioning leaves an unmarked root refused until removed.
-- The base model starts a segment that follows leading silence at its audio start
-  (F09: 0.75 s, speech at 4.0 s). Not a WER issue; consider trimming leading silence.
+- #147: faster-whisper adapter (backlog). A creator killed mid-provisioning leaves an
+  unmarked root refused until removed.
+- F09: base starts a segment at its audio start after leading silence (0.75 s, not 4.0 s).
 - Ctrl-C is not trapped (Tokio `signal` would be a new dependency). The model is hashed
   up to three times per run and twice per `setup check` (~0.3 s each); no cache.
 - Accent and crosstalk are not in the speech corpus (T-04 gap); F08 (13 words) is

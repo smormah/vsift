@@ -88,6 +88,27 @@ All gates are met by `base` except F08. Load time is not gated. The whole test t
 and 0.389/0.414 real-time factors; its memory sampler did not run (a multi-line
 PowerShell script over standard input), which the recorded run fixes.
 
+## Seam finding and fix
+
+Running the local-ASR checkpoint with `base_q5_1` lost F07's whole sentence from the
+two-chunk seam clip, with no warning. Chunk 1 heard the sentence from its first
+sample (25.0-34.0 s); chunk 0's previous sentence ended at 25.24 s, just inside it.
+The seam merge (rule 2, increment 3a) treated any overlapping segment across the
+edge as a copy, so it dropped chunk 1's sentence as "covered", while chunk 0's cut
+copy was dropped because chunk 1 owned its midpoint. whisper-cli itself output the
+sentence in both chunks. Fixed in this increment: a neighbour segment is a copy only
+when it spans the cut segment's midpoint (`covering` in `crates/vsift-domain/src/asr.rs`),
+with the regression test
+`a_sentence_starting_at_a_window_is_not_covered_by_the_previous_sentence`. After the
+fix the `base_q5_1` seam stage passes and the `base` checkpoint and adapter test still
+pass. The accuracy figures above come from single-chunk clips and the timing from a
+multi-chunk clip, so neither depends on the fix.
+
+The checkpoint's whole-file stage still fails with `base_q5_1`, because it hears F05's
+"invoice" as "in voice" (a genuine recognition difference, visible in the table). The
+checkpoint's word checks are written for the default profile, so the workflow runs it
+with `base` only and measures `base_q5_1` here.
+
 ## Gaps
 
 - **Accent and crosstalk are not in the corpus.** Every clip is one synthetic

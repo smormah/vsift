@@ -88,8 +88,8 @@ remain. Search and visuals are P08-P09.
   ([record](../docs/planning/p07-asr-qualification.md)): `base` RTF 0.388, 338 MiB,
   3.25% clean WER, no unexpected critical-term miss, **F08 61.5% (gate 25%, not met)**;
   `base_q5_1` RTF 0.409, 250 MiB, 4.06%, F08 46.2%. Default decision is open.
-- Opt-in `p07_asr_qualification` test and `P07 local ASR` workflow (Ubuntu 24.04,
-  Windows 2025) reproduce it; the workflow has not run yet.
+- A seam-merge bug that dropped a sentence starting at a chunk's first sample (found
+  with q5_1) is fixed. The workflow reproducing all this has not run yet.
 
 ## Evidence stream and private folders
 
