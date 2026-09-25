@@ -1,0 +1,16 @@
+WEBVTT - VSift F10 synthetic sidecar
+
+NOTE Synthetic, rights-safe VSift fixture text (MIT OR Apache-2.0).
+
+f10-1
+00:00.500 --> 00:03.500
+This synthetic sidecar is aligned with
+an explicit 500 millisecond offset.
+
+f10-2
+00:04.500 --> 00:08.500
+Dialog R-17 is displayed now.
+
+f10-3
+00:09.000 --> 00:11.000
+End of the synthetic imported transcript.

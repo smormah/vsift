@@ -1,0 +1,1 @@
+{"format":{"duration":"2.000000","start_time":"1.250000"},"streams":[{"index":0,"codec_type":"video","codec_name":"h264","time_base":"1/1000","start_pts":1250,"width":320,"height":240,"side_data_list":[{"rotation":-90}]},{"index":2,"codec_type":"audio","codec_name":"aac","time_base":"1/16000","start_pts":32000,"tags":{"language":"eng"}}]}

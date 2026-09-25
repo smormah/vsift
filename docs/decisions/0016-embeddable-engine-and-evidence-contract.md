@@ -227,3 +227,64 @@ This note fixes the CLI surface decision 5 left to P07.
 - No public command, schema or event kind changed. Retranscription, its schemas,
   the stream's treatment of superseded revisions and the next ADR follow in
   increment 3b.
+
+## 2026-09-24 implementation note: cargo-fuzz targets (decision 6)
+
+- Maintainer decision of 2026-09-24: `cargo-fuzz` runs on a pinned nightly toolchain
+  (`nightly-2026-09-01`) in the scheduled `Fuzz` workflow, weekly and on manual
+  dispatch (seconds per target, default 300, at most 1200), not on every pull request.
+  The repository's stable toolchain and MSRV are unchanged. Every pull request instead
+  runs `Fuzz harness replay` on stable: formatting, strict Clippy and the same target
+  bodies over every committed seed. Long campaigns remain P14 gates.
+- The harness is `fuzz/`, its own package with its own committed lockfile, excluded
+  from the workspace. The libFuzzer entry points need its `libfuzzer` feature, so
+  stable builds never compile libFuzzer. Each target body is a plain function that
+  reports a broken invariant as a typed `Violation`; the entry point aborts on one,
+  which libFuzzer records as a crash. Nothing in the harness panics or unwraps.
+- Six targets, all through published APIs: `transcript_srt` and `transcript_webvtt`
+  (`parse_supplied_transcript`: cue count, positive and ordered timing, bounded
+  non-blank text, text never larger than the sidecar); `whisper_full_json`
+  (`parse_whisper_full_json`, then the domain's chunk validation against a fixed 30 s
+  chunk: segment and token bounds, segments inside the chunk); `transcript_record`
+  (`decode_transcript_record`, versions 1 and 2, as `bundle validate` reads records:
+  an accepted record re-encodes and decodes to the same revision);
+  `ffprobe_metadata` (`parse_ffprobe_metadata` for both containers: positive
+  duration, unique stream indexes, dimensions exactly on video streams); and
+  `transcript_cursor` (`CursorToken::parse`, the untrusted `--cursor` value: an
+  accepted token survives encode and parse).
+- The one product change: the FFprobe metadata parser is now public as
+  `vsift_infrastructure::parse_ffprobe_metadata`, beside the other pure provider
+  parsers, because this decision names FFprobe metadata and the parser could not be
+  reached without running FFprobe. Its behaviour is unchanged.
+- Seeds are small and committed: copies of the existing transcript, whisper,
+  bundle-record and F11 probe fixtures, the inline probe and cursor documents from
+  existing tests and examples, and one version-2 record re-derived from the recorded
+  F01 whisper output. The replay tests fail if a seed drifts from its origin.
+- Not fuzzed yet, with the reason: the bundle manifest and metadata records and the
+  storage ownership marker (private, decoded only inside capability-scoped directory
+  reads; reachable publicly only through `validate_bundle` on a real directory tree);
+  the media-tool verification record and the user dependency configuration (private,
+  read only after ownership and link checks on private storage); the CLI's strict
+  JSON request decoder (crate-private and unused until P11 admits request files); the
+  FFmpeg `showinfo` diagnostic parser (private); and the managed-installation archive
+  inventories (P13, and their input is digest-verified first). Each is a strict
+  serde decoder plus field checks. Making them public only for fuzzing would widen
+  the published API without a consumer, so they wait for a natural entry point or a
+  filesystem-backed P14 harness.
+- `unsafe`: no VSift crate changed, and the fuzz crate forbids `unsafe_code` too.
+  `libfuzzer-sys` 0.4.13's `fuzz_target!` expands to two `#[no_mangle] extern "C"`
+  functions and no `unsafe` block; the lint is not reported for code expanded from
+  another crate's macro, so the entry points compile under `forbid` (a locally
+  written `#[no_mangle]` is rejected, which confirms the lint is active). The FFI glue
+  and libFuzzer's C++ runtime are inside `libfuzzer-sys`, like any dependency's
+  internals. No ADR exception was needed.
+- Dependencies: `libfuzzer-sys` 0.4.13 (rust-fuzz project, released 2026-06-04 after
+  releases in February 2026 and July 2025; vendors LLVM libFuzzer) and `arbitrary`
+  1.4.2 (MIT OR Apache-2.0), both only in the unpublished harness; `cargo-fuzz` 0.13.2
+  (MIT OR Apache-2.0, released 2026-06-09) is installed in CI with `--locked`. `libfuzzer-sys`
+  declares `(MIT OR Apache-2.0) AND NCSA`: its vendored libFuzzer files carry
+  `Apache-2.0 WITH LLVM-exception` headers, but the declared NCSA term is not in
+  `deny.toml`'s allow list. The maintainer approved (2026-09-25) an NCSA exception
+  for `libfuzzer-sys` alone, and the `Dependency policy` job now also checks the fuzz
+  lockfile; advisories, sources, bans and licences pass, and it adds no duplicate
+  version.

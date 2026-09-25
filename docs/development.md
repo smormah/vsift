@@ -32,6 +32,46 @@ cargo doc --workspace --no-deps --locked
 
 CI runs the same checks on Windows, macOS, and Linux.
 
+If you changed a parser the fuzz targets use, or anything in `fuzz/`, also run the
+fuzz harness checks (the workspace excludes `fuzz/`, so the commands above skip it):
+
+```console
+cargo fmt --manifest-path fuzz/Cargo.toml --check
+cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --all-features --locked -- -D warnings
+cargo test --manifest-path fuzz/Cargo.toml --locked
+```
+
+## Fuzzing
+
+`fuzz/` holds `cargo-fuzz` targets for the parsers of untrusted input
+([ADR 0016](decisions/0016-embeddable-engine-and-evidence-contract.md), decision 6):
+`transcript_srt`, `transcript_webvtt`, `whisper_full_json`, `transcript_record`,
+`ffprobe_metadata` and `transcript_cursor`. It is a separate package with its own
+lockfile. Each target body is a plain function in `fuzz/src/lib.rs`; the stable replay
+tests above run it over every seed in `fuzz/seeds/<target>/`, and the libFuzzer entry
+points in `fuzz/fuzz_targets/` (feature `libfuzzer`) run it under libFuzzer.
+
+libFuzzer needs a nightly toolchain, so the `Fuzz` workflow runs it weekly and on
+manual dispatch, never as a per-PR check. To fuzz locally on Linux (x86-64, with a C++
+compiler), use the workflow's pinned versions:
+
+```console
+rustup toolchain install nightly-2026-09-01 --profile minimal
+cargo install cargo-fuzz --version 0.13.2 --locked
+mkdir -p fuzz/corpus/transcript_srt
+cargo +nightly-2026-09-01 fuzz run --features libfuzzer transcript_srt \
+  fuzz/corpus/transcript_srt fuzz/seeds/transcript_srt -- -max_total_time=300 -timeout=10
+```
+
+The first corpus directory collects new inputs and, like `fuzz/artifacts/`, is ignored
+by Git. A crash leaves its input in `fuzz/artifacts/<target>/`; reproduce it with
+`cargo +nightly-2026-09-01 fuzz run --features libfuzzer <target> <crash-file>`. Every
+crash becomes a permanent regression test at the parser's own layer, not in `fuzz/`.
+Add a seed only by copying an existing reviewed fixture into `fuzz/seeds/<target>/` and
+listing its origin in `fuzz/tests/replay.rs`; the replay tests fail on an unlisted or
+drifted seed. On Windows with MSVC, the same commands work when the directory holding
+`clang_rt.asan_dynamic-x86_64.dll` (the MSVC `bin\HostX64\x64` directory) is on `PATH`.
+
 ## Architectural placement
 
 Before adding code, identify its owner:
@@ -79,6 +119,12 @@ Before adding a crate, review:
 - whether it introduces native build requirements.
 
 Commit `Cargo.lock` because VSift is an application. Dependency changes must pass `cargo deny check` in CI.
+
+The fuzz harness's lockfile (`fuzz/Cargo.lock`) adds only `libfuzzer-sys` 0.4.13,
+`arbitrary` 1.4.2 and `jobserver` 0.1.35 (a build helper of `cc`) to the workspace's
+graph; its review, and the
+open licence question for `libfuzzer-sys`'s declared NCSA term, are in the ADR 0016
+note of 2026-09-24.
 
 P02 uses `process-wrap` 10 for safe cross-platform access to Windows Job Objects and
 Unix process groups. Its enabled features, MSRV, transitive footprint and isolation

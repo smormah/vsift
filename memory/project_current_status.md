@@ -63,35 +63,38 @@ increment. Search and visuals are P08-P09.
   PTS), `FfmpegSpeechAudio`, `whisper_cli` (closed argv checked against v1.9.2
   `--help`, 120 s per chunk, stdout/stderr bounded and ignored, bounded no-follow read
   of the `-ojf` file), `WhisperSpeechRecognizer`, transcript record version 2.
-- **Real run (opt-in, Windows 11, whisper.cpp v1.9.2 official build, base model):**
-  F01, F05, F08 and F09 transcribed with required words present; F01 reads "The
-  service status is healthy and the build is 2048." F09's audio starts at 0.75 s.
+- **Real run (opt-in, Windows 11, whisper.cpp v1.9.2, base model):** F01, F05, F08 and
+  F09 transcribed with required words present; F09's audio starts at 0.75 s.
 - Imports unchanged: identities and version-1 record bytes pinned against `9dad79e`.
 
-## Private folders (fix, PR #141, `dadefbc`)
+## Fuzzing (P07, branch `p07/fuzz-targets`)
 
-Every folder VSift creates (per-user configuration and its missing parents, session
-root and its parent, retained bundles, managed data) is made private before use: a
-protected DACL for the user, SYSTEM and Administrators on Windows (`windows-acl`, no
-`unsafe`), 0o700 on Unix. Existing folders are never changed; a non-private one fails
-`STORAGE_IO` naming its kind. Threat model SEC-18.
+- `fuzz/`, its own package and lockfile outside the workspace, has six `cargo-fuzz`
+  targets over published parsers: SRT, WebVTT, whisper `-ojf` (then chunk
+  validation), stored transcript records v1/v2, FFprobe metadata (the parser is now
+  public as `parse_ffprobe_metadata`) and `--cursor` tokens. Each checks invariants of
+  accepted results and reports a typed `Violation`; the harness forbids `unsafe`.
+- The `Fuzz` workflow runs each for 300 s weekly on `nightly-2026-09-01` (manual
+  dispatch 1-1200 s); every PR's `Fuzz harness replay` runs them over the seeds on stable.
+- Not fuzzed (private decoders, reasons in the ADR 0016 note): bundle manifest and
+  ownership marker, verification record, user config, CLI request decoder, showinfo.
+- `libfuzzer-sys` declares NCSA: allowed for that crate only (maintainer, 2026-09-25).
 
-## Evidence stream and bundle record (P07 increment 2c)
+## Private folders (PR #141) and evidence stream (increment 2c)
 
-- `transcript get --events jsonl`: one keyed evidence event per segment
-  (`record_type: "transcript_segment"`, upsert `key` = `segment_id`, contiguous
-  `sequence` from 0), then one terminal event carrying the page without `items`,
-  `record_count` and `next_cursor`. Full rules: `cli-v1.md` ("Evidence stream").
-- `bundle validate` decodes every `transcript_record` strictly
-  (`bundle-transcript-record.schema.json` describes version 1).
+- Every folder VSift creates is made private before use (protected DACL via
+  `windows-acl`, no `unsafe`; 0o700 on Unix); a non-private existing one fails
+  `STORAGE_IO` naming its kind. Threat model SEC-18.
+- `transcript get --events jsonl`: one keyed evidence event per segment (upsert `key` =
+  `segment_id`), then one terminal event with `record_count` and `next_cursor`. Rules:
+  `cli-v1.md` ("Evidence stream"). `bundle validate` decodes every record strictly.
 
 ## Speech fixtures and preflight
 
-- Kokoro-spoken F01-F09/F12 clips (run 36052657304; test-only,
-  `docs/planning/p07-speech-fixtures.md`); recorded whisper v1.9.2 `-ojf` outputs in
-  `crates/vsift-infrastructure/tests/fixtures/whisper-1.9.2/`.
-- `ensure_media_tools_verified` runs once per tool identity before `ingest
-  --transcript` touches the session root; local ASR must call it too (3b).
+- Kokoro-spoken F01-F09/F12 clips (test-only, `docs/planning/p07-speech-fixtures.md`);
+  recorded whisper v1.9.2 `-ojf` outputs in `vsift-infrastructure/tests/fixtures/`.
+- `ensure_media_tools_verified` runs once per tool identity before `ingest --transcript`
+  touches the session root; local ASR must call it too (3b).
 
 ## The engine library and contract
 
@@ -119,7 +122,7 @@ protected DACL for the user, SYSTEM and Administrators on Windows (`windows-acl`
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
-| P07 | In progress: 1a-2c, speech fixtures and 3a (ASR core) done; 3b and 3c next |
+| P07 | In progress: 1a-2c, speech fixtures, 3a (ASR core) and fuzz targets done; 3b, 3c next |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
@@ -129,21 +132,19 @@ protected DACL for the user, SYSTEM and Administrators on Windows (`windows-acl`
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
 <- `vsift-cli` (parse, present). `vsift-contract` sits beside the engine and depends on
 domain and application only. `tools/vsift-governance` checks the ledger and these
-files' sizes. Largest modules: `filesystem_session_store.rs` and
+files' sizes; `fuzz/` is the fuzz harness. Largest modules: `filesystem_session_store.rs` and
 `managed_artifact_store.rs` (about 3.8k and 3.6k lines with tests), then the domain
 `transcript.rs` and `asr.rs`.
 
 ## Quality evidence
 
-- Increment 3a, Windows 11: fmt, strict Clippy (pedantic as errors), `cargo test
-  --workspace` (486 passed, 24 opt-in ignored), warning-denied rustdoc and the
-  governance check pass. Opt-in `p07_local_asr` passed with the reviewed whisper build
-  (SHA-256 `95e3c0b0...`, verified) and base model: about 8 s per clip in release,
-  46 s in debug (mostly hashing the model twice); `setup check` against it reports
-  `whisper.cpp v1.9.2 (reviewed build)`.
-- Earlier: the P07 transcript E2E consumes each import as a JSONL stream, retains it
-  and validates the bundle; fix #131 race tests 50/50; private-folder ACL tests.
-- CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance,
-  strict worker boundary, dependency policy and CodeQL; squash merges to protected
+- Fuzz targets, Windows 11: workspace fmt, strict Clippy, `cargo test --workspace`
+  (486 passed, 24 opt-in ignored), rustdoc and governance pass; the fuzz crate's fmt,
+  Clippy (both feature sets) and 5 replay tests pass, and it checks on the pinned
+  nightly. Each target ran 60 s under libFuzzer with AddressSanitizer on Windows (MSVC
+  ASan runtime on `PATH`): 0.3M-2.6M executions each, no finding.
+- 3a: opt-in `p07_local_asr` passed with the reviewed whisper build (8 s per clip, release).
+- CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
+  harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to protected
   `main`. Qualification records are in `docs/planning/`; history in git,
   `CHANGELOG.md` and `docs/history/2026-09-09-to-23-delivery-log.md`.
