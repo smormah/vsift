@@ -14,7 +14,7 @@ pub const LOCAL_ASR_TOOLS_REMEDIATION: &str = "Local speech recognition needs FF
 pub const LOCAL_ASR_MODEL_REMEDIATION: &str = "Local speech recognition needs a registered whisper.cpp model. Nothing was changed. Register the reviewed multilingual base model (ggml-base.bin) with setup configure-model --file <path>, then retry.";
 
 /// Remediation when the configured model is not a reviewed pinned profile.
-pub const UNPINNED_MODEL_REMEDIATION: &str = "The registered model file is not a reviewed pinned model profile, so VSift will not run it: its accuracy, licence and resource use are unknown. Nothing was changed. Register the reviewed multilingual whisper.cpp base model (ggml-base.bin, 147,951,465 bytes) with setup configure-model --file <path>, then retry.";
+pub const UNPINNED_MODEL_REMEDIATION: &str = "The registered model file is not a reviewed pinned model profile, so VSift will not run it: its accuracy, licence and resource use are unknown. Nothing was changed. Register a reviewed multilingual whisper.cpp base model with setup configure-model --file <path>, then retry: ggml-base.bin (147,951,465 bytes, the default) or its quantization ggml-base-q5_1.bin (59,707,625 bytes).";
 
 /// Remediation when the video has no audio stream `VSift` can decode.
 pub const NO_AUDIO_STREAM_REMEDIATION: &str = "The video has no audio stream VSift can decode, so there is no speech to transcribe. Nothing was changed. Check that the video has sound; a supplied SubRip or WebVTT transcript can be imported with ingest --transcript instead.";

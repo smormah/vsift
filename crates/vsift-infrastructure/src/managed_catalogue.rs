@@ -10,8 +10,8 @@ use vsift_application::{
     ReviewedManagedFile, ReviewedRuntimeCopy,
 };
 use vsift_domain::{
-    ArtifactIntegrity, ArtifactIntegrityError, ManagedArtifactFormat, ManagedComponent,
-    ManagedTarget,
+    ArtifactIntegrity, ArtifactIntegrityError, AsrModelProfile, ManagedArtifactFormat,
+    ManagedComponent, ManagedTarget, ReviewedAsrModel,
 };
 
 use crate::{
@@ -27,6 +27,17 @@ const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
 const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
 const WHISPER_URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-ubuntu-x64.tar.gz";
 const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
+const MODEL_BYTES: u64 = 147_951_465;
+const MODEL_SHA256: &str = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe";
+/// The `q5_1` quantization of the multilingual base model (maintainer decision
+/// D6). Revision `80da2d8` predates the repository's quantized files, so this
+/// pins the repository's newest revision, `5359861` (2024-10-29), at which
+/// `ggml-base.bin` is byte-identical to the base pin above (same Git LFS
+/// SHA-256): both reviewed models exist together at one immutable revision.
+/// The maintainer accepted this pin revision on 2026-09-25.
+const MODEL_Q5_1_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin";
+const MODEL_Q5_1_BYTES: u64 = 59_707_625;
+const MODEL_Q5_1_SHA256: &str = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898";
 const COMPATIBILITY_FIXTURE_BYTES: u64 = 76_500;
 const COMPATIBILITY_FIXTURE_SHA256: &str =
     "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070";
@@ -157,6 +168,71 @@ pub fn reviewed_compatibility_policy() -> Result<ReviewedCompatibilityPolicy, Ma
 /// Fails if the reviewed model literals are malformed.
 pub fn pinned_whisper_model() -> Result<ArtifactIntegrity, ManagedCatalogueError> {
     Ok(model_artifact()?.integrity)
+}
+
+/// One reviewed pinned whisper.cpp model: its profile, exact identity and the
+/// immutable publisher URL it was reviewed at.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReviewedWhisperModel {
+    /// Profile a file with this identity runs as.
+    pub profile: ReviewedAsrModel,
+    /// Exact size and SHA-256.
+    pub integrity: ArtifactIntegrity,
+    /// HTTPS URL at a pinned Hugging Face revision.
+    pub source_url: &'static str,
+    /// File name at that revision.
+    pub file_name: &'static str,
+}
+
+/// Returns every reviewed pinned whisper.cpp model, default first.
+///
+/// A registered model runs only when its size and SHA-256 equal one of these
+/// (maintainer decisions D5 and D6); which one it equals is its profile, so no
+/// configuration field selects a profile. Only the default is part of the
+/// managed installation plan.
+///
+/// # Errors
+///
+/// Fails if any reviewed model literal or publisher URL is malformed.
+pub fn reviewed_whisper_models() -> Result<[ReviewedWhisperModel; 2], ManagedCatalogueError> {
+    let reviewed =
+        |profile: ReviewedAsrModel| -> Result<ReviewedWhisperModel, ManagedCatalogueError> {
+            let (bytes, sha256, source_url, file_name) = match profile {
+                ReviewedAsrModel::Base => (MODEL_BYTES, MODEL_SHA256, MODEL_URL, "ggml-base.bin"),
+                ReviewedAsrModel::BaseQ5_1 => (
+                    MODEL_Q5_1_BYTES,
+                    MODEL_Q5_1_SHA256,
+                    MODEL_Q5_1_URL,
+                    "ggml-base-q5_1.bin",
+                ),
+            };
+            let integrity = integrity(bytes, sha256)?;
+            validate_source(source_url, PublisherOrigin::HuggingFaceModel, integrity)?;
+            Ok(ReviewedWhisperModel {
+                profile,
+                integrity,
+                source_url,
+                file_name,
+            })
+        };
+    Ok([
+        reviewed(ReviewedAsrModel::Base)?,
+        reviewed(ReviewedAsrModel::BaseQ5_1)?,
+    ])
+}
+
+/// The profile of a model file with this exact size and SHA-256:
+/// [`AsrModelProfile::Unreviewed`] unless it equals a reviewed pin.
+#[must_use]
+pub fn whisper_model_profile(bytes: u64, sha256: [u8; 32]) -> AsrModelProfile {
+    reviewed_whisper_models()
+        .ok()
+        .and_then(|models| {
+            models.into_iter().find(|model| {
+                model.integrity.bytes() == bytes && model.integrity.sha256() == sha256
+            })
+        })
+        .map_or(AsrModelProfile::Unreviewed, |model| model.profile.profile())
 }
 
 fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
@@ -710,10 +786,7 @@ fn whisper_runtime_copies() -> Vec<ReviewedRuntimeCopy> {
 }
 
 fn model_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
-    let integrity = integrity(
-        147_951_465,
-        "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
-    )?;
+    let integrity = integrity(MODEL_BYTES, MODEL_SHA256)?;
     validate_source(MODEL_URL, PublisherOrigin::HuggingFaceModel, integrity)?;
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::WhisperModel,
@@ -788,12 +861,50 @@ mod tests {
     use std::collections::HashSet;
 
     use vsift_application::ManagedSetupAction;
-    use vsift_domain::{ManagedComponent, ManagedTarget};
+    use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
         ManagedCatalogueError, ReviewedUbuntuAction, accepted_ubuntu_catalogue,
-        detect_managed_target, validate_layout,
+        detect_managed_target, pinned_whisper_model, reviewed_whisper_models, validate_layout,
+        whisper_model_profile,
     };
+
+    /// D6: the quantized profile sits beside the default, in the same
+    /// repository, and a file is its profile only by exact size and digest.
+    #[test]
+    fn reviewed_models_are_distinct_pins_identified_only_by_exact_identity()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let [base, quantized] = reviewed_whisper_models()?;
+        assert_eq!(base.profile, ReviewedAsrModel::Base);
+        assert_eq!(base.integrity, pinned_whisper_model()?);
+        assert_eq!(quantized.profile, ReviewedAsrModel::BaseQ5_1);
+        assert_eq!(quantized.integrity.bytes(), 59_707_625);
+        assert_ne!(base.integrity.sha256(), quantized.integrity.sha256());
+        for model in [base, quantized] {
+            assert!(
+                model
+                    .source_url
+                    .starts_with("https://huggingface.co/ggerganov/whisper.cpp/resolve/")
+            );
+            assert!(model.source_url.ends_with(&format!("/{}", model.file_name)));
+            assert_eq!(
+                whisper_model_profile(model.integrity.bytes(), model.integrity.sha256()),
+                model.profile.profile()
+            );
+        }
+        assert_eq!(
+            whisper_model_profile(base.integrity.bytes(), quantized.integrity.sha256()),
+            AsrModelProfile::Unreviewed
+        );
+        assert_eq!(
+            whisper_model_profile(
+                quantized.integrity.bytes() + 1,
+                quantized.integrity.sha256()
+            ),
+            AsrModelProfile::Unreviewed
+        );
+        Ok(())
+    }
 
     #[test]
     fn accepted_catalogue_is_complete_unique_and_time_bounded()

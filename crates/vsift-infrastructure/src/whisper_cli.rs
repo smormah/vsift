@@ -32,16 +32,16 @@ use vsift_application::{
     AsrCancellation, RecognizerIdentity, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
 };
 use vsift_domain::{
-    AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, ChunkTime,
-    CueText, LanguageTag, PlannedChunk, ProviderChunkOutput, ProviderSegment, ProviderToken,
-    ProviderTokenKind, SPEECH_SAMPLE_RATE, Sha256Hex, TranscriptRejection,
+    AsrDecodingProfile, AsrModel, AsrProvider, AsrProviderBuild, ChunkTime, CueText, LanguageTag,
+    PlannedChunk, ProviderChunkOutput, ProviderSegment, ProviderToken, ProviderTokenKind,
+    SPEECH_SAMPLE_RATE, Sha256Hex, TranscriptRejection,
 };
 
 use crate::{
     HostIsolation, ProcessCancellation, ProcessError, ProcessRequest, ProcessRequestError,
     ProcessSupervisor, ProcessWorkingDirectory, SupervisorPolicy, TerminationReason,
-    TrustedExecutable, identify_whisper_build, pinned_whisper_model,
-    whisper_build::hash_file_bounded, whisper_build::hex,
+    TrustedExecutable, identify_whisper_build, whisper_build::hash_file_bounded,
+    whisper_build::hex, whisper_model_profile,
 };
 
 /// Retained standard output of one run; whisper prints its transcript there,
@@ -489,7 +489,8 @@ impl WhisperCli {
 
     /// Identifies the provider build and model as they are now, from their
     /// bytes: the executable's SHA-256, the model's size and SHA-256 compared
-    /// with the reviewed pinned model, the decoding profile and the threads.
+    /// with the reviewed pinned models (its profile), the decoding profile and
+    /// the threads.
     ///
     /// The model is hashed in full (the base model is about 148 MB), so a run
     /// calls this before its first chunk and after its last, not per chunk.
@@ -506,12 +507,7 @@ impl WhisperCli {
         let (bytes, sha256) = hash_file_bounded(&self.model, MAX_WHISPER_MODEL_BYTES)
             .await
             .map_err(|_| SpeechRecognitionError::ModelUnavailable)?;
-        let profile = match pinned_whisper_model() {
-            Ok(pinned) if pinned.bytes() == bytes && pinned.sha256() == sha256 => {
-                AsrModelProfile::Base
-            }
-            _ => AsrModelProfile::Unreviewed,
-        };
+        let profile = whisper_model_profile(bytes, sha256);
         Ok(RecognizerIdentity {
             provider: AsrProviderBuild::new(
                 AsrProvider::WhisperCpp,

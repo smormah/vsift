@@ -18,9 +18,9 @@ use command::{
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{JsonLines, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
-    Engine, EngineConfig, EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections,
-    FailureCode, HostIsolation, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
-    UserConfigurationLocation,
+    DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
+    EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, SessionRootLocation,
+    SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
 };
 use vsift_contract::{
     CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, LOCAL_ASR_MODEL_REMEDIATION,
@@ -153,6 +153,7 @@ where
                         ffprobe: arguments.ffprobe,
                         whisper: arguments.whisper,
                     },
+                    local_asr_budget: DEFAULT_LOCAL_ASR_CHECK_BUDGET,
                 };
                 let report = match engine.check_setup(request).await {
                     Ok(report) => report,
@@ -167,6 +168,7 @@ where
                 };
                 setup::present_setup_check(
                     report.diagnosis(),
+                    *report.local_asr(),
                     config.profile,
                     mode,
                     |dependency| report.lookup(dependency),

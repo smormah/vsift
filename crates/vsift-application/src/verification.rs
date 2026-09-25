@@ -9,6 +9,8 @@
 
 use std::future::Future;
 
+use vsift_domain::ReviewedAsrModel;
+
 use crate::AsrFailure;
 
 /// The media operation a verification exercised when it stopped.
@@ -333,11 +335,11 @@ where
 /// Outcome of checking a registered speech model file.
 ///
 /// Only identity is checked. Whether the model transcribes with the selected
-/// `whisper.cpp` build is proven once P07 supplies the transcription adapter.
+/// `whisper.cpp` build is proven by the local-ASR verification.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModelVerification {
-    /// Exact size and SHA-256 match a reviewed pinned model.
-    KnownPinned,
+    /// Exact size and SHA-256 match this reviewed pinned model profile.
+    KnownPinned(ReviewedAsrModel),
     /// The file is readable but is not a reviewed pinned model.
     Unrecognised,
     /// The file could not be read as a regular file.
@@ -349,7 +351,7 @@ impl ModelVerification {
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
-            Self::KnownPinned => "known_pinned",
+            Self::KnownPinned(_) => "known_pinned",
             Self::Unrecognised => "unrecognised",
             Self::Unreadable => "unreadable",
         }
@@ -369,6 +371,7 @@ mod tests {
         MediaToolVerificationCache, MediaToolVerifier, ModelVerification, VerificationRecord,
         VerificationRecordSkip, preflight_media_tools,
     };
+    use vsift_domain::ReviewedAsrModel;
 
     struct ScriptedVerifier {
         result: MediaToolVerification,
@@ -538,6 +541,9 @@ mod tests {
             MediaToolFailure::UnexpectedResult.identifier(),
             "unexpected_result"
         );
-        assert_eq!(ModelVerification::KnownPinned.identifier(), "known_pinned");
+        assert_eq!(
+            ModelVerification::KnownPinned(ReviewedAsrModel::BaseQ5_1).identifier(),
+            "known_pinned"
+        );
     }
 }

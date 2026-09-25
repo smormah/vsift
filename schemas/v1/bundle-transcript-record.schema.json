@@ -793,6 +793,7 @@
         "model_profile": {
           "enum": [
             "base",
+            "base_q5_1",
             "unreviewed"
           ]
         },

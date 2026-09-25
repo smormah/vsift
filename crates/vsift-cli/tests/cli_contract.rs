@@ -178,6 +178,53 @@ fn off_path_whisper_is_selectable_without_installing_or_disclosing_its_path()
     Ok(())
 }
 
+/// D4: `setup check` reports the registered model and why local ASR was not
+/// verified, keeps the v1 constant fields, and never discloses the model path.
+#[test]
+fn setup_check_reports_an_unreviewed_model_without_running_or_disclosing_it()
+-> Result<(), Box<dyn std::error::Error>> {
+    let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let base = isolated_config_base()?;
+    std::fs::create_dir_all(&base)?;
+    let model = base.join("ggml-unreviewed-model.bin");
+    std::fs::write(&model, b"not a reviewed whisper.cpp model")?;
+    let registered = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "configure-model", "--json", "--file"])
+        .arg(&model)
+        .output()?;
+    assert!(registered.status.success());
+
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
+        .args(["setup", "check", "--json", "--timeout-seconds", "5"])
+        .arg("--ffmpeg")
+        .arg(&binary)
+        .arg("--ffprobe")
+        .arg(&binary)
+        .arg("--whisper")
+        .arg(&binary)
+        .env("PATH", "")
+        .output()?;
+    let value = parse_stdout(&output)?;
+    let _ = std::fs::remove_dir_all(&base);
+
+    assert_eq!(value["verification_scope"], "executable_probe_only");
+    assert_eq!(value["local_asr_model"], "not_checked");
+    assert_eq!(
+        value["local_asr"],
+        serde_json::json!({
+            "model": {"status": "unrecognised", "profile": null},
+            "verification": {
+                "status": "not_run", "source": null, "not_run_reason": "model_not_pinned",
+                "check": null, "reason": null
+            }
+        })
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("ggml-unreviewed-model"));
+    assert!(!stdout.contains(&binary.to_string_lossy().to_string()));
+    Ok(())
+}
+
 #[test]
 fn invalid_explicit_selection_does_not_fall_back_to_path() -> Result<(), Box<dyn std::error::Error>>
 {

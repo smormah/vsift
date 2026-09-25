@@ -466,6 +466,8 @@ enum StoredAsrProvider {
 #[serde(rename_all = "snake_case")]
 enum StoredModelProfile {
     Base,
+    #[serde(rename = "base_q5_1")]
+    BaseQ5_1,
     Unreviewed,
 }
 
@@ -601,6 +603,7 @@ impl StoredAsrRun {
             executable_sha256: run.provider().executable_sha256().as_str().to_owned(),
             model_profile: match run.model().profile() {
                 AsrModelProfile::Base => StoredModelProfile::Base,
+                AsrModelProfile::BaseQ5_1 => StoredModelProfile::BaseQ5_1,
                 AsrModelProfile::Unreviewed => StoredModelProfile::Unreviewed,
             },
             model_sha256: run.model().sha256().as_str().to_owned(),
@@ -670,6 +673,7 @@ impl StoredAsrRun {
             model: AsrModel::new(
                 match self.model_profile {
                     StoredModelProfile::Base => AsrModelProfile::Base,
+                    StoredModelProfile::BaseQ5_1 => AsrModelProfile::BaseQ5_1,
                     StoredModelProfile::Unreviewed => AsrModelProfile::Unreviewed,
                 },
                 Sha256Hex::parse(self.model_sha256).ok()?,

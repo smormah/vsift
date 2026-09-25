@@ -11,7 +11,97 @@
     "profile": { "enum": ["desktop", "worker"] },
     "status": { "enum": ["ready", "degraded", "blocked"] },
     "verification_scope": { "const": "executable_probe_only" },
-    "local_asr_model": { "const": "not_checked" },
+    "local_asr_model": {
+      "description": "Kept constant for v1 compatibility; the local_asr object reports the model and its verification.",
+      "const": "not_checked"
+    },
+    "local_asr": {
+      "description": "Local speech recognition (added in P07 increment 3c). model: the registered model's identity against the reviewed pins. verification: whether whisper.cpp, the model and FFmpeg/FFprobe transcribed the reviewed speech clip built into VSift, from a recorded pass or run by this check within its own 60 s budget. Every detail field is present; those that do not apply to the status are null.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "verification"],
+      "properties": {
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "profile"],
+          "properties": {
+            "status": { "enum": ["not_selected", "unreadable", "unrecognised", "known_pinned"] },
+            "profile": { "enum": [null, "base", "base_q5_1"] }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "status": { "const": "known_pinned" },
+                "profile": { "enum": ["base", "base_q5_1"] }
+              }
+            },
+            {
+              "properties": {
+                "status": { "enum": ["not_selected", "unreadable", "unrecognised"] },
+                "profile": { "type": "null" }
+              }
+            }
+          ]
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "source", "not_run_reason", "check", "reason"],
+          "properties": {
+            "status": { "enum": ["verified", "failed", "not_run"] },
+            "source": { "enum": [null, "recorded", "ran_now"] },
+            "not_run_reason": {
+              "enum": [null, "media_tools_unavailable", "whisper_unavailable", "model_not_selected", "model_not_pinned"]
+            },
+            "check": {
+              "enum": [
+                null, "preparation", "fixture_probe", "planning", "recognizer_identity",
+                "audio_extraction", "recognition", "output_validation", "assembly", "transcript", "budget"
+              ]
+            },
+            "reason": {
+              "enum": [
+                null, "fixture_integrity", "workspace", "fixture_media", "unexpected_transcript",
+                "budget_exceeded", "invalid_range", "too_many_chunks", "model_changed",
+                "model_unavailable", "unpinned_model", "cancelled", "deadline", "busy",
+                "resource_limit", "audio_unavailable", "provider_failed", "unparseable_output",
+                "malformed_output", "abnormal_termination", "io", "invalid_run"
+              ]
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "status": { "const": "verified" },
+                "source": { "enum": ["recorded", "ran_now"] },
+                "not_run_reason": { "type": "null" },
+                "check": { "type": "null" },
+                "reason": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "failed" },
+                "source": { "type": "null" },
+                "not_run_reason": { "type": "null" },
+                "check": { "type": "string" },
+                "reason": { "type": "string" }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "not_run" },
+                "source": { "type": "null" },
+                "not_run_reason": { "type": "string" },
+                "check": { "type": "null" },
+                "reason": { "type": "null" }
+              }
+            }
+          ]
+        }
+      }
+    },
     "dependencies": {
       "type": "array",
       "minItems": 3,

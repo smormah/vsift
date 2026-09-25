@@ -34,3 +34,24 @@ Other systems may work but are unqualified until added by evidence and an update
 matrix. Limits and platform versions can change through an ADR when qualification
 findings justify it. Optional enrichment cannot become a hidden install or correctness
 dependency for core investigation.
+
+## 2026-09-25 note: measured default outcome (P07 increment 3c)
+
+**The measured default is the multilingual `base` model.** Maintainer decision D6
+proposed gates for it on 4 recognizer threads, and the maintainer settled the noise
+gate on 2026-09-25 after measurement ([record](../planning/p07-asr-qualification.md),
+Windows 11, Xeon E5-2698 v4):
+
+- Enforced: at most 10% pooled word error rate on clips without added noise
+  (measured 3.25%), and every spoken critical term found in every clip, noisy F08
+  included, except the reviewed known misses (none unexpected).
+- Reported, not enforced (they measure the host): real-time factor at most 0.5
+  (0.388, and 0.489 on a busier run) and `whisper-cli` peak memory at most 400 MiB
+  (338 MiB).
+- **Deferred:** a word-error-rate gate for noisy speech. F08 (61.5%, one 13-word
+  clip) is reported as a known limitation. Issue #150 builds a noisy-speech fixture
+  set, with accent and crosstalk, before any such gate is set.
+
+A second reviewed profile, `base_q5_1` (its q5_1 quantization, pinned at the
+accepted revision `5359861`), is an optional alternative measured alongside; it is
+not the default.

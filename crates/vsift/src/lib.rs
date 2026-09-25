@@ -71,6 +71,7 @@
 mod asr;
 mod engine;
 mod error;
+mod local_asr_check;
 mod sessions;
 mod setup;
 mod transcripts;
@@ -85,6 +86,7 @@ pub use error::{
     EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError,
     UserConfigurationError,
 };
+pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
     IngestOutcome, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
@@ -100,12 +102,13 @@ pub use verification::{
 
 pub use vsift_application::{
     AsrFailure, AsrFailureReason, AsrStage, Clock, ClockError, IdentifierGenerationError,
-    IdentifierSource, LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier,
-    MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure, MediaToolVerification,
-    MediaToolVerifier, ModelVerification, OpenSessionError, OpenSessionOutcome,
-    PlanAcceptanceError, RecognizerIdentity, RuntimeDiagnosis, SessionStorageError, SetupProfile,
-    SourceProbeError, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError,
-    TranscriptQueryError,
+    IdentifierSource, LocalAsrCheckFailure, LocalAsrCheckOutcome, LocalAsrModelStatus,
+    LocalAsrNotRunReason, LocalAsrSetupStatus, LocalAsrVerification, LocalAsrVerificationFailure,
+    LocalAsrVerificationSource, LocalAsrVerifier, MediaToolCheck, MediaToolFailure,
+    MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier, ModelVerification,
+    OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RecognizerIdentity,
+    RuntimeDiagnosis, SessionStorageError, SetupProfile, SourceProbeError, SpeechPcm,
+    SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError, TranscriptQueryError,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
@@ -122,7 +125,8 @@ pub use vsift_domain::{
 pub use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, ProviderChunkOutput,
-    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, Sha256Hex,
+    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
+    Sha256Hex,
 };
 pub use vsift_domain::{
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,

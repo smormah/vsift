@@ -9,6 +9,7 @@ use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, Runti
 mod asr;
 mod clock;
 mod identifiers;
+mod local_asr_setup;
 mod provisioning;
 mod session;
 mod storage;
@@ -28,6 +29,10 @@ pub use session::{
     StagedSessionSource,
 };
 
+pub use local_asr_setup::{
+    LocalAsrCheckFailure, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
+    LocalAsrSetupStatus, LocalAsrVerificationSource,
+};
 pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, ManagedPlanAvailability, ManagedSetupAction,
     ManagedSetupPlan, PlanAcceptanceError, ReviewedArchiveLimits, ReviewedArchiveLink,

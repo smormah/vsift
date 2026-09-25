@@ -8,71 +8,73 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
-complete. P07 is in progress: increments 1a-3b and the fuzz targets are done, the
-packet is not. Local checks: CI is the default Linux/macOS check; Docker only for
-platform code.
+complete. P07 is in progress: every increment up to 3b and the fuzz targets are
+merged; 3c, the last increment, is complete on its branch and in review; the packet
+is not complete yet. Local checks: CI is the default Linux/macOS check; Docker only
+for platform code.
 
-1. **Done:** 1a `vsift-contract` wire types (PR #126); 1b engine facade, thin CLI
+1. **Merged:** 1a `vsift-contract` wire types (PR #126); 1b engine facade, thin CLI
    (PR #127); 2 supplied transcripts (PR #129); 2b media-tool preflight (PR #133); 2c
-   JSONL evidence stream and bundle record schema (PR #134); speech fixtures (PRs
-   #138-#140, #142, #143); 3a local ASR core (PR #145); `cargo-fuzz` targets (PR #146).
-2. **In review: increment 3b (branch `p07/asr-retranscribe`).** `transcript
-   retranscribe` through the engine under decisions D1-D8: both preflights, a private
-   work directory in the session, complete spliced revisions with carried segments,
-   `transcript get --revision`, widened v1 schemas and version-2 records, typed
-   failures on existing codes, and the opt-in `p07_local_asr` checkpoint (passed
-   locally). [ADR 0017](../docs/decisions/0017-local-asr-through-whisper-cpp.md) is
-   **Accepted** (2026-09-25) with its six further decisions (empty-speech revision,
-   first audio stream, retranscribe stream shape, no Ctrl-C trap, 1 s verification
-   end bound, no range clamping). Includes the seam-merge fix found in 3c.
-3. **Next: increment 3c.** D4: `setup check` reports an additive `local_asr` object
-   (runs the verification within 60 s if none is recorded). D6: the `base-q5_1`
-   profile beside the pinned base, gates RTF <= 0.5, <= 400 MiB, WER <= 10% clean /
-   25% F08, the measured default, `docs/planning/p07-asr-qualification.md`, and an
-   opt-in CI workflow. T-04 accuracy and timing are measured there.
-4. **Still owed by P07 before the packet closes:** the packet completion record in the
-   ledger.
+   JSONL evidence stream (PR #134); speech fixtures (PRs #138-#140, #142, #143); 3a
+   local ASR core (PR #145); `cargo-fuzz` targets (PR #146); 3b `transcript
+   retranscribe` with the seam-merge fix (PR #149, `57a72d4`,
+   [ADR 0017](../docs/decisions/0017-local-asr-through-whisper-cpp.md) Accepted).
+2. **In review: 3c (branch `p07/asr-setup-profiles`, on `57a72d4`).** Whole increment
+   done and green locally:
+   - D4: `setup check` `local_asr` object (model identity and profile; verification
+     recorded, ran now within its own 60 s budget, failed with a typed check/reason,
+     or not run with the first missing piece). Legacy fields and exit status unchanged.
+   - D6: reviewed `base_q5_1` profile, pinned at HF revision `5359861` (maintainer
+     accepted 2026-09-25). `base` stays the default.
+   - T-04: test-only scoring, the opt-in `p07_asr_qualification` test and
+     `docs/planning/p07-asr-qualification.md`. Decided gates for `base`: clean WER
+     <= 10% and every spoken critical term (noisy included) except known misses are
+     enforced; RTF and memory reported; F08 WER reported, not gated (#150). `base`
+     passes: 3.25% clean WER, no unexpected miss, RTF 0.39, 338 MiB.
+   - Opt-in `P07 local ASR` workflow (Ubuntu 24.04, Windows 2025) and its staging helper.
+3. **Still owed by P07 before the packet closes:** merge 3c; then the supervisor
+   dispatches the `P07 local ASR` workflow on `main` as qualification evidence
+   (the first Linux run) and writes the packet completion record in the ledger.
 
-## Follow-ups (open issues before relying on them)
+## Tracked issues
+
+- #150: noisy-speech fixture set (with accent and crosstalk) before any noise WER
+  gate; F08 (13 words) is the only noisy clip today.
+- #148: every speech chunk rehashes the session's whole source copy before FFmpeg
+  reads it (linear in source size per chunk); needs a cheaper binding before P14.
+- #147: faster-whisper adapter (backlog); whisper.cpp stays the default.
+- #128: process-supervisor tests fail intermittently on Windows under workspace load
+  (passing alone). Add recurrences as evidence.
+- #144: on one throttled Windows runner the concurrent-preflight test exceeded the 5 s
+  session-root provisioning wait (not a regression). Add recurrences.
+
+## Other follow-ups
 
 - A creator killed mid-provisioning leaves an unmarked root refused until removed.
-- Every speech chunk rehashes the session's whole source copy before FFmpeg reads it
-  (the P04 check-before-use rule): linear in source size per chunk. Long sources need
-  a cheaper binding before the P14 load gates.
-- The base model starts a segment that follows leading silence at its audio start
-  (F09: 0.75 s, speech at 4.0 s). Measure in 3c; consider trimming leading silence.
-- Ctrl-C is not trapped by the CLI (Tokio `signal` would be a dependency change).
-- Model identity is hashed three times per run (about 0.3 s each in release); no
-  cache added. Revisit if 3c's larger models make it dominate.
+- F09: base starts a segment at its audio start after leading silence (0.75 s, not
+  4.0 s); consider trimming leading silence.
+- Ctrl-C is not trapped (Tokio `signal` would be a new dependency). The model is hashed
+  up to three times per run and twice per `setup check` (~0.3 s each); no cache.
+- The local-ASR checkpoint's word checks are written for `base`; `base_q5_1` hears
+  F05's "invoice" as "in voice", so the workflow measures q5_1 only in T-04.
 
 ## Open decisions (maintainer)
 
-- Local ASR, decided 2026-09-25: D1 request only through `transcript retranscribe`;
-  D2 widen v1 schemas in place; D3 complete spliced revisions, older ones via `--revision`;
-  D4 `setup check` `local_asr` object (3c); D5 refuse unpinned models; D6 `base-q5_1`
-  and gates (3c); D7 no progress events yet; D8 no tombstones.
-- faster-whisper adapter: backlog issue #147; whisper.cpp stays the default.
-- Crate names are confirmed (`vsift` facade, `vsift-contract`); a crates.io
-  availability check still precedes first publication.
+- Crate names confirmed (`vsift`, `vsift-contract`); crates.io check precedes publication.
 - Minimum-supported-Rust-version policy before the library is first published.
 - Whether and when to cut 0.x pre-releases after P09.
 - Whether a local MCP adapter is wanted after P12. The CLI and skill stay primary.
 
 ## Known issues and gates
 
-- Supplied-transcript import and local ASR need real tools, so their success paths
-  are opt-in (`--ignored`): `p07_transcript_e2e`, `p07_local_asr_e2e` (needs
-  `VSIFT_TEST_WHISPER_CLI`, `VSIFT_TEST_WHISPER_MODEL`, FFmpeg on `PATH`; use
-  `--release`), `engine_retranscribe`, `p07_local_asr` (infrastructure adapter test).
+- Real-tool success paths are opt-in (`--ignored`): `p07_transcript_e2e`,
+  `p07_local_asr_e2e` and `p07_asr_qualification` (need `VSIFT_TEST_WHISPER_CLI`,
+  `VSIFT_TEST_WHISPER_MODEL`, optionally `VSIFT_TEST_WHISPER_MODEL_Q5_1`, FFmpeg on
+  `PATH`; use `--release`), `engine_retranscribe`, `p07_local_asr`.
 - whisper.cpp v1.9.2 `-ojf` output was valid UTF-8 (F08, forced Japanese/Russian); a
   split multi-byte token fails the chunk as `unparseable_output`; no `-oj` fallback.
-- #128: process-supervisor tests failed intermittently on Windows under workspace
-  load (again on 2026-09-25: `p04_preserves_invalid_bytes...`, `p03_caps_stdout...`),
-  passing alone. Treat recurrences as evidence and add them to #128.
-- #144: on one throttled Windows runner the concurrent-preflight test exceeded the 5 s
-  session-root provisioning wait (not a regression). Add recurrences.
-- The unchanged P06 checkpoint test and the stream contract tests use application
-  and infrastructure types, so the CLI keeps both as development dependencies.
+- The P06 checkpoint test and the stream contract tests use application and
+  infrastructure types, so the CLI keeps both as development dependencies.
 - FS-01: strict OS/storage-crash durability is unqualified. Durable requests fail
   closed until P10/P11/P14 run the Ubuntu/ext4 campaign (ADR 0010).
 - Baseline findings B-01..B-11 close through their mapped packets.

@@ -333,6 +333,24 @@ async fn unpinned_models_are_refused_before_any_work() -> TestResult {
     Ok(())
 }
 
+/// D6: the quantized base profile is pinned, so the run goes past the model
+/// check (here to the missing session root) instead of being refused.
+#[tokio::test]
+async fn the_quantized_pinned_profile_is_not_refused() -> TestResult {
+    let harness = Harness::passing(AsrModelProfile::BaseQ5_1, Speech::Words)?;
+    let engine = harness.engine();
+    harness.stand_in_tools(&engine)?;
+    let session = SessionId::parse("ses_0123456789abcdef")?;
+    let error = engine
+        .retranscribe(request(&session, None))
+        .await
+        .err()
+        .ok_or("a run without a session root succeeded")?;
+    assert!(!matches!(error, EngineError::LocalAsrModelNotPinned));
+    assert!(matches!(error, EngineError::SessionRoot(_)), "{error:?}");
+    Ok(())
+}
+
 /// Missing whisper.cpp or model, a model file `VSift` cannot identify as
 /// pinned, and malformed ranges all fail before anything runs.
 #[tokio::test]

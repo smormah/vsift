@@ -43,6 +43,7 @@ const F01_SPEECH_SOURCE: &str =
     "src_sha256_f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881";
 const WHISPER_SHA256: &str = "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d";
 const BASE_MODEL_SHA256: &str = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe";
+const Q5_1_MODEL_SHA256: &str = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898";
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
@@ -97,10 +98,24 @@ fn range(from: u64, to: u64) -> Built<TimeRange> {
 }
 
 fn run(source: &SourceSegment, covered: TimeRange, outcome: AsrChunkOutcome) -> Built<AsrRun> {
+    run_as(
+        AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(BASE_MODEL_SHA256)?),
+        source,
+        covered,
+        outcome,
+    )
+}
+
+fn run_as(
+    model: AsrModel,
+    source: &SourceSegment,
+    covered: TimeRange,
+    outcome: AsrChunkOutcome,
+) -> Built<AsrRun> {
     let planned = plan_chunks(source.id(), covered, ChunkPlan::R0)?;
     Ok(AsrRun::new(AsrRunParts {
         provider: AsrProviderBuild::new(AsrProvider::WhisperCpp, Sha256Hex::parse(WHISPER_SHA256)?),
-        model: AsrModel::new(AsrModelProfile::Base, Sha256Hex::parse(BASE_MODEL_SHA256)?),
+        model,
         decoding: AsrDecodingProfile::R0V1,
         plan: ChunkPlan::R0,
         threads: NonZeroU16::new(4).ok_or("zero")?,
@@ -211,6 +226,45 @@ fn the_frozen_local_asr_record_example_is_the_encoded_spliced_revision() -> Test
     let plain: serde_json::Value = serde_json::from_slice(&encode_transcript_record(&first)?)?;
     assert!(plain.get("inherited").is_none());
     assert!(conforms_to_record_schema(&plain)?);
+    Ok(())
+}
+
+/// D6: a run with the quantized profile is recorded as `base_q5_1`, conforms
+/// to the published record schema and decodes to the same revision.
+#[test]
+fn a_quantized_profile_run_round_trips_as_base_q5_1() -> TestResult {
+    let session = SessionId::parse(EXAMPLE_SESSION)?;
+    let source_id = SourceId::parse(F01_SPEECH_SOURCE)?;
+    let source = whole_file_source_segment(&source_id, MediaTime::from_micros(6 * SECOND))?;
+    let silent = AsrChunkOutcome::Silent {
+        audio: source.range(),
+    };
+    let revision = build_asr_revision(AsrRevisionRequest {
+        session_id: &session,
+        source_id: &source_id,
+        source_segment: &source,
+        number: NonZeroU32::MIN,
+        transcription: AsrTranscription {
+            run: run_as(
+                AsrModel::new(
+                    AsrModelProfile::BaseQ5_1,
+                    Sha256Hex::parse(Q5_1_MODEL_SHA256)?,
+                ),
+                &source,
+                source.range(),
+                silent,
+            )?,
+            language: None,
+            segments: Vec::new(),
+            warnings: TranscriptWarnings::default(),
+        },
+        splice: None,
+    })?;
+    let encoded = encode_transcript_record(&revision)?;
+    let value: serde_json::Value = serde_json::from_slice(&encoded)?;
+    assert_eq!(value["run"]["model_profile"], "base_q5_1");
+    assert!(conforms_to_record_schema(&value)?);
+    assert_eq!(decode_transcript_record(&encoded)?, revision);
     Ok(())
 }
 

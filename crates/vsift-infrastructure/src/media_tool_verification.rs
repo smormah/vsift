@@ -20,12 +20,13 @@ use vsift_application::{
 };
 use vsift_domain::{
     ArtifactIntegrity, DurabilityRequirement, MediaDescription, MediaSelection, MediaStreamKind,
-    MediaTime, OperationId, SessionId, TimeRange,
+    MediaTime, OperationId, ReviewedAsrModel, SessionId, TimeRange,
 };
 
 use crate::{
-    ExtractedAudio, ExtractedFrame, FfmpegMedia, FilesystemSessionStore, HostIsolation, MediaError,
-    MediaProviderConformance, ProcessCancellation, SourceSnapshot, file_lock::HeldFileLock,
+    ExtractedAudio, ExtractedFrame, FfmpegMedia, FilesystemSessionStore, HostIsolation,
+    ManagedCatalogueError, MediaError, MediaProviderConformance, ProcessCancellation,
+    SourceSnapshot, file_lock::HeldFileLock, reviewed_whisper_models,
 };
 
 /// The reviewed synthetic F01 fixture, identical to `fixtures/corpus/generated/F01.mp4`.
@@ -180,12 +181,16 @@ impl MediaToolVerifier for FixtureMediaToolVerifier {
     }
 }
 
-/// Checks a registered model file against the reviewed pinned model.
+/// Checks a registered model file against the reviewed pinned models.
 ///
-/// A size mismatch is decided without reading the file, so an unrelated large
-/// file is not hashed. A matching size is hashed in bounded chunks.
+/// A size that matches no pin is decided without reading the file, so an
+/// unrelated large file is not hashed. A matching size is hashed in bounded
+/// chunks, and the profile is the pin whose size and digest both match.
 #[must_use]
-pub fn verify_model_file(path: &Path, pinned: ArtifactIntegrity) -> ModelVerification {
+pub fn verify_model_file(
+    path: &Path,
+    pinned: &[(ReviewedAsrModel, ArtifactIntegrity)],
+) -> ModelVerification {
     let Ok(file) = fs::File::open(path) else {
         return ModelVerification::Unreadable;
     };
@@ -195,14 +200,36 @@ pub fn verify_model_file(path: &Path, pinned: ArtifactIntegrity) -> ModelVerific
     if !metadata.is_file() {
         return ModelVerification::Unreadable;
     }
-    if metadata.len() != pinned.bytes() {
+    let size = metadata.len();
+    if !pinned
+        .iter()
+        .any(|(_, integrity)| integrity.bytes() == size)
+    {
         return ModelVerification::Unrecognised;
     }
-    match bounded_sha256(file, pinned.bytes()) {
-        Ok(Some(digest)) if digest == pinned.sha256() => ModelVerification::KnownPinned,
-        Ok(_) => ModelVerification::Unrecognised,
+    match bounded_sha256(file, size) {
+        Ok(Some(digest)) => pinned
+            .iter()
+            .find(|(_, integrity)| integrity.bytes() == size && integrity.sha256() == digest)
+            .map_or(ModelVerification::Unrecognised, |(profile, _)| {
+                ModelVerification::KnownPinned(*profile)
+            }),
+        Ok(None) => ModelVerification::Unrecognised,
         Err(_) => ModelVerification::Unreadable,
     }
+}
+
+/// Identifies a registered model file against every reviewed pinned
+/// whisper.cpp model (maintainer decisions D5 and D6).
+///
+/// # Errors
+///
+/// Fails only when the built-in reviewed model pins are malformed.
+pub fn identify_whisper_model_file(
+    path: &Path,
+) -> Result<ModelVerification, ManagedCatalogueError> {
+    let pins = reviewed_whisper_models()?.map(|model| (model.profile, model.integrity));
+    Ok(verify_model_file(path, &pins))
 }
 
 /// Returns the digest when exactly `expected_bytes` were read, or `None` otherwise.
@@ -433,7 +460,7 @@ mod tests {
     use vsift_application::{MediaToolFailure, ModelVerification};
     use vsift_domain::{
         ArtifactIntegrity, DisplayRotation, FrameDimensions, FrameTiming, MediaDecodeSupport,
-        MediaDescription, MediaStream, MediaStreamKind, MediaTime, TimeRange,
+        MediaDescription, MediaStream, MediaStreamKind, MediaTime, ReviewedAsrModel, TimeRange,
     };
 
     use super::{
@@ -673,10 +700,26 @@ mod tests {
         let directory = TempDir::new()?;
         let pinned_bytes = b"reviewed model bytes";
         let digest = lowercase_hex(&Sha256::digest(pinned_bytes));
-        let pinned =
-            ArtifactIntegrity::from_sha256_hex(u64::try_from(pinned_bytes.len())?, &digest)?;
+        let quantized_bytes = b"quantized bytes";
+        let quantized_digest = lowercase_hex(&Sha256::digest(quantized_bytes));
+        let pins = [
+            (
+                ReviewedAsrModel::Base,
+                ArtifactIntegrity::from_sha256_hex(u64::try_from(pinned_bytes.len())?, &digest)?,
+            ),
+            (
+                ReviewedAsrModel::BaseQ5_1,
+                ArtifactIntegrity::from_sha256_hex(
+                    u64::try_from(quantized_bytes.len())?,
+                    &quantized_digest,
+                )?,
+            ),
+        ];
+        let pinned = &pins[..];
         let known = directory.0.join("known.bin");
         fs::write(&known, pinned_bytes)?;
+        let quantized = directory.0.join("quantized.bin");
+        fs::write(&quantized, quantized_bytes)?;
         let same_size = directory.0.join("same-size.bin");
         fs::write(&same_size, b"reviewed model BYTES")?;
         let other_size = directory.0.join("other-size.bin");
@@ -684,7 +727,11 @@ mod tests {
 
         assert_eq!(
             verify_model_file(&known, pinned),
-            ModelVerification::KnownPinned
+            ModelVerification::KnownPinned(ReviewedAsrModel::Base)
+        );
+        assert_eq!(
+            verify_model_file(&quantized, pinned),
+            ModelVerification::KnownPinned(ReviewedAsrModel::BaseQ5_1)
         );
         assert_eq!(
             verify_model_file(&same_size, pinned),

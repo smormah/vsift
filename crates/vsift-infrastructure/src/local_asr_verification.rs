@@ -12,7 +12,7 @@
 //! window (ADR 0017). The fixture is embedded so the check works without the
 //! repository.
 
-use std::{fs, path::Path};
+use std::{fs, future::Future, path::Path, time::Duration};
 
 use sha2::{Digest, Sha256};
 use vsift_application::{
@@ -140,6 +140,32 @@ pub fn local_asr_fingerprint(
         LocalAsrFiles::HostSupplied => field(&mut hasher, b"host_supplied"),
     }
     Some(MediaToolFingerprint::from_digest(hasher.finalize().into()))
+}
+
+/// How long cancelled work may take to stop after its budget ends before it
+/// is abandoned. Supervised processes observe cancellation within
+/// milliseconds; the grace covers removing their workspace.
+const BUDGET_STOP_GRACE: Duration = Duration::from_secs(5);
+
+/// Runs `work` for at most `budget`, returning `None` when the budget ends
+/// first.
+///
+/// On expiry `cancellation` fires, so every supervised process `work` started
+/// is stopped and its workspace removed, and `work` gets a bounded grace to
+/// finish doing so before it is dropped. `setup check` bounds its local-ASR
+/// verification this way, separately from its executable probe timeout.
+pub async fn run_within_budget<F: Future>(
+    budget: Duration,
+    cancellation: &ProcessCancellation,
+    work: F,
+) -> Option<F::Output> {
+    let mut work = std::pin::pin!(work);
+    if let Ok(output) = tokio::time::timeout(budget, &mut work).await {
+        return Some(output);
+    }
+    cancellation.cancel();
+    let _ = tokio::time::timeout(BUDGET_STOP_GRACE, &mut work).await;
+    None
 }
 
 /// Verifies a whisper.cpp CLI and model against the embedded speech fixture.
@@ -333,11 +359,45 @@ mod tests {
 
     use super::{
         F01_SPEECH, F01_SPEECH_BYTES, F01_SPEECH_SHA256, LocalAsrFiles, check_transcript,
-        local_asr_fingerprint, normalised,
+        local_asr_fingerprint, normalised, run_within_budget,
     };
-    use crate::{HostIsolation, MediaToolVerificationAuthority};
+    use crate::{HostIsolation, MediaToolVerificationAuthority, ProcessCancellation};
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    #[tokio::test]
+    async fn work_within_its_budget_completes_and_is_not_cancelled() {
+        let cancellation = ProcessCancellation::new();
+        let output = run_within_budget(std::time::Duration::from_secs(5), &cancellation, async {
+            7
+        })
+        .await;
+        assert_eq!(output, Some(7));
+        assert!(!cancellation.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn work_past_its_budget_is_cancelled_and_allowed_to_stop() {
+        let cancellation = ProcessCancellation::new();
+        let observed = cancellation.clone();
+        let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop = std::sync::Arc::clone(&stopped);
+        // Work that runs until it is cancelled, as a supervised process does.
+        let work = async move {
+            while !observed.is_cancelled() {
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+            stop.store(true, std::sync::atomic::Ordering::SeqCst);
+            7
+        };
+        let started = std::time::Instant::now();
+        let output =
+            run_within_budget(std::time::Duration::from_millis(20), &cancellation, work).await;
+        assert_eq!(output, None);
+        assert!(cancellation.is_cancelled());
+        assert!(stopped.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    }
 
     const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 

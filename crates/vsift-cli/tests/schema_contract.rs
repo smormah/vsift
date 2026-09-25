@@ -33,6 +33,10 @@ fn every_published_example_validates_against_its_schema() -> Result<(), Box<dyn 
             "examples/setup-check.blocked.json",
         ),
         (
+            "setup-check-response.schema.json",
+            "examples/setup-check.local-asr.json",
+        ),
+        (
             "operation-response.schema.json",
             "examples/operation-error.json",
         ),
@@ -58,6 +62,10 @@ fn strict_schemas_reject_unknown_fields() -> Result<(), Box<dyn std::error::Erro
         (
             "setup-check-response.schema.json",
             "examples/setup-check.blocked.json",
+        ),
+        (
+            "setup-check-response.schema.json",
+            "examples/setup-check.local-asr.json",
         ),
         (
             "operation-response.schema.json",
@@ -260,6 +268,7 @@ fn additive_setup_fields_do_not_invalidate_the_original_v1_payload()
         .ok_or_else(|| io::Error::other("setup example is not an object"))?;
     object.remove("verification_scope");
     object.remove("local_asr_model");
+    object.remove("local_asr");
     let dependencies = object
         .get_mut("dependencies")
         .and_then(Value::as_array_mut)
