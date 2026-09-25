@@ -23,6 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   configure-model` like the base model; its identity selects the profile, and every
   revision records which one ran. The base model stays the default and the only model
   in the managed setup plan.
+- Measured speech accuracy, speed and memory for both models, recorded in
+  `docs/planning/p07-asr-qualification.md`. The base model is confirmed as the
+  default: on clean speech it gets 3.25% of words wrong and hears every key term,
+  runs at 0.39 times real time on 4 threads and peaks at 338 MiB. On noisy speech only
+  the key terms are checked; its overall word accuracy there (61.5% errors on one
+  short noisy clip) is a known limitation until a larger noisy test set exists
+  (issue #150).
 - An opt-in `P07 local ASR` workflow (manual and weekly) runs the local-ASR
   checkpoint and the new accuracy, timing and memory qualification on Ubuntu 24.04
   and Windows with the reviewed whisper.cpp v1.9.2 builds and both pinned models,

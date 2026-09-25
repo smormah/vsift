@@ -28,10 +28,12 @@
 //!   by `PowerShell` `Get-Process`; on Linux `VmHWM` from `/proc/<pid>/status`
 //!   sampled every 100 ms. Other platforms report it as not measured.
 //!
-//! The D6 accuracy gates are enforced for the base profile: pooled word error
-//! rate of the clips without added noise at most 10%, F08 (noisy, English and
-//! Spanish) at most 25%, and every spoken critical term found except the
-//! reviewed known misses. The resource gates (real-time factor at most 0.5,
+//! The accuracy gates decided for the base profile (maintainer, 2026-09-25) are
+//! enforced: pooled word error rate of the clips without added noise at most
+//! 10%, and every spoken critical term found, in every clip including the noisy
+//! F08, except the reviewed known misses. F08's word error rate is reported as
+//! a known limitation and not gated until a noisy-speech fixture set exists
+//! (issue #150). The resource gates (real-time factor at most 0.5,
 //! peak memory at most 400 MiB) are evaluated and reported, not enforced,
 //! because they measure the host. The quantized profile is reported only. The
 //! report is written to `.vsift/e2e-runs/p07-asr-qualification-<run>/`.
@@ -87,7 +89,8 @@ const LOAD_TIME_RUNS: usize = 3;
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(100);
 /// D6 gates for the base profile, in basis points where they are rates.
 const CLEAN_WER_GATE_BP: usize = 1_000;
-const NOISY_WER_GATE_BP: usize = 2_500;
+/// Why F08's word error rate is reported but not gated.
+const NOISY_WER_NOT_GATED: &str = "known limitation: one 13-word noisy clip is too small a basis for a word error rate gate; noisy speech is gated on critical terms only until the noisy-speech fixture set of issue #150 exists (maintainer decision, 2026-09-25)";
 const RTF_GATE_MILLI: u128 = 500;
 const PEAK_MEMORY_GATE_BYTES: u64 = 400 * 1024 * 1024;
 const MIB: u64 = 1024 * 1024;
@@ -802,7 +805,6 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
         let load_ms = median(load_times.clone()).ok_or("no load time")?;
 
         let clean_ok = clean.wer_basis_points() <= CLEAN_WER_GATE_BP;
-        let noisy_ok = noisy.wer_basis_points() <= NOISY_WER_GATE_BP;
         let terms_ok = unexpected.is_empty();
         let rtf_ok = rtf_milli <= RTF_GATE_MILLI;
         let memory_ok = peak.map(|bytes| bytes <= PEAK_MEMORY_GATE_BYTES);
@@ -811,12 +813,6 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
                 failures.push(format!(
                     "base clean WER {} exceeds 10%",
                     percent(clean.wer_basis_points())
-                ));
-            }
-            if !noisy_ok {
-                failures.push(format!(
-                    "base F08 WER {} exceeds 25%",
-                    percent(noisy.wer_basis_points())
                 ));
             }
             if !terms_ok {
@@ -844,14 +840,15 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
                     "errors": clean.errors(),
                     "wer_percent": percent(clean.wer_basis_points()),
                     "gate": "<= 10%",
+                    "gated": true,
                     "met": clean_ok,
                 },
                 "f08_noisy": {
                     "reference_words": noisy.reference_words,
                     "errors": noisy.errors(),
                     "wer_percent": percent(noisy.wer_basis_points()),
-                    "gate": "<= 25%",
-                    "met": noisy_ok,
+                    "gated": false,
+                    "reason": NOISY_WER_NOT_GATED,
                 },
                 "critical_terms": {
                     "unexpected_misses": unexpected,
@@ -859,6 +856,8 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
                         .iter()
                         .map(|(fixture, term)| format!("{fixture} {term}"))
                         .collect::<Vec<_>>(),
+                    "gate": "every spoken critical term in every clip, noisy included, except the reviewed known misses",
+                    "gated": true,
                     "met": terms_ok,
                 },
                 "fixtures": fixtures,
@@ -873,6 +872,8 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
                 "runs_ms": timings.iter().map(Duration::as_millis).collect::<Vec<_>>(),
                 "clip_duration_ms": timing_duration_us / 1_000,
                 "gate": "<= 0.5",
+                "gated": false,
+                "reason": "reported, not enforced: it measures the host",
                 "met": rtf_ok,
             },
             "peak_memory": {
@@ -880,6 +881,8 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
                 "mib": peak.map(|bytes| bytes / MIB),
                 "method": method,
                 "gate": "<= 400 MiB",
+                "gated": false,
+                "reason": "reported, not enforced: it measures the host",
                 "met": memory_ok,
             },
         }));
@@ -906,8 +909,9 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
             "duration_ms": timing_duration_us / 1_000,
         },
         "coverage_gaps": [
-            "accented speech is not in the corpus",
-            "crosstalk (overlapping speakers) is not in the corpus",
+            "accented speech is not in the corpus (issue #150)",
+            "crosstalk (overlapping speakers) is not in the corpus (issue #150)",
+            "noisy speech is one 13-word clip (F08), so its word error rate is not gated (issue #150)",
             "every clip is synthetic (Kokoro) speech; no human recordings"
         ],
         "profiles": profiles,
@@ -926,6 +930,6 @@ async fn local_asr_accuracy_timing_and_memory() -> TestResult {
     if failures.is_empty() {
         Ok(())
     } else {
-        Err(format!("D6 accuracy gates not met: {failures:?}").into())
+        Err(format!("base accuracy gates not met: {failures:?}").into())
     }
 }

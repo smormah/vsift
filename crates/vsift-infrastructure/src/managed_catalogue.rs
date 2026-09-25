@@ -34,6 +34,7 @@ const MODEL_SHA256: &str = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df40
 /// pins the repository's newest revision, `5359861` (2024-10-29), at which
 /// `ggml-base.bin` is byte-identical to the base pin above (same Git LFS
 /// SHA-256): both reviewed models exist together at one immutable revision.
+/// The maintainer accepted this pin revision on 2026-09-25.
 const MODEL_Q5_1_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin";
 const MODEL_Q5_1_BYTES: u64 = 59_707_625;
 const MODEL_Q5_1_SHA256: &str = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898";

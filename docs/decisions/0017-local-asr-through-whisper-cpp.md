@@ -228,17 +228,17 @@ These were not settled by D1–D8; each follows the existing contracts most clos
   bytes, SHA-256 `422f1ae4…a8898`). Hugging Face revision `80da2d8` (the base pin)
   has no quantized files, so this pins revision `5359861` of the same repository,
   where `ggml-base.bin` is byte-identical to the base pin; the q5_1 LFS SHA-256 was
-  verified against a download from that revision. Section 4 now reads "a reviewed
-  pinned profile" for either; the profile is decided by file identity, recorded in
-  `model_profile` and bound into the verification fingerprint, so a pass for one
-  profile never stands in for the other. Only `base` is in the managed plan.
-- **Seam merge fix (section 3).** A cut segment is replaced by a neighbour-chunk
-  segment only when that segment spans the cut segment's midpoint; merely
-  overlapping it (the previous sentence ending just inside) no longer counts. With
-  `base_q5_1` the old rule dropped a whole sentence from both chunks without a
-  warning; the regression test and the record describe it.
-- **T-04.** Accuracy, timing and memory are measured by the opt-in
-  `p07_asr_qualification` test ([record](../planning/p07-asr-qualification.md)):
-  `base` meets the clean-speech, critical-term, real-time (0.388) and memory
-  (338 MiB) gates and misses the F08 WER gate (61.5%). The default is a maintainer
-  decision ([ADR 0005 note](0005-r0-scope-and-qualification-profiles.md)).
+  verified against a download from that revision. The maintainer accepted this pin
+  revision on 2026-09-25. Section 4 applies to both profiles: the profile is decided
+  by file identity, recorded in `model_profile` and bound into the verification
+  fingerprint, so a pass for one profile never stands in for the other. Only `base`
+  is in the managed plan.
+- **T-04 and the default (decided 2026-09-25).** `base` stays the default. The
+  opt-in `p07_asr_qualification` test ([record](../planning/p07-asr-qualification.md))
+  enforces, for `base`, at most 10% pooled word error rate on clips without added
+  noise and every spoken critical term (noisy F08 included) except the reviewed
+  known misses. F08's word error rate is reported as a known limitation and not
+  gated until a noisy-speech fixture set exists (issue #150); real-time factor and
+  peak memory are reported. `base` passes these gates
+  ([ADR 0005 note](0005-r0-scope-and-qualification-profiles.md)). The measurement
+  also found the seam-merge case now described in section 3.

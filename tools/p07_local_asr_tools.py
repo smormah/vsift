@@ -28,7 +28,8 @@ from p06_windows_candidate_smoke import CandidateRejected, verified_download
 # The two reviewed models, identical to reviewed_whisper_models() in
 # crates/vsift-infrastructure/src/managed_catalogue.rs. The q5_1 revision is
 # the repository's newest, where ggml-base.bin is byte-identical to the base
-# pin at revision 80da2d8 (which predates the quantized files).
+# pin at revision 80da2d8 (which predates the quantized files); the maintainer
+# accepted that pin revision on 2026-09-25.
 MODELS = {
     "base": (windows.MODEL_URL, windows.MODEL_SIZE, windows.MODEL_HASH, "ggml-base.bin"),
     "base_q5_1": (

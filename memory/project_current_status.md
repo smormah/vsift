@@ -16,7 +16,7 @@ Today it can:
 - import an existing SRT or WebVTT transcript with the video, aligned by an explicit
   offset;
 - **transcribe the video's speech itself with whisper.cpp** (`transcript
-  retranscribe`, P07 increment 3b, in review): the whole video or one range, into a new
+  retranscribe`, P07 increment 3b, merged): the whole video or one range, into a new
   revision that keeps earlier citations valid;
 - return timestamped transcript segments for a time range, from the newest revision
   or any earlier one, as one page or as a JSON Lines stream of keyed evidence records;
@@ -26,11 +26,11 @@ Today it can:
   including the content of their transcript records;
 - keep every folder it creates private to the user, whatever the parent folder grants.
 
-Increments 3b (PR #149, ADR 0017 Proposed) and 3c (branch `p07/asr-setup-profiles`,
-on top of 3b) are complete on their branches and await review. The P07 packet is not
-complete: the local-ASR default is undecided because the base model fails the F08
-accuracy gate (below), and the Linux workflow run, the merges and the packet record
-remain. Search and visuals are P08-P09.
+Increment 3b is merged (PR #149, ADR 0017 Accepted). Increment 3c, the last one, is
+complete on branch `p07/asr-setup-profiles` and in review: `setup check` local-ASR
+reporting, the `base_q5_1` profile and the measured default (`base`, passing the
+decided gates). The P07 packet is not complete until 3c merges, the `P07 local ASR`
+workflow runs on `main` and the ledger record is written. Search and visuals are P08-P09.
 
 ## What works (public CLI)
 
@@ -81,15 +81,16 @@ remain. Search and visuals are P08-P09.
 
 ## Local-ASR qualification (P07 increment 3c)
 
-- Profiles by file identity: `base` (148 MB, default) and `base_q5_1` (60 MB, pinned at
-  HF revision `5359861` of the same repository; base's revision has no quantized
-  files). Only `base` is in the managed plan.
+- Profiles by file identity: `base` (148 MB, the measured default) and `base_q5_1`
+  (60 MB, pinned at HF revision `5359861`, accepted 2026-09-25). Only `base` is in
+  the managed plan.
+- Decided gates for `base` (2026-09-25): enforced clean WER <= 10% and every spoken
+  critical term (noisy included) except known misses; RTF and memory reported; F08
+  WER reported as a known limitation, not gated, until #150's noisy fixtures exist.
 - Measured on Windows 11, Xeon E5-2698 v4, 4 threads
-  ([record](../docs/planning/p07-asr-qualification.md)): `base` RTF 0.388, 338 MiB,
-  3.25% clean WER, no unexpected critical-term miss, **F08 61.5% (gate 25%, not met)**;
-  `base_q5_1` RTF 0.409, 250 MiB, 4.06%, F08 46.2%. Default decision is open.
-- A seam-merge bug that dropped a sentence starting at a chunk's first sample (found
-  with q5_1) is fixed. The workflow reproducing all this has not run yet.
+  ([record](../docs/planning/p07-asr-qualification.md)): `base` 3.25% clean WER, no
+  unexpected miss, RTF 0.39, 338 MiB, F08 61.5%; `base_q5_1` 4.06%, 0.41, 250 MiB.
+  The `P07 local ASR` workflow has not run yet (first run on `main` after merge).
 
 ## Evidence stream and private folders
 
@@ -124,7 +125,7 @@ remain. Search and visuals are P08-P09.
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
-| P07 | In progress: 1a-3a and fuzz merged; 3b in review (ADR 0017 Proposed); 3c done on branch; default undecided (F08) |
+| P07 | In progress: 1a-3b and fuzz merged; 3c in review; then workflow run, ledger record |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
@@ -139,11 +140,10 @@ files' sizes; `fuzz/` is the fuzz harness. Largest: `filesystem_session_store.rs
 ## Quality evidence
 
 - 3c, Windows 11: fmt, strict Clippy, rustdoc with warnings denied, governance, the fuzz
-  seed replay and the workspace tests pass (see the PR for counts and any #128 flake);
-  opt-in: `setup check` verified local ASR for both profiles (ran now, then recorded),
-  and the qualification numbers above.
-- 3b, Windows 11: the same gates; opt-in `p07_local_asr` passed all nine stages in 64 s
-  (about 7.5 s per short clip once verified); the real two-chunk seam kept every word once.
+  seed replay, the Python tool tests and the workspace tests pass (counts in the PR);
+  opt-in release runs: `p07_asr_qualification` passes for `base`, the local-ASR
+  checkpoint passes with `base` (its `setup check` stage verified local ASR: ran now,
+  then recorded), and the adapter test passes.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. Qualification records are in `docs/planning/`; history in git,

@@ -343,7 +343,7 @@ pinned profile runs, and its identity decides the profile (no configuration fiel
 does): `base`, the multilingual whisper.cpp base model (`ggml-base.bin`, 147,951,465
 bytes, the default), or `base_q5_1`, its 5-bit quantization (`ggml-base-q5_1.bin`,
 59,707,625 bytes, SHA-256 `422f1ae4…a8898`, from the same Hugging Face repository at
-revision `5359861`). Any other file is refused before any work with
+revision `5359861`, a pin the maintainer accepted on 2026-09-25). Any other file is refused before any work with
 `MISSING_CAPABILITY`. The profile is recorded in every revision's `local_asr`
 provenance (`model_profile`). The order is part of the contract: the range is checked, the
 tools and model are resolved and identified, the session is checked (it must be open

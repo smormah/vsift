@@ -37,15 +37,21 @@ dependency for core investigation.
 
 ## 2026-09-25 note: measured default outcome (P07 increment 3c)
 
-Maintainer decision D6 proposed the gates for the `base` default on 4 threads:
-real-time factor at most 0.5, `whisper-cli` peak memory at most 400 MiB, word error
-rate at most 10% on clean clips and at most 25% on F08, and every spoken critical
-term except reviewed known misses. It also added a reviewed `base_q5_1` profile
-(the q5_1 quantization of the same model). Measured on Windows 11, Xeon E5-2698 v4
-([record](../planning/p07-asr-qualification.md)): `base` has a real-time factor of
-0.388, 338 MiB peak memory, 3.25% pooled WER without noise and no unexpected
-critical-term miss, but **61.5% WER on F08**, so it does not meet every gate;
-`base_q5_1` also misses F08 (46.2%). `base` therefore is not yet qualified as the
-default under the gates as written. It stays the pinned default in the reviewed
-plan and the command until the maintainer decides between the options in the
-record; this note records the outcome, not that decision.
+**The measured default is the multilingual `base` model.** Maintainer decision D6
+proposed gates for it on 4 recognizer threads, and the maintainer settled the noise
+gate on 2026-09-25 after measurement ([record](../planning/p07-asr-qualification.md),
+Windows 11, Xeon E5-2698 v4):
+
+- Enforced: at most 10% pooled word error rate on clips without added noise
+  (measured 3.25%), and every spoken critical term found in every clip, noisy F08
+  included, except the reviewed known misses (none unexpected).
+- Reported, not enforced (they measure the host): real-time factor at most 0.5
+  (0.388, and 0.489 on a busier run) and `whisper-cli` peak memory at most 400 MiB
+  (338 MiB).
+- **Deferred:** a word-error-rate gate for noisy speech. F08 (61.5%, one 13-word
+  clip) is reported as a known limitation. Issue #150 builds a noisy-speech fixture
+  set, with accent and crosstalk, before any such gate is set.
+
+A second reviewed profile, `base_q5_1` (its q5_1 quantization, pinned at the
+accepted revision `5359861`), is an optional alternative measured alongside; it is
+not the default.

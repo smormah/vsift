@@ -1,9 +1,11 @@
 # P07 local-ASR qualification record (T-04, decision D6)
 
 Status: measured 2026-09-25 on one Windows machine (P07 increment 3c, branch
-`p07/asr-setup-profiles`). **The base default does not meet every proposed D6 gate:
-it fails the F08 word-error-rate gate (61.5% against at most 25%).** It meets the
-other five. The default is a maintainer decision; a proposal is at the end.
+`p07/asr-setup-profiles`). **Decided (maintainer, 2026-09-25): `base` is the measured
+default and passes the gates below.** Noisy speech is gated on critical terms only;
+F08's word error rate is a reported known limitation until the noisy-speech fixture
+set of [issue #150](https://github.com/smormah/vsift/issues/150) exists. The
+`base_q5_1` pin at Hugging Face revision `5359861` was accepted the same day.
 
 ## What was measured, and how
 
@@ -28,11 +30,12 @@ itself uses the machine's parallelism, at most 8).
   without spaces, equal consecutive hypothesis words joined without spaces (`safe 12`
   finds `SAFE-12`; `407` never finds `4407`). Nothing is derived from a recognizer
   run. The reviewed known base-model misses (F04 "queued", F05 "4407", F08 "E-409")
-  are reported but do not fail the gate.
+  are reported but do not fail the gate. Critical terms are gated in every clip,
+  the noisy F08 included.
 - **Clean pool:** every clip without added noise (the `clean-synthetic` clips and
   F09, whose only difference is its offset audio stream), pooled: 123 reference
-  words. **F08** (office noise at 10 dB SNR, one English and one Spanish sentence) is
-  gated alone: 13 reference words.
+  words. **F08** (office noise at 10 dB SNR, one English and one Spanish sentence,
+  13 reference words) is reported alone; its word error rate is not gated.
 - **Model load time:** whisper.cpp's own `load time` for the F01 utterance, run
   directly, median of three.
 - **Real-time factor:** a 188.7 s clip concatenated at test time from the committed
@@ -48,19 +51,39 @@ Host: Windows 11 Pro 10.0.26200, Intel Xeon E5-2698 v4 @ 2.20 GHz (20 cores, 40
 logical processors), 64 GiB RAM, NTFS; whisper.cpp v1.9.2 reviewed Windows build
 (SHA-256 `95e3c0b0…2631d`); FFmpeg 9.0 (gyan.dev full build) on `PATH`.
 
+## Gates (decided 2026-09-25)
+
+| Gate for `base`, 4 threads | Enforced? |
+| --- | --- |
+| Pooled WER of clips without added noise <= 10% | Yes: the test fails |
+| Every spoken critical term found in every clip, noisy included, except the reviewed known misses | Yes: the test fails |
+| F08 (noisy) WER | No: reported as a known limitation, `"gated": false` with the reason in the report; a noise WER gate waits for #150 |
+| Real-time factor <= 0.5 | No: reported, it measures the host |
+| Peak `whisper-cli` memory <= 400 MiB | No: reported, it measures the host |
+
+`base_q5_1` is measured and reported only.
+
 ## Results
 
-| Measure | Gate (base) | `base` | `base_q5_1` |
-| --- | --- | ---: | ---: |
-| Model file | | 147,951,465 B | 59,707,625 B |
-| Model load time (median of 3) | | 316 ms | 177 ms |
-| Real-time factor, 188.7 s clip (median of 3) | <= 0.5 | **0.388** (73.2, 73.4, 74.6 s) | 0.409 (76.4, 77.2, 77.5 s) |
-| Peak `whisper-cli` memory | <= 400 MiB | **338 MiB** | 250 MiB |
-| Pooled WER, clips without noise (123 words) | <= 10% | **3.25%** (4 errors) | 4.06% (5 errors) |
-| F08 WER (13 words) | <= 25% | **61.53% (8 errors) - not met** | 46.15% (6 errors) |
-| Critical terms missed outside the known list | none | **none** | none |
+Two full runs on the same host and day. Accuracy was identical in both. Run A had
+the machine to itself. Run B is the run of record for the decided gates, and the
+machine was busier during it, so its timings are slower.
 
-Per clip (WER, critical terms missed):
+| Measure | Gate (base) | `base`, run A | `base`, run B | `base_q5_1`, run A | `base_q5_1`, run B |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Model file | | 147,951,465 B | | 59,707,625 B | |
+| Model load time (median of 3) | reported | 316 ms | 413 ms | 177 ms | 184 ms |
+| Real-time factor, 188.7 s clip (median of 3) | <= 0.5, reported | 0.388 (73.2, 73.4, 74.6 s) | 0.489 (92.4, 89.6, 97.1 s) | 0.409 | 0.432 (81.6, 71.9, 130.1 s) |
+| Peak `whisper-cli` memory | <= 400 MiB, reported | 338 MiB | 337 MiB | 250 MiB | 251 MiB |
+| Pooled WER, clips without noise (123 words) | **<= 10%, enforced** | **3.25%** (4 errors) | **3.25%** | 4.06% (5 errors) | 4.06% |
+| Critical terms missed outside the known list | **none, enforced** | **none** | **none** | none | none |
+| F08 WER (13 words) | reported (#150) | 61.53% (8 errors) | 61.53% | 46.15% (6 errors) | 46.15% |
+
+**Outcome: `base` meets every enforced gate and both reported resource gates.** In
+run B the test passed (`test result: ok`, 809 s) and its report says, for F08,
+`"gated": false` with the reason.
+
+Per clip (WER, critical terms missed; the same in both runs):
 
 | Clip | Words | `base` | `base_q5_1` |
 | --- | ---: | --- | --- |
@@ -77,16 +100,12 @@ Per clip (WER, critical terms missed):
 
 F08's eight base errors: "AB-731" heard as "AB 731" (two edits; the term itself is
 found), "E-409" as "E4 and I" (three), and the Spanish "AB-731" as "a vez 731"
-(three). Even if a space inside an identifier were forgiven, F08 would be 6/13
-(46%), still over the gate. The quantized profile is also over it on noise and is
-slightly worse on clean speech. F04's "queued", on the known-miss list, was heard
-correctly in both runs of this record; the list stays because the utterance alone
-is heard as "Q".
-
-All gates are met by `base` except F08. Load time is not gated. The whole test took
-644 s. The first run of this record (same day, same host) gave the same accuracy
-and 0.389/0.414 real-time factors; its memory sampler did not run (a multi-line
-PowerShell script over standard input), which the recorded run fixes.
+(three). Its critical terms "AB-731", "2.5 seconds" and "identificador" were heard;
+"E-409" is a reviewed known miss. F04's "queued", also on the known-miss list, was
+heard correctly in these runs; the list keeps it because the utterance alone is
+heard as "Q". An earlier run the same day gave the same accuracy and real-time
+factors of 0.389 and 0.414; its memory sampler did not run (a multi-line PowerShell
+script over standard input), which the recorded runs fix.
 
 ## Seam finding and fix
 
@@ -96,10 +115,10 @@ sample (25.0-34.0 s); chunk 0's previous sentence ended at 25.24 s, just inside 
 The seam merge (rule 2, increment 3a) treated any overlapping segment across the
 edge as a copy, so it dropped chunk 1's sentence as "covered", while chunk 0's cut
 copy was dropped because chunk 1 owned its midpoint. whisper-cli itself output the
-sentence in both chunks. Fixed in this increment: a neighbour segment is a copy only
-when it spans the cut segment's midpoint (`covering` in `crates/vsift-domain/src/asr.rs`),
-with the regression test
-`a_sentence_starting_at_a_window_is_not_covered_by_the_previous_sentence`. After the
+sentence in both chunks. The fix, found here and merged with increment 3b (PR #149,
+`57a72d4`; ADR 0017 section 3), makes a neighbour segment a copy only when it spans
+the cut segment's midpoint, with the regression test
+`a_sentence_starting_at_a_window_is_not_covered_by_the_previous_sentence`. With the
 fix the `base_q5_1` seam stage passes and the `base` checkpoint and adapter test still
 pass. The accuracy figures above come from single-chunk clips and the timing from a
 multi-chunk clip, so neither depends on the fix.
@@ -111,10 +130,13 @@ with `base` only and measures `base_q5_1` here.
 
 ## Gaps
 
+All three are tracked in [issue #150](https://github.com/smormah/vsift/issues/150):
+
+- **Noisy speech:** F08 is the only noisy clip and has 13 words, so its rate moves 7.7
+  points per word; no noise word-error gate is set until a noisy fixture set exists.
 - **Accent and crosstalk are not in the corpus.** Every clip is one synthetic
   (Kokoro) voice per sentence; there is no human recording, regional accent or
   overlapping speech. T-04 stays open for those until fixtures exist.
-- F08 is the only noisy clip and has 13 words, so its rate moves 7.7 points per word.
 - Measured on one Windows machine. The opt-in `P07 local ASR` workflow
   (`.github/workflows/p07-local-asr.yml`) repeats this on hosted Ubuntu 24.04 and
   Windows Server 2025 runners with the reviewed Ubuntu and Windows builds; its reports
@@ -122,25 +144,22 @@ with `base` only and measures `base_q5_1` here.
 - Long recordings: the timing clip is 3 minutes; the per-chunk source rehash (#148)
   makes cost grow with source size and is not measured here.
 
-## Proposal (maintainer decides)
+## Decision (maintainer, 2026-09-25)
 
-The base model meets the clean-speech, critical-term, real-time and memory gates
-with margin, and misses only the noisy-bilingual F08 WER gate, which the quantized
-profile also misses. Options:
+1. **`base` stays the default.** It meets the clean-speech and critical-term gates
+   with margin, and the resource gates.
+2. **Noisy speech is gated on critical terms only**, except the reviewed known
+   misses. F08's word error rate is reported as a known limitation and not gated; an
+   agent must confirm critical identifiers heard in noise against the source (VSift
+   keeps confidence `provider_uncalibrated` and cites times). Issue #150 builds a
+   noisy-speech fixture set, with accent and crosstalk, before any noise gate is set.
+3. **The `base_q5_1` pin at revision `5359861` is accepted.** It stays an optional
+   reviewed alternative for machines where 338 MiB of peak memory is too much. It is
+   smaller and loads faster, but was not faster end to end here and is slightly
+   less accurate on clean speech.
 
-1. **Keep `base` as the default and record F08 as a known limit** (proposed): state
-   in the profile that noisy speech with spoken identifiers is not qualified at 25%
-   and that critical identifiers in noise must be confirmed against the source
-   (VSift already keeps confidence `provider_uncalibrated` and cites times). Either
-   amend the F08 gate to what `base` does today, or leave it unmet and visible.
-2. Qualify a larger pinned profile (for example multilingual `small`, about 488 MB)
-   for noisy input before R0, and measure it with this test.
-3. Keep `base` and add noisy fixtures before deciding, since one 13-word clip is a
-   weak basis for a gate.
-
-`base_q5_1` is not proposed as the default: it is smaller and loads faster, but
-is slower end to end here and less accurate on clean speech. It stays a reviewed
-alternative for machines where 338 MiB of peak memory is too much.
+After 3c merges, the `P07 local ASR` workflow runs on `main` as qualification
+evidence for Ubuntu 24.04 and Windows Server 2025.
 
 ## Reproduce
 
@@ -152,5 +171,5 @@ cargo test --release -p vsift-infrastructure --locked --test p07_asr_qualificati
 ```
 
 The report is written to `.vsift/e2e-runs/p07-asr-qualification-<run>/report.json`.
-The test fails when a base accuracy gate is not met, so today it fails on F08 by
-design; the resource gates are reported, not enforced, because they measure the host.
+The test fails only when an enforced base gate (clean WER, critical terms) is not
+met. F08's word error rate and the resource gates are reported, not enforced.
