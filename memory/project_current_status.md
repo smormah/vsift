@@ -26,11 +26,9 @@ Today it can:
   including the content of their transcript records;
 - keep every folder it creates private to the user, whatever the parent folder grants.
 
-Increment 3b is merged (PR #149, ADR 0017 Accepted). Increment 3c, the last one, is
-complete on branch `p07/asr-setup-profiles` and in review: `setup check` local-ASR
-reporting, the `base_q5_1` profile and the measured default (`base`, passing the
-decided gates). The P07 packet is not complete until 3c merges, the `P07 local ASR`
-workflow runs on `main` and the ledger record is written. Search and visuals are P08-P09.
+**P07 is complete** (2026-09-25, merge `9ea3180`, ledger record written): local ASR
+works end to end and is qualified on Ubuntu 24.04 and Windows 2025. P08 (candidate and
+search index) is next and not started; search and visuals are P08-P09.
 
 ## What works (public CLI)
 
@@ -90,7 +88,8 @@ workflow runs on `main` and the ledger record is written. Search and visuals are
 - Measured on Windows 11, Xeon E5-2698 v4, 4 threads
   ([record](../docs/planning/p07-asr-qualification.md)): `base` 3.25% clean WER, no
   unexpected miss, RTF 0.39, 338 MiB, F08 61.5%; `base_q5_1` 4.06%, 0.41, 250 MiB.
-  The `P07 local ASR` workflow has not run yet (first run on `main` after merge).
+  Hosted run 36175016465 (tree of `9ea3180`): Windows 2025 RTF 0.284, 335 MiB; Ubuntu
+  24.04 RTF 3.245, 322 MiB (generic CPU backend only, #153); same accuracy on both.
 
 ## Evidence stream and private folders
 
@@ -125,7 +124,7 @@ workflow runs on `main` and the ledger record is written. Search and visuals are
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
-| P07 | In progress: 1a-3b and fuzz merged; 3c in review; then workflow run, ledger record |
+| P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
@@ -139,11 +138,9 @@ files' sizes; `fuzz/` is the fuzz harness. Largest: `filesystem_session_store.rs
 
 ## Quality evidence
 
-- 3c, Windows 11: fmt, strict Clippy, rustdoc with warnings denied, governance, the fuzz
-  seed replay, the Python tool tests and the workspace tests pass (counts in the PR);
-  opt-in release runs: `p07_asr_qualification` passes for `base`, the local-ASR
-  checkpoint passes with `base` (its `setup check` stage verified local ASR: ran now,
-  then recorded), and the adapter test passes.
+- P07 close, Windows 11 and hosted: workspace tests (539 passed, 29 opt-in), strict
+  Clippy, rustdoc, governance, fuzz replay and Python tool tests pass; the `P07 local
+  ASR` workflow passed the adapter, checkpoint and qualification on both runners.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. Qualification records are in `docs/planning/`; history in git,

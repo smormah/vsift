@@ -7,37 +7,29 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
-[ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). P00-P06 are
-complete. P07 is in progress: every increment up to 3b and the fuzz targets are
-merged; 3c, the last increment, is complete on its branch and in review; the packet
-is not complete yet. Local checks: CI is the default Linux/macOS check; Docker only
-for platform code.
+[ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). **P00-P07 are
+complete.** P07 (engine boundary and transcription) closed on 2026-09-25 with merge
+`9ea3180`; its evidence is in the ledger. Local checks: CI is the default Linux/macOS
+check; Docker only for platform code.
 
-1. **Merged:** 1a `vsift-contract` wire types (PR #126); 1b engine facade, thin CLI
-   (PR #127); 2 supplied transcripts (PR #129); 2b media-tool preflight (PR #133); 2c
-   JSONL evidence stream (PR #134); speech fixtures (PRs #138-#140, #142, #143); 3a
-   local ASR core (PR #145); `cargo-fuzz` targets (PR #146); 3b `transcript
-   retranscribe` with the seam-merge fix (PR #149, `57a72d4`,
-   [ADR 0017](../docs/decisions/0017-local-asr-through-whisper-cpp.md) Accepted).
-2. **In review: 3c (branch `p07/asr-setup-profiles`, on `57a72d4`).** Whole increment
-   done and green locally:
-   - D4: `setup check` `local_asr` object (model identity and profile; verification
-     recorded, ran now within its own 60 s budget, failed with a typed check/reason,
-     or not run with the first missing piece). Legacy fields and exit status unchanged.
-   - D6: reviewed `base_q5_1` profile, pinned at HF revision `5359861` (maintainer
-     accepted 2026-09-25). `base` stays the default.
-   - T-04: test-only scoring, the opt-in `p07_asr_qualification` test and
-     `docs/planning/p07-asr-qualification.md`. Decided gates for `base`: clean WER
-     <= 10% and every spoken critical term (noisy included) except known misses are
-     enforced; RTF and memory reported; F08 WER reported, not gated (#150). `base`
-     passes: 3.25% clean WER, no unexpected miss, RTF 0.39, 338 MiB.
-   - Opt-in `P07 local ASR` workflow (Ubuntu 24.04, Windows 2025) and its staging helper.
-3. **Still owed by P07 before the packet closes:** merge 3c; then the supervisor
-   dispatches the `P07 local ASR` workflow on `main` as qualification evidence
-   (the first Linux run) and writes the packet completion record in the ledger.
+1. **P07 delivered:** `vsift-contract` and the `vsift` engine facade; supplied SRT/WebVTT
+   import; automatic media-tool preflight; JSONL evidence stream; Kokoro speech
+   fixtures (test-only); local ASR through whisper.cpp v1.9.2 (`transcript
+   retranscribe`, spliced revisions, `transcript get --revision`,
+   [ADR 0017](../docs/decisions/0017-local-asr-through-whisper-cpp.md)); `setup check`
+   `local_asr` reporting; `base` (default) and `base_q5_1` profiles; T-04 scoring;
+   weekly `Fuzz` and `P07 local ASR` workflows. Qualification: workflow run
+   36175016465 passed on Ubuntu 24.04 and Windows 2025 (base clean WER 3.25%).
+2. **Next: P08 (candidate/search index), not started.** Governance rule 10: the
+   maintainer starts the next packet. Before implementation read the P08 row of
+   `docs/planning/implementation-work-packets.md` and V-02..V-05, C-03, S-11.
+3. **Candidate small fix before or alongside P08:** #153 (pin the optimised Ubuntu
+   whisper.cpp CPU backends; Linux RTF 3.2 today vs 0.28 on Windows).
 
 ## Tracked issues
 
+- #153: the reviewed Ubuntu whisper.cpp pin keeps only the generic x64 CPU backend,
+  so Linux ASR runs about 11x slower (RTF 3.245) than Windows (0.284).
 - #150: noisy-speech fixture set (with accent and crosstalk) before any noise WER
   gate; F08 (13 words) is the only noisy clip today.
 - #148: every speech chunk rehashes the session's whole source copy before FFmpeg
