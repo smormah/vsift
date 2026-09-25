@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/transcript-segment.schema.json",
   "title": "VSift transcript segment evidence record v1",
-  "description": "One citable, timestamped transcript segment. Each record names its own revision, source and source segment so it can be stored or indexed on its own. Times are integer microseconds on the normalized source timeline, half-open [start_us, end_us) with end_us > start_us. Text is untrusted and has been sanitized: lines are joined with \\n and no other control character remains.",
+  "description": "One citable, timestamped transcript segment. Each record names its own revision, source and source segment so it can be stored or indexed on its own. Times are integer microseconds on the normalized source timeline, half-open [start_us, end_us) with end_us > start_us. Text is untrusted and has been sanitized: lines are joined with \\n and no other control character remains. A segment was either imported from a supplied SubRip or WebVTT cue (alignment origin imported_srt or imported_webvtt, with its offset, cue timing and cue location) or recognised locally from the source's audio (origin local_asr, with its chunk, the provider's chunk-relative times and the recognizer; cue is null). A segment carried unchanged into a revision spliced from an earlier one (transcript retranscribe with a range) keeps the alignment and language of the revision that first produced it and names that revision and segment in carried_from; it has its own segment_id in the new revision.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -58,7 +58,7 @@
       ]
     },
     "confidence": {
-      "description": "Unknown confidence is null with origin unavailable, never 1.0.",
+      "description": "Unknown confidence is null with origin unavailable, never 1.0. Imported text has none; a local-ASR segment has the mean probability of its text tokens, provider_uncalibrated.",
       "type": "object",
       "additionalProperties": false,
       "required": ["value_basis_points", "origin"],
@@ -73,36 +73,116 @@
       }
     },
     "language": {
+      "description": "The language of the revision that produced the text: declared by an import, or detected by the recognizer and agreed by every transcribed chunk.",
       "oneOf": [
         { "type": "null" },
         { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$" }
       ]
     },
     "alignment": {
-      "description": "How the segment was placed: its origin, the explicit offset, and the cue timing as written before the offset.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["origin", "offset_us", "cue_start_us", "cue_end_us"],
-      "properties": {
-        "origin": { "enum": ["imported_srt", "imported_webvtt"] },
-        "offset_us": {
-          "type": "integer",
-          "minimum": -86400000000,
-          "maximum": 86400000000
+      "description": "How the segment was placed on the source timeline.",
+      "oneOf": [
+        {
+          "description": "An imported cue: its origin, the explicit offset, and the cue timing as written before the offset. start_us = cue_start_us + offset_us and end_us = cue_end_us + offset_us.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin", "offset_us", "cue_start_us", "cue_end_us"],
+          "properties": {
+            "origin": { "enum": ["imported_srt", "imported_webvtt"] },
+            "offset_us": {
+              "type": "integer",
+              "minimum": -86400000000,
+              "maximum": 86400000000
+            },
+            "cue_start_us": { "type": "integer", "minimum": 0 },
+            "cue_end_us": { "type": "integer", "minimum": 1 }
+          }
         },
-        "cue_start_us": { "type": "integer", "minimum": 0 },
-        "cue_end_us": { "type": "integer", "minimum": 1 }
-      }
+        {
+          "description": "Recognised locally: the chunk whose decoded audio the recognizer heard, the provider's times relative to that audio's first sample, and the recognizer. start_us = chunk_audio_start_us + provider_start_us; end_us = chunk_audio_start_us + provider_end_us, or chunk_audio_end_us when end_trimmed (the provider reported an end less than one second past the decoded audio).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "origin",
+            "chunk_index",
+            "chunk_audio_start_us",
+            "chunk_audio_end_us",
+            "provider_start_us",
+            "provider_end_us",
+            "end_trimmed",
+            "provider",
+            "executable_sha256",
+            "model_profile",
+            "model_sha256",
+            "decoding_profile"
+          ],
+          "properties": {
+            "origin": { "const": "local_asr" },
+            "chunk_index": { "type": "integer", "minimum": 0, "maximum": 1023 },
+            "chunk_audio_start_us": { "type": "integer", "minimum": 0 },
+            "chunk_audio_end_us": { "type": "integer", "minimum": 1 },
+            "provider_start_us": { "type": "integer", "minimum": 0 },
+            "provider_end_us": { "type": "integer", "minimum": 1 },
+            "end_trimmed": { "type": "boolean" },
+            "provider": { "enum": ["whisper_cpp"] },
+            "executable_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "model_profile": { "enum": ["base"] },
+            "model_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "decoding_profile": { "enum": ["r0-v1"] }
+          }
+        }
+      ]
     },
     "cue": {
-      "description": "Where the cue was written in the supplied file: its timed-cue ordinal and the line of its timing.",
+      "description": "Where an imported cue was written in the supplied file: its timed-cue ordinal and the line of its timing. Null for a local-ASR segment.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ordinal", "line"],
+          "properties": {
+            "ordinal": { "type": "integer", "minimum": 1 },
+            "line": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "carried_from": {
+      "description": "Present only on a segment carried unchanged into a spliced revision: the revision that first produced the text and the segment's identity there. That revision stays readable with transcript get --revision.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ordinal", "line"],
+      "required": ["revision_id", "segment_id"],
       "properties": {
-        "ordinal": { "type": "integer", "minimum": 1 },
-        "line": { "type": "integer", "minimum": 1 }
+        "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
+        "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "alignment": { "properties": { "origin": { "const": "local_asr" } } } }
+      },
+      "then": {
+        "properties": {
+          "cue": { "type": "null" },
+          "speaker": { "type": "null" },
+          "original_text": { "type": "null" },
+          "confidence": { "properties": { "origin": { "enum": ["unavailable", "provider_uncalibrated"] } } }
+        }
+      },
+      "else": {
+        "properties": {
+          "cue": { "type": "object" },
+          "confidence": {
+            "properties": {
+              "value_basis_points": { "type": "null" },
+              "origin": { "const": "unavailable" }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

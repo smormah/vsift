@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/transcript-retranscribe-data.schema.json",
+  "title": "VSift transcript.retranscribe data v1",
+  "description": "The data member of a complete transcript.retranscribe result: the new local-ASR revision, committed and now the session's newest. Validate the envelope with operation-response.schema.json. requested_range is the range the caller asked for (null for the whole source); the revision's replaced_range is that range widened to whole segments of the superseded revision. recognised_segment_count is how many of the revision's segments this run recognised; the rest were carried from earlier revisions. The segments themselves are read with transcript get --revision <revision.revision_id>, as a page or an evidence stream.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "requested_range", "revision", "recognised_segment_count"],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "requested_range": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from_us", "to_us"],
+          "properties": {
+            "from_us": { "type": "integer", "minimum": 0 },
+            "to_us": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "revision": {
+      "allOf": [
+        { "$ref": "transcript-revision.schema.json" },
+        {
+          "properties": {
+            "alignment": { "properties": { "origin": { "const": "local_asr" } } }
+          }
+        }
+      ]
+    },
+    "recognised_segment_count": { "type": "integer", "minimum": 0, "maximum": 20000 }
+  }
+}

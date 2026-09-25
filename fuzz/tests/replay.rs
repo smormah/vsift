@@ -132,6 +132,11 @@ const SEEDS: &[Seed] = &[
         Origin::EncodedF01LocalAsr,
     ),
     seed(
+        Target::TranscriptRecord,
+        "bundle-transcript-record.asr.json",
+        Origin::Copy("schemas/v1/examples"),
+    ),
+    seed(
         Target::FfprobeMetadata,
         "F11-excessive-streams.json",
         Origin::Copy("fixtures/corpus/generated"),

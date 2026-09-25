@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/transcript-revision.schema.json",
   "title": "VSift transcript revision summary v1",
-  "description": "Identity, alignment and import outcome of one immutable transcript revision. Warnings are typed; a warning with excluded_cues true means those cues are not in the revision and cannot be cited.",
+  "description": "Identity, alignment and outcome of one immutable transcript revision. Warnings are typed; a warning with excluded_cues true means those cues (or recognised segments) are not in the revision and cannot be cited. An imported revision (alignment origin imported_srt or imported_webvtt) has its offset and sidecar and none of the local-ASR members. A local-ASR revision (origin local_asr) has sidecar null and adds local_asr (what ran, how, over which range and with what chunk outcomes), supersedes and replaced_range (the revision it replaced and the range it replaced there, or null) and carried_segment_count (segments carried unchanged from earlier revisions). For local-ASR warnings, first_cue is the 1-based ordinal of the first affected chunk.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -39,28 +39,45 @@
       }
     },
     "alignment": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["origin", "offset_us"],
-      "properties": {
-        "origin": { "enum": ["imported_srt", "imported_webvtt"] },
-        "offset_us": {
-          "type": "integer",
-          "minimum": -86400000000,
-          "maximum": 86400000000
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin", "offset_us"],
+          "properties": {
+            "origin": { "enum": ["imported_srt", "imported_webvtt"] },
+            "offset_us": {
+              "type": "integer",
+              "minimum": -86400000000,
+              "maximum": 86400000000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin"],
+          "properties": {
+            "origin": { "const": "local_asr" }
+          }
         }
-      }
+      ]
     },
     "sidecar": {
-      "description": "Identity of the exact supplied bytes that were parsed.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["format", "sha256", "bytes"],
-      "properties": {
-        "format": { "enum": ["srt", "webvtt"] },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 }
-      }
+      "description": "Identity of the exact supplied bytes that were parsed; null for a local-ASR revision.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "sha256", "bytes"],
+          "properties": {
+            "format": { "enum": ["srt", "webvtt"] },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 }
+          }
+        }
+      ]
     },
     "language": {
       "oneOf": [
@@ -68,10 +85,15 @@
         { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]{0,34}$" }
       ]
     },
-    "segment_count": { "type": "integer", "minimum": 1, "maximum": 20000 },
+    "segment_count": {
+      "description": "Segments in the revision. At least one for an import; a local-ASR run that recognised no speech records a revision with none of its own (warning no_speech_recognised).",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20000
+    },
     "warnings": {
       "type": "array",
-      "maxItems": 6,
+      "maxItems": 12,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -84,13 +106,109 @@
               "speaker_label_discarded",
               "overlapping_cues",
               "cues_outside_source",
-              "cues_crossing_source_boundary"
+              "cues_crossing_source_boundary",
+              "provider_segments_rejected",
+              "provider_end_trimmed",
+              "non_speech_markers_removed",
+              "seam_duplicates_removed",
+              "silent_chunks_skipped",
+              "no_speech_recognised"
             ]
           },
           "count": { "type": "integer", "minimum": 1 },
           "first_cue": { "type": "integer", "minimum": 1 },
           "excluded_cues": { "type": "boolean" }
         }
+      }
+    },
+    "local_asr": {
+      "description": "The local-ASR run that produced the revision's own segments: provider build and model by SHA-256, the pinned model profile and decoding profile, the chunk plan, recognizer threads, the decoded audio stream, the source range its chunks covered, and how many chunks were transcribed, silent (every 20 ms frame below -50 dBFS, not transcribed) or had no audio.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "executable_sha256",
+        "model_profile",
+        "model_sha256",
+        "decoding_profile",
+        "window_us",
+        "overlap_us",
+        "threads",
+        "audio_stream",
+        "covered_range",
+        "chunk_count",
+        "transcribed_chunks",
+        "silent_chunks",
+        "no_audio_chunks"
+      ],
+      "properties": {
+        "provider": { "enum": ["whisper_cpp"] },
+        "executable_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "model_profile": { "enum": ["base"] },
+        "model_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "decoding_profile": { "enum": ["r0-v1"] },
+        "window_us": { "type": "integer", "minimum": 1, "maximum": 30000000 },
+        "overlap_us": { "type": "integer", "minimum": 0, "maximum": 14999999 },
+        "threads": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "audio_stream": { "type": "integer", "minimum": 0 },
+        "covered_range": { "$ref": "#/$defs/range" },
+        "chunk_count": { "type": "integer", "minimum": 1, "maximum": 1024 },
+        "transcribed_chunks": { "type": "integer", "minimum": 0, "maximum": 1024 },
+        "silent_chunks": { "type": "integer", "minimum": 0, "maximum": 1024 },
+        "no_audio_chunks": { "type": "integer", "minimum": 0, "maximum": 1024 }
+      }
+    },
+    "supersedes": {
+      "description": "The revision this one superseded (the session's newest when the run started), or null when the session had no transcript.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" }
+      ]
+    },
+    "replaced_range": {
+      "description": "The range of the superseded revision this one replaced: the requested range widened to whole segments of that revision, or the whole source. Null without a superseded revision.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/range" }]
+    },
+    "carried_segment_count": {
+      "description": "Segments carried unchanged from earlier revisions (each names its origin in carried_from); segment_count minus this is what the run recognised.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20000
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "alignment": { "properties": { "origin": { "const": "local_asr" } } } }
+      },
+      "then": {
+        "required": ["local_asr", "supersedes", "replaced_range", "carried_segment_count"],
+        "properties": { "sidecar": { "type": "null" } }
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            { "required": ["local_asr"] },
+            { "required": ["supersedes"] },
+            { "required": ["replaced_range"] },
+            { "required": ["carried_segment_count"] }
+          ]
+        },
+        "properties": {
+          "sidecar": { "type": "object" },
+          "segment_count": { "minimum": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
       }
     }
   }

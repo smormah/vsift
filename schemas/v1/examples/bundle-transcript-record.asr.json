@@ -1,0 +1,111 @@
+{
+  "schema_version": 2,
+  "format": "vsift.transcript_record",
+  "revision_id": "trv_4210915bdac994cd08f04a7ad5d99475",
+  "revision": 2,
+  "source_id": "src_sha256_f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881",
+  "source_segment": {
+    "end_us": 6000000,
+    "id": "sgm_d8c02dd568a61a80ab6c119905a1a984",
+    "index": 0,
+    "start_us": 0,
+    "state": "closed"
+  },
+  "origin": "local_asr",
+  "run": {
+    "audio_stream": 1,
+    "chunks": [
+      {
+        "audio": {
+          "end_us": 6000000,
+          "start_us": 5500000
+        },
+        "end_us": 6000000,
+        "index": 0,
+        "outcome": "silent",
+        "start_us": 5500000
+      }
+    ],
+    "decoding_profile": "r0-v1",
+    "executable_sha256": "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d",
+    "model_profile": "base",
+    "model_sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "overlap_us": 5000000,
+    "provider": "whisper_cpp",
+    "threads": 4,
+    "window_us": 30000000
+  },
+  "supersedes": "trv_7936f6da2eecbf52108c4e6c9f96660e",
+  "replaced_range": {
+    "end_us": 6000000,
+    "start_us": 5500000
+  },
+  "inherited": [
+    {
+      "language": "en",
+      "provenance": {
+        "local_asr": {
+          "audio_stream": 1,
+          "chunks": [
+            {
+              "audio": {
+                "end_us": 6000000,
+                "start_us": 0
+              },
+              "end_us": 6000000,
+              "index": 0,
+              "outcome": "transcribed",
+              "start_us": 0
+            }
+          ],
+          "decoding_profile": "r0-v1",
+          "executable_sha256": "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d",
+          "model_profile": "base",
+          "model_sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+          "overlap_us": 5000000,
+          "provider": "whisper_cpp",
+          "threads": 4,
+          "window_us": 30000000
+        }
+      },
+      "revision_id": "trv_7936f6da2eecbf52108c4e6c9f96660e"
+    }
+  ],
+  "language": null,
+  "warnings": [
+    {
+      "count": 1,
+      "first_cue": 1,
+      "kind": "silent_chunks_skipped"
+    },
+    {
+      "count": 1,
+      "first_cue": 1,
+      "kind": "no_speech_recognised"
+    }
+  ],
+  "segments": [
+    {
+      "carried_from": {
+        "revision_id": "trv_7936f6da2eecbf52108c4e6c9f96660e",
+        "segment_id": "tsg_24c8830a6279bc594180301086f2281b"
+      },
+      "confidence_basis_points": 9370,
+      "end_us": 5260000,
+      "id": "tsg_bd0c6294394b4b5520684dc9814e1c03",
+      "ordinal": 1,
+      "origin": {
+        "local_asr": {
+          "chunk": 0,
+          "end_trim": "unchanged",
+          "provider_end_us": 5260000,
+          "provider_start_us": 0
+        }
+      },
+      "original_text": null,
+      "speaker": null,
+      "start_us": 0,
+      "text": "The service status is healthy and the build is 2048."
+    }
+  ]
+}

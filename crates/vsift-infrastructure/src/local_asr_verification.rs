@@ -44,10 +44,17 @@ const F01_SPEECH_SHA256: &str = "f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe552
 /// The generator's speech window for F01, in source microseconds.
 const F01_SPEECH_START_MICROS: u64 = 500_000;
 const F01_SPEECH_END_MICROS: u64 = 4_675_000;
-/// How far outside the speech window a recognised segment may reach: the
-/// base model reports coarse times, but text half a second from any speech
-/// was not placed at the audio that produced it.
+/// How far a recognised segment may start outside the speech window: text
+/// starting half a second away from any speech was not placed at the audio
+/// that produced it.
 const SPEECH_WINDOW_TOLERANCE_MICROS: u64 = 500_000;
+/// How far past the speech window a recognised segment may end. whisper.cpp
+/// ends a segment at its next timestamp token, which trails the last word:
+/// the reviewed v1.9.2 base build ends F01's only segment at 5.26 s, 0.585 s
+/// after the speech. The provider end tolerance the domain already allows for
+/// a chunk's audio end (one second) bounds it without accepting text placed
+/// after the audio.
+const SPEECH_END_TOLERANCE_MICROS: u64 = vsift_domain::PROVIDER_END_TOLERANCE_MICROS;
 /// Normalised phrases the transcript must contain. F01's script is "The
 /// service status is healthy and the build is 2048."; these are its evidence
 /// terms, which a working recognizer reproduces at any number formatting
@@ -273,10 +280,13 @@ impl LocalAsrVerifier for FixtureAsrVerifier {
 /// speech window.
 fn check_transcript(segments: &[MergedSegment]) -> Result<(), LocalAsrVerificationFailure> {
     let earliest = F01_SPEECH_START_MICROS.saturating_sub(SPEECH_WINDOW_TOLERANCE_MICROS);
-    let latest = F01_SPEECH_END_MICROS.saturating_add(SPEECH_WINDOW_TOLERANCE_MICROS);
+    let latest_start = F01_SPEECH_END_MICROS.saturating_add(SPEECH_WINDOW_TOLERANCE_MICROS);
+    let latest_end = F01_SPEECH_END_MICROS.saturating_add(SPEECH_END_TOLERANCE_MICROS);
     let placed = segments.iter().all(|merged| {
         let range = merged.segment.range();
-        range.start().as_micros() >= earliest && range.end().as_micros() <= latest
+        range.start().as_micros() >= earliest
+            && range.start().as_micros() <= latest_start
+            && range.end().as_micros() <= latest_end
     });
     let text = normalised(
         &segments
@@ -394,12 +404,27 @@ mod tests {
         )])?;
         assert_eq!(check_transcript(&good), Ok(()));
         let missing = segments(&[(620_000, 4_500_000, "The service status is healthy.")])?;
-        let late = segments(&[(
-            620_000,
-            5_500_000,
+        // The reviewed build's own output for F01: it ends 0.585 s after the speech.
+        let observed = segments(&[(
+            0,
+            5_260_000,
             "The service status is healthy and the build is 2048.",
         )])?;
-        for failing in [missing, late, Vec::new()] {
+        assert_eq!(check_transcript(&observed), Ok(()));
+        let late = segments(&[(
+            620_000,
+            5_700_000,
+            "The service status is healthy and the build is 2048.",
+        )])?;
+        let early = segments(&[
+            (
+                0,
+                4_000_000,
+                "The service status is healthy and the build is 2048.",
+            ),
+            (5_300_000, 5_600_000, "Thanks."),
+        ])?;
+        for failing in [missing, late, early, Vec::new()] {
             assert_eq!(
                 check_transcript(&failing),
                 Err(LocalAsrVerificationFailure::UnexpectedTranscript)
