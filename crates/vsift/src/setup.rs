@@ -7,8 +7,8 @@ use std::{
 };
 
 use vsift_application::{
-    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, ManagedSetupPlan, RuntimeDiagnosis,
-    SetupProfile, SetupSelectionState, plan_managed_setup,
+    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, LocalAsrSetupStatus,
+    ManagedSetupPlan, RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
 use vsift_domain::{ManagedTarget, RuntimeDependency};
@@ -67,6 +67,10 @@ pub struct SetupCheckRequest {
     pub probe_timeout: Duration,
     /// Selections for this call only; they take precedence over configured ones.
     pub per_call: ExecutableSelections,
+    /// Time allowed for the local-ASR verification when no pass is recorded,
+    /// separate from `probe_timeout`; hosts normally pass
+    /// [`crate::DEFAULT_LOCAL_ASR_CHECK_BUDGET`].
+    pub local_asr_budget: Duration,
 }
 
 /// Result of a dependency check: what responded, and where each probed
@@ -78,9 +82,17 @@ pub struct SetupCheckReport {
     per_call: [bool; 3],
     /// Whether any path (per-call or configured) was selected.
     selected: [bool; 3],
+    local_asr: LocalAsrSetupStatus,
 }
 
 impl SetupCheckReport {
+    /// The registered model and the local-ASR functional verification
+    /// (maintainer decision D4).
+    #[must_use]
+    pub const fn local_asr(&self) -> &LocalAsrSetupStatus {
+        &self.local_asr
+    }
+
     /// Probe results and aggregate readiness.
     #[must_use]
     pub const fn diagnosis(&self) -> &RuntimeDiagnosis {
@@ -170,15 +182,21 @@ impl EvaluatedSetupPlan {
 }
 
 impl Engine {
-    /// Probes `FFmpeg`, `FFprobe` and whisper.cpp without changing the machine.
+    /// Probes `FFmpeg`, `FFprobe` and whisper.cpp, identifies the registered
+    /// model and reports the local-ASR functional verification.
     ///
-    /// Only executable responses are checked; provider compatibility and the
-    /// local ASR model are not.
+    /// Probes only show that executables respond. The local-ASR report says
+    /// whether the model is a reviewed pinned profile and whether the selected
+    /// tools and model passed the verification: a recorded pass is reported
+    /// as is; otherwise, when everything it needs is present, the
+    /// verification runs within `local_asr_budget` and a pass is recorded. It
+    /// changes nothing else on the machine.
     ///
     /// # Errors
     ///
-    /// Fails when the per-user configuration cannot be read. Missing or
-    /// unhealthy dependencies are results, not errors.
+    /// Fails when the per-user configuration, the clock or the built-in
+    /// reviewed policy cannot be read. Missing or unhealthy dependencies and a
+    /// failed verification are results, not errors.
     pub async fn check_setup(
         &self,
         request: SetupCheckRequest,
@@ -193,12 +211,17 @@ impl Engine {
         let selected = presence(&selections);
         let probe = ProcessDependencyProbe::with_explicit_paths(
             request.probe_timeout,
-            selections.into_probe_paths(),
+            selections.clone().into_probe_paths(),
         );
+        let diagnosis = DiagnoseRuntime::new(probe).execute().await;
+        let local_asr = self
+            .check_local_asr(&selections, request.local_asr_budget)
+            .await?;
         Ok(SetupCheckReport {
-            diagnosis: DiagnoseRuntime::new(probe).execute().await,
+            diagnosis,
             per_call: presence(&per_call),
             selected,
+            local_asr,
         })
     }
 

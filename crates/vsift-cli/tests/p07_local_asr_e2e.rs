@@ -15,7 +15,7 @@
 //!
 //! ```console
 //! VSIFT_TEST_WHISPER_CLI=<absolute whisper-cli path>
-//! VSIFT_TEST_WHISPER_MODEL=<absolute ggml-base.bin path>
+//! VSIFT_TEST_WHISPER_MODEL=<absolute ggml-base.bin or ggml-base-q5_1.bin path>
 //! cargo test --release -p vsift-cli --locked --test p07_local_asr_e2e -- --ignored --nocapture
 //! ```
 //!
@@ -246,6 +246,46 @@ fn prepare(base: &Path, tools: &Tools, model: bool) -> Result<Value, StageStop> 
     Ok(check)
 }
 
+/// D4: with everything registered, the first `setup check` runs the
+/// local-ASR verification and records the pass; the next reports the record.
+/// Returns the reviewed profile the registered model is.
+fn setup_verifies_local_asr(base: &Path, first: &Value) -> Result<Value, StageStop> {
+    conforms("setup-check-response.schema.json", first)?;
+    let profile = first["local_asr"]["model"]["profile"].clone();
+    ensure(
+        first["local_asr"]["model"]["status"] == "known_pinned"
+            && (profile == "base" || profile == "base_q5_1"),
+        "setup check did not identify the model as a reviewed profile",
+    )?;
+    ensure(
+        first["local_asr"]["verification"]["status"] == "verified"
+            && first["local_asr"]["verification"]["source"] == "ran_now",
+        &format!(
+            "the first setup check did not verify local ASR: {}",
+            first["local_asr"]["verification"]
+        ),
+    )?;
+    let started = Instant::now();
+    let (code, second) = run_json(vsift(base)?.args(["setup", "check", "--json"]))?;
+    let recorded_ms = started.elapsed().as_millis();
+    ensure(code == Some(0), "the second setup check did not exit 0")?;
+    ensure(
+        second["local_asr"]["verification"]["source"] == "recorded",
+        "the second setup check did not report the recorded pass",
+    )?;
+    ensure(
+        first["verification_scope"] == "executable_probe_only"
+            && first["local_asr_model"] == "not_checked",
+        "the v1 constant fields changed",
+    )?;
+    Ok(json!({
+        "model_profile": profile,
+        "first": first["local_asr"]["verification"],
+        "second": second["local_asr"]["verification"],
+        "recorded_check_ms": recorded_ms,
+    }))
+}
+
 fn ingest(base: &Path, video: &Path) -> Result<String, StageStop> {
     let (code, opened) = run_json(vsift(base)?.arg("ingest").arg(video).arg("--json"))?;
     ensure(code == Some(0), "plain ingest failed")?;
@@ -403,8 +443,9 @@ fn whole_file(base: &Path, duration: u64) -> Result<(String, Value, u128), Stage
         "a whole-file run reported a requested range",
     )?;
     ensure(
-        revision["local_asr"]["model_profile"] == "base",
-        "the pinned base model did not run",
+        revision["local_asr"]["model_profile"] == "base"
+            || revision["local_asr"]["model_profile"] == "base_q5_1",
+        "a reviewed pinned model did not run",
     )?;
     let page = read_all(base, &session, duration, None)?;
     within_span(&page, speech_span("F05")?)?;
@@ -807,7 +848,13 @@ fn supplied_transcript_ignores_whisper(root: &OwnedRoot, tools: &Tools) -> Stage
 /// T-05: whisper without a model fails typed, before any work, with no revision.
 fn missing_model(root: &OwnedRoot, tools: &Tools) -> StageResult {
     let base = root.base("missing-model");
-    prepare(&base, tools, false)?;
+    let check = prepare(&base, tools, false)?;
+    conforms("setup-check-response.schema.json", &check)?;
+    ensure(
+        check["local_asr"]["model"]["status"] == "not_selected"
+            && check["local_asr"]["verification"]["not_run_reason"] == "model_not_selected",
+        "setup check did not report the missing model (D4)",
+    )?;
     let session = ingest(&base, &fixture("F01-speech.mp4"))?;
     let (code, result) = run_json(
         vsift(&base)?
@@ -878,7 +925,12 @@ async fn local_asr_checkpoint() -> TestResult {
         .as_ref()
         .map_or_else(blocked, |tools| prepare(&base, tools, true));
     let setup = prepared.as_ref().ok().cloned();
-    stages.push(stage("p07_local_asr_setup", clock, prepared));
+    let verified = prepared.and_then(|check| setup_verifies_local_asr(&base, &check));
+    let model_profile = verified
+        .as_ref()
+        .map_or(Value::Null, |evidence| evidence["model_profile"].clone());
+    let setup = setup.filter(|_| verified.is_ok());
+    stages.push(stage("p07_local_asr_setup", clock, verified));
 
     let duration = 20_000_000;
     let clock = Instant::now();
@@ -990,13 +1042,13 @@ async fn local_asr_checkpoint() -> TestResult {
         "ffmpeg_version": checks["dependencies"][0]["detail"],
         "ffprobe_version": checks["dependencies"][1]["detail"],
         "whisper_version": checks["dependencies"][2]["detail"],
-        "model_profile": "base (pinned)",
+        "model_profile": model_profile,
         "client_versions": [],
         "authorization": "opt-in cargo test invocation; setup configure writes only to isolated temporary per-user bases; no install, download or network access",
         "prior_checkpoints": ["P04: p04_media_e2e", "P05: p05_session_e2e", "P06: p06_setup_e2e", "P07: p07_transcript_e2e"],
         "stages": stages,
         "coverage_gaps": [
-            "WER and critical-term accuracy (T-04) and the measured default profile are increment 3c",
+            "WER, critical terms and timing (T-04) are measured by the opt-in p07_asr_qualification test, not by this checkpoint",
             "Search, candidates and visual refinement belong to P08 and P09"
         ],
         "future_stages": future_stages,

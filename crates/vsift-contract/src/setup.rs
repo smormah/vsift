@@ -2,10 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 use vsift_application::{
-    ManagedSetupAction, ManagedSetupPlan, RuntimeDiagnosis, SetupDependencyDisposition,
-    SetupModelDisposition, SetupProfile,
+    LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedSetupAction, ManagedSetupPlan,
+    RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
 };
-use vsift_domain::{DependencyState, DependencyStatus, FailureCode, RuntimeDependency};
+use vsift_domain::{
+    DependencyState, DependencyStatus, FailureCode, ReviewedAsrModel, RuntimeDependency,
+};
 
 use crate::{
     command::CommandName,
@@ -44,6 +46,10 @@ impl DependencyLookup {
 ///
 /// Unlike newer commands this is not wrapped in the operation envelope when
 /// written as plain JSON; the P01 shape is preserved for existing consumers.
+/// `verification_scope` and `local_asr_model` keep their original constant
+/// values for v1 compatibility (maintainer decision D4); they describe the
+/// executable probes only. The additive `local_asr` object carries the
+/// model identity and the local-ASR functional verification.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct SetupCheckResponse {
     schema_version: &'static str,
@@ -53,15 +59,21 @@ pub struct SetupCheckResponse {
     verification_scope: &'static str,
     local_asr_model: &'static str,
     dependencies: Vec<SetupCheckDependencyResponse>,
+    local_asr: LocalAsrSetupResponse,
 }
 
 impl SetupCheckResponse {
     /// Creates the compatible setup response for the explicitly resolved profile.
     ///
     /// `lookup` reports, for each probed dependency, where its executable came
-    /// from.
+    /// from; `local_asr` is the model and verification report.
     #[must_use]
-    pub fn new<F>(diagnosis: &RuntimeDiagnosis, profile: SetupProfile, lookup: F) -> Self
+    pub fn new<F>(
+        diagnosis: &RuntimeDiagnosis,
+        profile: SetupProfile,
+        lookup: F,
+        local_asr: &LocalAsrSetupStatus,
+    ) -> Self
     where
         F: Fn(RuntimeDependency) -> DependencyLookup,
     {
@@ -77,6 +89,57 @@ impl SetupCheckResponse {
                 .iter()
                 .map(|status| SetupCheckDependencyResponse::new(status, lookup(status.dependency)))
                 .collect(),
+            local_asr: LocalAsrSetupResponse::new(*local_asr),
+        }
+    }
+}
+
+/// The `local_asr` object of a `setup check` response.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct LocalAsrSetupResponse {
+    model: LocalAsrModelResponse,
+    verification: LocalAsrVerificationResponse,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct LocalAsrModelResponse {
+    status: &'static str,
+    profile: Option<&'static str>,
+}
+
+/// One flat object for every outcome, so a reader switches on `status` and
+/// finds each detail field present (null when it does not apply).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct LocalAsrVerificationResponse {
+    status: &'static str,
+    source: Option<&'static str>,
+    not_run_reason: Option<&'static str>,
+    check: Option<&'static str>,
+    reason: Option<&'static str>,
+}
+
+impl LocalAsrSetupResponse {
+    fn new(status: LocalAsrSetupStatus) -> Self {
+        let verification = status.verification;
+        let (source, not_run_reason, check, reason) = match verification {
+            LocalAsrCheckOutcome::Verified(source) => (Some(source.identifier()), None, None, None),
+            LocalAsrCheckOutcome::Failed(failure) => {
+                (None, None, Some(failure.check()), Some(failure.reason()))
+            }
+            LocalAsrCheckOutcome::NotRun(reason) => (None, Some(reason.identifier()), None, None),
+        };
+        Self {
+            model: LocalAsrModelResponse {
+                status: status.model.identifier(),
+                profile: status.model.profile().map(ReviewedAsrModel::identifier),
+            },
+            verification: LocalAsrVerificationResponse {
+                status: verification.identifier(),
+                source,
+                not_run_reason,
+                check,
+                reason,
+            },
         }
     }
 }

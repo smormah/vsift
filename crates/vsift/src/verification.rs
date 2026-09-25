@@ -175,6 +175,18 @@ impl Engine {
         &self,
         tools: &MediaProviderConformance,
     ) -> Result<MediaToolPreflightOutcome, EngineError> {
+        self.ensure_media_tools_verified_with(tools, &ProcessCancellation::new())
+            .await
+    }
+
+    /// [`Engine::ensure_media_tools_verified`] with a cancellation signal that
+    /// stops the reviewed fixture's tool processes, for callers that bound
+    /// the preflight in time.
+    pub(crate) async fn ensure_media_tools_verified_with(
+        &self,
+        tools: &MediaProviderConformance,
+        cancellation: &ProcessCancellation,
+    ) -> Result<MediaToolPreflightOutcome, EngineError> {
         let policy =
             reviewed_compatibility_policy().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
         let now = self.now_unix_seconds()?;
@@ -213,7 +225,7 @@ impl Engine {
                 isolation,
                 state.workspace_parent().to_path_buf(),
                 policy,
-                ProcessCancellation::new(),
+                cancellation.clone(),
             );
             preflight_media_tools(&verifier, &state, fingerprint.as_ref(), now).await
         };

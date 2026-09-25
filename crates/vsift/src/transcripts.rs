@@ -180,7 +180,7 @@ impl Engine {
     }
 }
 
-fn resolve_tool(
+pub(crate) fn resolve_tool(
     path_lookup: &ExecutableResolver,
     configured: Option<PathBuf>,
     dependency: RuntimeDependency,

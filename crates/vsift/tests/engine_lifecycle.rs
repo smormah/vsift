@@ -21,9 +21,10 @@ use std::{
 
 use vsift::{
     Cancellation, CleanDecision, CleanEntry, CleanMode, CleanRequest, CleanScope, Clock,
-    ClockError, DependencyState, Engine, EngineConfig, EngineError, EnginePorts,
-    ExecutableRejection, ExecutableSelections, FailureCode, HostIsolation,
-    IdentifierGenerationError, IdentifierSource, IngestRequest, MediaToolSelection,
+    ClockError, DEFAULT_LOCAL_ASR_CHECK_BUDGET, DependencyState, Engine, EngineConfig, EngineError,
+    EnginePorts, ExecutableRejection, ExecutableSelections, FailureCode, HostIsolation,
+    IdentifierGenerationError, IdentifierSource, IngestRequest, LocalAsrCheckOutcome,
+    LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, MediaToolSelection,
     MediaToolVerification, MediaToolVerificationRequest, ModelSelection, ModelVerification,
     OperationId, RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionListEntry,
     SessionPhase, SessionRootError, SessionRootLocation, SetupCheckRequest, SourceRetention,
@@ -451,10 +452,18 @@ async fn setup_check_reports_missing_explicit_paths_without_searching_path() -> 
                 ffprobe: Some(harness.root.path("missing-ffprobe")),
                 whisper: Some(harness.root.path("missing-whisper")),
             },
+            local_asr_budget: DEFAULT_LOCAL_ASR_CHECK_BUDGET,
         })
         .await?;
 
     assert_eq!(report.diagnosis().readiness, RuntimeReadiness::Blocked);
+    assert_eq!(
+        *report.local_asr(),
+        LocalAsrSetupStatus {
+            model: LocalAsrModelStatus::NotSelected,
+            verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::MediaToolsUnavailable),
+        }
+    );
     assert_eq!(
         report.lookup(RuntimeDependency::Ffmpeg),
         DependencyLookup::ConfiguredUserPath

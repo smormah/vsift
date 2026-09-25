@@ -14,15 +14,17 @@ use std::{
     ffi::OsStr,
     future::Future,
     num::{NonZeroU16, NonZeroU32},
+    path::{Path, PathBuf},
     pin::Pin,
 };
 
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, LocalAsrVerification,
-    LocalAsrVerifier, MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure,
-    RecognizerIdentity, RevisionSplice, SessionStorageError, SourceProbeError, SpeechPcm,
-    SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, build_asr_revision,
-    preflight_local_asr, transcribe_range, whole_file_source_segment,
+    AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, CachedMediaToolVerification,
+    LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier, MediaToolCheck,
+    MediaToolFailure, MediaToolFingerprint, MediaToolPreflightFailure, MediaToolPreflightOutcome,
+    MediaToolVerificationCache, RecognizerIdentity, RevisionSplice, SessionStorageError,
+    SourceProbeError, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest,
+    build_asr_revision, preflight_local_asr, transcribe_range, whole_file_source_segment,
 };
 use vsift_domain::{
     AsrModelProfile, ChunkPlan, MediaSelection, MediaTime, PlannedChunk, ProviderChunkOutput,
@@ -30,10 +32,10 @@ use vsift_domain::{
 };
 use vsift_infrastructure::{
     ExecutableResolutionError, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio,
-    FilesystemSessionStore, FixtureAsrVerifier, LocalAsrFiles, MediaError,
-    MediaProviderConformance, MediaToolVerificationAuthority, ProcessCancellation,
-    ProcessWorkingDirectory, SessionStatus, SourceError, SourceSnapshot, TrustedExecutable,
-    WhisperCli, WhisperError, WhisperSpeechRecognizer, encode_transcript_record,
+    FilesystemMediaToolVerificationCache, FilesystemSessionStore, FixtureAsrVerifier,
+    LocalAsrFiles, MediaError, MediaProviderConformance, MediaToolVerificationAuthority,
+    ProcessCancellation, ProcessWorkingDirectory, SessionStatus, SourceError, SourceSnapshot,
+    TrustedExecutable, WhisperCli, WhisperError, WhisperSpeechRecognizer, encode_transcript_record,
     local_asr_fingerprint, media_tool_fingerprint, reviewed_compatibility_policy,
 };
 
@@ -98,7 +100,7 @@ impl RetranscribeOutcome {
 }
 
 /// Which recognizer a retranscription uses.
-enum SelectedRecognizer<'a> {
+pub(crate) enum SelectedRecognizer<'a> {
     /// whisper.cpp with the configured model, run in a work directory.
     Whisper(WhisperCli),
     /// The embedding host's recognizer and verifier.
@@ -323,26 +325,27 @@ impl Engine {
             return Ok(SelectedRecognizer::Host(host));
         }
         let store = self.user_configuration()?;
-        let configured = store.read()?;
-        let executable = match configured.whisper {
-            Some(path) => TrustedExecutable::explicit(path),
-            None => ExecutableResolver::from_current_path().resolve(OsStr::new("whisper-cli")),
-        }
-        .map_err(|error| match error {
-            ExecutableResolutionError::NotFound => {
-                EngineError::LocalAsrToolUnavailable(RuntimeDependency::Whisper)
-            }
-            other => EngineError::Executable(ExecutableRejection::from(&other)),
-        })?;
+        let executable = resolve_whisper(store.read()?.whisper)?;
         let model = store.read_model()?.ok_or(EngineError::ModelNotSelected)?;
-        let cli = WhisperCli::new(
+        Ok(SelectedRecognizer::Whisper(
+            self.whisper_recognizer(executable, &model)?,
+        ))
+    }
+
+    /// whisper.cpp with `model`, the machine's recognizer threads and the
+    /// host's isolation.
+    pub(crate) fn whisper_recognizer(
+        &self,
+        executable: TrustedExecutable,
+        model: &Path,
+    ) -> Result<WhisperCli, EngineError> {
+        WhisperCli::new(
             executable,
-            &model,
+            model,
             recognizer_threads(),
             self.config().host_isolation.into_infrastructure(),
         )
-        .map_err(|_: WhisperError| EngineError::LocalAsrModelUnavailable)?;
-        Ok(SelectedRecognizer::Whisper(cli))
+        .map_err(|_: WhisperError| EngineError::LocalAsrModelUnavailable)
     }
 
     /// Ensures the selected recognizer transcribes the reviewed speech fixture
@@ -355,6 +358,29 @@ impl Engine {
         identity: &RecognizerIdentity,
         cancellation: &ProcessCancellation,
     ) -> Result<(), EngineError> {
+        let preflight = self.prepare_local_asr_preflight(tools, recognizer, identity)?;
+        self.run_local_asr_preflight(&preflight, tools, recognizer, identity, cancellation)
+            .await
+            .map(|_| ())
+            .map_err(EngineError::LocalAsrVerificationFailed)
+    }
+
+    /// Opens the per-user verification record and derives the fingerprint a
+    /// local-ASR pass for this setup is recorded under. The verifier's
+    /// authority is part of it: the reviewed fixture, or a host-supplied
+    /// verifier or recognizer, never stand in for each other.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the reviewed policy, the clock or the configuration cannot
+    /// be read, and with a media-tool workspace failure when the per-user
+    /// verification directory cannot be used.
+    pub(crate) fn prepare_local_asr_preflight(
+        &self,
+        tools: &MediaProviderConformance,
+        recognizer: &SelectedRecognizer<'_>,
+        identity: &RecognizerIdentity,
+    ) -> Result<LocalAsrPreflight, EngineError> {
         let policy =
             reviewed_compatibility_policy().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
         let now = self.now_unix_seconds()?;
@@ -373,63 +399,102 @@ impl Engine {
         } else {
             MediaToolVerificationAuthority::ReviewedFixture
         };
-        let media_fingerprint = media_tool_fingerprint(tools, isolation, &policy, media_authority);
-        let outcome = match recognizer {
-            SelectedRecognizer::Host(host) => {
-                let fingerprint = media_fingerprint.as_ref().and_then(|media| {
-                    local_asr_fingerprint(
-                        media,
-                        LocalAsrFiles::HostSupplied,
-                        identity,
-                        isolation,
-                        MediaToolVerificationAuthority::HostSupplied,
-                    )
-                });
-                let verifier = HostVerifierRef(host.verifier.as_ref());
-                preflight_local_asr(&verifier, &state, fingerprint.as_ref(), now).await
-            }
-            SelectedRecognizer::Whisper(cli) => {
-                let files = LocalAsrFiles::Selected {
+        let (files, authority) = match recognizer {
+            SelectedRecognizer::Host(_) => (
+                LocalAsrFiles::HostSupplied,
+                MediaToolVerificationAuthority::HostSupplied,
+            ),
+            SelectedRecognizer::Whisper(cli) => (
+                LocalAsrFiles::Selected {
                     whisper: cli.executable().path(),
                     model: cli.model(),
-                };
-                if let Some(verifier) = self.host_local_asr_verifier() {
-                    let fingerprint = media_fingerprint.as_ref().and_then(|media| {
-                        local_asr_fingerprint(
-                            media,
-                            files,
-                            identity,
-                            isolation,
-                            MediaToolVerificationAuthority::HostSupplied,
-                        )
-                    });
-                    preflight_local_asr(&verifier, &state, fingerprint.as_ref(), now).await
+                },
+                if self.host_local_asr_verifier().is_some() {
+                    MediaToolVerificationAuthority::HostSupplied
                 } else {
-                    let fingerprint = media_fingerprint.as_ref().and_then(|media| {
-                        local_asr_fingerprint(
-                            media,
-                            files,
-                            identity,
-                            isolation,
-                            MediaToolVerificationAuthority::ReviewedFixture,
-                        )
-                    });
+                    MediaToolVerificationAuthority::ReviewedFixture
+                },
+            ),
+        };
+        let fingerprint = media_tool_fingerprint(tools, isolation, &policy, media_authority)
+            .and_then(|media| local_asr_fingerprint(&media, files, identity, isolation, authority));
+        Ok(LocalAsrPreflight {
+            state,
+            fingerprint,
+            now,
+        })
+    }
+
+    /// Runs the local-ASR preflight with the verifier matching `recognizer`:
+    /// the host's, a host-supplied replacement for the fixture, or the
+    /// reviewed speech fixture.
+    pub(crate) async fn run_local_asr_preflight(
+        &self,
+        preflight: &LocalAsrPreflight,
+        tools: &MediaProviderConformance,
+        recognizer: &SelectedRecognizer<'_>,
+        identity: &RecognizerIdentity,
+        cancellation: &ProcessCancellation,
+    ) -> Result<MediaToolPreflightOutcome, LocalAsrVerificationFailure> {
+        let LocalAsrPreflight {
+            state,
+            fingerprint,
+            now,
+        } = preflight;
+        match recognizer {
+            SelectedRecognizer::Host(host) => {
+                let verifier = HostVerifierRef(host.verifier.as_ref());
+                preflight_local_asr(&verifier, state, fingerprint.as_ref(), *now).await
+            }
+            SelectedRecognizer::Whisper(cli) => {
+                if let Some(verifier) = self.host_local_asr_verifier() {
+                    preflight_local_asr(&verifier, state, fingerprint.as_ref(), *now).await
+                } else {
                     let verifier = FixtureAsrVerifier::new(
                         tools.clone(),
-                        isolation,
+                        self.config().host_isolation.into_infrastructure(),
                         state.workspace_parent().to_path_buf(),
                         cli.clone(),
                         identity.clone(),
                         cancellation.clone(),
                     );
-                    preflight_local_asr(&verifier, &state, fingerprint.as_ref(), now).await
+                    preflight_local_asr(&verifier, state, fingerprint.as_ref(), *now).await
                 }
             }
-        };
-        outcome
-            .map(|_| ())
-            .map_err(EngineError::LocalAsrVerificationFailed)
+        }
     }
+}
+
+/// The per-user verification record and the fingerprint one local-ASR setup
+/// is recorded under.
+pub(crate) struct LocalAsrPreflight {
+    state: FilesystemMediaToolVerificationCache,
+    fingerprint: Option<MediaToolFingerprint>,
+    now: u64,
+}
+
+impl LocalAsrPreflight {
+    /// Whether a still-valid pass for exactly this setup is recorded.
+    pub(crate) fn recorded(&self) -> bool {
+        self.fingerprint.as_ref().is_some_and(|fingerprint| {
+            self.state.lookup(fingerprint, self.now) == CachedMediaToolVerification::Verified
+        })
+    }
+}
+
+/// Resolves the whisper.cpp CLI: `selected` when given, otherwise
+/// `whisper-cli` on the filtered `PATH`.
+pub(crate) fn resolve_whisper(selected: Option<PathBuf>) -> Result<TrustedExecutable, EngineError> {
+    match selected {
+        Some(path) => TrustedExecutable::explicit(path),
+        None => ExecutableResolver::from_current_path().resolve(OsStr::new("whisper-cli")),
+    }
+    .map_err(|error| match error {
+        ExecutableResolutionError::NotFound => {
+            EngineError::LocalAsrToolUnavailable(RuntimeDependency::Whisper)
+        }
+        other => EngineError::Executable(ExecutableRejection::from(&other)),
+    })
 }
 
 /// The committed status of an open, unexpired session.
@@ -493,6 +558,11 @@ pub(crate) struct HostAsr {
 }
 
 impl HostAsr {
+    /// The host recognizer's reported identity.
+    pub(crate) async fn identity(&self) -> Result<RecognizerIdentity, SpeechRecognitionError> {
+        self.recognizer.identity_boxed().await
+    }
+
     pub(crate) fn new(
         recognizer: impl SpeechRecognizer + 'static,
         verifier: impl LocalAsrVerifier + 'static,

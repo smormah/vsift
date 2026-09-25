@@ -60,7 +60,7 @@ pub use gzip_tar_inventory::{
 };
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
-    local_asr_fixture_sha256,
+    local_asr_fixture_sha256, run_within_budget,
 };
 pub use managed_artifact_store::{
     ManagedArtifactError, ManagedArtifactStore, ManagedInstallGuard, ManagedPayloadError,

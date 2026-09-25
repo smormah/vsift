@@ -8,7 +8,10 @@
 use std::{fs, io, path::PathBuf};
 
 use serde_json::Value;
-use vsift_application::{RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup};
+use vsift_application::{
+    LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus,
+    RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup,
+};
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     ConfiguredSelectionResponse, DependencyLookup, LifecycleResponse, ListedSession,
@@ -25,6 +28,11 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 const SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
 const SOURCE: &str = "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const EXPIRES_AT: &str = "2026-09-24T00:00:00Z";
+/// What `setup check` reports with no media tools and no model registered.
+const NOTHING_REGISTERED: LocalAsrSetupStatus = LocalAsrSetupStatus {
+    model: LocalAsrModelStatus::NotSelected,
+    verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::MediaToolsUnavailable),
+};
 
 fn schema_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/v1")
@@ -140,6 +148,7 @@ fn blocked_setup_check_matches_the_frozen_example() -> TestResult {
         &diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         SetupProfile::Desktop,
         |_| DependencyLookup::FilteredPath,
+        &NOTHING_REGISTERED,
     ))?;
 
     validate("setup-check-response.schema.json", &response)?;
@@ -160,6 +169,7 @@ fn ready_setup_check_reports_sanitized_detail_and_lookup_provenance() -> TestRes
             RuntimeDependency::Ffprobe => DependencyLookup::ConfiguredUserPath,
             RuntimeDependency::Whisper => DependencyLookup::FilteredPath,
         },
+        &NOTHING_REGISTERED,
     ))?;
 
     validate("setup-check-response.schema.json", &response)?;
