@@ -323,6 +323,42 @@ fn forged_positions_are_rejected() -> TestResult {
     Ok(())
 }
 
+/// S-11 in memory: a revision at the 20,000-segment import bound pages
+/// completely at limits 1, 20 and 100 with no gap or duplicate. The engine's
+/// opt-in `engine_search` S-11 test repeats this through the store and
+/// measures each page.
+#[test]
+fn s11_a_20000_segment_revision_pages_completely() -> TestResult {
+    let texts: Vec<String> = (1_u32..=20_000)
+        .map(|ordinal| {
+            if ordinal % 400 == 0 {
+                format!("Dialog R-17 marker {ordinal}")
+            } else if ordinal % 1_000 == 500 {
+                format!("17 then r reversed {ordinal}")
+            } else {
+                format!("segment {ordinal} of the long synthetic transcript")
+            }
+        })
+        .collect();
+    let borrowed: Vec<&str> = texts.iter().map(String::as_str).collect();
+    let session_id = session("0123456789abcdef")?;
+    let revision = revision(&borrowed, 1)?;
+    let mut expected: Vec<(SearchMatch, u32)> = (1_u32..=20_000)
+        .filter(|ordinal| ordinal % 400 == 0)
+        .map(|ordinal| (SearchMatch::Phrase, ordinal))
+        .collect();
+    expected.extend(
+        (1_u32..=20_000)
+            .filter(|ordinal| ordinal % 1_000 == 500)
+            .map(|ordinal| (SearchMatch::AllTerms, ordinal)),
+    );
+    for limit in [1, 20, 100] {
+        let paged = all_pages(&session_id, &revision, request("r 17", limit, None)?)?;
+        assert_eq!(paged, expected, "limit {limit}");
+    }
+    Ok(())
+}
+
 const WORDS: [&str; 6] = ["alpha", "beta", "R-17", "r", "17", "gamma"];
 
 proptest! {
