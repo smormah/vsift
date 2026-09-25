@@ -17,7 +17,7 @@ use vsift_application::{
 };
 use vsift_domain::{
     OperationId, PublicationGuarantee, SessionArtifactKind, SessionId, SessionLifetime,
-    SessionPhase, SourceId, StorageGeneration, TranscriptRevision,
+    SessionPhase, SourceId, StorageGeneration, TranscriptRevision, TranscriptRevisionId,
 };
 
 use crate::{SourceSnapshot, file_lock::HeldFileLock, private_user_root::restrict_new_directory};
@@ -38,6 +38,16 @@ const GENERATIONS_DIRECTORY: &str = "generations";
 const RECORDS_DIRECTORY: &str = "records";
 const ARTIFACTS_DIRECTORY: &str = "artifacts";
 const ATTEMPTS_DIRECTORY: &str = "attempts";
+/// Private scratch space for work in progress on one session, such as the
+/// speech chunks a retranscription hands to the recognizer.
+const WORK_DIRECTORY: &str = "work";
+/// Every work directory is named this prefix and 16 lowercase hex digits.
+const WORK_PREFIX: &str = "asr-";
+const WORK_RANDOM_BYTES: usize = 8;
+/// Held exclusively by the live run that owns a work directory.
+const WORK_LOCK_FILE: &str = "work.lock";
+/// Most leftover work directories one new run removes.
+const MAX_REMOVED_WORK_DIRECTORIES: usize = 8;
 const INITIAL_GENERATION_FILE: &str = "0.json";
 const STORAGE_SCHEMA_VERSION: u16 = 1;
 const STORAGE_LAYOUT_VERSION: u16 = 1;
@@ -141,6 +151,54 @@ impl SessionReadHold {
 /// P03 exposes only coordination. P05 owns lifecycle state changes and deletion.
 pub struct ExclusiveSessionLifetimeHold {
     _lifetime_lock: HeldFileLock,
+}
+
+/// A private, uniquely named scratch directory inside one open session.
+///
+/// It lives at `sessions/<id>/work/asr-<16 hex>` under the owner-private
+/// root, so it is as private as the session's evidence, never shared between
+/// sessions, and removed with the session by `session clean`. While it exists
+/// it holds a shared hold on the session's lifetime, so closing or cleaning
+/// the session returns busy instead of removing files a run is using, and an
+/// exclusive lock on its own `work.lock` so a later run can tell a live
+/// directory from one left by a killed process. Dropping it removes it; a
+/// directory left by a killed process is removed by the next run that
+/// creates one in the same session (at most eight at a time).
+pub struct SessionWorkDirectory {
+    path: PathBuf,
+    owner: Option<HeldFileLock>,
+    _hold: SessionReadHold,
+}
+
+impl SessionWorkDirectory {
+    /// Absolute path of the directory, for providers that need one.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for SessionWorkDirectory {
+    fn drop(&mut self) {
+        // Windows cannot remove a directory holding an open file, so the lock
+        // is released and closed first. Nothing adopts an existing work
+        // directory, so no other run can start using it in between.
+        if let Some(owner) = self.owner.take() {
+            let _ = owner.release();
+        }
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+/// The committed private source copy of one open session, under a shared
+/// lifetime hold, with the identity its lifecycle record gives it.
+pub(crate) struct CommittedSource {
+    pub(crate) directory: Dir,
+    pub(crate) directory_path: PathBuf,
+    pub(crate) hold: SessionReadHold,
+    pub(crate) source_id: SourceId,
+    pub(crate) file_name: String,
+    pub(crate) bytes: u64,
 }
 
 /// Verified committed lifecycle state for one disposable session.
@@ -1120,6 +1178,37 @@ impl FilesystemSessionStore {
         session_id: &SessionId,
         now_unix_seconds: u64,
     ) -> Result<Option<(TranscriptRevision, SessionStatus)>, SessionStorageError> {
+        self.read_transcript_where(session_id, now_unix_seconds, |_| true)
+    }
+
+    /// Reads one committed transcript revision of an open session by identity.
+    ///
+    /// Every revision stays readable after a newer one supersedes it, so a
+    /// citation of an older revision can always be resolved (ADR 0017). Records
+    /// are read newest first, each verified and decoded as by
+    /// [`Self::read_transcript`], until one has `revision`'s identity.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::read_transcript`]; a revision the session does not hold is
+    /// `Ok(None)`.
+    pub fn read_transcript_revision(
+        &self,
+        session_id: &SessionId,
+        revision: &TranscriptRevisionId,
+        now_unix_seconds: u64,
+    ) -> Result<Option<(TranscriptRevision, SessionStatus)>, SessionStorageError> {
+        self.read_transcript_where(session_id, now_unix_seconds, |candidate| {
+            candidate.id() == revision
+        })
+    }
+
+    fn read_transcript_where(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+        mut wanted: impl FnMut(&TranscriptRevision) -> bool,
+    ) -> Result<Option<(TranscriptRevision, SessionStatus)>, SessionStorageError> {
         let _hold = self.acquire_read(session_id)?;
         let sessions = self
             .root
@@ -1137,19 +1226,135 @@ impl FilesystemSessionStore {
         if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
             return Err(SessionStorageError::StateConflict);
         }
-        let Some(artifact) = record
+        let mut records = record
             .artifacts
             .iter()
             .rev()
-            .find(|artifact| artifact.kind == StoredArtifactKind::TranscriptRecord)
-        else {
+            .filter(|artifact| artifact.kind == StoredArtifactKind::TranscriptRecord)
+            .peekable();
+        if records.peek().is_none() {
             return Ok(None);
-        };
+        }
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let revision = read_transcript_artifact(&artifacts, artifact, status.source_id())?;
-        Ok(Some((revision, status)))
+        for artifact in records {
+            let revision = read_transcript_artifact(&artifacts, artifact, status.source_id())?;
+            if wanted(&revision) {
+                return Ok(Some((revision, status)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Opens the committed private source copy of an open session under a
+    /// shared lifetime hold, with the identity its lifecycle record gives it.
+    pub(crate) fn committed_source(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<CommittedSource, SessionStorageError> {
+        let hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let directory = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let directory_path = self
+            .root_path
+            .join(SESSIONS_DIRECTORY)
+            .join(session_id.as_str())
+            .join(ARTIFACTS_DIRECTORY);
+        Ok(CommittedSource {
+            directory,
+            directory_path,
+            hold,
+            source_id: status.source_id().clone(),
+            file_name: record.source_name,
+            bytes: status.source_bytes(),
+        })
+    }
+
+    /// Creates a fresh private work directory inside an open session.
+    ///
+    /// Leftover work directories of the same session whose run has ended
+    /// (their lock can be taken) are removed first, at most eight; one whose
+    /// lock is held, or that is not exactly a work directory, is never
+    /// touched, and links are never followed.
+    ///
+    /// # Errors
+    ///
+    /// Closed or expired sessions conflict, active cleanup is busy, and a work
+    /// directory that cannot be created is a storage failure.
+    pub fn session_work_directory(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<SessionWorkDirectory, SessionStorageError> {
+        let hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        match create_private_child_directory(&session, Path::new(WORK_DIRECTORY)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(map_storage_io(error)),
+        }
+        let work = session
+            .open_dir_nofollow(WORK_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        remove_leftover_work_directories(&work);
+        let mut random = [0_u8; WORK_RANDOM_BYTES];
+        getrandom::fill(&mut random).map_err(|_| SessionStorageError::Io)?;
+        let name = format!("{WORK_PREFIX}{}", lowercase_hex(&random));
+        create_private_child_directory(&work, Path::new(&name)).map_err(map_storage_io)?;
+        let path = self
+            .root_path
+            .join(SESSIONS_DIRECTORY)
+            .join(session_id.as_str())
+            .join(WORK_DIRECTORY)
+            .join(&name);
+        // From here on, dropping the value removes the directory again.
+        let mut directory = SessionWorkDirectory {
+            path,
+            owner: None,
+            _hold: hold,
+        };
+        let lock = fs::File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(directory.path.join(WORK_LOCK_FILE))
+            .map_err(map_storage_io)?;
+        directory.owner = Some(HeldFileLock::try_exclusive(lock).map_err(map_lock_error)?);
+        Ok(directory)
     }
 
     /// Reads one committed lifecycle after verifying the root and manifest chain.
@@ -1679,6 +1884,55 @@ fn map_provision_create_error(error: io::Error) -> SessionStoreOpenError {
     } else {
         SessionStoreOpenError::RootUnavailable
     }
+}
+
+/// Removes work directories whose run has ended: exactly named, real
+/// directories whose lock file can be locked now, or that have none. A held
+/// lock means a live run and the directory is kept. Failures are ignored; the
+/// next run tries again.
+fn remove_leftover_work_directories(work: &Dir) {
+    let Ok(entries) = work.entries() else {
+        return;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten().take(256) {
+        if removed == MAX_REMOVED_WORK_DIRECTORIES {
+            return;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let exact = name.strip_prefix(WORK_PREFIX).is_some_and(|random| {
+            random.len() == WORK_RANDOM_BYTES * 2
+                && random
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        });
+        if !exact || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        let Ok(directory) = work.open_dir_nofollow(&name) else {
+            continue;
+        };
+        let abandoned = match open_regular_file(&directory, WORK_LOCK_FILE, true) {
+            Ok(file) => HeldFileLock::try_exclusive(file.into_std())
+                .is_ok_and(|held| held.release().is_ok()),
+            Err(error) => error.kind() == io::ErrorKind::NotFound,
+        };
+        drop(directory);
+        if abandoned && work.remove_dir_all(&name).is_ok() {
+            removed += 1;
+        }
+    }
+}
+
+fn lowercase_hex(bytes: &[u8]) -> String {
+    let mut text = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        text.push(char::from(HEX[usize::from(byte >> 4)]));
+        text.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    text
 }
 
 fn create_private_child_directory(parent: &Dir, name: &Path) -> io::Result<()> {

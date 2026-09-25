@@ -9,8 +9,9 @@
 use std::{error::Error, fmt};
 
 use vsift_application::{
-    ClockError, IdentifierGenerationError, MediaToolFailure, MediaToolPreflightFailure,
-    OpenSessionError, PlanAcceptanceError, SessionStorageError, SourceProbeError,
+    AsrFailure, AsrFailureReason, AsrStage, ClockError, IdentifierGenerationError,
+    LocalAsrVerificationFailure, MediaToolFailure, MediaToolPreflightFailure, OpenSessionError,
+    PlanAcceptanceError, SessionStorageError, SourceProbeError, TranscriptBuildError,
     TranscriptQueryError,
 };
 use vsift_contract::PrivateFolder;
@@ -73,6 +74,29 @@ pub enum EngineError {
     /// The automatic preflight could not verify the selected `FFmpeg` and
     /// `FFprobe` before the first media stage, so nothing was written.
     MediaToolVerificationFailed(MediaToolPreflightFailure),
+    /// `FFmpeg`, `FFprobe` or whisper.cpp, needed for local speech
+    /// recognition, was neither configured nor found on the filtered `PATH`.
+    LocalAsrToolUnavailable(RuntimeDependency),
+    /// The configured local ASR model is not an absolute, readable regular file.
+    LocalAsrModelUnavailable,
+    /// The configured model is not a reviewed pinned profile, so it is never
+    /// run (maintainer decision D5).
+    LocalAsrModelNotPinned,
+    /// The automatic local-ASR preflight did not pass, so nothing was written.
+    LocalAsrVerificationFailed(LocalAsrVerificationFailure),
+    /// Local speech recognition failed at a typed stage; nothing was committed.
+    LocalAsrFailed(AsrFailure),
+    /// The source has no audio stream the media adapter decodes.
+    NoAudioStream,
+    /// The requested range extends past the end of the source.
+    RangeOutsideSource,
+    /// The session's source copy could not be probed.
+    SourceProbe(SourceProbeError),
+    /// The session holds no transcript revision with the requested identity.
+    TranscriptRevisionNotFound,
+    /// A completed recognition run could not be assembled into a revision;
+    /// this is an internal fault.
+    TranscriptAssembly(TranscriptBuildError),
 }
 
 impl EngineError {
@@ -111,6 +135,9 @@ impl EngineError {
             | Self::InvalidTimeRange
             | Self::InvalidPageLimit
             | Self::TranscriptQuery(_)
+            | Self::NoAudioStream
+            | Self::RangeOutsideSource
+            | Self::TranscriptRevisionNotFound
             | Self::Executable(
                 ExecutableRejection::NotAbsolute
                 | ExecutableRejection::NotRegularFile
@@ -119,15 +146,74 @@ impl EngineError {
             Self::DependencyNotSelected(_)
             | Self::MediaToolUnavailable(_)
             | Self::ModelNotSelected
+            | Self::LocalAsrToolUnavailable(_)
+            | Self::LocalAsrModelUnavailable
+            | Self::LocalAsrModelNotPinned
             | Self::Executable(ExecutableRejection::NotFound) => FailureCode::MissingCapability,
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
-            | Self::Identifier(_) => FailureCode::Internal,
+            | Self::Identifier(_)
+            | Self::TranscriptAssembly(_) => FailureCode::Internal,
             Self::MediaToolVerificationFailed(failure) => {
                 media_tool_verification_failure_code(failure.failure)
             }
+            Self::LocalAsrVerificationFailed(failure) => {
+                local_asr_verification_failure_code(*failure)
+            }
+            Self::LocalAsrFailed(failure) => asr_failure_code(*failure),
+            Self::SourceProbe(error) => probe_failure_code(*error),
         }
+    }
+}
+
+/// Public code for a failed local speech-recognition run (ADR 0017).
+///
+/// A recognizer or model that cannot be used, or that produced unusable
+/// output, means no working capability; exhausted bounds (including a
+/// recognizer that ended abnormally, usually for lack of memory) are resource
+/// limits; audio that cannot be decoded is the source's fault. `Io` is storage
+/// when the session's source copy or decoded audio could not be read, and a
+/// missing capability when a recognizer process could not run.
+pub(crate) const fn asr_failure_code(failure: AsrFailure) -> FailureCode {
+    match failure.reason {
+        AsrFailureReason::InvalidRange => FailureCode::InvalidArgument,
+        AsrFailureReason::TooManyChunks
+        | AsrFailureReason::ResourceLimit
+        | AsrFailureReason::AbnormalTermination => FailureCode::ResourceLimit,
+        AsrFailureReason::ModelChanged
+        | AsrFailureReason::ModelUnavailable
+        | AsrFailureReason::UnpinnedModel
+        | AsrFailureReason::ProviderFailed
+        | AsrFailureReason::UnparseableOutput
+        | AsrFailureReason::MalformedOutput(_) => FailureCode::MissingCapability,
+        AsrFailureReason::Cancelled => FailureCode::Cancelled,
+        AsrFailureReason::Deadline => FailureCode::DeadlineExceeded,
+        AsrFailureReason::Busy => FailureCode::Busy,
+        AsrFailureReason::AudioUnavailable => FailureCode::InvalidSource,
+        AsrFailureReason::Workspace => FailureCode::StorageIo,
+        AsrFailureReason::Io => match failure.stage {
+            AsrStage::AudioExtraction => FailureCode::StorageIo,
+            AsrStage::Planning
+            | AsrStage::RecognizerIdentity
+            | AsrStage::Recognition
+            | AsrStage::OutputValidation
+            | AsrStage::Assembly => FailureCode::MissingCapability,
+        },
+        AsrFailureReason::InvalidRun(_) => FailureCode::Internal,
+    }
+}
+
+/// Public code for a failed local-ASR preflight: the same as a run for a
+/// failed transcription, and an unusable capability for a transcript that
+/// missed the fixture's words.
+const fn local_asr_verification_failure_code(failure: LocalAsrVerificationFailure) -> FailureCode {
+    match failure {
+        LocalAsrVerificationFailure::FixtureIntegrity => FailureCode::Internal,
+        LocalAsrVerificationFailure::Workspace => FailureCode::StorageIo,
+        LocalAsrVerificationFailure::FixtureMedia
+        | LocalAsrVerificationFailure::UnexpectedTranscript => FailureCode::MissingCapability,
+        LocalAsrVerificationFailure::Transcription(failure) => asr_failure_code(failure),
     }
 }
 
@@ -259,6 +345,40 @@ impl fmt::Display for EngineError {
                 failure.check.identifier(),
                 failure.failure.identifier()
             ),
+            Self::LocalAsrToolUnavailable(dependency) => write!(
+                formatter,
+                "{} is needed for local speech recognition but was not found",
+                dependency.display_name()
+            ),
+            Self::LocalAsrModelUnavailable => {
+                formatter.write_str("the configured local ASR model cannot be read")
+            }
+            Self::LocalAsrModelNotPinned => {
+                formatter.write_str("the configured local ASR model is not a reviewed pinned model")
+            }
+            Self::LocalAsrVerificationFailed(failure) => match failure {
+                LocalAsrVerificationFailure::Transcription(asr) => {
+                    write!(
+                        formatter,
+                        "local speech recognition failed verification: {asr}"
+                    )
+                }
+                other => write!(
+                    formatter,
+                    "local speech recognition failed verification ({})",
+                    other.identifier()
+                ),
+            },
+            Self::LocalAsrFailed(failure) => failure.fmt(formatter),
+            Self::NoAudioStream => formatter.write_str("the source has no decodable audio stream"),
+            Self::RangeOutsideSource => {
+                formatter.write_str("the requested range extends past the end of the source")
+            }
+            Self::SourceProbe(error) => error.fmt(formatter),
+            Self::TranscriptRevisionNotFound => {
+                formatter.write_str("the session has no transcript revision with that identity")
+            }
+            Self::TranscriptAssembly(error) => error.fmt(formatter),
         }
     }
 }
@@ -276,7 +396,17 @@ impl Error for EngineError {
             Self::TranscriptSource(error) => Some(error),
             Self::TranscriptRejected(error) => Some(error),
             Self::TranscriptQuery(error) => Some(error),
-            Self::WorkingDirectoryUnavailable
+            Self::LocalAsrFailed(error) => Some(error),
+            Self::SourceProbe(error) => Some(error),
+            Self::TranscriptAssembly(error) => Some(error),
+            Self::LocalAsrToolUnavailable(_)
+            | Self::LocalAsrModelUnavailable
+            | Self::LocalAsrModelNotPinned
+            | Self::LocalAsrVerificationFailed(_)
+            | Self::NoAudioStream
+            | Self::RangeOutsideSource
+            | Self::TranscriptRevisionNotFound
+            | Self::WorkingDirectoryUnavailable
             | Self::MediaToolUnavailable(_)
             | Self::MediaToolVerificationFailed(_)
             | Self::TranscriptUnavailable

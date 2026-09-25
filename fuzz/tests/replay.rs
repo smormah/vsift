@@ -333,8 +333,7 @@ fn the_local_asr_record_seed_is_the_encoded_f01_revision() -> TestResult {
             segments: merged.segments,
             warnings,
         },
-        supersedes: None,
-        replaced_range: None,
+        splice: None,
     })?;
     let encoded = encode_transcript_record(&revision)?;
     let committed =

@@ -23,10 +23,12 @@ use vsift::{
     UserConfigurationLocation,
 };
 use vsift_contract::{
-    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse,
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, OperationResponse, TerminalEventResponse,
-    TranscriptEvidenceStream, media_tool_verification_summary, non_private_folder_summary,
-    transcript_rejection_summary,
+    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, LOCAL_ASR_MODEL_REMEDIATION,
+    LOCAL_ASR_TOOLS_REMEDIATION, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
+    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, OperationResponse,
+    TerminalEventResponse, TranscriptEvidenceStream, UNKNOWN_REVISION_REMEDIATION,
+    UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
+    media_tool_verification_summary, non_private_folder_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -292,7 +294,10 @@ where
                     let result = session::transcript_get(&engine, arguments);
                     write_session_result(&mut writer, mode, operation, result)
                 }
-                TranscriptCommand::Retranscribe(_) => not_implemented(&mut writer, mode, operation),
+                TranscriptCommand::Retranscribe(arguments) => {
+                    let result = session::retranscribe(&engine, arguments).await;
+                    write_session_result(&mut writer, mode, operation, result)
+                }
             }
         }
         Command::Session(arguments) => {
@@ -404,11 +409,32 @@ impl From<EngineError> for CommandFailure {
                     .media_tool_verification_failure()
                     .map(media_tool_verification_summary)
             })
-            .or_else(|| error.non_private_folder().map(non_private_folder_summary));
+            .or_else(|| error.non_private_folder().map(non_private_folder_summary))
+            .or_else(|| local_asr_remediation(&error));
         Self {
             code: error.failure_code(),
             remediation,
         }
+    }
+}
+
+/// Fixed-prose remediation for local speech recognition and transcript
+/// reads; never a path, provider output or transcript text.
+fn local_asr_remediation(error: &EngineError) -> Option<String> {
+    match error {
+        EngineError::LocalAsrToolUnavailable(_) => Some(LOCAL_ASR_TOOLS_REMEDIATION.to_owned()),
+        EngineError::ModelNotSelected | EngineError::LocalAsrModelUnavailable => {
+            Some(LOCAL_ASR_MODEL_REMEDIATION.to_owned())
+        }
+        EngineError::LocalAsrModelNotPinned => Some(UNPINNED_MODEL_REMEDIATION.to_owned()),
+        EngineError::LocalAsrVerificationFailed(failure) => {
+            Some(local_asr_verification_summary(*failure))
+        }
+        EngineError::LocalAsrFailed(failure) => Some(local_asr_failure_summary(*failure)),
+        EngineError::NoAudioStream => Some(NO_AUDIO_STREAM_REMEDIATION.to_owned()),
+        EngineError::TranscriptUnavailable => Some(NO_TRANSCRIPT_REMEDIATION.to_owned()),
+        EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
+        _ => None,
     }
 }
 

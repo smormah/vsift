@@ -295,8 +295,7 @@ fn a_local_asr_revision_round_trips_through_record_version_2() -> TestResult {
             segments: merged.segments,
             warnings,
         },
-        supersedes: None,
-        replaced_range: None,
+        splice: None,
     })?;
     let encoded = encode_transcript_record(&revision)?;
     let record: serde_json::Value = serde_json::from_slice(&encoded)?;

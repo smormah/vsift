@@ -28,7 +28,7 @@ use crate::{
 /// Every clone observes the same signal; cancelling any clone stops the
 /// operation at its next provider boundary.
 #[derive(Clone, Debug)]
-pub struct Cancellation(ProcessCancellation);
+pub struct Cancellation(pub(crate) ProcessCancellation);
 
 impl Cancellation {
     /// Creates an uncancelled signal.

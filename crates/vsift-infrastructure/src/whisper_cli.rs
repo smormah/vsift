@@ -262,6 +262,9 @@ pub enum WhisperError {
     OutputLimit,
     /// The provider exited unsuccessfully or wrote no JSON output.
     ProviderFailed,
+    /// The provider was ended by a signal or an operating-system crash status
+    /// rather than exiting; running out of memory is the usual cause.
+    AbnormalTermination,
     /// The JSON output was rejected.
     Output(WhisperOutputError),
 }
@@ -279,6 +282,7 @@ impl fmt::Display for WhisperError {
             Self::Cancelled => "whisper was cancelled",
             Self::OutputLimit => "whisper exceeded its output bound",
             Self::ProviderFailed => "whisper did not complete",
+            Self::AbnormalTermination => "whisper terminated abnormally",
             Self::Output(_) => "whisper output was rejected",
         })
     }
@@ -310,15 +314,14 @@ impl From<&WhisperError> for SpeechRecognitionError {
                 | WhisperOutputError::TooManyTokens,
             ) => Self::ResourceLimit,
             WhisperError::ProviderFailed => Self::ProviderFailed,
+            WhisperError::AbnormalTermination => Self::AbnormalTermination,
             WhisperError::Output(
                 WhisperOutputError::InvalidUtf8
                 | WhisperOutputError::Unparseable
                 | WhisperOutputError::InvalidText(_),
             ) => Self::UnparseableOutput,
-            WhisperError::StaleChunkFile
-            | WhisperError::Workspace(_)
-            | WhisperError::Request(_)
-            | WhisperError::Process(_) => Self::Io,
+            WhisperError::StaleChunkFile | WhisperError::Workspace(_) => Self::Workspace,
+            WhisperError::Request(_) | WhisperError::Process(_) => Self::Io,
         }
     }
 }
@@ -454,6 +457,9 @@ impl WhisperCli {
             })?;
         match outcome.termination {
             TerminationReason::Exited if outcome.status.success() => {}
+            TerminationReason::Exited if ended_abnormally(outcome.status) => {
+                return Err(WhisperError::AbnormalTermination);
+            }
             TerminationReason::Exited => return Err(WhisperError::ProviderFailed),
             TerminationReason::Deadline => return Err(WhisperError::Deadline),
             TerminationReason::Cancelled => return Err(WhisperError::Cancelled),
@@ -480,6 +486,64 @@ impl WhisperCli {
     pub const fn threads(&self) -> NonZeroU16 {
         self.threads
     }
+
+    /// Identifies the provider build and model as they are now, from their
+    /// bytes: the executable's SHA-256, the model's size and SHA-256 compared
+    /// with the reviewed pinned model, the decoding profile and the threads.
+    ///
+    /// The model is hashed in full (the base model is about 148 MB), so a run
+    /// calls this before its first chunk and after its last, not per chunk.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SpeechRecognitionError::Io`] when the executable cannot be
+    /// identified and [`SpeechRecognitionError::ModelUnavailable`] when the
+    /// model cannot be read within [`MAX_WHISPER_MODEL_BYTES`].
+    pub async fn recognizer_identity(&self) -> Result<RecognizerIdentity, SpeechRecognitionError> {
+        let build = identify_whisper_build(&self.executable)
+            .await
+            .map_err(|_| SpeechRecognitionError::Io)?;
+        let (bytes, sha256) = hash_file_bounded(&self.model, MAX_WHISPER_MODEL_BYTES)
+            .await
+            .map_err(|_| SpeechRecognitionError::ModelUnavailable)?;
+        let profile = match pinned_whisper_model() {
+            Ok(pinned) if pinned.bytes() == bytes && pinned.sha256() == sha256 => {
+                AsrModelProfile::Base
+            }
+            _ => AsrModelProfile::Unreviewed,
+        };
+        Ok(RecognizerIdentity {
+            provider: AsrProviderBuild::new(
+                AsrProvider::WhisperCpp,
+                Sha256Hex::parse(build.sha256_hex()).map_err(|_| SpeechRecognitionError::Io)?,
+            ),
+            model: AsrModel::new(
+                profile,
+                Sha256Hex::parse(hex(&sha256)).map_err(|_| SpeechRecognitionError::Io)?,
+            ),
+            decoding: AsrDecodingProfile::R0V1,
+            threads: self.threads,
+        })
+    }
+}
+
+/// Whether a process that was not stopped by the supervisor ended without
+/// exiting normally: killed by a signal on Unix (the out-of-memory killer
+/// sends `SIGKILL`), or with an NTSTATUS error code on Windows (such as
+/// `STATUS_NO_MEMORY` or an access violation), which an exit call never
+/// produces for whisper-cli.
+#[cfg(unix)]
+fn ended_abnormally(status: std::process::ExitStatus) -> bool {
+    status.code().is_none()
+}
+
+/// See the Unix variant.
+#[cfg(windows)]
+fn ended_abnormally(status: std::process::ExitStatus) -> bool {
+    const NTSTATUS_ERROR: u32 = 0xC000_0000;
+    status
+        .code()
+        .is_some_and(|code| code.cast_unsigned() >= NTSTATUS_ERROR)
 }
 
 fn write_new_file(directory: &Dir, name: &str, bytes: &[u8]) -> Result<(), WhisperError> {
@@ -555,30 +619,7 @@ impl WhisperSpeechRecognizer {
 
 impl SpeechRecognizer for WhisperSpeechRecognizer {
     async fn identity(&self) -> Result<RecognizerIdentity, SpeechRecognitionError> {
-        let build = identify_whisper_build(self.cli.executable())
-            .await
-            .map_err(|_| SpeechRecognitionError::Io)?;
-        let (bytes, sha256) = hash_file_bounded(self.cli.model(), MAX_WHISPER_MODEL_BYTES)
-            .await
-            .map_err(|_| SpeechRecognitionError::ModelUnavailable)?;
-        let profile = match pinned_whisper_model() {
-            Ok(pinned) if pinned.bytes() == bytes && pinned.sha256() == sha256 => {
-                AsrModelProfile::Base
-            }
-            _ => AsrModelProfile::Unreviewed,
-        };
-        Ok(RecognizerIdentity {
-            provider: AsrProviderBuild::new(
-                AsrProvider::WhisperCpp,
-                Sha256Hex::parse(build.sha256_hex()).map_err(|_| SpeechRecognitionError::Io)?,
-            ),
-            model: AsrModel::new(
-                profile,
-                Sha256Hex::parse(hex(&sha256)).map_err(|_| SpeechRecognitionError::Io)?,
-            ),
-            decoding: AsrDecodingProfile::R0V1,
-            threads: self.cli.threads(),
-        })
+        self.cli.recognizer_identity().await
     }
 
     async fn recognize(

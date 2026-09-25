@@ -281,6 +281,11 @@ fn transcript_get_rejects_bad_requests_and_sessions_without_a_transcript() -> Te
     let value = json(&without)?;
     assert_eq!(value["command"], "transcript.get");
     assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    // D1: the fixed remediation points at both ways to get a transcript.
+    let remedy = value["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("remediation missing")?;
+    assert!(remedy.contains("transcript retranscribe") && remedy.contains("ingest --transcript"));
 
     let empty_range = vsift(
         &root,
@@ -309,7 +314,9 @@ fn transcript_get_rejects_bad_requests_and_sessions_without_a_transcript() -> Te
         assert_eq!(json(&output)?["command"], "parse", "{arguments:?}");
     }
 
-    let retranscribe = vsift(
+    // Local ASR is reachable, and with no tools at all it fails typed before
+    // touching the session: nothing on PATH and nothing configured.
+    let retranscribe = vsift_without_path(
         &root,
         &[
             "transcript",
@@ -325,8 +332,36 @@ fn transcript_get_rejects_bad_requests_and_sessions_without_a_transcript() -> Te
     assert_eq!(retranscribe.status.code(), Some(2));
     let value = json(&retranscribe)?;
     assert_eq!(value["command"], "transcript.retranscribe");
-    assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
+    assert_eq!(value["error"]["code"], "MISSING_CAPABILITY");
+    let remedy = value["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("remediation missing")?;
+    assert!(remedy.contains("whisper") && !remedy.contains(path_text(&root.0)?));
+
+    // Both range flags or neither.
+    for partial in [["--from", "0"], ["--to", "10"]] {
+        let mut full = vec!["transcript", "retranscribe", session];
+        full.extend(partial);
+        full.push("--json");
+        let output = vsift_without_path(&root, &full)?;
+        assert_eq!(output.status.code(), Some(2), "{partial:?}");
+        assert_eq!(json(&output)?["command"], "parse", "{partial:?}");
+    }
     Ok(())
+}
+
+/// Runs `vsift` like [`vsift`] with an empty `PATH`, so no provider is found.
+fn vsift_without_path(root: &OwnedRoot, arguments: &[&str]) -> Result<Output, Box<dyn Error>> {
+    let base = root.path("user");
+    Ok(Command::cargo_bin("vsift")?
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
+        .env("PATH", "")
+        .arg("--session-root")
+        .arg(root.sessions())
+        .args(arguments)
+        .output()?)
 }
 
 fn repository(relative: &str) -> PathBuf {

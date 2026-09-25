@@ -225,7 +225,7 @@ fn bounded_sha256(file: fs::File, expected_bytes: u64) -> io::Result<Option<[u8;
     Ok((total == expected_bytes).then(|| hasher.finalize().into()))
 }
 
-fn matches_integrity(bytes: &[u8], integrity: ArtifactIntegrity) -> bool {
+pub(crate) fn matches_integrity(bytes: &[u8], integrity: ArtifactIntegrity) -> bool {
     u64::try_from(bytes.len()).is_ok_and(|length| length == integrity.bytes())
         && <[u8; 32]>::from(Sha256::digest(bytes)) == integrity.sha256()
 }
@@ -327,11 +327,11 @@ const fn map_media_error(error: &MediaError) -> MediaToolFailure {
     }
 }
 
-fn random_session_id() -> Result<SessionId, ()> {
+pub(crate) fn random_session_id() -> Result<SessionId, ()> {
     SessionId::parse(format!("ses_{}", random_hex()?)).map_err(|_| ())
 }
 
-fn random_operation_id() -> Result<OperationId, ()> {
+pub(crate) fn random_operation_id() -> Result<OperationId, ()> {
     OperationId::parse(format!("op_{}", random_hex()?)).map_err(|_| ())
 }
 
@@ -402,7 +402,6 @@ impl VerificationWorkspace {
     }
 
     /// The workspace directory.
-    #[cfg(test)]
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }

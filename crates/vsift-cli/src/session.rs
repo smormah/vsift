@@ -7,19 +7,23 @@
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
-    BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    Engine, FailureCode, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot,
-    SourceRetention, SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery,
+    BundleSummary, Cancellation, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest,
+    CleanScope, Engine, FailureCode, IngestRequest, RetranscribeRange, RetranscribeRequest,
+    SessionListEntry, SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
+    TranscriptExcerpt, TranscriptQuery,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, SessionState,
-    StatusData, TranscriptEvidenceStream, TranscriptPageData, transcript_warning_messages,
+    StatusData, TranscriptEvidenceStream, TranscriptPageData, TranscriptRetranscribeData,
+    transcript_warning_messages,
 };
 
 use crate::{
     CommandFailure,
-    command::{IngestArguments, SessionCommand, TranscriptGetArguments},
+    command::{
+        IngestArguments, SessionCommand, TranscriptGetArguments, TranscriptRetranscribeArguments,
+    },
 };
 
 type Response = OperationResponse<serde_json::Value>;
@@ -190,11 +194,50 @@ fn read_transcript(
 ) -> Result<TranscriptExcerpt, CommandFailure> {
     Ok(engine.transcript(TranscriptQuery {
         session: arguments.session,
+        revision: arguments.revision,
         from_micros: arguments.from,
         to_micros: arguments.to,
         limit: arguments.limit,
         cursor: arguments.cursor,
     })?)
+}
+
+/// Transcribes a session's speech locally into a new revision.
+///
+/// With `--events jsonl` the result is one terminal event, like every command
+/// other than `transcript get`: a whole-video revision can hold thousands of
+/// segments, more than one bounded stream may carry, so its records are read
+/// with `transcript get --revision <revision_id> --events jsonl`, page by page.
+/// The command-line host does not trap Ctrl-C; an interrupted run commits
+/// nothing, and its work directory is removed by the session's next run or
+/// cleanup.
+pub(crate) async fn retranscribe(
+    engine: &Engine,
+    arguments: TranscriptRetranscribeArguments,
+) -> Result<Response, CommandFailure> {
+    let range = arguments
+        .from
+        .zip(arguments.to)
+        .map(|(from_micros, to_micros)| RetranscribeRange {
+            from_micros,
+            to_micros,
+        });
+    let outcome = engine
+        .retranscribe(RetranscribeRequest {
+            session: arguments.session,
+            range,
+            cancellation: Cancellation::new(),
+        })
+        .await?;
+    let data = TranscriptRetranscribeData::new(
+        outcome.session().session_id(),
+        outcome.requested(),
+        outcome.revision(),
+    );
+    let expires_at = rfc3339(outcome.session().lifetime().expires_at_unix_seconds())?;
+    Ok(response(CommandName::TranscriptRetranscribe, &data)?
+        .with_lifecycle(LifecycleResponse::ephemeral(expires_at))
+        .with_warnings(&transcript_warning_messages(outcome.revision())))
 }
 
 /// Reads one bounded page of a session's transcript as one result.

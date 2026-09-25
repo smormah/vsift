@@ -34,8 +34,11 @@
 //!   [`Engine::close_session`], [`Engine::retain_session`] and
 //!   [`Engine::clean_sessions`].
 //! - **Transcripts:** [`Engine::ingest`] with a [`SuppliedTranscriptRequest`]
-//!   imports a `SubRip` or `WebVTT` sidecar; [`Engine::transcript`] pages the
-//!   committed revision.
+//!   imports a `SubRip` or `WebVTT` sidecar; [`Engine::retranscribe`]
+//!   transcribes the session's speech, or one range of it, locally with
+//!   whisper.cpp into a new revision (the only operation that runs local ASR);
+//!   [`Engine::transcript`] pages the newest revision, or any earlier one by
+//!   identity.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that
@@ -45,6 +48,10 @@
 //!   state; a failure is [`EngineError::MediaToolVerificationFailed`] and
 //!   nothing is written. [`EnginePorts::with_media_tool_verifier`] replaces the
 //!   reviewed fixture verifier for tests and hosts with their own authority.
+//!   [`Engine::retranscribe`] also runs a local-ASR preflight that transcribes
+//!   a reviewed speech clip once per recognizer identity;
+//!   [`EnginePorts::with_local_asr_verifier`] and
+//!   [`EnginePorts::with_speech_recognizer`] replace it or the recognizer.
 //!
 //! # Errors
 //!
@@ -61,6 +68,7 @@
 
 #![forbid(unsafe_code)]
 
+mod asr;
 mod engine;
 mod error;
 mod sessions;
@@ -68,6 +76,7 @@ mod setup;
 mod transcripts;
 mod verification;
 
+pub use asr::{RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, SessionRootLocation,
     UserConfigurationLocation,
@@ -90,25 +99,30 @@ pub use verification::{
 };
 
 pub use vsift_application::{
-    Clock, ClockError, IdentifierGenerationError, IdentifierSource, MediaToolCheck,
-    MediaToolFailure, MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier,
-    ModelVerification, OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RuntimeDiagnosis,
-    SessionStorageError, SetupProfile, SourceProbeError, TranscriptQueryError,
+    AsrFailure, AsrFailureReason, AsrStage, Clock, ClockError, IdentifierGenerationError,
+    IdentifierSource, LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier,
+    MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure, MediaToolVerification,
+    MediaToolVerifier, ModelVerification, OpenSessionError, OpenSessionOutcome,
+    PlanAcceptanceError, RecognizerIdentity, RuntimeDiagnosis, SessionStorageError, SetupProfile,
+    SourceProbeError, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError,
+    TranscriptQueryError,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
-    AlignmentOrigin, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText, CueTiming,
-    CursorError, LanguageTag, MediaTime, ProviderEndTrim, SegmentOrigin, SidecarIdentity,
-    SourceSegment, SourceSegmentId, SourceSegmentState, SpeakerLabel, TimeRange, TranscriptFormat,
-    TranscriptImportError, TranscriptOffset, TranscriptProvenance, TranscriptRejection,
-    TranscriptRevision, TranscriptRevisionId, TranscriptSegment, TranscriptSegmentId,
-    TranscriptWarning, TranscriptWarningKind, TranscriptWarnings,
+    AlignmentOrigin, CarriedFrom, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText,
+    CueTiming, CursorError, InheritedRevision, LanguageTag, MediaTime, ProviderEndTrim,
+    SegmentOrigin, SidecarIdentity, SourceSegment, SourceSegmentId, SourceSegmentState,
+    SpeakerLabel, TimeRange, TranscriptFormat, TranscriptImportError, TranscriptOffset,
+    TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptRevisionId,
+    TranscriptSegment, TranscriptSegmentId, TranscriptWarning, TranscriptWarningKind,
+    TranscriptWarnings,
 };
-/// Local-ASR provenance values reachable from [`TranscriptProvenance`]. No
-/// engine operation produces a local-ASR revision yet.
+/// Local-ASR provenance values reachable from [`TranscriptProvenance`], and
+/// the values a host-supplied [`SpeechRecognizer`] works with.
 pub use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, Sha256Hex,
+    AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, ProviderChunkOutput,
+    ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, Sha256Hex,
 };
 pub use vsift_domain::{
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,

@@ -241,8 +241,7 @@ async fn speech_clips_are_transcribed_through_the_real_adapters() -> TestResult 
             source_segment: &source,
             number: NonZeroU32::MIN,
             transcription,
-            supersedes: None,
-            replaced_range: None,
+            splice: None,
         })?;
         let encoded = encode_transcript_record(&revision)?;
         if decode_transcript_record(&encoded)? != revision {

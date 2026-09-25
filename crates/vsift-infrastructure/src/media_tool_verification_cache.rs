@@ -132,7 +132,7 @@ pub enum MediaToolVerificationAuthority {
 }
 
 impl MediaToolVerificationAuthority {
-    const fn tag(self) -> &'static [u8] {
+    pub(crate) const fn tag(self) -> &'static [u8] {
         match self {
             Self::ReviewedFixture => b"reviewed_fixture",
             Self::HostSupplied => b"host_supplied",
@@ -182,12 +182,12 @@ pub fn media_tool_fingerprint(
 }
 
 /// Length-prefixes every field so no two input sequences hash alike.
-fn field(hasher: &mut Sha256, bytes: &[u8]) {
+pub(crate) fn field(hasher: &mut Sha256, bytes: &[u8]) {
     hasher.update((bytes.len() as u64).to_le_bytes());
     hasher.update(bytes);
 }
 
-fn number(hasher: &mut Sha256, value: u64) {
+pub(crate) fn number(hasher: &mut Sha256, value: u64) {
     field(hasher, &value.to_le_bytes());
 }
 
@@ -198,7 +198,7 @@ fn list(hasher: &mut Sha256, values: &[&str]) {
     }
 }
 
-const fn isolation_tag(host_isolation: HostIsolation) -> &'static [u8] {
+pub(crate) const fn isolation_tag(host_isolation: HostIsolation) -> &'static [u8] {
     match host_isolation {
         HostIsolation::ProcessOnly => b"process_only",
         #[cfg(target_os = "linux")]
@@ -235,7 +235,9 @@ fn policy_fields(hasher: &mut Sha256, policy: &ReviewedCompatibilityPolicy) {
     number(hasher, u64::from(*audio_channels));
 }
 
-fn executable_identity(hasher: &mut Sha256, path: &Path) -> Option<()> {
+/// Binds a regular file's canonical path and on-disk identity (size,
+/// modification time and platform identity), never its contents.
+pub(crate) fn executable_identity(hasher: &mut Sha256, path: &Path) -> Option<()> {
     field(hasher, &path_bytes(path.as_os_str()));
     let metadata = fs::symlink_metadata(path).ok()?;
     if !metadata.is_file() {

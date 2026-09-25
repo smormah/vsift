@@ -7,7 +7,7 @@ use vsift_application::{
 };
 use vsift_domain::{
     MediaTime, PageLimit, RuntimeDependency, SessionId, TimeRange, TranscriptImportError,
-    TranscriptOffset, TranscriptRevision, TranscriptSegment,
+    TranscriptOffset, TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
 };
 use vsift_infrastructure::{
     ExecutableResolutionError, ExecutableResolver, MediaProviderConformance, TrustedExecutable,
@@ -25,8 +25,11 @@ const MICROS_PER_SECOND: u64 = 1_000_000;
 /// A bounded request for the transcript segments of one session in a range.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TranscriptQuery {
-    /// Session whose latest transcript revision is read.
+    /// Session whose transcript is read.
     pub session: SessionId,
+    /// Revision to read; `None` reads the newest. Every revision a session
+    /// ever committed stays readable, so an older citation always resolves.
+    pub revision: Option<TranscriptRevisionId>,
     /// Inclusive source-timeline start, in microseconds.
     pub from_micros: u64,
     /// Exclusive source-timeline end, in microseconds.
@@ -80,17 +83,19 @@ impl TranscriptExcerpt {
 }
 
 impl Engine {
-    /// Reads one bounded page of a session's latest transcript revision.
+    /// Reads one bounded page of a session's newest transcript revision, or of
+    /// the revision `query.revision` names.
     ///
     /// Segments intersecting `[from, to)` are returned in start order. A
     /// continuation cursor is bound to the session, the revision, the range and
-    /// the session's current expiry.
+    /// the session's current expiry. This never runs a provider.
     ///
     /// # Errors
     ///
     /// Fails for an invalid range, page size or cursor, a missing root or
-    /// session, a closed or expired session, a session without a transcript,
-    /// or a stored record that fails its integrity checks.
+    /// session, a closed or expired session, a session without a transcript, a
+    /// revision the session does not hold, or a stored record that fails its
+    /// integrity checks.
     pub fn transcript(&self, query: TranscriptQuery) -> Result<TranscriptExcerpt, EngineError> {
         let range = TimeRange::new(
             MediaTime::from_micros(query.from_micros),
@@ -103,9 +108,14 @@ impl Engine {
             .map_err(|_| EngineError::InvalidPageLimit)?;
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let (revision, status) = store
-            .read_transcript(&query.session, now)?
-            .ok_or(EngineError::TranscriptUnavailable)?;
+        let (revision, status) = match &query.revision {
+            None => store
+                .read_transcript(&query.session, now)?
+                .ok_or(EngineError::TranscriptUnavailable)?,
+            Some(revision) => store
+                .read_transcript_revision(&query.session, revision, now)?
+                .ok_or(EngineError::TranscriptRevisionNotFound)?,
+        };
         let expires_at = status
             .lifetime()
             .expires_at_unix_seconds()
@@ -161,7 +171,7 @@ impl Engine {
 
     /// Resolves `FFmpeg` and `FFprobe` with the same precedence as `setup
     /// check`: a configured user selection first, then the filtered `PATH`.
-    fn media_tools(&self) -> Result<MediaProviderConformance, EngineError> {
+    pub(crate) fn media_tools(&self) -> Result<MediaProviderConformance, EngineError> {
         let configured = self.user_configuration()?.read()?;
         let resolver = ExecutableResolver::from_current_path();
         let ffmpeg = resolve_tool(&resolver, configured.ffmpeg, RuntimeDependency::Ffmpeg)?;
