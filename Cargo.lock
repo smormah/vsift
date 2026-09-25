@@ -2118,6 +2118,7 @@ dependencies = [
  "vsift",
  "vsift-application",
  "vsift-contract",
+ "vsift-domain",
  "vsift-infrastructure",
 ]
 
