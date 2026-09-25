@@ -22,9 +22,9 @@ platform code.
    `transcript get --revision`, widened v1 schemas and version-2 records, typed
    failures on existing codes, and the opt-in `p07_local_asr` checkpoint (passed
    locally). [ADR 0017](../docs/decisions/0017-local-asr-through-whisper-cpp.md) is
-   **Proposed** and needs maintainer review before merge; it lists six decisions
-   awaiting confirmation (empty-speech revision, audio-stream choice, retranscribe
-   stream shape, no Ctrl-C trap, 1 s verification end bound, no range clamping).
+   **Accepted** (2026-09-25) with its six further decisions (empty-speech revision,
+   first audio stream, retranscribe stream shape, no Ctrl-C trap, 1 s verification
+   end bound, no range clamping). Includes the seam-merge fix found in 3c.
 3. **Next: increment 3c.** D4: `setup check` reports an additive `local_asr` object
    (runs the verification within 60 s if none is recorded). D6: the `base-q5_1`
    profile beside the pinned base, gates RTF <= 0.5, <= 400 MiB, WER <= 10% clean /
@@ -47,7 +47,6 @@ platform code.
 
 ## Open decisions (maintainer)
 
-- ADR 0017 review and its six recorded decisions (above).
 - Local ASR, decided 2026-09-25: D1 request only through `transcript retranscribe`;
   D2 widen v1 schemas in place; D3 complete spliced revisions, older ones via `--revision`;
   D4 `setup check` `local_asr` object (3c); D5 refuse unpinned models; D6 `base-q5_1`

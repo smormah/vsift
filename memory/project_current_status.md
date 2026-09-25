@@ -25,7 +25,7 @@ Today it can:
   including the content of their transcript records;
 - keep every folder it creates private to the user, whatever the parent folder grants.
 
-Increment 3b is complete on its branch and awaits review; ADR 0017 is Proposed. The
+Increment 3b is complete (PR #149, ADR 0017 accepted 2026-09-25). The
 P07 packet is not complete: increment 3c (setup-check reporting and the model
 profile gates) and the packet record remain. Search and visuals are P08-P09.
 
@@ -109,7 +109,7 @@ profile gates) and the packet record remain. Search and visuals are P08-P09.
 | --- | --- |
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
-| P07 | In progress: 1a-3a and fuzz merged; 3b in review (ADR 0017 Proposed); 3c next |
+| P07 | In progress: 1a-3a and fuzz merged; 3b merged (ADR 0017 accepted); 3c next |
 | P08–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 

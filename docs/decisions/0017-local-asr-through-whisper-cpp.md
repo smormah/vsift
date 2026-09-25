@@ -1,6 +1,6 @@
 # ADR 0017: Local speech recognition through whisper.cpp
 
-- Status: Proposed (maintainer review before merge)
+- Status: Accepted (maintainer, 2026-09-25)
 - Date: 2026-09-25
 - Tracking: [P07 / issue #10](https://github.com/smormah/vsift/issues/10), increment 3b
 - Refines: [ADR 0005](0005-r0-scope-and-qualification-profiles.md) (the CPU speech
@@ -174,6 +174,8 @@ seven days like media-tool passes. A failure writes nothing and is typed
 reason, `unexpected_transcript`). `setup check` does not report it yet (D4, 3c).
 
 ## Decisions recorded for maintainer confirmation
+
+The maintainer confirmed all six on 2026-09-25.
 
 These were not settled by D1–D8; each follows the existing contracts most closely.
 
