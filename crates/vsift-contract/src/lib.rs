@@ -29,6 +29,13 @@
 //!   [`TranscriptEvidenceStream`] of [`EvidenceEventResponse`] records ended by
 //!   one terminal event whose data is [`TranscriptStreamData`], with the
 //!   published [`EventKind`] and [`EvidenceRecordType`] identifiers.
+//! - **Search:** the `search` page [`SearchData`] and its stream
+//!   [`SearchEvidenceStream`] (the matching segments as `transcript_segment`
+//!   evidence events, then [`SearchStreamData`]), built from a
+//!   [`SearchPresentation`] by [`search_response`], which also fills the
+//!   envelope [`CoverageResponse`] and the `partial` status, and
+//!   [`search_query_rejection_summary`] for a rejected query. Every stream is
+//!   written through the [`EvidenceStream`] view.
 //! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
 //!   remediation for a failed automatic media-tool preflight.
 //! - **Storage:** [`non_private_folder_summary`], the fixed-prose remediation
@@ -50,6 +57,7 @@ mod command;
 mod envelope;
 mod evidence;
 mod local_asr;
+mod search;
 mod session;
 mod setup;
 mod storage;
@@ -69,6 +77,10 @@ pub use local_asr::{
     UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary,
 };
+pub use search::{
+    MAX_COVERAGE_RANGES, SearchData, SearchEvidenceStream, SearchPresentation, SearchStreamData,
+    UNTRANSCRIBED_SEARCH_WARNING, search_query_rejection_summary, search_response,
+};
 pub use session::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, ListedSession,
     OpenData, PageData, SessionState, StatusData,
@@ -79,7 +91,7 @@ pub use setup::{
 };
 pub use storage::{PrivateFolder, non_private_folder_summary};
 pub use stream::{
-    EventKind, EvidenceEventResponse, EvidenceRecordType, TranscriptEvidenceStream,
+    EventKind, EvidenceEventResponse, EvidenceRecordType, EvidenceStream, TranscriptEvidenceStream,
     TranscriptStreamData,
 };
 pub use text::{MAX_PROVIDER_DETAIL_BYTES, sanitize_untrusted_text};

@@ -73,13 +73,33 @@ struct CommandResponse {
 
 /// Honest statement of inspected and missing result coverage.
 ///
-/// No current operation reports partial coverage; the shape is frozen so the
-/// search and candidate packets can fill it without a schema change.
+/// The shape was frozen before any operation filled it. `search` (P08) is the
+/// first: `truncated` says part of the searched range has no transcript,
+/// `gaps` lists those parts as `<from_us>-<to_us>` and `reasons` names why,
+/// with distinct identifiers. Only this crate builds it, so every host reports
+/// coverage by the same rules.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CoverageResponse {
     truncated: bool,
     gaps: Vec<String>,
     reasons: Vec<String>,
+}
+
+impl CoverageResponse {
+    /// Coverage with its three members, as the operation's rules decide them.
+    pub(crate) const fn new(truncated: bool, gaps: Vec<String>, reasons: Vec<String>) -> Self {
+        Self {
+            truncated,
+            gaps,
+            reasons,
+        }
+    }
+
+    /// Whether part of the requested result could not be covered.
+    #[must_use]
+    pub const fn truncated(&self) -> bool {
+        self.truncated
+    }
 }
 
 /// Lifecycle metadata attached to a session-backed operation.
@@ -182,6 +202,17 @@ impl OperationResponse<serde_json::Value> {
         response.status = OperationStatus::Partial.identifier();
         response.warnings.push(warning.to_owned());
         Ok(response)
+    }
+
+    /// Attaches coverage to a completed result. Truncated coverage makes the
+    /// result `partial`: useful data with a stated gap, still a success.
+    #[must_use]
+    pub(crate) fn with_coverage(mut self, coverage: CoverageResponse) -> Self {
+        if coverage.truncated && self.error.is_none() {
+            self.status = OperationStatus::Partial.identifier();
+        }
+        self.coverage = Some(coverage);
+        self
     }
 
     /// Adds fixed-prose warnings to a completed result without changing its status.

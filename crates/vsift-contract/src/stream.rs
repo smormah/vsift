@@ -140,7 +140,7 @@ pub struct EvidenceEventResponse {
 }
 
 impl EvidenceEventResponse {
-    fn transcript_segment(
+    pub(crate) fn transcript_segment(
         sequence: u64,
         command: CommandName,
         revision: &TranscriptRevision,
@@ -159,6 +159,19 @@ impl EvidenceEventResponse {
             )),
         }
     }
+}
+
+/// A finite JSON Lines evidence stream: its evidence events, then the one
+/// terminal event that ends it.
+///
+/// Hosts write any stream through this one view, so every command that
+/// streams evidence (`transcript get`, `search`) is written identically.
+pub trait EvidenceStream {
+    /// The evidence events, in stream order.
+    fn records(&self) -> &[EvidenceEventResponse];
+
+    /// The terminal event that ends the stream.
+    fn terminal(&self) -> &TerminalEventResponse;
 }
 
 /// Data of the terminal event that ends a `transcript.get` evidence stream.
@@ -234,6 +247,16 @@ impl TranscriptEvidenceStream {
     /// The terminal event that ends the stream.
     #[must_use]
     pub const fn terminal(&self) -> &TerminalEventResponse {
+        &self.terminal
+    }
+}
+
+impl EvidenceStream for TranscriptEvidenceStream {
+    fn records(&self) -> &[EvidenceEventResponse] {
+        &self.records
+    }
+
+    fn terminal(&self) -> &TerminalEventResponse {
         &self.terminal
     }
 }

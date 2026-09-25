@@ -39,6 +39,9 @@
 //!   whisper.cpp into a new revision (the only operation that runs local ASR);
 //!   [`Engine::transcript`] pages the newest revision, or any earlier one by
 //!   identity.
+//! - **Search:** [`Engine::search`] finds a literal query in a revision's
+//!   segments, ranked phrase matches first, and reports which parts of the
+//!   searched range no transcript covers.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that
@@ -72,6 +75,7 @@ mod asr;
 mod engine;
 mod error;
 mod local_asr_check;
+mod search;
 mod sessions;
 mod setup;
 mod transcripts;
@@ -87,6 +91,7 @@ pub use error::{
     UserConfigurationError,
 };
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
+pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
     IngestOutcome, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
@@ -127,6 +132,11 @@ pub use vsift_domain::{
     AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, ProviderChunkOutput,
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
     Sha256Hex,
+};
+/// Search values that appear in this API.
+pub use vsift_domain::{
+    CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchMatch,
+    SearchQuery, SearchQueryRejection,
 };
 pub use vsift_domain::{
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
