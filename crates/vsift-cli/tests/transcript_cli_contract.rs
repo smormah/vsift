@@ -571,6 +571,51 @@ fn transcript_get<'a>(session: &'a str, range: [&'a str; 2], extra: &[&'a str]) 
     arguments
 }
 
+/// `--revision` reads a named revision, the same page the default read gives
+/// while it is the newest; an unknown revision is a typed invalid argument,
+/// and a malformed one is a parse error.
+#[tokio::test]
+async fn transcript_get_reads_a_named_revision() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_f10_session(&root).await?;
+    let full = ["0", "12000000"];
+    let newest = json(&vsift(&root, &transcript_get(&session, full, &["--json"]))?)?;
+    let revision = newest["data"]["revision"]["revision_id"]
+        .as_str()
+        .ok_or("revision missing")?
+        .to_owned();
+    let named = json(&vsift(
+        &root,
+        &transcript_get(&session, full, &["--revision", &revision, "--json"]),
+    )?)?;
+    assert_eq!(named["data"], newest["data"]);
+
+    let unknown = vsift(
+        &root,
+        &transcript_get(
+            &session,
+            full,
+            &["--revision", "trv_2222222222222222", "--json"],
+        ),
+    )?;
+    assert_eq!(unknown.status.code(), Some(2));
+    let value = json(&unknown)?;
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        value["error"]["remediation"][0]["summary"]
+            .as_str()
+            .is_some_and(|summary| summary.contains("revision_id"))
+    );
+
+    let malformed = vsift(
+        &root,
+        &transcript_get(&session, full, &["--revision", "latest", "--json"]),
+    )?;
+    assert_eq!(malformed.status.code(), Some(2));
+    assert_eq!(json(&malformed)?["command"], "parse");
+    Ok(())
+}
+
 /// `--events jsonl` streams one evidence event per segment, then exactly one
 /// terminal event whose cursor continues the stream on the next call; the
 /// records are the `--json` page items, which keep their existing shape.
