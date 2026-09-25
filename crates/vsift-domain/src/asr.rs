@@ -1057,9 +1057,11 @@ enum Side {
 ///    the other chunk heard.
 /// 2. A kept segment within 0.5 s of an inner window edge was probably cut by
 ///    that edge. It is dropped when the neighbour across that edge has a
-///    segment overlapping it that is not itself cut at the facing edge; that
-///    neighbour segment is kept instead, wherever its midpoint lies. Without
-///    such a neighbour segment the cut segment is kept, so speech is never lost.
+///    segment spanning the cut segment's midpoint that is not itself cut at
+///    the facing edge; that neighbour segment is kept instead, wherever its
+///    own midpoint lies. A neighbour segment that only touches the cut one
+///    (the end of the previous sentence) is not a copy of it. Without such a
+///    neighbour segment the cut segment is kept, so speech is never lost.
 /// 3. At each seam, the last kept segment of the earlier chunk and the first
 ///    kept segment of the later one are compared when their times overlap. If
 ///    the earlier one's normalised words end with at least two words the later
@@ -1181,21 +1183,28 @@ fn cut_at(chunks: &[ChunkSegments], index: usize, segment: &AsrSegmentDraft, sid
     }
 }
 
-/// Segments of chunk `neighbour` overlapping `segment` and not cut at the
-/// neighbour's edge that faces it.
+/// Segments of chunk `neighbour` spanning the midpoint of `segment` and not
+/// cut at the neighbour's edge that faces it.
+///
+/// Spanning the midpoint, not merely overlapping, is what makes a neighbour
+/// segment a copy of the same speech: a segment that ends just inside the
+/// cut one is the sentence before it, and treating it as a copy would drop
+/// the cut sentence from both chunks (found with the `base_q5_1` profile in
+/// P07 increment 3c).
 fn covering(
     chunks: &[ChunkSegments],
     neighbour: usize,
     segment: &AsrSegmentDraft,
     facing: Side,
 ) -> Vec<(usize, usize)> {
+    let middle = segment.midpoint();
     chunks[neighbour]
         .segments
         .iter()
         .enumerate()
         .filter(|(_, candidate)| {
-            candidate.range.start() < segment.range.end()
-                && candidate.range.end() > segment.range.start()
+            candidate.range.start().as_micros() <= middle
+                && candidate.range.end().as_micros() > middle
                 && !cut_at(chunks, neighbour, candidate, facing)
         })
         .map(|(position, _)| (neighbour, position))

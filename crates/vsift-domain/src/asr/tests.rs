@@ -557,6 +557,59 @@ fn a_cut_segment_without_a_neighbour_copy_is_kept() -> TestResult {
     Ok(())
 }
 
+/// T-03 regression (P07 increment 3c, `base_q5_1` on the real seam clip): the
+/// later chunk hears the whole sentence from its first sample, and the earlier
+/// chunk's previous sentence ends 0.24 s after that. The previous sentence is
+/// not a copy of the cut one, so the whole sentence is kept exactly once
+/// instead of being dropped from both chunks.
+#[test]
+fn a_sentence_starting_at_a_window_is_not_covered_by_the_previous_sentence() -> TestResult {
+    let window_0 = (0, 30 * SECOND);
+    let window_1 = (25 * SECOND, 55 * SECOND);
+    let first = with(
+        draft(
+            0,
+            window_0,
+            22_600_000,
+            25_240_000,
+            "and leaves submit enabled",
+        )?,
+        draft(
+            0,
+            window_0,
+            25_240_000,
+            29_780_000,
+            "the orange line spikes at ten",
+        )?,
+    );
+    let second = with(
+        draft(
+            1,
+            window_1,
+            25 * SECOND,
+            34 * SECOND,
+            "the orange line spikes at ten thirty two while the median stays",
+        )?,
+        draft(
+            1,
+            window_1,
+            34 * SECOND,
+            40 * SECOND,
+            "first the queue is empty",
+        )?,
+    );
+    let (kept, _) = texts(&[first, second]);
+    assert_eq!(
+        kept,
+        [
+            "and leaves submit enabled",
+            "the orange line spikes at ten thirty two while the median stays",
+            "first the queue is empty"
+        ]
+    );
+    Ok(())
+}
+
 fn run(outcomes: &[AsrChunkOutcome]) -> Built<AsrRun> {
     let planned = plan_chunks(&segment_id()?, range(0, 70 * SECOND)?, ChunkPlan::R0)?;
     Ok(AsrRun::new(AsrRunParts {

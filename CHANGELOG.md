@@ -117,6 +117,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Local speech recognition could drop a whole sentence that started exactly
+  where a 30-second chunk begins, when the previous sentence ended just after that
+  point, without any warning. The sentence is now kept once.
 - `setup check` no longer echoes a provider's first output line as `detail`. With
   whisper.cpp v1.9.2 that line was a library-loader log naming an absolute folder,
   which broke the promise that paths are not echoed. FFmpeg and FFprobe now report

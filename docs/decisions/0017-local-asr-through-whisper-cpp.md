@@ -73,7 +73,11 @@ chunks (every 20 ms frame below -50 dBFS) are recorded and not transcribed; the 
 merge keeps a sentence across a seam once, removes duplicates and keeps genuine
 repeats (3a). The opt-in checkpoint builds a 44.6 s clip from six speech utterances
 with one crossing the 25–30 s overlap and requires every checked word exactly once
-(it recorded one `seam_duplicates_removed`).
+(it recorded one `seam_duplicates_removed`). A segment cut at a chunk edge is replaced
+by a neighbouring chunk's segment only when that segment spans the cut segment's
+midpoint; merely overlapping it does not count. Measurement for increment 3c found the
+looser 3a rule could drop a sentence that starts at a chunk's first sample from both
+chunks without a warning; a regression test covers it.
 
 ### 4. Model profiles by identity (D5)
 
