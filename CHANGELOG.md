@@ -237,6 +237,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Whisper model is the reviewed pinned model. It now runs automatically before
   the first media operation (see the media-tool check above).
 
+### Documentation
+
+- New [known limits register](docs/planning/known-limits.md): every current limitation,
+  residual risk, deferral and accepted trade-off (L-001 to L-046) in one place, each with
+  its evidence, impact, owner packet, tracking issue, status and a maintainer review
+  field. New limits are added to it in the same change that finds them.
+
 ### Changed
 
 - `transcript retranscribe` now checks the session's copy of the video twice per run

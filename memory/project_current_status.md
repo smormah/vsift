@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-09-26. Current-state document: rewrite it, don't append to it. Next
+As of 2026-09-27. Current-state document: rewrite it, don't append to it. Next
 actions and open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -28,6 +28,7 @@ Today it can:
 **P09 is complete** (2026-09-27, merge `e57c706`, ledger record written; PRs #162, #163,
 #165, #166; ADR 0019 accepted with D1-D7). P00-P09 are complete and the mechanical
 checkpoint is met; P10 (recovery integration) is next and not started.
+Every known limit, residual risk and deferral is in `docs/planning/known-limits.md`.
 
 ## P09 PR 4: `crop`, `audio` and qualification
 

@@ -40,6 +40,8 @@ the ledger. The test spine's mechanical checkpoint is met.
 
 ## Other follow-ups
 
+- **Known limits register:** `docs/planning/known-limits.md` (L-001..L-046, maintainer
+  review pending). Add every new limit there in the same change.
 - Evidence: a burst over a range denser than one 1,200-frame listing (60 fps over more
   than 20 s) is rejected (`outside_listing`). Tiny text is measured on synthetic glyphs
   only. Neighbours list up to three windows (2, 10, 29 s).

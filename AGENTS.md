@@ -76,5 +76,6 @@ limits, not logs. History lives in git, `CHANGELOG.md`, qualification records an
 verification evidence in the pull request description rather than a follow-up pull
 request. Findings close only with implementation and regression-test evidence.
 Preserve accepted ADRs; record superseding decisions explicitly.
+New known limitations go into `docs/planning/known-limits.md` in the same change.
 
 Do not leave unexplained TODO comments. Track deferred work in a GitHub issue and reference the issue from the code only when a local marker is necessary.
