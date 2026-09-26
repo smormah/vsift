@@ -1,0 +1,1034 @@
+# Known limits register
+
+Date: 2026-09-27 (after P09; P00-P09 complete, P10 not started).
+Status: current-state register. Every entry below is **pending maintainer review**.
+
+## Purpose and how to use it
+
+This is the one place that lists what VSift cannot do yet, does less well than it
+should, or deliberately accepts as a risk. It gathers limits that were recorded across
+the qualification records, ADRs, the threat model, the contract, the work record and
+open GitHub issues, so they can be reviewed and evaluated together. It does not
+replace those documents: each entry links to its source, which stays authoritative
+for the detail.
+
+- **Current state, not a log.** Rewrite an entry when its facts change; delete it in
+  the change that removes the limit (and say so in `CHANGELOG.md`). History lives in
+  git. IDs are never reused.
+- **Plain English first, precise second.** Each entry says what the limit is and who
+  it affects, then the numbers and where they were measured.
+- **Scheduled work is listed too.** A missing R0 capability that a later packet owns
+  (for example the agent skill) is a limit of VSift *today*, so it appears here with
+  its owner packet. Being listed does not make it eligible ahead of the
+  [delivery ledger](delivery-ledger.json).
+
+Each entry has these fields:
+
+| Field | Meaning |
+| --- | --- |
+| Area | security, integrity/durability, performance, accuracy/ASR, visual detection, corpus/fixtures, platform/distribution, contract/UX, process/CI |
+| Severity | high, medium or low, by the rubric below |
+| Owner | the packet that will address it, or **unscheduled** |
+| Issue | the tracking GitHub issue, or **none** |
+| Status | **open** (a defect or gap to fix), **accepted residual** (a known risk accepted by a recorded decision), **deferred** (scheduled or scoped to later work), **monitoring** (watched; act on recurrence or new data) |
+| Review | the maintainer's decision: **pending**, or accepted / rejected / rescheduled with a date (see [Review workflow](#review-workflow)) |
+
+**Severity rubric.**
+
+- **High:** could let altered, forged or wrong evidence be presented to an agent as
+  verified, or blocks an R0 release gate with no workaround.
+- **Medium:** users or agents will meet it in normal use (reduced accuracy, slow calls,
+  a missing convenience), or a qualification claim in that area is still unproven; a
+  workaround or an honest disclosure exists.
+- **Low:** an edge case, a bounded cost, a cosmetic issue, or a residual inside the
+  documented threat model.
+
+## Summary
+
+| ID | Title | Area | Severity | Owner | Issue | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| [L-001](#l-001) | Evidence calls check the source copy by identity only (D1) | security | low | unscheduled | none | accepted residual |
+| [L-002](#l-002) | A change undone before the closing hash is not seen (bracketed binding) | security | low | unscheduled | none | accepted residual |
+| [L-003](#l-003) | A forged diagnostics line that continues the real numbering (SEC-17) | security | low | unscheduled | none | accepted residual |
+| [L-004](#l-004) | Native decoders and the recognizer are not sandboxed on the desktop | security | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-005](#l-005) | Private Windows folders get their DACL just after creation, not atomically | security | low | unscheduled | none | accepted residual |
+| [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents | security | low | unscheduled | none | accepted residual |
+| [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
+| [L-008](#l-008) | Strict OS/storage-crash durability is unqualified (FS-01) | integrity/durability | high | P10, P11, P14 | [#13](https://github.com/smormah/vsift/issues/13), [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
+| [L-010](#l-010) | Recovery, cancellation and idempotency are not qualified | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
+| [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | none | monitoring |
+| [L-012](#l-012) | Warm requests slow down as a session's manifest chain grows | performance | medium | P10 | [#164](https://github.com/smormah/vsift/issues/164) | open |
+| [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | none | monitoring |
+| [L-014](#l-014) | A session holds at most 160 evidence files (256 artifacts, 64 KiB manifest) | contract/UX | medium | P10 | [#164](https://github.com/smormah/vsift/issues/164) | deferred |
+| [L-015](#l-015) | Bursts over more than 20 s of 60 fps video are refused | contract/UX | low | unscheduled | none | open |
+| [L-016](#l-016) | Delivered file paths use the Windows `\\?\` form and die with the session | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | accepted residual |
+| [L-017](#l-017) | Human-readable output is pretty-printed JSON | contract/UX | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-018](#l-018) | Tiny text is measured on synthetic glyphs only; crops are never upscaled | visual detection | low | unscheduled | none | open |
+| [L-019](#l-019) | A seek that lands past the requested frame reports "not found" | contract/UX | low | unscheduled | none | accepted residual |
+| [L-020](#l-020) | Noisy speech: `base` word error rate 61.5% on F08, not gated | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
+| [L-021](#l-021) | Reviewed known misses: "queued", "4407", "E-409" | accuracy/ASR | medium | unscheduled | none | accepted residual |
+| [L-022](#l-022) | No accent, crosstalk, human-voice or long-recording ASR evidence | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | open |
+| [L-023](#l-023) | ASR output differs across CPU backends; revision ids differ by host | accuracy/ASR | low | unscheduled | none | accepted residual |
+| [L-024](#l-024) | An ASR segment can start at the audio's start, before the speech | accuracy/ASR | medium | unscheduled | none | open |
+| [L-025](#l-025) | Local ASR runs: Ctrl-C not trapped, no progress events, model hashed per run | contract/UX | low | unscheduled | none | accepted residual |
+| [L-026](#l-026) | whisper.cpp output with a split multi-byte token fails the chunk | accuracy/ASR | low | unscheduled | none | accepted residual |
+| [L-027](#l-027) | whisper.cpp is the only speech engine | accuracy/ASR | low | unscheduled | [#147](https://github.com/smormah/vsift/issues/147) | deferred |
+| [L-028](#l-028) | Change thresholds are calibrated only on the synthetic corpus | visual detection | medium | unscheduled | none | open |
+| [L-029](#l-029) | 2 Hz sampling misses changes shorter than 0.5 s or below the change rule | visual detection | medium | unscheduled | none | accepted residual |
+| [L-030](#l-030) | Motion fixtures draw no motion; scrolling and cursors only synthetic (F04/F05/F12-E02) | corpus/fixtures | medium | unscheduled | [#159](https://github.com/smormah/vsift/issues/159) | open |
+| [L-031](#l-031) | The visual index is tied to the probed duration; 30 minutes per call | visual detection | low | unscheduled | none | accepted residual |
+| [L-032](#l-032) | Search: no Unicode folding, no cross-segment phrases, no compound number words | contract/UX | medium | unscheduled | none | accepted residual |
+| [L-033](#l-033) | A supplied transcript is assumed to cover the whole video | contract/UX | low | unscheduled | none | accepted residual |
+| [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
+| [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-038](#l-038) | No worker or batch host; `job` commands are reserved | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-039](#l-039) | No agent skill; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
+| [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
+| [L-041](#l-041) | A throttled Windows runner exceeded the 5 s provisioning wait | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | monitoring |
+| [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | none | open |
+| [L-043](#l-043) | Library API unstable; MSRV, pre-release and MCP decisions open | contract/UX | low | unscheduled | none | open |
+| [L-044](#l-044) | Accepted engineering trade-offs (CLI test dependencies, session compatibility) | contract/UX | low | unscheduled | none | accepted residual |
+| [L-045](#l-045) | Several documents and trackers state an outdated position | process/CI | low | unscheduled | none | open |
+| [L-046](#l-046) | Deliberate scope exclusions (live sources, OCR, speakers, URLs) | contract/UX | low | R1 or later | [#107](https://github.com/smormah/vsift/issues/107), [#108](https://github.com/smormah/vsift/issues/108) | accepted residual |
+
+Counts: 6 high, 16 medium, 24 low (46 entries).
+
+## Security
+
+### L-001
+
+**Evidence calls check the source copy by identity only (D1).**
+
+- **What:** after the first evidence call of a session hashes the private copy of the
+  video in full, later `frame`, `crop` and `audio` calls compare only the copy's
+  on-disk identity (size, modification time, device, file index and platform change
+  fields). On Windows a process running as the same user that rewrites the copy and
+  restores its modification time between two calls is not detected by the later call;
+  it is caught only by a later full hash (a call whose identity differs, or any
+  mutating operation). On Unix the kernel-set status-change time prevents this.
+- **Evidence:** ADR 0019 D1; [ADR 0012 note of 2026-09-26](../decisions/0012-p04-source-media-profile.md)
+  ("evidence calls compare the copy's identity across calls"); regression tests
+  `evidence_calls_hash_the_copy_only_when_its_identity_is_new_or_changed` and
+  `a_modified_source_copy_is_an_integrity_failure_and_nothing_is_committed`. Each
+  result reports `source_check` (`identity` or `full_hash`).
+- **Impact:** an evidence item marked `identity` could, in that attack, show pixels of
+  a rewritten copy. Only an actor who already controls the user's account can do it.
+- **Why:** hashing a large copy on every call costs about 11 s per call on 1.17 GB
+  ([L-011](#l-011)); the desktop threat model excludes hostile same-user code
+  ([threat model](security-threat-model.md), "Assets, actors and trust boundaries").
+- **Mitigation:** the recorded identity lives in the owner-private session manifest;
+  mutating operations keep full hashing; `source_check` is visible per result.
+- **Next step:** revisit only if a hostile same-user profile is ever required (worker
+  tenants use external sandboxes, P11).
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-002
+
+**A change undone before the closing hash is not seen (bracketed binding).**
+
+- **What:** operations that call FFmpeg or whisper.cpp many times hash the copy once
+  at the start and once before commit, and compare identity before each provider
+  call. A same-user change made after a check and undone before the closing hash (on
+  Windows including the modification time, or within one file-time tick) is not
+  detected. The older per-call rehash had exactly the same blind spot between the hash
+  and the provider's read.
+- **Evidence:** [ADR 0012](../decisions/0012-p04-source-media-profile.md) "Limits and
+  consequences" and its 2026-09-26 note (issue #148, closed); threat model "Residual
+  risks and response". Measured benefit: an 869 MB, 24-chunk source decoded in 25.5 s
+  bound versus 173.4 s with per-call rehashing (Windows 11, Xeon E5-2698 v4).
+- **Impact:** as [L-001](#l-001); limited to same-user actors.
+- **Why:** a per-call hash is linear in source size per chunk; the residual existed
+  before the change.
+- **Mitigation:** private session directory under a lifetime hold; any change still
+  present at the end fails the commit with `INTEGRITY_FAILURE`.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-003
+
+**A forged diagnostics line that continues the real numbering (SEC-17 residual).**
+
+- **What:** VSift reads frame and audio times from FFmpeg's `showinfo`/`ashowinfo`
+  lines. Since P09 PR 1 it accepts only lines that begin with the filter's own prefix
+  and requires gap-free, strictly increasing frame numbering. A line that begins with
+  that prefix, which is possible only through a log message that embeds an untrusted
+  string with a line break, and exactly continues the real numbering cannot be told
+  apart by text alone.
+- **Evidence:** [threat model](security-threat-model.md), SEC-17 finding fixed
+  2026-09-26; [ADR 0012 note](../decisions/0012-p04-source-media-profile.md)
+  "provider diagnostics parsing hardened"; fuzz targets `frame_showinfo`,
+  `frame_listing`.
+- **Impact:** for an extraction the line count must still equal the images decoded,
+  and a forged listing entry names a timestamp the exact extraction then does not find
+  (`FrameNotFound`), so it cannot become evidence. It could make a listing-based
+  request fail.
+- **Why:** FFmpeg mixes filter output and echoed metadata in one stream.
+- **Mitigation:** prefix, numbering, time-base and exact-extraction checks.
+- **Next step:** none planned; re-review if FFmpeg's log format changes.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-004
+
+**Native decoders and the recognizer are not sandboxed on the desktop.**
+
+- **What:** FFmpeg, FFprobe and whisper.cpp run as ordinary processes with the user's
+  filesystem and network access. VSift bounds their arguments, protocols, time,
+  output, threads and (for FFmpeg) each allocation at 64 MiB, but a malicious decoder
+  can allocate several buffers under that cap, and whisper.cpp's memory is bounded only
+  by the operating system (an abnormal exit is `RESOURCE_LIMIT`). Dangerous
+  decompression-bomb media has not been run.
+- **Evidence:** [ADR 0012](../decisions/0012-p04-source-media-profile.md) "Limits and
+  consequences"; [threat model](security-threat-model.md) process isolation profile and
+  residuals (P04, P07 3b, P08); [baseline review](baseline-review.md) B-09.
+- **Impact:** a crafted video that exploits a decoder bug runs with the user's rights.
+- **Why:** desktop profile decision (ADR 0005, ADR 0012); strict isolation needs
+  external host controls.
+- **Mitigation:** forced local demuxers, `file` protocol only, MOV external references
+  off, closed argument lists, Job Object / process-group cleanup; strict-worker mode
+  fails closed when isolation is requested but unavailable.
+- **Next step:** P11 strict worker isolation (SEC-T01); P14 malicious-decoder and
+  decompression-bomb qualification in a disposable environment.
+- **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
+  [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
+  **Review:** pending.
+
+### L-005
+
+**Private Windows folders get their DACL just after creation, not atomically.**
+
+- **What:** each folder VSift creates as a private root gets a protected DACL (user,
+  SYSTEM, Administrators) immediately after creation and before content is written.
+  A principal the parent already trusted could open a handle to the still-empty folder
+  in that instant and keep it; it could later list names but not open entries.
+- **Evidence:** [threat model](security-threat-model.md) "Process isolation profile"
+  (SEC-18, 2026-09-24); [P05 record](p05-session-qualification.md) "private roots under
+  a permissive parent".
+- **Impact:** file names (not contents) could be visible to an already-trusted
+  principal of the parent folder.
+- **Why:** atomic creation needs `CreateDirectoryW` security attributes, that is
+  `unsafe` or a new dependency, both excluded by `AGENTS.md`.
+- **Mitigation:** creation under a no-delete-share handle; post-creation validation.
+- **Next step:** reconsider if a reviewed safe API becomes available.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-006
+
+**The media-tool check record trusts file identity, not executable contents.**
+
+- **What:** a passed FFmpeg/FFprobe (and local-ASR) check is remembered for seven days,
+  keyed to the executables' canonical paths and on-disk identity. Executable contents
+  are not hashed, so a same-user process that rewrites a tool in place while keeping
+  size and timestamps is not detected.
+- **Evidence:** [threat model](security-threat-model.md) "Process isolation profile"
+  (SEC-02, P07); [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md)
+  section 9.
+- **Impact:** outside the desktop threat model; a tampered tool could produce wrong
+  output that VSift then validates only structurally.
+- **Why:** hashing every tool before every media stage is costly; the record is an
+  optimisation, never an authority.
+- **Mitigation:** strict private record (4 KiB, versioned); any defect reads as
+  "unverified". Managed installs (P13) will pin tool digests.
+- **Next step:** P13 managed identity for managed tools.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-007
+
+**Evidence can carry instructions; agents can leak delivered paths.**
+
+- **What:** transcripts, frames and audio can contain text that tries to steer an
+  agent (prompt injection). VSift labels evidence as untrusted data and never acts on
+  it, but it cannot make every model immune. Bidirectional-formatting characters in a
+  supplied transcript are shown as written. An agent that copies a delivered file path
+  into prose may reveal the session root's location to readers of that prose.
+- **Evidence:** [threat model](security-threat-model.md) "Agent-specific controls" and
+  the P07 increment 2 and P09 delivery residuals; SEC-16; tests A-04, SEC-T02 not yet
+  run.
+- **Impact:** a hostile recording could influence an agent's reasoning or actions.
+- **Why:** prompt injection is an open problem; paths are delivered by decision D2.
+- **Mitigation:** fixed-prose remediation that never echoes evidence text; typed
+  fields; no evidence-driven installs or policy.
+- **Next step:** P12 skill limits authority and qualifies A-04 and SEC-T02 with
+  malicious spoken, cell and screenshot instructions.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** deferred. **Review:** pending.
+
+## Integrity and durability
+
+### L-008
+
+**Strict OS/storage-crash durability is unqualified (FS-01).**
+
+- **What:** sessions are consistent across a VSift process crash, but no OS-crash or
+  power-loss campaign has proved that a committed generation survives on NTFS, APFS or
+  ext4. Explicit durable requests therefore fail before any change, and a retained
+  bundle does not gain an OS-crash durability claim by being retained.
+- **Evidence:** [ADR 0010](../decisions/0010-storage-qualification-gate.md);
+  [P03 feasibility record](p03-storage-feasibility.md) "Measured experiments and
+  remaining gate"; threat model SEC-24.
+- **Impact:** blocks the strict Linux worker profile and R-09/R-10; desktop users get
+  ephemeral (process-crash-consistent) guarantees only.
+- **Why:** needs an owned disposable OS/storage fault harness, which the repository does
+  not have.
+- **Mitigation:** fail-closed durable mode; the effective guarantee is reported.
+- **Next step:** P10/P11/P14 run the Ubuntu 24.04/ext4 crash campaign.
+- **Owner:** P10, P11, P14. **Issue:** [#13](https://github.com/smormah/vsift/issues/13),
+  [#14](https://github.com/smormah/vsift/issues/14),
+  [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
+  **Review:** pending.
+
+### L-009
+
+**Cleanup and erasure leave some work to the user.**
+
+- **What:**
+  - An expired session is only eligible for cleanup; files are removed when
+    `session clean` runs, not automatically.
+  - Deleting a session does not erase backups, snapshots, SSD remnants or copies made
+    elsewhere; no secure-erasure claim is made.
+  - An interrupted `session retain` export may stay incomplete; it is private, fails
+    validation, and must be inspected or removed by the user.
+  - A creator killed while provisioning a new session root leaves an unmarked root
+    that is refused until the user removes it.
+  - An existing folder that other accounts can access is refused, never repaired
+    (`STORAGE_IO` with a remediation naming the folder kind).
+- **Evidence:** [ADR 0013](../decisions/0013-retained-bundle-publication.md)
+  consequences; [P05 record](p05-session-qualification.md) "Limits and follow-up
+  ownership" and the #131 residual; threat model residuals; README "Principles".
+- **Impact:** disk use accumulates until cleaned; rare manual recovery steps.
+- **Why:** VSift never deletes what it cannot positively identify as its own, and runs
+  no background service.
+- **Mitigation:** typed errors with fixed remediation; `session clean --expired
+  --dry-run`.
+- **Next step:** document the cleanup routine in P12 skill and P13 user docs.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-010
+
+**Recovery, cancellation and idempotency are not qualified.**
+
+- **What:** interrupted operations are not discovered or resumed, there are no stage
+  checkpoints or operation keys for jobs, and cancellation/commit ordering has not been
+  qualified (X-01..X-06, X-09, X-10, S-07, S-08).
+- **Evidence:** [work packets](implementation-work-packets.md) P10 row; ledger P10
+  `planned`.
+- **Impact:** a killed long run (for example a whole-video retranscription) starts over;
+  R-09 is an R0 release gate.
+- **Why:** scheduled after P09.
+- **Mitigation:** partial results commit what finished (`candidates`, evidence calls),
+  generations are process-crash consistent, and repeated evidence requests are reused.
+- **Next step:** P10.
+- **Owner:** P10. **Issue:** [#13](https://github.com/smormah/vsift/issues/13).
+  **Status:** deferred. **Review:** pending.
+
+## Performance
+
+### L-011
+
+**Evidence on large sources is slow; the first call hashes the whole copy.**
+
+- **What:** the first evidence call of each session hashes the whole source copy (the
+  hash `ingest` made is not recorded as a verified identity), and every new frame
+  re-decodes the source. On a dense 1080p file this is slow.
+- **Evidence:** [P09 record](p09-evidence-navigation.md) "Performance" (recorded, not
+  gated; Windows 11, Xeon E5-2698 v4, FFmpeg 9.0, release build) on a 1.17 GB, 240 s,
+  about 39 Mbit/s MPEG-4 1080p worst-case clip: `ingest` 19.1 s; first `frame get`
+  10.9 s (full SHA-256); new frames p95 4.1 s (3.2-4.1 s); a 12-frame burst over 60 s
+  17.1 s; warm reuse p95 241 ms. On 720p F01 a cold frame takes 1.5-2.0 s and the
+  first evidence call of a base about 6 s (media-tool preflight).
+- **Impact:** agents wait seconds per new frame on large, dense recordings; screen
+  recordings are usually far less dense.
+- **Why:** D1 hashes once per session for integrity; no decode cache by design (reuse
+  is by artifact identity, ADR 0019 consequences).
+- **Mitigation:** reuse of identical requests without any process; bursts bounded to
+  12 frames by default.
+- **Next step:** consider recording the verified identity at `ingest`; measure on
+  Ubuntu and macOS ([L-035](#l-035)); P14 load gates.
+- **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
+  **Review:** pending.
+
+### L-012
+
+**Warm requests slow down as a session's manifest chain grows.**
+
+- **What:** every session read validates the whole chain of committed generations, so
+  a repeated, reused request costs about 3.7 ms more per generation.
+- **Evidence:** [P09 record](p09-evidence-navigation.md) "Manifest-chain walk": warm
+  reuse p95 159 / 398 / 652 / 1,086 ms at 3 / 64 / 128 / 256 generations; above the
+  250 ms target from about 60 generations; a session full of evidence (160 artifacts)
+  near 0.6 s. Issue #164.
+- **Impact:** long investigations get steadily slower on every read.
+- **Why:** full validation keeps INV-02/SEC-08 simple; incremental validation belongs
+  with P10's commit work.
+- **Mitigation:** bounded by the artifact and evidence budgets ([L-014](#l-014)).
+- **Next step:** validate the chain incrementally from a verified checkpoint; record
+  before/after numbers in the P09 record.
+- **Owner:** P10. **Issue:** [#164](https://github.com/smormah/vsift/issues/164).
+  **Status:** open. **Review:** pending.
+
+### L-013
+
+**Evidence records and transcripts are re-read in full on every call.**
+
+- **What:** each evidence call reads and decodes all of the session's evidence records
+  (at most 160 records of at most 256 KiB); `search` matches the whole transcript
+  revision on every request with no persisted index.
+- **Evidence:** [work record](../../memory/TODO.md) "Other follow-ups";
+  [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
+  decision 4: a 20,000-segment revision pages at p95 145-167 ms.
+- **Impact:** none measured beyond the 250 ms target today.
+- **Why:** an index is new persistent state with its own integrity rules.
+- **Mitigation:** hard bounds on record count and size.
+- **Next step:** add an index only if a measurement misses the target.
+- **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
+  **Review:** pending.
+
+## Evidence contract and user experience
+
+### L-014
+
+**A session holds at most 160 evidence files (256 artifacts, 64 KiB manifest).**
+
+- **What:** a session keeps at most 256 artifacts, a 64 KiB manifest, 10 GiB and a
+  4,096-generation chain; evidence (images, clips and their records) has a sub-budget of
+  160 artifacts. A 12-frame burst uses up to 13 of those slots.
+- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) D4;
+  [resource profiles](support-and-resource-profiles.md) "Evidence navigation";
+  [P05 record](p05-session-qualification.md) limits.
+- **Impact:** a long investigation hits `RESOURCE_LIMIT` (or a `partial` result with
+  `session_evidence_budget`) and must retain the session and open a new one.
+- **Why:** raising the caps needs incremental chain validation ([L-012](#l-012)).
+- **Mitigation:** fixed remediation (retain and reopen); reuse does not consume slots.
+- **Next step:** raise the caps with #164 in P10.
+- **Owner:** P10. **Issue:** [#164](https://github.com/smormah/vsift/issues/164).
+  **Status:** deferred. **Review:** pending.
+
+### L-015
+
+**Bursts over more than 20 s of 60 fps video are refused.**
+
+- **What:** one frame listing covers at most 60 s and 1,200 frames. A burst over a range
+  denser than that (60 fps over more than 20 s) is rejected with `outside_listing`
+  rather than listed in pieces. Neighbours search windows of 2, 10 and 29 s, so on a
+  very sparse stream a side can stop with `search_window` although more frames exist.
+- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) section 6 and the
+  PR 2 note ("rejected for now"); [P09 record](p09-evidence-navigation.md) residuals.
+- **Impact:** agents must split long bursts on high-frame-rate recordings.
+- **Why:** bounded listing per provider run (SEC-05); multi-listing bursts not built.
+- **Mitigation:** typed failure; the stop reason says more may exist.
+- **Next step:** list in several bounded runs for dense ranges.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-016
+
+**Delivered file paths use the Windows `\\?\` form and die with the session.**
+
+- **What:** `files[].path` is the absolute path of the committed artifact; on Windows it
+  is the extended-length form `\\?\C:\...`. Paths are valid only while the session
+  exists; a path that is not valid UTF-8 is `STORAGE_IO`.
+- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) D2 and PR 3 note
+  (maintainer decision 2026-09-26); [CLI contract](../contracts/cli-v1.md) P09 frames.
+- **Impact:** some tools and humans find the form unusual; a closed session invalidates
+  earlier paths.
+- **Why:** the form is valid and long-path safe; evidence records never hold paths.
+- **Mitigation:** hosts may display the path as they wish.
+- **Next step:** friendlier display in P13 human output.
+- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
+  **Status:** accepted residual. **Review:** pending.
+
+### L-017
+
+**Human-readable output is pretty-printed JSON.**
+
+- **What:** without `--json`, most commands print the indented JSON result, not
+  readable terminal text.
+- **Evidence:** [CLI contract](../contracts/cli-v1.md) ("Human output is the indented
+  JSON result; readable terminal text is P13's"); ADR 0019 (assigned to P13 on
+  2026-09-26).
+- **Impact:** people running VSift by hand get machine output; agents are unaffected.
+- **Why:** agent contract first (ADR 0008).
+- **Mitigation:** the JSON is complete and stable.
+- **Next step:** P13.
+- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
+  **Status:** deferred. **Review:** pending.
+
+### L-018
+
+**Tiny text is measured on synthetic glyphs only; crops are never upscaled.**
+
+- **What:** small-text crops were checked on a synthetic 5x7 glyph drawn at scale 4
+  (a 20x28 crop). Real screen text with anti-aliasing, subpixel rendering and
+  compression is not in the corpus. Crops are delivered at native size; an agent that
+  needs a larger view must scale the image itself.
+- **Evidence:** [P09 record](p09-evidence-navigation.md) V-06 and residuals.
+- **Impact:** readability of real small UI text through VSift crops is unmeasured.
+- **Why:** no real recordings in the corpus; no scaling so no detail is invented.
+- **Mitigation:** native pixels are exact (pixel-equal to FFmpeg's decode).
+- **Next step:** add real-recording text fixtures with [L-028](#l-028).
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-019
+
+**A seek that lands past the requested frame reports "not found".**
+
+- **What:** when a container's start is far from the probed origin, the extraction's
+  seek can land after the requested frame; VSift then reports `FrameNotFound` instead of
+  extracting another frame.
+- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) "Consequences",
+  residuals.
+- **Impact:** a rare typed failure on unusual containers; never wrong pixels.
+- **Why:** exactness over guessing.
+- **Mitigation:** typed failure; nothing committed.
+- **Next step:** measure whether any corpus or real file triggers it.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+## Speech recognition
+
+### L-020
+
+**Noisy speech: `base` word error rate 61.5% on F08, not gated.**
+
+- **What:** on the only noisy clip (office noise at 10 dB SNR, 13 words, English and
+  Spanish) the default `base` model got 61.5% word error rate (`base_q5_1` 46.2%)
+  against a proposed 25% gate. The maintainer decided on 2026-09-25 to gate noisy speech
+  on critical terms only and report the rate as a known limitation.
+- **Evidence:** [P07 ASR record](p07-asr-qualification.md) (Windows 11, Xeon
+  E5-2698 v4, whisper.cpp v1.9.2, 4 threads); [ADR 0005 note](../decisions/0005-r0-scope-and-qualification-profiles.md);
+  issue #150. One word moves F08's rate by 7.7 points.
+- **Impact:** transcripts of noisy recordings can be substantially wrong.
+- **Why:** the sample is too small to gate on.
+- **Mitigation:** confidence stays `provider_uncalibrated`; times are cited so an agent
+  can check the audio clip; critical terms are gated.
+- **Next step:** #150 noisy fixture set (20/10/5 dB, several hundred words per level,
+  English and Spanish), then a gate proposal.
+- **Owner:** unscheduled (R0 backlog). **Issue:** [#150](https://github.com/smormah/vsift/issues/150).
+  **Status:** deferred. **Review:** pending.
+
+### L-021
+
+**Reviewed known misses: "queued", "4407", "E-409".**
+
+- **What:** the qualification allows three reviewed misses of critical terms by `base`:
+  F04 "queued" (heard as "Q" alone; heard correctly in the recorded runs), F05
+  "invoice 4407" (heard "Invoice407"; `base_q5_1` "in Voice 40407"), F08 "E-409" (heard
+  "E4 and I"). An Intel AVX-512 runner also heard F05's "invoice" as "in voice".
+- **Evidence:** [P07 ASR record](p07-asr-qualification.md) per-clip table and hosted
+  runners.
+- **Impact:** identifiers and numbers can be misheard; search does not bridge the
+  difference (`407` never finds `4407`).
+- **Why:** limits of the `base` model.
+- **Mitigation:** gates fail on any unexpected miss; agents must confirm critical
+  identifiers against the source.
+- **Next step:** re-measure with #150's fixtures; consider a larger optional profile.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-022
+
+**No accent, crosstalk, human-voice or long-recording ASR evidence.**
+
+- **What:** every speech clip is one synthetic (Kokoro) voice per sentence; there is no
+  human recording, regional accent or overlapping speech. Accuracy is measured on
+  single-chunk clips; the timing clip is 3 minutes. T-04 stays open for these.
+- **Evidence:** [P07 ASR record](p07-asr-qualification.md) "Gaps"; issue #150 scope;
+  [verification](verification.md) T-04.
+- **Impact:** real meeting and QA speech accuracy is unknown.
+- **Why:** needs human or otherwise licensed recordings.
+- **Mitigation:** honest reporting; uncalibrated confidence.
+- **Next step:** licensed human fixtures (#150 lists them so they are not lost).
+- **Owner:** unscheduled. **Issue:** [#150](https://github.com/smormah/vsift/issues/150).
+  **Status:** open. **Review:** pending.
+
+### L-023
+
+**ASR output differs across CPU backends; revision ids differ by host.**
+
+- **What:** whisper.cpp output is deterministic on one host but ggml picks an optimised
+  CPU backend at load time, and backends differ slightly in floating point. Transcripts,
+  and therefore content-derived revision ids, can differ between machines. The P07
+  checkpoint's whole-file stage fails with `base_q5_1` (F05 "in voice"), so the workflow
+  runs it with `base` only.
+- **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md)
+  consequences; [P07 ASR record](p07-asr-qualification.md) hosted runners (run
+  36198903762).
+- **Impact:** the same video can yield slightly different transcripts on two machines.
+- **Why:** upstream runtime behaviour.
+- **Mitigation:** journey tests check only words every reviewed host hears; accuracy is
+  measured separately.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-024
+
+**An ASR segment can start at the audio's start, before the speech.**
+
+- **What:** the `base` model starts a segment that follows leading silence at the start
+  of its audio: F09's segment starts at 0.75 s although speech starts at 4.0 s.
+  Citations are at segment granularity.
+- **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md) "Known
+  limits"; the P09 local-ASR journey cited 3.0-8.0 s for a term spoken at
+  6.31-8.33 s ([P09 record](p09-evidence-navigation.md)).
+- **Impact:** a cited start time can precede the words by seconds.
+- **Why:** model behaviour; no voice-activity trimming in R0 (VAD is R1 enrichment).
+- **Mitigation:** segments still contain the speech; audio clips let an agent check.
+- **Next step:** measure segment-start error on #150's fixtures; decide whether word
+  timestamps or trimming are needed before R0.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-025
+
+**Local ASR runs: Ctrl-C not trapped, no progress events, model hashed per run.**
+
+- **What:**
+  - The CLI does not trap Ctrl-C: the process ends, whisper.cpp is killed with it,
+    nothing is committed, and the work directory is swept later.
+  - `transcript retranscribe` emits no progress events; `--events jsonl` writes one
+    terminal event. At a real-time factor of 0.39, an hour of audio is about 23 minutes
+    of silence for the caller.
+  - The model file is hashed up to three times per run (about 0.3 s each in release),
+    with no identity cache; the first run with a new tool, model or VSift version adds
+    a fixture transcription (about 6 s).
+- **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md) decision
+  4, section 6, consequences.
+- **Impact:** long runs look stalled; an interrupted run restarts from scratch
+  ([L-010](#l-010)).
+- **Why:** trapping signals needs Tokio's `signal` feature (a dependency review); readers
+  already skip unknown event kinds, so progress can be added later.
+- **Mitigation:** library hosts get `Cancellation` between stages.
+- **Next step:** review the signal feature and progress events with P10/P11.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-026
+
+**whisper.cpp output with a split multi-byte token fails the chunk.**
+
+- **What:** older whisper.cpp builds could split a multi-byte character across tokens,
+  making the `-ojf` document invalid UTF-8; VSift rejects it and the chunk fails.
+  The pinned v1.9.2 writes valid UTF-8 (the Spanish F08 output passes).
+- **Evidence:** `crates/vsift-infrastructure/tests/whisper_output.rs`
+  (`the_spanish_bearing_output_is_valid_utf8`); [work record](../../memory/TODO.md).
+- **Impact:** a user-supplied older build can fail on non-ASCII speech.
+- **Why:** strict parsing of untrusted output.
+- **Mitigation:** typed failure; reviewed build recommended.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-027
+
+**whisper.cpp is the only speech engine.**
+
+- **What:** local ASR runs only through the whisper.cpp CLI; a faster-whisper adapter is
+  an approved backlog item, not scheduled in R0.
+- **Evidence:** issue #147; [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md)
+  section 1.
+- **Impact:** users with faster-whisper or GPUs cannot use them.
+- **Why:** one reviewed reference engine for R0 qualification.
+- **Mitigation:** hosts can supply their own recognizer through the engine library.
+- **Next step:** schedule #147 after R0.
+- **Owner:** unscheduled. **Issue:** [#147](https://github.com/smormah/vsift/issues/147).
+  **Status:** deferred. **Review:** pending.
+
+## Visual candidates
+
+### L-028
+
+**Change thresholds are calibrated only on the synthetic corpus.**
+
+- **What:** a block counts as changed at 4 grey levels (two blocks, or one at 6).
+  Unchanged samples of the synthetic corpus differ by at most 1 level, so the thresholds
+  are four to six times that noise. Real screen recordings with heavier compression
+  noise have not been measured.
+- **Evidence:** [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
+  decision 10; [P08 recall record](p08-candidate-recall.md) "Not measured";
+  `crates/vsift-domain/src/visual.rs` rustdoc.
+- **Impact:** on real recordings candidates may include false changes or miss subtle
+  edits; the recall and false-change figures (10/10 stable, 0 false changes) apply to
+  the synthetic corpus only.
+- **Why:** no licensed real recordings in the corpus.
+- **Mitigation:** candidates are a shortlist, not evidence; periodic coverage every
+  10 s; frames and bursts let agents inspect directly.
+- **Next step:** measure noise and recall on project-owned real screen recordings.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-029
+
+**2 Hz sampling misses changes shorter than 0.5 s or below the change rule.**
+
+- **What:** frames are sampled at most every 0.5 s at 128x72 grey. A change shorter than
+  0.5 s that falls between samples, or smaller than the change rule, is not seen, and
+  the result's coverage cannot report what sampling did not see. There is no denser
+  pass. At most 32 candidates per window are kept (drops are reported).
+- **Evidence:** [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
+  decisions 2 and 10 and consequences; [P08 recall record](p08-candidate-recall.md): F06's
+  tooltip found 300 ms late, F09's marker 250 ms late; threat model P08 residual.
+- **Impact:** brief flashes (toasts, tooltips) can be missed silently.
+- **Why:** bounded, cheap analysis (maintainer decision 2026-09-26).
+- **Mitigation:** `change_window` brackets the true start; bursts and neighbours give
+  dense frames on request.
+- **Next step:** consider a targeted denser pass around transcript hits.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-030
+
+**Motion fixtures draw no motion; scrolling and cursors only synthetic.**
+
+- **What:** the P04 generator draws F04-E02 (scroll), F05-E02 (loading indicator) and
+  F12-E02 with exactly the pixels of the state before them, so no visual method can see
+  them begin. The corpus has no real scrolling, cursor movement or loading animation;
+  V-03 motion is tested only on clips built at test time (FFmpeg `life` scroll and zoom).
+  Animation and overlapping cells are not covered.
+- **Evidence:** issue #159; [P08 recall record](p08-candidate-recall.md) "Corpus
+  limitations" and "Motion"; ADR 0018 decision 3.
+- **Impact:** recall on scroll and loading events is unmeasured on the corpus.
+- **Why:** generator defect found in P08.
+- **Mitigation:** the three events are re-verified as identical on every run and
+  reported as corpus limitations.
+- **Next step:** #159: regenerate the fixtures (truth first), re-record samples, move
+  the events into the gate; regenerate the P07 speech variants that copy the video.
+- **Owner:** unscheduled (R0 backlog). **Issue:** [#159](https://github.com/smormah/vsift/issues/159).
+  **Status:** open. **Review:** pending.
+
+### L-031
+
+**The visual index is tied to the probed duration; 30 minutes per call.**
+
+- **What:** the stored index records the probed duration; if a later probe reports a
+  different duration (for example after switching FFprobe builds), the index no longer
+  describes the source and reads fail. One `candidates` call analyses at most 30
+  windows (30 minutes); the rest is `not_analyzed` until a later call.
+- **Evidence:** [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
+  decisions 9, 11 and 13; `crates/vsift-application/src/visual.rs`.
+- **Impact:** long videos need several calls; a tool change mid-session can invalidate
+  candidates.
+- **Why:** bounded work per call; strict re-derivation on read.
+- **Mitigation:** typed coverage gaps; retain and reopen with a fresh session.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+## Search and transcripts
+
+### L-032
+
+**Search: no Unicode folding, no cross-segment phrases, no compound number words.**
+
+- **What:**
+  - No Unicode normalisation or accent folding: precomposed and decomposed spellings
+    differ, and "identificacion" does not find "identificación".
+  - A phrase that runs from one segment into the next is not found.
+  - Number words `zero`..`twenty` and the tens become digits, but compounds such as
+    `thirty-two` are joined (`thirtytwo`) and not converted to `32`.
+  - Only transcript text is searched; on-screen text is not (no OCR in R0).
+- **Evidence:** [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
+  decisions 2, 3, 7 and consequences; `crates/vsift-domain/src/search.rs` rustdoc.
+- **Impact:** "no hit" can mean "said differently"; results report `scope:
+  transcript_text`.
+- **Why:** Unicode tables would be a new dependency; phrase matching is per segment by
+  design.
+- **Mitigation:** normalisation of spelling, hyphens, thousands and decimals; all-terms
+  tier.
+- **Next step:** evaluate a reviewed Unicode dependency and compound numbers.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-033
+
+**A supplied transcript is assumed to cover the whole video.**
+
+- **What:** a supplied SRT/WebVTT file is taken to cover the whole source; its
+  completeness is not verified, so a region it does not cover is not reported as
+  untranscribed. For spliced local-ASR revisions coverage can be understated (never
+  overstated).
+- **Evidence:** [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
+  decision 7.
+- **Impact:** with a partial supplied transcript, "no hit" may be read as "not said".
+- **Why:** VSift cannot know what the author left out.
+- **Mitigation:** `basis: supplied_transcript` is reported.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-034
+
+**Speech fixtures are synthetic and partly unaligned.**
+
+- **What:** the Kokoro speech fixtures' direct Python dependencies are pinned but the
+  transitive set is not installed from a hash-locked file; the Spanish segment has no
+  word timings; clean fixtures' speech is not aligned with their visual events; the
+  model's training data cannot be checked independently (residual, low).
+- **Evidence:** [P07 speech fixtures](p07-speech-fixtures.md) "Known limits" and
+  "Licence review".
+- **Impact:** cross-modal timing truth exists only for the speech variants the journeys
+  use (F03-speech).
+- **Why:** test-only generator; fixtures are data.
+- **Mitigation:** committed clips with provenance and byte-for-byte verification.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+## Platforms, distribution and missing R0 capabilities
+
+### L-035
+
+**Evidence exists for Windows 11 only; macOS and Linux are unproven.**
+
+- **What:** the P08 and P09 real-tool checkpoints and all performance numbers were
+  recorded on one Windows 11 machine. Local ASR was also measured on hosted Ubuntu 24.04
+  and Windows Server 2025 runners. macOS runs only the ordinary Quality CI: no media,
+  ASR or evidence checkpoint, and whisper.cpp v1.9.2 publishes no macOS CLI archive, so
+  there is no reviewed macOS build. Linux desktop and other distributions, network
+  filesystems, and Windows/macOS worker use are unqualified.
+- **Evidence:** [resource profiles](support-and-resource-profiles.md);
+  [P09 record](p09-evidence-navigation.md) residuals;
+  [P07 ASR record](p07-asr-qualification.md); [P06 source review](p06-provisioning-source-review.md).
+- **Impact:** no platform may be called "supported" yet; only "qualification target".
+- **Why:** P14 owns the release matrix.
+- **Mitigation:** cross-platform Quality CI on every PR.
+- **Next step:** run the opt-in checkpoints on Ubuntu and macOS before P14; decide the
+  macOS whisper.cpp route.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
+  **Status:** deferred. **Review:** pending.
+
+### L-036
+
+**No native packages, npm launcher, SBOM, signing or provenance.**
+
+- **What:** VSift can only be built from source with Rust. There are no native release
+  artifacts, no npm launcher, no SBOM/notices, no signing or notarization and no trusted
+  publishing. The unscoped npm name `vsift` was merely observed free on 2026-09-10, not
+  reserved; crate-name availability is unchecked.
+- **Evidence:** [ADR 0009](../decisions/0009-package-identity-and-distribution.md);
+  [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) decision 1;
+  threat model "Installation and distribution policy"; baseline B-11.
+- **Impact:** R-14 is an R0 release gate.
+- **Why:** scheduled in P13.
+- **Mitigation:** none needed before release.
+- **Next step:** P13.
+- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
+  **Status:** deferred. **Review:** pending.
+
+### L-037
+
+**Managed dependency installation is parked.**
+
+- **What:** `setup install/repair/list/remove/rollback` return `COMMAND_NOT_IMPLEMENTED`;
+  `setup plan` is read-only. The only accepted catalogue is Ubuntu 24.04 x86-64; Windows
+  x86-64 and macOS return manual guidance. The Windows FFmpeg candidate is a daily build
+  (upstream keeps only the last 14 daily builds), and its LGPL-3.0 notices are not yet
+  reconciled.
+- **Evidence:** [ADR 0015](../decisions/0015-r0-delivery-replan.md);
+  [CLI contract](../contracts/cli-v1.md) `setup plan`;
+  [P06 Windows candidate](p06-windows-artifact-candidate.md) "Remaining gates";
+  [work record](../../memory/TODO.md) "Parked" (resume order).
+- **Impact:** users install FFmpeg and whisper.cpp themselves; R-03 requires at least one
+  qualified managed target.
+- **Why:** moved from P06 to P13 by ADR 0015.
+- **Mitigation:** detection, bring-your-own selection, verification and typed guidance.
+- **Next step:** P13, in the recorded resume order.
+- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
+  **Status:** deferred. **Review:** pending.
+
+### L-038
+
+**No worker or batch host; `job` commands are reserved.**
+
+- **What:** `job run/batch/status/resume/cancel` return `COMMAND_NOT_IMPLEMENTED`; there
+  is no durable workspace, finite batch reader, graceful shutdown or supervisor event
+  stream, and the strict Linux worker is qualified only at the process boundary (P02).
+- **Evidence:** [CLI contract](../contracts/cli-v1.md) command table; P11 row of the
+  [work packets](implementation-work-packets.md) (X-07..X-11, O-01..O-04, SEC-T01).
+- **Impact:** no server use; R-10..R-12 are R0 release gates.
+- **Why:** scheduled after P10.
+- **Mitigation:** the engine library can be embedded.
+- **Next step:** P11.
+- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
+  **Status:** deferred. **Review:** pending.
+
+### L-039
+
+**No agent skill; the named-agent journeys have not run.**
+
+- **What:** there is no agent skill, and A-01..A-09 (including A-08/A-09 through named
+  Codex and Claude Code clients) have not run. The mechanical journey passes without an
+  agent.
+- **Evidence:** [verification](verification.md) section 6; ledger P12 `planned`;
+  [test spine](e2e-test-spine.md).
+- **Impact:** R0's defining gate (a coding agent from a local video to a grounded
+  handoff) is unproven.
+- **Why:** scheduled after P10/P11.
+- **Mitigation:** the CLI contract is complete for the journey.
+- **Next step:** P12.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** deferred. **Review:** pending.
+
+## Process and CI
+
+### L-040
+
+**Process-supervisor tests fail intermittently on Windows under load.**
+
+- **What:** a few `process_supervisor` tests failed on child exit status twice in full
+  local `cargo test --workspace` runs on Windows 11 (P07 increment 2, and 2026-09-25 with
+  `p03_caps_stdout_stderr_and_combined_floods_during_read` and
+  `p04_preserves_invalid_bytes_and_handles_no_newline_and_delayed_output` under a
+  parallel release build); 40/40 and 20/20 isolated reruns passed; never seen in CI.
+- **Evidence:** issue #128 and its comments.
+- **Impact:** noisy local runs; a possible timing assumption around child exit or Job
+  Object cleanup.
+- **Why:** unknown.
+- **Mitigation:** record the failing names and output on recurrence before rerunning.
+- **Next step:** a parallel stress run like the lock stress workflow.
+- **Owner:** unscheduled. **Issue:** [#128](https://github.com/smormah/vsift/issues/128).
+  **Status:** monitoring. **Review:** pending.
+
+### L-041
+
+**A throttled Windows runner exceeded the 5 s provisioning wait.**
+
+- **What:** on one slow hosted runner (test binary 93 s instead of about 3 s) a
+  concurrent-preflight test got the documented `BUSY` (`ProvisioningInProgress`) after
+  the 5 s wait; 30/30 stress runs passed on the branch and on `main`.
+- **Evidence:** issue #144.
+- **Impact:** a rare CI failure; the product behaviour (`BUSY`, retryable) is correct.
+- **Why:** the test treats the documented outcome as a failure.
+- **Mitigation:** none yet; options are listed in the issue.
+- **Next step:** decide between accepting `BUSY` in the test or an injectable wait.
+- **Owner:** unscheduled. **Issue:** [#144](https://github.com/smormah/vsift/issues/144).
+  **Status:** monitoring. **Review:** pending.
+
+### L-042
+
+**Real-tool success paths run only on demand, not in hosted CI.**
+
+- **What:** the success paths that use real FFmpeg, whisper.cpp or large media are
+  opt-in (`--ignored`): `p07_transcript_e2e`, `p07_local_asr_e2e`,
+  `p07_asr_qualification`, `p08_search_e2e`, `p08_candidates_e2e`, `p09_evidence_e2e`
+  and the listed engine tests. Only the P07 local ASR workflow runs some of them on
+  hosted runners, on demand. Long fuzz campaigns (weekly short runs today), soak and the
+  load ladder are P14 gates.
+- **Evidence:** [work record](../../memory/TODO.md) "Known issues and gates";
+  [verification](verification.md) section 7 CI tiers.
+- **Impact:** a regression in a real-tool path is found only when someone runs the
+  checkpoint.
+- **Why:** local models and sizeable media; runner cost (decided in the test spine's
+  execution policy).
+- **Mitigation:** recorded samples keep the P08 recall gate in every CI run; stand-in
+  tools cover contracts.
+- **Next step:** consider a scheduled hosted run of the P08/P09 checkpoints.
+- **Owner:** P14 (release runs); scheduled runs unscheduled. **Issue:** none.
+  **Status:** open. **Review:** pending.
+
+### L-043
+
+**Library API unstable; MSRV, pre-release and MCP decisions open.**
+
+- **What:** the `vsift` library API is 0.x and unstable; the MSRV equals the latest
+  stable release with no policy; `cargo-semver-checks` joins CI only at first
+  publication. Open maintainer decisions: an MSRV policy before publication, whether to
+  cut 0.x pre-releases after P09, and whether a local MCP adapter is wanted after P12.
+- **Evidence:** [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md)
+  decisions 3, 7, 8; [work record](../../memory/TODO.md) "Open decisions".
+- **Impact:** embedders face breaking changes; the CLI JSON v1 contract is stable.
+- **Why:** pre-release.
+- **Mitigation:** CLI contract tests and frozen examples.
+- **Next step:** maintainer decisions.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-044
+
+**Accepted engineering trade-offs (CLI test dependencies, session compatibility).**
+
+- **What:** the CLI keeps `vsift-application`, `vsift-infrastructure` and `vsift-domain`
+  as development dependencies for tests that seed session records (normal dependencies
+  are only `vsift` and `vsift-contract`). A session written by this version records an
+  optional `verified_source_identity` that older builds reject.
+- **Evidence:** [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md)
+  implementation note; [work record](../../memory/TODO.md) "Known issues and gates".
+- **Impact:** none for users (sessions are disposable).
+- **Why:** test seeding; additive storage change.
+- **Mitigation:** architecture boundary checked for normal dependencies.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-045
+
+**Several documents and trackers state an outdated position.**
+
+- **What:** found while compiling this register (2026-09-27):
+  - `README.md` "Project status" says P09 is "pending review and merge", "Current
+    behavior" says frame and audio retrieval return `COMMAND_NOT_IMPLEMENTED`, the setup
+    text names `ingest --transcript` as today's first media operation, and "Principles"
+    promises readable terminal output ([L-017](#l-017)).
+  - [CLI contract](../contracts/cli-v1.md) "Output protocol" says human output is
+    readable terminal text, while its P09 section says it is indented JSON; its command
+    table still marks `setup configure`, `configure-model` and `plan` "Partial P06".
+  - [Architecture and contracts](architecture-and-contracts.md) says it is implemented
+    "through P06 plus ... P07 increment 2".
+  - The [threat model](security-threat-model.md) header still reads "proposed release
+    requirements, 2026-09-09".
+  - The [P08 recall record](p08-candidate-recall.md) calls ADR 0018 "Proposed"; it was
+    accepted on 2026-09-26.
+  - The P06 source-review and Windows-candidate records say "P06 remains open" (dated
+    records; P06 closed on the narrowed ADR 0015 scope).
+  - Issue #40's checkpoints are all unchecked although P04-P09 checkpoints are met.
+  - `CHANGELOG.md` says a hosted `BUSY` symptom "remains under review"; issue #66 was
+    closed on 2026-09-23.
+- **Impact:** readers and agents can be misled about what works.
+- **Why:** per-packet updates missed these files.
+- **Mitigation:** this list.
+- **Next step:** one documentation sweep PR; tick #40's met checkpoints.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-046
+
+**Deliberate scope exclusions (live sources, OCR, speakers, URLs).**
+
+- **What:** R0 accepts only local MP4/Matroska/WebM files (HLS, playlists and URLs are
+  rejected), up to 4 hours and 20 GiB; sessions expire after 24 idle hours and at most
+  7 days. There is no live capture (#107), speaker grouping (#108), OCR, diarization,
+  embeddings or scroll stitching (DEC-12, R1), and no multi-tenant host (R2).
+- **Evidence:** [ADR 0005](../decisions/0005-r0-scope-and-qualification-profiles.md),
+  [ADR 0011](../decisions/0011-r1-industrial-capability-expansion.md),
+  [ADR 0012](../decisions/0012-p04-source-media-profile.md),
+  [resource profiles](support-and-resource-profiles.md).
+- **Impact:** agents must work from transcript text and pixels only.
+- **Why:** accepted scope decisions.
+- **Mitigation:** typed rejections; coverage states what was searched.
+- **Next step:** R1 (P15-P20) and later scope ADRs.
+- **Owner:** R1 or later. **Issue:** [#107](https://github.com/smormah/vsift/issues/107),
+  [#108](https://github.com/smormah/vsift/issues/108). **Status:** accepted residual.
+  **Review:** pending.
+
+## Review workflow
+
+1. **Review.** For each entry the maintainer sets its **Review** line to one of:
+   - `accepted (YYYY-MM-DD)`: the limit stands as described; set the status to
+     *accepted residual* if it was *open*;
+   - `rejected (YYYY-MM-DD): <reason>`: the limit must be fixed; add or link an issue
+     and an owner packet;
+   - `rescheduled to <packet or issue> (YYYY-MM-DD)`: change **Owner** and **Issue**.
+   Update the summary table in the same change.
+2. **Closing.** An entry closes only with implementation and regression-test evidence
+   (`AGENTS.md`). Delete it in the change that removes the limit, cite the PR in
+   `CHANGELOG.md`, and never reuse its ID.
+3. **New limits.** Documentation is part of the change: a pull request that finds or
+   introduces a limitation, residual risk, deferral or accepted trade-off adds an entry
+   here in the same pull request, alongside its ADR, qualification record or threat
+   model note.
+4. **Periodic sweep.** At each packet close, re-read the sources this register was built
+   from (the work record and status, qualification records, ADR notes, threat model
+   residuals, the CLI contract and open issues) and reconcile.

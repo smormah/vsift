@@ -38,6 +38,8 @@ Read these documents together:
 8. [Baseline review](baseline-review.md): observed gaps in the existing scaffold.
 9. [Delivery governance](delivery-governance.md), [traceability](traceability.md), and
    [qualification profiles](support-and-resource-profiles.md): enforceable scope controls.
+10. [Known limits register](known-limits.md): every current limitation, residual risk,
+    deferral and accepted trade-off in one reviewable place.
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
 ledger describe approved direction. Existing ADRs remain intact. A reviewed design
