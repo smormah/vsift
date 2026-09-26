@@ -283,8 +283,76 @@ fn validate(
     validate_requirements_and_packets(&mut messages, &ledger.requirements, &ledger.packets);
     validate_corpus(&mut messages, corpus);
     validate_handoff_files(&mut messages, repository_root);
+    validate_fault_injection_features(&mut messages, repository_root);
 
     messages
+}
+
+/// Checks that no build a user receives can enable fault injection.
+///
+/// The `fault-injection` feature lets `VSIFT_FAULT_POINT` stop the process at
+/// a commit boundary (ADR 0020). Only the infrastructure crate may define it,
+/// and it may be enabled only from development dependencies, never by
+/// default, by a normal dependency or by a published crate's features. The
+/// crate itself also refuses to compile it without debug assertions.
+fn validate_fault_injection_features(messages: &mut Vec<String>, root: &Path) {
+    let mut manifests = vec![String::from("Cargo.toml"), String::from("fuzz/Cargo.toml")];
+    for directory in ["crates", "tools"] {
+        match fs::read_dir(root.join(directory)) {
+            Ok(entries) => {
+                let mut names: Vec<String> = entries
+                    .filter_map(Result::ok)
+                    .filter_map(|entry| entry.file_name().into_string().ok())
+                    .collect();
+                names.sort();
+                manifests.extend(
+                    names
+                        .into_iter()
+                        .map(|name| format!("{directory}/{name}/Cargo.toml"))
+                        .filter(|path| root.join(path).is_file()),
+                );
+            }
+            Err(error) => messages.push(format!("{directory} could not be listed: {error}")),
+        }
+    }
+    for manifest in manifests {
+        match fs::read_to_string(root.join(&manifest)) {
+            Ok(text) => check_fault_injection_manifest(messages, &manifest, &text),
+            Err(error) => messages.push(format!("{manifest} could not be read: {error}")),
+        }
+    }
+}
+
+/// The feature name, and the one manifest allowed to define it.
+const FAULT_INJECTION_FEATURE: &str = "fault-injection";
+const FAULT_INJECTION_OWNER: &str = "crates/vsift-infrastructure/Cargo.toml";
+
+fn check_fault_injection_manifest(messages: &mut Vec<String>, manifest: &str, text: &str) {
+    let mut section = "";
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            section = trimmed;
+            continue;
+        }
+        if !trimmed.contains(FAULT_INJECTION_FEATURE) {
+            continue;
+        }
+        let definition = manifest == FAULT_INJECTION_OWNER
+            && section == "[features]"
+            && trimmed.starts_with(&format!("{FAULT_INJECTION_FEATURE} ="));
+        let development = section.ends_with("dev-dependencies]");
+        if !definition && !development {
+            messages.push(format!(
+                "{manifest} line {} enables {FAULT_INJECTION_FEATURE} outside a development \
+                 dependency; it must never reach a release build (ADR 0020)",
+                index + 1
+            ));
+        }
+    }
 }
 
 fn validate_handoff_files(messages: &mut Vec<String>, root: &Path) {
@@ -758,7 +826,7 @@ fn require_count(messages: &mut Vec<String>, field: &str, actual: usize, expecte
 mod tests {
     use super::{
         CORPUS_MANIFEST, CorpusManifest, DEFAULT_LEDGER, DeliveryLedger, PacketStatus,
-        check_handoff_length, validate,
+        check_fault_injection_manifest, check_handoff_length, validate,
     };
     use std::{error::Error, fs, io, path::PathBuf};
 
@@ -783,6 +851,51 @@ mod tests {
                 .any(|message| message.contains("memory/TODO.md has 11 lines")),
             "{messages:#?}"
         );
+    }
+
+    #[test]
+    fn fault_injection_is_defined_once_and_enabled_only_for_development() {
+        let owner = "crates/vsift-infrastructure/Cargo.toml";
+        let mut messages = Vec::new();
+        check_fault_injection_manifest(
+            &mut messages,
+            owner,
+            "[features]\n# fault-injection is development only\nfault-injection = []\n",
+        );
+        check_fault_injection_manifest(
+            &mut messages,
+            "crates/vsift-cli/Cargo.toml",
+            "[dev-dependencies]\nvsift-infrastructure = { workspace = true, features = [\"fault-injection\"] }\n",
+        );
+        check_fault_injection_manifest(
+            &mut messages,
+            "crates/vsift/Cargo.toml",
+            "[target.'cfg(unix)'.dev-dependencies]\nx = { features = [\"fault-injection\"] }\n",
+        );
+        assert!(messages.is_empty(), "{messages:#?}");
+
+        for (manifest, text) in [
+            (
+                owner,
+                "[features]\ndefault = [\"fault-injection\"]\nfault-injection = []\n",
+            ),
+            (
+                "crates/vsift-cli/Cargo.toml",
+                "[dependencies]\nvsift-infrastructure = { workspace = true, features = [\"fault-injection\"] }\n",
+            ),
+            (
+                "crates/vsift/Cargo.toml",
+                "[features]\nfault-injection = []\n",
+            ),
+            (
+                "crates/vsift/Cargo.toml",
+                "[features]\ntests = [\"vsift-infrastructure/fault-injection\"]\n",
+            ),
+        ] {
+            let mut messages = Vec::new();
+            check_fault_injection_manifest(&mut messages, manifest, text);
+            assert_eq!(messages.len(), 1, "{manifest}: {text}");
+        }
     }
 
     #[test]
