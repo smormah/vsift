@@ -92,6 +92,10 @@ const fn visual_sampling_error(error: &MediaError) -> VisualSamplingError {
         | MediaError::InvalidOrientation
         | MediaError::NoFrameWithinTolerance
         | MediaError::NoDecodedAudio
-        | MediaError::InvalidVisualWindow => VisualSamplingError::Io,
+        | MediaError::InvalidVisualWindow
+        | MediaError::InvalidFrameRequest
+        | MediaError::CropOutsideFrame
+        | MediaError::FrameNotFound
+        | MediaError::TimeBaseMismatch => VisualSamplingError::Io,
     }
 }

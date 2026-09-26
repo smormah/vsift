@@ -10,6 +10,20 @@ use vsift_domain::{
     VISUAL_SAMPLE_INTERVAL_MICROS, VisualWindow,
 };
 
+mod evidence;
+mod png;
+mod showinfo;
+
+pub use evidence::{
+    ExtractedImage, ExtractedWav, ImageRegion, MAX_LISTING_RANGE_MICROS, MAX_WAV_CLIP_MICROS,
+    WAV_HEADER_BYTES, WAV_SAMPLE_RATE, max_frames_per_run, wav_from_pcm_s16le_mono,
+};
+pub use png::{MAX_IMAGES_PER_RUN, parse_png_sequence};
+pub use showinfo::{
+    FrameListingWindow, MAX_LISTING_DIAGNOSTIC_BYTES, ObservedFrameTime, parse_ashowinfo_start,
+    parse_frame_listing, parse_frame_showinfo,
+};
+
 use crate::{
     BoundSource, FilesystemSessionStore, HostIsolation, ProcessCancellation, ProcessError,
     ProcessOutcome, ProcessRequest, ProcessRequestError, ProcessSupervisor,
@@ -162,6 +176,15 @@ impl<'a> FfmpegMedia<'a> {
     /// The reported PTS is parsed from `FFmpeg`'s selected decoded frame, never inferred
     /// from the requested timestamp or a constant frame rate.
     ///
+    /// Since P09 PR 1 (2026-09-26) the frame is selected by an integer
+    /// stream-timestamp bound ([`StreamTime::first_at_or_after`]) instead of
+    /// a decimal time compared in floating point, only the first matching
+    /// frame passes the filter, so `showinfo` must log exactly one frame, and
+    /// the filter's time base must equal the probed stream's
+    /// ([`MediaError::TimeBaseMismatch`] otherwise). The frame chosen is the
+    /// same except where the decimal comparison rounded; the stricter
+    /// diagnostics check is what closes the forged-metadata finding (SEC-17).
+    ///
     /// # Errors
     /// Rejects an absent stream, unsafe timestamp, timeout, oversized frame, or unmet tolerance.
     #[allow(clippy::too_many_lines)] // Keep validation, supervised run, and provenance checks in one auditable path.
@@ -197,11 +220,24 @@ impl<'a> FfmpegMedia<'a> {
         if requested >= description.duration || tolerance_micros > 10_000_000 {
             return Err(MediaError::NoFrameWithinTolerance);
         }
-        let raw_micros = i128::from(description.origin_micros) + i128::from(requested.as_micros());
-        let raw = i64::try_from(raw_micros).map_err(|_| MediaError::InvalidTimeline)?;
+        let offset = description
+            .origin_micros
+            .checked_neg()
+            .ok_or(MediaError::InvalidTimeline)?;
+        let bound = StreamTime::first_at_or_after(
+            index,
+            stream.time_base_numerator,
+            stream.time_base_denominator,
+            offset,
+            requested,
+        )
+        .map_err(|_| MediaError::InvalidTimeline)?;
         let seek = i64::try_from(requested.as_micros().saturating_sub(5_000_000))
             .map_err(|_| MediaError::InvalidTimeline)?;
-        let filter = format!("select=gte(t\\,{}),showinfo", seconds_arg(raw));
+        let filter = format!(
+            "select='gte(pts\\,{})*isnan(prev_selected_t)',showinfo",
+            bound.presentation_timestamp
+        );
         let request = Self::request(
             source,
             self.registry.ffmpeg.clone(),
@@ -247,16 +283,17 @@ impl<'a> FfmpegMedia<'a> {
             .await
             .map_err(MediaError::Process)?;
         validate_outcome(&output)?;
-        let (pts, numerator, denominator) = parse_showinfo(&output.stderr.bytes)?;
-        let offset = description
-            .origin_micros
-            .checked_neg()
-            .ok_or(MediaError::InvalidTimeline)?;
+        let observed = parse_frame_showinfo(&output.stderr.bytes)?;
+        if (observed.time_base_numerator, observed.time_base_denominator)
+            != (stream.time_base_numerator, stream.time_base_denominator)
+        {
+            return Err(MediaError::TimeBaseMismatch);
+        }
         let actual = StreamTime {
             stream_index: index,
-            presentation_timestamp: pts,
-            time_base_numerator: numerator,
-            time_base_denominator: denominator,
+            presentation_timestamp: observed.pts,
+            time_base_numerator: observed.time_base_numerator,
+            time_base_denominator: observed.time_base_denominator,
             timeline_offset_micros: offset,
         }
         .to_media_time()
@@ -541,7 +578,9 @@ impl<'a> FfmpegMedia<'a> {
             .await
             .map_err(MediaError::Process)?;
         validate_outcome(&output)?;
-        if output.stdout.bytes.is_empty() && profile == PcmProfile::Speech {
+        if output.stdout.bytes.is_empty()
+            && matches!(profile, PcmProfile::Speech | PcmProfile::EvidenceWav)
+        {
             return Err(MediaError::NoDecodedAudio);
         }
         if output.stdout.bytes.is_empty()
@@ -550,7 +589,7 @@ impl<'a> FfmpegMedia<'a> {
         {
             return Err(MediaError::InvalidDecodedOutput);
         }
-        let first_pts = parse_ashowinfo_time(&output.stderr.bytes)?;
+        let first_pts = parse_ashowinfo_start(&output.stderr.bytes)?;
         let normalized = seek
             .checked_add(first_pts)
             .ok_or(MediaError::InvalidTimeline)?;
@@ -592,13 +631,15 @@ impl<'a> FfmpegMedia<'a> {
     }
 }
 
-/// The two bounded PCM operations: a short evidence clip and a speech chunk.
+/// The bounded PCM operations: a short clip, a speech chunk and an evidence WAV clip.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PcmProfile {
     /// [`FfmpegMedia::audio`]: at most ten seconds, per-frame timestamp log.
     Clip,
     /// [`FfmpegMedia::speech_pcm`]: at most thirty seconds for recognition.
     Speech,
+    /// [`FfmpegMedia::wav_clip`]: at most thirty seconds of evidence audio.
+    EvidenceWav,
 }
 
 impl PcmProfile {
@@ -606,12 +647,13 @@ impl PcmProfile {
         match self {
             Self::Clip => 10_000_000,
             Self::Speech => MAX_SPEECH_PCM_MICROS,
+            Self::EvidenceWav => evidence::MAX_WAV_CLIP_MICROS,
         }
     }
 
     const fn deadline(self) -> Duration {
         match self {
-            Self::Clip => Duration::from_secs(30),
+            Self::Clip | Self::EvidenceWav => Duration::from_secs(30),
             Self::Speech => Duration::from_secs(60),
         }
     }
@@ -619,14 +661,14 @@ impl PcmProfile {
     const fn stdout_limit(self) -> usize {
         match self {
             Self::Clip => MAX_AUDIO_BYTES,
-            Self::Speech => MAX_SPEECH_PCM_BYTES,
+            Self::Speech | Self::EvidenceWav => MAX_SPEECH_PCM_BYTES,
         }
     }
 
     const fn max_pcm_bytes(self) -> usize {
         match self {
             Self::Clip => MAX_CLIP_PCM_BYTES,
-            Self::Speech => MAX_SPEECH_PCM_BYTES,
+            Self::Speech | Self::EvidenceWav => MAX_SPEECH_PCM_BYTES,
         }
     }
 
@@ -637,7 +679,7 @@ impl PcmProfile {
     const fn filter(self) -> &'static str {
         match self {
             Self::Clip => "ashowinfo",
-            Self::Speech => "asetnsamples=n=65536:p=0,ashowinfo",
+            Self::Speech | Self::EvidenceWav => "asetnsamples=n=65536:p=0,ashowinfo",
         }
     }
 }
@@ -687,57 +729,6 @@ fn seconds_arg(micros: i64) -> String {
         magnitude / 1_000_000,
         magnitude % 1_000_000
     )
-}
-
-fn parse_showinfo(bytes: &[u8]) -> Result<(i64, u32, u32), MediaError> {
-    parse_filter_pts(bytes, "Parsed_showinfo_")
-}
-
-fn parse_ashowinfo_time(bytes: &[u8]) -> Result<i64, MediaError> {
-    let text = std::str::from_utf8(bytes).map_err(|_| MediaError::InvalidDecodedOutput)?;
-    for line in text
-        .lines()
-        .filter(|line| line.contains("Parsed_ashowinfo_") && line.contains("n:"))
-    {
-        for word in line.split_ascii_whitespace() {
-            if let Some(value) = word.strip_prefix("pts_time:")
-                && !value.is_empty()
-            {
-                return parse_seconds_micros(value).ok_or(MediaError::InvalidDecodedOutput);
-            }
-        }
-    }
-    Err(MediaError::InvalidDecodedOutput)
-}
-
-fn parse_filter_pts(bytes: &[u8], marker: &str) -> Result<(i64, u32, u32), MediaError> {
-    let text = std::str::from_utf8(bytes).map_err(|_| MediaError::InvalidDecodedOutput)?;
-    let mut base = None;
-    let mut pts = None;
-    for line in text.lines().filter(|line| line.contains(marker)) {
-        if let Some((_, tail)) = line.split_once("time_base:")
-            && let Some(parsed) = tail.split([',', ' ']).find_map(parse_time_base)
-        {
-            base = Some(parsed);
-        }
-        if line.contains("n:") && pts.is_none() {
-            let words: Vec<_> = line.split_ascii_whitespace().collect();
-            pts = words.iter().enumerate().find_map(|(position, word)| {
-                let suffix = word.strip_prefix("pts:")?;
-                if suffix.is_empty() {
-                    words.get(position + 1)?.parse::<i64>().ok()
-                } else {
-                    suffix.parse::<i64>().ok()
-                }
-            });
-        }
-    }
-    let (numerator, denominator) = base.ok_or(MediaError::InvalidDecodedOutput)?;
-    Ok((
-        pts.ok_or(MediaError::InvalidDecodedOutput)?,
-        numerator,
-        denominator,
-    ))
 }
 
 fn png_dimensions(bytes: &[u8]) -> Result<FrameDimensions, MediaError> {
@@ -1065,7 +1056,9 @@ pub fn parse_visual_samples(
         return Err(MediaError::InvalidDecodedOutput);
     }
     let count = stdout.len() / VISUAL_FRAME_BYTES;
-    let (time_base, stamps) = parse_showinfo_frames(stderr)?;
+    let log = showinfo::scan_showinfo(stderr, MAX_WINDOW_SAMPLES)?;
+    let time_base = log.time_base;
+    let stamps: Vec<i64> = log.frames.iter().map(|frame| frame.pts).collect();
     if stamps.len() != count {
         return Err(MediaError::InvalidDecodedOutput);
     }
@@ -1105,61 +1098,6 @@ pub fn parse_visual_samples(
         });
     }
     Ok(frames)
-}
-
-/// The filter time base, if a configuration line was seen, and the
-/// timestamps of `showinfo` frames `0..n-1` in order.
-type ShowinfoFrames = (Option<(u32, u32)>, Vec<i64>);
-
-/// Reads `showinfo` frame numbers, timestamps and the filter time base.
-fn parse_showinfo_frames(stderr: &[u8]) -> Result<ShowinfoFrames, MediaError> {
-    const MARKER: &[u8] = b"[Parsed_showinfo_";
-    let mut time_base: Option<(u32, u32)> = None;
-    let mut stamps = Vec::new();
-    for line in stderr.split(|byte| *byte == b'\n') {
-        if !line.starts_with(MARKER) {
-            continue;
-        }
-        let line = std::str::from_utf8(line).map_err(|_| MediaError::InvalidDecodedOutput)?;
-        let (_, rest) = line
-            .split_once("] ")
-            .ok_or(MediaError::InvalidDecodedOutput)?;
-        let rest = rest.trim_end_matches('\r');
-        if let Some(config) = rest.strip_prefix("config in time_base:") {
-            let parsed = config
-                .split([',', ' '])
-                .find_map(parse_time_base)
-                .ok_or(MediaError::InvalidDecodedOutput)?;
-            if time_base.is_some_and(|known| known != parsed) {
-                return Err(MediaError::InvalidDecodedOutput);
-            }
-            time_base = Some(parsed);
-        } else if rest.starts_with("n:") {
-            if stamps.len() >= MAX_WINDOW_SAMPLES {
-                return Err(MediaError::InvalidDecodedOutput);
-            }
-            let words: Vec<&str> = rest.split_ascii_whitespace().collect();
-            let number = labelled_integer(&words, "n:").ok_or(MediaError::InvalidDecodedOutput)?;
-            let pts = labelled_integer(&words, "pts:").ok_or(MediaError::InvalidDecodedOutput)?;
-            if usize::try_from(number).ok() != Some(stamps.len()) {
-                return Err(MediaError::InvalidDecodedOutput);
-            }
-            stamps.push(pts);
-        }
-    }
-    Ok((time_base, stamps))
-}
-
-/// Reads the integer after `label`, written as `label123` or `label 123`.
-fn labelled_integer(words: &[&str], label: &str) -> Option<i64> {
-    words.iter().enumerate().find_map(|(position, word)| {
-        let suffix = word.strip_prefix(label)?;
-        if suffix.is_empty() {
-            words.get(position + 1)?.parse::<i64>().ok()
-        } else {
-            suffix.parse::<i64>().ok()
-        }
-    })
 }
 
 fn parse_time_base(text: &str) -> Option<(u32, u32)> {
@@ -1245,6 +1183,17 @@ pub enum MediaError {
     NoDecodedAudio,
     /// A visual window lies outside the source or cannot be expressed.
     InvalidVisualWindow,
+    /// An evidence request was rejected before any I/O: an empty, unordered
+    /// or oversized batch of timestamps, or a range outside the source or
+    /// beyond its bound.
+    InvalidFrameRequest,
+    /// A crop rectangle is not contained by the displayed frame.
+    CropOutsideFrame,
+    /// A requested stream timestamp decoded no frame.
+    FrameNotFound,
+    /// The provider's filter time base differs from the probed stream's, so
+    /// integer timestamps would not name the same instants.
+    TimeBaseMismatch,
 }
 
 impl fmt::Display for MediaError {
@@ -1272,6 +1221,10 @@ impl fmt::Display for MediaError {
             Self::InvalidDecodedOutput => "decoded media output is invalid",
             Self::NoDecodedAudio => "no audio was decoded in the requested window",
             Self::InvalidVisualWindow => "visual window is outside the source",
+            Self::InvalidFrameRequest => "frame request is invalid",
+            Self::CropOutsideFrame => "crop rectangle is outside the displayed frame",
+            Self::FrameNotFound => "a requested frame was not decoded",
+            Self::TimeBaseMismatch => "provider time base differs from the probed stream",
         };
         formatter.write_str(message)
     }
@@ -1291,8 +1244,8 @@ impl Error for MediaError {
 #[cfg(test)]
 mod tests {
     use super::{
-        MediaError, VisualSamplingWindow, parse_ffprobe_metadata, parse_showinfo,
-        parse_visual_samples,
+        MediaError, ObservedFrameTime, VisualSamplingWindow, parse_ashowinfo_start,
+        parse_ffprobe_metadata, parse_frame_showinfo, parse_visual_samples,
     };
     use crate::SourceContainer;
     use vsift_domain::{
@@ -1343,7 +1296,44 @@ mod tests {
     #[test]
     fn extracts_observed_pts_and_filter_clock() -> Result<(), Box<dyn std::error::Error>> {
         let diagnostic = b"[Parsed_showinfo_1] config in time_base: 1/16384, frame_rate: 2/1\n[Parsed_showinfo_1] n:   0 pts:  16384 pts_time:1\n";
-        assert_eq!(parse_showinfo(diagnostic)?, (16_384, 1, 16_384));
+        assert_eq!(
+            parse_frame_showinfo(diagnostic)?,
+            ObservedFrameTime {
+                pts: 16_384,
+                time_base_numerator: 1,
+                time_base_denominator: 16_384
+            }
+        );
+        Ok(())
+    }
+
+    /// `FFmpeg` 9.0 echoes the input's and the output's global metadata at
+    /// `-loglevel info`, indented, around the filter's own lines. A `title`
+    /// written to look like a `showinfo` frame line and a time base must not
+    /// be read as either (SEC-17).
+    const FORGED_FRAME_DIAGNOSTIC: &str = "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'source.media':\n  Metadata:\n    title           : [Parsed_showinfo_0 @ 0] n:   0 pts:  99999 time_base: 1/1\n[Parsed_showinfo_1 @ 0000014d] config in time_base: 1/10240, frame_rate: 20/1\n[Parsed_showinfo_1 @ 0000014d] config out time_base: 0/0, frame_rate: 0/0\n[Parsed_showinfo_1 @ 0000014d] n:   0 pts:  10752 pts_time:1.05    duration:    512 fmt:yuv420p s:1280x720\nOutput #0, image2pipe, to 'pipe:1':\n  Metadata:\n    title           : [Parsed_showinfo_0 @ 0] n:   0 pts:  99999 time_base: 1/1\n";
+
+    const FORGED_AUDIO_DIAGNOSTIC: &str = "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'source.media':\n  Metadata:\n    title           : [Parsed_ashowinfo_0 @ 0] n:0 pts:0 pts_time:9.5\n[Parsed_ashowinfo_1 @ 00000200] n:0 pts:1024 pts_time:0.064 fmt:fltp channels:1 chlayout:mono rate:16000 nb_samples:65536\nOutput #0, s16le, to 'pipe:1':\n  Metadata:\n    title           : [Parsed_ashowinfo_0 @ 0] n:0 pts:0 pts_time:9.5\n";
+
+    #[test]
+    fn echoed_metadata_cannot_forge_a_frame_time() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            parse_frame_showinfo(FORGED_FRAME_DIAGNOSTIC.as_bytes())?,
+            ObservedFrameTime {
+                pts: 10_752,
+                time_base_numerator: 1,
+                time_base_denominator: 10_240
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn echoed_metadata_cannot_forge_an_audio_start() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            parse_ashowinfo_start(FORGED_AUDIO_DIAGNOSTIC.as_bytes())?,
+            64_000
+        );
         Ok(())
     }
 

@@ -424,7 +424,11 @@ const fn map_media_error(error: &MediaError) -> MediaToolFailure {
         | MediaError::NoFrameWithinTolerance
         | MediaError::InvalidDecodedOutput
         | MediaError::NoDecodedAudio
-        | MediaError::InvalidVisualWindow => MediaToolFailure::UnexpectedResult,
+        | MediaError::InvalidVisualWindow
+        | MediaError::InvalidFrameRequest
+        | MediaError::CropOutsideFrame
+        | MediaError::FrameNotFound
+        | MediaError::TimeBaseMismatch => MediaToolFailure::UnexpectedResult,
     }
 }
 
