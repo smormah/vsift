@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Crops and audio clips from the command line (P09 PR 4, ADR 0019), completing
+  evidence navigation: `vsift crop <session> <evd_...> --rect x,y,w,h` cuts a rectangle
+  out of a frame or an earlier crop by decoding the frame again, at native size, in the
+  displayed orientation, and records where it lies in the source frame, so a crop of a
+  crop still names source pixels; `vsift audio <session> --from <us> --to <us>` returns
+  a WAV clip of up to 30 seconds (16 kHz mono) that says when its first sample really
+  starts and whether the range was clipped at the end of the source. Both deliver the
+  committed file's absolute path, are reused when repeated, stream with
+  `--events jsonl` (the new `audio_evidence` record for clips) and refuse a rectangle
+  outside its parent, a clip of more than 30 seconds, a source without audio and
+  damaged media with typed errors and remediation. New schemas `audio-data`,
+  `audio-stream-data` and `audio-evidence`; frozen examples `crop.json` and
+  `audio.json`. The P09 checkpoint now also checks crops pixel for pixel against
+  FFmpeg's own decode, audio start times, damaged and cut-short media, every stream,
+  retained bundles with evidence, and records performance; the results are in the
+  [P09 qualification record](docs/planning/p09-evidence-navigation.md).
 - Frames from the command line (P09 PR 3, ADR 0019):
   `vsift frame get <session> --at <us>` returns the first frame at or after a time
   (`--select displayed-at` for the frame on screen at it, `--tolerance-us` up to 10 s,
@@ -29,8 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `frame-stream-data` and `frame-evidence`; frozen examples `frame-get.json`,
   `frame-get.events.jsonl`, `frame-neighbours.json` and `frame-burst.partial.json`;
   the opt-in checkpoint `p09_evidence_e2e` checks F01, F09, the rotated variant and
-  every visual candidate of the test videos against their frozen truth. `crop` and
-  `audio` stay reserved until PR 4.
+  every visual candidate of the test videos against their frozen truth.
 - The evidence core of evidence navigation (P09 PR 2, in the engine library, not yet
   reachable from the CLI; ADR 0019, now accepted with decisions D1-D7): exact frames at
   a time or of a visual candidate, the consecutive frames around one, an even burst

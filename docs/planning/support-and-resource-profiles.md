@@ -54,7 +54,13 @@ Audio clips are WAV, 16 kHz mono signed 16-bit, at most 30 s (about 0.9 MiB,
 10 GiB, with a sub-budget of 160 evidence artifacts (images, clips and evidence
 records of at most 256 KiB); a call without room for its record and one file is
 `RESOURCE_LIMIT` before any provider runs, and one that runs out after extracting
-something is `partial` (`session_evidence_budget`).
+something is `partial` (`session_evidence_budget`). Measured on Windows 11 (Xeon
+E5-2698 v4, FFmpeg 9.0, release build, [qualification record](p09-evidence-navigation.md)):
+a reused request takes about 120-200 ms through the binary; a cold 1280x720 frame about
+1.5-2 s; on a 1.17 GB 1080p clip of about 39 Mbit/s a cold frame p95 4.1 s, a 12-frame
+burst over 60 s 15.8 s, and the first call's full hash of the copy 10.3 s. Every read
+validates the session's manifest chain, so warm calls grow by about 3.7 ms per session
+generation (about 1 s at 256).
 
 These values are admission ceilings, not throughput promises. Provider threads count
 against weighted CPU admission. Source staging, model size and decoded outputs count

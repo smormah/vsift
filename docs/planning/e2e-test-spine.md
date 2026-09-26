@@ -1,8 +1,8 @@
 # Incremental end-to-end test spine
 
 Status: P04, P05 and P06 checkpoints, the P07 supplied-transcript and local-ASR
-stages, the P08 search and visual-candidates stages and the P09 frame stages are
-implemented; the complete journey remains `not_implemented`. Managed
+stages, the P08 search and visual-candidates stages and the P09 evidence-navigation
+stages are implemented; the complete journey remains `not_implemented`. Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -211,12 +211,32 @@ neighbours each side, bursts of 0 and 101 frames refused by the grammar and of 1
 and 100 frames naming the truth's frames, a 60 s range clipped and 61 s refused with
 the remediation to use `candidates`); and `p09_reuse` (repeats `reused` without a
 write, two requests for one frame sharing one item and file, `full_hash` then
-`identity` source checks). It prints `p09_evidence: passed` and writes
-`.vsift/e2e-runs/p09-<run-id>/report.json`, listing the PR 4 stages (`p09_crop`,
-`p09_audio`, `p09_malformed`, `p09_stream_and_bundle`, `p09_perf`) as
-`not_implemented`. On Windows 11 with FFmpeg 9.0 it passed on 2026-09-26 in 154 s
-(debug build): a cold `frame get` about 1.8 s after the first call's preflight, a
-reused one about 150 ms, 29 candidate frames at delta 0.
+`identity` source checks).
+
+P09 PR 4 completes the checkpoint (V-06, audio, malformed media, streams, bundles and
+performance); run it with `--release` for the performance record:
+
+```console
+cargo test --release -p vsift-cli --locked --test p09_evidence_e2e -- --ignored --nocapture
+```
+
+Further stages: `p09_crop` (crops of the rotated variant equal to FFmpeg's decode pixel
+for pixel, edges and one pixel past them, a crop of a crop in source pixels, F03's G18
+cell green then red, a tiny glyph at native size); `p09_audio` (first-sample times 64 ms
+and 750 ms, clipping at the end, no-audio, over-30 s and after-the-end refusals);
+`p09_malformed` (F11's damaged audio, F11's truncated file and a clip cut short at run
+time are `INVALID_SOURCE` with nothing committed); `p09_stream_and_bundle` (every
+command's JSON Lines stream, then `session retain` and `bundle validate` with the
+evidence records conforming to their bundle schema and holding no path); and `p09_perf`
+(recorded, not gated: warm reuse, cold frames and a 12-frame burst on a 1080p clip of
+about 1 GiB built at run time with the native MPEG-4 encoder and stream-copy loops,
+128 MiB in a debug build or `VSIFT_TEST_P09_PERF_MB`, and the warm cost as the manifest
+chain grows to 256 generations). It prints `p09_evidence: passed` and writes
+`.vsift/e2e-runs/p09-<run-id>/report.json`. On Windows 11 with FFmpeg 9.0 the release
+run passed on 2026-09-26 in 435 s; the results are in the
+[P09 qualification record](p09-evidence-navigation.md). The checkpoints run separately:
+no single journey yet goes from a video through both transcript paths to cited frames
+(the "mechanical checkpoint" below).
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

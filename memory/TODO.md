@@ -6,30 +6,25 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P09 (evidence navigation) is in progress; the packet is not complete.** PR 1 (media
-primitives and SEC-17 hardening) is merged (`965617f`). PR 2, the evidence core, is merged
-(`4aecdaa`, #163). **PR 3, the frame commands, is complete on branch
-`p09/frame-commands`** (on `main`) and awaits review. ADR 0019 is
-accepted with D1-D7. P00-P08 are complete.
+**P09 (evidence navigation) implementation is complete across PRs 1-4; the packet is
+not complete until they merge and its ledger completion record lands.** PRs 1 and 2 are
+merged (`965617f`, `4aecdaa`); PR 3 (frame commands, branch `p09/frame-commands`) and
+PR 4 (`crop` and `audio`, branch `p09/crop-audio`, built on PR 3) await review and
+merge. ADR 0019 is accepted with D1-D7. P00-P08 are complete.
 
-1. **PR 3 delivered (public CLI):**
-   - `frame get <ses> (--at <us> | --candidate <vcd>) [--select at-or-after|displayed-at]
-     [--tolerance-us 0..10000000]`, `frame neighbours <ses> <evd> [--count 1..20]`,
-     `frame burst <ses> --from --to [--max-frames 1..100]`, with `--json`, `--events jsonl`
-     and indented-JSON human output;
-   - `vsift-contract` `frame_response`/`FrameEvidenceStream`, record type
-     `frame_evidence`, schemas `frame-data`, `frame-stream-data`, `frame-evidence`,
-     frozen examples `frame-get.json`, `frame-get.events.jsonl`, `frame-neighbours.json`,
-     `frame-burst.partial.json`; `files[]` with verified absolute paths (D2);
-   - fixed remediation per typed failure (selection reasons, burst over 60 s ->
-     `candidates`, full session -> retain and reopen, missing tools, unknown ids);
-   - tests: `frame_contract`, `frame_cli_contract`, opt-in `p09_evidence_e2e` stages
-     `p09_frame_exact`, `p09_candidate_frames`, `p09_neighbours_burst`, `p09_reuse`
-     (passed on Windows 11, FFmpeg 9.0, 154 s debug).
-2. **Next: PR 4** - `crop <ses> <evd> --rect x,y,w,h` and `audio <ses> --from --to`
-   public, their schemas and examples, E2E stages `p09_crop`, `p09_audio`,
-   `p09_malformed`, `p09_stream_and_bundle`, `p09_perf`, and the qualification record
-   `docs/planning/p09-evidence-navigation.md`; then the ledger completion follow-up.
+1. **Public now:** `frame get <ses> (--at | --candidate) [--select] [--tolerance-us]`,
+   `frame neighbours <ses> <evd> [--count 1..20]`, `frame burst <ses> --from --to
+   [--max-frames 1..100]`, `crop <ses> <evd> --rect x,y,w,h`, `audio <ses> --from --to`
+   (<= 30 s), each with `--json`, `--events jsonl` (`frame_evidence`,
+   `audio_evidence` records) and `files[]` absolute paths (D2); schemas `frame-data`,
+   `frame-stream-data`, `frame-evidence`, `audio-data`, `audio-stream-data`,
+   `audio-evidence`; six frozen examples.
+2. **Qualified:** `docs/planning/p09-evidence-navigation.md` - release run of
+   `p09_evidence_e2e`, nine stages passed in 435 s (Windows 11, FFmpeg 9.0): V-01
+   against the frozen frame lists, 29 candidate frames at delta 0, crops pixel-equal to
+   FFmpeg, audio first-sample times, malformed media, streams and bundles, performance.
+3. **Next (maintainer/supervisor):** merge PR 3 and PR 4, then the P09 ledger
+   completion record. Then P10.
 
 ## Tracked issues
 
@@ -42,8 +37,13 @@ accepted with D1-D7. P00-P08 are complete.
 ## Other follow-ups
 
 - Evidence: a burst over a range denser than one 1,200-frame listing (60 fps over more
-  than 20 s) is rejected (`outside_listing`); several listings would lift it. Tiny-text
-  crops (V-06) are unmeasured. Neighbours list up to three windows (2, 10, 29 s).
+  than 20 s) is rejected (`outside_listing`). Tiny text is measured on synthetic glyphs
+  only. Neighbours list up to three windows (2, 10, 29 s).
+- Every session read walks the whole manifest chain: warm evidence calls grow about
+  3.7 ms per generation (1 s at 256); needs a tracked issue (incremental validation,
+  P10).
+- No single E2E journey yet goes video -> both transcript paths -> cited frames (the
+  test spine's "mechanical checkpoint"); decide whether P09 completion needs it.
 - Evidence records are read and decoded in full on every evidence call (at most 160
   records of 256 KiB); fine for R0, an index would help later.
 - Candidates: real screen recordings are unmeasured; no denser pass for sub-0.5 s

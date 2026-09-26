@@ -22,7 +22,28 @@
 //!   frames; a 60 s range is clipped to the video and 61 s is refused with
 //!   the remediation to use `candidates`;
 //! - `p09_reuse` (V-08): a repeated request is `reused` without writing, and
-//!   two requests that resolve to one frame share one item and one file.
+//!   two requests that resolve to one frame share one item and one file;
+//! - `p09_crop` (V-06): crops of the rotated variant equal `FFmpeg`'s decode of
+//!   the same displayed region (edges included, one pixel more refused), a
+//!   crop of a crop names and shows source pixels, F03's G18 cell turns from
+//!   green to red at 4 s, and a tiny glyph keeps its native size;
+//! - `p09_audio`: clips report their first decoded sample (F01's audio-only
+//!   variant 64 ms, F09 750 ms) as 16 kHz mono, a range past the end is
+//!   clipped, and a source without audio, a range over 30 s and one that
+//!   starts after the end are refused with their remediation;
+//! - `p09_malformed`: F11's damaged audio, F11's truncated file and a video
+//!   cut short at run time are `INVALID_SOURCE` with nothing committed, while
+//!   their decodable parts stay usable;
+//! - `p09_stream_and_bundle`: every command's `--events jsonl` stream, then
+//!   `session retain` and `bundle validate` with the evidence records;
+//! - `p09_perf` (recorded, not gated): warm reuse through the binary, cold
+//!   frames and a 12-frame burst on a 1080p clip built at run time (about
+//!   1 GiB in a release build and 128 MiB in a debug build, which hashes too
+//!   slowly for more; `VSIFT_TEST_P09_PERF_MB` sets another size), and the warm cost as
+//!   the session's manifest chain grows to 256 generations.
+//!
+//! Clips are encoded with `FFmpeg`'s native MPEG-4 Part 2 encoder, present in
+//! every build including the pinned CI builds that omit libx264.
 //!
 //! ```console
 //! cargo test -p vsift-cli --locked --test p09_evidence_e2e -- --ignored --nocapture
@@ -47,7 +68,10 @@ use std::{
 use assert_cmd::Command;
 use jsonschema::{Retrieve, Uri};
 use serde_json::{Value, json};
-use vsift_contract::BURST_RANGE_REMEDIATION;
+use vsift_contract::{
+    AUDIO_RANGE_REMEDIATION, AUDIO_RANGE_START_REMEDIATION, BURST_RANGE_REMEDIATION,
+    CROP_OUTSIDE_REMEDIATION, NO_AUDIO_CLIP_REMEDIATION,
+};
 use vsift_infrastructure::{ExecutableResolver, TrustedExecutable};
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -157,6 +181,21 @@ impl MediaTools {
             ffmpeg: resolver.resolve(OsStr::new("ffmpeg")).ok()?,
             ffprobe: resolver.resolve(OsStr::new("ffprobe")).ok()?,
         })
+    }
+
+    /// Runs `ffmpeg` with a closed argument list to build a clip.
+    fn build(&self, arguments: &[&OsStr]) -> Result<(), StageStop> {
+        let output = Process::new(self.ffmpeg.path())
+            .args(["-v", "error", "-nostdin", "-y"])
+            .args(arguments)
+            .output()?;
+        ensure(
+            output.status.success(),
+            &format!(
+                "ffmpeg could not build a clip: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        )
     }
 
     /// Decodes an image file to packed 8-bit RGB with `FFmpeg`.
@@ -288,7 +327,12 @@ fn evidence(base: &Path, arguments: &[&str]) -> Result<(Option<i32>, Value, Dura
     let elapsed = started.elapsed();
     conforms("operation-response.schema.json", &result)?;
     if result["error"].is_null() {
-        conforms("frame-data.schema.json", &result["data"])?;
+        let data = if arguments.first() == Some(&"audio") {
+            "audio-data.schema.json"
+        } else {
+            "frame-data.schema.json"
+        };
+        conforms(data, &result["data"])?;
     }
     Ok((code, result, elapsed))
 }
@@ -787,6 +831,636 @@ fn reuse_stage(base: &Path) -> StageResult {
     }))
 }
 
+/// The packed RGB of `rect` (`[x, y, width, height]`) inside an image of
+/// `width` pixels per row.
+fn region(image: &[u8], width: u64, [x, y, w, h]: [u64; 4]) -> Result<Vec<u8>, StageStop> {
+    let mut bytes = Vec::new();
+    for row in y..y + h {
+        let start = usize::try_from((row * width + x) * 3)?;
+        let end = start + usize::try_from(w * 3)?;
+        bytes.extend_from_slice(
+            image
+                .get(start..end)
+                .ok_or_else(|| failed("a region lies outside the reference image"))?,
+        );
+    }
+    Ok(bytes)
+}
+
+/// Mean red, green and blue of packed 8-bit RGB.
+fn mean_colour(rgb: &[u8]) -> Result<(u64, u64, u64), StageStop> {
+    let pixels = u64::try_from(rgb.len() / 3)?;
+    ensure(pixels > 0, "an image is empty")?;
+    let mut sums = (0_u64, 0_u64, 0_u64);
+    for pixel in rgb.as_chunks::<3>().0 {
+        sums.0 += u64::from(pixel[0]);
+        sums.1 += u64::from(pixel[1]);
+        sums.2 += u64::from(pixel[2]);
+    }
+    Ok((sums.0 / pixels, sums.1 / pixels, sums.2 / pixels))
+}
+
+fn rect_text([x, y, w, h]: [u64; 4]) -> String {
+    format!("{x},{y},{w},{h}")
+}
+
+/// One successful crop: its result and the decoded pixels of its file.
+fn crop_pixels(
+    base: &Path,
+    tools: &MediaTools,
+    session: &str,
+    parent: &str,
+    rect: [u64; 4],
+) -> Result<(Value, Vec<u8>), StageStop> {
+    let text = rect_text(rect);
+    let (result, _) = evidence_ok(base, &["crop", session, parent, "--rect", &text])?;
+    let (_, item) = single(&result)?;
+    ensure(
+        item["kind"] == "crop"
+            && u64_of(&item["image"]["width"])? == rect[2]
+            && u64_of(&item["image"]["height"])? == rect[3],
+        &format!("the crop {text} is not a native-size crop"),
+    )?;
+    let pixels = tools.decode_image(&file_path(&result, 0)?)?;
+    Ok((result, pixels))
+}
+
+/// V-06: crops of the rotated variant equal `FFmpeg`'s decode of the same
+/// region, edges and nesting; F03's cell changes colour at 4 s; a tiny glyph
+/// keeps its native size.
+#[allow(
+    clippy::too_many_lines,
+    reason = "Every V-06 crop case reads best in one journey"
+)]
+fn crop_stage(base: &Path, tools: &MediaTools) -> StageResult {
+    let source = fixture("F01-rotation-90.mp4");
+    let session = ingest(base, &source)?;
+    let (frame, _) = evidence_ok(base, &["frame", "get", &session, "--at", "2000000"])?;
+    let parent = evidence_id(&frame)?;
+    let pts = frame["data"]["items"][0]["frame"]["pts"]
+        .as_i64()
+        .ok_or_else(|| failed("no pts"))?;
+    let reference = tools.decode_reference(&source, pts)?;
+    let mut cases = Vec::new();
+    for rect in [
+        [100, 200, 300, 150],
+        [0, 0, 720, 1_280],
+        [719, 1_279, 1, 1],
+        [420, 1_000, 300, 280],
+    ] {
+        let (result, pixels) = crop_pixels(base, tools, &session, &parent, rect)?;
+        let item = &result["data"]["items"][0];
+        ensure(
+            pixels == region(&reference, 720, rect)?
+                && u64_of(&item["crop"]["frame_x"])? == rect[0]
+                && u64_of(&item["crop"]["frame_y"])? == rect[1]
+                && item["crop"]["parent_evidence_id"] == parent.as_str()
+                && result["data"]["selections"][0]["delta_us"] == 0,
+            &format!("the crop {} differs from FFmpeg's decode", rect_text(rect)),
+        )?;
+        cases.push(json!({"rect": rect_text(rect), "pixel_equal": true}));
+    }
+    // One pixel past the displayed frame is refused before any tool runs.
+    let (code, outside, _) = evidence(
+        base,
+        &["crop", &session, &parent, "--rect", "421,1000,300,280"],
+    )?;
+    ensure(
+        code == Some(2)
+            && outside["error"]["code"] == "INVALID_ARGUMENT"
+            && outside["error"]["remediation"][0]["summary"] == CROP_OUTSIDE_REMEDIATION,
+        "a crop one pixel past the frame was not refused",
+    )?;
+    // A crop of a crop names source pixels and equals that source region.
+    let (outer, _) = crop_pixels(base, tools, &session, &parent, [100, 200, 300, 150])?;
+    ensure(
+        outer["data"]["reused"] == true,
+        "a repeated crop was not reused",
+    )?;
+    let outer_id = evidence_id(&outer)?;
+    let (nested, pixels) = crop_pixels(base, tools, &session, &outer_id, [10, 20, 50, 40])?;
+    let nested_item = &nested["data"]["items"][0];
+    ensure(
+        nested_item["crop"]["frame_x"] == 110
+            && nested_item["crop"]["frame_y"] == 220
+            && nested_item["crop"]["x"] == 10
+            && nested_item["crop"]["parent_evidence_id"] == outer_id.as_str()
+            && pixels == region(&reference, 720, [110, 220, 50, 40])?,
+        "a crop of a crop does not name and show its source pixels",
+    )?;
+
+    // F03's G18 cell: green before 4 s, red from 4 s.
+    let f03 = ingest(base, &fixture("F03.mp4"))?;
+    let mut colours = Vec::new();
+    for at in ["3900000", "4000000"] {
+        let (cell_frame, _) = evidence_ok(
+            base,
+            &["frame", "get", &f03, "--at", at, "--tolerance-us", "0"],
+        )?;
+        let (_, pixels) = crop_pixels(
+            base,
+            tools,
+            &f03,
+            &evidence_id(&cell_frame)?,
+            [850, 420, 280, 70],
+        )?;
+        colours.push(mean_colour(&pixels)?);
+    }
+    let [(red_before, green_before, _), (red_after, green_after, _)] = colours[..] else {
+        return Err(failed("expected two cell crops"));
+    };
+    ensure(
+        green_before > red_before + 40 && red_after > green_after + 40,
+        &format!("the G18 cell did not turn from green to red: {colours:?}"),
+    )?;
+
+    // A tiny glyph (the first 4x-scaled 5x7 letter of F01's title, 20x28
+    // pixels) keeps its native size: nothing is scaled or invented.
+    let f01 = ingest(base, &fixture("F01.mp4"))?;
+    let (title_frame, _) = evidence_ok(base, &["frame", "get", &f01, "--at", "1000000"])?;
+    let title_pts = title_frame["data"]["items"][0]["frame"]["pts"]
+        .as_i64()
+        .ok_or_else(|| failed("no pts"))?;
+    let f01_reference = tools.decode_reference(&fixture("F01.mp4"), title_pts)?;
+    let glyph = [35, 20, 20, 28];
+    let (_, glyph_pixels) = crop_pixels(base, tools, &f01, &evidence_id(&title_frame)?, glyph)?;
+    let bright = glyph_pixels
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .filter(|pixel| pixel.iter().all(|channel| *channel > 200))
+        .count();
+    ensure(
+        glyph_pixels == region(&f01_reference, 1_280, glyph)?
+            && bright > 0
+            && bright < glyph_pixels.len() / 3,
+        "the tiny glyph crop is not the glyph at native size",
+    )?;
+    Ok(json!({
+        "rotated_crops": cases,
+        "outside_by_one_pixel": outside["error"]["code"],
+        "crop_of_crop": {"frame_x": 110, "frame_y": 220, "pixel_equal": true},
+        "f03_g18_mean_rgb": {"at_3_9_s": colours[0], "at_4_0_s": colours[1]},
+        "tiny_glyph": {"rect": rect_text(glyph), "native_size": true, "pixel_equal": true, "glyph_pixels": bright},
+    }))
+}
+
+/// The format of a WAV clip: channels, sample rate and bits per sample, and
+/// its number of samples.
+fn wav_format(bytes: &[u8]) -> Result<(u16, u32, u16, usize), StageStop> {
+    let field = |range: std::ops::Range<usize>| {
+        bytes
+            .get(range)
+            .ok_or_else(|| failed("the clip is shorter than a WAV header"))
+    };
+    ensure(
+        field(0..4)? == b"RIFF" && field(8..12)? == b"WAVE",
+        "the clip is not a WAV file",
+    )?;
+    let channels = u16::from_le_bytes(field(22..24)?.try_into()?);
+    let rate = u32::from_le_bytes(field(24..28)?.try_into()?);
+    let bits = u16::from_le_bytes(field(34..36)?.try_into()?);
+    Ok((channels, rate, bits, bytes.len().saturating_sub(44) / 2))
+}
+
+/// V-01 for sound: clips report their first decoded sample, are clipped to
+/// the source and refuse what has no audio or is too long.
+fn audio_stage(base: &Path) -> StageResult {
+    let mut clips = Vec::new();
+    for (file, to, expected_start) in [
+        ("F01-audio-only.m4a", 1_000_000_u64, 64_000_u64),
+        ("F09.mkv", 2_000_000, 750_000),
+    ] {
+        let session = ingest(base, &fixture(file))?;
+        let to_text = to.to_string();
+        let (result, elapsed) =
+            evidence_ok(base, &["audio", &session, "--from", "0", "--to", &to_text])?;
+        let data = &result["data"];
+        let item = &data["items"][0];
+        let (channels, rate, bits, samples) = wav_format(&fs::read(file_path(&result, 0)?)?)?;
+        let requested = usize::try_from(to * 16 / 1_000)?;
+        ensure(
+            u64_of(&item["actual_start_us"])? == expected_start
+                && u64_of(&data["selections"][0]["actual_us"])? == expected_start
+                && data["range_clipped"] == false
+                && (channels, rate, bits) == (1, 16_000, 16)
+                && samples <= requested
+                && samples + requested / 2 >= requested,
+            &format!("{file}: the clip does not start at {expected_start} us as 16 kHz mono"),
+        )?;
+        clips.push(json!({"fixture": file, "actual_start_us": expected_start, "samples": samples, "ms": elapsed.as_millis()}));
+    }
+    let session = ingest(base, &fixture("F01-audio-only.m4a"))?;
+    let (clipped, _) = evidence_ok(
+        base,
+        &["audio", &session, "--from", "5000000", "--to", "8000000"],
+    )?;
+    let end = u64_of(&clipped["data"]["items"][0]["range"]["end_us"])?;
+    ensure(
+        clipped["data"]["range_clipped"] == true && end < 8_000_000 && end > 5_000_000,
+        "a range past the end of the audio was not clipped to it",
+    )?;
+    let mut refusals = Vec::new();
+    for (file, from, to, summary) in [
+        ("F10.mp4", "0", "1000000", NO_AUDIO_CLIP_REMEDIATION),
+        (
+            "F01-audio-only.m4a",
+            "0",
+            "30000001",
+            AUDIO_RANGE_REMEDIATION,
+        ),
+        (
+            "F01-audio-only.m4a",
+            "7000000",
+            "8000000",
+            AUDIO_RANGE_START_REMEDIATION,
+        ),
+    ] {
+        let target = ingest(base, &fixture(file))?;
+        let (code, result, _) = evidence(base, &["audio", &target, "--from", from, "--to", to])?;
+        ensure(
+            code == Some(2)
+                && result["error"]["code"] == "INVALID_ARGUMENT"
+                && result["error"]["remediation"][0]["summary"] == summary
+                && artifact_count(base, &target)? == 0,
+            &format!("{file} {from}-{to} was not refused with its remediation"),
+        )?;
+        refusals.push(
+            json!({"fixture": file, "from_us": from, "to_us": to, "code": result["error"]["code"]}),
+        );
+    }
+    Ok(json!({"clips": clips, "clipped_end_us": end, "refusals": refusals}))
+}
+
+/// Damaged and cut-short media: typed `INVALID_SOURCE` with nothing
+/// committed; the decodable part stays usable.
+fn malformed_stage(base: &Path) -> StageResult {
+    let mut outcomes = Vec::new();
+    let damaged = ingest(base, &fixture("F11-damaged-tail.mp4"))?;
+    let truncated_fixture = ingest(base, &fixture("F11-truncated.mp4"))?;
+    let bytes = fs::read(fixture("F05.mp4"))?;
+    let cut = base.join("truncated-at-run-time.mp4");
+    fs::write(&cut, bytes.get(..bytes.len() * 6 / 10).unwrap_or_default())?;
+    let cut_session = ingest(base, &cut)?;
+    for (label, session, arguments) in [
+        (
+            "f11_damaged_tail_audio",
+            &damaged,
+            vec!["audio", "--from", "0", "--to", "1000000"],
+        ),
+        (
+            "f11_truncated_frame",
+            &truncated_fixture,
+            vec!["frame", "get", "--at", "0"],
+        ),
+        (
+            "cut_frame_past_the_data",
+            &cut_session,
+            vec!["frame", "get", "--at", "18000000"],
+        ),
+        (
+            "cut_burst_across_the_data",
+            &cut_session,
+            vec!["frame", "burst", "--from", "0", "--to", "20000000"],
+        ),
+    ] {
+        let before = artifact_count(base, session)?;
+        // The session identity follows the command words.
+        let split = if arguments[0] == "frame" { 2 } else { 1 };
+        let mut full: Vec<&str> = arguments[..split].to_vec();
+        full.push(session);
+        full.extend_from_slice(&arguments[split..]);
+        let (code, result, _) = evidence(base, &full)?;
+        ensure(
+            code == Some(3)
+                && result["error"]["code"] == "INVALID_SOURCE"
+                && artifact_count(base, session)? == before,
+            &format!(
+                "{label}: {} (exit {code:?}) or something was committed",
+                result["error"]["code"]
+            ),
+        )?;
+        outcomes.push(json!({"case": label, "code": "INVALID_SOURCE", "remediation": result["error"]["remediation"][0]["summary"].is_string()}));
+    }
+    // What decodes stays usable: the damaged file's video and the cut
+    // file's first second.
+    evidence_ok(base, &["frame", "get", &damaged, "--at", "0"])?;
+    evidence_ok(base, &["frame", "get", &cut_session, "--at", "1000000"])?;
+    Ok(json!({"refusals": outcomes, "decodable_parts_usable": true}))
+}
+
+/// Splits a JSON Lines stream into validated lines.
+fn stream_lines(base: &Path, arguments: &[&str], command: &str) -> Result<Vec<Value>, StageStop> {
+    let output = vsift(base)?
+        .args(arguments)
+        .args(["--events", "jsonl"])
+        .output()?;
+    ensure(
+        output.status.code() == Some(0) && output.stderr.is_empty(),
+        &format!("the {command} stream failed"),
+    )?;
+    let lines = std::str::from_utf8(&output.stdout)?
+        .trim_end_matches('\n')
+        .split('\n')
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    let (terminal, records) = lines
+        .split_last()
+        .ok_or_else(|| failed("the stream is empty"))?;
+    let (record_schema, data_schema) = if command == "audio" {
+        (
+            "audio-evidence.schema.json",
+            "audio-stream-data.schema.json",
+        )
+    } else {
+        (
+            "frame-evidence.schema.json",
+            "frame-stream-data.schema.json",
+        )
+    };
+    for (sequence, record) in (0_u64..).zip(records) {
+        conforms("evidence-event.schema.json", record)?;
+        conforms(record_schema, &record["record"])?;
+        ensure(
+            record["sequence"].as_u64() == Some(sequence)
+                && record["command"] == command
+                && record["key"] == record["record"]["evidence_id"],
+            "an evidence event is out of sequence or mis-keyed",
+        )?;
+    }
+    conforms("terminal-event.schema.json", terminal)?;
+    conforms(data_schema, &terminal["result"]["data"])?;
+    ensure(
+        terminal["result"]["data"]["record_count"].as_u64() == u64::try_from(records.len()).ok()
+            && terminal["sequence"].as_u64() == u64::try_from(records.len()).ok(),
+        "the terminal event does not count the records",
+    )?;
+    Ok(lines)
+}
+
+/// Every command streams, then the session is retained and its bundle,
+/// evidence records included, validates.
+#[allow(
+    clippy::too_many_lines,
+    reason = "Every stream and the bundle checks read best in one journey"
+)]
+fn stream_and_bundle_stage(base: &Path) -> StageResult {
+    let session = ingest(base, &fixture("F01.mp4"))?;
+    let get = stream_lines(
+        base,
+        &["frame", "get", &session, "--at", "1025000"],
+        "frame.get",
+    )?;
+    let anchor = get[0]["key"]
+        .as_str()
+        .ok_or_else(|| failed("no key"))?
+        .to_owned();
+    let mut counts = Vec::new();
+    counts.push(json!({"command": "frame.get", "events": get.len()}));
+    for (arguments, command) in [
+        (
+            vec![
+                "frame",
+                "neighbours",
+                session.as_str(),
+                anchor.as_str(),
+                "--count",
+                "2",
+            ],
+            "frame.neighbours",
+        ),
+        (
+            vec![
+                "frame",
+                "burst",
+                session.as_str(),
+                "--from",
+                "0",
+                "--to",
+                "6000000",
+                "--max-frames",
+                "4",
+            ],
+            "frame.burst",
+        ),
+        (
+            vec![
+                "crop",
+                session.as_str(),
+                anchor.as_str(),
+                "--rect",
+                "150,235,550,55",
+            ],
+            "crop",
+        ),
+        (
+            vec!["audio", session.as_str(), "--from", "0", "--to", "2000000"],
+            "audio",
+        ),
+    ] {
+        let lines = stream_lines(base, &arguments, command)?;
+        counts.push(json!({"command": command, "events": lines.len()}));
+    }
+    let bundle = base.join("bundle");
+    let (code, retained) = run_json(
+        vsift(base)?
+            .args(["session", "retain", &session, "--output"])
+            .arg(&bundle)
+            .arg("--json"),
+    )?;
+    ensure(
+        code == Some(0),
+        &format!("session retain failed: {}", retained["error"]["code"]),
+    )?;
+    let (code, validated) = run_json(
+        vsift(base)?
+            .args(["bundle", "validate"])
+            .arg(&bundle)
+            .arg("--json"),
+    )?;
+    ensure(code == Some(0), "bundle validate failed")?;
+    let manifest: Value = serde_json::from_slice(&fs::read(bundle.join("bundle.json"))?)?;
+    let mut kinds = std::collections::BTreeMap::<String, u64>::new();
+    let root_text = base.to_string_lossy().to_string();
+    for artifact in manifest["artifacts"]
+        .as_array()
+        .ok_or_else(|| failed("artifacts missing"))?
+    {
+        let name = artifact["name"].as_str().unwrap_or_default();
+        let kind = artifact["kind"].as_str().unwrap_or_default().to_owned();
+        *kinds.entry(kind.clone()).or_default() += 1;
+        if kind == "evidence_record" {
+            let text = fs::read_to_string(bundle.join(name))?;
+            ensure(
+                !text.contains(&root_text) && !text.contains("\"path\""),
+                "an evidence record holds a path",
+            )?;
+            conforms(
+                "bundle-evidence-record.schema.json",
+                &serde_json::from_str(&text)?,
+            )?;
+        }
+    }
+    ensure(
+        kinds.get("evidence_record") == Some(&5)
+            && kinds.contains_key("frame_png")
+            && kinds.get("audio_wav") == Some(&1),
+        &format!("the bundle does not carry the evidence: {kinds:?}"),
+    )?;
+    Ok(json!({
+        "streams": counts,
+        "bundle_artifacts": validated["data"]["artifact_count"],
+        "bundle_artifact_kinds": kinds,
+    }))
+}
+
+fn p95(durations: &[Duration]) -> Duration {
+    let mut sorted = durations.to_vec();
+    sorted.sort_unstable();
+    let rank = (sorted.len() * 95).div_ceil(100).saturating_sub(1);
+    sorted.get(rank).copied().unwrap_or_default()
+}
+
+fn millis(durations: &[Duration]) -> Vec<u128> {
+    durations.iter().map(Duration::as_millis).collect()
+}
+
+/// Performance record (not a gate): warm reuse, cold frames and a burst on
+/// a large 1080p clip built at run time, and the manifest-chain walk.
+#[allow(
+    clippy::too_many_lines,
+    reason = "The measurements and their record read best together"
+)]
+fn perf_stage(base: &Path, tools: &MediaTools) -> StageResult {
+    // Warm reuse on F01.
+    let f01 = ingest(base, &fixture("F01.mp4"))?;
+    evidence_ok(base, &["frame", "get", &f01, "--at", "1025000"])?;
+    let mut warm = Vec::new();
+    for _ in 0..20 {
+        warm.push(evidence_ok(base, &["frame", "get", &f01, "--at", "1025000"])?.1);
+    }
+
+    // A 1080p clip: F07 (1920x1080) with temporal noise so it does not
+    // compress, 60 s encoded once with FFmpeg's native MPEG-4 encoder, then
+    // looped by stream copy to the target size.
+    // A debug build hashes too slowly for a gigabyte inside the CLI deadline.
+    let target_mb: u64 = env::var("VSIFT_TEST_P09_PERF_MB")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(if cfg!(debug_assertions) { 128 } else { 1_024 });
+    let built = Instant::now();
+    let segment = base.join("segment-1080p.mp4");
+    tools.build(&[
+        OsStr::new("-stream_loop"),
+        OsStr::new("2"),
+        OsStr::new("-i"),
+        fixture("F07.mp4").as_os_str(),
+        OsStr::new("-map"),
+        OsStr::new("0:v:0"),
+        OsStr::new("-vf"),
+        OsStr::new("noise=alls=10:allf=t"),
+        OsStr::new("-t"),
+        OsStr::new("30"),
+        OsStr::new("-c:v"),
+        OsStr::new("mpeg4"),
+        OsStr::new("-q:v"),
+        OsStr::new("5"),
+        OsStr::new("-g"),
+        OsStr::new("40"),
+        OsStr::new("-an"),
+        segment.as_os_str(),
+    ])?;
+    let segment_bytes = fs::metadata(&segment)?.len();
+    let loops = (target_mb * 1_048_576)
+        .div_ceil(segment_bytes.max(1))
+        .max(1);
+    let clip = base.join("large-1080p.mp4");
+    let repeat = (loops - 1).to_string();
+    tools.build(&[
+        OsStr::new("-stream_loop"),
+        OsStr::new(&repeat),
+        OsStr::new("-i"),
+        segment.as_os_str(),
+        OsStr::new("-c"),
+        OsStr::new("copy"),
+        clip.as_os_str(),
+    ])?;
+    fs::remove_file(&segment)?;
+    let clip_bytes = fs::metadata(&clip)?.len();
+    let build_ms = built.elapsed().as_millis();
+    let ingested = Instant::now();
+    let large = ingest(base, &clip)?;
+    let ingest_ms = ingested.elapsed().as_millis();
+    fs::remove_file(&clip)?;
+    let duration_s = loops * 30;
+    let burst_end = (duration_s.min(60) * SECOND).to_string();
+    // The first call hashes the 1 GB copy in full (D1); later calls compare
+    // its identity.
+    let (_, first_call) = evidence_ok(base, &["frame", "get", &large, "--at", "1000000"])?;
+    let mut cold = Vec::new();
+    for index in 1..=10_u64 {
+        let at = (index * duration_s * SECOND / 11).to_string();
+        let (result, elapsed) = evidence_ok(base, &["frame", "get", &large, "--at", &at])?;
+        ensure(
+            result["data"]["reused"] == false
+                && result["data"]["items"][0]["image"]["width"] == 1_920,
+            "a cold 1080p frame was reused or not 1920 wide",
+        )?;
+        cold.push(elapsed);
+    }
+    let (burst, burst_time) = evidence_ok(
+        base,
+        &["frame", "burst", &large, "--from", "0", "--to", &burst_end],
+    )?;
+    ensure(
+        burst["data"]["items"].as_array().map(Vec::len) == Some(12),
+        "the 12-frame 1080p burst did not return 12 frames",
+    )?;
+    let mut large_warm = Vec::new();
+    for _ in 0..10 {
+        large_warm.push(evidence_ok(base, &["frame", "get", &large, "--at", "1000000"])?.1);
+    }
+
+    // The manifest chain: every read walks it, so a warm call's cost grows
+    // with the session's generations. Renewals add one generation each.
+    let chain = ingest(base, &fixture("F01.mp4"))?;
+    evidence_ok(base, &["frame", "get", &chain, "--at", "1025000"])?;
+    let mut walk = Vec::new();
+    let mut generation = 0_u64;
+    for target in [2_u64, 64, 128, 256] {
+        while generation < target {
+            let (code, renewed) =
+                run_json(vsift(base)?.args(["session", "renew", &chain, "--json"]))?;
+            ensure(code == Some(0), "a renewal failed")?;
+            generation = u64_of(&renewed["data"]["generation"])?;
+        }
+        let mut samples = Vec::new();
+        for _ in 0..5 {
+            samples.push(evidence_ok(base, &["frame", "get", &chain, "--at", "1025000"])?.1);
+        }
+        walk.push(json!({"generation": generation, "warm_reuse_p95_ms": p95(&samples).as_millis(), "warm_reuse_ms": millis(&samples)}));
+    }
+    let warm_p95 = p95(&warm);
+    Ok(json!({
+        "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
+        "warm_reuse_f01": {"p95_ms": warm_p95.as_millis(), "target_ms": 250, "meets_target": warm_p95 <= Duration::from_millis(250), "samples_ms": millis(&warm)},
+        "large_clip": {
+            "recipe": "F07 1920x1080 with noise=alls=10:allf=t (about 39 Mbit/s), a 30 s segment encoded with mpeg4 -q:v 5 -g 40, looped by stream copy",
+            "bytes": clip_bytes,
+            "duration_s": duration_s,
+            "build_ms": build_ms,
+            "ingest_ms": ingest_ms,
+            "first_call_with_full_hash_ms": first_call.as_millis(),
+            "cold_frame_get_p95_ms": p95(&cold).as_millis(),
+            "cold_frame_get_ms": millis(&cold),
+            "burst_12_frames_ms": burst_time.as_millis(),
+            "burst_range_us": [0, duration_s.min(60) * SECOND],
+            "warm_reuse_p95_ms": p95(&large_warm).as_millis(),
+        },
+        "manifest_chain_walk": walk,
+    }))
+}
+
 fn stage(name: &str, started: Instant, result: StageResult) -> Value {
     let elapsed_ms = started.elapsed().as_millis();
     match result {
@@ -824,6 +1498,10 @@ fn with_tools(
 
 #[tokio::test]
 #[ignore = "opt-in P09 evidence checkpoint; needs ffmpeg and ffprobe on PATH; reports to .vsift/e2e-runs"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep the journey order and the complete evidence record visible together"
+)]
 async fn evidence_checkpoint() -> TestResult {
     let started = Instant::now();
     let repository = repository().canonicalize()?;
@@ -856,6 +1534,30 @@ async fn evidence_checkpoint() -> TestResult {
     let result = with_tools(&root, "reuse", tools.as_ref(), |base, _| reuse_stage(base));
     stages.push(stage("p09_reuse", clock, result));
 
+    let clock = Instant::now();
+    let result = with_tools(&root, "crop", tools.as_ref(), crop_stage);
+    stages.push(stage("p09_crop", clock, result));
+
+    let clock = Instant::now();
+    let result = with_tools(&root, "audio", tools.as_ref(), |base, _| audio_stage(base));
+    stages.push(stage("p09_audio", clock, result));
+
+    let clock = Instant::now();
+    let result = with_tools(&root, "malformed", tools.as_ref(), |base, _| {
+        malformed_stage(base)
+    });
+    stages.push(stage("p09_malformed", clock, result));
+
+    let clock = Instant::now();
+    let result = with_tools(&root, "bundle", tools.as_ref(), |base, _| {
+        stream_and_bundle_stage(base)
+    });
+    stages.push(stage("p09_stream_and_bundle", clock, result));
+
+    let clock = Instant::now();
+    let result = with_tools(&root, "perf", tools.as_ref(), perf_stage);
+    stages.push(stage("p09_perf", clock, result));
+
     let status_of = |wanted: &str| stages.iter().any(|entry| entry["status"] == wanted);
     let overall = if status_of("failed") {
         "failed"
@@ -865,16 +1567,6 @@ async fn evidence_checkpoint() -> TestResult {
         "passed"
     };
     stages.push(json!({"name": "p09_evidence", "status": overall}));
-    let pending: Vec<_> = [
-        "p09_crop",
-        "p09_audio",
-        "p09_malformed",
-        "p09_stream_and_bundle",
-        "p09_perf",
-    ]
-    .into_iter()
-    .map(|name| json!({"name": name, "status": "not_implemented", "packet": "P09 PR 4"}))
-    .collect();
     let future_stages: Vec<_> = [
         "p10_recovery",
         "p11_worker_batch",
@@ -894,7 +1586,7 @@ async fn evidence_checkpoint() -> TestResult {
             "schema_version": manifest["schema_version"],
             "corpus_id": manifest["corpus_id"],
         },
-        "fixtures": "F01-F10 and F12, F01-rotation-90.mp4, with the frame lists of fixtures/corpus/generated/verification.json",
+        "fixtures": "F01-F10 and F12, F01-rotation-90.mp4, F01-audio-only.m4a, F11-damaged-tail.mp4, F11-truncated.mp4, with the frame lists of fixtures/corpus/generated/verification.json; F05 cut short and a 1080p clip of about 1 GiB built at run time",
         "os": env::consts::OS,
         "architecture": env::consts::ARCH,
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
@@ -903,9 +1595,10 @@ async fn evidence_checkpoint() -> TestResult {
         "authorization": "opt-in cargo test invocation; setup configure writes only to isolated temporary per-user bases; no install, download or network access",
         "prior_checkpoints": ["P08: p08_search_e2e", "P08: p08_candidates_e2e"],
         "stages": stages,
-        "pending_p09_stages": pending,
         "coverage_gaps": [
-            "Crops, audio clips, malformed sources, streams and bundles, and performance are PR 4 stages"
+            "Tiny text is measured on synthetic 5x7 glyphs only; real screen text with anti-aliasing and compression is not in the corpus",
+            "A burst over more than 1,200 frames (60 fps over more than 20 s) is refused as outside_listing",
+            "Performance is recorded, not gated; the build profile is in the p09_perf evidence"
         ],
         "future_stages": future_stages,
         "overall": overall,
