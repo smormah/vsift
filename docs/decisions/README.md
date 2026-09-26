@@ -22,3 +22,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0016: Embeddable engine and published evidence contract](0016-embeddable-engine-and-evidence-contract.md)
 - [0017: Local speech recognition through whisper.cpp](0017-local-asr-through-whisper-cpp.md) (Accepted)
 - [0018: Visual-candidate index and transcript search](0018-visual-candidate-index-and-transcript-search.md) (Accepted)
+- [0019: Evidence navigation](0019-evidence-navigation.md) (Proposed)

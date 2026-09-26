@@ -17,77 +17,76 @@ Today it can:
 - transcribe the video's speech itself with whisper.cpp (`transcript retranscribe`);
 - return timestamped transcript segments for a time range, as a page or a JSON Lines
   stream of keyed evidence records;
-- **search the transcript for words** (`search`, P08 PR 1);
-- **list the moments where the screen changed** (`candidates`, P08 PR 4), analysing
-  the video on first use, at most 30 minutes per call, and saying plainly which parts
-  are not analysed or could not be;
+- search the transcript for words (`search`);
+- list the moments where the screen changed (`candidates`);
 - manage the session's lifetime and retention, and validate retained bundles;
 - keep every folder it creates private to the user.
 
-**P08 is complete** (2026-09-26, merge `b830fc9`, ledger record written; ADR 0018
-accepted): search (#156), bracketed source binding (#157), visual index core (#158) and
-`candidates` (#160). P09 (evidence navigation) is next and not started.
+**P09 (evidence navigation) is in progress.** PR 1, the media primitives and a
+security fix, is complete on branch `p09/media-primitives` and not yet merged. It adds
+nothing a user can call yet: frames, crops and audio clips become commands in PRs 3
+and 4, after the maintainer confirms ADR 0019's decisions D1-D7 and PR 2 builds the
+evidence core. P00-P08 are complete.
 
-## What works (public CLI, on `p08/candidates`)
+## P09 PR 1: what it delivers (internal)
+
+- **Security fix (SEC-17):** FFmpeg repeats a file's metadata in the diagnostics VSift
+  reads frame and audio times from; two readers accepted any line containing the
+  filter's name, so a crafted title could move `transcript retranscribe`'s segment
+  times. Readers now take only lines the filter wrote, numbered without gaps, with the
+  time base checked. Regression tests failed on the old code (ADR 0012 note).
+- **Integer-timestamp selection:** `StreamTime::first_at_or_after`; the P04 `frame`
+  call and all new calls select `pts` integers, never decimal seconds. All 29 recorded
+  P08 candidates extract at delta 0.
+- **Adapter (`FfmpegMedia`):** `list_frame_times` (60 s, 1,200 frames, 1 MiB
+  diagnostics), `frames_at` (up to 8 exact frames, 64 MiB, rgb24 PNG), `crop_at`
+  (FFmpeg crop after display rotation, pixel-exact on the rotated fixture), `wav_clip`
+  (16 kHz mono, <= 30 s, header written in Rust); strict `parse_png_sequence`; new
+  `MediaError` variants `InvalidFrameRequest`, `CropOutsideFrame`, `FrameNotFound`,
+  `TimeBaseMismatch`.
+- **Domain `evidence::navigation`:** at-or-after (default) and displayed-at selection
+  with tolerance up to 10 s; neighbours 1..20 per side with typed stops; bursts of
+  1..100 even targets over at most 60 s, deduplicated; `CropRect::parse` and `compose`.
+- **Preflight profile 3:** the `frame` check also lists, extracts exactly and crops F01.
+- **Evidence:** opt-in `p09_media_primitives` (V-01/V-06 at adapter level) passed with
+  FFmpeg 9.0; always-run `p09_recorded_diagnostics` over real FFmpeg output; verifier
+  v2 records independent `ffprobe` frame lists (no hash or truth changed).
+
+## What works (public CLI, unchanged by P09 PR 1)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`.
 - `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`: disposable
   session (24 idle hours, at most 7 days); supplied SRT/WebVTT import never needs whisper.
 - `transcript retranscribe <session> [--from --to]`, `transcript get ... [--events jsonl]`.
-- `search <session> --query <text> [--from --to] [--limit] [--cursor] [--revision]`:
-  matching `transcript_segment` records with `hits` and `transcript_coverage`;
-  untranscribed parts make it `partial` (exit 0) with envelope `coverage`.
-- `candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor]`:
-  `visual_candidate` records in time order (actual frame time, span, change window,
-  reasons, stability, uncalibrated change size, visual hash, displayed dimensions),
-  `index` and `coverage` (analysed ranges and typed gaps); gaps make it `partial` (exit
-  0). Analysed ranges and cursor calls are warm reads with no tool. `--events jsonl`.
-- `session list/status/renew/close/retain/clean` and `bundle validate` (transcript and
-  visual-index records, decoded strictly).
+- `search <session> --query <text> [--from --to] [--limit] [--cursor] [--revision]`.
+- `candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor]`: analysed
+  on first use (30 minutes per call), warm pages without tools, honest coverage.
+- `session list/status/renew/close/retain/clean` and `bundle validate`.
 - Still `COMMAND_NOT_IMPLEMENTED`: frame, audio, crop, job and setup
   install/repair/list/rollback/remove.
 
-## Visual candidates (P08 PR 3 core and PR 4 command)
+## Visual candidates (P08)
 
-- **Domain `visual`:** 128x72 grey samples at most every 0.5 s become 16x9 block means
-  and a difference hash; fixed 60 s windows (never merged) with a 0.5 s lead-in; change
-  = one block moving >= 6 or two >= 4; motion, transients, a candidate in every 10 s
-  cell with a frame, at most 32 per window; typed gaps. The index carries the stream's
-  displayed dimensions; `MediaDescription::visual_video_stream` picks the stream.
-- **Application:** `extend_visual_index(_within)` (budget, clamped to 30),
-  `merge_visual_extension` (lost commit race), `page_candidates` (cursor bound to the
-  windows of its range), coverage helpers.
-- **Engine:** `Engine::candidates`: warm read or tools, preflight, `BoundSource`, probe,
-  analyse, full re-verify, commit (merge and retry up to 3 times), page.
-  `EnginePorts::with_visual_window_budget`. Existing failure codes only.
-- **Infrastructure:** `FfmpegMedia::visual_samples` (closed argv, 122 frames, 256 KiB
-  diagnostics, 120 s; `-ss`/`-t` normalised with a 1 s margin), `visual_index_record`
-  (8 MiB, 64 per session, strict decode, bundles validated), preflight profile 2.
-- **Measured:** recorded and live gates hit every stable event of at least 1 s, F06's
-  500 ms tooltip, 0 false changes, 12.9 candidates/min; F04-E02, F05-E02, F12-E02 are
-  corpus limitations (#159). Warm pages p95 about 100 ms (engine, four-hour index).
+- 128x72 grey samples at most every 0.5 s in fixed 60 s windows; a change is one block
+  moving >= 6 or two >= 4; a candidate in every 10 s cell; typed gaps; index stores the
+  displayed dimensions. Recall: every stable event of at least 1 s, 0 false changes,
+  12.9 candidates/min; F04-E02, F05-E02, F12-E02 are corpus limitations (#159).
   Record: `docs/planning/p08-candidate-recall.md`.
 
-## Transcript search (P08 PR 1)
+## Transcript search and local ASR (P07, P08)
 
-- Normalisation (lowercase, `2,048`→`2048`, `E-409`→`e409`, number words as digits),
-  query ≤256 bytes and 1..16 words, phrase then all-terms tiers, coverage from
-  provenance, computed on demand (S-11 p95 about 150 ms on 20,000 segments).
-
-## Local ASR and source binding (P07, P08 PR 2)
-
-- Import or `AsrRun` provenance, 30 s chunks with 5 s overlap, profiles `base`
-  (default) and `base_q5_1`; base 3.25% clean WER, RTF 0.39.
-- A `BoundSource` hashes on open and before commit and compares on-disk identity per
-  provider call (#148); used by local ASR and visual sampling.
+- Search normalises spelling (`2,048`→`2048`, `E-409`→`e409`, number words), phrase then
+  all-terms tiers, coverage from provenance, on demand (p95 about 150 ms at 20,000).
+- Local ASR: 30 s chunks with 5 s overlap, profiles `base` (default) and `base_q5_1`;
+  base 3.25% clean WER, RTF 0.39. A `BoundSource` hashes the copy on open and before
+  commit and compares on-disk identity per provider call (#148).
 
 ## Evidence stream, private folders and fuzzing
 
-- `transcript get`, `search` and `candidates --events jsonl`: keyed evidence events
-  (`transcript_segment`, `visual_candidate`), then one terminal event.
+- `transcript get`, `search` and `candidates --events jsonl`: keyed evidence events.
 - Every folder VSift creates is made private before use (SEC-18).
-- Nine `cargo-fuzz` targets, including `search_query`, `visual_samples` and
-  `visual_index_record`; weekly nightly run, per-PR seed replay.
+- Twelve `cargo-fuzz` targets, including `frame_showinfo`, `frame_listing` and
+  `png_sequence`; weekly nightly run, per-PR seed replay.
 
 ## The engine library and contract
 
@@ -104,7 +103,8 @@ accepted): search (#156), bracketed source binding (#157), visual index core (#1
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
-| P09–P12, P14 | Not started |
+| P09 | In progress: PR 1 of 4 complete on its branch; PRs 2-4 remain |
+| P10–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
 ## Architecture snapshot
@@ -113,14 +113,16 @@ accepted): search (#156), bracketed source binding (#157), visual index core (#1
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
 <- `vsift-cli` (parse, present). `vsift-contract` sits beside the engine and depends on
 domain and application only. `tools/vsift-governance` checks the ledger and these
-files' sizes; `fuzz/` is the fuzz harness. Largest: `filesystem_session_store.rs`.
+files' sizes; `fuzz/` is the fuzz harness. The media adapter is
+`crates/vsift-infrastructure/src/ffmpeg_media.rs` with submodules `evidence`,
+`showinfo` and `png`. Largest file: `filesystem_session_store.rs`.
 
 ## Quality evidence
 
-- P08 PR 4 branch, Windows 11: fmt, strict Clippy, workspace tests, warning-denied
-  rustdoc, governance, fuzz replay and fuzz Clippy pass; the opt-in
-  `p08_candidates_e2e` (7 stages, with the local-ASR variant) and `engine_candidates`
-  pass with FFmpeg 9.0. Results go in the PR description.
+- P09 PR 1 branch, Windows 11: fmt, strict Clippy, workspace tests, warning-denied
+  rustdoc, governance, fuzz fmt/Clippy/replay and the verifier's Python tests pass; the
+  opt-in `p09_media_primitives`, `p04_media_e2e` and `p06_tool_verification` pass with
+  FFmpeg 9.0. Results go in the PR description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. Qualification records are in `docs/planning/`; history in git,

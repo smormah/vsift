@@ -315,6 +315,29 @@ Residual: FFmpeg remains a native decoder with the user's filesystem access, as 
 P04, and sampling at 2 Hz can miss a change shorter than 0.5 s or smaller than the
 change rule; the result's coverage cannot report what sampling did not see.
 
+SEC-17 finding, fixed 2026-09-26 in P09 PR 1 (ADR 0012 note of that date): the frame
+and audio diagnostics readers accepted any line containing the filter's marker, and
+FFmpeg echoes source metadata into the same output, so a crafted file could supply the
+reported frame time and time base or the first audio sample time. On user media this
+reached `transcript retranscribe`, whose chunk start times place transcript segments.
+Every reader now accepts only lines that begin with the filter's own prefix, requires
+frames numbered without gaps or repeats with strictly increasing timestamps (a single
+extraction exactly one), and the frame paths fail closed unless the filter time base
+equals the probed stream's. Regression tests fail on the earlier code; the fuzz targets
+`frame_showinfo` and `frame_listing` check that indented copies of every line never
+change a result. P09's evidence primitives (ADR 0019, not yet user-reachable) keep the
+P04/P08 controls: one supervised run per call with a closed argument list, forced
+demuxer and `file` protocol, `-xerror`, a 64 MiB allocation cap, two threads, a 30 s
+deadline, at most 8 frames of at most 16 megapixels and 64 MiB of PNG, 1,200 listed
+frames with 1 MiB of diagnostics, and WAV clips of at most 30 s; crop rectangles are
+validated against the displayed frame before any I/O, and every PNG is walked chunk by
+chunk with CRCs checked before it is accepted (SEC-05). Residual: a line that begins
+with the filter's prefix (possible only through a log message that embeds an untrusted
+string with a line break) and exactly continues the real numbering cannot be told apart
+by text alone. For an extraction the count must still equal the images decoded; a
+forged listing entry names a timestamp the exact extraction then does not find
+(`FrameNotFound`), so it cannot become evidence.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.

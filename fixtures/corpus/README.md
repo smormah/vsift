@@ -29,7 +29,11 @@ tone-based audio sentinels and rotated/audio-track variants. The verifier indepe
 checks generated hashes, timestamps and selected decoded pixels. The source recipes
 are reproducible with the same FFmpeg build; `generated/provenance.json` records that
 build's version and hash. P07 adds speech variants of the speech-bearing fixtures
-(below); the tone fixtures stay unchanged. P08/P12 use the frozen corpus for measured retrieval and agent evaluation. See the
+(below); the tone fixtures stay unchanged. P08/P12 use the frozen corpus for measured retrieval and agent evaluation. Since
+verifier v2 (P09, 2026-09-26) `generated/verification.json` also records the independent
+`ffprobe` frame timestamps of F01, F09 and the rotation variant (`frame_timestamps_us`,
+normalized microseconds); P09's frame tests compare their listings with them. No hash
+or truth changed. See the
 [P04 qualification record](../../docs/planning/p04-media-qualification.md).
 
 ## Speech variants (P07)

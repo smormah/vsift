@@ -209,7 +209,7 @@ A failed check is a failed operation (`status: "failed"`, `data: null`) with one
 `remediation` item (`required_authority: "none"`, `command: null`) whose summary
 begins with the fixed sentence `The selected FFmpeg and FFprobe failed VSift's
 media-tool check at the <check> step (<reason>).`, where `<check>` is `preparation`,
-`probe`, `frame`, `audio` or `visual_sampling` (verification profile 2, P08) and `<reason>` is `process_failure`, `provider_rejected`,
+`probe`, `frame`, `audio` or `visual_sampling` (verification profile 2, P08; profile 3, P09, adds frame listing, exact-timestamp extraction and a crop to the `frame` check) and `<reason>` is `process_failure`, `provider_rejected`,
 `output_limit`, `unexpected_result`, `deadline`, `workspace`, `cancelled` or
 `fixture_integrity`. Fixed prose for the reason and the next step follows; no path or
 tool output is ever included. See

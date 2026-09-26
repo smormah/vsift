@@ -121,3 +121,43 @@ second is not portable through the process supervisor. Regression tests:
 `crates/vsift-infrastructure/tests/p08_source_binding.rs`, the hash-count tests in
 `crates/vsift-infrastructure/src/source_binding/tests.rs` and the opt-in engine
 tests in `crates/vsift/tests/engine_retranscribe.rs`. Closes #148.
+
+## 2026-09-26 implementation note: provider diagnostics parsing hardened (SEC-17)
+
+P09 PR 1. "Frame selection ... using the selected frame's observed PTS" and "Audio
+reports the first observed decoded sample PTS" above rely on reading `FFmpeg`'s
+`showinfo` and `ashowinfo` diagnostics. The frame and audio readers accepted any line
+that *contained* the filter's marker. At `-loglevel info` `FFmpeg` also echoes the
+input's and the output's metadata, which the source author controls, so a crafted
+`title` could supply the frame timestamp and time base, or the first audio sample time,
+that the adapter then reported as observed. On the pre-fix code the regression tests
+read pts 99999 in a 1/1 time base instead of 10752 in 1/10240, and 9.5 s instead of
+64 ms. The P08 visual-sample reader already read only lines that begin with the marker
+and was not affected. On user media the audio reader was reachable through `transcript
+retranscribe`, where each chunk's first decoded sample time places its segments on the
+timeline, so a crafted file could shift its own transcript's times; the frame reader
+and the short-clip reader ran only on the embedded F01 fixture of the media-tool
+preflight.
+
+- **Line origin:** every reader now reads only lines that *begin* with the filter's own
+  `[Parsed_showinfo_` or `[Parsed_ashowinfo_` prefix. `FFmpeg` indents every echoed
+  metadata value and turns a line break inside a value into another indented line.
+- **Consistency:** frame lines must be numbered `0, 1, 2, ...` without a gap or repeat
+  and their timestamps must strictly increase, so a line that does begin with the prefix
+  but is not the filter's own (for example one forged through a log message that embeds
+  an untrusted string with a line break) adds a frame the real numbering does not have,
+  and the output is rejected. A single-frame extraction now passes only the first
+  matching frame through the filter (`isnan(prev_selected_t)`) and requires exactly one
+  frame line.
+- **Time base:** the single-frame call and the new evidence calls select by an integer
+  stream-timestamp bound and fail closed unless the filter's `config in time_base`
+  equals the probed stream's (`MediaError::TimeBaseMismatch`).
+
+The parsers are published (`parse_frame_showinfo`, `parse_ashowinfo_start`,
+`parse_frame_listing`) and fuzzed (`frame_showinfo`, `frame_listing`), including an
+invariant that indented copies of every line never change a result. Regression tests:
+`echoed_metadata_cannot_forge_a_frame_time` and
+`echoed_metadata_cannot_forge_an_audio_start` (unit), `p09_recorded_diagnostics`
+(real `FFmpeg` 9.0 output of a clip with a forged title), and the opt-in
+`forged_metadata_cannot_move_a_reported_time`. No failure code changed. See
+[ADR 0019](0019-evidence-navigation.md).
