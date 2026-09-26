@@ -6,11 +6,9 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P09 (evidence navigation) implementation is complete across PRs 1-4; the packet is
-not complete until they merge and its ledger completion record lands.** PRs 1 and 2 are
-merged (`965617f`, `4aecdaa`); PR 3 (frame commands, branch `p09/frame-commands`) and
-PR 4 (`crop` and `audio`, branch `p09/crop-audio`, built on PR 3) await review and
-merge. ADR 0019 is accepted with D1-D7. P00-P08 are complete.
+**P00-P09 are complete.** P09 (evidence navigation) closed on 2026-09-27 with merge
+`e57c706` (PRs #162, #163, #165, #166; ADR 0019 accepted with D1-D7); its evidence is in
+the ledger. The test spine's mechanical checkpoint is met.
 
 1. **Public now:** `frame get <ses> (--at | --candidate) [--select] [--tolerance-us]`,
    `frame neighbours <ses> <evd> [--count 1..20]`, `frame burst <ses> --from --to
@@ -27,8 +25,10 @@ merge. ADR 0019 is accepted with D1-D7. P00-P08 are complete.
    (`p09_mechanical_journey_supplied` 10.6 s, `p09_mechanical_journey_local_asr`
    24.0 s: search -> candidates -> candidate frame -> crop -> audio -> retained bundle
    on F03-speech, every citation checked against frozen truth).
-3. **Next (maintainer/supervisor):** merge PR 3 and PR 4, then the P09 ledger
-   completion record. Then P10.
+3. **Next: P10 (recovery integration), not started.** Governance rule 10: the
+   maintainer starts it. Read the P10 row of `docs/planning/implementation-work-packets.md`
+   and X-01..X-06, X-09, X-10, S-07, S-08 first. #164 (incremental manifest-chain
+   validation) and ADR 0019 D4 (raising the artifact caps) belong with P10's commit work.
 
 ## Tracked issues
 

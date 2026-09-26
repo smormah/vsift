@@ -25,12 +25,9 @@ Today it can:
 - manage the session's lifetime and retention, and validate retained bundles;
 - keep every folder it creates private to the user.
 
-**P09 (evidence navigation) implementation is complete across PRs 1-4; the packet is
-not complete until they merge and the ledger completion record lands.** PRs 1 and 2 are
-merged (`965617f`, `4aecdaa`); PR 3 (the frame commands, branch `p09/frame-commands`)
-and PR 4 (`crop`, `audio` and the qualification record, branch `p09/crop-audio`) await
-review and merge. ADR 0019 is accepted with D1-D7. P00-P08 are
-complete.
+**P09 is complete** (2026-09-27, merge `e57c706`, ledger record written; PRs #162, #163,
+#165, #166; ADR 0019 accepted with D1-D7). P00-P09 are complete and the mechanical
+checkpoint is met; P10 (recovery integration) is next and not started.
 
 ## P09 PR 4: `crop`, `audio` and qualification
 
@@ -122,7 +119,7 @@ complete.
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
-| P09 | Implementation complete (PRs 1-4); PRs 1-2 merged, PRs 3-4 await merge and the ledger record |
+| P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10–P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
