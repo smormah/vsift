@@ -28,7 +28,7 @@ use crate::{
 
 type Response = OperationResponse<serde_json::Value>;
 
-fn rfc3339(seconds: u64) -> Result<String, FailureCode> {
+pub(crate) fn rfc3339(seconds: u64) -> Result<String, FailureCode> {
     let seconds = i64::try_from(seconds).map_err(|_| FailureCode::InvalidArgument)?;
     OffsetDateTime::from_unix_timestamp(seconds)
         .map_err(|_| FailureCode::InvalidArgument)?

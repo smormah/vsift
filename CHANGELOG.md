@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Transcript search: `vsift search <session> --query <text>` finds a literal query in
+  the session's newest transcript (or `--revision <trv_id>`), optionally within
+  `--from/--to`, 20 hits per page (`--limit 1..100`, `--cursor` to continue). Spelling
+  differences such as `R-17` and "dialog r 17", `2,048` and `2048`, or `twelve` and `12`
+  still match. Whole-phrase matches come first, then segments containing every word;
+  a phrase split across two segments is not found, and accents are not folded. Each
+  hit is the same transcript segment record `transcript get` returns, and `--events
+  jsonl` streams those records followed by the hit list. Every result says which parts
+  of the searched range have no transcript and where local recognition found no
+  speech; when part is untranscribed, the result is `partial` (still exit 0) and the
+  envelope `coverage` lists the gaps. On-screen text is not searched. Search reads the
+  stored transcript on every call and writes nothing; a 20,000-segment transcript
+  pages in about 150 ms. A rejected query (`empty`, `too_long` over 256 bytes,
+  `too_many_terms` over 16 words, `control_character`) is `INVALID_ARGUMENT` with
+  fixed remediation naming the reason. New schemas `search-data` and
+  `search-stream-data` with frozen examples; ADR 0018 (proposed) records the design.
+- An opt-in P08 checkpoint (`p08_search_e2e`) and a `search_query` fuzz target.
+
 - `setup check` now reports local speech recognition in a new `local_asr` object:
   whether the registered model is a reviewed pinned model and which profile, and
   whether whisper.cpp, the model and FFmpeg/FFprobe really transcribe a short speech

@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-09-25. Current-state document: rewrite it, don't append to it. Next
+As of 2026-09-26. Current-state document: rewrite it, don't append to it. Next
 actions and open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -15,108 +15,101 @@ Today it can:
 - copy a video into a private, disposable session;
 - import an existing SRT or WebVTT transcript with the video, aligned by an explicit
   offset;
-- **transcribe the video's speech itself with whisper.cpp** (`transcript
-  retranscribe`, P07 increment 3b, merged): the whole video or one range, into a new
-  revision that keeps earlier citations valid;
-- return timestamped transcript segments for a time range, from the newest revision
-  or any earlier one, as one page or as a JSON Lines stream of keyed evidence records;
-- prove, automatically and once per setup, that FFmpeg/FFprobe and the speech
-  recognizer really work before running them on a user's video;
-- manage the session's lifetime and retention, and validate retained bundles,
-  including the content of their transcript records;
-- keep every folder it creates private to the user, whatever the parent folder grants.
+- transcribe the video's speech itself with whisper.cpp (`transcript retranscribe`),
+  whole or one range, into a new revision that keeps earlier citations valid;
+- return timestamped transcript segments for a time range, from any revision, as a page
+  or as a JSON Lines stream of keyed evidence records;
+- **search the transcript for words** (`search`, P08 PR 1, PR #156,
+  ADR 0018 accepted): tolerant of spelling (`R-17` = "dialog r 17"), ranked,
+  paged, and honest about which parts of the video no transcript covers;
+- manage the session's lifetime and retention, and validate retained bundles;
+- keep every folder it creates private to the user.
 
-**P07 is complete** (2026-09-25, merge `9ea3180`, ledger record written): local ASR
-works end to end and is qualified on Ubuntu 24.04 and Windows 2025. P08 (candidate and
-search index) is next and not started; search and visuals are P08-P09.
+**P07 is complete** (merge `9ea3180`). **P08 (candidates and search) is in progress:**
+PR 1 (transcript search) is complete on its branch; PR 2 (#148 source binding) runs in
+parallel; PR 3 (visual index core) and PR 4 (`candidates`) are next. P08 is not complete
+until `candidates` ships with its recall report.
 
 ## What works (public CLI)
 
-- `setup check`, `setup configure`, `setup configure-model` and the read-only
-  `setup plan`. `setup check` keeps its v1 probe fields and adds `local_asr` (3c):
-  the model's identity and profile, and the local-ASR verification (a recorded pass,
-  or run now within its own 60 s budget; failed with a typed check/reason; or not run
-  with the first missing piece). Exit status still reflects the probes only.
-- `ingest <video>`: stages and hashes one local MP4/Matroska source into a disposable
-  session (24 idle hours, at most 7 days). Runs no provider.
-- `ingest <video> --transcript <file> [--transcript-offset <signed us>]`: parses the
-  sidecar, runs the media-tool preflight, probes the video, keeps only cues wholly
-  inside it, and commits source and transcript in one generation. Never needs whisper.
-- `transcript retranscribe <session> [--from <us> --to <us>]` (3b): resolves FFmpeg,
-  FFprobe, `whisper-cli` and the registered model, refuses any model that is not a
-  reviewed pinned profile (`base`, or `base_q5_1` from 3c), runs the media-tool and
-  local-ASR preflights, then decodes 30 s chunks of the session's committed copy in a
-  private work directory inside the session and commits one version-2 record. A range widens to whole segments of
-  the newest revision; segments outside it are carried under new identities naming
-  their origin (`carried_from`). No speech still commits a revision
-  (`no_speech_recognised`). Existing failure codes, fixed-prose remediation.
-- `transcript get <session> --from --to [--limit 1..100] [--cursor] [--revision]`: the
-  newest revision by default, any revision by identity; `--events jsonl` streams it.
-  A session without a transcript gets remediation naming both routes.
-- `session list/status/renew/close/retain/clean` and `bundle validate` (records v1
-  and v2, decoded strictly).
-- Still `COMMAND_NOT_IMPLEMENTED`: search, candidates, frame, audio, crop, job and
-  setup install/repair/list/rollback/remove.
+- `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`.
+  `setup check` adds `local_asr` (model identity and profile, the local-ASR verification).
+- `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`: disposable
+  session (24 idle hours, at most 7 days); supplied SRT/WebVTT import never needs whisper.
+- `transcript retranscribe <session> [--from --to]`: whisper.cpp v1.9.2 with a reviewed
+  pinned model (`base` default, `base_q5_1`), preflights first, 30 s chunks, spliced
+  revisions with carried segments (`carried_from`), `no_speech_recognised` recorded.
+- `transcript get <session> --from --to [--limit] [--cursor] [--revision]`, and
+  `--events jsonl` for the stream.
+- `search <session> --query <text> [--from --to] [--limit 1..100] [--cursor]
+  [--revision]` (PR 1): `items` are the matching segments as `transcript_segment`
+  records with a parallel `hits` list (`phrase` or `all_terms`); `transcript_coverage`
+  gives the basis (`supplied_transcript`, `local_asr`, `mixed`), scope
+  `transcript_text`, and transcribed, untranscribed and no-speech ranges. An
+  untranscribed part makes the result `partial` (exit 0) with the gaps in the envelope
+  `coverage` (its first use). `--events jsonl` streams the records, then the hits.
+- `session list/status/renew/close/retain/clean` and `bundle validate`.
+- Still `COMMAND_NOT_IMPLEMENTED`: candidates, frame, audio, crop, job and setup
+  install/repair/list/rollback/remove.
 
-## Local ASR (P07 increments 3a and 3b)
+## Transcript search (P08 PR 1)
 
-- **Domain:** a revision's provenance is an import or one `AsrRun`; a spliced revision
-  also holds `inherited` provenance, and every segment (own or carried) is re-checked
-  against the rule that produced it. `snap_to_segments` widens bounded ranges. R0
-  chunks: 30 s windows, 5 s overlap; validation, -50 dBFS silence and seam merge.
-- **Application:** `transcribe_range` (refuses unpinned models, identity checked before
-  and after), `build_asr_revision` (splicing), `LocalAsrVerifier` port and
-  `preflight_local_asr` (shares the verification record, own fingerprint domain).
-- **Infrastructure:** whisper CLI adapter (abnormal exits are `RESOURCE_LIMIT`),
-  `FixtureAsrVerifier` over the embedded F01 speech clip and its fingerprint,
-  `SourceSnapshot::open_committed`, `session_work_directory`, reads by revision
-  identity, record version 2 with carried segments.
-- **Engine:** `Engine::retranscribe`; `EnginePorts::with_local_asr_verifier` and
-  `with_speech_recognizer` for hosts and tests.
-- **Contract:** widened `transcript-segment`, `transcript-revision` and
-  `bundle-transcript-record` schemas (D2), new `transcript-retranscribe-data`, frozen
-  F01 speech examples; imports serialize exactly as before.
+- **Domain (`search.rs`):** normalisation (lowercase; `2,048`→`2048`; hyphen joins
+  `E-409`→`e409`; `10:32`→`10 32`; decimals by value; `zero`..`twenty` and tens as
+  digits; other punctuation separates; no Unicode normalisation). Query ≤256 bytes,
+  1..16 words, typed rejections `empty`, `too_long`, `too_many_terms`,
+  `control_character`. Tier 1 phrase (words joined without spaces equal consecutive
+  segment words joined), tier 2 all terms; rank (tier, ordinal); early-stopping scan.
+  `SearchCoverage` derives coverage from provenance (chunk windows, inherited runs,
+  supplied text taken as whole-source).
+- **Application:** `page_search` with `CursorToken`/`QueryDigest` (`vsift.search.v1`,
+  revision, range, normalised words; snapshot = revision number; key `<tier>-<ordinal>`).
+- **Engine:** `Engine::search` validates the query before any read; reuses existing
+  errors plus `EngineError::SearchQueryRejected` (maps to `INVALID_ARGUMENT`).
+- **Contract:** `SearchData`, `SearchStreamData`, `SearchEvidenceStream`,
+  `search_response`, `search_query_rejection_summary`, an `EvidenceStream` trait for
+  hosts, `CoverageResponse` now built by the contract (`with_coverage` sets `partial`).
+- **Computed on demand:** no index. S-11 (Windows 11, Xeon E5-2698 v4, release): a
+  20,000-segment revision pages fully at limits 1/20/100 with p95 154/167/145 ms vs
+  142 ms for a `transcript get` page of the same record (target 250 ms).
+- **Opt-in checkpoint `p08_search_e2e`** (stage `p08_search_supplied`): F10 import,
+  `R-17` and "dialog r 17" find F10-E01's segment; passed on Windows 11 with FFmpeg 9.0.
 
-## Local-ASR qualification (P07 increment 3c)
+## Local ASR and qualification (P07)
 
-- Profiles by file identity: `base` (148 MB, the measured default) and `base_q5_1`
-  (60 MB, pinned at HF revision `5359861`, accepted 2026-09-25). Only `base` is in
-  the managed plan.
-- Decided gates for `base` (2026-09-25): enforced clean WER <= 10% and every spoken
-  critical term (noisy included) except known misses; RTF and memory reported; F08
-  WER reported as a known limitation, not gated, until #150's noisy fixtures exist.
-- Measured on Windows 11, Xeon E5-2698 v4, 4 threads
-  ([record](../docs/planning/p07-asr-qualification.md)): `base` 3.25% clean WER, no
-  unexpected miss, RTF 0.39, 338 MiB, F08 61.5%; `base_q5_1` 4.06%, 0.41, 250 MiB.
-  Hosted run 36175016465 (tree of `9ea3180`): Windows 2025 RTF 0.284, 335 MiB; Ubuntu
-  24.04 RTF 3.245, 322 MiB (generic CPU backend only, #153); same accuracy on both.
+- Domain: import or `AsrRun` provenance, inherited provenance for spliced revisions,
+  `snap_to_segments`, 30 s chunks with 5 s overlap, -50 dBFS silence, seam merge.
+- Profiles by identity: `base` (148 MB, default) and `base_q5_1` (60 MB). Gates for
+  `base`: clean WER ≤10% and every spoken critical term except known misses. Measured
+  (`docs/planning/p07-asr-qualification.md`): base 3.25% clean WER, RTF 0.39, 338 MiB;
+  hosted run 36199691655 (after #153): Ubuntu RTF 0.244, Windows 0.264.
 
 ## Evidence stream and private folders
 
-- `transcript get --events jsonl`: one keyed evidence event per segment, then one
-  terminal event; no tombstones (D8), consumers filter on `revision_id`.
-- Every folder VSift creates is made private before use; a non-private existing one
-  fails `STORAGE_IO` naming its kind (SEC-18).
+- `transcript get --events jsonl` and `search --events jsonl`: keyed evidence events,
+  then one terminal event; no tombstones, consumers filter on `revision_id`.
+- Every folder VSift creates is made private before use (SEC-18).
 
-## Fuzzing (P07, PR #146)
+## Fuzzing
 
-- Six `cargo-fuzz` targets over published parsers (SRT, WebVTT, whisper `-ojf`,
-  records v1/v2, FFprobe metadata, cursors); weekly nightly run, per-PR seed replay.
+- Seven `cargo-fuzz` targets (SRT, WebVTT, whisper `-ojf`, records v1/v2, FFprobe
+  metadata, cursors, and P08's `search_query`); weekly nightly run, per-PR seed replay.
 
 ## The engine library and contract
 
 - **`crates/vsift`:** `Engine::new(EngineConfig, EnginePorts)`; setup, session,
-  transcript, retranscribe, `validate_bundle`, `verify_media_tools`, `identify_model`.
-  One typed `EngineError`; `failure_code()` is the single public-code mapping. API 0.x.
+  transcript, retranscribe, search, `validate_bundle`, `verify_media_tools`,
+  `identify_model`. One typed `EngineError`; `failure_code()` is the single public-code
+  mapping. API 0.x.
 - **`crates/vsift-contract`:** every v1 wire type and fixed prose; **`vsift-cli`** is thin.
 
 ## What exists internally (not exposed by the CLI)
 
 - **P02:** shell-free process supervision. **P03:** private storage roots, locks,
   admission, immutable generations, process-crash recovery (ephemeral profile; FS-01).
-- **P04:** restricted FFprobe/FFmpeg metadata, frame, audio and speech PCM.
-- **P06:** model identification (now both reviewed profiles). **Managed-installer
-  foundations** (owned by P13).
+- **P04:** restricted FFprobe/FFmpeg metadata, frame, audio and speech PCM (the visual
+  index in PR 3 will build on the frame primitives).
+- **P06:** model identification. **Managed-installer foundations** (owned by P13).
 
 ## Packet status
 
@@ -125,7 +118,8 @@ search index) is next and not started; search and visuals are P08-P09.
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
-| P08–P12, P14 | Not started |
+| P08 | In progress: PR 1 search complete on branch (ADR 0018 review pending); PR 2 in parallel; PR 3-4 next |
+| P09–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
 ## Architecture snapshot
@@ -138,9 +132,8 @@ files' sizes; `fuzz/` is the fuzz harness. Largest: `filesystem_session_store.rs
 
 ## Quality evidence
 
-- P07 close, Windows 11 and hosted: workspace tests (539 passed, 29 opt-in), strict
-  Clippy, rustdoc, governance, fuzz replay and Python tool tests pass; the `P07 local
-  ASR` workflow passed the adapter, checkpoint and qualification on both runners.
+- P08 PR 1, Windows 11: fmt, strict Clippy, workspace tests, warning-denied rustdoc,
+  governance, fuzz replay and fuzz Clippy pass; results are in the PR description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. Qualification records are in `docs/planning/`; history in git,

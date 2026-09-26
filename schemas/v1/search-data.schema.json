@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/search-data.schema.json",
+  "title": "VSift search data v1",
+  "description": "The data member of a complete or partial search result: one bounded page of the transcript segments that match a literal query, in rank order (phrase matches first, then all-terms matches, each by segment start). items are the matching segments as published transcript evidence records (transcript-segment.schema.json), exactly as transcript.get returns them; hits names each item's segment_id and how it matched, in the same order. query.terms is how the query was normalised. range is the requested range, or null when the whole transcript was searched. transcript_coverage says which parts of the searched range a transcript covers: a word said in an untranscribed range cannot be found, and on-screen text is never searched. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when untranscribed_ranges is not empty. Pass next_cursor back with the same session, query, range and revision to continue; it is rejected for any other search, session or revision, or after the session expires.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "revision",
+    "query",
+    "range",
+    "items",
+    "hits",
+    "next_cursor",
+    "transcript_coverage"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "revision": { "$ref": "transcript-revision.schema.json" },
+    "query": { "$ref": "#/$defs/query" },
+    "range": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/range" }
+      ]
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "transcript-segment.schema.json" }
+    },
+    "hits": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/hit" }
+    },
+    "next_cursor": { "$ref": "#/$defs/next_cursor" },
+    "transcript_coverage": { "$ref": "#/$defs/transcript_coverage" }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ranges": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/range" }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["terms"],
+      "properties": {
+        "terms": {
+          "description": "The normalised query words, in query order: lowercase letters and digits, with a decimal point only between digits.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        }
+      }
+    },
+    "hit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["segment_id", "match"],
+      "properties": {
+        "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" },
+        "match": {
+          "description": "phrase: the query words joined without spaces equal consecutive segment words joined without spaces. all_terms: every query word is a segment word, in any order.",
+          "enum": ["phrase", "all_terms"]
+        }
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 512 }
+      ]
+    },
+    "transcript_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basis",
+        "scope",
+        "searched_range",
+        "transcribed_ranges",
+        "untranscribed_ranges",
+        "no_speech_ranges",
+        "ranges_truncated"
+      ],
+      "properties": {
+        "basis": {
+          "description": "supplied_transcript: a supplied SubRip or WebVTT file, taken to cover the whole source but not verified to be complete. local_asr: local speech recognition only; covered ranges are those it examined. mixed: local speech recognition of part of the source spliced into supplied text elsewhere.",
+          "enum": ["supplied_transcript", "local_asr", "mixed"]
+        },
+        "scope": {
+          "description": "What search reads: transcript text only; on-screen text is not searched.",
+          "const": "transcript_text"
+        },
+        "searched_range": {
+          "description": "The requested range (or the whole source) clipped to the source; null when the requested range lies wholly outside it.",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/range" }
+          ]
+        },
+        "transcribed_ranges": { "$ref": "#/$defs/ranges" },
+        "untranscribed_ranges": { "$ref": "#/$defs/ranges" },
+        "no_speech_ranges": {
+          "description": "Transcribed ranges where local recognition found no audible signal or no audio; never overlapping a segment.",
+          "$ref": "#/$defs/ranges"
+        },
+        "ranges_truncated": {
+          "description": "True when a range list held more than 100 ranges and only its first 100, in start order, are listed.",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -31,9 +31,11 @@ assert_cmd.workspace = true
 getrandom.workspace = true
 jsonschema.workspace = true
 predicates.workspace = true
-# The opt-in P06 checkpoint drives tool verification through the engine's
-# internal crates directly; the CLI itself depends only on `vsift`.
+# The opt-in P06 checkpoint drives tool verification, and the transcript and
+# search contract tests seed session records, through the engine's internal
+# crates directly; the CLI itself depends only on `vsift` and `vsift-contract`.
 vsift-application.workspace = true
+vsift-domain.workspace = true
 vsift-infrastructure.workspace = true
 
 [lints]

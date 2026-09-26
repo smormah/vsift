@@ -46,7 +46,8 @@ cargo test --manifest-path fuzz/Cargo.toml --locked
 `fuzz/` holds `cargo-fuzz` targets for the parsers of untrusted input
 ([ADR 0016](decisions/0016-embeddable-engine-and-evidence-contract.md), decision 6):
 `transcript_srt`, `transcript_webvtt`, `whisper_full_json`, `transcript_record`,
-`ffprobe_metadata` and `transcript_cursor`. It is a separate package with its own
+`ffprobe_metadata`, `transcript_cursor` and `search_query` (P08: query normalisation and
+matching over a query, a line feed and segment text). It is a separate package with its own
 lockfile. Each target body is a plain function in `fuzz/src/lib.rs`; the stable replay
 tests above run it over every seed in `fuzz/seeds/<target>/`, and the libFuzzer entry
 points in `fuzz/fuzz_targets/` (feature `libfuzzer`) run it under libFuzzer.

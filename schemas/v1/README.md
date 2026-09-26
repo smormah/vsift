@@ -38,6 +38,16 @@ These files are the machine-readable public v1 boundary:
 - `transcript-get-stream-data.schema.json` — the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count` and the continuation cursor (P07);
+- `search-data.schema.json` — the `data` member of a complete or partial `search`
+  result (P08): the matching segments as `items` (transcript segment records, in rank
+  order), the parallel `hits` (`segment_id` and `match`: `phrase` or `all_terms`), the
+  normalised `query.terms`, the requested `range`, the continuation cursor and
+  `transcript_coverage` (basis, scope `transcript_text`, searched, transcribed,
+  untranscribed and no-speech ranges). Its envelope `coverage` is `truncated`, and its
+  status `partial`, exactly when part of the searched range has no transcript;
+- `search-stream-data.schema.json` — the `data` member of the terminal event that ends
+  a `search --events jsonl` stream: the page without its items, with `hits`,
+  `record_count` and the cursor (P08);
 - `transcript-segment.schema.json` — one transcript segment, the first published
   evidence record (ADR 0016): self-describing identities, normalized source time,
   sanitized text, confidence, alignment and cue provenance (P07). A local-ASR segment
@@ -52,9 +62,11 @@ These files are the machine-readable public v1 boundary:
 
 The `--events jsonl` stream is a sequence of events with a contiguous `sequence`
 from 0: for `transcript.get`, one `evidence` event per segment and then one
-`terminal` event; for every other command, the terminal event alone. Dispatch on
-`event`; the terminal event's `sequence` and, for `transcript.get`, its
-`record_count` equal the number of evidence events before it. The exact consumer
+`terminal` event; for `search`, one `evidence` event per matching segment (the same
+`transcript_segment` records, in rank order) and then one `terminal` event; for every
+other command, the terminal event alone. Dispatch on `event`; the terminal event's
+`sequence` and, for `transcript.get` and `search`, its `record_count` equal the number
+of evidence events before it. The exact consumer
 rules (upsert keys, end of stream, paging) are in the CLI contract.
 
 Data schemas describe the `data` member only; validate the surrounding envelope with
@@ -88,6 +100,12 @@ nothing installed (local ASR `not_run`, `media_tools_unavailable`); both are che
 by `vsift-contract`'s `setup_local_asr_contract` and `schema_conformance`, and the
 blocked one against the binary's output by the CLI's `schema_contract`. Local-ASR
 provenance names the model profile `base` or `base_q5_1` (P07 increment 3c).
+`search.json` and `search.events.jsonl` search that F10 import for `R-17`: one phrase
+hit, the segment F10-E01 cites, with complete coverage from the supplied transcript,
+as a result and as a stream (one evidence event and the terminal event); both are
+checked by `vsift-contract`'s `search_contract`, the stream byte for byte.
+`search-stream-data.schema.json` references definitions of `search-data.schema.json`
+by JSON pointer (`search-data.schema.json#/$defs/hit`).
 `storage-not-private.json` is the `setup configure` failure an agent receives when
 the per-user configuration folder already exists and other accounts can access it;
 it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows

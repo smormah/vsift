@@ -15,8 +15,9 @@
 use std::{collections::BTreeSet, error::Error, fmt};
 
 use vsift_domain::{
-    CursorToken, MAX_CUE_TEXT_BYTES, MAX_TRANSCRIPT_CUES, MediaStreamKind, MediaTime, PlannedChunk,
-    SourceSegmentId, TimeRange, TranscriptFormat, validate_chunk_output,
+    CursorToken, MAX_CUE_TEXT_BYTES, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
+    MediaStreamKind, MediaTime, PlannedChunk, SearchMatch, SearchQuery, SourceSegmentId, TimeRange,
+    TranscriptFormat, normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
     SourceContainer, WhisperOutputLimits, decode_transcript_record, encode_transcript_record,
@@ -25,6 +26,10 @@ use vsift_infrastructure::{
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 const WEBVTT_SIGNATURE: &[u8] = b"WEBVTT";
+/// Normalisation lowercases, which can turn one character into up to three
+/// (only U+0130 grows beyond one) and never grows a character's UTF-8 form by
+/// more than half; three times the input is a safe bound on the words' bytes.
+const MAX_NORMALISED_GROWTH: usize = 3;
 /// Window of the fixed chunk that whisper output is validated against: the
 /// longest R0 chunk, so every in-bounds provider time is reachable.
 const WHISPER_CHUNK_MICROS: u64 = 30_000_000;
@@ -47,17 +52,22 @@ pub enum Target {
     FfprobeMetadata,
     /// The `transcript get --cursor` continuation token through `CursorToken::parse`.
     TranscriptCursor,
+    /// The `search --query` text through `SearchQuery::parse`, then matched
+    /// against segment text. The input is the query, a line feed, and the
+    /// segment text.
+    SearchQuery,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
         Self::TranscriptRecord,
         Self::FfprobeMetadata,
         Self::TranscriptCursor,
+        Self::SearchQuery,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -70,6 +80,7 @@ impl Target {
             Self::TranscriptRecord => "transcript_record",
             Self::FfprobeMetadata => "ffprobe_metadata",
             Self::TranscriptCursor => "transcript_cursor",
+            Self::SearchQuery => "search_query",
         }
     }
 
@@ -86,6 +97,7 @@ impl Target {
             Self::TranscriptRecord => check_transcript_record(data),
             Self::FfprobeMetadata => check_ffprobe_metadata(data),
             Self::TranscriptCursor => check_transcript_cursor(data),
+            Self::SearchQuery => check_search_query(data),
         }
     }
 }
@@ -124,6 +136,14 @@ pub enum Violation {
     DimensionsMismatch,
     /// An accepted cursor did not decode to itself after encoding.
     CursorRoundTripChanged,
+    /// An accepted query is too long or has no words or too many, or a
+    /// normalised word is empty, holds a character normalisation never keeps,
+    /// or the words outgrow their text.
+    SearchWordsOutOfBounds,
+    /// Normalising a query's or text's normalised words again changed them.
+    SearchNormalisationNotIdempotent,
+    /// A match tier does not hold for the words it was decided on.
+    SearchMatchInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -144,6 +164,9 @@ impl fmt::Display for Violation {
             Self::DuplicateStreamIndex => "accepted metadata repeats a stream index",
             Self::DimensionsMismatch => "stream dimensions do not match the stream kind",
             Self::CursorRoundTripChanged => "an accepted cursor changed in a round trip",
+            Self::SearchWordsOutOfBounds => "search words are empty, invalid or unbounded",
+            Self::SearchNormalisationNotIdempotent => "normalising normalised words changed them",
+            Self::SearchMatchInconsistent => "a search match does not hold for its words",
         })
     }
 }
@@ -310,5 +333,60 @@ fn check_transcript_cursor(data: &[u8]) -> Result<(), Violation> {
     match CursorToken::parse(&token.encode()) {
         Ok(reparsed) if reparsed == token => Ok(()),
         _ => Err(Violation::CursorRoundTripChanged),
+    }
+}
+
+/// Words normalisation may keep: letters, digits and a decimal point.
+fn is_search_word(word: &str) -> bool {
+    !word.is_empty()
+        && word
+            .chars()
+            .all(|character| character.is_alphanumeric() || character == '.')
+}
+
+/// Normalises `text`, checking the words are bounded, well formed and
+/// unchanged by normalising them again.
+fn checked_words(text: &str) -> Result<Vec<String>, Violation> {
+    let words = normalise_search_text(text);
+    let bytes: usize = words.iter().map(String::len).sum();
+    if bytes > text.len().saturating_mul(MAX_NORMALISED_GROWTH)
+        || !words.iter().all(|word| is_search_word(word))
+    {
+        return Err(Violation::SearchWordsOutOfBounds);
+    }
+    if normalise_search_text(&words.join(" ")) != words {
+        return Err(Violation::SearchNormalisationNotIdempotent);
+    }
+    Ok(words)
+}
+
+fn check_search_query(data: &[u8]) -> Result<(), Violation> {
+    let Ok(input) = std::str::from_utf8(data) else {
+        return Ok(());
+    };
+    let (query_text, text) = input.split_once('\n').unwrap_or((input, ""));
+    let words = checked_words(text)?;
+    let Ok(query) = SearchQuery::parse(query_text) else {
+        return Ok(());
+    };
+    let terms = query.terms();
+    if query_text.len() > MAX_SEARCH_QUERY_BYTES
+        || terms.is_empty()
+        || terms.len() > MAX_SEARCH_TERMS
+        || checked_words(query_text)? != terms
+    {
+        return Err(Violation::SearchWordsOutOfBounds);
+    }
+    let consistent = match query.classify(text) {
+        // A phrase is a run of consecutive words, so it lies within them joined.
+        Some(SearchMatch::Phrase) => words.concat().contains(&terms.concat()),
+        Some(SearchMatch::AllTerms) => terms.iter().all(|term| words.contains(term)),
+        // Every query word being a text word is at least an all-terms match.
+        None => !terms.iter().all(|term| words.contains(term)),
+    };
+    if consistent {
+        Ok(())
+    } else {
+        Err(Violation::SearchMatchInconsistent)
     }
 }

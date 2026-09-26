@@ -15,7 +15,7 @@ use vsift_application::{
     TranscriptQueryError,
 };
 use vsift_contract::PrivateFolder;
-use vsift_domain::{FailureCode, RuntimeDependency, TranscriptImportError};
+use vsift_domain::{FailureCode, RuntimeDependency, SearchQueryRejection, TranscriptImportError};
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
     SessionStoreOpenError, UserDependencyConfigError,
@@ -97,6 +97,8 @@ pub enum EngineError {
     /// A completed recognition run could not be assembled into a revision;
     /// this is an internal fault.
     TranscriptAssembly(TranscriptBuildError),
+    /// A search query was rejected before any transcript was read.
+    SearchQueryRejected(SearchQueryRejection),
 }
 
 impl EngineError {
@@ -138,6 +140,7 @@ impl EngineError {
             | Self::NoAudioStream
             | Self::RangeOutsideSource
             | Self::TranscriptRevisionNotFound
+            | Self::SearchQueryRejected(_)
             | Self::Executable(
                 ExecutableRejection::NotAbsolute
                 | ExecutableRejection::NotRegularFile
@@ -229,6 +232,19 @@ impl EngineError {
             | Self::OpenSession(OpenSessionError::TranscriptRejected(rejection)) => {
                 Some(*rejection)
             }
+            _ => None,
+        }
+    }
+
+    /// The typed reason a search query was rejected, if that is why the
+    /// search failed.
+    ///
+    /// Hosts use it to tell the caller how to correct the query; the reason
+    /// never carries the query text.
+    #[must_use]
+    pub const fn search_query_rejection(&self) -> Option<SearchQueryRejection> {
+        match self {
+            Self::SearchQueryRejected(rejection) => Some(*rejection),
             _ => None,
         }
     }
@@ -379,6 +395,7 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the session has no transcript revision with that identity")
             }
             Self::TranscriptAssembly(error) => error.fmt(formatter),
+            Self::SearchQueryRejected(rejection) => rejection.fmt(formatter),
         }
     }
 }
@@ -399,6 +416,7 @@ impl Error for EngineError {
             Self::LocalAsrFailed(error) => Some(error),
             Self::SourceProbe(error) => Some(error),
             Self::TranscriptAssembly(error) => Some(error),
+            Self::SearchQueryRejected(error) => Some(error),
             Self::LocalAsrToolUnavailable(_)
             | Self::LocalAsrModelUnavailable
             | Self::LocalAsrModelNotPinned
@@ -981,6 +999,18 @@ mod tests {
         ] {
             assert_eq!(error.failure_code(), code);
         }
+    }
+
+    /// ADR 0018: a rejected search query is an invalid argument that keeps
+    /// its typed reason; search adds no failure code.
+    #[test]
+    fn rejected_search_queries_are_invalid_arguments() {
+        for rejection in vsift_domain::SearchQueryRejection::ALL {
+            let error = EngineError::SearchQueryRejected(rejection);
+            assert_eq!(error.failure_code(), FailureCode::InvalidArgument);
+            assert_eq!(error.search_query_rejection(), Some(rejection));
+        }
+        assert_eq!(EngineError::InvalidPageLimit.search_query_rejection(), None);
     }
 
     #[test]

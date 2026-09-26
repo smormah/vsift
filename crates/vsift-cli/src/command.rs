@@ -415,9 +415,26 @@ pub(crate) struct TranscriptRetranscribeArguments {
 pub(crate) struct SearchArguments {
     /// Session to search.
     pub session: SessionId,
-    /// Literal query text; it is never interpreted as code or regular expression.
+    /// Literal query text, at most 256 bytes; it is never interpreted as code
+    /// or a regular expression.
     #[arg(long)]
     pub query: String,
+    /// Inclusive source-timeline start in microseconds; requires --to. Omit
+    /// both to search the whole transcript.
+    #[arg(long, requires = "to")]
+    pub from: Option<u64>,
+    /// Exclusive source-timeline end in microseconds; requires --from.
+    #[arg(long, requires = "from")]
+    pub to: Option<u64>,
+    /// Hits per page, 1 through 100; defaults to 20.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
+    pub limit: Option<u16>,
+    /// Opaque continuation token returned by the previous page of the same search.
+    #[arg(long)]
+    pub cursor: Option<String>,
+    /// Revision to search (a `trv_` identity); defaults to the newest.
+    #[arg(long)]
+    pub revision: Option<TranscriptRevisionId>,
 }
 
 /// Visual-candidate page request.

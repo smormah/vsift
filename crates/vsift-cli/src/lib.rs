@@ -6,6 +6,7 @@ mod command;
 mod config;
 mod json_input;
 mod output;
+mod search;
 mod session;
 mod setup;
 
@@ -23,12 +24,13 @@ use vsift::{
     SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
 };
 use vsift_contract::{
-    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, LOCAL_ASR_MODEL_REMEDIATION,
-    LOCAL_ASR_TOOLS_REMEDIATION, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
-    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, OperationResponse,
-    TerminalEventResponse, TranscriptEvidenceStream, UNKNOWN_REVISION_REMEDIATION,
+    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, EvidenceStream,
+    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
+    OperationResponse, TerminalEventResponse, UNKNOWN_REVISION_REMEDIATION,
     UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
-    media_tool_verification_summary, non_private_folder_summary, transcript_rejection_summary,
+    media_tool_verification_summary, non_private_folder_summary, search_query_rejection_summary,
+    transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -316,7 +318,14 @@ where
                 }
             }
         }
-        Command::Search(_) => not_implemented(&mut writer, mode, CommandName::Search),
+        Command::Search(arguments) if mode == OutputMode::JsonLines => {
+            let result = search::search_stream(&engine, arguments);
+            write_evidence_stream(&mut writer, CommandName::Search, result)
+        }
+        Command::Search(arguments) => {
+            let result = search::search(&engine, arguments);
+            write_session_result(&mut writer, mode, CommandName::Search, result)
+        }
         Command::Candidates(_) => not_implemented(&mut writer, mode, CommandName::Candidates),
         Command::Frame(arguments) => {
             not_implemented(&mut writer, mode, arguments.command.operation_name())
@@ -412,6 +421,11 @@ impl From<EngineError> for CommandFailure {
                     .map(media_tool_verification_summary)
             })
             .or_else(|| error.non_private_folder().map(non_private_folder_summary))
+            .or_else(|| {
+                error
+                    .search_query_rejection()
+                    .map(search_query_rejection_summary)
+            })
             .or_else(|| local_asr_remediation(&error));
         Self {
             code: error.failure_code(),
@@ -478,14 +492,15 @@ where
 /// Writes an evidence stream in `--events jsonl` mode: its evidence events in
 /// order, then its terminal event. A failure before the stream exists is the
 /// usual single terminal failure event.
-fn write_evidence_stream<StandardOutput, StandardError>(
+fn write_evidence_stream<StandardOutput, StandardError, Stream>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     command: CommandName,
-    result: Result<TranscriptEvidenceStream, CommandFailure>,
+    result: Result<Stream, CommandFailure>,
 ) -> ProcessExit
 where
     StandardOutput: Write,
     StandardError: Write,
+    Stream: EvidenceStream,
 {
     let stream = match result {
         Ok(stream) => stream,

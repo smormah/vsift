@@ -18,8 +18,9 @@ use vsift_application::{
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CursorToken, MediaTime, SessionId, Sha256Hex,
-    SourceId, TimeRange, merge_chunks, plan_chunks, validate_chunk_output,
+    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CursorToken, MediaTime, SearchMatch,
+    SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange, merge_chunks, plan_chunks,
+    validate_chunk_output,
 };
 use vsift_fuzz::Target;
 use vsift_infrastructure::{
@@ -39,6 +40,14 @@ enum Origin {
     /// revision built from the recorded F01 whisper output (see
     /// [`the_local_asr_record_seed_is_the_encoded_f01_revision`]).
     EncodedF01LocalAsr,
+    /// A `search_query` input: a query that appears verbatim in the first
+    /// file, a line feed, and segment text that appears verbatim in the second.
+    SearchPair {
+        query: &'static str,
+        query_in: &'static str,
+        text: &'static str,
+        text_in: &'static str,
+    },
 }
 
 struct Seed {
@@ -161,6 +170,36 @@ const SEEDS: &[Seed] = &[
         "transcript-get-next-cursor.txt",
         Origin::InlineIn("schemas/v1/examples/transcript-get.json"),
     ),
+    seed(
+        Target::SearchQuery,
+        "f10-r-17.txt",
+        Origin::SearchPair {
+            query: "R-17",
+            query_in: "fixtures/corpus/manifest.json",
+            text: "Dialog R-17 is displayed now.",
+            text_in: "fixtures/corpus/transcripts/F10.srt",
+        },
+    ),
+    seed(
+        Target::SearchQuery,
+        "f10-dialog-r-17.txt",
+        Origin::SearchPair {
+            query: "dialog r 17",
+            query_in: "crates/vsift-contract/tests/search_contract.rs",
+            text: "Dialog R-17 is displayed now.",
+            text_in: "fixtures/corpus/transcripts/F10.srt",
+        },
+    ),
+    seed(
+        Target::SearchQuery,
+        "f01-build-2048.txt",
+        Origin::SearchPair {
+            query: "build 2,048",
+            query_in: "crates/vsift-contract/tests/search_contract.rs",
+            text: "The service status is healthy and the build is 2048.",
+            text_in: "crates/vsift-infrastructure/tests/fixtures/whisper-1.9.2/F01.base.json",
+        },
+    ),
 ];
 
 const fn seed(target: Target, file: &'static str, origin: Origin) -> Seed {
@@ -236,6 +275,9 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
         (Target::TranscriptCursor, "transcript-get-next-cursor.txt"),
+        (Target::SearchQuery, "f10-r-17.txt"),
+        (Target::SearchQuery, "f10-dialog-r-17.txt"),
+        (Target::SearchQuery, "f01-build-2048.txt"),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
@@ -251,6 +293,16 @@ fn well_formed_seeds_are_accepted() -> TestResult {
                 parse_ffprobe_metadata(&data, SourceContainer::IsoMedia).is_ok()
             }
             Target::TranscriptCursor => CursorToken::parse(std::str::from_utf8(&data)?).is_ok(),
+            Target::SearchQuery => {
+                let (query, text) = std::str::from_utf8(&data)?
+                    .split_once('\n')
+                    .ok_or("no line feed")?;
+                // Each seed matches: two as a phrase, one as all terms.
+                SearchQuery::parse(query)
+                    .ok()
+                    .and_then(|query| query.classify(text))
+                    .is_some_and(|tier| SearchMatch::ALL.contains(&tier))
+            }
         };
         assert!(is_accepted, "{}/{file} is rejected", target.name());
     }
@@ -289,6 +341,16 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
                 fs::read_to_string(repository(path))?.contains(std::str::from_utf8(&data)?)
             }
             Origin::EncodedF01LocalAsr => true,
+            Origin::SearchPair {
+                query,
+                query_in,
+                text,
+                text_in,
+            } => {
+                data == format!("{query}\n{text}").as_bytes()
+                    && fs::read_to_string(repository(query_in))?.contains(query)
+                    && fs::read_to_string(repository(text_in))?.contains(text)
+            }
         };
         assert!(matches, "{} no longer matches its origin", seed.file);
     }

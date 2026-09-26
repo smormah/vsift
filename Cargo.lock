@@ -2096,6 +2096,7 @@ dependencies = [
 name = "vsift-application"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "sha2",
  "tokio",
  "vsift-domain",
@@ -2117,6 +2118,7 @@ dependencies = [
  "vsift",
  "vsift-application",
  "vsift-contract",
+ "vsift-domain",
  "vsift-infrastructure",
 ]
 
