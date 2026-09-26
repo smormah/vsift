@@ -11,9 +11,9 @@ Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-deli
 complete** (P07 merge `9ea3180`). **P08 (candidates and search) is in progress**; the ledger
 marks it `in_progress`. P08 is delivered as four pull requests:
 
-1. **PR 1, transcript search: complete on branch `p08/search`, awaiting maintainer
-   review of [ADR 0018](../docs/decisions/0018-visual-candidate-index-and-transcript-search.md)
-   (Proposed) before merge.** `vsift search` end to end: domain normalisation, tiers,
+1. **PR 1, transcript search (PR #156;
+   [ADR 0018](../docs/decisions/0018-visual-candidate-index-and-transcript-search.md)
+   accepted 2026-09-26).** Merging in order: #156, #157, #158, #160. `vsift search` end to end: domain normalisation, tiers,
    ranking and coverage; application paging with query-bound cursors; `Engine::search`;
    contract types, schemas `search-data`/`search-stream-data` and frozen F10 examples;
    CLI; tests (C-03, S-11, contract, opt-in `p08_search_e2e`); fuzz target `search_query`.
@@ -29,7 +29,7 @@ marks it `in_progress`. P08 is delivered as four pull requests:
 #153 is fixed (PR #155, `10a251e`): the optimised Ubuntu whisper.cpp CPU backends are
 pinned; hosted Ubuntu RTF 0.244, Windows 0.264.
 
-## Decisions awaiting the maintainer (ADR 0018)
+## Decisions confirmed by the maintainer (ADR 0018, 2026-09-26)
 
 1. Visual index built inside `candidates`, 30 minutes of media per call.
 2. 2 Hz sampling with a candidate at least every 10 s.
@@ -39,7 +39,7 @@ pinned; hosted Ubuntu RTF 0.244, Windows 0.264.
 5. `search --events jsonl` streams existing `transcript_segment` records, then a terminal
    event with the hit list (implemented in PR 1).
 6. No thumbnails in P08 (P09 frames).
-Also confirm PR 1's additions: a third coverage basis `mixed` (local ASR spliced into
+Also confirmed, PR 1's additions: a third coverage basis `mixed` (local ASR spliced into
 supplied text), and a supplied transcript taken to cover the whole source (unverified).
 
 ## Tracked issues

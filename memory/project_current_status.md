@@ -19,8 +19,8 @@ Today it can:
   whole or one range, into a new revision that keeps earlier citations valid;
 - return timestamped transcript segments for a time range, from any revision, as a page
   or as a JSON Lines stream of keyed evidence records;
-- **search the transcript for words** (`search`, P08 PR 1, on branch `p08/search`,
-  awaiting ADR 0018 review): tolerant of spelling (`R-17` = "dialog r 17"), ranked,
+- **search the transcript for words** (`search`, P08 PR 1, PR #156,
+  ADR 0018 accepted): tolerant of spelling (`R-17` = "dialog r 17"), ranked,
   paged, and honest about which parts of the video no transcript covers;
 - manage the session's lifetime and retention, and validate retained bundles;
 - keep every folder it creates private to the user.

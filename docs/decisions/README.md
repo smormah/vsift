@@ -21,4 +21,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0015: Re-plan R0 delivery around the working evidence pipeline](0015-r0-delivery-replan.md)
 - [0016: Embeddable engine and published evidence contract](0016-embeddable-engine-and-evidence-contract.md)
 - [0017: Local speech recognition through whisper.cpp](0017-local-asr-through-whisper-cpp.md) (Accepted)
-- [0018: Visual-candidate index and transcript search](0018-visual-candidate-index-and-transcript-search.md) (Proposed)
+- [0018: Visual-candidate index and transcript search](0018-visual-candidate-index-and-transcript-search.md) (Accepted)

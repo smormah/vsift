@@ -1,6 +1,6 @@
 # ADR 0018: Visual-candidate index and transcript search
 
-- Status: Proposed (maintainer review before merge of P08 PR 1)
+- Status: Accepted (maintainer, 2026-09-26)
 - Date: 2026-09-26
 - Tracking: [P08 / issue #11](https://github.com/smormah/vsift/issues/11)
 - Refines: [ADR 0008](0008-cli-and-json-contract.md) (the reserved `search` and
@@ -143,6 +143,9 @@ cursor; page sizes 0 and 101 and a lone `--from`/`--to` are parse errors, like
   limitations, with an issue to regenerate the motion fixtures.
 
 ## Decisions for maintainer confirmation
+
+The maintainer confirmed every decision below on 2026-09-26, together with those
+added by P08 PR 3 and PR 4.
 
 1. The visual index is built inside `candidates`, at most 30 minutes of media per call,
    the rest reported as `not_analyzed`.
