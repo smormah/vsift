@@ -16,9 +16,9 @@ use serde::Serialize;
 use vsift_domain::{SessionId, TimeRange, TranscriptRevision, TranscriptSegment};
 
 use crate::{
-    CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse, OperationResponse,
-    TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData, VisualCandidateData,
-    transcript::RangeData,
+    AudioEvidenceData, CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse,
+    OperationResponse, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
+    VisualCandidateData, transcript::RangeData,
 };
 
 /// One published JSON Lines event kind, written to the event's `event` field.
@@ -84,6 +84,9 @@ pub enum EvidenceRecordType {
     /// A frame or a crop of one (`frame-evidence.schema.json`, P09); its key
     /// is the item's `evidence_id`.
     FrameEvidence,
+    /// An audio clip (`audio-evidence.schema.json`, P09); its key is the
+    /// item's `evidence_id`.
+    AudioEvidence,
 }
 
 impl EvidenceRecordType {
@@ -91,10 +94,11 @@ impl EvidenceRecordType {
     ///
     /// Contract tests compare this list with the `record_type` enum of
     /// `evidence-event.schema.json`.
-    pub const ALL: [Self; 3] = [
+    pub const ALL: [Self; 4] = [
         Self::TranscriptSegment,
         Self::VisualCandidate,
         Self::FrameEvidence,
+        Self::AudioEvidence,
     ];
 
     /// Returns the stable identifier written to the `record_type` field.
@@ -104,6 +108,7 @@ impl EvidenceRecordType {
             Self::TranscriptSegment => "transcript_segment",
             Self::VisualCandidate => "visual_candidate",
             Self::FrameEvidence => "frame_evidence",
+            Self::AudioEvidence => "audio_evidence",
         }
     }
 
@@ -114,6 +119,7 @@ impl EvidenceRecordType {
             Self::TranscriptSegment => 0,
             Self::VisualCandidate => 1,
             Self::FrameEvidence => 2,
+            Self::AudioEvidence => 3,
         }
     }
 }
@@ -137,6 +143,7 @@ enum EvidenceRecord {
     TranscriptSegment(Box<TranscriptSegmentData>),
     VisualCandidate(Box<VisualCandidateData>),
     FrameEvidence(Box<FrameEvidenceData>),
+    AudioEvidence(Box<AudioEvidenceData>),
 }
 
 /// One evidence record event: a single self-describing JSON Lines record.
@@ -216,12 +223,31 @@ impl EvidenceEventResponse {
     }
 }
 
+impl EvidenceEventResponse {
+    pub(crate) fn audio_evidence(
+        sequence: u64,
+        command: CommandName,
+        item: AudioEvidenceData,
+    ) -> Self {
+        Self {
+            schema_version: CONTRACT_VERSION,
+            event: EventKind::Evidence.identifier(),
+            sequence,
+            command: command.identifier(),
+            operation_id: None,
+            record_type: EvidenceRecordType::AudioEvidence.identifier(),
+            key: item.evidence_id().to_owned(),
+            record: EvidenceRecord::AudioEvidence(Box::new(item)),
+        }
+    }
+}
+
 /// A finite JSON Lines evidence stream: its evidence events, then the one
 /// terminal event that ends it.
 ///
 /// Hosts write any stream through this one view, so every command that
 /// streams evidence (`transcript get`, `search`, `candidates`, the frame
-/// commands and `crop`) is written identically.
+/// commands, `crop` and `audio`) is written identically.
 pub trait EvidenceStream {
     /// The evidence events, in stream order.
     fn records(&self) -> &[EvidenceEventResponse];

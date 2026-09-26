@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/audio-stream-data.schema.json",
+  "title": "VSift audio JSON Lines terminal data v1",
+  "description": "The data member of the complete or partial terminal result that ends an audio --events jsonl stream (P09). It is the result of audio-data.schema.json without its items: the clip was the preceding evidence event (record_type audio_evidence, keyed by evidence_id), and record_count says how many there were. files still delivers the clip's path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "source_id",
+    "operation",
+    "request",
+    "request_key",
+    "reused",
+    "profile",
+    "tool_fingerprint",
+    "source_check",
+    "selections",
+    "range_clipped",
+    "record_count",
+    "files",
+    "partial_reason"
+  ],
+  "properties": {
+    "session_id": { "$ref": "frame-data.schema.json#/$defs/session_id" },
+    "source_id": { "$ref": "frame-data.schema.json#/$defs/source_id" },
+    "operation": { "const": "audio" },
+    "request": { "$ref": "audio-data.schema.json#/$defs/audio_request" },
+    "request_key": { "$ref": "frame-data.schema.json#/$defs/request_key" },
+    "reused": { "$ref": "frame-data.schema.json#/$defs/reused" },
+    "profile": { "const": "p09-r0-v1" },
+    "tool_fingerprint": { "$ref": "frame-evidence.schema.json#/properties/tool_fingerprint" },
+    "source_check": { "$ref": "frame-data.schema.json#/$defs/source_check" },
+    "selections": { "$ref": "audio-data.schema.json#/$defs/selections" },
+    "range_clipped": { "type": "boolean" },
+    "record_count": { "const": 1 },
+    "files": { "$ref": "audio-data.schema.json#/$defs/files" },
+    "partial_reason": { "$ref": "frame-data.schema.json#/$defs/partial_reason" }
+  }
+}

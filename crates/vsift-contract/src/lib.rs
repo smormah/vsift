@@ -45,12 +45,15 @@
 //! - **Evidence navigation:** the `frame get`, `frame neighbours`,
 //!   `frame burst` and `crop` result [`FrameData`], its published evidence
 //!   record [`FrameEvidenceData`] and its stream [`FrameEvidenceStream`]
-//!   (`frame_evidence` evidence events, then [`FrameStreamData`]), built
-//!   from an [`EvidencePresentation`] by [`frame_response`], with the files
-//!   delivered as absolute session artifact paths (ADR 0019 D2), the
-//!   `partial` status and [`partial_evidence_warning`] when a call stopped
-//!   short, and fixed-prose remediation such as
-//!   [`EVIDENCE_BUDGET_REMEDIATION`] and [`frame_selection_summary`] (P09).
+//!   (`frame_evidence` evidence events, then [`FrameStreamData`]), built by
+//!   [`frame_response`]; the `audio` result [`AudioData`], its record
+//!   [`AudioEvidenceData`] and stream [`AudioEvidenceStream`] (then
+//!   [`AudioStreamData`]), built by [`audio_response`]. Both present an
+//!   [`EvidencePresentation`] with the files delivered as absolute session
+//!   artifact paths (ADR 0019 D2), the `partial` status and
+//!   [`partial_evidence_warning`] when a call stopped short, and fixed-prose
+//!   remediation such as [`EVIDENCE_BUDGET_REMEDIATION`] and
+//!   [`frame_selection_summary`] (P09).
 //! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
 //!   remediation for a failed automatic media-tool preflight.
 //! - **Storage:** [`non_private_folder_summary`], the fixed-prose remediation
@@ -100,11 +103,13 @@ pub use local_asr::{
     local_asr_verification_summary,
 };
 pub use navigation::{
-    BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION, DeliveredEvidenceFile,
-    EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION, EVIDENCE_PATH_REMEDIATION,
-    EVIDENCE_TOOLS_REMEDIATION, EvidencePresentation, EvidencePresentationError, FrameData,
-    FrameEvidenceData, FrameEvidenceStream, FrameStreamData, NO_FRAMES_REMEDIATION,
-    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, frame_response,
+    AUDIO_RANGE_REMEDIATION, AUDIO_RANGE_START_REMEDIATION, AudioData, AudioEvidenceData,
+    AudioEvidenceStream, AudioStreamData, BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION,
+    DeliveredEvidenceFile, EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION,
+    EVIDENCE_PATH_REMEDIATION, EVIDENCE_TOOLS_REMEDIATION, EvidencePresentation,
+    EvidencePresentationError, FrameData, FrameEvidenceData, FrameEvidenceStream, FrameStreamData,
+    NO_AUDIO_CLIP_REMEDIATION, NO_FRAMES_REMEDIATION, UNDECODABLE_EVIDENCE_REMEDIATION,
+    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, audio_response, frame_response,
     frame_selection_summary, partial_evidence_warning,
 };
 pub use search::{

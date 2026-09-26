@@ -1,0 +1,85 @@
+{
+  "command": "crop",
+  "coverage": null,
+  "data": {
+    "burst": null,
+    "files": [
+      {
+        "evidence_id": "evd_2b6da34a75e5a238cabe7cc2e9fa446b",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-a4446ba445df4a55e4d6af15ab745143db05c5392917f122350424eb4343db2b.png"
+      }
+    ],
+    "items": [
+      {
+        "crop": {
+          "frame_x": 150,
+          "frame_y": 235,
+          "height": 55,
+          "parent_evidence_id": "evd_98cddae2618e298443f2410c063a9067",
+          "width": 550,
+          "x": 150,
+          "y": 235
+        },
+        "evidence_id": "evd_2b6da34a75e5a238cabe7cc2e9fa446b",
+        "frame": {
+          "height": 720,
+          "pts": 10752,
+          "time_base_denominator": 10240,
+          "time_base_numerator": 1,
+          "time_us": 1050000,
+          "width": 1280
+        },
+        "image": {
+          "bytes": 47,
+          "height": 55,
+          "media_type": "image/png",
+          "sha256": "a4446ba445df4a55e4d6af15ab745143db05c5392917f122350424eb4343db2b",
+          "width": 550
+        },
+        "kind": "crop",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      }
+    ],
+    "neighbours": null,
+    "operation": "crop",
+    "partial_reason": null,
+    "profile": "p09-r0-v1",
+    "request": {
+      "parent_evidence_id": "evd_98cddae2618e298443f2410c063a9067",
+      "rect": {
+        "height": 55,
+        "width": 550,
+        "x": 150,
+        "y": 235
+      }
+    },
+    "request_key": "opk_sha256_a4deb303db6eceebb278dd5c742f3ea3cc28a4f253b682257a5b27cdba5f1c22",
+    "reused": false,
+    "selections": [
+      {
+        "actual_us": 1050000,
+        "delta_us": 0,
+        "evidence_id": "evd_2b6da34a75e5a238cabe7cc2e9fa446b",
+        "requested_us": 1050000,
+        "role": "requested"
+      }
+    ],
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_check": "identity",
+    "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+    "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-27T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}
