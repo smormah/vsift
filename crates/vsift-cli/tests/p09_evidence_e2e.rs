@@ -36,6 +36,18 @@
 //!   their decodable parts stay usable;
 //! - `p09_stream_and_bundle`: every command's `--events jsonl` stream, then
 //!   `session retain` and `bundle validate` with the evidence records;
+//! - `p09_mechanical_journey_supplied` and `p09_mechanical_journey_local_asr`
+//!   (the test spine's mechanical checkpoint): one continuous journey per
+//!   transcript path over the F03 speech variant, from the video to cited
+//!   evidence without an agent: ingest with a `SubRip` file written at run
+//!   time from the frozen script and speech placement, or plain ingest then
+//!   `transcript retranscribe` (needs `VSIFT_TEST_WHISPER_CLI` and
+//!   `VSIFT_TEST_WHISPER_MODEL`, otherwise `blocked`); then `search` for the
+//!   critical term, `candidates` within 10 s of the hit, `frame get
+//!   --candidate` for a candidate inside the critical event, `crop` of the
+//!   changed cell and `audio` over the cited segment, every citation checked
+//!   against the frozen truth, and finally `session retain` and `bundle
+//!   validate` with the transcript, candidate, frame, crop and clip lineage;
 //! - `p09_perf` (recorded, not gated): warm reuse through the binary, cold
 //!   frames and a 12-frame burst on a 1080p clip built at run time (about
 //!   1 GiB in a release build and 128 MiB in a debug build, which hashes too
@@ -1461,6 +1473,465 @@ fn perf_stage(base: &Path, tools: &MediaTools) -> StageResult {
     }))
 }
 
+/// The optional local-ASR path's recognizer and model.
+struct Whisper {
+    cli: PathBuf,
+    model: PathBuf,
+}
+
+impl Whisper {
+    fn discover() -> Option<Self> {
+        let absolute = |name: &str| {
+            env::var_os(name)
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute() && path.is_file())
+        };
+        Some(Self {
+            cli: absolute("VSIFT_TEST_WHISPER_CLI")?,
+            model: absolute("VSIFT_TEST_WHISPER_MODEL")?,
+        })
+    }
+}
+
+/// The journey's fixture: F03's speech variant, the term the script says
+/// when the cell changes, the critical event that shows it, and the cell.
+const JOURNEY_FIXTURE: &str = "F03";
+const JOURNEY_FILE: &str = "F03-speech.mp4";
+const JOURNEY_TERM: &str = "127.50";
+const JOURNEY_EVENT: &str = "F03-E02";
+/// Cell G18, drawn at (850, 420) with size 280x70 by the frozen generator
+/// recipe (`tools/generate_p04_fixtures.py`) and checked by the fixture
+/// verifier's "F03 G18 fill" pixel check; the manifest names the cell but
+/// holds no geometry.
+const JOURNEY_CELL: [u64; 4] = [850, 420, 280, 70];
+/// How far either side of a search hit an agent looks for candidates.
+const LEAD_LAG_US: u64 = 10 * SECOND;
+/// Local speech recognition places segments within this much of the
+/// generator's speech span (the P07 local-ASR checkpoint's tolerance).
+const ASR_SPAN_TOLERANCE_US: u64 = SECOND;
+
+/// Which transcript path a journey takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TranscriptPath {
+    /// A `SubRip` file written at run time from the frozen script.
+    Supplied,
+    /// whisper.cpp through `transcript retranscribe`.
+    LocalAsr,
+}
+
+impl TranscriptPath {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Supplied => "supplied_transcript",
+            Self::LocalAsr => "local_asr",
+        }
+    }
+
+    /// How far a segment may lie outside the speech span.
+    const fn tolerance(self) -> u64 {
+        match self {
+            Self::Supplied => 0,
+            Self::LocalAsr => ASR_SPAN_TOLERANCE_US,
+        }
+    }
+}
+
+/// The frozen truth one journey is checked against.
+struct JourneyTruth {
+    duration: u64,
+    speech: (u64, u64),
+    term_words: (u64, u64),
+    event: (u64, u64),
+    script: String,
+}
+
+fn manifest_fixture(manifest: &Value, id: &str) -> Result<Value, StageStop> {
+    manifest["fixtures"]
+        .as_array()
+        .and_then(|fixtures| fixtures.iter().find(|entry| entry["id"] == id))
+        .cloned()
+        .ok_or_else(|| failed("fixture missing from the manifest"))
+}
+
+fn journey_truth() -> Result<JourneyTruth, StageStop> {
+    let manifest: Value = serde_json::from_slice(&fs::read(
+        repository().join("fixtures/corpus/manifest.json"),
+    )?)?;
+    let entry = manifest_fixture(&manifest, JOURNEY_FIXTURE)?;
+    let event = entry["events"]
+        .as_array()
+        .and_then(|events| events.iter().find(|event| event["id"] == JOURNEY_EVENT))
+        .ok_or_else(|| failed("the journey's event is missing from the manifest"))?;
+    ensure(
+        event["critical"] == true,
+        "the journey's event is not critical",
+    )?;
+    let provenance: Value = serde_json::from_slice(&fs::read(fixture("speech-provenance.json"))?)?;
+    let variant = provenance["assembly"]["variants"]
+        .as_array()
+        .and_then(|variants| {
+            variants
+                .iter()
+                .find(|variant| variant["fixture"] == JOURNEY_FIXTURE)
+        })
+        .ok_or_else(|| failed("the journey's fixture is missing from speech provenance"))?;
+    let word = variant["tts_word_timings"]
+        .as_array()
+        .and_then(|words| words.iter().find(|word| word["text"] == JOURNEY_TERM))
+        .ok_or_else(|| failed("the term has no word timing"))?;
+    Ok(JourneyTruth {
+        duration: u64_of(&entry["duration_us"])?,
+        speech: (
+            u64_of(&variant["speech_start_us"])?,
+            u64_of(&variant["speech_end_us"])?,
+        ),
+        term_words: (u64_of(&word["start_us"])?, u64_of(&word["end_us"])?),
+        event: (u64_of(&event["start_us"])?, u64_of(&event["end_us"])?),
+        script: entry["audio"]["script"]
+            .as_str()
+            .ok_or_else(|| failed("no script"))?
+            .to_owned(),
+    })
+}
+
+/// A `SubRip` file of one cue: the frozen script over the generator's speech
+/// span, as an agent's supplied transcript would be.
+fn write_srt(path: &Path, truth: &JourneyTruth) -> Result<(), StageStop> {
+    let stamp = |micros: u64| {
+        let millis = micros / 1_000;
+        format!(
+            "{:02}:{:02}:{:02},{:03}",
+            millis / 3_600_000,
+            millis / 60_000 % 60,
+            millis / 1_000 % 60,
+            millis % 1_000
+        )
+    };
+    fs::write(
+        path,
+        format!(
+            "1\n{} --> {}\n{}\n",
+            stamp(truth.speech.0),
+            stamp(truth.speech.1),
+            truth.script
+        ),
+    )?;
+    Ok(())
+}
+
+/// Registers whisper.cpp and its model next to the media tools.
+fn prepare_whisper(base: &Path, whisper: &Whisper) -> Result<(), StageStop> {
+    let (code, _) = run_json(
+        vsift(base)?
+            .args(["setup", "configure", "whisper", "--executable"])
+            .arg(&whisper.cli)
+            .arg("--json"),
+    )?;
+    ensure(code == Some(0), "setup configure whisper did not succeed")?;
+    let (code, _) = run_json(
+        vsift(base)?
+            .args(["setup", "configure-model", "--file"])
+            .arg(&whisper.model)
+            .arg("--json"),
+    )?;
+    ensure(code == Some(0), "setup configure-model did not succeed")
+}
+
+fn timed_json(command: &mut Command) -> Result<(Option<i32>, Value, Duration), StageStop> {
+    let started = Instant::now();
+    let (code, value) = run_json(command)?;
+    Ok((code, value, started.elapsed()))
+}
+
+/// Opens the session by the path's route: ingest with the `SubRip` file, or
+/// plain ingest then local speech recognition.
+fn open_journey(
+    base: &Path,
+    path: TranscriptPath,
+    truth: &JourneyTruth,
+) -> Result<(String, Value), StageStop> {
+    let video = fixture(JOURNEY_FILE);
+    let mut command = vsift(base)?;
+    command.arg("ingest").arg(&video);
+    if path == TranscriptPath::Supplied {
+        let srt = base.join("F03-speech.srt");
+        write_srt(&srt, truth)?;
+        command
+            .arg("--transcript")
+            .arg(&srt)
+            .args(["--transcript-offset", "0"]);
+    }
+    let (code, opened, ingest_time) = timed_json(command.arg("--json"))?;
+    ensure(
+        code == Some(0),
+        &format!("ingest failed: {}", opened["error"]["code"]),
+    )?;
+    let session = opened["data"]["session_id"]
+        .as_str()
+        .ok_or_else(|| failed("session missing"))?
+        .to_owned();
+    let mut timings = json!({"ingest_ms": ingest_time.as_millis()});
+    if path == TranscriptPath::LocalAsr {
+        let (code, result, elapsed) = timed_json(
+            vsift(base)?
+                .args(["transcript", "retranscribe", &session])
+                .arg("--json"),
+        )?;
+        ensure(
+            code == Some(0),
+            &format!(
+                "transcript retranscribe failed: {}",
+                result["error"]["code"]
+            ),
+        )?;
+        conforms("transcript-retranscribe-data.schema.json", &result["data"])?;
+        timings["retranscribe_ms"] = json!(elapsed.as_millis());
+    }
+    Ok((session, timings))
+}
+
+/// Every artifact of a retained bundle by kind; evidence records conform
+/// to their bundle schema and hold no path.
+fn bundle_records(bundle: &Path, kind: &str) -> Result<Vec<Value>, StageStop> {
+    let manifest: Value = serde_json::from_slice(&fs::read(bundle.join("bundle.json"))?)?;
+    let mut records = Vec::new();
+    for artifact in manifest["artifacts"]
+        .as_array()
+        .ok_or_else(|| failed("artifacts missing"))?
+    {
+        if artifact["kind"] != kind {
+            continue;
+        }
+        let name = artifact["name"].as_str().unwrap_or_default();
+        ensure(
+            name.starts_with("artifact-") && !name.contains(['/', '\\']),
+            "a bundle artifact has an unexpected name",
+        )?;
+        records.push(serde_json::from_slice(&fs::read(bundle.join(name))?)?);
+    }
+    Ok(records)
+}
+
+/// One continuous journey from the video to cited, validated evidence.
+#[allow(
+    clippy::too_many_lines,
+    reason = "The journey's steps and their checks read best in one place"
+)]
+fn mechanical_journey(base: &Path, tools: &MediaTools, path: TranscriptPath) -> StageResult {
+    let truth = journey_truth()?;
+    let started = Instant::now();
+    let (session, mut timings) = open_journey(base, path, &truth)?;
+
+    // 1. Search: the segment that says the term, inside the speech span and
+    // over the term's words.
+    let (code, search, elapsed) =
+        timed_json(vsift(base)?.args(["search", &session, "--query", JOURNEY_TERM, "--json"]))?;
+    timings["search_ms"] = json!(elapsed.as_millis());
+    ensure(code == Some(0), "search failed")?;
+    conforms("search-data.schema.json", &search["data"])?;
+    let segment = &search["data"]["items"][0];
+    let (segment_start, segment_end) = (u64_of(&segment["start_us"])?, u64_of(&segment["end_us"])?);
+    let tolerance = path.tolerance();
+    ensure(
+        segment_start + tolerance >= truth.speech.0
+            && segment_end <= truth.speech.1 + tolerance
+            && segment_start < truth.term_words.1 + tolerance
+            && segment_end + tolerance > truth.term_words.0,
+        &format!(
+            "the cited segment [{segment_start}, {segment_end}) is not inside the speech span {:?} over the term {:?}",
+            truth.speech, truth.term_words
+        ),
+    )?;
+
+    // 2. Candidates within the lead/lag window of the hit.
+    let window = (
+        segment_start.saturating_sub(LEAD_LAG_US),
+        (segment_start + LEAD_LAG_US).min(truth.duration),
+    );
+    let (code, page, elapsed) = timed_json(
+        vsift(base)?
+            .args(["candidates", &session, "--from"])
+            .arg(window.0.to_string())
+            .arg("--to")
+            .arg(window.1.to_string())
+            .args(["--limit", "100", "--json"]),
+    )?;
+    timings["candidates_ms"] = json!(elapsed.as_millis());
+    ensure(code == Some(0), "candidates failed")?;
+    conforms("candidates-data.schema.json", &page["data"])?;
+    let candidate = page["data"]["items"]
+        .as_array()
+        .and_then(|items| {
+            items.iter().find(|item| {
+                item["representative_us"]
+                    .as_u64()
+                    .is_some_and(|time| (truth.event.0..truth.event.1).contains(&time))
+            })
+        })
+        .ok_or_else(|| failed("no candidate within the lead/lag window lies inside the event"))?
+        .clone();
+    let candidate_id = candidate["candidate_id"]
+        .as_str()
+        .ok_or_else(|| failed("no candidate id"))?
+        .to_owned();
+    let representative = u64_of(&candidate["representative_us"])?;
+
+    // 3. The candidate's own frame.
+    let (frame, elapsed) = evidence_ok(
+        base,
+        &["frame", "get", &session, "--candidate", &candidate_id],
+    )?;
+    timings["frame_get_ms"] = json!(elapsed.as_millis());
+    let (selection, frame_item) = single(&frame)?;
+    let frame_time = u64_of(&selection["actual_us"])?;
+    ensure(
+        frame["data"]["request"]["candidate_id"] == candidate_id.as_str()
+            && selection["delta_us"] == 0
+            && frame_time == representative
+            && (truth.event.0..truth.event.1).contains(&frame_time)
+            && frame_item["image"]["width"] == 1_440
+            && frame_item["image"]["height"] == 900,
+        "the candidate's frame is not its own 1440x900 frame inside the event",
+    )?;
+    let frame_id = evidence_id(&frame)?;
+
+    // 4. The cell, cropped from that frame.
+    let [x, y, width, height] = JOURNEY_CELL;
+    let rect = rect_text(JOURNEY_CELL);
+    let (crop, elapsed) = evidence_ok(base, &["crop", &session, &frame_id, "--rect", &rect])?;
+    timings["crop_ms"] = json!(elapsed.as_millis());
+    let (crop_selection, crop_item) = single(&crop)?;
+    ensure(
+        crop_item["crop"]["parent_evidence_id"] == frame_id.as_str()
+            && u64_of(&crop_item["crop"]["frame_x"])? == x
+            && u64_of(&crop_item["crop"]["frame_y"])? == y
+            && u64_of(&crop_item["image"]["width"])? == width
+            && u64_of(&crop_item["image"]["height"])? == height
+            && u64_of(&crop_selection["actual_us"])? == frame_time,
+        "the crop does not name its frame and the cell's region",
+    )?;
+    let (red, green, blue) = mean_colour(&tools.decode_image(&file_path(&crop, 0)?)?)?;
+    ensure(
+        red > green + 40,
+        &format!("the cell is not red after the change: ({red}, {green}, {blue})"),
+    )?;
+
+    // 5. The audio of the cited segment (at most 30 s).
+    let audio_to = segment_end.min(segment_start + 30 * SECOND);
+    let (audio, elapsed) = evidence_ok(
+        base,
+        &[
+            "audio",
+            &session,
+            "--from",
+            &segment_start.to_string(),
+            "--to",
+            &audio_to.to_string(),
+        ],
+    )?;
+    timings["audio_ms"] = json!(elapsed.as_millis());
+    let clip = &audio["data"]["items"][0];
+    let actual_start = u64_of(&clip["actual_start_us"])?;
+    let (channels, rate, bits, samples) = wav_format(&fs::read(file_path(&audio, 0)?)?)?;
+    let expected_samples = usize::try_from((audio_to - segment_start) * 16 / 1_000)?;
+    ensure(
+        u64_of(&clip["range"]["start_us"])? == segment_start
+            && u64_of(&clip["range"]["end_us"])? == audio_to
+            && audio["data"]["range_clipped"] == false
+            && actual_start >= segment_start
+            && actual_start < segment_start + 100_000
+            && (channels, rate, bits) == (1, 16_000, 16)
+            && samples <= expected_samples
+            && samples + expected_samples / 10 >= expected_samples,
+        "the clip does not cover the cited segment from its first sample",
+    )?;
+
+    // 6. Retain the whole session and validate it, lineage included.
+    let bundle = base.join("bundle");
+    let (code, retained, elapsed) = timed_json(
+        vsift(base)?
+            .args(["session", "retain", &session, "--output"])
+            .arg(&bundle)
+            .arg("--json"),
+    )?;
+    ensure(
+        code == Some(0),
+        &format!("session retain failed: {}", retained["error"]["code"]),
+    )?;
+    let (code, validated, validate_time) = timed_json(
+        vsift(base)?
+            .args(["bundle", "validate"])
+            .arg(&bundle)
+            .arg("--json"),
+    )?;
+    ensure(code == Some(0), "bundle validate failed")?;
+    timings["retain_ms"] = json!(elapsed.as_millis());
+    timings["bundle_validate_ms"] = json!(validate_time.as_millis());
+    let transcripts = bundle_records(&bundle, "transcript_record")?;
+    let indexes = bundle_records(&bundle, "visual_index_record")?;
+    let evidence_records = bundle_records(&bundle, "evidence_record")?;
+    for record in &transcripts {
+        conforms("bundle-transcript-record.schema.json", record)?;
+    }
+    for record in &indexes {
+        conforms("bundle-visual-index-record.schema.json", record)?;
+    }
+    let root_text = base.to_string_lossy().to_string();
+    for record in &evidence_records {
+        conforms("bundle-evidence-record.schema.json", record)?;
+        let text = record.to_string();
+        ensure(
+            !text.contains(&root_text) && !text.contains("\"path\""),
+            "an evidence record holds a path",
+        )?;
+    }
+    let candidate_indexed = indexes.iter().any(|index| {
+        index["windows"].as_array().is_some_and(|windows| {
+            windows.iter().any(|window| {
+                window["candidates"].as_array().is_some_and(|candidates| {
+                    candidates.iter().any(|entry| {
+                        entry["id"] == candidate_id.as_str()
+                            && entry["representative_us"] == representative
+                    })
+                })
+            })
+        })
+    });
+    let frame_linked = evidence_records.iter().any(|record| {
+        record["request"]["frame_get"]["candidate_id"] == candidate_id.as_str()
+            && record["items"][0]["evidence_id"] == frame_id.as_str()
+    });
+    let crop_linked = evidence_records.iter().any(|record| {
+        record["request"]["crop"]["parent_evidence_id"] == frame_id.as_str()
+            && record["items"][0]["subject"]["crop"]["region"]["parent_evidence_id"]
+                == frame_id.as_str()
+    });
+    ensure(
+        transcripts.len() == 1
+            && evidence_records.len() == 3
+            && candidate_indexed
+            && frame_linked
+            && crop_linked,
+        "the bundle does not carry the transcript, the candidate and the frame, crop and clip lineage",
+    )?;
+    timings["total_ms"] = json!(started.elapsed().as_millis());
+    Ok(json!({
+        "path": path.label(),
+        "fixture": JOURNEY_FILE,
+        "term": JOURNEY_TERM,
+        "segment_us": [segment_start, segment_end],
+        "speech_span_us": [truth.speech.0, truth.speech.1],
+        "term_words_us": [truth.term_words.0, truth.term_words.1],
+        "candidate": {"id": candidate_id, "representative_us": representative, "window_us": [window.0, window.1]},
+        "event": {"id": JOURNEY_EVENT, "window_us": [truth.event.0, truth.event.1]},
+        "frame": {"evidence_id": frame_id, "actual_us": frame_time, "delta_us": 0},
+        "crop": {"rect": rect, "mean_rgb": [red, green, blue], "parent": "the frame"},
+        "audio": {"range_us": [segment_start, audio_to], "actual_start_us": actual_start, "samples": samples},
+        "bundle": {"artifacts": validated["data"]["artifact_count"], "evidence_records": evidence_records.len()},
+        "timings": timings,
+    }))
+}
+
 fn stage(name: &str, started: Instant, result: StageResult) -> Value {
     let elapsed_ms = started.elapsed().as_millis();
     match result {
@@ -1555,6 +2026,25 @@ async fn evidence_checkpoint() -> TestResult {
     stages.push(stage("p09_stream_and_bundle", clock, result));
 
     let clock = Instant::now();
+    let result = with_tools(&root, "journey-supplied", tools.as_ref(), |base, tools| {
+        mechanical_journey(base, tools, TranscriptPath::Supplied)
+    });
+    stages.push(stage("p09_mechanical_journey_supplied", clock, result));
+
+    let clock = Instant::now();
+    let whisper = Whisper::discover();
+    let result = match whisper.as_ref() {
+        Some(whisper) => with_tools(&root, "journey-asr", tools.as_ref(), |base, tools| {
+            prepare_whisper(base, whisper)?;
+            mechanical_journey(base, tools, TranscriptPath::LocalAsr)
+        }),
+        None => Err(StageStop::Blocked(
+            "set VSIFT_TEST_WHISPER_CLI and VSIFT_TEST_WHISPER_MODEL to an absolute whisper-cli and ggml model".to_owned(),
+        )),
+    };
+    stages.push(stage("p09_mechanical_journey_local_asr", clock, result));
+
+    let clock = Instant::now();
     let result = with_tools(&root, "perf", tools.as_ref(), perf_stage);
     stages.push(stage("p09_perf", clock, result));
 
@@ -1586,7 +2076,8 @@ async fn evidence_checkpoint() -> TestResult {
             "schema_version": manifest["schema_version"],
             "corpus_id": manifest["corpus_id"],
         },
-        "fixtures": "F01-F10 and F12, F01-rotation-90.mp4, F01-audio-only.m4a, F11-damaged-tail.mp4, F11-truncated.mp4, with the frame lists of fixtures/corpus/generated/verification.json; F05 cut short and a 1080p clip of about 1 GiB built at run time",
+        "local_asr_path": whisper.is_some(),
+        "fixtures": "F01-F10 and F12, F01-rotation-90.mp4, F01-audio-only.m4a, F03-speech.mp4 with a SubRip file written from the frozen script, F11-damaged-tail.mp4, F11-truncated.mp4, with the frame lists of fixtures/corpus/generated/verification.json; F05 cut short and a 1080p clip of about 1 GiB built at run time",
         "os": env::consts::OS,
         "architecture": env::consts::ARCH,
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },

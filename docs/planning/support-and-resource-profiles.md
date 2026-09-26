@@ -58,9 +58,9 @@ something is `partial` (`session_evidence_budget`). Measured on Windows 11 (Xeon
 E5-2698 v4, FFmpeg 9.0, release build, [qualification record](p09-evidence-navigation.md)):
 a reused request takes about 120-200 ms through the binary; a cold 1280x720 frame about
 1.5-2 s; on a 1.17 GB 1080p clip of about 39 Mbit/s a cold frame p95 4.1 s, a 12-frame
-burst over 60 s 15.8 s, and the first call's full hash of the copy 10.3 s. Every read
+burst over 60 s 17.1 s, and the first call's full hash of the copy 10.9 s. Every read
 validates the session's manifest chain, so warm calls grow by about 3.7 ms per session
-generation (about 1 s at 256).
+generation (about 1 s at 256; issue #164).
 
 These values are admission ceilings, not throughput promises. Provider threads count
 against weighted CPU admission. Source staging, model size and decoded outputs count

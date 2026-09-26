@@ -43,12 +43,14 @@ complete.
   `audio-data`, `audio-stream-data`, `audio-evidence`; frozen `crop.json`, `audio.json`.
   Remediation per medium (30 s, range start, no audio, undecodable media).
 - **Qualification:** `docs/planning/p09-evidence-navigation.md`. Release run of
-  `p09_evidence_e2e` (Windows 11, Xeon E5-2698 v4, FFmpeg 9.0): nine stages passed in
-  435 s. Crops pixel-equal to FFmpeg; audio starts 64 ms and 750 ms; malformed media
+  `p09_evidence_e2e` (Windows 11, Xeon E5-2698 v4, FFmpeg 9.0, whisper.cpp v1.9.2):
+  eleven stages passed in 471 s, including the mechanical journey on both transcript
+  paths (F03-speech: search, candidates, candidate frame, crop, audio, retained bundle;
+  10.6 s supplied, 24.0 s local ASR). Crops pixel-equal to FFmpeg; audio starts 64 ms and 750 ms; malformed media
   `INVALID_SOURCE` with nothing committed; streams and a retained bundle validate. Perf
-  (recorded): warm reuse p95 142 ms; on a 1.17 GB 1080p clip cold frame p95 4.1 s,
-  12-frame burst 15.8 s, first full hash 10.3 s; warm cost grows about 3.7 ms per
-  session generation (1 s at 256).
+  (recorded): warm reuse p95 141 ms; on a 1.17 GB 1080p clip cold frame p95 4.1 s,
+  12-frame burst 17.1 s, first full hash 10.9 s; warm cost grows about 3.7 ms per
+  session generation (1 s at 256, #164).
 
 ## P09 PR 3: the frame commands (public)
 
@@ -120,7 +122,7 @@ complete.
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
-| P09 | Implementation complete (PRs 1-4); PR 1 merged, PRs 2-4 await merge and the ledger record |
+| P09 | Implementation complete (PRs 1-4); PRs 1-2 merged, PRs 3-4 await merge and the ledger record |
 | P10–P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 

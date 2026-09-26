@@ -314,5 +314,7 @@ public, completing the D6 grammar, and records the packet's qualification in
   another time or range, nothing committed.
 - **Evidence:** `navigation_contract` (frozen `crop.json`, `audio.json`), the binary's
   `evidence_cli_contract` and the opt-in `p09_evidence_e2e` stages `p09_crop`,
-  `p09_audio`, `p09_malformed`, `p09_stream_and_bundle` and `p09_perf` (results in the
+  `p09_audio`, `p09_malformed`, `p09_stream_and_bundle`, the mechanical journeys
+  `p09_mechanical_journey_supplied` and `p09_mechanical_journey_local_asr` (video to
+  cited, validated evidence on both transcript paths) and `p09_perf` (results in the
   qualification record).

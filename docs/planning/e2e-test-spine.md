@@ -232,11 +232,24 @@ evidence records conforming to their bundle schema and holding no path); and `p0
 about 1 GiB built at run time with the native MPEG-4 encoder and stream-copy loops,
 128 MiB in a debug build or `VSIFT_TEST_P09_PERF_MB`, and the warm cost as the manifest
 chain grows to 256 generations). It prints `p09_evidence: passed` and writes
-`.vsift/e2e-runs/p09-<run-id>/report.json`. On Windows 11 with FFmpeg 9.0 the release
-run passed on 2026-09-26 in 435 s; the results are in the
-[P09 qualification record](p09-evidence-navigation.md). The checkpoints run separately:
-no single journey yet goes from a video through both transcript paths to cited frames
-(the "mechanical checkpoint" below).
+`.vsift/e2e-runs/p09-<run-id>/report.json`.
+
+The same checkpoint carries the **mechanical checkpoint** of the gates below:
+`p09_mechanical_journey_supplied` and `p09_mechanical_journey_local_asr` each run one
+continuous CLI journey over the F03 speech variant, one per transcript path (a SubRip
+file written at run time from the frozen script and speech placement, or plain ingest
+then `transcript retranscribe`, which needs `VSIFT_TEST_WHISPER_CLI` and
+`VSIFT_TEST_WHISPER_MODEL` and is otherwise `blocked`): `search` for the critical term,
+`candidates` within 10 s of the hit, `frame get --candidate` for a candidate inside the
+critical event, `crop` of the changed cell, `audio` over the cited segment, then
+`session retain` and `bundle validate`. Every citation is checked against the frozen
+truth (segment inside the speech span, candidate and frame inside the event window,
+crop region, size and colour, clip range and first sample) and the lineage (the frame's
+request names the candidate, which the retained visual index holds; the crop's parent is
+the frame). On Windows 11 with FFmpeg 9.0 and whisper.cpp v1.9.2 the release run passed
+all eleven stages on 2026-09-26 in 471 s (the journeys 10.6 s and 24.0 s); the results
+are in the [P09 qualification record](p09-evidence-navigation.md). The mechanical
+checkpoint is met by these two stages.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
@@ -282,7 +295,9 @@ action.
 - **Packet checkpoint:** the packet's new stage passes locally against the cumulative
   journey after its component tests pass.
 - **Mechanical checkpoint:** after P09, both transcript paths reach validated source
-  evidence without an agent or manual transcript/screenshot preparation.
+  evidence without an agent or manual transcript/screenshot preparation. Met by
+  `p09_mechanical_journey_supplied` and `p09_mechanical_journey_local_asr` in
+  `p09_evidence_e2e` (2026-09-26).
 - **Agent checkpoint:** after P12, A-08/A-09 pass through both named clients with fixed
   permissions, budgets and retained bounded trial records.
 - **Distribution checkpoint:** after P13, the agent checkpoint begins from a clean

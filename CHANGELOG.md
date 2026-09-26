@@ -22,7 +22,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `audio-stream-data` and `audio-evidence`; frozen examples `crop.json` and
   `audio.json`. The P09 checkpoint now also checks crops pixel for pixel against
   FFmpeg's own decode, audio start times, damaged and cut-short media, every stream,
-  retained bundles with evidence, and records performance; the results are in the
+  retained bundles with evidence, and records performance; and it runs the mechanical
+  journey from a video to cited evidence on both transcript paths (a supplied SubRip
+  file and local speech recognition): search, candidates, the candidate's frame, a crop
+  and the audio of the cited segment, all checked against frozen truth, then retain
+  and validate the session; the results are in the
   [P09 qualification record](docs/planning/p09-evidence-navigation.md).
 - Frames from the command line (P09 PR 3, ADR 0019):
   `vsift frame get <session> --at <us>` returns the first frame at or after a time

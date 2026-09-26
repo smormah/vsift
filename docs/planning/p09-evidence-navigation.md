@@ -1,7 +1,7 @@
 # P09 evidence-navigation qualification record
 
 Status: measured 2026-09-26 on P09 PR 4 (`p09/crop-audio`, which builds on PR 3
-`p09/frame-commands` and PR 2 `p09/evidence-core`; PR 1 is merged as `965617f`),
+`p09/frame-commands`; PRs 1 and 2 are merged as `965617f` and `4aecdaa`),
 Windows 11 Pro, Intel Xeon E5-2698 v4 (20 cores, 40 threads, 2.2 GHz), 64 GiB RAM,
 FFmpeg and FFprobe 9.0 (gyan.dev full build), release build. Design:
 [ADR 0019](../decisions/0019-evidence-navigation.md) (accepted, D1-D7). Verification
@@ -26,7 +26,9 @@ Expectations come only from frozen truth, never from the results being scored:
 - FFmpeg's own decode of the fixture (`select=eq(pts,P)`, `rgb24`) as the pixel
   reference for every whole-frame and crop comparison; and
 - the P08 candidates `candidates` returns for the fixtures (29 over F01-F10 and F12,
-  the recorded P08 set).
+  the recorded P08 set); and
+- for the mechanical journeys, the speech placement and word timings of
+  `fixtures/corpus/generated/speech-provenance.json`.
 
 The component evidence below it runs everywhere without FFmpeg:
 `crates/vsift-contract/tests/navigation_contract.rs` (the six frozen examples, schema
@@ -35,7 +37,10 @@ failures with remediation, and reuse through the binary with stand-in tools that
 cannot run), and the PR 1 and PR 2 domain, application, store and engine tests listed
 in [verification](verification.md).
 
-The run passed on 2026-09-26: `p09_evidence: passed`, all nine stages, 435 s. In a
+The final run passed on 2026-09-26 with whisper.cpp v1.9.2 and the pinned `base`
+model supplied (`VSIFT_TEST_WHISPER_CLI`, `VSIFT_TEST_WHISPER_MODEL`):
+`p09_evidence: passed`, all eleven stages, 471 s. Without them the local-ASR journey is
+`blocked` and the checkpoint does not pass. In a
 debug build the performance stage uses a 128 MiB clip, because debug hashing is too slow
 for a gigabyte within the per-call deadline.
 
@@ -96,7 +101,7 @@ at delta 0 with the candidate's displayed dimensions (1, 4, 2, 3, 3, 3, 1, 2, 4,
   frames on each side.
 - `--max-frames 0` and `101` are parse errors; bursts of 1, 12 and 100 targets over F01
   name exactly the truth's frames (100 distinct frames, targets 60 ms apart on the
-  50 ms grid, 9.2 s); a 60 s range over the 6 s video is clipped
+  50 ms grid, 9.4 s); a 60 s range over the 6 s video is clipped
   (`clipped_at_end_of_stream`); 61 s is `INVALID_ARGUMENT` with the remediation to find
   moments with `candidates`.
 - Contract: a partial burst carries `partial_reason` and its warning
@@ -106,7 +111,7 @@ at delta 0 with the candidate's displayed dimensions (1, 4, 2, 3, 3, 3, 1, 2, 4,
 
 ## V-08: reuse (`p09_reuse`, contract tests)
 
-- A repeated `frame get` returns the same result with `reused: true` in 120-126 ms
+- A repeated `frame get` returns the same result with `reused: true` in 116-148 ms
   through the binary and writes nothing; 1.04 s names the same item and file as
   1.025 s (both 1.05 s) under a new record (one more artifact, no new image).
 - The first call checks the copy with `full_hash`, later calls by `identity` (D1).
@@ -127,20 +132,65 @@ at delta 0 with the candidate's displayed dimensions (1, 4, 2, 3, 3, 3, 1, 2, 4,
   validate` pass with 5 evidence records, 9 images and 1 clip, every record conforms
   to `bundle-evidence-record.schema.json` and none holds a path.
 
+## The mechanical journey (`p09_mechanical_journey_supplied`, `p09_mechanical_journey_local_asr`)
+
+The [test spine](e2e-test-spine.md)'s mechanical checkpoint: after P09, both transcript
+paths reach validated source evidence without an agent or manual transcript or
+screenshot preparation. Each stage is one continuous CLI journey over the F03 speech
+variant (`F03-speech.mp4`, 1440x900): the critical event F03-E02 [4 s, 9 s) is cell G18
+turning from 125.00 on green to 127.50 on red, and the script says "127.50" over
+6.3125-8.325 s of a 0.5-8.575 s speech span (`speech-provenance.json`). The cell's
+region 850,420,280,70 comes from the frozen generator recipe
+(`tools/generate_p04_fixtures.py`), checked by the fixture verifier's "F03 G18 fill"
+pixel check; the manifest names the cell but holds no geometry.
+
+1. **Transcript.** Supplied: `ingest --transcript` with a SubRip file written at run
+   time from the frozen script over the speech span. Local ASR: plain `ingest`, then
+   `transcript retranscribe` (whisper.cpp v1.9.2, pinned `base` model).
+2. **`search --query 127.50`**: the cited segment must lie inside the speech span (the
+   ASR path within 1 s, the P07 tolerance) and cover part of the term's words.
+3. **`candidates`** within 10 s either side of the hit (the lead/lag window): one must
+   lie inside F03-E02.
+4. **`frame get --candidate`** for it: delta 0, the candidate's time, inside the event,
+   1440x900, and the request names the candidate.
+5. **`crop`** of the cell from that frame: its parent is the frame, `frame_x`/`frame_y`
+   850/420, 280x70 at native size, and its pixels are red, as the event's truth says.
+6. **`audio`** over the cited segment: the clip's range is the segment, its first
+   sample within 100 ms of the segment start, 16 kHz mono, the expected sample count.
+7. **`session retain`, `bundle validate`**: the bundle carries one transcript record,
+   the visual index record holding the candidate, and three evidence records; the frame
+   record's request names the candidate and its item is the frame, the crop record's
+   parent is the frame; every record conforms to its bundle schema and holds no path.
+
+| Step | Supplied transcript | Local ASR |
+| --- | --- | --- |
+| Transcript | ingest with SubRip 4.1 s | ingest 0.25 s, retranscribe 17.6 s |
+| Cited segment | 0.5-8.575 s (the cue) | 3.0-8.0 s |
+| `search` | 83 ms | 85 ms |
+| `candidates` 0-9 s | 1.5 s; candidate at 4.0 s | 1.3 s; candidate at 4.0 s |
+| `frame get --candidate` | 1.9 s; 4,000,000 us, delta 0 | 2.0 s; 4,000,000 us, delta 0 |
+| `crop` 850,420,280,70 | 1.3 s; mean RGB (203, 92, 88) | 1.3 s; mean RGB (203, 92, 88) |
+| `audio` over the segment | 1.2 s; first sample 500,000 us, 129,200 samples | 1.0 s; first sample 3,000,000 us, 80,000 samples |
+| `session retain` + `bundle validate` | 163 ms + 81 ms; 8 artifacts | 140 ms + 77 ms; 8 artifacts |
+| Whole journey | 10.6 s | 24.0 s |
+
+Both journeys passed. The mechanical checkpoint is met by these two stages, run
+together with the P07 and P08 checkpoints' own coverage of each transcript path.
+
 ## Performance (`p09_perf`, recorded, not gated)
 
 | Measurement | Result |
 | --- | --- |
-| Warm reuse on F01, 20 calls through the binary | p95 142 ms (target 250 ms: met) |
+| Warm reuse on F01, 20 calls through the binary | p95 141 ms (target 250 ms: met) |
 | Cold `frame get` on F01 (after the first call's preflight) | 1.5-2.0 s |
 | First evidence call of a base (runs the media-tool preflight) | about 6 s |
-| 1080p clip: 1.17 GB, 240 s, about 39 Mbit/s MPEG-4, built at run time | built in 3.3 s by stream copy |
-| `ingest` of that clip (copy and hash) | 19.5 s |
-| First `frame get` (one full SHA-256 of the copy, D1) | 10.3 s |
-| Cold `frame get`, 10 times across the clip | p95 4.1 s (3.3-4.1 s) |
-| 12-frame burst over 60 s of it | 15.8 s |
-| Warm reuse on it | p95 196 ms |
-| Warm reuse at 3 / 64 / 128 / 256 session generations | p95 235 / 335 / 636 / 1,042 ms |
+| 1080p clip: 1.17 GB, 240 s, about 39 Mbit/s MPEG-4, built at run time | built in 3.5 s by stream copy |
+| `ingest` of that clip (copy and hash) | 19.1 s |
+| First `frame get` (one full SHA-256 of the copy, D1) | 10.9 s |
+| Cold `frame get`, 10 times across the clip | p95 4.1 s (3.2-4.1 s) |
+| 12-frame burst over 60 s of it | 17.1 s |
+| Warm reuse on it | p95 241 ms |
+| Warm reuse at 3 / 64 / 128 / 256 session generations | p95 159 / 398 / 652 / 1,086 ms |
 
 The clip is F07 (1920x1080) with temporal noise so it does not compress, 30 s encoded
 with FFmpeg's native MPEG-4 encoder and looped by stream copy to about 1 GiB; it is a
@@ -150,7 +200,8 @@ worst case for decoding, far denser than a screen recording.
 warm call costs about 3.7 ms more per generation: over the 250 ms target from about 60
 generations. An evidence session reaches at most about 160 evidence commits (the D4
 sub-budget), where a warm call would take about 0.6 s. Incremental chain validation
-(P10, the D4 alternative) removes the growth; until then the cost is bounded by the
+(P10, the D4 alternative; tracked as [#164](https://github.com/smormah/vsift/issues/164))
+removes the growth; until then the cost is bounded by the
 evidence and artifact budgets.
 
 ## Residuals and known limits
@@ -165,7 +216,10 @@ evidence and artifact budgets.
   with anti-aliasing, subpixel rendering and compression is not in the corpus, and
   crops are never upscaled.
 - **Paths:** delivered paths are absolute and, on Windows, in the extended-length form
-  `\\?\C:\...` the engine returns; they are valid only while the session exists.
-- **Manifest chain:** warm cost grows linearly with session generations (above).
+  `\\?\C:\...` the engine returns, kept verbatim because it is valid and long-path
+  safe (hosts may display it as they wish); they are valid only while the session
+  exists.
+- **Manifest chain:** warm cost grows linearly with session generations (above);
+  tracked as [#164](https://github.com/smormah/vsift/issues/164).
 - **Performance** was measured on one Windows machine; Ubuntu and macOS runs of the
   opt-in checkpoint have not been recorded.

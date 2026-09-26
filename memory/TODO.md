@@ -20,9 +20,13 @@ merge. ADR 0019 is accepted with D1-D7. P00-P08 are complete.
    `frame-stream-data`, `frame-evidence`, `audio-data`, `audio-stream-data`,
    `audio-evidence`; six frozen examples.
 2. **Qualified:** `docs/planning/p09-evidence-navigation.md` - release run of
-   `p09_evidence_e2e`, nine stages passed in 435 s (Windows 11, FFmpeg 9.0): V-01
-   against the frozen frame lists, 29 candidate frames at delta 0, crops pixel-equal to
-   FFmpeg, audio first-sample times, malformed media, streams and bundles, performance.
+   `p09_evidence_e2e`, eleven stages passed in 471 s (Windows 11, FFmpeg 9.0,
+   whisper.cpp v1.9.2): V-01 against the frozen frame lists, 29 candidate frames at
+   delta 0, crops pixel-equal to FFmpeg, audio first-sample times, malformed media,
+   streams and bundles, performance, and the test spine's mechanical checkpoint
+   (`p09_mechanical_journey_supplied` 10.6 s, `p09_mechanical_journey_local_asr`
+   24.0 s: search -> candidates -> candidate frame -> crop -> audio -> retained bundle
+   on F03-speech, every citation checked against frozen truth).
 3. **Next (maintainer/supervisor):** merge PR 3 and PR 4, then the P09 ledger
    completion record. Then P10.
 
@@ -39,11 +43,8 @@ merge. ADR 0019 is accepted with D1-D7. P00-P08 are complete.
 - Evidence: a burst over a range denser than one 1,200-frame listing (60 fps over more
   than 20 s) is rejected (`outside_listing`). Tiny text is measured on synthetic glyphs
   only. Neighbours list up to three windows (2, 10, 29 s).
-- Every session read walks the whole manifest chain: warm evidence calls grow about
-  3.7 ms per generation (1 s at 256); needs a tracked issue (incremental validation,
-  P10).
-- No single E2E journey yet goes video -> both transcript paths -> cited frames (the
-  test spine's "mechanical checkpoint"); decide whether P09 completion needs it.
+- #164: every session read walks the whole manifest chain; warm evidence calls grow
+  about 3.7 ms per generation (about 1 s at 256). Incremental validation (P10).
 - Evidence records are read and decoded in full on every evidence call (at most 160
   records of 256 KiB); fine for R0, an index would help later.
 - Candidates: real screen recordings are unmeasured; no denser pass for sub-0.5 s
