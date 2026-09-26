@@ -28,7 +28,11 @@ pub use asr::{
     validate_chunk_output,
 };
 pub use evidence::{
-    Confidence, ConfidenceError, ConfidenceOrigin, SpeakerLabel, SpeakerLabelError,
+    BurstCount, BurstExtent, BurstPlan, BurstRange, Confidence, ConfidenceError, ConfidenceOrigin,
+    FrameListing, FrameSelection, FrameSelectionError, FrameTolerance, ListedFrame, ListingTail,
+    MAX_BURST_FRAMES, MAX_BURST_RANGE_MICROS, MAX_FRAME_TOLERANCE_MICROS, MAX_LISTED_FRAMES,
+    MAX_NEIGHBOUR_COUNT, NavigationError, NeighbourCount, NeighbourPlan, NeighbourStop,
+    SelectedFrame, SpeakerLabel, SpeakerLabelError, plan_burst, plan_neighbours, select_frame,
 };
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
@@ -55,7 +59,7 @@ pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
 };
 pub use timeline::{
-    CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,
+    CropParseError, CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,
     TimeConversionError, TimeRange, TimeRangeError,
 };
 pub use transcript::{

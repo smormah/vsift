@@ -6,27 +6,31 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P08 are complete.** P08 (candidates and search) closed on 2026-09-26 with merge
-`b830fc9`; its evidence is in the ledger ([ADR 0018](../docs/decisions/0018-visual-candidate-index-and-transcript-search.md),
-accepted). Local checks: CI is the default Linux/macOS check.
+**P09 (evidence navigation) is in progress. PR 1 (media primitives and hardening) is
+complete on branch `p09/media-primitives` and awaits review; the packet is not
+complete.** P00-P08 are complete (P08 closed 2026-09-26, merge `b830fc9`).
 
-1. **P08 delivered:** `vsift search` (literal, tiered, honest coverage; #156); bracketed
-   source binding, one full hash per multi-call operation (#157, closed #148); the visual
-   index core (#158) and `vsift candidates` with its recall record
-   `docs/planning/p08-candidate-recall.md` (#160): 10/10 stable events, 0 false changes.
-2. **Next: P09 (evidence navigation: frames, neighbours, bursts, audio ranges, crops,
-   reuse and lineage), not started.** Governance rule 10: the maintainer starts it.
-   Before implementation read the P09 row of `docs/planning/implementation-work-packets.md`
-   and V-01, V-06..V-08; candidates' `representative_us` feeds `frame get`.
-3. **Candidate follow-up:** #159 (regenerate the motion fixtures) would move three
-   corpus-limited events into the recall gate and give V-03 real scrolling.
-4. **Decisions confirmed in ADR 0018 (2026-09-26):** index built inside `candidates`, 30
-   windows per call, remainder `not_analyzed`; 2 Hz actual frames, a candidate at least
-   every 10 s; recall gated on stable events of at least 1 s; no thumbnails; search
-   streams existing `transcript_segment` records. PR 3 lowered the change thresholds
-   (one block moving 6, or two moving 4) and gives `-ss`/`-t` in normalised time with a
-   1 s margin. PR 4 clips a range past the video's end, stores the displayed dimensions
-   in the index, and lets a host lower the per-call budget.
+1. **PR 1 delivered (not user-reachable):** the SEC-17 parser fix (frame and audio
+   diagnostics now read only the filter's own lines, consistently numbered, time base
+   checked); integer-timestamp frame selection; `FfmpegMedia` `list_frame_times`,
+   `frames_at`, `crop_at`, `wav_clip`; `parse_png_sequence`; domain
+   `evidence::navigation` (select, neighbours, bursts) and `CropRect::parse/compose`;
+   preflight profile 3; fuzz targets `frame_showinfo`, `frame_listing`,
+   `png_sequence`; verifier v2 frame-time lists; ADR 0019 (Proposed).
+2. **Next: maintainer confirms D1-D7 in ADR 0019**, then PR 2.
+   - D1 source check per evidence call (recommended: persisted verified identity after
+     one full hash; items record `source_check` identity|full_hash).
+   - D2 images as the committed-artifact path in `files[]` only.
+   - D3 at-or-after default, `--select displayed-at`, even deduplicated bursts,
+     consecutive neighbours.
+   - D4 keep 256 artifacts / 64 KiB manifest, P09 sub-budget 160, `RESOURCE_LIMIT`.
+   - D5 WAV 16 kHz mono <= 30 s. D6 `<session>` on neighbours/crop, `--candidate`,
+     optional `--max-frames` default 12, frames linked to candidates. D7 FFmpeg crops.
+3. **PR 2: evidence core** - application use cases, session artifacts, reuse and
+   lineage (V-08), engine operations; pending D1-D7.
+4. **PR 3:** `frame get`, `frame neighbours`, `frame burst` public (V-01, V-07).
+5. **PR 4:** `crop` and `audio` public, P09 qualification record, then the ledger
+   completion follow-up.
 
 ## Tracked issues
 
@@ -39,10 +43,11 @@ accepted). Local checks: CI is the default Linux/macOS check.
 
 ## Other follow-ups
 
-- Candidates: real screen recordings (heavier compression noise) are unmeasured; no
-  denser on-demand pass for sub-0.5 s changes; the probe's duration is part of the index
-  scope, so a tools upgrade that probes another duration makes an old index an
-  integrity failure for that session.
+- Evidence: a 60 fps source needs several listings for a 60 s burst (listing cap 1,200
+  frames); tiny-text crops (V-06) are unmeasured; the preflight adds three short FFmpeg
+  runs to the first media operation per tool identity.
+- Candidates: real screen recordings are unmeasured; no denser pass for sub-0.5 s
+  changes; the probe's duration is part of the index scope.
 - Search: no accent folding or Unicode normalisation; phrases do not cross segments;
   number compounds such as `thirty-two` are not converted.
 - A creator killed mid-provisioning leaves an unmarked root refused until removed.
@@ -51,7 +56,7 @@ accepted). Local checks: CI is the default Linux/macOS check.
 
 ## Open decisions (maintainer)
 
-- Crate names confirmed (`vsift`, `vsift-contract`); crates.io check precedes publication.
+- ADR 0019 D1-D7 (above) before P09 PR 2.
 - Minimum-supported-Rust-version policy before the library is first published.
 - Whether and when to cut 0.x pre-releases after P09.
 - Whether a local MCP adapter is wanted after P12. The CLI and skill stay primary.
@@ -60,9 +65,9 @@ accepted). Local checks: CI is the default Linux/macOS check.
 
 - Real-tool success paths are opt-in (`--ignored`): `p07_transcript_e2e`,
   `p07_local_asr_e2e`, `p07_asr_qualification`, `p08_search_e2e`, `p08_candidates_e2e`,
-  `engine_retranscribe`, `p07_local_asr`, `p08_candidates_fixtures`, the S-11
-  measurements (`engine_search`, `engine_candidates`, `--release`) and
-  `source_binding::tests::a_real_multi_chunk_decode_hashes_the_copy_exactly_twice`.
+  `engine_retranscribe`, `p07_local_asr`, `p08_candidates_fixtures`,
+  `p09_media_primitives`, the S-11 measurements (`engine_search`, `engine_candidates`,
+  `--release`) and `source_binding::tests::a_real_multi_chunk_decode_hashes_the_copy_exactly_twice`.
 - whisper.cpp `-ojf` output: a split multi-byte token fails the chunk (`unparseable_output`).
 - The CLI keeps application, infrastructure and domain as development dependencies for
   tests that seed session records; hosts depend only on `vsift` and `vsift-contract`.
@@ -84,5 +89,7 @@ bounded version cleanup; kill and power-loss qualification; D-02..D-08 and the E
 - New features land in the engine once, never in a host. Any new media stage calls the
   preflight hook first; one that calls a provider more than once over a source takes a
   `BoundSource`. Wire sequencing lives in `vsift-contract`.
+- Provider diagnostics are read only from lines that begin with the filter's own prefix,
+  with consistent numbering (ADR 0012 note of 2026-09-26).
 - A new public command, failure code, event kind or record type needs its `CommandName`,
   `FailureCode::ALL`, `EventKind::ALL` or `EvidenceRecordType::ALL` entry and v1 schemas.

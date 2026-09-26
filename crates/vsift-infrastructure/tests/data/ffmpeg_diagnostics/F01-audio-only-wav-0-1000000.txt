@@ -1,0 +1,25 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'F01-audio-only.m4a':
+  Metadata:
+    major_brand     : M4A 
+    minor_version   : 512
+    compatible_brands: M4A isomiso2
+  Duration: 00:00:06.00, start: 0.000000, bitrate: 50 kb/s
+  Stream #0:0[0x1](und): Audio: aac (LC) (mp4a / 0x6134706D), 16000 Hz, mono, fltp, 48 kb/s (default)
+    Metadata:
+      handler_name    : SoundHandler
+Stream mapping:
+  Stream #0:0 -> #0:0 (aac (native) -> pcm_s16le (native))
+[Parsed_ashowinfo_1 @ 000001e8a25f21c0] n:0 pts:1024 pts_time:0.064 fmt:fltp channels:1 chlayout:mono rate:16000 nb_samples:65536 checksum:CE7EFBB5 plane_checksums: [ CE7EFBB5 ]
+Output #0, s16le, to 'pipe:1':
+  Metadata:
+    major_brand     : M4A 
+    minor_version   : 512
+    compatible_brands: M4A isomiso2
+    encoder         : Lavf63.1.100
+  Stream #0:0(und): Audio: pcm_s16le, 16000 Hz, mono, s16, 256 kb/s (default)
+    Metadata:
+      encoder         : Lavc63.1.100 pcm_s16le
+      handler_name    : SoundHandler
+[Parsed_ashowinfo_1 @ 000001e8a25f21c0] n:1 pts:66560 pts_time:4.16 fmt:fltp channels:1 chlayout:mono rate:16000 nb_samples:29440 checksum:D097F109 plane_checksums: [ D097F109 ]
+[out#0/s16le @ 000001e8a26049c0] video:0KiB audio:31KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.000000%
+size=      31KiB time=00:00:01.06 bitrate= 240.6kbits/s speed=54.7x elapsed=0:00:00.01    

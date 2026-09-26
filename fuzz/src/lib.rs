@@ -15,17 +15,19 @@
 use std::{collections::BTreeSet, error::Error, fmt};
 
 use vsift_domain::{
-    CursorToken, MAX_CUE_TEXT_BYTES, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
-    MAX_WINDOW_CANDIDATES, MediaStreamKind, MediaTime, PlannedChunk, SearchMatch, SearchQuery,
-    SessionId, SourceSegmentId, TimeRange, TranscriptFormat, VISUAL_FRAME_BYTES, VisualCandidate,
-    VisualCandidateId, VisualChangePolicy, VisualIndexWindow, VisualSample, VisualWindow,
-    VisualWindowOutcome, analyse_window, normalise_search_text, validate_chunk_output,
+    CursorToken, FrameDimensions, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES,
+    MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES,
+    MediaStreamKind, MediaTime, PlannedChunk, SearchMatch, SearchQuery, SessionId, SourceSegmentId,
+    TimeRange, TranscriptFormat, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId,
+    VisualChangePolicy, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
+    analyse_window, normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
-    SourceContainer, VisualSamplingWindow, WhisperOutputLimits, decode_transcript_record,
+    FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, SourceContainer,
+    VisualSamplingWindow, WhisperOutputLimits, decode_transcript_record,
     decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
-    parse_ffprobe_metadata, parse_supplied_transcript, parse_visual_samples,
-    parse_whisper_full_json,
+    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
+    parse_png_sequence, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -45,6 +47,13 @@ pub const VISUAL_FUZZ_SESSION: &str = "ses_0123456789abcdef";
 /// 60 s source with its origin at zero, so every in-bounds timestamp is
 /// reachable.
 const VISUAL_WINDOW_MICROS: u64 = 60_000_000;
+/// The frame listing every [`Target::FrameListing`] input is parsed against:
+/// F01's stream (1/10240, origin zero) over `[0, 60 s)`, so every in-bounds
+/// timestamp of a 20 fps listing is reachable.
+const LISTING_TIME_BASE_DENOMINATOR: u32 = 10_240;
+const LISTING_WINDOW_MICROS: u64 = 60_000_000;
+/// What `FFmpeg` writes before an echoed metadata value at `-loglevel info`.
+const ECHO_INDENT: &[u8] = b"    title           : ";
 
 /// One fuzzed parser.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,11 +83,21 @@ pub enum Target {
     /// against segment text. The input is the query, a line feed, and the
     /// segment text.
     SearchQuery,
+    /// `showinfo` and `ashowinfo` diagnostics through the single-frame and
+    /// first-audio-sample parsers (`parse_frame_showinfo`,
+    /// `parse_ashowinfo_start`). The input is the diagnostics.
+    FrameShowinfo,
+    /// A frame listing's `showinfo` diagnostics through `parse_frame_listing`,
+    /// against a fixed 60 s window of F01's stream. The input is the diagnostics.
+    FrameListing,
+    /// An extraction run's standard output through `parse_png_sequence`. See
+    /// [`png_sequence_input`] for the input layout.
+    PngSequence,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 12] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -88,6 +107,9 @@ impl Target {
         Self::VisualSamples,
         Self::VisualIndexRecord,
         Self::SearchQuery,
+        Self::FrameShowinfo,
+        Self::FrameListing,
+        Self::PngSequence,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -103,6 +125,9 @@ impl Target {
             Self::VisualSamples => "visual_samples",
             Self::VisualIndexRecord => "visual_index_record",
             Self::SearchQuery => "search_query",
+            Self::FrameShowinfo => "frame_showinfo",
+            Self::FrameListing => "frame_listing",
+            Self::PngSequence => "png_sequence",
         }
     }
 
@@ -122,6 +147,9 @@ impl Target {
             Self::VisualSamples => check_visual_samples(data),
             Self::VisualIndexRecord => check_visual_index_record(data),
             Self::SearchQuery => check_search_query(data),
+            Self::FrameShowinfo => check_frame_showinfo(data),
+            Self::FrameListing => check_frame_listing(data),
+            Self::PngSequence => check_png_sequence(data),
         }
     }
 }
@@ -179,6 +207,15 @@ pub enum Violation {
     SearchNormalisationNotIdempotent,
     /// A match tier does not hold for the words it was decided on.
     SearchMatchInconsistent,
+    /// Indented copies of the diagnostic lines, as `FFmpeg` echoes source
+    /// metadata, changed what a diagnostics parser accepted (SEC-17).
+    EchoedDiagnosticsChangedResult,
+    /// An accepted frame listing holds too many frames, frames out of order,
+    /// or frames or a covered range outside the listed window.
+    ListingOutOfBounds,
+    /// Accepted PNG images are not exactly the input, split into the
+    /// expected number of images of the expected size.
+    PngSequenceMismatch,
 }
 
 impl fmt::Display for Violation {
@@ -210,6 +247,11 @@ impl fmt::Display for Violation {
             Self::SearchWordsOutOfBounds => "search words are empty, invalid or unbounded",
             Self::SearchNormalisationNotIdempotent => "normalising normalised words changed them",
             Self::SearchMatchInconsistent => "a search match does not hold for its words",
+            Self::EchoedDiagnosticsChangedResult => {
+                "echoed metadata lines changed a diagnostics parser's result"
+            }
+            Self::ListingOutOfBounds => "an accepted frame listing is out of bounds",
+            Self::PngSequenceMismatch => "accepted PNG images do not match the output",
         })
     }
 }
@@ -529,4 +571,133 @@ fn check_search_query(data: &[u8]) -> Result<(), Violation> {
     } else {
         Err(Violation::SearchMatchInconsistent)
     }
+}
+
+/// `data` followed by an indented copy of each of its lines, the way `FFmpeg`
+/// echoes a metadata value (`title`, chapter names) around the filter's own
+/// lines. A diagnostics parser must give the same result for both.
+fn with_echoed_lines(data: &[u8]) -> Vec<u8> {
+    let mut echoed = Vec::with_capacity(data.len().saturating_mul(2).saturating_add(64));
+    echoed.extend_from_slice(data);
+    echoed.push(b'\n');
+    for line in data.split(|byte| *byte == b'\n') {
+        echoed.extend_from_slice(ECHO_INDENT);
+        echoed.extend_from_slice(line);
+        echoed.push(b'\n');
+    }
+    echoed
+}
+
+fn check_frame_showinfo(data: &[u8]) -> Result<(), Violation> {
+    let frame = parse_frame_showinfo(data).ok();
+    let audio = parse_ashowinfo_start(data).ok();
+    let echoed = with_echoed_lines(data);
+    if echoed.len() <= MAX_DIAGNOSTIC_BYTES
+        && (parse_frame_showinfo(&echoed).ok() != frame
+            || parse_ashowinfo_start(&echoed).ok() != audio)
+    {
+        return Err(Violation::EchoedDiagnosticsChangedResult);
+    }
+    Ok(())
+}
+
+fn check_frame_listing(data: &[u8]) -> Result<(), Violation> {
+    let covered = TimeRange::new(
+        MediaTime::from_micros(0),
+        MediaTime::from_micros(LISTING_WINDOW_MICROS),
+    )
+    .map_err(|_| Violation::HarnessSetup)?;
+    let window = FrameListingWindow::new(
+        0,
+        1,
+        LISTING_TIME_BASE_DENOMINATOR,
+        0,
+        covered,
+        ListingTail::EndOfStream,
+    )
+    .map_err(|_| Violation::HarnessSetup)?;
+    let listing = parse_frame_listing(data, &window).ok();
+    if let Some(listing) = &listing {
+        let frames = listing.frames();
+        let inside = listing.covered().start() == covered.start()
+            && listing.covered().end() <= covered.end()
+            && frames.iter().all(|frame| {
+                frame.pts >= window.first_pts()
+                    && frame.pts < window.end_pts()
+                    && frame.time < listing.covered().end()
+            });
+        let ordered = frames.windows(2).all(|pair| match pair {
+            [before, after] => before.pts < after.pts && before.time <= after.time,
+            _ => true,
+        });
+        let truncated = listing.tail() == ListingTail::MoreMayFollow;
+        if frames.len() > MAX_LISTED_FRAMES
+            || !inside
+            || !ordered
+            || (truncated && listing.covered() == covered)
+        {
+            return Err(Violation::ListingOutOfBounds);
+        }
+    }
+    let echoed = with_echoed_lines(data);
+    if echoed.len() <= MAX_LISTING_DIAGNOSTIC_BYTES
+        && parse_frame_listing(&echoed, &window).ok() != listing
+    {
+        return Err(Violation::EchoedDiagnosticsChangedResult);
+    }
+    Ok(())
+}
+
+/// Builds a [`Target::PngSequence`] input: one byte with the expected number
+/// of images, the expected width and height as big-endian 16-bit integers,
+/// then the standard output to split.
+#[must_use]
+pub fn png_sequence_input(expected: u8, width: u16, height: u16, stdout: &[u8]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(stdout.len().saturating_add(5));
+    data.push(expected);
+    data.extend_from_slice(&width.to_be_bytes());
+    data.extend_from_slice(&height.to_be_bytes());
+    data.extend_from_slice(stdout);
+    data
+}
+
+fn check_png_sequence(data: &[u8]) -> Result<(), Violation> {
+    let [
+        expected,
+        width_high,
+        width_low,
+        height_high,
+        height_low,
+        stdout @ ..,
+    ] = data
+    else {
+        return Ok(());
+    };
+    let width = u16::from_be_bytes([*width_high, *width_low]);
+    let height = u16::from_be_bytes([*height_high, *height_low]);
+    let Ok(dimensions) = FrameDimensions::new(u32::from(width), u32::from(height)) else {
+        return Ok(());
+    };
+    let Ok(images) = parse_png_sequence(stdout, usize::from(*expected), dimensions) else {
+        return Ok(());
+    };
+    let size = |image: &[u8]| {
+        let field = |range: std::ops::Range<usize>| {
+            image
+                .get(range)
+                .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
+                .map(u32::from_be_bytes)
+        };
+        (field(16..20), field(20..24))
+    };
+    if images.len() != usize::from(*expected)
+        || images.concat() != stdout
+        || images.iter().any(|image| {
+            !image.starts_with(b"\x89PNG\r\n\x1a\n")
+                || size(image) != (Some(u32::from(width)), Some(u32::from(height)))
+        })
+    {
+        return Err(Violation::PngSequenceMismatch);
+    }
+    Ok(())
 }

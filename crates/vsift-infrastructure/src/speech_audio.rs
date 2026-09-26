@@ -93,6 +93,10 @@ const fn speech_audio_error(error: &MediaError) -> SpeechAudioError {
         | MediaError::InvalidTimeline
         | MediaError::NoFrameWithinTolerance
         | MediaError::InvalidDecodedOutput
-        | MediaError::InvalidVisualWindow => SpeechAudioError::Io,
+        | MediaError::InvalidVisualWindow
+        | MediaError::InvalidFrameRequest
+        | MediaError::CropOutsideFrame
+        | MediaError::FrameNotFound
+        | MediaError::TimeBaseMismatch => SpeechAudioError::Io,
     }
 }

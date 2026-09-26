@@ -77,8 +77,9 @@ use crate::{
 ///
 /// Bump it whenever the fixture checks change meaning, so every recorded pass
 /// from the previous checks is re-verified. Profile 2 (P08) adds the
-/// visual-sampling check.
-pub const MEDIA_TOOL_VERIFICATION_PROFILE: u32 = 2;
+/// visual-sampling check; profile 3 (P09) makes the `frame` check also list
+/// frame timestamps, extract a frame by its exact timestamp and crop one.
+pub const MEDIA_TOOL_VERIFICATION_PROFILE: u32 = 3;
 
 /// How long a recorded pass is trusted before the tools are verified again.
 ///

@@ -49,8 +49,14 @@ cargo test --manifest-path fuzz/Cargo.toml --locked
 `ffprobe_metadata`, `transcript_cursor`, `visual_samples` (FFmpeg's `showinfo`
 diagnostics of one visual window through `parse_visual_samples` and the window
 analysis; the input is a frame count, a pixel seed and the diagnostics, and the target
-writes the frames itself), `visual_index_record` and `search_query` (query normalisation
-and matching over a query, a line feed and segment text). It is a separate package with its
+writes the frames itself), `visual_index_record`, `search_query` (query normalisation
+and matching over a query, a line feed and segment text), `frame_showinfo` (the
+single-frame and first-audio-sample diagnostics readers), `frame_listing` (a frame
+listing's diagnostics against a fixed 60 s window) and `png_sequence` (the PNG sequence
+walker; the input is an image count, a width and height, then the output). The two
+diagnostics targets also require that indented copies of every line, as FFmpeg echoes
+source metadata, never change a result; their seeds are the real FFmpeg 9.0 output in
+`crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/`. It is a separate package with its
 own lockfile. Each target body is a plain function in `fuzz/src/lib.rs`; the stable replay
 tests above run it over every seed in `fuzz/seeds/<target>/`, and the libFuzzer entry
 points in `fuzz/fuzz_targets/` (feature `libfuzzer`) run it under libFuzzer.

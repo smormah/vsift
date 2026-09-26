@@ -43,6 +43,29 @@ def frame_times(ffprobe: str, path: Path) -> list[Decimal]:
     return [Decimal(line.strip().split(",")[0]) for line in output.decode().splitlines() if line.strip()]
 
 
+def normalized_microseconds(times: list[Decimal], origin: Decimal) -> list[int]:
+    """Frame times relative to the source origin, in whole microseconds.
+
+    The list is independent V-01 truth for the adapter's frame listing, so it
+    must be exact: a time that is not a whole microsecond or a list that does
+    not strictly increase is rejected rather than rounded or sorted.
+    """
+    result = []
+    for time in times:
+        micros = (time - origin) * 1_000_000
+        if micros != micros.to_integral_value() or micros < 0:
+            raise AssertionError(f"frame time {time} is not a whole non-negative microsecond after {origin}")
+        value = int(micros)
+        if result and value <= result[-1]:
+            raise AssertionError("frame times do not strictly increase")
+        result.append(value)
+    return result
+
+
+FRAME_LIST_FIXTURES = ("F01", "F09")
+FRAME_LIST_VARIANTS = ("rotation-90",)
+
+
 def decoded_frame(ffmpeg: str, path: Path, time: Decimal, width: int, height: int) -> bytes:
     frame = run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-i", str(path),
                  "-ss", str(time), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
@@ -71,6 +94,7 @@ def verify(ffmpeg: str, ffprobe: str) -> None:
         raise AssertionError("generator provenance points at different frozen truth")
     entries = {entry["fixture"]: entry for entry in provenance["fixtures"]}
     checks = []
+    frame_lists: dict[str, list[int]] = {}
     for fixture in truth["fixtures"]:
         fixture_id = fixture["id"]
         if fixture_id == "F11":
@@ -109,6 +133,8 @@ def verify(ffmpeg: str, ffprobe: str) -> None:
             duration = Decimal(info["format"]["duration"])
         if abs(duration - Decimal(fixture["duration_us"]) / 1_000_000) > Decimal("0.05"):
             raise AssertionError(f"{fixture_id} duration differs from frozen truth: {duration}")
+        if fixture_id in FRAME_LIST_FIXTURES:
+            frame_lists[fixture_id] = normalized_microseconds(times, origin)
         checks.append({"fixture": fixture_id, "sha256": entry["sha256"], "frames": len(times),
                        "duration_us": int(duration * 1_000_000), "origin_us": int(origin * 1_000_000),
                        "dimensions": [video["width"], video["height"]]})
@@ -146,6 +172,9 @@ def verify(ffmpeg: str, ffprobe: str) -> None:
                          "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], 720 * 1280 * 3)
             if len(image) != 720 * 1280 * 3:
                 raise AssertionError("rotation variant did not display as portrait")
+        if entry["variant"] in FRAME_LIST_VARIANTS:
+            variant_origin = Decimal(info["format"].get("start_time", "0"))
+            frame_lists[entry["fixture"]] = normalized_microseconds(frame_times(ffprobe, path), variant_origin)
         elif entry["variant"] == "audio-only":
             if [stream["codec_type"] for stream in info["streams"]] != ["audio"]:
                 raise AssertionError("audio-only variant has an unexpected video stream")
@@ -160,8 +189,9 @@ def verify(ffmpeg: str, ffprobe: str) -> None:
                 raise AssertionError("multiple-audio variant stream order changed")
             if [stream["tags"]["language"] for stream in info["streams"][1:]] != ["eng", "spa"]:
                 raise AssertionError("multiple-audio variant language tags changed")
-    report = {"verifier": "tools/verify_p04_fixtures.py v1", "status": "passed", "manifest_sha256": sha256(manifest_path),
+    report = {"verifier": "tools/verify_p04_fixtures.py v2", "status": "passed", "manifest_sha256": sha256(manifest_path),
               "checks": checks, "pixel_checks": ["F02 repeated A/B/A", "F03 G18 fill", "F06 500 ms tooltip", "F09 3.25 s marker"],
+              "frame_timestamps_us": frame_lists,
               "F11_variant_hashes_verified": len(provenance["F11_variants"]),
               "media_variant_hashes_verified": len(provenance["media_variants"])}
     (GENERATED / "verification.json").write_bytes((json.dumps(report, indent=2) + "\n").encode("utf-8"))

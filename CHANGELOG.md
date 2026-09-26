@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Groundwork for evidence navigation (P09 PR 1, not yet reachable from the CLI; ADR
+  0019, proposed): the media adapter can list a stretch of a video's actual frame
+  times, extract up to eight frames by their exact timestamps as full-resolution PNG
+  images, crop a rectangle of a frame in its displayed orientation, and cut a WAV clip
+  of up to 30 seconds (16 kHz mono) that says when its first sample really starts.
+  Frames are chosen by integer timestamps, so a visual candidate's time now extracts
+  exactly that frame (all 29 candidates of the test videos at a difference of 0). The
+  rules that choose frames for a time (at-or-after by default, or the frame on screen),
+  the frames around one, and an evenly spread burst are pure, property-tested domain
+  code. New fuzz targets `frame_showinfo`, `frame_listing` and `png_sequence`.
+- The automatic FFmpeg/FFprobe check now also lists frame times, extracts a frame by
+  its exact timestamp and crops it (verification profile 3, still reported as the
+  `frame` check), so every recorded pass is verified once more.
+
 - Visual candidates: `vsift candidates <session> --from <us> --to <us>` lists the
   moments where the video's screen changed, plus a sample at least every 10 seconds so
   a static screen is still represented, 20 per page (`--limit 1..100`, `--cursor` to
@@ -194,6 +208,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Security (SEC-17):** the media adapter could report a time taken from a video's
+  own metadata instead of what FFmpeg decoded. FFmpeg repeats a file's metadata (for
+  example its title) in the same diagnostic output VSift reads frame and audio times
+  from, and two readers accepted any line that merely contained the filter's name, so
+  a crafted file could shift the times `transcript retranscribe` gave its own
+  transcript segments. Readers now accept only lines the filter itself wrote, require
+  a complete, consistent sequence of frames, and check the time base against the
+  probed stream; anything else is rejected. No failure code or schema changed.
 - `transcript retranscribe` could save a revision even if the session's copy of the
   video changed after the last chunk was decoded. The copy is now verified again
   before the revision is saved; if it changed, the run fails with

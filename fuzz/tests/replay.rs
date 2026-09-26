@@ -26,16 +26,17 @@ use vsift_application::{
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CursorToken, FrameDimensions, MediaTime,
-    SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange, VISUAL_BLOCKS,
+    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CursorToken, FrameDimensions, ListingTail,
+    MediaTime, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange, VISUAL_BLOCKS,
     VISUAL_FRAME_BYTES, VisualHash, VisualIndexProfile, VisualSample, VisualWindow, merge_chunks,
     plan_chunks, validate_chunk_output,
 };
-use vsift_fuzz::{Target, VISUAL_FUZZ_SESSION, visual_samples_input};
+use vsift_fuzz::{Target, VISUAL_FUZZ_SESSION, png_sequence_input, visual_samples_input};
 use vsift_infrastructure::{
-    SourceContainer, VisualSamplingWindow, WhisperOutputLimits, decode_transcript_record,
-    decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
-    parse_ffprobe_metadata, parse_supplied_transcript, parse_visual_samples,
+    FrameListingWindow, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
+    decode_transcript_record, decode_visual_index_record, encode_transcript_record,
+    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
     parse_whisper_full_json,
 };
 
@@ -56,6 +57,9 @@ enum Origin {
     RecordedShowinfo(&'static str),
     /// The visual-index record encoded from this fixture's recorded samples.
     RecordedVisualIndex(&'static str),
+    /// A `png_sequence` input: this many copies of the recorded 80x80 F01
+    /// crop PNG ([`RECORDED_CROP`]), expected as 80x80 images.
+    RecordedCrops(u8),
     /// A `search_query` input: a query that appears verbatim in the first
     /// file, a line feed, and segment text that appears verbatim in the second.
     SearchPair {
@@ -75,6 +79,13 @@ struct Seed {
 const TRANSCRIPT_DATA: &str = "crates/vsift-infrastructure/tests/data/transcripts";
 const WHISPER_FIXTURES: &str = "crates/vsift-infrastructure/tests/fixtures/whisper-1.9.2";
 const VISUAL_SAMPLES: &str = "crates/vsift-infrastructure/tests/data/visual_samples";
+/// Real `FFmpeg` 9.0 diagnostics of the P09 adapter calls (see
+/// `crates/vsift-infrastructure/tests/p09_recorded_diagnostics.rs`).
+const FFMPEG_DIAGNOSTICS: &str = "crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics";
+/// The recorded `crop_at` output the `png_sequence` seeds repeat.
+const RECORDED_CROP: &str =
+    "crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/F01-crop-560-320-80x80.png";
+const RECORDED_CROP_SIZE: u16 = 80;
 
 const SEEDS: &[Seed] = &[
     seed(
@@ -208,6 +219,46 @@ const SEEDS: &[Seed] = &[
         Origin::RecordedVisualIndex("F10"),
     ),
     seed(
+        Target::FrameShowinfo,
+        "F01-frame-1025000.txt",
+        Origin::Copy(FFMPEG_DIAGNOSTICS),
+    ),
+    seed(
+        Target::FrameShowinfo,
+        "F01-audio-only-wav-0-1000000.txt",
+        Origin::Copy(FFMPEG_DIAGNOSTICS),
+    ),
+    seed(
+        Target::FrameShowinfo,
+        "forged-title-frame-250000.txt",
+        Origin::Copy(FFMPEG_DIAGNOSTICS),
+    ),
+    seed(
+        Target::FrameShowinfo,
+        "forged-title-wav-0-1000000.txt",
+        Origin::Copy(FFMPEG_DIAGNOSTICS),
+    ),
+    seed(
+        Target::FrameListing,
+        "F01-listing-900000-1200000.txt",
+        Origin::Copy(FFMPEG_DIAGNOSTICS),
+    ),
+    seed(
+        Target::FrameListing,
+        "forged-title-listing-0-1000000.txt",
+        Origin::Copy(FFMPEG_DIAGNOSTICS),
+    ),
+    seed(
+        Target::PngSequence,
+        "F01-crop-x1.bin",
+        Origin::RecordedCrops(1),
+    ),
+    seed(
+        Target::PngSequence,
+        "F01-crop-x2.bin",
+        Origin::RecordedCrops(2),
+    ),
+    seed(
         Target::SearchQuery,
         "f10-r-17.txt",
         Origin::SearchPair {
@@ -319,52 +370,87 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::SearchQuery, "f10-r-17.txt"),
         (Target::SearchQuery, "f10-dialog-r-17.txt"),
         (Target::SearchQuery, "f01-build-2048.txt"),
+        (Target::FrameShowinfo, "F01-frame-1025000.txt"),
+        (Target::FrameShowinfo, "F01-audio-only-wav-0-1000000.txt"),
+        (Target::FrameShowinfo, "forged-title-frame-250000.txt"),
+        (Target::FrameShowinfo, "forged-title-wav-0-1000000.txt"),
+        (Target::FrameListing, "F01-listing-900000-1200000.txt"),
+        (Target::FrameListing, "forged-title-listing-0-1000000.txt"),
+        (Target::PngSequence, "F01-crop-x1.bin"),
+        (Target::PngSequence, "F01-crop-x2.bin"),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
-        let is_accepted = match target {
-            Target::TranscriptSrt | Target::TranscriptWebVtt => {
-                parse_supplied_transcript(&data).is_ok()
-            }
-            Target::WhisperFullJson => {
-                parse_whisper_full_json(&data, WhisperOutputLimits::R0).is_ok()
-            }
-            Target::TranscriptRecord => decode_transcript_record(&data).is_ok(),
-            Target::FfprobeMetadata => {
-                parse_ffprobe_metadata(&data, SourceContainer::IsoMedia).is_ok()
-            }
-            Target::TranscriptCursor => CursorToken::parse(std::str::from_utf8(&data)?).is_ok(),
-            Target::VisualSamples => match data.as_slice() {
-                [count, _, stderr @ ..] => parse_visual_samples(
-                    &vec![0_u8; usize::from(*count) * VISUAL_FRAME_BYTES],
-                    stderr,
-                    &VisualSamplingWindow::new(
-                        0,
-                        0,
-                        MediaTime::from_micros(0),
-                        MediaTime::from_micros(60_000_000),
-                    )?,
-                )
-                .is_ok_and(|frames| frames.len() == usize::from(*count)),
-                _ => false,
-            },
-            Target::VisualIndexRecord => {
-                decode_visual_index_record(&data, &SessionId::parse(VISUAL_FUZZ_SESSION)?).is_ok()
-            }
-            Target::SearchQuery => {
-                let (query, text) = std::str::from_utf8(&data)?
-                    .split_once('\n')
-                    .ok_or("no line feed")?;
-                // Each seed matches: two as a phrase, one as all terms.
-                SearchQuery::parse(query)
-                    .ok()
-                    .and_then(|query| query.classify(text))
-                    .is_some_and(|tier| SearchMatch::ALL.contains(&tier))
-            }
-        };
+        let is_accepted = is_accepted(target, &data)?;
         assert!(is_accepted, "{}/{file} is rejected", target.name());
     }
     Ok(())
+}
+
+/// Whether `target`'s parser accepts a well-formed seed.
+fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
+    Ok(match target {
+        Target::TranscriptSrt | Target::TranscriptWebVtt => parse_supplied_transcript(data).is_ok(),
+        Target::WhisperFullJson => parse_whisper_full_json(data, WhisperOutputLimits::R0).is_ok(),
+        Target::TranscriptRecord => decode_transcript_record(data).is_ok(),
+        Target::FfprobeMetadata => parse_ffprobe_metadata(data, SourceContainer::IsoMedia).is_ok(),
+        Target::TranscriptCursor => CursorToken::parse(std::str::from_utf8(data)?).is_ok(),
+        Target::VisualSamples => match data {
+            [count, _, stderr @ ..] => parse_visual_samples(
+                &vec![0_u8; usize::from(*count) * VISUAL_FRAME_BYTES],
+                stderr,
+                &VisualSamplingWindow::new(
+                    0,
+                    0,
+                    MediaTime::from_micros(0),
+                    MediaTime::from_micros(60_000_000),
+                )?,
+            )
+            .is_ok_and(|frames| frames.len() == usize::from(*count)),
+            _ => false,
+        },
+        Target::VisualIndexRecord => {
+            decode_visual_index_record(data, &SessionId::parse(VISUAL_FUZZ_SESSION)?).is_ok()
+        }
+        Target::SearchQuery => {
+            let (query, text) = std::str::from_utf8(data)?
+                .split_once('\n')
+                .ok_or("no line feed")?;
+            // Each seed matches: two as a phrase, one as all terms.
+            SearchQuery::parse(query)
+                .ok()
+                .and_then(|query| query.classify(text))
+                .is_some_and(|tier| SearchMatch::ALL.contains(&tier))
+        }
+        // Each diagnostics seed is accepted by the parser of its kind.
+        Target::FrameShowinfo => {
+            parse_frame_showinfo(data).is_ok() || parse_ashowinfo_start(data).is_ok()
+        }
+        Target::FrameListing => parse_frame_listing(
+            data,
+            &FrameListingWindow::new(
+                0,
+                1,
+                10_240,
+                0,
+                TimeRange::new(
+                    MediaTime::from_micros(0),
+                    MediaTime::from_micros(60_000_000),
+                )?,
+                ListingTail::EndOfStream,
+            )?,
+        )
+        .is_ok_and(|listing| !listing.frames().is_empty()),
+        Target::PngSequence => match data {
+            [count, _, _, _, _, stdout @ ..] => parse_png_sequence(
+                stdout,
+                usize::from(*count),
+                FrameDimensions::new(u32::from(RECORDED_CROP_SIZE), u32::from(RECORDED_CROP_SIZE))?,
+            )
+            .is_ok(),
+            _ => false,
+        },
+    })
 }
 
 /// The seed directories hold exactly the listed seeds, and each listed copy or
@@ -401,6 +487,7 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
             Origin::EncodedF01LocalAsr
             | Origin::RecordedShowinfo(_)
             | Origin::RecordedVisualIndex(_) => true,
+            Origin::RecordedCrops(count) => data == crops_seed(count)?,
             Origin::SearchPair {
                 query,
                 query_in,
@@ -470,6 +557,17 @@ fn the_local_asr_record_seed_is_the_encoded_f01_revision() -> TestResult {
         "regenerate the seed: the encoder no longer writes the committed bytes"
     );
     Ok(())
+}
+
+/// A `png_sequence` seed: `count` copies of the recorded crop.
+fn crops_seed(count: u8) -> Result<Vec<u8>, Box<dyn Error>> {
+    let png = fs::read(repository(RECORDED_CROP))?;
+    Ok(png_sequence_input(
+        count,
+        RECORDED_CROP_SIZE,
+        RECORDED_CROP_SIZE,
+        &png.repeat(usize::from(count)),
+    ))
 }
 
 /// Each target has a libFuzzer entry point of the same name.
@@ -614,6 +712,7 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
             Origin::Copy(_)
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
+            | Origin::RecordedCrops(_)
             | Origin::SearchPair { .. } => continue,
         };
         let path = seed_directory(seed.target).join(seed.file);
