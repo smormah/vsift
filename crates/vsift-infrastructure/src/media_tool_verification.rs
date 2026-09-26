@@ -3,8 +3,9 @@
 //!
 //! A version probe only shows that an executable responds. This verifier stages
 //! the embedded fixture in a fresh private session, runs the same bounded P04
-//! probe, frame and audio operations an investigation uses, and compares each
-//! result with the fixture's recorded truth. The fixture is embedded so the
+//! probe, frame and audio operations and the P08 visual sampling an
+//! investigation uses, and compares each result with the fixture's recorded
+//! truth. The fixture is embedded so the
 //! check works on machines without the repository (ADR 0015).
 
 use std::{
@@ -19,14 +20,16 @@ use vsift_application::{
     MediaToolVerification, MediaToolVerifier, ModelVerification, ReviewedCompatibilityPolicy,
 };
 use vsift_domain::{
-    ArtifactIntegrity, DurabilityRequirement, MediaDescription, MediaSelection, MediaStreamKind,
-    MediaTime, OperationId, ReviewedAsrModel, SessionId, TimeRange,
+    ArtifactIntegrity, CandidateReason, CandidateStability, DurabilityRequirement,
+    MediaDescription, MediaSelection, MediaStreamKind, MediaTime, OperationId, ReviewedAsrModel,
+    SessionId, TimeRange, VisualChangePolicy, VisualSample, VisualWindow, analyse_window,
 };
 
 use crate::{
-    ExtractedAudio, ExtractedFrame, FfmpegMedia, FilesystemSessionStore, HostIsolation,
-    ManagedCatalogueError, MediaError, MediaProviderConformance, ProcessCancellation,
-    SourceSnapshot, file_lock::HeldFileLock, reviewed_whisper_models,
+    BoundSource, ExtractedAudio, ExtractedFrame, FfmpegMedia, FilesystemSessionStore,
+    HostIsolation, ManagedCatalogueError, MediaError, MediaProviderConformance,
+    ProcessCancellation, RawGrayFrame, SourceSnapshot, file_lock::HeldFileLock,
+    reviewed_whisper_models,
 };
 
 /// The reviewed synthetic F01 fixture, identical to `fixtures/corpus/generated/F01.mp4`.
@@ -49,6 +52,17 @@ const AUDIO_SPAN_MICROS: u64 = 1_000_000;
 /// Extracted PCM may be slightly shorter or longer than the span at codec edges.
 const AUDIO_LENGTH_TOLERANCE_PERCENT: u64 = 10;
 const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+/// F01's first visual window is the whole 6 s clip; at 20 frames per second
+/// the 0.5 s sampler keeps exactly the frames at 0, 0.5, ..., 5.5 s.
+const VISUAL_SAMPLE_COUNT: u64 = 12;
+const VISUAL_SAMPLE_SPACING_MICROS: u64 = 500_000;
+/// Block (row 4, column 7) lies inside F01's blue status panel and block 143
+/// (the bottom-right corner) on its dark background. Measured with `FFmpeg`
+/// 9.0 they are 72 and 26; the check only requires the panel to be clearly
+/// brighter, so a build that outputs limited-range grey still passes.
+const VISUAL_PANEL_BLOCK: usize = 4 * 16 + 7;
+const VISUAL_BACKGROUND_BLOCK: usize = 143;
+const VISUAL_MIN_CONTRAST: u8 = 20;
 /// Every verification workspace is named this prefix followed by exactly
 /// [`WORKSPACE_RANDOM_BYTES`] random bytes in lowercase hex, and nothing else.
 const WORKSPACE_PREFIX: &str = "vsift-tool-verification-";
@@ -165,7 +179,25 @@ impl FixtureMediaToolVerifier {
             )
             .await
             .map_err(|error| (MediaToolCheck::Audio, map_media_error(&error)))?;
-        check_audio(&audio, &self.policy).map_err(|failure| (MediaToolCheck::Audio, failure))
+        check_audio(&audio, &self.policy).map_err(|failure| (MediaToolCheck::Audio, failure))?;
+
+        // Visual indexing decodes window after window from a bound copy, so
+        // the check does too: the copy is hashed once more here.
+        let visual = |failure| (MediaToolCheck::VisualSampling, failure);
+        let bound = BoundSource::bind(snapshot).map_err(|_| visual(MediaToolFailure::Workspace))?;
+        let window = VisualWindow::new(0, description.duration)
+            .map_err(|_| visual(MediaToolFailure::UnexpectedResult))?;
+        let frames = media
+            .visual_samples(
+                &bound,
+                &description,
+                F01_SELECTION,
+                window,
+                self.cancellation.clone(),
+            )
+            .await
+            .map_err(|error| visual(map_media_error(&error)))?;
+        check_visual_samples(window, &frames).map_err(visual)
     }
 }
 
@@ -300,6 +332,47 @@ fn check_frame(frame: &ExtractedFrame) -> Result<(), MediaToolFailure> {
     Ok(())
 }
 
+/// Checks F01's visual samples: the exact time grid, a static screen (one
+/// settled candidate, no change between samples) and a plausible image.
+fn check_visual_samples(
+    window: VisualWindow,
+    frames: &[RawGrayFrame],
+) -> Result<(), MediaToolFailure> {
+    let unexpected = MediaToolFailure::UnexpectedResult;
+    let expected_times = (0..VISUAL_SAMPLE_COUNT).map(|step| step * VISUAL_SAMPLE_SPACING_MICROS);
+    if u64::try_from(frames.len()).ok() != Some(VISUAL_SAMPLE_COUNT)
+        || !frames
+            .iter()
+            .map(|frame| frame.time.as_micros())
+            .eq(expected_times)
+    {
+        return Err(unexpected);
+    }
+    let samples: Vec<VisualSample> = frames
+        .iter()
+        .map(|frame| VisualSample::from_gray(frame.time, &frame.pixels))
+        .collect();
+    let analysis =
+        analyse_window(window, &samples, VisualChangePolicy::R0).map_err(|_| unexpected)?;
+    let [candidate] = analysis.candidates.as_slice() else {
+        return Err(unexpected);
+    };
+    let first = samples.first().ok_or(unexpected)?;
+    let panel = first.blocks().get(VISUAL_PANEL_BLOCK).ok_or(unexpected)?;
+    let background = first
+        .blocks()
+        .get(VISUAL_BACKGROUND_BLOCK)
+        .ok_or(unexpected)?;
+    if candidate.reason != CandidateReason::FirstFrame
+        || candidate.stability != CandidateStability::Settled
+        || u64::from(candidate.sample_count) != VISUAL_SAMPLE_COUNT
+        || panel.saturating_sub(*background) < VISUAL_MIN_CONTRAST
+    {
+        return Err(unexpected);
+    }
+    Ok(())
+}
+
 fn check_audio(
     audio: &ExtractedAudio,
     policy: &ReviewedCompatibilityPolicy,
@@ -350,7 +423,8 @@ const fn map_media_error(error: &MediaError) -> MediaToolFailure {
         | MediaError::UnsupportedCodec
         | MediaError::NoFrameWithinTolerance
         | MediaError::InvalidDecodedOutput
-        | MediaError::NoDecodedAudio => MediaToolFailure::UnexpectedResult,
+        | MediaError::NoDecodedAudio
+        | MediaError::InvalidVisualWindow => MediaToolFailure::UnexpectedResult,
     }
 }
 
@@ -466,11 +540,12 @@ mod tests {
     use super::{
         AUDIO_SPAN_MICROS, F01, F01_DURATION_MICROS, F01_HEIGHT, F01_WIDTH, FRAME_AT_MICROS,
         PNG_SIGNATURE, VerificationWorkspace, WORKSPACE_LOCK_FILE, check_audio, check_description,
-        check_frame, is_verification_workspace_name, lowercase_hex, matches_integrity,
-        verify_model_file,
+        check_frame, check_visual_samples, is_verification_workspace_name, lowercase_hex,
+        matches_integrity, verify_model_file,
     };
     use crate::{
-        ExtractedAudio, ExtractedFrame, file_lock::HeldFileLock, reviewed_compatibility_policy,
+        ExtractedAudio, ExtractedFrame, RawGrayFrame, file_lock::HeldFileLock,
+        reviewed_compatibility_policy,
     };
 
     type TestResult = Result<(), Box<dyn Error>>;
@@ -749,6 +824,49 @@ mod tests {
             verify_model_file(&directory.0, pinned),
             ModelVerification::Unreadable
         );
+        Ok(())
+    }
+
+    /// F01-like grey frames: dark background with a brighter panel at
+    /// `level`, sampled every `spacing` microseconds.
+    fn gray_frames(count: u64, spacing: u64, level: impl Fn(u64) -> u8) -> Vec<RawGrayFrame> {
+        (0..count)
+            .map(|step| {
+                let mut pixels = Box::new([26_u8; vsift_domain::VISUAL_FRAME_BYTES]);
+                for row in 16..56 {
+                    for column in 16..112 {
+                        if let Some(pixel) = pixels.get_mut(row * 128 + column) {
+                            *pixel = level(step);
+                        }
+                    }
+                }
+                RawGrayFrame {
+                    time: MediaTime::from_micros(step * spacing),
+                    pixels,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn visual_check_requires_the_grid_a_static_screen_and_contrast() -> TestResult {
+        let window =
+            vsift_domain::VisualWindow::new(0, MediaTime::from_micros(F01_DURATION_MICROS))?;
+        assert_eq!(
+            check_visual_samples(window, &gray_frames(12, 500_000, |_| 72)),
+            Ok(())
+        );
+        for frames in [
+            gray_frames(11, 500_000, |_| 72),
+            gray_frames(12, 400_000, |_| 72),
+            gray_frames(12, 500_000, |_| 30),
+            gray_frames(12, 500_000, |step| if step < 6 { 72 } else { 120 }),
+        ] {
+            assert_eq!(
+                check_visual_samples(window, &frames),
+                Err(MediaToolFailure::UnexpectedResult)
+            );
+        }
         Ok(())
     }
 }

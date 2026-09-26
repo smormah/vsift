@@ -46,6 +46,8 @@ jobs:
           - transcript_record
           - ffprobe_metadata
           - transcript_cursor
+          - visual_samples
+          - visual_index_record
           - search_query
     steps:
       - name: Check out repository

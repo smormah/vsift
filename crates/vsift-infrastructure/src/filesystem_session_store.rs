@@ -18,6 +18,7 @@ use vsift_application::{
 use vsift_domain::{
     OperationId, PublicationGuarantee, SessionArtifactKind, SessionId, SessionLifetime,
     SessionPhase, SourceId, StorageGeneration, TranscriptRevision, TranscriptRevisionId,
+    VisualIndex,
 };
 
 use crate::{SourceSnapshot, file_lock::HeldFileLock, private_user_root::restrict_new_directory};
@@ -1034,6 +1035,12 @@ impl FilesystemSessionStore {
                 // read, so a bundle validates only if its transcript could be
                 // cited.
                 read_transcript_artifact(&bundle, artifact, &source_id)?;
+            } else if artifact.kind == StoredArtifactKind::VisualIndexRecord {
+                // The same reasoning as for transcripts: every visual-index
+                // record is decoded with the window grid, coverage, policy
+                // and identity rules a session read applies (ADR 0013 note
+                // of 2026-09-26).
+                read_visual_index_artifact(&bundle, artifact, &session_id, &source_id)?;
             } else {
                 let file = open_regular_file(&bundle, &artifact.name, false)
                     .map_err(|_| SessionStorageError::IntegrityFailure)?;
@@ -1245,6 +1252,56 @@ impl FilesystemSessionStore {
             }
         }
         Ok(None)
+    }
+
+    /// Reads the newest committed visual-index revision of an open session.
+    ///
+    /// Each revision holds every window of the one before it, so only the
+    /// newest record is read. It is read under a shared lifetime hold, its
+    /// size and SHA-256 are checked against the committed manifest, and it is
+    /// decoded strictly (window grid, coverage and change rules, identities)
+    /// and must describe the session's source.
+    ///
+    /// # Errors
+    ///
+    /// Closed or expired sessions conflict; a changed, oversized or invalid
+    /// record is an integrity failure, and a newer record version is
+    /// unsupported.
+    pub fn read_visual_index(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<Option<(VisualIndex, SessionStatus)>, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let record = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let Some(newest) = record
+            .artifacts
+            .iter()
+            .rev()
+            .find(|artifact| artifact.kind == StoredArtifactKind::VisualIndexRecord)
+        else {
+            return Ok(None);
+        };
+        let artifacts = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let index = read_visual_index_artifact(&artifacts, newest, session_id, status.source_id())?;
+        Ok(Some((index, status)))
     }
 
     /// Opens the committed private source copy of an open session under a
@@ -2416,6 +2473,18 @@ fn update_lifecycle(
             {
                 return Err(SessionStorageError::CapacityExhausted);
             }
+            // Visual-index revisions are bounded separately so a runaway
+            // caller cannot fill the session's 256 artifact slots with them.
+            if artifact.kind == StoredArtifactKind::VisualIndexRecord
+                && record
+                    .artifacts
+                    .iter()
+                    .filter(|existing| existing.kind == StoredArtifactKind::VisualIndexRecord)
+                    .count()
+                    >= crate::MAX_VISUAL_INDEX_RECORDS
+            {
+                return Err(SessionStorageError::CapacityExhausted);
+            }
             let total = record
                 .artifacts
                 .iter()
@@ -2456,6 +2525,35 @@ fn read_transcript_artifact(
         return Err(SessionStorageError::IntegrityFailure);
     }
     Ok(revision)
+}
+
+/// Reads, verifies and decodes one visual-index record artifact.
+///
+/// As for transcript records, the recorded size and digest are checked
+/// before any byte is interpreted; the record is then decoded strictly, must
+/// belong to `session_id` and must describe `source_id`.
+fn read_visual_index_artifact(
+    directory: &Dir,
+    artifact: &StoredArtifact,
+    session_id: &SessionId,
+    source_id: &SourceId,
+) -> Result<VisualIndex, SessionStorageError> {
+    let file = open_regular_file(directory, &artifact.name, false)
+        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let mut bytes = Vec::new();
+    file.take(artifact.bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(map_storage_io)?;
+    if u64::try_from(bytes.len()).ok() != Some(artifact.bytes)
+        || sha256_hex(&bytes) != artifact.sha256
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let index = crate::decode_visual_index_record(&bytes, session_id)?;
+    if index.source_id() != source_id {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(index)
 }
 
 fn validate_artifact_record(artifact: &StoredArtifact) -> Result<(), SessionStorageError> {
@@ -3331,6 +3429,7 @@ enum StoredArtifactKind {
     FramePng,
     AudioPcm,
     TranscriptRecord,
+    VisualIndexRecord,
 }
 
 impl StoredArtifactKind {
@@ -3339,6 +3438,7 @@ impl StoredArtifactKind {
             SessionArtifactKind::FramePng => Self::FramePng,
             SessionArtifactKind::AudioPcm => Self::AudioPcm,
             SessionArtifactKind::TranscriptRecord => Self::TranscriptRecord,
+            SessionArtifactKind::VisualIndexRecord => Self::VisualIndexRecord,
         }
     }
 
@@ -3346,7 +3446,7 @@ impl StoredArtifactKind {
         match self {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
-            Self::TranscriptRecord => "json",
+            Self::TranscriptRecord | Self::VisualIndexRecord => "json",
         }
     }
 
@@ -3356,6 +3456,7 @@ impl StoredArtifactKind {
             Self::FramePng => crate::MAX_FRAME_BYTES,
             Self::AudioPcm => crate::MAX_AUDIO_BYTES,
             Self::TranscriptRecord => crate::MAX_TRANSCRIPT_RECORD_BYTES,
+            Self::VisualIndexRecord => crate::MAX_VISUAL_INDEX_RECORD_BYTES,
         }
     }
 }

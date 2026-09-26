@@ -20,6 +20,9 @@ pub enum SessionArtifactKind {
     AudioPcm,
     /// One immutable transcript revision, stored as versioned JSON (P07).
     TranscriptRecord,
+    /// One immutable visual-candidate index revision, stored as versioned
+    /// JSON (P08). Each revision is a superset of the one before it.
+    VisualIndexRecord,
 }
 
 impl SessionArtifactKind {
@@ -30,6 +33,7 @@ impl SessionArtifactKind {
             Self::FramePng => "frame_png",
             Self::AudioPcm => "audio_pcm",
             Self::TranscriptRecord => "transcript_record",
+            Self::VisualIndexRecord => "visual_index_record",
         }
     }
 
@@ -39,7 +43,7 @@ impl SessionArtifactKind {
         match self {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
-            Self::TranscriptRecord => "json",
+            Self::TranscriptRecord | Self::VisualIndexRecord => "json",
         }
     }
 }

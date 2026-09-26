@@ -28,7 +28,9 @@ vsift-domain = { version = "0.1.0", path = "../crates/vsift-domain" }
 vsift-infrastructure = { version = "0.1.0", path = "../crates/vsift-infrastructure" }
 
 [dev-dependencies]
-# Re-derives the local-ASR record seed in the replay tests.
+# Re-derive the local-ASR and visual-index record seeds in the replay tests;
+# serde_json reads the recorded visual samples the visual seeds come from.
+serde_json = "1.0.151"
 vsift-application = { version = "0.1.0", path = "../crates/vsift-application" }
 
 [[bin]]
@@ -74,6 +76,22 @@ required-features = ["libfuzzer"]
 [[bin]]
 name = "transcript_cursor"
 path = "fuzz_targets/transcript_cursor.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "visual_samples"
+path = "fuzz_targets/visual_samples.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "visual_index_record"
+path = "fuzz_targets/visual_index_record.rs"
 test = false
 doc = false
 bench = false

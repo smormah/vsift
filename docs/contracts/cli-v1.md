@@ -170,8 +170,8 @@ non-regular or unsafe sidecar path is `INVALID_SOURCE`, as for source media.
 **Automatic media-tool preflight.** Before the first media stage of an operation that
 runs FFmpeg/FFprobe on user media (today `ingest --transcript` and `transcript
 retranscribe`; later frames and audio use the same hook), VSift proves the resolved pair works by running a
-small reviewed test video built into VSift (F01) through the same probe, frame and
-audio steps an investigation uses and comparing each result with its known answers
+small reviewed test video built into VSift (F01) through the same probe, frame,
+audio and visual-sampling steps an investigation uses and comparing each result with its known answers
 (ADR 0015). It runs after the sidecar is parsed and the tools are located, and before
 the session root is created or touched, so a failure writes nothing. There is no
 separate command. Plain `ingest`, `setup` commands and `transcript get` never run it,
@@ -209,7 +209,7 @@ A failed check is a failed operation (`status: "failed"`, `data: null`) with one
 `remediation` item (`required_authority: "none"`, `command: null`) whose summary
 begins with the fixed sentence `The selected FFmpeg and FFprobe failed VSift's
 media-tool check at the <check> step (<reason>).`, where `<check>` is `preparation`,
-`probe`, `frame` or `audio` and `<reason>` is `process_failure`, `provider_rejected`,
+`probe`, `frame`, `audio` or `visual_sampling` (verification profile 2, P08) and `<reason>` is `process_failure`, `provider_rejected`,
 `output_limit`, `unexpected_result`, `deadline`, `workspace`, `cancelled` or
 `fixture_integrity`. Fixed prose for the reason and the next step follows; no path or
 tool output is ever included. See

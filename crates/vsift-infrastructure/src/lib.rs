@@ -29,6 +29,8 @@ mod transcript_record;
 mod transcript_sidecar;
 mod user_dependency_config;
 mod verified_artifact_transfer;
+mod visual_index_record;
+mod visual_sampler;
 mod whisper_build;
 mod whisper_cli;
 mod xz_tar_inventory;
@@ -47,8 +49,9 @@ pub use executable::{
 };
 pub use ffmpeg_media::{
     ExtractedAudio, ExtractedFrame, FfmpegMedia, MAX_AUDIO_BYTES, MAX_DIAGNOSTIC_BYTES,
-    MAX_FRAME_BYTES, MAX_PROBE_BYTES, MAX_SPEECH_PCM_BYTES, MAX_SPEECH_PCM_MICROS, MediaError,
-    MediaProviderConformance, parse_ffprobe_metadata,
+    MAX_FRAME_BYTES, MAX_PROBE_BYTES, MAX_SPEECH_PCM_BYTES, MAX_SPEECH_PCM_MICROS,
+    MAX_VISUAL_DIAGNOSTIC_BYTES, MAX_VISUAL_SAMPLE_BYTES, MediaError, MediaProviderConformance,
+    RawGrayFrame, VisualSamplingWindow, parse_ffprobe_metadata, parse_visual_samples,
 };
 pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ExclusiveSessionLifetimeHold,
@@ -113,6 +116,11 @@ pub use transcript_record::{
 pub use transcript_sidecar::{MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript};
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
+pub use visual_index_record::{
+    MAX_VISUAL_INDEX_RECORD_BYTES, MAX_VISUAL_INDEX_RECORDS, decode_visual_index_record,
+    encode_visual_index_record,
+};
+pub use visual_sampler::FfmpegVisualSampler;
 pub use whisper_build::{
     MAX_WHISPER_EXECUTABLE_BYTES, WhisperBuildError, WhisperBuildIdentity, WhisperBuildRecognition,
     identify_whisper_build,

@@ -17,12 +17,13 @@ marks it `in_progress`. P08 is delivered as four pull requests:
    ranking and coverage; application paging with query-bound cursors; `Engine::search`;
    contract types, schemas `search-data`/`search-stream-data` and frozen F10 examples;
    CLI; tests (C-03, S-11, contract, opt-in `p08_search_e2e`); fuzz target `search_query`.
-2. **PR 2, #148 bracketed source binding (PR #157, this change):** one full hash when a
+2. **PR 2, #148 bracketed source binding (PR #157, merges before PR 3):** one full hash when a
    multi-call operation opens the source, a cheap identity check before each provider
    call, a full hash before commit (ADR 0012 note). 869 MB, 24-chunk clip: 25.5 s vs 173.4 s.
-3. **PR 3, visual index core (next):** 60 s pure windows, 2 Hz actual-frame sampling with a
-   candidate at least every 10 s, merging with preserved time, stability, visual hash,
-   batched visual-index records as a new session artifact kind, typed gap taxonomy.
+3. **PR 3, visual index core (PR #158, this change; not user-reachable yet):** 60 s pure
+   windows, 2 Hz actual-frame sampling, a candidate at least every 10 s, time-preserving
+   merges, stability, visual hash, batched `visual_index_record` artifacts, typed gaps,
+   `visual_sampling` preflight (profile 2). Recall: 10/10 stable events, 0 false changes.
 4. **PR 4, `candidates` command (after PR 3):** analyses missing windows in range, at most
    30 minutes of media per call, remainder `not_analyzed`; recall report over `stable`
    events of at least 1 s; completes ADR 0018's visual half; closes P08.

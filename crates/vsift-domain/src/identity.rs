@@ -107,6 +107,16 @@ opaque_identifier!(
     "tsg_",
     "Opaque identity for one timestamped segment inside a transcript revision."
 );
+opaque_identifier!(
+    VisualIndexId,
+    "vix_",
+    "Opaque identity for one immutable revision of a session's visual-candidate index (P08)."
+);
+opaque_identifier!(
+    VisualCandidateId,
+    "vcd_",
+    "Opaque identity for one visual candidate: a sampled screen state at a source time (P08)."
+);
 
 /// Cryptographic identity of immutable source bytes.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

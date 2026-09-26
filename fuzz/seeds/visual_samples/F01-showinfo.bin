@@ -1,0 +1,14 @@
+@[Parsed_showinfo_3 @ 0000000000000000] config in time_base: 1/10240, frame_rate: 20/1
+[Parsed_showinfo_3 @ 0000000000000000] config out time_base: 0/0, frame_rate: 0/0
+[Parsed_showinfo_3 @ 0000000000000000] n:   0 pts:      0 pts_time:0.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   1 pts:   5120 pts_time:0.500000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   2 pts:  10240 pts_time:1.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   3 pts:  15360 pts_time:1.500000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   4 pts:  20480 pts_time:2.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   5 pts:  25600 pts_time:2.500000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   6 pts:  30720 pts_time:3.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   7 pts:  35840 pts_time:3.500000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   8 pts:  40960 pts_time:4.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   9 pts:  46080 pts_time:4.500000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  10 pts:  51200 pts_time:5.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  11 pts:  56320 pts_time:5.500000 fmt:gray s:128x72 i:P iskey:0 type:P

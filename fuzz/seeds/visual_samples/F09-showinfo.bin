@@ -1,0 +1,20 @@
+@[Parsed_showinfo_3 @ 0000000000000000] config in time_base: 1/1000, frame_rate: 20/1
+[Parsed_showinfo_3 @ 0000000000000000] config out time_base: 0/0, frame_rate: 0/0
+[Parsed_showinfo_3 @ 0000000000000000] n:   0 pts:      0 pts_time:0.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   1 pts:    700 pts_time:0.700000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   2 pts:   1400 pts_time:1.400000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   3 pts:   2100 pts_time:2.100000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   4 pts:   2800 pts_time:2.800000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   5 pts:   3500 pts_time:3.500000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   6 pts:   4200 pts_time:4.200000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   7 pts:   4900 pts_time:4.900000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   8 pts:   5600 pts_time:5.600000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:   9 pts:   6300 pts_time:6.300000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  10 pts:   7000 pts_time:7.000000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  11 pts:   7700 pts_time:7.700000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  12 pts:   8400 pts_time:8.400000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  13 pts:   9100 pts_time:9.100000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  14 pts:   9800 pts_time:9.800000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  15 pts:  10500 pts_time:10.500000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  16 pts:  11200 pts_time:11.200000 fmt:gray s:128x72 i:P iskey:0 type:P
+[Parsed_showinfo_3 @ 0000000000000000] n:  17 pts:  11900 pts_time:11.900000 fmt:gray s:128x72 i:P iskey:0 type:P

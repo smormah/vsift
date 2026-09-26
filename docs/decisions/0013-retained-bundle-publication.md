@@ -68,3 +68,25 @@ with `UNSUPPORTED_SCHEMA`. This remains data-only validation: nothing is execute
 fetched. Bundles that `session retain` produced are unaffected, because their records
 already satisfy these rules. `session retain` itself revalidates the finished bundle,
 so it applies the same check.
+
+## 2026-09-26 implementation note: visual-index records are validated as data
+
+P08 adds the artifact kind `visual_index_record`: one revision of a session's
+visual-candidate index, at most 8 MiB and at most 64 per session (a 65th is
+`RESOURCE_LIMIT`). Each revision holds every window of the one before it, so a session
+read uses only the newest record, and a bundle carries all of them.
+
+As for transcript records, `bundle validate` (and therefore `session retain`) decodes
+every visual-index record strictly, not only its size and SHA-256:
+- unknown fields, values, versions and formats are rejected;
+- every window's range must follow the fixed 60 s grid of the recorded duration;
+- candidate spans, sample counts, the change policy and the 10 s coverage rule are
+  re-checked;
+- every candidate and revision identity is derived again from the session, source,
+  stream, profile, window and time, and the record must name the bundle's session and
+  source.
+
+A non-conforming record fails with `INTEGRITY_FAILURE`, a newer record version with
+`UNSUPPORTED_SCHEMA`. Records hold candidates only, never pixels. The public schema for
+the record is published with the `candidates` command (P08 PR 4); until then no
+command writes one.

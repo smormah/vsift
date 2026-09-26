@@ -91,8 +91,9 @@ pub enum ModelSelection {
 }
 
 impl Engine {
-    /// Runs the embedded reviewed fixture through the real probe, frame and
-    /// audio steps with the selected tools and checks each result.
+    /// Runs the embedded reviewed fixture through the real probe, frame,
+    /// audio and visual-sampling steps with the selected tools and checks
+    /// each result.
     ///
     /// A failed check is a result ([`MediaToolVerification::Failed`]), not an
     /// error.

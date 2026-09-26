@@ -16,12 +16,16 @@ use std::{collections::BTreeSet, error::Error, fmt};
 
 use vsift_domain::{
     CursorToken, MAX_CUE_TEXT_BYTES, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
-    MediaStreamKind, MediaTime, PlannedChunk, SearchMatch, SearchQuery, SourceSegmentId, TimeRange,
-    TranscriptFormat, normalise_search_text, validate_chunk_output,
+    MAX_WINDOW_CANDIDATES, MediaStreamKind, MediaTime, PlannedChunk, SearchMatch, SearchQuery,
+    SessionId, SourceSegmentId, TimeRange, TranscriptFormat, VISUAL_FRAME_BYTES, VisualCandidate,
+    VisualCandidateId, VisualChangePolicy, VisualIndexWindow, VisualSample, VisualWindow,
+    VisualWindowOutcome, analyse_window, normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
-    SourceContainer, WhisperOutputLimits, decode_transcript_record, encode_transcript_record,
-    parse_ffprobe_metadata, parse_supplied_transcript, parse_whisper_full_json,
+    SourceContainer, VisualSamplingWindow, WhisperOutputLimits, decode_transcript_record,
+    decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
+    parse_ffprobe_metadata, parse_supplied_transcript, parse_visual_samples,
+    parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -34,6 +38,13 @@ const MAX_NORMALISED_GROWTH: usize = 3;
 /// longest R0 chunk, so every in-bounds provider time is reachable.
 const WHISPER_CHUNK_MICROS: u64 = 30_000_000;
 const WHISPER_SOURCE_SEGMENT: &str = "sgm_0123456789abcdef";
+/// Session every fuzzed visual-index record is decoded for; the seeds are
+/// encoded for it.
+pub const VISUAL_FUZZ_SESSION: &str = "ses_0123456789abcdef";
+/// The visual-sampling window every input is parsed against: window 0 of a
+/// 60 s source with its origin at zero, so every in-bounds timestamp is
+/// reachable.
+const VISUAL_WINDOW_MICROS: u64 = 60_000_000;
 
 /// One fuzzed parser.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -52,6 +63,13 @@ pub enum Target {
     FfprobeMetadata,
     /// The `transcript get --cursor` continuation token through `CursorToken::parse`.
     TranscriptCursor,
+    /// One visual window's `FFmpeg` output through `parse_visual_samples`, then
+    /// the domain's window analysis. See [`visual_samples_input`] for the
+    /// input layout.
+    VisualSamples,
+    /// The stored visual-index record through `decode_visual_index_record`,
+    /// as a session read and `bundle validate` read it.
+    VisualIndexRecord,
     /// The `search --query` text through `SearchQuery::parse`, then matched
     /// against segment text. The input is the query, a line feed, and the
     /// segment text.
@@ -60,13 +78,15 @@ pub enum Target {
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
         Self::TranscriptRecord,
         Self::FfprobeMetadata,
         Self::TranscriptCursor,
+        Self::VisualSamples,
+        Self::VisualIndexRecord,
         Self::SearchQuery,
     ];
 
@@ -80,6 +100,8 @@ impl Target {
             Self::TranscriptRecord => "transcript_record",
             Self::FfprobeMetadata => "ffprobe_metadata",
             Self::TranscriptCursor => "transcript_cursor",
+            Self::VisualSamples => "visual_samples",
+            Self::VisualIndexRecord => "visual_index_record",
             Self::SearchQuery => "search_query",
         }
     }
@@ -97,6 +119,8 @@ impl Target {
             Self::TranscriptRecord => check_transcript_record(data),
             Self::FfprobeMetadata => check_ffprobe_metadata(data),
             Self::TranscriptCursor => check_transcript_cursor(data),
+            Self::VisualSamples => check_visual_samples(data),
+            Self::VisualIndexRecord => check_visual_index_record(data),
             Self::SearchQuery => check_search_query(data),
         }
     }
@@ -136,6 +160,17 @@ pub enum Violation {
     DimensionsMismatch,
     /// An accepted cursor did not decode to itself after encoding.
     CursorRoundTripChanged,
+    /// Accepted visual samples do not match the decoded frames: another
+    /// count, other pixels, unordered times or a time outside the window.
+    VisualSamplesMismatch,
+    /// The window analysis rejected accepted samples, or its result failed
+    /// the index's own validation.
+    VisualAnalysisInvalid,
+    /// An accepted visual-index record could not be encoded again.
+    VisualRecordNotReencodable,
+    /// An accepted visual-index record changed in a round trip, or a window
+    /// exceeds its candidate budget.
+    VisualRecordRoundTripChanged,
     /// An accepted query is too long or has no words or too many, or a
     /// normalised word is empty, holds a character normalisation never keeps,
     /// or the words outgrow their text.
@@ -164,6 +199,14 @@ impl fmt::Display for Violation {
             Self::DuplicateStreamIndex => "accepted metadata repeats a stream index",
             Self::DimensionsMismatch => "stream dimensions do not match the stream kind",
             Self::CursorRoundTripChanged => "an accepted cursor changed in a round trip",
+            Self::VisualSamplesMismatch => "accepted visual samples do not match the frames",
+            Self::VisualAnalysisInvalid => "the window analysis of accepted samples is invalid",
+            Self::VisualRecordNotReencodable => {
+                "an accepted visual-index record could not be encoded again"
+            }
+            Self::VisualRecordRoundTripChanged => {
+                "an accepted visual-index record changed in a round trip"
+            }
             Self::SearchWordsOutOfBounds => "search words are empty, invalid or unbounded",
             Self::SearchNormalisationNotIdempotent => "normalising normalised words changed them",
             Self::SearchMatchInconsistent => "a search match does not hold for its words",
@@ -333,6 +376,103 @@ fn check_transcript_cursor(data: &[u8]) -> Result<(), Violation> {
     match CursorToken::parse(&token.encode()) {
         Ok(reparsed) if reparsed == token => Ok(()),
         _ => Err(Violation::CursorRoundTripChanged),
+    }
+}
+
+/// Builds a [`Target::VisualSamples`] input: one byte with the number of
+/// decoded frames, one byte from which each frame's uniform pixel value is
+/// derived, then the diagnostics (`showinfo` text).
+///
+/// The fuzzer mutates the diagnostics freely while the frames stay cheap:
+/// the target writes `count` frames of 9,216 bytes itself rather than
+/// expecting megabytes of input.
+#[must_use]
+pub fn visual_samples_input(count: u8, pixel_seed: u8, stderr: &[u8]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(stderr.len().saturating_add(2));
+    data.push(count);
+    data.push(pixel_seed);
+    data.extend_from_slice(stderr);
+    data
+}
+
+fn visual_frames(count: u8, pixel_seed: u8) -> Vec<u8> {
+    let mut stdout = Vec::with_capacity(usize::from(count) * VISUAL_FRAME_BYTES);
+    for frame in 0..count {
+        stdout.extend(std::iter::repeat_n(
+            pixel_seed.wrapping_add(frame.wrapping_mul(7)),
+            VISUAL_FRAME_BYTES,
+        ));
+    }
+    stdout
+}
+
+fn check_visual_samples(data: &[u8]) -> Result<(), Violation> {
+    let [count, pixel_seed, stderr @ ..] = data else {
+        return Ok(());
+    };
+    let stdout = visual_frames(*count, *pixel_seed);
+    let end = MediaTime::from_micros(VISUAL_WINDOW_MICROS);
+    let sampling = VisualSamplingWindow::new(0, 0, MediaTime::from_micros(0), end)
+        .map_err(|_| Violation::HarnessSetup)?;
+    let Ok(frames) = parse_visual_samples(&stdout, stderr, &sampling) else {
+        return Ok(());
+    };
+    if frames.len() != usize::from(*count)
+        || frames
+            .iter()
+            .zip(stdout.chunks(VISUAL_FRAME_BYTES))
+            .any(|(frame, pixels)| frame.pixels.as_slice() != pixels || frame.time >= end)
+        || frames.windows(2).any(|pair| match pair {
+            [before, after] => before.time >= after.time,
+            _ => false,
+        })
+    {
+        return Err(Violation::VisualSamplesMismatch);
+    }
+    let window = VisualWindow::new(0, end).map_err(|_| Violation::HarnessSetup)?;
+    let samples: Vec<VisualSample> = frames
+        .iter()
+        .map(|frame| VisualSample::from_gray(frame.time, &frame.pixels))
+        .collect();
+    let analysis = analyse_window(window, &samples, VisualChangePolicy::R0)
+        .map_err(|_| Violation::VisualAnalysisInvalid)?;
+    let mut candidates = Vec::with_capacity(analysis.candidates.len());
+    for (position, draft) in analysis.candidates.into_iter().enumerate() {
+        let id = VisualCandidateId::parse(format!("vcd_{position:032x}"))
+            .map_err(|_| Violation::HarnessSetup)?;
+        candidates.push(VisualCandidate::new(id, draft));
+    }
+    VisualIndexWindow::new(
+        window,
+        VisualWindowOutcome::Analysed {
+            sample_count: analysis.sample_count,
+            candidates,
+            dropped_candidates: analysis.dropped_candidates,
+            frameless_cells: analysis.frameless_cells,
+        },
+        VisualChangePolicy::R0,
+    )
+    .map_err(|_| Violation::VisualAnalysisInvalid)?;
+    Ok(())
+}
+
+fn check_visual_index_record(data: &[u8]) -> Result<(), Violation> {
+    let session = SessionId::parse(VISUAL_FUZZ_SESSION).map_err(|_| Violation::HarnessSetup)?;
+    let Ok(index) = decode_visual_index_record(data, &session) else {
+        return Ok(());
+    };
+    if index
+        .windows()
+        .iter()
+        .any(|window| window.candidates().len() > MAX_WINDOW_CANDIDATES)
+    {
+        return Err(Violation::VisualRecordRoundTripChanged);
+    }
+    let encoded = encode_visual_index_record(&session, &index)
+        .map_err(|_| Violation::VisualRecordNotReencodable)?;
+    match decode_visual_index_record(&encoded, &session) {
+        Ok(decoded) if decoded == index => Ok(()),
+        _ => Err(Violation::VisualRecordRoundTripChanged),
     }
 }
 
