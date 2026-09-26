@@ -82,7 +82,7 @@ until `candidates` ships with its recall report.
 - Profiles by identity: `base` (148 MB, default) and `base_q5_1` (60 MB). Gates for
   `base`: clean WER ≤10% and every spoken critical term except known misses. Measured
   (`docs/planning/p07-asr-qualification.md`): base 3.25% clean WER, RTF 0.39, 338 MiB;
-  hosted run 36175016465: Windows RTF 0.284, Ubuntu 3.245 (#153).
+  hosted run 36199691655 (after #153): Ubuntu RTF 0.244, Windows 0.264.
 
 ## Evidence stream and private folders
 

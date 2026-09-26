@@ -26,8 +26,8 @@ marks it `in_progress`. P08 is delivered as four pull requests:
    30 minutes of media per call, remainder `not_analyzed`; recall report over `stable`
    events of at least 1 s; completes ADR 0018's visual half; closes P08.
 
-Separately, #153's fix (optimised Ubuntu whisper.cpp CPU backends) is in a pull request
-on branch `fix/ubuntu-whisper-cpu-backends`.
+#153 is fixed (PR #155, `10a251e`): the optimised Ubuntu whisper.cpp CPU backends are
+pinned; hosted Ubuntu RTF 0.244, Windows 0.264.
 
 ## Decisions awaiting the maintainer (ADR 0018)
 
@@ -44,8 +44,6 @@ supplied text), and a supplied transcript taken to cover the whole source (unver
 
 ## Tracked issues
 
-- #153: Ubuntu whisper.cpp pin keeps only the generic x64 CPU backend (RTF 3.2 vs 0.28 on
-  Windows); fix in PR on `fix/ubuntu-whisper-cpu-backends`.
 - #150: noisy-speech fixture set before any noise WER gate.
 - #148: every speech chunk rehashes the session's whole source copy; P08 PR 2.
 - #147: faster-whisper adapter (backlog); whisper.cpp stays the default.
