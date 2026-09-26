@@ -11,14 +11,15 @@ Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-deli
 complete** (P07 merge `9ea3180`). **P08 (candidates and search) is in progress**; the ledger
 marks it `in_progress`. P08 is delivered as four pull requests:
 
-1. **PR 1, transcript search (PR #156;
+1. **PR 1, transcript search: merged (PR #156, `a2fadc1`;
    [ADR 0018](../docs/decisions/0018-visual-candidate-index-and-transcript-search.md)
-   accepted 2026-09-26).** Merging in order: #156, #157, #158, #160. `vsift search` end to end: domain normalisation, tiers,
+   accepted 2026-09-26).** Remaining merges in order: #157, #158, #160. `vsift search` end to end: domain normalisation, tiers,
    ranking and coverage; application paging with query-bound cursors; `Engine::search`;
    contract types, schemas `search-data`/`search-stream-data` and frozen F10 examples;
    CLI; tests (C-03, S-11, contract, opt-in `p08_search_e2e`); fuzz target `search_query`.
-2. **PR 2, #148 bracketed source binding:** in parallel, by another agent. Removes the
-   whole-source rehash per speech chunk.
+2. **PR 2, #148 bracketed source binding (PR #157, this change):** one full hash when a
+   multi-call operation opens the source, a cheap identity check before each provider
+   call, a full hash before commit (ADR 0012 note). 869 MB, 24-chunk clip: 25.5 s vs 173.4 s.
 3. **PR 3, visual index core (next):** 60 s pure windows, 2 Hz actual-frame sampling with a
    candidate at least every 10 s, merging with preserved time, stability, visual hash,
    batched visual-index records as a new session artifact kind, typed gap taxonomy.
@@ -45,7 +46,6 @@ supplied text), and a supplied transcript taken to cover the whole source (unver
 ## Tracked issues
 
 - #150: noisy-speech fixture set before any noise WER gate.
-- #148: every speech chunk rehashes the session's whole source copy; P08 PR 2.
 - #147: faster-whisper adapter (backlog); whisper.cpp stays the default.
 - #128: process-supervisor tests fail intermittently on Windows under load; add recurrences.
 - #144: a throttled Windows runner once exceeded the 5 s session-root provisioning wait.

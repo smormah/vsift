@@ -68,3 +68,56 @@ variants require an owned disposable limited environment in P14.
   and provider-specific I/O would cross the reviewed input boundary.
 - Require strict worker isolation for desktop P04: rejected because ADR 0005 keeps
   desktop and worker guarantees distinct; P11 has not qualified that host boundary.
+
+## 2026-09-26 implementation note: bracketed binding for multi-call operations
+
+Issue #148, P08. The per-call rehash above is linear in source size for every
+provider call, and local speech recognition (ADR 0017) makes one `FFmpeg` call per
+30 s chunk: a one-hour source was hashed about 150 times. Operations that call a
+provider more than once now bind the private copy for the whole operation instead:
+
+- **Open:** `BoundSource` reopens the committed copy no-follow and verifies its
+  SHA-256 once, recording the on-disk identity of the file it hashed (read from the
+  same handle before and after the bytes, so a write during the hash fails).
+- **Before each provider call:** the copy is reopened by name and only its identity
+  is compared: size, modification time, device and file index on every platform,
+  plus the change fields the media-tool fingerprint already uses (Unix permission
+  bits, owner and status-change time; Windows creation time and attributes).
+- **Before commit:** one last identity comparison and a second full SHA-256
+  verification. Only then is the snapshot handed back to the caller for commit.
+
+The media adapter takes a sealed `SourceBinding`. A plain `SourceSnapshot` keeps
+this ADR's per-call rehash for single-call operations (`ingest`'s probe, the
+media-tool fixture check); a `BoundSource` compares identity. The speech-audio
+adapter accepts only a `BoundSource`, and `transcript retranscribe` and the local-ASR
+fixture check use one, so a run hashes the copy exactly twice however many chunks it
+decodes. A mismatch uses the existing typed mappings and commits nothing: at the
+probe `INVALID_SOURCE`, at a chunk's decode `STORAGE_IO` (the source copy could not
+be read, ADR 0017 section 8), and at the closing verification `INTEGRITY_FAILURE`.
+No failure code was added. The closing verification is new: before, a run's last
+check was the rehash before its last chunk, so a change after it went unseen.
+
+**The residual in "Limits and consequences" is unchanged.** Per-call hashing proves
+the bytes only at the instant they are hashed; a same-user actor could already change
+the copy between that hash and the provider's read and restore it afterwards. The
+bracketed binding has exactly that blind spot and no wider one: any change still
+present when the operation ends fails the closing verification; a replaced file, a
+changed size or modification time, and on Unix any write or metadata change (the
+kernel sets the status-change time, which an unprivileged process cannot set back)
+fail the next identity check before the provider reads the file. What remains is a
+transient in-place change undone before the closing verification, and on Windows,
+which has no user-immutable change time, a rewrite that also restores the
+modification time, which only the closing hash sees. File times have the
+filesystem clock's granularity, so a write within the same tick as the binding is
+likewise left to the closing hash. The copy stays in a private session directory
+under the session's lifetime hold, so only a same-user actor can write it at all.
+
+Measured on Windows 11 (Xeon E5-2698 v4, release build) over an 869 MB, 10-minute
+source of 24 chunks, probing and decoding every chunk took 25.5 s bound (2 full
+hashes) against 173.4 s with the per-call rehash (26 full hashes). Holding a
+deny-write handle for the run, or giving `FFmpeg` an open handle instead of a path,
+were the other options in #148; neither is needed for this guarantee, and the
+second is not portable through the process supervisor. Regression tests:
+`crates/vsift-infrastructure/tests/p08_source_binding.rs`, the hash-count tests in
+`crates/vsift-infrastructure/src/source_binding/tests.rs` and the opt-in engine
+tests in `crates/vsift/tests/engine_retranscribe.rs`. Closes #148.

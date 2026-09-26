@@ -196,9 +196,18 @@ the result into the superseded revision; `preflight_local_asr` runs the
 `LocalAsrVerifier` port once per identity. Infrastructure provides
 `FfmpegMedia::speech_pcm`, the whisper.cpp CLI adapter (closed argument list,
 supervised per-chunk runs, a bounded parser of its `-ojf` file), the
-`FixtureAsrVerifier` and its fingerprint, `SourceSnapshot::open_committed`, the
-session work directory and version 2 of the `transcript_record` format. The engine's
-`Engine::retranscribe` composes them; imports still write version 1.
+`FixtureAsrVerifier` and its fingerprint, `BoundSource`, the session work directory
+and version 2 of the `transcript_record` format. The engine's `Engine::retranscribe`
+composes them; imports still write version 1.
+
+A provider call proves it reads the committed source bytes through a sealed
+`SourceBinding`. A single-call operation passes the `SourceSnapshot`, which rehashes
+the private copy before the call (ADR 0012). An operation that calls a provider many
+times over one source, such as a retranscription's chunk decodes, binds it once as a
+`BoundSource`: a full SHA-256 verification when it is opened, an on-disk identity
+comparison before each call, and a second full verification in `release_verified`
+before anything derived from it is committed (issue #148, ADR 0012 note of
+2026-09-26).
 
 ## Error model
 

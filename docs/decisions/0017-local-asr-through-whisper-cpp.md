@@ -216,7 +216,9 @@ These were not settled by D1–D8; each follows the existing contracts most clos
   audio (F09's segment starts at 0.75 s, not 4.0 s); accuracy and timing are measured
   in 3c (T-04). Every chunk rehashes the session's source copy before FFmpeg reads it
   (the P04 check-before-use rule), which is linear in source size per chunk; long
-  sources need a cheaper binding before the P14 load gates.
+  sources need a cheaper binding before the P14 load gates. (Resolved on 2026-09-26,
+  issue #148: a run now hashes the source copy twice in total; see the note at the
+  end.)
 
 ## 2026-09-25 note: increment 3c delivered D4 and D6
 
@@ -249,3 +251,18 @@ These were not settled by D1–D8; each follows the existing contracts most clos
   peak memory are reported. `base` passes these gates
   ([ADR 0005 note](0005-r0-scope-and-qualification-profiles.md)). The measurement
   also found the seam-merge case now described in section 3.
+
+## 2026-09-26 note: the per-chunk source rehash is gone (issue #148)
+
+A run no longer rehashes the session's source copy before every chunk. It binds the
+copy for the whole run ([ADR 0012 note of 2026-09-26](0012-p04-source-media-profile.md)):
+one full SHA-256 verification when the committed copy is opened, an on-disk identity
+comparison (size, modification time, file identity and platform change fields)
+before the probe and before each chunk's decode, and a second full verification
+after recognition and before the revision is committed. The source is therefore
+hashed exactly twice per run, whatever its length; on an 869 MB, 24-chunk source the
+decoding stages took 25.5 s instead of 173.4 s. The local-ASR fixture check binds its
+staged fixture the same way. Failure mapping (section 8) is unchanged: a copy that
+changed is `STORAGE_IO` at a chunk's decode, as before, and `INTEGRITY_FAILURE` at the
+new closing verification; nothing is committed. The source-integrity residual of ADR
+0012 is unchanged.

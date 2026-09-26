@@ -69,9 +69,9 @@ use vsift_domain::{
     AsrModelProfile, ChunkPlan, DurabilityRequirement, MediaSelection, OperationId, SessionId,
 };
 use vsift_infrastructure::{
-    ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore, HostIsolation,
-    MediaProviderConformance, ProcessCancellation, ProcessWorkingDirectory, SourceSnapshot,
-    TrustedExecutable, WhisperCli, WhisperSpeechRecognizer,
+    BoundSource, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore,
+    HostIsolation, MediaProviderConformance, ProcessCancellation, ProcessWorkingDirectory,
+    SourceSnapshot, TrustedExecutable, WhisperCli, WhisperSpeechRecognizer,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -338,25 +338,25 @@ impl Bench {
     ) -> Built<(String, Duration, u64)> {
         let operation = self.operations.get() + 1;
         self.operations.set(operation);
-        let snapshot = SourceSnapshot::stage(
+        let bound = BoundSource::bind(SourceSnapshot::stage(
             &self.store,
             &self.session,
             &OperationId::parse(format!("op_{operation:016x}"))?,
             clip,
-        )?;
+        )?)?;
         let media = FfmpegMedia::new(
             MediaProviderConformance::r0(self.ffmpeg.clone(), self.ffprobe.clone()),
             HostIsolation::ProcessOnly,
             &self.store,
         );
-        let description = media.probe(&snapshot, ProcessCancellation::new()).await?;
+        let description = media.probe(&bound, ProcessCancellation::new()).await?;
         let stream = description
             .speech_audio_stream()
             .ok_or("clip has no decodable audio")?;
-        let source = whole_file_source_segment(snapshot.id(), description.duration)?;
+        let source = whole_file_source_segment(bound.snapshot().id(), description.duration)?;
         let audio = FfmpegSpeechAudio::new(
             &media,
-            &snapshot,
+            &bound,
             &description,
             MediaSelection {
                 video: None,
@@ -379,6 +379,8 @@ impl Bench {
         )
         .await?;
         let elapsed = started.elapsed();
+        drop(audio);
+        bound.release_verified()?;
         let text = transcription
             .segments
             .iter()

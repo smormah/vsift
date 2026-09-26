@@ -7,7 +7,8 @@
 //! the recognizer (D1), dependencies and the model are checked before any
 //! work, an unpinned model is refused (D5), and a failed verification writes
 //! nothing. The opt-in tests decode real speech with `FFmpeg`, so they need
-//! `ffmpeg` and `ffprobe` on `PATH`:
+//! `ffmpeg` and `ffprobe` on `PATH`; two of them change the session's source
+//! copy while the run uses it (issue #148):
 //!
 //! `cargo test -p vsift --locked --test engine_retranscribe -- --ignored`
 
@@ -15,10 +16,12 @@ use std::{
     env,
     error::Error,
     ffi::OsStr,
-    fs,
+    fs::{self, OpenOptions},
     future::Future,
+    io::{Seek, SeekFrom, Write},
     num::NonZeroU16,
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
     sync::{
         Arc,
         atomic::{AtomicU64, AtomicUsize, Ordering},
@@ -27,12 +30,13 @@ use std::{
 };
 
 use vsift::{
-    AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, Cancellation,
-    ChunkTime, CueText, Engine, EngineConfig, EngineError, EnginePorts, FailureCode, HostIsolation,
-    IngestRequest, LanguageTag, LocalAsrVerification, LocalAsrVerificationFailure,
-    LocalAsrVerifier, MediaToolVerification, MediaToolVerifier, PlannedChunk, ProviderChunkOutput,
-    ProviderSegment, ProviderToken, ProviderTokenKind, RecognizerIdentity, RetranscribeRange,
-    RetranscribeRequest, RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
+    AsrDecodingProfile, AsrFailure, AsrFailureReason, AsrModel, AsrModelProfile, AsrProvider,
+    AsrProviderBuild, AsrStage, Cancellation, ChunkTime, CueText, Engine, EngineConfig,
+    EngineError, EnginePorts, FailureCode, HostIsolation, IngestRequest, LanguageTag,
+    LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier, MediaToolVerification,
+    MediaToolVerifier, PlannedChunk, ProviderChunkOutput, ProviderSegment, ProviderToken,
+    ProviderTokenKind, RecognizerIdentity, RetranscribeRange, RetranscribeRequest,
+    RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptQuery, TranscriptWarningKind,
     UserConfigurationLocation,
 };
@@ -537,6 +541,174 @@ async fn a_video_without_audio_is_refused() -> TestResult {
     assert!(matches!(error, EngineError::NoAudioStream));
     assert_eq!(error.failure_code(), FailureCode::InvalidArgument);
     assert_eq!(harness.recognizer.calls().1, 0);
+    assert_eq!(engine.session_status(&session)?.artifact_count(), 0);
+    Ok(())
+}
+
+/// How [`TamperingRecognizer`] changes the session's source copy while it
+/// recognises the first chunk.
+#[derive(Clone, Copy)]
+enum Tamper {
+    /// Same-length bytes overwritten in place, modification time put back.
+    RewriteInPlace,
+    /// One byte appended.
+    Grow,
+}
+
+/// A recognizer that changes the committed source copy during chunk 0, the
+/// way a same-user actor could between two provider calls.
+#[derive(Clone)]
+struct TamperingRecognizer {
+    inner: CountingRecognizer,
+    copy: PathBuf,
+    tamper: Tamper,
+}
+
+impl TamperingRecognizer {
+    fn change_copy(&self) -> std::io::Result<()> {
+        let modified = fs::metadata(&self.copy)?.modified()?;
+        {
+            let mut file = OpenOptions::new().write(true).open(&self.copy)?;
+            match self.tamper {
+                Tamper::RewriteInPlace => {
+                    file.seek(SeekFrom::Start(64))?;
+                    file.write_all(b"TAMPERED")?;
+                }
+                Tamper::Grow => {
+                    file.seek(SeekFrom::End(0))?;
+                    file.write_all(&[0])?;
+                }
+            }
+            file.sync_all()?;
+        }
+        OpenOptions::new()
+            .write(true)
+            .open(&self.copy)?
+            .set_modified(modified)
+    }
+}
+
+impl SpeechRecognizer for TamperingRecognizer {
+    fn identity(
+        &self,
+    ) -> impl Future<Output = Result<RecognizerIdentity, SpeechRecognitionError>> + Send {
+        std::future::ready(self.inner.answer_identity())
+    }
+
+    fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        _pcm: &SpeechPcm,
+    ) -> impl Future<Output = Result<ProviderChunkOutput, SpeechRecognitionError>> + Send {
+        let changed = if chunk.index() == 0 {
+            self.change_copy().map_err(|_| SpeechRecognitionError::Io)
+        } else {
+            Ok(())
+        };
+        std::future::ready(changed.and_then(|()| self.inner.answer(chunk)))
+    }
+}
+
+/// The session's committed source copy: the one `source-*.media` file under
+/// the harness's session root.
+fn committed_copy(directory: &Path) -> Built<PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![directory.to_path_buf()];
+    while let Some(next) = pending.pop() {
+        for entry in fs::read_dir(next)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if entry.file_type()?.is_dir() {
+                pending.push(entry.path());
+            } else if name.starts_with("source-") && name.ends_with(".media") {
+                found.push(entry.path());
+            }
+        }
+    }
+    match found.as_slice() {
+        [copy] => Ok(copy.clone()),
+        _ => Err(format!("expected one committed source copy, found {}", found.len()).into()),
+    }
+}
+
+/// Ingests `source`, then retranscribes it with a recognizer that applies
+/// `tamper` to the committed copy during the first chunk; returns the failure.
+async fn tampered_run(
+    harness: &Harness,
+    source: PathBuf,
+    tamper: Tamper,
+) -> Built<(EngineError, Engine, SessionId)> {
+    let session = harness.plain_session(&harness.engine(), source).await?;
+    let recognizer = TamperingRecognizer {
+        inner: harness.recognizer.clone(),
+        copy: committed_copy(&harness.root.path("sessions"))?,
+        tamper,
+    };
+    let engine = harness.engine_with(
+        EnginePorts::system()
+            .with_media_tool_verifier(PassingMediaTools)
+            .with_speech_recognizer(recognizer, harness.verifier.clone()),
+    );
+    let error = engine
+        .retranscribe(request(&session, None))
+        .await
+        .err()
+        .ok_or("a run over a changed source copy committed")?;
+    Ok((error, engine, session))
+}
+
+/// Issue #148 (a): bytes rewritten during the run, with size and modification
+/// time put back, fail the closing full verification; nothing is committed.
+#[tokio::test]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_source_copy_rewritten_during_the_run_commits_nothing() -> TestResult {
+    let harness = Harness::passing(AsrModelProfile::Base, Speech::Words)?;
+    let (error, engine, session) =
+        tampered_run(&harness, fixture("F05-speech.mp4"), Tamper::RewriteInPlace).await?;
+    assert_eq!(error.failure_code(), FailureCode::IntegrityFailure);
+    assert_eq!(harness.recognizer.calls().1, 1, "F05 is one chunk");
+    assert_eq!(engine.session_status(&session)?.artifact_count(), 0);
+    Ok(())
+}
+
+/// Builds a clip of several R0 chunks by looping a committed speech fixture.
+fn looped_clip(harness: &Harness) -> Built<PathBuf> {
+    let clip = harness.root.path("looped.mp4");
+    let status = Command::new("ffmpeg")
+        .args(["-v", "error", "-n", "-stream_loop", "3", "-i"])
+        .arg(fixture("F05-speech.mp4"))
+        .args(["-c", "copy"])
+        .arg(&clip)
+        .stdin(Stdio::null())
+        .status()?;
+    if !status.success() {
+        return Err("ffmpeg could not build the looped clip".into());
+    }
+    Ok(clip)
+}
+
+/// Issue #148 (b): a copy whose size changed after one chunk fails the next
+/// chunk's identity check before `FFmpeg` reads it; nothing is committed.
+#[tokio::test]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_source_copy_resized_between_chunks_fails_the_next_decode() -> TestResult {
+    let harness = Harness::passing(AsrModelProfile::Base, Speech::Words)?;
+    let clip = looped_clip(&harness)?;
+    let (error, engine, session) = tampered_run(&harness, clip, Tamper::Grow).await?;
+    assert!(matches!(
+        error,
+        EngineError::LocalAsrFailed(AsrFailure {
+            stage: AsrStage::AudioExtraction,
+            reason: AsrFailureReason::Io,
+        })
+    ));
+    assert_eq!(error.failure_code(), FailureCode::StorageIo);
+    assert_eq!(
+        harness.recognizer.calls().1,
+        1,
+        "the second chunk was not refused before recognition"
+    );
     assert_eq!(engine.session_status(&session)?.artifact_count(), 0);
     Ok(())
 }

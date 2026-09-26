@@ -26,8 +26,8 @@ Today it can:
 - keep every folder it creates private to the user.
 
 **P07 is complete** (merge `9ea3180`). **P08 (candidates and search) is in progress:**
-PR 1 (transcript search) is complete on its branch; PR 2 (#148 source binding) runs in
-parallel; PR 3 (visual index core) and PR 4 (`candidates`) are next. P08 is not complete
+PR 1 (transcript search) is merged (#156, ADR 0018 accepted); PR 2 (#148 source binding,
+#157) merges next; PR 3 (visual index core, #158) and PR 4 (`candidates`, #160) follow. P08 is not complete
 until `candidates` ships with its recall report.
 
 ## What works (public CLI)
@@ -118,7 +118,7 @@ until `candidates` ships with its recall report.
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
-| P08 | In progress: PR 1 search complete on branch (ADR 0018 review pending); PR 2 in parallel; PR 3-4 next |
+| P08 | In progress: PR 1 search merged; PR 2 #148 binding merging; PR 3-4 follow |
 | P09–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 

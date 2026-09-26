@@ -16,7 +16,9 @@ use vsift_application::{
 };
 use vsift_domain::{OperationId, SessionId, SourceId};
 
-use crate::{FilesystemSessionStore, SessionReadHold, SessionRegistration};
+use crate::{
+    FilesystemSessionStore, SessionReadHold, SessionRegistration, source_binding::FileIdentity,
+};
 
 /// Maximum source size in the accepted desktop profile.
 pub const MAX_SOURCE_BYTES: u64 = 20 * 1024 * 1024 * 1024;
@@ -54,6 +56,10 @@ pub struct SourceSnapshot {
     directory: Dir,
     directory_path: PathBuf,
     _hold: SessionReadHold,
+    /// Test seam: how many times this copy's bytes were read whole to verify
+    /// them (issue #148 requires exactly two per bound operation).
+    #[cfg(test)]
+    full_hashes: std::sync::atomic::AtomicU32,
 }
 
 impl SourceSnapshot {
@@ -115,6 +121,8 @@ impl SourceSnapshot {
             directory,
             directory_path,
             _hold: hold,
+            #[cfg(test)]
+            full_hashes: std::sync::atomic::AtomicU32::new(0),
         })
     }
 
@@ -138,6 +146,17 @@ impl SourceSnapshot {
         session_id: &SessionId,
         now_unix_seconds: u64,
     ) -> Result<Self, SourceError> {
+        Self::open_committed_identified(store, session_id, now_unix_seconds)
+            .map(|(snapshot, _)| snapshot)
+    }
+
+    /// [`Self::open_committed`], also returning the on-disk identity of the
+    /// file that was hashed, for a [`BoundSource`](crate::BoundSource).
+    pub(crate) fn open_committed_identified(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<(Self, FileIdentity), SourceError> {
         let committed = store
             .committed_source(session_id, now_unix_seconds)
             .map_err(SourceError::Storage)?;
@@ -147,24 +166,25 @@ impl SourceSnapshot {
             .directory
             .open_with(&committed.file_name, &options)
             .map_err(|_| SourceError::SnapshotChanged)?;
-        let metadata = file.metadata().map_err(SourceError::Io)?;
-        if !metadata.is_file() || metadata.len() != committed.bytes {
+        let (id, container, identity) = read_identified(&mut file, committed.bytes)?;
+        if id != committed.source_id {
             return Err(SourceError::SnapshotChanged);
         }
-        let (id, bytes, container) = copy_bounded(&mut file, &mut std::io::sink())?;
-        if id != committed.source_id || bytes != committed.bytes {
-            return Err(SourceError::SnapshotChanged);
-        }
-        Ok(Self {
-            session_id: session_id.clone(),
-            id,
-            bytes,
-            container,
-            file_name: committed.file_name,
-            directory: committed.directory,
-            directory_path: committed.directory_path,
-            _hold: committed.hold,
-        })
+        Ok((
+            Self {
+                session_id: session_id.clone(),
+                id,
+                bytes: committed.bytes,
+                container,
+                file_name: committed.file_name,
+                directory: committed.directory,
+                directory_path: committed.directory_path,
+                _hold: committed.hold,
+                #[cfg(test)]
+                full_hashes: std::sync::atomic::AtomicU32::new(1),
+            },
+            identity,
+        ))
     }
 
     /// Cryptographic identity of the staged bytes.
@@ -209,24 +229,41 @@ impl SourceSnapshot {
 
     /// Rehashes the private copy immediately before a provider operation.
     ///
+    /// This is the per-call binding of ADR 0012. An operation that calls a
+    /// provider many times binds the copy once with a
+    /// [`BoundSource`](crate::BoundSource) instead (issue #148).
+    ///
     /// # Errors
     /// Rejects a removed, substituted, or changed snapshot.
     pub fn verify(&self) -> Result<(), SourceError> {
+        let file = self.open_copy().map_err(SourceError::Io)?;
+        self.rehash(file).map(|_| ())
+    }
+
+    /// Opens the private copy no-follow inside the held artifact directory.
+    pub(crate) fn open_copy(&self) -> std::io::Result<File> {
         let mut options = OpenOptions::new();
         options.read(true).follow(FollowSymlinks::No);
-        let mut file = self
-            .directory
-            .open_with(&self.file_name, &options)
-            .map_err(SourceError::Io)?;
-        let meta = file.metadata().map_err(SourceError::Io)?;
-        if !meta.is_file() || meta.len() != self.bytes {
+        self.directory.open_with(&self.file_name, &options)
+    }
+
+    /// Reads the whole opened copy, requires its SHA-256 and size to be the
+    /// snapshot's, and returns the identity of the file that was read.
+    pub(crate) fn rehash(&self, mut file: File) -> Result<FileIdentity, SourceError> {
+        #[cfg(test)]
+        self.full_hashes
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (id, _, identity) = read_identified(&mut file, self.bytes)?;
+        if id != self.id {
             return Err(SourceError::SnapshotChanged);
         }
-        let (id, bytes, _) = copy_bounded(&mut file, &mut std::io::sink())?;
-        if id != self.id || bytes != self.bytes {
-            return Err(SourceError::SnapshotChanged);
-        }
-        Ok(())
+        Ok(identity)
+    }
+
+    /// How many times this copy was read whole to verify it.
+    #[cfg(test)]
+    pub(crate) fn full_hashes(&self) -> u32 {
+        self.full_hashes.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Rehashes the original selected path to detect a changed or replaced source.
@@ -414,6 +451,30 @@ fn invalid_source_name(name: &std::ffi::OsStr) -> bool {
 #[cfg(not(windows))]
 fn invalid_source_name(_name: &std::ffi::OsStr) -> bool {
     false
+}
+
+/// Hashes one opened private copy of `expected_bytes` and returns its SHA-256
+/// source identity, its container and its on-disk identity.
+///
+/// The identity is read from the same handle before and after the bytes, and
+/// must not change in between, so it is the identity of exactly the file whose
+/// bytes were hashed: a write during the read, or a file of another size, is a
+/// changed snapshot.
+fn read_identified(
+    file: &mut File,
+    expected_bytes: u64,
+) -> Result<(SourceId, SourceContainer, FileIdentity), SourceError> {
+    let before = file.metadata().map_err(SourceError::Io)?;
+    if !before.is_file() || before.len() != expected_bytes {
+        return Err(SourceError::SnapshotChanged);
+    }
+    let (id, bytes, container) = copy_bounded(file, &mut std::io::sink())?;
+    let after = file.metadata().map_err(SourceError::Io)?;
+    let identity = FileIdentity::of(&after);
+    if bytes != expected_bytes || FileIdentity::of(&before) != identity {
+        return Err(SourceError::SnapshotChanged);
+    }
+    Ok((id, container, identity))
 }
 
 fn copy_bounded(
