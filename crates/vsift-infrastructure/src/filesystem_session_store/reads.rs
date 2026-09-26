@@ -73,7 +73,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
             .lifecycle
@@ -129,7 +129,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
             .lifecycle
@@ -168,7 +168,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
             .lifecycle
@@ -218,7 +218,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(map_storage_io)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         if let Some(record) = committed.manifest.lifecycle {
             let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
             let now = std::time::SystemTime::now()

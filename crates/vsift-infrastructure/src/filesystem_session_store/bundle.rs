@@ -13,8 +13,9 @@ use vsift_application::SessionStorageError;
 use vsift_domain::{EvidenceRecord, EvidenceSubject, PublicationGuarantee, SessionId, SourceId};
 
 use super::{
-    ARTIFACTS_DIRECTORY, BundleManifest, BundleSourcePolicy, BundleStatus, FilesystemSessionStore,
-    MAX_SESSION_ARTIFACT_BYTES, SESSIONS_DIRECTORY, StoredArtifact, StoredArtifactKind,
+    ARTIFACTS_DIRECTORY, BundleManifest, BundleSourcePolicy, BundleStatus, ChainCheck,
+    FilesystemSessionStore, MAX_SESSION_ARTIFACT_BYTES, SESSIONS_DIRECTORY, StoredArtifact,
+    StoredArtifactKind,
     chain::read_committed_manifest,
     copy_and_hash_bounded, create_private_child_directory, create_regular_file, hash_bounded,
     map_open_error, map_storage_io, open_regular_file,
@@ -55,7 +56,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, ChainCheck::Full)?;
         let record = committed
             .manifest
             .lifecycle

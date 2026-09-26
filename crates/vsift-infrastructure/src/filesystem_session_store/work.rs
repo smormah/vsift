@@ -40,7 +40,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
             .lifecycle

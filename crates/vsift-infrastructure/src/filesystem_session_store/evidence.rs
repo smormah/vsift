@@ -9,19 +9,31 @@ use vsift_domain::{
 };
 
 use super::{
-    ARTIFACTS_DIRECTORY, COORDINATION_DIRECTORY, EvidenceInventory, EvidenceMediaFile,
-    FilesystemSessionStore, LifecycleUpdate, SESSIONS_DIRECTORY, StoredArtifact,
+    ARTIFACTS_DIRECTORY, ATTEMPTS_DIRECTORY, COORDINATION_DIRECTORY, EvidenceInventory,
+    EvidenceMediaFile, FilesystemSessionStore, LifecycleUpdate, SESSIONS_DIRECTORY, StoredArtifact,
     StoredArtifactKind,
     chain::read_committed_manifest,
+    commit::CommitHooks,
     hash_bounded, map_lock_error, map_storage_io, open_regular_file, open_session_lock,
-    publication::{
-        evidence_artifact_count, install_content_addressed, publish_generation_while_locked,
-    },
+    publication::{ArtifactInstaller, evidence_artifact_count, publish_generation_while_locked},
     reads::read_evidence_artifact,
     root::acquire_admission,
     sha256_hex,
 };
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
+
+/// The inputs of one evidence commit besides its session and generation.
+#[derive(Clone, Copy)]
+pub(super) struct EvidenceFiles<'a> {
+    /// The call's new media files.
+    pub(super) media: &'a [EvidenceMediaFile<'a>],
+    /// The call's encoded evidence record.
+    pub(super) record: &'a [u8],
+    /// The source identity the call verified with a full hash, if it did.
+    pub(super) verified_identity: Option<&'a VerifiedSourceIdentity>,
+    /// The commit time.
+    pub(super) now_unix_seconds: u64,
+}
 
 impl FilesystemSessionStore {
     /// Publishes one bounded P04 media result as immutable session evidence.
@@ -63,7 +75,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
             .lifecycle
@@ -77,15 +89,30 @@ impl FilesystemSessionStore {
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        install_content_addressed(&artifacts, &name, bytes, &digest)?;
+        let attempts = session
+            .open_dir_nofollow(ATTEMPTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let hooks = CommitHooks::new();
+        let durability = committed.manifest.durability;
+        let installer = ArtifactInstaller {
+            commit: hooks.commit(durability),
+            artifacts: &artifacts,
+            attempts: &attempts,
+            operation: operation_id,
+            listed: &record.artifacts,
+        };
+        installer.install(&name, bytes, &digest)?;
+        installer.finish()?;
         let _writer =
             HeldFileLock::try_exclusive(open_session_lock(&coordination, session_id, "writer")?)
                 .map_err(map_lock_error)?;
+        // The session's own durability: its commit protocol was fixed when
+        // it was initialized (ADR 0020).
         let request = PublishSessionGenerationRequest::new(
             session_id.clone(),
             operation_id.clone(),
             expected_generation,
-            vsift_domain::DurabilityRequirement::Ephemeral,
+            durability.requirement(),
         );
         publish_generation_while_locked(
             &self.root,
@@ -100,7 +127,8 @@ impl FilesystemSessionStore {
                 },
                 now: now_unix_seconds,
             },
-            None,
+            &hooks,
+            Some(&self.verified_heads),
         )
     }
 
@@ -137,6 +165,36 @@ impl FilesystemSessionStore {
         verified_identity: Option<&VerifiedSourceIdentity>,
         now_unix_seconds: u64,
     ) -> Result<StorageGeneration, SessionStorageError> {
+        self.commit_evidence(
+            session_id,
+            operation_id,
+            expected_generation,
+            &EvidenceFiles {
+                media,
+                record,
+                verified_identity,
+                now_unix_seconds,
+            },
+            &CommitHooks::new(),
+        )
+    }
+
+    /// [`Self::publish_evidence`] under explicit commit hooks, so the unit
+    /// tests can trace or interrupt it.
+    pub(super) fn commit_evidence(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        files: &EvidenceFiles<'_>,
+        hooks: &CommitHooks<'_>,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        let EvidenceFiles {
+            media,
+            record,
+            verified_identity,
+            now_unix_seconds,
+        } = *files;
         let mut files: Vec<(StoredArtifactKind, &[u8])> = media
             .iter()
             .map(|file| (StoredArtifactKind::from_media(file.kind), file.bytes))
@@ -172,7 +230,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record_state = committed
             .manifest
             .lifecycle
@@ -184,17 +242,30 @@ impl FilesystemSessionStore {
         let directory = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let attempts = session
+            .open_dir_nofollow(ATTEMPTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let durability = committed.manifest.durability;
+        let installer = ArtifactInstaller {
+            commit: hooks.commit(durability),
+            artifacts: &directory,
+            attempts: &attempts,
+            operation: operation_id,
+            listed: &record_state.artifacts,
+        };
         for ((_, bytes), artifact) in files.iter().zip(&artifacts) {
-            install_content_addressed(&directory, &artifact.name, bytes, &artifact.sha256)?;
+            installer.install(&artifact.name, bytes, &artifact.sha256)?;
         }
+        installer.finish()?;
         let _writer =
             HeldFileLock::try_exclusive(open_session_lock(&coordination, session_id, "writer")?)
                 .map_err(map_lock_error)?;
+        // The session's own durability (ADR 0020).
         let request = PublishSessionGenerationRequest::new(
             session_id.clone(),
             operation_id.clone(),
             expected_generation,
-            vsift_domain::DurabilityRequirement::Ephemeral,
+            durability.requirement(),
         );
         publish_generation_while_locked(
             &self.root,
@@ -204,7 +275,8 @@ impl FilesystemSessionStore {
                 verified_identity: verified_identity.map(|identity| identity.as_str().to_owned()),
                 now: now_unix_seconds,
             },
-            None,
+            hooks,
+            Some(&self.verified_heads),
         )
     }
 
@@ -236,7 +308,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let lifecycle = committed
             .manifest
             .lifecycle
@@ -302,7 +374,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let lifecycle = committed
             .manifest
             .lifecycle

@@ -5,11 +5,12 @@ use vsift_application::{PublishSessionGenerationRequest, SessionStorageError};
 use vsift_domain::{OperationId, SessionArtifactKind, SessionId, StorageGeneration};
 
 use super::{
-    FilesystemSessionStore, LifecycleUpdate, SESSIONS_DIRECTORY, SessionStatus, StoredArtifact,
-    StoredArtifactKind,
+    ATTEMPTS_DIRECTORY, FilesystemSessionStore, LifecycleUpdate, SESSIONS_DIRECTORY, SessionStatus,
+    StoredArtifact, StoredArtifactKind,
     chain::read_committed_manifest,
+    commit::CommitHooks,
     map_storage_io,
-    publication::{install_content_addressed, publish_generation_with_update},
+    publication::{ArtifactInstaller, LifetimeHold, publish_generation_with_update},
     sha256_hex,
 };
 use crate::SourceSnapshot;
@@ -52,7 +53,9 @@ impl FilesystemSessionStore {
                 now: now_unix_seconds,
                 artifacts: Vec::new(),
             },
-            false,
+            LifetimeHold::Shared,
+            &CommitHooks::new(),
+            Some(&self.verified_heads),
         )
     }
 
@@ -87,7 +90,27 @@ impl FilesystemSessionStore {
         self.revalidate_root()?;
         let digest = sha256_hex(bytes);
         let name = format!("artifact-{digest}.{}", kind.extension());
-        install_content_addressed(snapshot.artifact_directory(), &name, bytes, &digest)?;
+        let session = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?
+            .open_dir_nofollow(snapshot.session_id().as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let head = read_committed_manifest(&session, snapshot.session_id(), self.chain_check())?;
+        let attempts = session
+            .open_dir_nofollow(ATTEMPTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let hooks = CommitHooks::new();
+        // The initial generation lists no artifact yet.
+        let installer = ArtifactInstaller {
+            commit: hooks.commit(head.manifest.durability),
+            artifacts: snapshot.artifact_directory(),
+            attempts: &attempts,
+            operation: operation_id,
+            listed: &[],
+        };
+        installer.install(&name, bytes, &digest)?;
+        installer.finish()?;
         let request = PublishSessionGenerationRequest::new(
             snapshot.session_id().clone(),
             operation_id.clone(),
@@ -111,7 +134,9 @@ impl FilesystemSessionStore {
                         .map_err(|_| SessionStorageError::CapacityExhausted)?,
                 }],
             },
-            false,
+            LifetimeHold::Shared,
+            &hooks,
+            Some(&self.verified_heads),
         )
     }
 }
@@ -134,7 +159,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let lifecycle = committed
             .manifest
             .lifecycle
@@ -198,7 +223,9 @@ impl FilesystemSessionStore {
             LifecycleUpdate::Renew {
                 now: now_unix_seconds,
             },
-            true,
+            LifetimeHold::Exclusive,
+            &CommitHooks::new(),
+            Some(&self.verified_heads),
         )
     }
 
@@ -225,7 +252,9 @@ impl FilesystemSessionStore {
             self.admission_capacity,
             &request,
             LifecycleUpdate::Close,
-            true,
+            LifetimeHold::Exclusive,
+            &CommitHooks::new(),
+            Some(&self.verified_heads),
         )
     }
 }

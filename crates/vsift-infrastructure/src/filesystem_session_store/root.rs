@@ -11,16 +11,26 @@ use vsift_application::SessionStorageError;
 use vsift_domain::{SessionId, StorageGeneration};
 
 use super::{
-    COORDINATION_DIRECTORY, DEFAULT_ADMISSION_CAPACITY, ExclusiveSessionLifetimeHold,
+    COORDINATION_DIRECTORY, ChainCheck, DEFAULT_ADMISSION_CAPACITY, ExclusiveSessionLifetimeHold,
     FilesystemAdmissionPermit, FilesystemSessionStore, INITIALIZATION_LOCK, MAX_ADMISSION_CAPACITY,
     OWNERSHIP_FILE, OwnershipMarker, PROVISIONING_LOCK, SESSIONS_DIRECTORY, STORAGE_LAYOUT_VERSION,
-    STORAGE_SCHEMA_VERSION, SessionReadHold, SessionStoreOpenError, chain::read_committed_manifest,
-    create_private_child_directory, create_regular_file, map_lock_error, map_open_error,
-    map_storage_io, open_regular_file, open_session_lock, read_bounded,
+    STORAGE_SCHEMA_VERSION, SessionReadHold, SessionStoreOpenError, VerifiedHeadCache,
+    chain::read_committed_manifest, create_private_child_directory, create_regular_file,
+    map_lock_error, map_open_error, map_storage_io, open_regular_file, open_session_lock,
+    read_bounded,
 };
-use crate::{file_lock::HeldFileLock, private_user_root::restrict_new_directory};
+use crate::{
+    durable_profile::storage_capabilities, file_lock::HeldFileLock,
+    private_user_root::restrict_new_directory,
+};
 
 impl FilesystemSessionStore {
+    /// How an ordinary read validates the manifest chain: down to the
+    /// session's checkpoint or this instance's last verified head (#164).
+    pub(super) const fn chain_check(&self) -> ChainCheck<'_> {
+        ChainCheck::Incremental(Some(&self.verified_heads))
+    }
+
     /// Provisions a root with the reviewed desktop admission default.
     ///
     /// # Errors
@@ -116,9 +126,11 @@ impl FilesystemSessionStore {
         validate_root_layout(&root)?;
         finish_provisioning(&root, provisioning);
         Ok(Self {
+            capabilities: storage_capabilities(&root),
             root,
             root_path: canonical,
             admission_capacity,
+            verified_heads: VerifiedHeadCache::default(),
         })
     }
 
@@ -157,9 +169,11 @@ impl FilesystemSessionStore {
         let marker = validate_root_layout(&root)?;
 
         Ok(Self {
+            capabilities: storage_capabilities(&root),
             root,
             root_path: canonical,
             admission_capacity: marker.admission_capacity,
+            verified_heads: VerifiedHeadCache::default(),
         })
     }
 
@@ -220,7 +234,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         Ok(SessionReadHold {
             _lifetime_lock: lifetime,
             generation: StorageGeneration::from_value(committed.manifest.generation),

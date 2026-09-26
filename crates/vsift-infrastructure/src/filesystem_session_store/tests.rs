@@ -11,29 +11,31 @@ use std::{
 use super::{
     ATTEMPTS_DIRECTORY, COORDINATION_DIRECTORY, CURRENT_FILE, DEFAULT_ADMISSION_CAPACITY,
     FilesystemSessionStore, GENERATIONS_DIRECTORY, INITIALIZATION_LOCK, OWNERSHIP_FILE,
-    PROVISIONING_LOCK, PublicationBoundary, RootProvisioningState, SESSIONS_DIRECTORY,
-    SessionStoreOpenError, map_storage_io,
-    publication::{publication_boundary_name, publish_generation},
-    root::admission_slot_name,
-    root_provisioning_state,
+    PROVISIONING_LOCK, RootProvisioningState, SESSIONS_DIRECTORY, SessionStoreOpenError,
+    commit::CommitHooks, map_storage_io, publication::publish_generation,
+    root::admission_slot_name, root_provisioning_state,
 };
-use crate::{SessionRootError, SessionRootProvisioning, session_root::open_session_root_within};
+use crate::{
+    SessionRootError, SessionRootProvisioning,
+    fault_point::{FAULT_EXIT_CODE, FAULT_POINT_VARIABLE, FaultPoint},
+    session_root::open_session_root_within,
+};
 use vsift_application::{
     InitializeSessionStorage, InitializeSessionStorageRequest, PublishSessionGeneration,
     PublishSessionGenerationRequest, SessionStorageError,
 };
 use vsift_domain::{DurabilityRequirement, OperationId, SessionId, StorageGeneration};
 
-type TestResult = Result<(), Box<dyn Error>>;
+pub(super) type TestResult = Result<(), Box<dyn Error>>;
 
 static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-struct Fixture {
-    path: PathBuf,
+pub(super) struct Fixture {
+    pub(super) path: PathBuf,
 }
 
 impl Fixture {
-    fn new() -> Result<Self, Box<dyn Error>> {
+    pub(super) fn new() -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let path = fixture_path(stamp, sequence);
@@ -81,17 +83,17 @@ impl Drop for Fixture {
 }
 
 #[cfg(unix)]
-fn create_private_directory(path: &Path) -> std::io::Result<()> {
+pub(super) fn create_private_directory(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
     fs::DirBuilder::new().mode(0o700).create(path)
 }
 
 #[cfg(windows)]
-fn create_private_directory(path: &Path) -> std::io::Result<()> {
+pub(super) fn create_private_directory(path: &Path) -> std::io::Result<()> {
     fs::DirBuilder::new().create(path)
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(super) fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut file = StdFile::options()
         .read(true)
         .write(true)
@@ -101,7 +103,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     file.sync_all()
 }
 
-fn request(
+pub(super) fn request(
     durability: DurabilityRequirement,
 ) -> Result<InitializeSessionStorageRequest, vsift_domain::IdentifierError> {
     Ok(InitializeSessionStorageRequest::new(
@@ -111,7 +113,7 @@ fn request(
     ))
 }
 
-fn publication_request(
+pub(super) fn publication_request(
     operation: &str,
     expected: u64,
     durability: DurabilityRequirement,
@@ -814,12 +816,12 @@ async fn corrupt_and_future_metadata_fail_closed() -> TestResult {
 #[tokio::test]
 async fn every_publication_fault_preserves_or_recovers_a_committed_generation() -> TestResult {
     for boundary in [
-        PublicationBoundary::ManifestWrite,
-        PublicationBoundary::ManifestFlush,
-        PublicationBoundary::ManifestRename,
-        PublicationBoundary::PointerWrite,
-        PublicationBoundary::PointerFlush,
-        PublicationBoundary::PointerRename,
+        FaultPoint::ManifestWrite,
+        FaultPoint::ManifestFlush,
+        FaultPoint::ManifestRename,
+        FaultPoint::PointerWrite,
+        FaultPoint::PointerFlush,
+        FaultPoint::PointerRename,
     ] {
         let fixture = Fixture::new()?;
         let store = FilesystemSessionStore::open_existing(&fixture.path)?;
@@ -833,7 +835,7 @@ async fn every_publication_fault_preserves_or_recovers_a_committed_generation() 
                 &store.root,
                 store.admission_capacity,
                 &publish,
-                Some(boundary),
+                &CommitHooks::failing_at(boundary),
             ),
             Err(SessionStorageError::Io),
             "fault at {boundary:?}"
@@ -868,12 +870,12 @@ async fn publication_crash_child() -> TestResult {
 #[tokio::test]
 async fn process_kill_at_every_publication_boundary_recovers_and_retries() -> TestResult {
     for boundary in [
-        PublicationBoundary::ManifestWrite,
-        PublicationBoundary::ManifestFlush,
-        PublicationBoundary::ManifestRename,
-        PublicationBoundary::PointerWrite,
-        PublicationBoundary::PointerFlush,
-        PublicationBoundary::PointerRename,
+        FaultPoint::ManifestWrite,
+        FaultPoint::ManifestFlush,
+        FaultPoint::ManifestRename,
+        FaultPoint::PointerWrite,
+        FaultPoint::PointerFlush,
+        FaultPoint::PointerRename,
     ] {
         let fixture = Fixture::new()?;
         InitializeSessionStorage::new(FilesystemSessionStore::open_existing(&fixture.path)?)
@@ -887,15 +889,16 @@ async fn process_kill_at_every_publication_boundary_recovers_and_retries() -> Te
                 "--nocapture",
             ])
             .env("VSIFT_P03_CRASH_ROOT", &fixture.path)
-            .env(
-                "VSIFT_P03_CRASH_BOUNDARY",
-                publication_boundary_name(boundary),
-            )
+            .env(FAULT_POINT_VARIABLE, boundary.name())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()?;
-        assert_eq!(status.code(), Some(91), "child at {boundary:?}");
+        assert_eq!(
+            status.code(),
+            Some(FAULT_EXIT_CODE),
+            "child at {boundary:?}"
+        );
 
         let store = FilesystemSessionStore::open_existing(&fixture.path)?;
         let session_id = SessionId::parse("ses_0123456789abcdef")?;
@@ -1072,6 +1075,16 @@ async fn generation_chain_tampering_and_missing_manifest_fail_closed() -> TestRe
         *first ^= 1;
     }
     fs::write(&zero, bytes)?;
+    // Since #164 a read stops at the writer's chain checkpoint (the head
+    // here), so generation 0 is checked only by a walk from an older anchor:
+    // without the checkpoint the whole chain is walked again.
+    fs::remove_file(
+        fixture
+            .path
+            .join(SESSIONS_DIRECTORY)
+            .join("ses_0123456789abcdef")
+            .join(super::CHAIN_CHECKPOINT_FILE),
+    )?;
     let session_id = SessionId::parse("ses_0123456789abcdef")?;
     assert!(
         store

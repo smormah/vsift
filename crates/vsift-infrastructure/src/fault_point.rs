@@ -1,0 +1,213 @@
+//! Named points in the session store's commit path where a test or a fault
+//! campaign can make the process stop (P10, ADR 0020).
+//!
+//! Each [`FaultPoint`] marks one boundary of a commit: a content-addressed
+//! artifact installed, the artifact directory synchronised, a generation
+//! manifest written, flushed, renamed and its directory synchronised, the
+//! commit pointer likewise, and the chain checkpoint written. The points are
+//! reached in both publication modes; in ephemeral mode, where no directory is
+//! synchronised, a directory-sync point marks the place the synchronisation
+//! would be.
+//!
+//! Stopping the process is compiled only into this crate's unit tests and
+//! into builds with the `fault-injection` feature, which must never be
+//! enabled in a release build (the crate refuses to compile it without debug
+//! assertions, and the governance check refuses it outside development
+//! dependencies). There, `VSIFT_FAULT_POINT=<name>[:<n>]` makes the process
+//! exit at once with [`FAULT_EXIT_CODE`], without unwinding or running
+//! destructors, the `n`-th time (default the first) one commit reaches the
+//! named point. For the files already written that is the same as a kill: the
+//! kernel holds whatever the process wrote, and nothing after the point runs.
+//! The count is kept by the commit itself, not in process-wide state.
+
+use std::fmt;
+
+/// Exit status of a process stopped at a fault point.
+#[cfg(any(test, feature = "fault-injection"))]
+pub const FAULT_EXIT_CODE: i32 = 91;
+
+/// Environment variable that selects a fault point.
+#[cfg(any(test, feature = "fault-injection"))]
+pub const FAULT_POINT_VARIABLE: &str = "VSIFT_FAULT_POINT";
+
+/// Line written to standard error just before a process stops at a point.
+#[cfg(any(test, feature = "fault-injection"))]
+pub const FAULT_MARKER: &str = "VSIFT_FAULT_POINT_REACHED";
+
+/// One boundary of the session store's commit path.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum FaultPoint {
+    /// One content-addressed artifact was created, written and flushed.
+    ArtifactInstall,
+    /// The artifact directory was synchronised after a batch of installs.
+    ArtifactDirectorySync,
+    /// The staged generation manifest was written.
+    ManifestWrite,
+    /// The staged generation manifest was flushed.
+    ManifestFlush,
+    /// The manifest was renamed into `generations/`.
+    ManifestRename,
+    /// `generations/` was synchronised.
+    ManifestDirectorySync,
+    /// The staged commit pointer was written.
+    PointerWrite,
+    /// The staged commit pointer was flushed.
+    PointerFlush,
+    /// The pointer was renamed to `current.json`.
+    PointerRename,
+    /// The session directory was synchronised: the commit is acknowledged.
+    PointerDirectorySync,
+    /// The staged chain checkpoint was written, before it replaces the old one.
+    ChainCheckpointWrite,
+}
+
+impl FaultPoint {
+    /// Every point, in commit order.
+    #[cfg(any(test, feature = "fault-injection"))]
+    pub const ALL: [Self; 11] = [
+        Self::ArtifactInstall,
+        Self::ArtifactDirectorySync,
+        Self::ManifestWrite,
+        Self::ManifestFlush,
+        Self::ManifestRename,
+        Self::ManifestDirectorySync,
+        Self::PointerWrite,
+        Self::PointerFlush,
+        Self::PointerRename,
+        Self::PointerDirectorySync,
+        Self::ChainCheckpointWrite,
+    ];
+
+    /// The point's stable name, as `VSIFT_FAULT_POINT` spells it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::ArtifactInstall => "artifact-install",
+            Self::ArtifactDirectorySync => "artifact-directory-sync",
+            Self::ManifestWrite => "manifest-write",
+            Self::ManifestFlush => "manifest-flush",
+            Self::ManifestRename => "manifest-rename",
+            Self::ManifestDirectorySync => "manifest-directory-sync",
+            Self::PointerWrite => "pointer-write",
+            Self::PointerFlush => "pointer-flush",
+            Self::PointerRename => "pointer-rename",
+            Self::PointerDirectorySync => "pointer-directory-sync",
+            Self::ChainCheckpointWrite => "chain-checkpoint-write",
+        }
+    }
+
+    /// Parses a point's stable name.
+    #[cfg(any(test, feature = "fault-injection"))]
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|point| point.name() == name)
+    }
+}
+
+impl fmt::Display for FaultPoint {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.name())
+    }
+}
+
+/// The point one commit stops at, read from the environment when the commit
+/// starts, and how often the commit has reached it.
+#[derive(Debug, Default)]
+pub(crate) struct FaultPlan {
+    #[cfg(any(test, feature = "fault-injection"))]
+    selected: Option<(FaultPoint, u32)>,
+    #[cfg(any(test, feature = "fault-injection"))]
+    reached: std::cell::Cell<u32>,
+}
+
+impl FaultPlan {
+    /// The plan `VSIFT_FAULT_POINT` selects; always empty in a build that
+    /// cannot stop at fault points.
+    pub(crate) fn from_environment() -> Self {
+        #[cfg(any(test, feature = "fault-injection"))]
+        {
+            Self {
+                selected: std::env::var(FAULT_POINT_VARIABLE)
+                    .ok()
+                    .as_deref()
+                    .and_then(parse_selection),
+                reached: std::cell::Cell::new(0),
+            }
+        }
+        #[cfg(not(any(test, feature = "fault-injection")))]
+        {
+            Self::default()
+        }
+    }
+
+    /// Stops the process if this is the selected arrival at `point`.
+    #[cfg_attr(
+        not(any(test, feature = "fault-injection")),
+        allow(clippy::unused_self, reason = "a build that cannot stop keeps no plan")
+    )]
+    pub(crate) fn reach(&self, point: FaultPoint) {
+        #[cfg(any(test, feature = "fault-injection"))]
+        if let Some((selected, arrival)) = self.selected
+            && selected == point
+        {
+            let reached = self.reached.get().saturating_add(1);
+            self.reached.set(reached);
+            if reached == arrival {
+                use std::io::Write as _;
+                let _ = writeln!(std::io::stderr(), "{FAULT_MARKER}={point}");
+                std::process::exit(FAULT_EXIT_CODE);
+            }
+        }
+        #[cfg(not(any(test, feature = "fault-injection")))]
+        let _ = point;
+    }
+}
+
+/// Parses `<name>[:<n>]`, `n` at least 1.
+#[cfg(any(test, feature = "fault-injection"))]
+fn parse_selection(text: &str) -> Option<(FaultPoint, u32)> {
+    let (name, arrival) = match text.split_once(':') {
+        Some((name, count)) => (name, count.parse::<u32>().ok().filter(|n| *n >= 1)?),
+        None => (text, 1),
+    };
+    Some((FaultPoint::parse(name)?, arrival))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FaultPoint, parse_selection};
+
+    #[test]
+    fn every_point_has_a_distinct_name_that_parses_back() {
+        for (index, point) in FaultPoint::ALL.into_iter().enumerate() {
+            assert_eq!(FaultPoint::parse(point.name()), Some(point));
+            assert!(
+                FaultPoint::ALL
+                    .iter()
+                    .skip(index + 1)
+                    .all(|other| other.name() != point.name())
+            );
+        }
+    }
+
+    #[test]
+    fn selections_name_a_point_and_an_optional_positive_arrival() {
+        assert_eq!(
+            parse_selection("manifest-write"),
+            Some((FaultPoint::ManifestWrite, 1))
+        );
+        assert_eq!(
+            parse_selection("artifact-install:2"),
+            Some((FaultPoint::ArtifactInstall, 2))
+        );
+        for rejected in [
+            "",
+            "manifest",
+            "artifact-install:0",
+            "artifact-install:",
+            "x:1",
+        ] {
+            assert_eq!(parse_selection(rejected), None, "{rejected}");
+        }
+    }
+}

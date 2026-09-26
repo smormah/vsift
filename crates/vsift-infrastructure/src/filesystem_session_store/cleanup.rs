@@ -8,10 +8,10 @@ use vsift_application::SessionStorageError;
 use vsift_domain::{OperationId, SessionId, SessionLifetime, SessionPhase};
 
 use super::{
-    COORDINATION_DIRECTORY, CleanOutcome, FilesystemSessionStore, GENERATIONS_DIRECTORY,
-    INITIAL_GENERATION_FILE, INITIALIZATION_LOCK, SESSION_INDEX_DIRECTORY, SESSIONS_DIRECTORY,
-    SessionIndexMarker, chain::read_committed_manifest, map_lock_error, map_storage_io,
-    open_regular_file, session_bucket, stored::read_versioned_json_file,
+    COORDINATION_DIRECTORY, ChainCheck, CleanOutcome, FilesystemSessionStore,
+    GENERATIONS_DIRECTORY, INITIAL_GENERATION_FILE, INITIALIZATION_LOCK, SESSION_INDEX_DIRECTORY,
+    SESSIONS_DIRECTORY, SessionIndexMarker, chain::read_committed_manifest, map_lock_error,
+    map_storage_io, open_regular_file, session_bucket, stored::read_versioned_json_file,
 };
 use crate::file_lock::HeldFileLock;
 
@@ -70,7 +70,7 @@ impl FilesystemSessionStore {
         let session = sessions
             .open_dir_nofollow(selected_name)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let committed = read_committed_manifest(&session, session_id)?;
+        let committed = read_committed_manifest(&session, session_id, ChainCheck::Full)?;
         let eligible = if existing_quarantine {
             true
         } else if let Some(record) = committed.manifest.lifecycle {

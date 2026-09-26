@@ -12,10 +12,13 @@
 mod bundle;
 mod chain;
 mod cleanup;
+mod commit;
 mod evidence;
 mod index;
 mod initialization;
 mod lifecycle;
+#[cfg(test)]
+mod p10_tests;
 mod publication;
 mod reads;
 mod root;
@@ -30,16 +33,17 @@ use std::{
     fmt, fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
+    sync::{Mutex, PoisonError},
 };
 
 use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, DirBuilder, File, Metadata, OpenOptions};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use vsift_application::SessionStorageError;
+use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
-    EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind, SessionId,
-    SessionLifetime, SessionPhase, SourceId, StorageGeneration,
+    DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
+    SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -73,6 +77,9 @@ const WORK_LOCK_FILE: &str = "work.lock";
 /// Most leftover work directories one new run removes.
 const MAX_REMOVED_WORK_DIRECTORIES: usize = 8;
 const INITIAL_GENERATION_FILE: &str = "0.json";
+/// The newest generation whose chain the session's writer has verified
+/// (issue #164): readers walk the chain down only to it.
+const CHAIN_CHECKPOINT_FILE: &str = "chain-verified.json";
 const STORAGE_SCHEMA_VERSION: u16 = 1;
 const STORAGE_LAYOUT_VERSION: u16 = 1;
 const MAX_ADMISSION_CAPACITY: u16 = 64;
@@ -83,16 +90,6 @@ const MAX_SESSION_ARTIFACTS: usize = 256;
 /// Most artifact bytes one session holds: 10 GiB.
 const MAX_SESSION_ARTIFACT_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 const HEX: &[u8; 16] = b"0123456789abcdef";
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PublicationBoundary {
-    ManifestWrite,
-    ManifestFlush,
-    ManifestRename,
-    PointerWrite,
-    PointerFlush,
-    PointerRename,
-}
 
 /// Failure to open and validate an explicitly selected private storage root.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -143,6 +140,13 @@ pub struct FilesystemSessionStore {
     root: Dir,
     root_path: PathBuf,
     admission_capacity: u16,
+    /// What this root may acknowledge on this host, decided once when the
+    /// store is opened (`durable_profile`, ADR 0010).
+    capabilities: StorageCapabilities,
+    /// The last head this store instance verified, so several reads in one
+    /// command walk the chain once (#164). Adapter state, never shared
+    /// between instances or processes.
+    verified_heads: VerifiedHeadCache,
 }
 
 /// Root-wide weighted permit backed by stable OS-locked slot files.
@@ -558,6 +562,16 @@ struct CommittedManifest {
     digest: String,
 }
 
+/// How far a read validates the manifest chain below the committed head.
+#[derive(Clone, Copy)]
+enum ChainCheck<'a> {
+    /// Every generation down to 0: retained exports and cleanup.
+    Full,
+    /// Down to the newest verified anchor: the session's checkpoint or this
+    /// store instance's last verified head (#164).
+    Incremental(Option<&'a VerifiedHeadCache>),
+}
+
 trait MetadataVersion {
     fn schema_version(&self) -> u16;
 }
@@ -714,8 +728,50 @@ struct GenerationManifest {
     operation_id: String,
     generation: u64,
     previous_manifest_sha256: Option<String>,
+    /// How the session publishes, fixed at generation 0 and carried
+    /// unchanged by every later generation (ADR 0020). Absent, as in every
+    /// session written before P10, means ephemeral; an ephemeral manifest
+    /// still omits it, so older builds keep reading ephemeral sessions.
+    #[serde(default, skip_serializing_if = "StoredDurability::is_ephemeral")]
+    durability: StoredDurability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     lifecycle: Option<StoredLifecycle>,
+}
+
+/// A session's publication mode as its manifests record it.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredDurability {
+    /// Process-crash-consistent publication (ADR 0010's desktop profile).
+    #[default]
+    Ephemeral,
+    /// The ordered, synchronised protocol of ADR 0020, acknowledged only on a
+    /// qualified OS-crash-durable profile.
+    Durable,
+}
+
+impl StoredDurability {
+    const fn from_requirement(requirement: DurabilityRequirement) -> Self {
+        match requirement {
+            DurabilityRequirement::Ephemeral => Self::Ephemeral,
+            DurabilityRequirement::Durable => Self::Durable,
+        }
+    }
+
+    const fn requirement(self) -> DurabilityRequirement {
+        match self {
+            Self::Ephemeral => DurabilityRequirement::Ephemeral,
+            Self::Durable => DurabilityRequirement::Durable,
+        }
+    }
+
+    #[allow(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "serde's skip_serializing_if passes a reference"
+    )]
+    const fn is_ephemeral(&self) -> bool {
+        matches!(self, Self::Ephemeral)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -818,6 +874,57 @@ struct CommitPointer {
     schema_version: u16,
     generation: u64,
     manifest_sha256: String,
+}
+
+/// `chain-verified.json`: the newest generation whose whole chain the
+/// session's writer has verified, and that generation's manifest digest
+/// (#164). Written only by the writer, under the writer lock, after a
+/// successful publication; never ahead of the head it was written for.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ChainCheckpoint {
+    schema_version: u16,
+    generation: u64,
+    manifest_sha256: String,
+}
+
+impl MetadataVersion for ChainCheckpoint {
+    fn schema_version(&self) -> u16 {
+        self.schema_version
+    }
+}
+
+/// One verified head: the session, its generation and manifest digest.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct VerifiedHead {
+    session_id: SessionId,
+    generation: u64,
+    manifest_sha256: String,
+}
+
+/// The last head one store instance verified (#164).
+///
+/// One entry is enough for its purpose, several reads of one session in one
+/// command; a read of another session replaces it.
+#[derive(Debug, Default)]
+struct VerifiedHeadCache(Mutex<Option<VerifiedHead>>);
+
+impl VerifiedHeadCache {
+    /// The verified head of `session_id`, if this instance holds one.
+    fn get(&self, session_id: &SessionId) -> Option<VerifiedHead> {
+        // A poisoned lock still holds a value that was set only after a
+        // successful verification, so it stays usable.
+        let guard = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        guard
+            .as_ref()
+            .filter(|head| &head.session_id == session_id)
+            .cloned()
+    }
+
+    fn set(&self, head: VerifiedHead) {
+        let mut guard = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        *guard = Some(head);
+    }
 }
 
 impl MetadataVersion for GenerationManifest {
