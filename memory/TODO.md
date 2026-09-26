@@ -6,21 +6,20 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-P00-P07 are complete (P07 merge `9ea3180`; re-plan in ADR 0015/0016). **P08
-(candidates and search) is implemented across four pull requests; ADR 0018 was
-accepted on 2026-09-26.** PR 1 (#156) is merged; #157, #158 and #160 (this change) merge
-in that order. The packet completes with the ledger completion record. Local checks: CI is the default Linux/macOS
-check.
+**P00-P08 are complete.** P08 (candidates and search) closed on 2026-09-26 with merge
+`b830fc9`; its evidence is in the ledger ([ADR 0018](../docs/decisions/0018-visual-candidate-index-and-transcript-search.md),
+accepted). Local checks: CI is the default Linux/macOS check.
 
-1. **PR 1 (literal search, #156, merged `a2fadc1`)**; **PR 2 (bracketed source binding,
-   #148, #157)** and **PR 3 (visual index core, #158)** are green in CI.
-2. **PR 4, the `candidates` command (#160, this change; on PR 3)**. `Engine::candidates`, v1 command, `visual_candidate`
-   record type, four schemas and four frozen examples, C-03/V-04 tests, the opt-in
-   `p08_candidates_e2e` checkpoint (7 stages), ADR 0018 completed (Accepted),
-   recall record `docs/planning/p08-candidate-recall.md`.
-3. **Next (supervisor):** merge #157, #158 and #160 in order; write the P08 ledger
-   completion record citing the merge commits and checkpoint reports. P09 starts only
-   when the maintainer says so (governance rule 10).
+1. **P08 delivered:** `vsift search` (literal, tiered, honest coverage; #156); bracketed
+   source binding, one full hash per multi-call operation (#157, closed #148); the visual
+   index core (#158) and `vsift candidates` with its recall record
+   `docs/planning/p08-candidate-recall.md` (#160): 10/10 stable events, 0 false changes.
+2. **Next: P09 (evidence navigation: frames, neighbours, bursts, audio ranges, crops,
+   reuse and lineage), not started.** Governance rule 10: the maintainer starts it.
+   Before implementation read the P09 row of `docs/planning/implementation-work-packets.md`
+   and V-01, V-06..V-08; candidates' `representative_us` feeds `frame get`.
+3. **Candidate follow-up:** #159 (regenerate the motion fixtures) would move three
+   corpus-limited events into the recall gate and give V-03 real scrolling.
 4. **Decisions confirmed in ADR 0018 (2026-09-26):** index built inside `candidates`, 30
    windows per call, remainder `not_analyzed`; 2 Hz actual frames, a candidate at least
    every 10 s; recall gated on stable events of at least 1 s; no thumbnails; search
@@ -34,7 +33,6 @@ check.
 - #159: regenerate the motion fixtures so F04/F05/F12 E02 differ visibly (corpus
   limitations today; F04-E02 is the corpus's only scroll).
 - #150: noisy-speech fixture set before any noise WER gate.
-- #148: per-chunk source rehash; fixed by P08 PR 2 (#157), closes when it merges.
 - #147: faster-whisper adapter (backlog); whisper.cpp stays the default.
 - #128: process-supervisor tests fail intermittently on Windows under load; add recurrences.
 - #144: a throttled Windows runner once exceeded the 5 s session-root provisioning wait.
