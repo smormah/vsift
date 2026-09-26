@@ -30,7 +30,7 @@
         { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" }
       ]
     },
-    "record_type": { "enum": ["transcript_segment", "visual_candidate"] },
+    "record_type": { "enum": ["transcript_segment", "visual_candidate", "frame_evidence"] },
     "key": {
       "type": "string",
       "pattern": "^[a-z]+_[a-z0-9_]+$",
@@ -66,6 +66,21 @@
             "pattern": "^vcd_[a-z0-9]{16,64}$"
           },
           "record": { "$ref": "visual-candidate.schema.json" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "record_type": { "const": "frame_evidence" } },
+        "required": ["record_type"]
+      },
+      "then": {
+        "properties": {
+          "key": {
+            "description": "The record's evidence_id.",
+            "pattern": "^evd_[a-z0-9]{16,64}$"
+          },
+          "record": { "$ref": "frame-evidence.schema.json" }
         }
       }
     }

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/frame-evidence.schema.json",
+  "title": "VSift frame evidence record v1",
+  "description": "One published frame_evidence record (P09, ADR 0019): a whole displayed frame of the session's video, or a rectangle of one, extracted by frame get, frame neighbours, frame burst or crop. Its evidence_id digests only what fixes its pixels (session, source, stream, adapter profile, provider fingerprint, the frame's exact timestamp and time base, and a crop's region), so every request that resolves to the same frame names the same record; request-specific facts (requested time, policy, delta, candidate) are in the result's request and selections. The pixels are the delivered file named in the result's files, never embedded. Times are integer microseconds on the normalized source timeline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidence_id",
+    "source_id",
+    "stream_index",
+    "kind",
+    "frame",
+    "crop",
+    "image",
+    "profile",
+    "tool_fingerprint"
+  ],
+  "properties": {
+    "evidence_id": { "$ref": "#/$defs/evidence_id" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "stream_index": { "$ref": "#/$defs/u32" },
+    "kind": {
+      "description": "frame for a whole displayed frame, crop for a rectangle of one.",
+      "enum": ["frame", "crop"]
+    },
+    "frame": {
+      "description": "The displayed frame shown: its presentation timestamp pts in the stream's time base, its normalized time_us (the time of the pixels returned) and the whole displayed frame's orientation-correct width and height.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time_base_numerator", "time_base_denominator", "pts", "time_us", "width", "height"],
+      "properties": {
+        "time_base_numerator": { "$ref": "#/$defs/positive_u32" },
+        "time_base_denominator": { "$ref": "#/$defs/positive_u32" },
+        "pts": { "type": "integer" },
+        "time_us": { "type": "integer", "minimum": 0 },
+        "width": { "$ref": "#/$defs/positive_u32" },
+        "height": { "$ref": "#/$defs/positive_u32" }
+      }
+    },
+    "crop": {
+      "description": "null for a whole frame. For a crop: the parent frame or crop item it was cut from, the rectangle in the parent image's displayed pixels (x, y, width, height) and its origin in the whole displayed frame's pixels (frame_x, frame_y), so lineage always names source pixels.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parent_evidence_id", "x", "y", "width", "height", "frame_x", "frame_y"],
+          "properties": {
+            "parent_evidence_id": { "$ref": "#/$defs/evidence_id" },
+            "x": { "$ref": "#/$defs/u32" },
+            "y": { "$ref": "#/$defs/u32" },
+            "width": { "$ref": "#/$defs/positive_u32" },
+            "height": { "$ref": "#/$defs/positive_u32" },
+            "frame_x": { "$ref": "#/$defs/u32" },
+            "frame_y": { "$ref": "#/$defs/u32" }
+          }
+        }
+      ]
+    },
+    "image": {
+      "description": "The delivered image: an 8-bit RGB PNG at native resolution (nothing is scaled), its size in pixels, SHA-256 and size in bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["media_type", "width", "height", "sha256", "bytes"],
+      "properties": {
+        "media_type": { "const": "image/png" },
+        "width": { "$ref": "#/$defs/positive_u32" },
+        "height": { "$ref": "#/$defs/positive_u32" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+      }
+    },
+    "profile": {
+      "description": "The adapter profile the pixels were extracted with.",
+      "const": "p09-r0-v1"
+    },
+    "tool_fingerprint": {
+      "description": "The media provider's fingerprint (executables' identity, adapter, reviewed policy, host isolation and verifying authority), or null when it could not be computed; then the evidence_id also digests the image and nothing is reused.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "frame" } }, "required": ["kind"] },
+      "then": { "properties": { "crop": { "type": "null" } } },
+      "else": { "properties": { "crop": { "type": "object" } } }
+    }
+  ],
+  "$defs": {
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "positive_u32": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" }
+  }
+}

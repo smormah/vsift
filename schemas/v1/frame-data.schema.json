@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/frame-data.schema.json",
+  "title": "VSift frame and crop data v1",
+  "description": "The data member of a complete or partial frame.get, frame.neighbours, frame.burst or crop result (P09, ADR 0019). operation names the call and fixes the shape of request, neighbours and burst. The result presents the lineage record the call committed, or, with reused true, the complete record an identical earlier request committed (no provider ran and nothing was written). selections say which item each requested time resolved to, with requested and actual time and their signed delta; items are the distinct frame_evidence records in the record's order; files deliver each item's image as the absolute path of the committed session artifact, valid while the session exists and never to be written to (decision D2). A result whose call stopped on a budget, the deadline or a cancellation after extracting something has partial_reason set and envelope status partial. Times are integer microseconds on the normalized source timeline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "source_id",
+    "operation",
+    "request",
+    "request_key",
+    "reused",
+    "profile",
+    "tool_fingerprint",
+    "source_check",
+    "selections",
+    "neighbours",
+    "burst",
+    "items",
+    "files",
+    "partial_reason"
+  ],
+  "properties": {
+    "session_id": { "$ref": "#/$defs/session_id" },
+    "source_id": { "$ref": "#/$defs/source_id" },
+    "operation": { "$ref": "#/$defs/operation" },
+    "request": { "type": "object" },
+    "request_key": { "$ref": "#/$defs/request_key" },
+    "reused": { "$ref": "#/$defs/reused" },
+    "profile": { "const": "p09-r0-v1" },
+    "tool_fingerprint": { "$ref": "frame-evidence.schema.json#/properties/tool_fingerprint" },
+    "source_check": { "$ref": "#/$defs/source_check" },
+    "selections": { "$ref": "#/$defs/selections" },
+    "neighbours": { "$ref": "#/$defs/neighbours" },
+    "burst": { "$ref": "#/$defs/burst" },
+    "items": {
+      "description": "The distinct items, in the record's order; each is a frame_evidence record.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "frame-evidence.schema.json" }
+    },
+    "files": { "$ref": "#/$defs/files" },
+    "partial_reason": { "$ref": "#/$defs/partial_reason" }
+  },
+  "allOf": [{ "$ref": "#/$defs/operation_rules" }],
+  "$defs": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" },
+    "operation": { "enum": ["frame_get", "frame_neighbours", "frame_burst", "crop"] },
+    "request_key": {
+      "description": "Digest of the session, source, stream selector, operation, canonical request, adapter profile and provider fingerprint. An identical later request with a known fingerprint is answered from the complete record with this key.",
+      "type": "string",
+      "pattern": "^opk_sha256_[0-9a-f]{64}$"
+    },
+    "reused": {
+      "description": "true when the record was committed by an earlier identical request and returned without running a provider or writing anything; every file was verified again.",
+      "type": "boolean"
+    },
+    "source_check": {
+      "description": "How the call that committed the record checked the session's source copy (decision D1): identity (its on-disk identity matched the one recorded after an earlier full hash) or full_hash.",
+      "enum": ["identity", "full_hash"]
+    },
+    "selections": {
+      "description": "Which item each requested time resolved to. requested_us is the time the role refers to: the requested time (requested, frame_get), the anchor frame's time (before and after), a burst target's time (target) or the parent frame's time (requested, crop). delta_us is actual_us - requested_us.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "evidence_id", "requested_us", "actual_us", "delta_us"],
+        "properties": {
+          "role": { "enum": ["requested", "before", "after", "target"] },
+          "evidence_id": { "$ref": "#/$defs/evidence_id" },
+          "requested_us": { "type": "integer", "minimum": 0 },
+          "actual_us": { "type": "integer", "minimum": 0 },
+          "delta_us": { "type": "integer" }
+        }
+      }
+    },
+    "side_stop": {
+      "description": "Why a side holds fewer frames than asked: start_of_stream, end_of_stream, or search_window (the frames searched ended; more may exist). null when the side is full.",
+      "oneOf": [
+        { "type": "null" },
+        { "enum": ["start_of_stream", "end_of_stream", "search_window"] }
+      ]
+    },
+    "neighbours": {
+      "description": "For frame_neighbours, why each side stopped short; null for every other operation.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["before_stop", "after_stop"],
+          "properties": {
+            "before_stop": { "$ref": "#/$defs/side_stop" },
+            "after_stop": { "$ref": "#/$defs/side_stop" }
+          }
+        }
+      ]
+    },
+    "burst": {
+      "description": "For frame_burst, the plan: the range the even targets were spread over (the requested range, or its part before the end of the video with extent clipped_at_end_of_stream), the number of targets and the number of distinct frames they named; null for every other operation.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["planned", "extent", "targets", "distinct"],
+          "properties": {
+            "planned": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["start_us", "end_us"],
+              "properties": {
+                "start_us": { "type": "integer", "minimum": 0 },
+                "end_us": { "type": "integer", "minimum": 1 }
+              }
+            },
+            "extent": { "enum": ["requested", "clipped_at_end_of_stream"] },
+            "targets": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "distinct": { "type": "integer", "minimum": 0, "maximum": 100 }
+          }
+        }
+      ]
+    },
+    "files": {
+      "description": "One delivered file per item, in item order: the absolute path of the committed session artifact (decision D2). It is valid while the session exists (until it is closed, expires or is cleaned) and must not be written to; retain the session to keep the evidence.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_id", "media_type", "path"],
+        "properties": {
+          "evidence_id": { "$ref": "#/$defs/evidence_id" },
+          "media_type": { "enum": ["image/png", "audio/wav"] },
+          "path": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        }
+      }
+    },
+    "partial_reason": {
+      "description": "Why the call returned fewer items than its request named, or null for a complete result. The items returned are committed evidence. Only complete records are reused.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "enum": [
+            "frame_budget",
+            "pixel_budget",
+            "byte_budget",
+            "session_evidence_budget",
+            "deadline_exceeded",
+            "cancelled"
+          ]
+        }
+      ]
+    },
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "positive_u32": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "frame_get_request": {
+      "description": "at_us is the requested time; policy at_or_after (the first frame at or after it, the default) or displayed_at (the frame on screen at it); tolerance_us how far the frame may lie from it (1000000 unless the request said otherwise). With candidate_id the frame is the candidate's representative time, at_or_after with tolerance 0.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at_us", "policy", "tolerance_us", "candidate_id"],
+      "properties": {
+        "at_us": { "type": "integer", "minimum": 0 },
+        "policy": { "enum": ["at_or_after", "displayed_at"] },
+        "tolerance_us": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "candidate_id": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^vcd_[a-z0-9]{16,64}$" }
+          ]
+        }
+      }
+    },
+    "neighbours_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchor_evidence_id", "count"],
+      "properties": {
+        "anchor_evidence_id": { "$ref": "#/$defs/evidence_id" },
+        "count": { "type": "integer", "minimum": 1, "maximum": 20 }
+      }
+    },
+    "burst_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us", "max_frames"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 },
+        "max_frames": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "crop_request": {
+      "description": "The rectangle in the parent image's displayed pixels.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_evidence_id", "rect"],
+      "properties": {
+        "parent_evidence_id": { "$ref": "#/$defs/evidence_id" },
+        "rect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "$ref": "#/$defs/u32" },
+            "y": { "$ref": "#/$defs/u32" },
+            "width": { "$ref": "#/$defs/positive_u32" },
+            "height": { "$ref": "#/$defs/positive_u32" }
+          }
+        }
+      }
+    },
+    "single_selection": {
+      "properties": {
+        "selections": {
+          "maxItems": 1,
+          "items": { "properties": { "role": { "const": "requested" } } }
+        }
+      }
+    },
+    "operation_rules": {
+      "description": "The shape of request, neighbours and burst, and the selection roles, that each operation allows.",
+      "allOf": [
+        {
+          "if": { "properties": { "operation": { "const": "frame_get" } }, "required": ["operation"] },
+          "then": {
+            "allOf": [{ "$ref": "#/$defs/single_selection" }],
+            "properties": {
+              "request": { "$ref": "#/$defs/frame_get_request" },
+              "neighbours": { "type": "null" },
+              "burst": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "frame_neighbours" } }, "required": ["operation"] },
+          "then": {
+            "properties": {
+              "request": { "$ref": "#/$defs/neighbours_request" },
+              "neighbours": { "type": "object" },
+              "burst": { "type": "null" },
+              "selections": {
+                "maxItems": 40,
+                "items": { "properties": { "role": { "enum": ["before", "after"] } } }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "frame_burst" } }, "required": ["operation"] },
+          "then": {
+            "properties": {
+              "request": { "$ref": "#/$defs/burst_request" },
+              "neighbours": { "type": "null" },
+              "burst": { "type": "object" },
+              "selections": { "items": { "properties": { "role": { "const": "target" } } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "crop" } }, "required": ["operation"] },
+          "then": {
+            "allOf": [{ "$ref": "#/$defs/single_selection" }],
+            "properties": {
+              "request": { "$ref": "#/$defs/crop_request" },
+              "neighbours": { "type": "null" },
+              "burst": { "type": "null" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

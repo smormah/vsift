@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/frame-stream-data.schema.json",
+  "title": "VSift frame and crop JSON Lines terminal data v1",
+  "description": "The data member of the complete or partial terminal result that ends a frame.get, frame.neighbours, frame.burst or crop --events jsonl stream (P09). It is the result of frame-data.schema.json without its items: the items were the preceding evidence events (record_type frame_evidence, keyed by evidence_id), in the record's order, and record_count says how many there were. files still delivers one path per item.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "source_id",
+    "operation",
+    "request",
+    "request_key",
+    "reused",
+    "profile",
+    "tool_fingerprint",
+    "source_check",
+    "selections",
+    "neighbours",
+    "burst",
+    "record_count",
+    "files",
+    "partial_reason"
+  ],
+  "properties": {
+    "session_id": { "$ref": "frame-data.schema.json#/$defs/session_id" },
+    "source_id": { "$ref": "frame-data.schema.json#/$defs/source_id" },
+    "operation": { "$ref": "frame-data.schema.json#/$defs/operation" },
+    "request": { "type": "object" },
+    "request_key": { "$ref": "frame-data.schema.json#/$defs/request_key" },
+    "reused": { "$ref": "frame-data.schema.json#/$defs/reused" },
+    "profile": { "const": "p09-r0-v1" },
+    "tool_fingerprint": { "$ref": "frame-evidence.schema.json#/properties/tool_fingerprint" },
+    "source_check": { "$ref": "frame-data.schema.json#/$defs/source_check" },
+    "selections": { "$ref": "frame-data.schema.json#/$defs/selections" },
+    "neighbours": { "$ref": "frame-data.schema.json#/$defs/neighbours" },
+    "burst": { "$ref": "frame-data.schema.json#/$defs/burst" },
+    "record_count": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "files": { "$ref": "frame-data.schema.json#/$defs/files" },
+    "partial_reason": { "$ref": "frame-data.schema.json#/$defs/partial_reason" }
+  },
+  "allOf": [{ "$ref": "frame-data.schema.json#/$defs/operation_rules" }]
+}

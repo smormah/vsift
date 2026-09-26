@@ -1,0 +1,191 @@
+{
+  "command": "frame.burst",
+  "coverage": null,
+  "data": {
+    "burst": {
+      "distinct": 12,
+      "extent": "clipped_at_end_of_stream",
+      "planned": {
+        "end_us": 6000000,
+        "start_us": 4000000
+      },
+      "targets": 12
+    },
+    "files": [
+      {
+        "evidence_id": "evd_e45fcaeaf14d22b7aaa668afdb780d11",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ebce2bd56f2e70d100e3259dcd9d0541355fc7c3eaee68d29b7d81d483ae1151.png"
+      },
+      {
+        "evidence_id": "evd_59bbe04202082d3cc0996b2261b6c9d7",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-1ad4a84ac04fad6d66604f764324238f1fa1bab0738c752ba18638bc001857f4.png"
+      },
+      {
+        "evidence_id": "evd_d209db21eb39e615c44ca4bbcc138354",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ccf0cf726ff782f91e3af8ea1f8133c8aca8244e11ac214586c3bc8ace65d27e.png"
+      },
+      {
+        "evidence_id": "evd_8582ea182a3dc3b00a9d1369801d9ca1",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ddb83d8687efbf97021ebd7dbd9721ec34857d11d4c877e4d27c277886e1671c.png"
+      }
+    ],
+    "items": [
+      {
+        "crop": null,
+        "evidence_id": "evd_e45fcaeaf14d22b7aaa668afdb780d11",
+        "frame": {
+          "height": 720,
+          "pts": 40960,
+          "time_base_denominator": 10240,
+          "time_base_numerator": 1,
+          "time_us": 4000000,
+          "width": 1280
+        },
+        "image": {
+          "bytes": 48,
+          "height": 720,
+          "media_type": "image/png",
+          "sha256": "ebce2bd56f2e70d100e3259dcd9d0541355fc7c3eaee68d29b7d81d483ae1151",
+          "width": 1280
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      },
+      {
+        "crop": null,
+        "evidence_id": "evd_59bbe04202082d3cc0996b2261b6c9d7",
+        "frame": {
+          "height": 720,
+          "pts": 43008,
+          "time_base_denominator": 10240,
+          "time_base_numerator": 1,
+          "time_us": 4200000,
+          "width": 1280
+        },
+        "image": {
+          "bytes": 48,
+          "height": 720,
+          "media_type": "image/png",
+          "sha256": "1ad4a84ac04fad6d66604f764324238f1fa1bab0738c752ba18638bc001857f4",
+          "width": 1280
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      },
+      {
+        "crop": null,
+        "evidence_id": "evd_d209db21eb39e615c44ca4bbcc138354",
+        "frame": {
+          "height": 720,
+          "pts": 44544,
+          "time_base_denominator": 10240,
+          "time_base_numerator": 1,
+          "time_us": 4350000,
+          "width": 1280
+        },
+        "image": {
+          "bytes": 48,
+          "height": 720,
+          "media_type": "image/png",
+          "sha256": "ccf0cf726ff782f91e3af8ea1f8133c8aca8244e11ac214586c3bc8ace65d27e",
+          "width": 1280
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      },
+      {
+        "crop": null,
+        "evidence_id": "evd_8582ea182a3dc3b00a9d1369801d9ca1",
+        "frame": {
+          "height": 720,
+          "pts": 46080,
+          "time_base_denominator": 10240,
+          "time_base_numerator": 1,
+          "time_us": 4500000,
+          "width": 1280
+        },
+        "image": {
+          "bytes": 48,
+          "height": 720,
+          "media_type": "image/png",
+          "sha256": "ddb83d8687efbf97021ebd7dbd9721ec34857d11d4c877e4d27c277886e1671c",
+          "width": 1280
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      }
+    ],
+    "neighbours": null,
+    "operation": "frame_burst",
+    "partial_reason": "session_evidence_budget",
+    "profile": "p09-r0-v1",
+    "request": {
+      "from_us": 4000000,
+      "max_frames": 12,
+      "to_us": 8000000
+    },
+    "request_key": "opk_sha256_1f0ee5a5f3642635b1d82934069aab09721bb1bae435f2106974bd3d4224c4c1",
+    "reused": false,
+    "selections": [
+      {
+        "actual_us": 4000000,
+        "delta_us": 0,
+        "evidence_id": "evd_e45fcaeaf14d22b7aaa668afdb780d11",
+        "requested_us": 4000000,
+        "role": "target"
+      },
+      {
+        "actual_us": 4200000,
+        "delta_us": 33334,
+        "evidence_id": "evd_59bbe04202082d3cc0996b2261b6c9d7",
+        "requested_us": 4166666,
+        "role": "target"
+      },
+      {
+        "actual_us": 4350000,
+        "delta_us": 16667,
+        "evidence_id": "evd_d209db21eb39e615c44ca4bbcc138354",
+        "requested_us": 4333333,
+        "role": "target"
+      },
+      {
+        "actual_us": 4500000,
+        "delta_us": 0,
+        "evidence_id": "evd_8582ea182a3dc3b00a9d1369801d9ca1",
+        "requested_us": 4500000,
+        "role": "target"
+      }
+    ],
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_check": "identity",
+    "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+    "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-27T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "The session's 160 evidence artifacts are used up; the items returned are committed evidence. Keep them with session retain, then open a new session to continue."
+  ]
+}
