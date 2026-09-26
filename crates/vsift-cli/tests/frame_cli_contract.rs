@@ -100,7 +100,7 @@ impl Drop for OwnedRoot {
     }
 }
 
-/// The per-user VSift folder the binary derives from the test's `HOME`,
+/// The per-user `VSift` folder the binary derives from the test's `HOME`,
 /// `LOCALAPPDATA` or `XDG_CONFIG_HOME`: macOS keeps it under
 /// `Library/Application Support`.
 fn config_root(base: &Path) -> PathBuf {
