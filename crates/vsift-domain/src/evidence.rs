@@ -1,6 +1,17 @@
-//! Evidence metadata that preserves uncertainty and provider provenance.
+//! Evidence metadata that preserves uncertainty and provider provenance, and
+//! the pure navigation rules that choose which frames a request names.
 
 use std::{error::Error, fmt};
+
+mod navigation;
+
+pub use navigation::{
+    BurstCount, BurstExtent, BurstPlan, BurstRange, FrameListing, FrameSelection,
+    FrameSelectionError, FrameTolerance, ListedFrame, ListingTail, MAX_BURST_FRAMES,
+    MAX_BURST_RANGE_MICROS, MAX_FRAME_TOLERANCE_MICROS, MAX_LISTED_FRAMES, MAX_NEIGHBOUR_COUNT,
+    NavigationError, NeighbourCount, NeighbourPlan, NeighbourStop, SelectedFrame, plan_burst,
+    plan_neighbours, select_frame,
+};
 
 const MAX_SPEAKER_LABEL_BYTES: usize = 128;
 
