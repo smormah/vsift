@@ -9,7 +9,7 @@ VSift is a Rust command-line tool that gives AI coding agents local,
 source-grounded access to the evidence in a video. Under
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md) it is
 also an embeddable engine library (`vsift`) that the CLI, and later other hosts, use.
-On the P08 branches it can:
+Today it can:
 - check and register its dependencies and show a read-only setup plan, and report
   whether local speech recognition really works here (`setup check` `local_asr`);
 - copy a video into a private, disposable session;
@@ -24,11 +24,9 @@ On the P08 branches it can:
 - manage the session's lifetime and retention, and validate retained bundles;
 - keep every folder it creates private to the user.
 
-**P07 is complete** (merge `9ea3180`). **P08's implementation is complete across four
-pull requests** (ADR 0018 accepted 2026-09-26): PR 1 search (#156, merged), PR 2
-bracketed source binding (#157), PR 3 visual index core (#158) and PR 4 `candidates`
-(#160, this change). The packet closes when all four are merged and the ledger
-completion record is written.
+**P08 is complete** (2026-09-26, merge `b830fc9`, ledger record written; ADR 0018
+accepted): search (#156), bracketed source binding (#157), visual index core (#158) and
+`candidates` (#160). P09 (evidence navigation) is next and not started.
 
 ## What works (public CLI, on `p08/candidates`)
 
@@ -105,7 +103,7 @@ completion record is written.
 | P00–P05 | Complete; merge commits and evidence are in the ledger |
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
-| P08 | Implementation complete in PRs 1-4 (ADR 0018 accepted); merging, then the ledger record |
+| P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09–P12, P14 | Not started |
 | P13 | Not started; now also delivers managed dependency installation |
 
