@@ -76,8 +76,9 @@ use crate::{
 /// Version of what a media-tool verification checks.
 ///
 /// Bump it whenever the fixture checks change meaning, so every recorded pass
-/// from the previous checks is re-verified.
-pub const MEDIA_TOOL_VERIFICATION_PROFILE: u32 = 1;
+/// from the previous checks is re-verified. Profile 2 (P08) adds the
+/// visual-sampling check.
+pub const MEDIA_TOOL_VERIFICATION_PROFILE: u32 = 2;
 
 /// How long a recorded pass is trusted before the tools are verified again.
 ///

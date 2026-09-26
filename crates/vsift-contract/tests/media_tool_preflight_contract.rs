@@ -63,6 +63,7 @@ fn every_check_and_reason_produces_schema_valid_json_and_jsonl_failures() -> Tes
         MediaToolCheck::Probe,
         MediaToolCheck::Frame,
         MediaToolCheck::Audio,
+        MediaToolCheck::VisualSampling,
     ] {
         for failure in [
             MediaToolFailure::FixtureIntegrity,

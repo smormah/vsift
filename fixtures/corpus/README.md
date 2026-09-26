@@ -70,6 +70,25 @@ python tools/verify_p07_speech.py --ffmpeg /absolute/path/to/ffmpeg --ffprobe /a
 `python -m unittest discover -s tools -p test_p07_speech.py` tests the recipe and the
 verifier without the model (the assembly tests also need FFmpeg and FFprobe).
 
+## Recorded visual samples (P08)
+
+The visual-candidate index is gated on what FFmpeg actually decodes from F01-F10 and
+F12. `crates/vsift-infrastructure/tests/data/visual_samples/<id>.json` records, per
+fixture, every sample of every 60 s window (time, 16x9 block means, 64-bit difference
+hash; no pixels) as `FfmpegMedia::visual_samples` decoded it, with the FFmpeg version,
+the sampling profile and the date. The always-run recall test scores candidates built
+from them against this manifest only; see `docs/development.md` to re-record them.
+
+Finding (2026-09-26): three events are drawn with exactly the pixels of the state
+before them, because `scene()` in `tools/generate_p04_fixtures.py` renders no
+difference for them: F04-E02 (the scroll: the table still shows row 1001 until F04-E03
+starts), F05-E02 (no loading indicator is drawn) and F12-E02 (the defect code screen
+is drawn from the start). No visual method can see these events begin, so the recall
+report lists them as corpus limitations (re-verified from the samples on every run)
+instead of changing the truth. F12-E02 is still hit by periodic coverage. Regenerating
+the motion fixtures with rendered scrolling and a loading state is a separate,
+reviewed truth change.
+
 ## Supplied-transcript sidecars (P07)
 
 `transcripts/F10.srt` and `transcripts/F10.vtt` are hand-written, rights-safe synthetic

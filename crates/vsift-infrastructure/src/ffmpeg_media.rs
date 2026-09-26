@@ -4,14 +4,17 @@ use std::{error::Error, fmt, num::NonZeroUsize, time::Duration};
 
 use serde::Deserialize;
 use vsift_domain::{
-    DisplayRotation, FrameDimensions, FrameTiming, MediaDecodeSupport, MediaDescription,
-    MediaSelection, MediaStream, MediaStreamKind, MediaTime, StreamTime, TimeRange,
+    DisplayRotation, FrameDimensions, FrameTiming, MAX_WINDOW_SAMPLES, MediaDecodeSupport,
+    MediaDescription, MediaSelection, MediaStream, MediaStreamKind, MediaTime, StreamTime,
+    TimeRange, VISUAL_FRAME_BYTES, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH,
+    VISUAL_SAMPLE_INTERVAL_MICROS, VisualWindow,
 };
 
 use crate::{
-    FilesystemSessionStore, HostIsolation, ProcessCancellation, ProcessError, ProcessOutcome,
-    ProcessRequest, ProcessRequestError, ProcessSupervisor, ProcessWorkingDirectory, SourceBinding,
-    SourceError, SourceSnapshot, SupervisorPolicy, TerminationReason, TrustedExecutable,
+    BoundSource, FilesystemSessionStore, HostIsolation, ProcessCancellation, ProcessError,
+    ProcessOutcome, ProcessRequest, ProcessRequestError, ProcessSupervisor,
+    ProcessWorkingDirectory, SourceBinding, SourceError, SourceSnapshot, SupervisorPolicy,
+    TerminationReason, TrustedExecutable,
 };
 
 /// Hard bound for structured probe output.
@@ -29,6 +32,24 @@ pub const MAX_SPEECH_PCM_BYTES: usize = 1024 * 1024;
 pub const MAX_SPEECH_PCM_MICROS: u64 = 30_000_000;
 /// Largest clip [`FfmpegMedia::audio`] decodes: ten seconds at 16 kHz mono.
 const MAX_CLIP_PCM_BYTES: usize = 320_000;
+/// Hard bound for one visual window's decoded samples: at most
+/// [`MAX_WINDOW_SAMPLES`] grey 128x72 frames.
+pub const MAX_VISUAL_SAMPLE_BYTES: usize = MAX_WINDOW_SAMPLES * VISUAL_FRAME_BYTES;
+/// Hard bound for one visual window's diagnostics. `showinfo` logs two or
+/// three lines (about 450 bytes) per sample and keyframes add side-data
+/// lines, so the general 64 KiB diagnostic bound is too small for 122
+/// samples; 256 KiB is still a hard, small cap.
+pub const MAX_VISUAL_DIAGNOSTIC_BYTES: usize = 256 * 1024;
+/// Deadline for decoding one 60 s visual window.
+const VISUAL_WINDOW_DEADLINE: Duration = Duration::from_secs(120);
+/// Margin of the input seek and read length around a visual window.
+///
+/// `FFmpeg` interprets an input `-ss` relative to the container's start time,
+/// which is not guaranteed to equal the probed origin (the earliest stream
+/// start), and `-t` counts from the seek point. Seeking one second early and
+/// reading one second late costs little and leaves the exact bounds to the
+/// `select` expression, which compares raw stream timestamps.
+const VISUAL_SEEK_MARGIN_MICROS: u64 = 1_000_000;
 const MAX_STREAMS: usize = 32;
 const MAX_DURATION_MICROS: u64 = 4 * 60 * 60 * 1_000_000;
 const MAX_FRAME_PIXELS: u64 = 16_000_000;
@@ -318,6 +339,128 @@ impl<'a> FfmpegMedia<'a> {
         .await
     }
 
+    /// Decodes one visual window's samples: actual frames at least 0.5 s
+    /// apart from the window's lead-in time (up to 0.5 s before the window)
+    /// to its end, downscaled to 128x72 8-bit grey.
+    ///
+    /// The window is sampled as one bounded `FFmpeg` run with a closed
+    /// argument list; only numbers and the private provider path are filled
+    /// in. A `select` expression on raw stream timestamps keeps frames in
+    /// `[lead-in, end)` spaced at least 0.5 s apart (the first selected frame
+    /// is always kept), `-fps_mode passthrough` keeps each frame's own
+    /// timestamp, and `showinfo` reports it. At most 122 frames are written.
+    /// The reported times are parsed and normalized by
+    /// [`parse_visual_samples`], never inferred from the request. The scale
+    /// to 128x72 ignores the aspect ratio: samples only detect change.
+    ///
+    /// A visual index decodes window after window from the same copy, so this
+    /// operation takes a [`BoundSource`]: each call compares only the copy's
+    /// on-disk identity, and the caller verifies the full hash again before
+    /// committing (issue #148). Each call takes one root admission slot, as
+    /// every other provider operation does.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an absent or unsupported video stream, a window beyond the
+    /// source, a changed source, a timeout, exceeded bounds, or malformed
+    /// provider output.
+    #[allow(clippy::too_many_lines)] // Keep validation, the closed argument list and parsing in one auditable path.
+    pub async fn visual_samples(
+        &self,
+        binding: &BoundSource,
+        description: &MediaDescription,
+        selection: MediaSelection,
+        window: VisualWindow,
+        cancellation: ProcessCancellation,
+    ) -> Result<Vec<RawGrayFrame>, MediaError> {
+        let _admission = self
+            .store
+            .try_admit(1)
+            .map_err(|_| MediaError::CapacityUnavailable)?;
+        binding
+            .check_before_provider_call()
+            .map_err(MediaError::Source)?;
+        let source = binding.snapshot();
+        description
+            .validate_selection(selection)
+            .map_err(|_| MediaError::StreamUnavailable)?;
+        let index = selection.video.ok_or(MediaError::StreamUnavailable)?;
+        let stream = description
+            .streams
+            .iter()
+            .find(|value| value.index == index && value.kind == MediaStreamKind::Video)
+            .ok_or(MediaError::StreamUnavailable)?;
+        if stream.decode_support == MediaDecodeSupport::Unsupported {
+            return Err(MediaError::UnsupportedCodec);
+        }
+        let range = window.range();
+        if range.end() > description.duration {
+            return Err(MediaError::InvalidVisualWindow);
+        }
+        let sampling = VisualSamplingWindow::new(
+            index,
+            description.origin_micros,
+            window.lead_in_start(),
+            range.end(),
+        )?;
+        let raw_lead = sampling.raw_micros(sampling.lead_in)?;
+        let raw_end = sampling.raw_micros(sampling.end)?;
+        let seek = sampling
+            .lead_in
+            .as_micros()
+            .saturating_sub(VISUAL_SEEK_MARGIN_MICROS);
+        let read = range
+            .end()
+            .as_micros()
+            .checked_sub(seek)
+            .and_then(|span| span.checked_add(VISUAL_SEEK_MARGIN_MICROS))
+            .ok_or(MediaError::InvalidVisualWindow)?;
+        let as_argument =
+            |micros: u64| i64::try_from(micros).map_err(|_| MediaError::InvalidVisualWindow);
+        let filter = format!(
+            "select='gte(t\\,{lead})*lt(t\\,{end})*(isnan(prev_selected_t)+gte(t-prev_selected_t\\,{interval}))',scale={VISUAL_FRAME_WIDTH}:{VISUAL_FRAME_HEIGHT}:flags=area,format=gray,showinfo",
+            lead = seconds_arg(raw_lead),
+            end = seconds_arg(raw_end),
+            interval = seconds_arg(as_argument(VISUAL_SAMPLE_INTERVAL_MICROS)?),
+        );
+        let request = Self::request(source, self.registry.ffmpeg.clone(), VISUAL_WINDOW_DEADLINE)?
+            .with_arguments([
+                "-hide_banner",
+                "-nostdin",
+                "-loglevel",
+                "info",
+                "-nostats",
+                "-xerror",
+                "-max_alloc",
+                "67108864",
+                "-threads",
+                "2",
+                "-copyts",
+                "-ss",
+            ])
+            .with_argument(seconds_arg(as_argument(seek)?))
+            .with_argument("-t")
+            .with_argument(seconds_arg(as_argument(read)?))
+            .with_arguments(["-protocol_whitelist", "file"]);
+        let request = restrict_mov_references(request, source)
+            .with_arguments(["-f", source.container().demuxer(), "-i"])
+            .with_argument(source.provider_path().as_os_str())
+            .with_arguments(["-map"])
+            .with_argument(format!("0:{index}"))
+            .with_arguments(["-an", "-sn", "-dn", "-vf"])
+            .with_argument(filter)
+            .with_arguments(["-fps_mode", "passthrough", "-frames:v"])
+            .with_argument(MAX_WINDOW_SAMPLES.to_string())
+            .with_arguments(["-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"]);
+        let output = self
+            .supervisor_with(MAX_VISUAL_SAMPLE_BYTES, MAX_VISUAL_DIAGNOSTIC_BYTES)
+            .run(request, cancellation)
+            .await
+            .map_err(MediaError::Process)?;
+        validate_outcome(&output)?;
+        parse_visual_samples(&output.stdout.bytes, &output.stderr.bytes, &sampling)
+    }
+
     #[allow(clippy::too_many_lines)] // The bounded chunk and timestamp checks form one operation contract.
     async fn decode_pcm(
         &self,
@@ -438,8 +581,12 @@ impl<'a> FfmpegMedia<'a> {
     }
 
     fn supervisor(&self, stdout_limit: usize) -> ProcessSupervisor {
+        self.supervisor_with(stdout_limit, MAX_DIAGNOSTIC_BYTES)
+    }
+
+    fn supervisor_with(&self, stdout_limit: usize, stderr_limit: usize) -> ProcessSupervisor {
         let stdout = NonZeroUsize::new(stdout_limit).unwrap_or(NonZeroUsize::MIN);
-        let stderr = NonZeroUsize::new(MAX_DIAGNOSTIC_BYTES).unwrap_or(NonZeroUsize::MIN);
+        let stderr = NonZeroUsize::new(stderr_limit).unwrap_or(NonZeroUsize::MIN);
         let policy = SupervisorPolicy::default().with_stream_limits(stdout, stderr);
         ProcessSupervisor::new(policy, self.host_isolation)
     }
@@ -829,6 +976,192 @@ pub fn parse_ffprobe_metadata(
     })
 }
 
+/// The timeline of one visual window's decode: which stream, how its raw
+/// timestamps map to source time, and where samples may lie.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VisualSamplingWindow {
+    stream_index: u32,
+    origin_micros: i64,
+    lead_in: MediaTime,
+    end: MediaTime,
+}
+
+impl VisualSamplingWindow {
+    /// Describes a decode of `stream_index` whose samples must lie in
+    /// `[lead_in, end)` on the normalized timeline, for a source whose
+    /// earliest stream starts at `origin_micros` of raw stream time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MediaError::InvalidVisualWindow`] for an empty interval.
+    pub fn new(
+        stream_index: u32,
+        origin_micros: i64,
+        lead_in: MediaTime,
+        end: MediaTime,
+    ) -> Result<Self, MediaError> {
+        if end <= lead_in {
+            return Err(MediaError::InvalidVisualWindow);
+        }
+        Ok(Self {
+            stream_index,
+            origin_micros,
+            lead_in,
+            end,
+        })
+    }
+
+    fn raw_micros(self, time: MediaTime) -> Result<i64, MediaError> {
+        i64::try_from(time.as_micros())
+            .ok()
+            .and_then(|micros| micros.checked_add(self.origin_micros))
+            .ok_or(MediaError::InvalidVisualWindow)
+    }
+}
+
+/// One decoded 128x72 8-bit grey sample frame at its observed source time.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RawGrayFrame {
+    /// Observed presentation time on the normalized source timeline.
+    pub time: MediaTime,
+    /// Row-major grey pixels.
+    pub pixels: Box<[u8; VISUAL_FRAME_BYTES]>,
+}
+
+/// Parses one visual window's decoded samples from `FFmpeg`'s raw grey
+/// output and its `showinfo` diagnostics.
+///
+/// Both streams are untrusted provider output, so the parser is published
+/// beside [`parse_ffprobe_metadata`] for fuzzing (ADR 0016, decision 6). It
+/// accepts the output only when the two agree exactly:
+///
+/// - stdout is a whole number `n` of 9,216-byte frames, `n` at most
+///   [`MAX_WINDOW_SAMPLES`];
+/// - stderr has `showinfo` frame lines numbered `0..n-1`, in order, and when
+///   `n > 0` at least one `config in time_base` line, all of them equal (a
+///   filter graph reconfigured mid-window, for example on a resolution
+///   change, repeats it);
+/// - timestamps strictly increase and, normalized through the source origin,
+///   lie in the window's `[lead-in, end)`.
+///
+/// Only lines that begin with `[Parsed_showinfo_` are read, so input
+/// metadata that `FFmpeg` echoes (always indented) cannot forge a frame line,
+/// and other lines are never decoded as text at all.
+///
+/// # Errors
+///
+/// Returns [`MediaError::OutputLimit`] beyond the byte bounds and
+/// [`MediaError::InvalidDecodedOutput`] or [`MediaError::InvalidTimeline`]
+/// for anything inconsistent; parsing never partially succeeds.
+pub fn parse_visual_samples(
+    stdout: &[u8],
+    stderr: &[u8],
+    window: &VisualSamplingWindow,
+) -> Result<Vec<RawGrayFrame>, MediaError> {
+    if stdout.len() > MAX_VISUAL_SAMPLE_BYTES || stderr.len() > MAX_VISUAL_DIAGNOSTIC_BYTES {
+        return Err(MediaError::OutputLimit);
+    }
+    if !stdout.len().is_multiple_of(VISUAL_FRAME_BYTES) {
+        return Err(MediaError::InvalidDecodedOutput);
+    }
+    let count = stdout.len() / VISUAL_FRAME_BYTES;
+    let (time_base, stamps) = parse_showinfo_frames(stderr)?;
+    if stamps.len() != count {
+        return Err(MediaError::InvalidDecodedOutput);
+    }
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    let (numerator, denominator) = time_base.ok_or(MediaError::InvalidDecodedOutput)?;
+    let offset = window
+        .origin_micros
+        .checked_neg()
+        .ok_or(MediaError::InvalidTimeline)?;
+    let mut frames = Vec::with_capacity(count);
+    let mut previous: Option<MediaTime> = None;
+    for (pts, pixels) in stamps
+        .into_iter()
+        .zip(stdout.as_chunks::<VISUAL_FRAME_BYTES>().0)
+    {
+        let time = StreamTime {
+            stream_index: window.stream_index,
+            presentation_timestamp: pts,
+            time_base_numerator: numerator,
+            time_base_denominator: denominator,
+            timeline_offset_micros: offset,
+        }
+        .to_media_time()
+        .map_err(|_| MediaError::InvalidTimeline)?;
+        if time < window.lead_in
+            || time >= window.end
+            || previous.is_some_and(|before| before >= time)
+        {
+            return Err(MediaError::InvalidDecodedOutput);
+        }
+        previous = Some(time);
+        frames.push(RawGrayFrame {
+            time,
+            pixels: Box::new(*pixels),
+        });
+    }
+    Ok(frames)
+}
+
+/// The filter time base, if a configuration line was seen, and the
+/// timestamps of `showinfo` frames `0..n-1` in order.
+type ShowinfoFrames = (Option<(u32, u32)>, Vec<i64>);
+
+/// Reads `showinfo` frame numbers, timestamps and the filter time base.
+fn parse_showinfo_frames(stderr: &[u8]) -> Result<ShowinfoFrames, MediaError> {
+    const MARKER: &[u8] = b"[Parsed_showinfo_";
+    let mut time_base: Option<(u32, u32)> = None;
+    let mut stamps = Vec::new();
+    for line in stderr.split(|byte| *byte == b'\n') {
+        if !line.starts_with(MARKER) {
+            continue;
+        }
+        let line = std::str::from_utf8(line).map_err(|_| MediaError::InvalidDecodedOutput)?;
+        let (_, rest) = line
+            .split_once("] ")
+            .ok_or(MediaError::InvalidDecodedOutput)?;
+        let rest = rest.trim_end_matches('\r');
+        if let Some(config) = rest.strip_prefix("config in time_base:") {
+            let parsed = config
+                .split([',', ' '])
+                .find_map(parse_time_base)
+                .ok_or(MediaError::InvalidDecodedOutput)?;
+            if time_base.is_some_and(|known| known != parsed) {
+                return Err(MediaError::InvalidDecodedOutput);
+            }
+            time_base = Some(parsed);
+        } else if rest.starts_with("n:") {
+            if stamps.len() >= MAX_WINDOW_SAMPLES {
+                return Err(MediaError::InvalidDecodedOutput);
+            }
+            let words: Vec<&str> = rest.split_ascii_whitespace().collect();
+            let number = labelled_integer(&words, "n:").ok_or(MediaError::InvalidDecodedOutput)?;
+            let pts = labelled_integer(&words, "pts:").ok_or(MediaError::InvalidDecodedOutput)?;
+            if usize::try_from(number).ok() != Some(stamps.len()) {
+                return Err(MediaError::InvalidDecodedOutput);
+            }
+            stamps.push(pts);
+        }
+    }
+    Ok((time_base, stamps))
+}
+
+/// Reads the integer after `label`, written as `label123` or `label 123`.
+fn labelled_integer(words: &[&str], label: &str) -> Option<i64> {
+    words.iter().enumerate().find_map(|(position, word)| {
+        let suffix = word.strip_prefix(label)?;
+        if suffix.is_empty() {
+            words.get(position + 1)?.parse::<i64>().ok()
+        } else {
+            suffix.parse::<i64>().ok()
+        }
+    })
+}
+
 fn parse_time_base(text: &str) -> Option<(u32, u32)> {
     let (n, d) = text.split_once('/')?;
     let numerator = n.parse::<u32>().ok()?;
@@ -910,6 +1243,8 @@ pub enum MediaError {
     InvalidDecodedOutput,
     /// The selected stream has no audio in the requested speech window.
     NoDecodedAudio,
+    /// A visual window lies outside the source or cannot be expressed.
+    InvalidVisualWindow,
 }
 
 impl fmt::Display for MediaError {
@@ -936,6 +1271,7 @@ impl fmt::Display for MediaError {
             Self::NoFrameWithinTolerance => "no displayed frame met the requested tolerance",
             Self::InvalidDecodedOutput => "decoded media output is invalid",
             Self::NoDecodedAudio => "no audio was decoded in the requested window",
+            Self::InvalidVisualWindow => "visual window is outside the source",
         };
         formatter.write_str(message)
     }
@@ -954,9 +1290,15 @@ impl Error for MediaError {
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaError, parse_ffprobe_metadata, parse_showinfo};
+    use super::{
+        MediaError, VisualSamplingWindow, parse_ffprobe_metadata, parse_showinfo,
+        parse_visual_samples,
+    };
     use crate::SourceContainer;
-    use vsift_domain::{DisplayRotation, MediaDecodeSupport, MediaSelection, MediaStreamKind};
+    use vsift_domain::{
+        DisplayRotation, MediaDecodeSupport, MediaSelection, MediaStreamKind, MediaTime,
+        VISUAL_FRAME_BYTES,
+    };
 
     const VALID: &str = r#"{"format":{"duration":"2.000000","start_time":"1.250000"},"streams":[{"index":0,"codec_type":"video","codec_name":"h264","time_base":"1/1000","start_pts":1250,"width":320,"height":240,"side_data_list":[{"rotation":-90}]},{"index":2,"codec_type":"audio","codec_name":"aac","time_base":"1/16000","start_pts":32000,"tags":{"language":"eng"}}]}"#;
 
@@ -1037,6 +1379,150 @@ mod tests {
             description.streams[0].decode_support,
             MediaDecodeSupport::Unsupported
         );
+        Ok(())
+    }
+
+    /// `showinfo` diagnostics shaped like `FFmpeg` 9.0's for three samples of
+    /// F01, with the echoed input header, both configuration lines and a
+    /// side-data line.
+    const VISUAL_DIAGNOSTIC: &str = "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'source.media':\n  Metadata:\n    title           : [Parsed_showinfo_0 @ 0] n:   0 pts:  99999\n[Parsed_showinfo_3 @ 000001f8] config in time_base: 1/10240, frame_rate: 20/1\n[Parsed_showinfo_3 @ 000001f8] config out time_base: 0/0, frame_rate: 0/0\n[Parsed_showinfo_3 @ 000001f8] n:   0 pts:      0 pts_time:0       duration:    512 fmt:gray s:128x72\n[Parsed_showinfo_3 @ 000001f8]   side data - H.26[45] User Data Unregistered SEI message\n[Parsed_showinfo_3 @ 000001f8] n:   1 pts:   5120 pts_time:0.5     duration:    512 fmt:gray s:128x72\r\n[Parsed_showinfo_3 @ 000001f8] color_range:pc color_space:unknown\n[Parsed_showinfo_3 @ 000001f8] n:   2 pts:  10240 pts_time:1       duration:    512 fmt:gray s:128x72\n[out#0/rawvideo @ 000001f8] video:27KiB\n";
+
+    fn visual_window(
+        lead_micros: u64,
+        end_micros: u64,
+    ) -> Result<VisualSamplingWindow, MediaError> {
+        VisualSamplingWindow::new(
+            0,
+            0,
+            MediaTime::from_micros(lead_micros),
+            MediaTime::from_micros(end_micros),
+        )
+    }
+
+    #[test]
+    fn parses_visual_samples_when_frames_and_diagnostics_agree()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut stdout = vec![10_u8; VISUAL_FRAME_BYTES * 3];
+        if let Some(byte) = stdout.get_mut(VISUAL_FRAME_BYTES) {
+            *byte = 99;
+        }
+        let frames = parse_visual_samples(
+            &stdout,
+            VISUAL_DIAGNOSTIC.as_bytes(),
+            &visual_window(0, 6_000_000)?,
+        )?;
+        let times: Vec<u64> = frames.iter().map(|frame| frame.time.as_micros()).collect();
+        assert_eq!(times, vec![0, 500_000, 1_000_000]);
+        assert_eq!(
+            frames.get(1).and_then(|frame| frame.pixels.first()),
+            Some(&99)
+        );
+        let origin = VisualSamplingWindow::new(
+            0,
+            -250_000,
+            MediaTime::from_micros(250_000),
+            MediaTime::from_micros(2_000_000),
+        )?;
+        let shifted = parse_visual_samples(&stdout, VISUAL_DIAGNOSTIC.as_bytes(), &origin)?;
+        assert_eq!(
+            shifted.first().map(|frame| frame.time.as_micros()),
+            Some(250_000)
+        );
+        assert!(parse_visual_samples(&[], b"", &visual_window(0, 1)?)?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_visual_output_that_disagrees_with_its_diagnostics()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let three = vec![0_u8; VISUAL_FRAME_BYTES * 3];
+        let window = visual_window(0, 6_000_000)?;
+        let diagnostic = VISUAL_DIAGNOSTIC.as_bytes();
+        for (stdout, stderr) in [
+            (vec![0_u8; VISUAL_FRAME_BYTES * 2], diagnostic.to_vec()),
+            (vec![0_u8; VISUAL_FRAME_BYTES * 3 + 1], diagnostic.to_vec()),
+            (
+                three.clone(),
+                VISUAL_DIAGNOSTIC
+                    .replace("pts:  10240", "pts:   5120")
+                    .into_bytes(),
+            ),
+            (
+                three.clone(),
+                VISUAL_DIAGNOSTIC.replace("n:   2", "n:   3").into_bytes(),
+            ),
+            (
+                three.clone(),
+                VISUAL_DIAGNOSTIC
+                    .replace("config in time_base: 1/10240", "config in time_base: 0/1")
+                    .into_bytes(),
+            ),
+            (
+                three.clone(),
+                format!("{VISUAL_DIAGNOSTIC}[Parsed_showinfo_3 @ 0] config in time_base: 1/1000\n")
+                    .into_bytes(),
+            ),
+            (
+                three.clone(),
+                VISUAL_DIAGNOSTIC
+                    .replace("pts:      0", "pts:   0x10")
+                    .into_bytes(),
+            ),
+            (
+                vec![0_u8; VISUAL_FRAME_BYTES],
+                b"[Parsed_showinfo_0 @ 0] n:   0 pts: 0\n".to_vec(),
+            ),
+        ] {
+            assert!(
+                parse_visual_samples(&stdout, &stderr, &window).is_err(),
+                "{}",
+                String::from_utf8_lossy(&stderr)
+            );
+        }
+        assert!(matches!(
+            parse_visual_samples(&three, diagnostic, &visual_window(0, 1_000_000)?),
+            Err(MediaError::InvalidDecodedOutput)
+        ));
+        assert!(matches!(
+            parse_visual_samples(&three, diagnostic, &visual_window(1, 6_000_000)?),
+            Err(MediaError::InvalidDecodedOutput)
+        ));
+        let mut invalid_utf8 = b"[Parsed_showinfo_3 @ 0] n:   0 pts: \xff".to_vec();
+        invalid_utf8.push(b'\n');
+        assert!(parse_visual_samples(&[], &invalid_utf8, &window).is_err());
+        assert!(matches!(
+            parse_visual_samples(
+                &vec![0_u8; super::MAX_VISUAL_SAMPLE_BYTES + VISUAL_FRAME_BYTES],
+                b"",
+                &window
+            ),
+            Err(MediaError::OutputLimit)
+        ));
+        assert!(
+            VisualSamplingWindow::new(0, 0, MediaTime::from_micros(5), MediaTime::from_micros(5))
+                .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reads_wide_frame_numbers_written_without_padding() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut stderr =
+            String::from("[Parsed_showinfo_3 @ 0] config in time_base: 1/1000, frame_rate: 2/1\n");
+        for (number, pts) in [("0", "0"), ("1", "500"), ("2", "1000")] {
+            stderr.push_str("[Parsed_showinfo_3 @ 0] n:");
+            stderr.push_str(number);
+            stderr.push_str(" pts:");
+            stderr.push_str(pts);
+            stderr.push_str(" pts_time:x\n");
+        }
+        let frames = parse_visual_samples(
+            &vec![0_u8; VISUAL_FRAME_BYTES * 3],
+            stderr.as_bytes(),
+            &visual_window(0, 2_000_000)?,
+        )?;
+        assert_eq!(frames.len(), 3);
         Ok(())
     }
 }

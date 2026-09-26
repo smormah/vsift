@@ -92,6 +92,7 @@ const fn speech_audio_error(error: &MediaError) -> SpeechAudioError {
         | MediaError::InvalidOrientation
         | MediaError::InvalidTimeline
         | MediaError::NoFrameWithinTolerance
-        | MediaError::InvalidDecodedOutput => SpeechAudioError::Io,
+        | MediaError::InvalidDecodedOutput
+        | MediaError::InvalidVisualWindow => SpeechAudioError::Io,
     }
 }

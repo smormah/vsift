@@ -1366,6 +1366,7 @@ name = "vsift-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "serde_json",
  "vsift-application",
  "vsift-domain",
  "vsift-infrastructure",

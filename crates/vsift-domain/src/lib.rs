@@ -15,6 +15,7 @@ mod session;
 mod storage;
 mod timeline;
 mod transcript;
+mod visual;
 
 pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -32,7 +33,7 @@ pub use evidence::{
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
-    SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId,
+    SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
 pub use job::{JobState, JobTransitionError};
 pub use media::{
@@ -66,6 +67,16 @@ pub use transcript::{
     TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptRevisionError,
     TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptSlice,
     TranscriptWarning, TranscriptWarningKind, TranscriptWarnings, align_imported_cues,
+};
+pub use visual::{
+    CandidateChange, CandidateDraft, CandidateReason, CandidateStability, CoverageGapReason,
+    MAX_VISUAL_INDEX_DURATION_MICROS, MAX_WINDOW_CANDIDATES, MAX_WINDOW_SAMPLES,
+    VISUAL_BLOCK_COLUMNS, VISUAL_BLOCK_ROWS, VISUAL_BLOCKS, VISUAL_CELL_MICROS, VISUAL_FRAME_BYTES,
+    VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_LEAD_IN_MICROS, VISUAL_SAMPLE_INTERVAL_MICROS,
+    VISUAL_WINDOW_MICROS, VisualAnalysisError, VisualCandidate, VisualChangePolicy,
+    VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexParts,
+    VisualIndexProfile, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
+    WindowAnalysis, analyse_window, visual_window_count,
 };
 
 /// A specialist runtime dependency that provides one of `VSift`'s capabilities.

@@ -16,6 +16,7 @@ mod session;
 mod storage;
 mod transcript;
 mod verification;
+mod visual;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
@@ -60,6 +61,13 @@ pub use verification::{
     MediaToolPreflightFailure, MediaToolPreflightOutcome, MediaToolVerification,
     MediaToolVerificationCache, MediaToolVerifier, ModelVerification, VerificationRecord,
     VerificationRecordSkip, preflight_local_asr, preflight_media_tools,
+};
+pub use visual::{
+    CandidatePage, CandidatePageRequest, CandidateQueryError, ExtendVisualIndexRequest,
+    MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError, VisualIndexExtension,
+    VisualIndexScope, VisualSampler, VisualSamplingError, candidate_query_digest, clip_to_source,
+    extend_visual_index, page_candidates, verify_visual_index_identities, visual_candidate_id,
+    visual_coverage_gaps, visual_index_id,
 };
 
 /// Port used to inspect one specialist runtime dependency.

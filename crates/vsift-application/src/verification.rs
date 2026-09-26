@@ -24,6 +24,8 @@ pub enum MediaToolCheck {
     Frame,
     /// `FFmpeg` audio extraction.
     Audio,
+    /// `FFmpeg` visual sampling for the candidate index (P08).
+    VisualSampling,
 }
 
 impl MediaToolCheck {
@@ -35,6 +37,7 @@ impl MediaToolCheck {
             Self::Probe => "probe",
             Self::Frame => "frame",
             Self::Audio => "audio",
+            Self::VisualSampling => "visual_sampling",
         }
     }
 }
@@ -80,7 +83,8 @@ impl MediaToolFailure {
 /// Outcome of running the selected `FFmpeg` and `FFprobe` against the fixture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MediaToolVerification {
-    /// Probe, frame and audio results all matched the fixture's recorded truth.
+    /// Probe, frame, audio and visual-sampling results all matched the
+    /// fixture's recorded truth.
     Verified,
     /// Verification stopped at `check` for `failure`; later checks did not run.
     Failed {

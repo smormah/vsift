@@ -76,6 +76,7 @@ mod tests {
                 MediaToolCheck::Probe,
                 MediaToolCheck::Frame,
                 MediaToolCheck::Audio,
+                MediaToolCheck::VisualSampling,
             ] {
                 let summary =
                     media_tool_verification_summary(MediaToolPreflightFailure { check, failure });
