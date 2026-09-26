@@ -105,6 +105,30 @@ doc = false
 bench = false
 required-features = ["libfuzzer"]
 
+[[bin]]
+name = "frame_showinfo"
+path = "fuzz_targets/frame_showinfo.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "frame_listing"
+path = "fuzz_targets/frame_listing.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "png_sequence"
+path = "fuzz_targets/png_sequence.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
 # The workspace lints, repeated because this package cannot inherit them.
 [lints.rust]
 missing_docs = "warn"

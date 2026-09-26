@@ -49,6 +49,9 @@ jobs:
           - visual_samples
           - visual_index_record
           - search_query
+          - frame_showinfo
+          - frame_listing
+          - png_sequence
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
