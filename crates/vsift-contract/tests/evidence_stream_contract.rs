@@ -406,8 +406,14 @@ fn evidence_and_stream_schemas_reject_unknown_fields_and_mismatched_keys() -> Te
     assert!(!is_valid("evidence-event.schema.json", &foreign_key)?);
 
     let mut unknown_type = record.clone();
-    unknown_type["record_type"] = Value::from("visual_candidate");
+    unknown_type["record_type"] = Value::from("frame_image");
     assert!(!is_valid("evidence-event.schema.json", &unknown_type)?);
+
+    // A transcript segment labelled as another published record type fails
+    // that type's key pattern and record schema.
+    let mut mislabelled = record.clone();
+    mislabelled["record_type"] = Value::from("visual_candidate");
+    assert!(!is_valid("evidence-event.schema.json", &mislabelled)?);
 
     let mut as_terminal = record.clone();
     as_terminal["event"] = Value::from("terminal");

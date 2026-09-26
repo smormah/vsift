@@ -111,6 +111,39 @@ impl MediaDescription {
             .map(|stream| stream.index)
     }
 
+    /// The video stream visual analysis samples: the first video stream, in
+    /// original order, whose codec this adapter decodes, with its
+    /// orientation-correct displayed dimensions.
+    ///
+    /// As for speech, R0 never chooses between several video tracks; the
+    /// first decodable one is the one players show.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VisualStreamError::Absent`] when the source has no video
+    /// stream at all (an audio-only file: the caller asked for something the
+    /// source cannot have), and [`VisualStreamError::Unsupported`] when every
+    /// video stream uses a codec the adapter does not decode, or reports no
+    /// dimensions (the source is the problem).
+    pub fn visual_video_stream(&self) -> Result<(u32, FrameDimensions), VisualStreamError> {
+        let mut video = self
+            .streams
+            .iter()
+            .filter(|stream| stream.kind == MediaStreamKind::Video)
+            .peekable();
+        if video.peek().is_none() {
+            return Err(VisualStreamError::Absent);
+        }
+        video
+            .find(|stream| stream.decode_support == MediaDecodeSupport::Supported)
+            .and_then(|stream| {
+                stream
+                    .encoded_dimensions
+                    .map(|encoded| (stream.index, stream.rotation.displayed_dimensions(encoded)))
+            })
+            .ok_or(VisualStreamError::Unsupported)
+    }
+
     /// Validates explicit indexes without silently switching tracks.
     ///
     /// # Errors
@@ -133,6 +166,26 @@ impl MediaDescription {
     }
 }
 
+/// Why a source has no video stream visual analysis can sample.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VisualStreamError {
+    /// The source has no video stream.
+    Absent,
+    /// No video stream has a codec and dimensions the adapter decodes.
+    Unsupported,
+}
+
+impl fmt::Display for VisualStreamError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Absent => "the source has no video stream",
+            Self::Unsupported => "the source has no video stream the adapter decodes",
+        })
+    }
+}
+
+impl Error for VisualStreamError {}
+
 /// An explicit stream index is missing or has the wrong kind.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MediaSelectionError {
@@ -147,3 +200,98 @@ impl fmt::Display for MediaSelectionError {
 }
 
 impl Error for MediaSelectionError {}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DisplayRotation, MediaDecodeSupport, MediaDescription, MediaStream, MediaStreamKind,
+        VisualStreamError,
+    };
+    use crate::{FrameDimensions, MediaTime};
+
+    type Built<T> = Result<T, Box<dyn std::error::Error>>;
+
+    fn stream(
+        index: u32,
+        kind: MediaStreamKind,
+        support: MediaDecodeSupport,
+        rotation: DisplayRotation,
+    ) -> Built<MediaStream> {
+        Ok(MediaStream {
+            index,
+            kind,
+            codec: String::from("h264"),
+            decode_support: support,
+            time_base_numerator: 1,
+            time_base_denominator: 1_000,
+            start_pts: None,
+            encoded_dimensions: (kind == MediaStreamKind::Video)
+                .then(|| FrameDimensions::new(1280, 720))
+                .transpose()?,
+            rotation,
+            language: None,
+        })
+    }
+
+    fn description(streams: Vec<MediaStream>) -> MediaDescription {
+        MediaDescription {
+            duration: MediaTime::from_micros(1_000_000),
+            origin_micros: 0,
+            streams,
+        }
+    }
+
+    #[test]
+    fn the_first_decodable_video_stream_is_sampled_with_displayed_dimensions() -> Built<()> {
+        let source = description(vec![
+            stream(
+                0,
+                MediaStreamKind::Audio,
+                MediaDecodeSupport::Supported,
+                DisplayRotation::Zero,
+            )?,
+            stream(
+                1,
+                MediaStreamKind::Video,
+                MediaDecodeSupport::Unsupported,
+                DisplayRotation::Zero,
+            )?,
+            stream(
+                2,
+                MediaStreamKind::Video,
+                MediaDecodeSupport::Supported,
+                DisplayRotation::Clockwise90,
+            )?,
+        ]);
+        assert_eq!(
+            source.visual_video_stream(),
+            Ok((2, FrameDimensions::new(720, 1280)?))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn audio_only_and_undecodable_video_are_told_apart() -> Built<()> {
+        let audio_only = description(vec![stream(
+            0,
+            MediaStreamKind::Audio,
+            MediaDecodeSupport::Supported,
+            DisplayRotation::Zero,
+        )?]);
+        assert_eq!(
+            audio_only.visual_video_stream(),
+            Err(VisualStreamError::Absent)
+        );
+        let undecodable = description(vec![stream(
+            0,
+            MediaStreamKind::Video,
+            MediaDecodeSupport::Unsupported,
+            DisplayRotation::Zero,
+        )?]);
+        assert_eq!(
+            undecodable.visual_video_stream(),
+            Err(VisualStreamError::Unsupported)
+        );
+        Ok(())
+    }
+}

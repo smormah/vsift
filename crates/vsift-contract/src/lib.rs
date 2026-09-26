@@ -36,6 +36,12 @@
 //!   envelope [`CoverageResponse`] and the `partial` status, and
 //!   [`search_query_rejection_summary`] for a rejected query. Every stream is
 //!   written through the [`EvidenceStream`] view.
+//! - **Candidates:** the `candidates` page [`CandidatesData`], its published
+//!   evidence record [`VisualCandidateData`] and its stream
+//!   [`CandidatesEvidenceStream`] (`visual_candidate` evidence events, then
+//!   [`CandidatesStreamData`]), built from a [`CandidatesPresentation`] by
+//!   [`candidates_response`], which fills the envelope coverage and the
+//!   `partial` status when the range has gaps (P08).
 //! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
 //!   remediation for a failed automatic media-tool preflight.
 //! - **Storage:** [`non_private_folder_summary`], the fixed-prose remediation
@@ -53,6 +59,7 @@
 
 #![forbid(unsafe_code)]
 
+mod candidates;
 mod command;
 mod envelope;
 mod evidence;
@@ -66,6 +73,11 @@ mod text;
 mod transcript;
 mod verification;
 
+pub use candidates::{
+    CANDIDATE_CURSOR_REMEDIATION, CandidatesData, CandidatesEvidenceStream, CandidatesPresentation,
+    CandidatesStreamData, NO_VIDEO_STREAM_REMEDIATION, VISUAL_COVERAGE_WARNING,
+    VISUAL_TOOLS_REMEDIATION, VisualCandidateData, candidates_response,
+};
 pub use command::CommandName;
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, OperationResponse,

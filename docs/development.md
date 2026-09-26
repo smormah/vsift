@@ -134,6 +134,19 @@ or a change to the sampling argv), run it with `VSIFT_RECORD_VISUAL_SAMPLES=1`, 
 the diff and the report, then regenerate the fuzz seeds as above. Never edit the
 manifest to make the gate pass.
 
+The same gate through the `candidates` command, with the lead/lag, continuation,
+stream and bundle, damaged-media, V-03 motion and S-11 stages, is the opt-in
+checkpoint (see [the E2E spine](planning/e2e-test-spine.md)):
+
+```console
+cargo test --release -p vsift-cli --locked --test p08_candidates_e2e -- --ignored --nocapture
+```
+
+After an intended contract change, `VSIFT_REGENERATE_CONTRACT_EXAMPLES=1` rewrites the
+frozen `candidates*.json(l)` examples (`vsift-contract`'s `candidates_contract`) and
+`bundle-visual-index-record.json` (`vsift-infrastructure`'s `visual_index_store`);
+review the diff before committing.
+
 ## Dependencies
 
 Before adding a crate, review:

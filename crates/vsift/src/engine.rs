@@ -3,13 +3,14 @@
 use std::{
     env,
     future::Future,
+    num::NonZeroUsize,
     path::{Path, PathBuf},
     pin::Pin,
 };
 
 use vsift_application::{
-    Clock, IdentifierSource, LocalAsrVerifier, MediaToolVerification, MediaToolVerifier,
-    SpeechRecognizer,
+    Clock, IdentifierSource, LocalAsrVerifier, MAX_WINDOWS_PER_EXTENSION, MediaToolVerification,
+    MediaToolVerifier, SpeechRecognizer,
 };
 use vsift_domain::{OperationId, SessionId};
 use vsift_infrastructure::{
@@ -84,7 +85,15 @@ pub struct EnginePorts {
     media_tool_verifier: Option<Box<dyn HostMediaToolVerifier>>,
     local_asr_verifier: Option<Box<dyn HostLocalAsrVerifier>>,
     speech_recognizer: Option<HostAsr>,
+    visual_window_budget: NonZeroUsize,
 }
+
+/// [`MAX_WINDOWS_PER_EXTENSION`] as the default window budget.
+const DEFAULT_VISUAL_WINDOW_BUDGET: NonZeroUsize =
+    match NonZeroUsize::new(MAX_WINDOWS_PER_EXTENSION) {
+        Some(budget) => budget,
+        None => NonZeroUsize::MIN,
+    };
 
 impl EnginePorts {
     /// Uses the injected clock and identifier source.
@@ -99,7 +108,22 @@ impl EnginePorts {
             media_tool_verifier: None,
             local_asr_verifier: None,
             speech_recognizer: None,
+            visual_window_budget: DEFAULT_VISUAL_WINDOW_BUDGET,
         }
+    }
+
+    /// Lowers how many 60 s windows one [`Engine::candidates`] call analyses
+    /// before it answers with the rest reported as `not_analyzed`.
+    ///
+    /// The default and the maximum is 30 windows (30 minutes of media); a
+    /// larger budget is clamped to it, so no host can make one call
+    /// unbounded. A host that must answer sooner lowers it; the opt-in
+    /// continuation tests lower it to one window to exercise a long video
+    /// with a short one.
+    #[must_use]
+    pub const fn with_visual_window_budget(mut self, budget: NonZeroUsize) -> Self {
+        self.visual_window_budget = budget;
+        self
     }
 
     /// Replaces the reviewed speech-fixture verifier that the automatic
@@ -193,6 +217,11 @@ impl Engine {
 
     pub(crate) fn new_operation_id(&self) -> Result<OperationId, EngineError> {
         Ok(self.ports.identifiers.operation_id()?)
+    }
+
+    /// Windows one `candidates` call may analyse.
+    pub(crate) const fn visual_window_budget(&self) -> NonZeroUsize {
+        self.ports.visual_window_budget
     }
 
     /// The host-supplied media-tool verifier, when one replaced the fixture.

@@ -1,0 +1,194 @@
+{
+  "command": "candidates",
+  "coverage": {
+    "gaps": [],
+    "reasons": [],
+    "truncated": false
+  },
+  "data": {
+    "coverage": {
+      "analyzed": [
+        {
+          "from_us": 0,
+          "to_us": 12000000
+        }
+      ],
+      "gaps": [],
+      "ranges_truncated": false,
+      "searched_range": {
+        "from_us": 0,
+        "to_us": 12000000
+      }
+    },
+    "index": {
+      "coverage_interval_us": 10000000,
+      "duration_us": 12000000,
+      "index_id": "vix_cced9a5fe918398c7afc2b463545666f",
+      "number": 1,
+      "profile": "r0-visual-v1",
+      "sample_interval_us": 500000,
+      "window_us": 60000000
+    },
+    "items": [
+      {
+        "analysis": {
+          "height": 72,
+          "profile": "r0-visual-v1",
+          "width": 128
+        },
+        "candidate_id": "vcd_8e2bf69b55fa4e33896913428350e041",
+        "change": null,
+        "change_window": null,
+        "displayed_dimensions": {
+          "height": 720,
+          "width": 1280
+        },
+        "reasons": [
+          "first_frame"
+        ],
+        "representative_us": 0,
+        "sample_count": 8,
+        "source_id": "src_sha256_aec1a03817bbe77366bd29ca7b8254537de50b6f941b0b262fadd82cb652ea60",
+        "source_segment_id": "sgm_7e06d28881a9cd6dc99d74798d9be3e8",
+        "span": {
+          "from_us": 0,
+          "to_us": 4000000
+        },
+        "stability": "settled",
+        "stream_index": 0,
+        "visual_hash": "6000587840005000",
+        "window": {
+          "from_us": 0,
+          "ordinal": 0,
+          "to_us": 12000000
+        }
+      },
+      {
+        "analysis": {
+          "height": 72,
+          "profile": "r0-visual-v1",
+          "width": 128
+        },
+        "candidate_id": "vcd_97a867077c1aa0979717bb3742994172",
+        "change": {
+          "changed_blocks": 6,
+          "max_block_delta": 21
+        },
+        "change_window": {
+          "from_us": 3500000,
+          "to_us": 4000000
+        },
+        "displayed_dimensions": {
+          "height": 720,
+          "width": 1280
+        },
+        "reasons": [
+          "visual_change"
+        ],
+        "representative_us": 4000000,
+        "sample_count": 8,
+        "source_id": "src_sha256_aec1a03817bbe77366bd29ca7b8254537de50b6f941b0b262fadd82cb652ea60",
+        "source_segment_id": "sgm_7e06d28881a9cd6dc99d74798d9be3e8",
+        "span": {
+          "from_us": 4000000,
+          "to_us": 8000000
+        },
+        "stability": "settled",
+        "stream_index": 0,
+        "visual_hash": "6000587840005800",
+        "window": {
+          "from_us": 0,
+          "ordinal": 0,
+          "to_us": 12000000
+        }
+      },
+      {
+        "analysis": {
+          "height": 72,
+          "profile": "r0-visual-v1",
+          "width": 128
+        },
+        "candidate_id": "vcd_ad4edcf39c3ff4ced6bfafb5606e71e4",
+        "change": {
+          "changed_blocks": 17,
+          "max_block_delta": 21
+        },
+        "change_window": {
+          "from_us": 7500000,
+          "to_us": 8000000
+        },
+        "displayed_dimensions": {
+          "height": 720,
+          "width": 1280
+        },
+        "reasons": [
+          "visual_change"
+        ],
+        "representative_us": 8000000,
+        "sample_count": 4,
+        "source_id": "src_sha256_aec1a03817bbe77366bd29ca7b8254537de50b6f941b0b262fadd82cb652ea60",
+        "source_segment_id": "sgm_7e06d28881a9cd6dc99d74798d9be3e8",
+        "span": {
+          "from_us": 8000000,
+          "to_us": 10000000
+        },
+        "stability": "settled",
+        "stream_index": 0,
+        "visual_hash": "6000587840006c00",
+        "window": {
+          "from_us": 0,
+          "ordinal": 0,
+          "to_us": 12000000
+        }
+      },
+      {
+        "analysis": {
+          "height": 72,
+          "profile": "r0-visual-v1",
+          "width": 128
+        },
+        "candidate_id": "vcd_546ca66fc07f9abddcd7ffa8818b6483",
+        "change": null,
+        "change_window": null,
+        "displayed_dimensions": {
+          "height": 720,
+          "width": 1280
+        },
+        "reasons": [
+          "periodic_coverage"
+        ],
+        "representative_us": 10000000,
+        "sample_count": 4,
+        "source_id": "src_sha256_aec1a03817bbe77366bd29ca7b8254537de50b6f941b0b262fadd82cb652ea60",
+        "source_segment_id": "sgm_7e06d28881a9cd6dc99d74798d9be3e8",
+        "span": {
+          "from_us": 10000000,
+          "to_us": 12000000
+        },
+        "stability": "settled",
+        "stream_index": 0,
+        "visual_hash": "6000587840006c00",
+        "window": {
+          "from_us": 0,
+          "ordinal": 0,
+          "to_us": 12000000
+        }
+      }
+    ],
+    "next_cursor": null,
+    "range": {
+      "from_us": 0,
+      "to_us": 12000000
+    },
+    "session_id": "ses_0123456789abcdef0123456789abcdef"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

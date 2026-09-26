@@ -26,10 +26,10 @@ use std::num::NonZeroU32;
 use serde::{Deserialize, Serialize};
 use vsift_application::{SessionStorageError, VisualIndexScope, verify_visual_index_identities};
 use vsift_domain::{
-    CandidateChange, CandidateDraft, CandidateReason, CandidateStability, MediaTime, SessionId,
-    SourceId, TimeRange, VisualCandidate, VisualCandidateId, VisualDelta, VisualHash, VisualIndex,
-    VisualIndexId, VisualIndexParts, VisualIndexProfile, VisualIndexWindow, VisualWindow,
-    VisualWindowOutcome,
+    CandidateChange, CandidateDraft, CandidateReason, CandidateStability, FrameDimensions,
+    MediaTime, SessionId, SourceId, TimeRange, VisualCandidate, VisualCandidateId, VisualDelta,
+    VisualHash, VisualIndex, VisualIndexId, VisualIndexParts, VisualIndexProfile,
+    VisualIndexWindow, VisualWindow, VisualWindowOutcome,
 };
 
 /// Largest encoded visual-index record a session will store or read.
@@ -105,9 +105,17 @@ struct StoredVisualIndex {
     session_id: String,
     source_id: String,
     stream_index: u32,
+    displayed_dimensions: StoredDimensions,
     duration_us: u64,
     profile: StoredProfile,
     windows: Vec<StoredWindow>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredDimensions {
+    width: u32,
+    height: u32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -197,6 +205,10 @@ impl StoredVisualIndex {
             session_id: session_id.as_str().to_owned(),
             source_id: index.source_id().as_str().to_owned(),
             stream_index: index.stream_index(),
+            displayed_dimensions: StoredDimensions {
+                width: index.displayed_dimensions().width(),
+                height: index.displayed_dimensions().height(),
+            },
             duration_us: index.duration().as_micros(),
             profile: match index.profile() {
                 VisualIndexProfile::R0 => StoredProfile::R0,
@@ -217,6 +229,11 @@ impl StoredVisualIndex {
             StoredProfile::R0 => VisualIndexProfile::R0,
         };
         let source_id = SourceId::parse(self.source_id).ok()?;
+        let displayed_dimensions = FrameDimensions::new(
+            self.displayed_dimensions.width,
+            self.displayed_dimensions.height,
+        )
+        .ok()?;
         let duration = MediaTime::from_micros(self.duration_us);
         let mut windows = Vec::with_capacity(self.windows.len());
         for stored in self.windows {
@@ -227,6 +244,7 @@ impl StoredVisualIndex {
             number: NonZeroU32::new(self.revision)?,
             source_id: source_id.clone(),
             stream_index: self.stream_index,
+            displayed_dimensions,
             duration,
             profile,
             windows,
@@ -236,6 +254,7 @@ impl StoredVisualIndex {
             session_id,
             source_id: &source_id,
             stream_index: self.stream_index,
+            displayed_dimensions,
             duration,
             profile,
         };

@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod candidates;
 mod command;
 mod config;
 mod json_input;
@@ -24,13 +25,14 @@ use vsift::{
     SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
 };
 use vsift_contract::{
-    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse, EvidenceStream,
-    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
+    CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
+    ConfiguredSelectionResponse, EvidenceStream, LOCAL_ASR_MODEL_REMEDIATION,
+    LOCAL_ASR_TOOLS_REMEDIATION, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
+    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, NO_VIDEO_STREAM_REMEDIATION,
     OperationResponse, TerminalEventResponse, UNKNOWN_REVISION_REMEDIATION,
-    UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
-    media_tool_verification_summary, non_private_folder_summary, search_query_rejection_summary,
-    transcript_rejection_summary,
+    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, local_asr_failure_summary,
+    local_asr_verification_summary, media_tool_verification_summary, non_private_folder_summary,
+    search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -326,7 +328,14 @@ where
             let result = search::search(&engine, arguments);
             write_session_result(&mut writer, mode, CommandName::Search, result)
         }
-        Command::Candidates(_) => not_implemented(&mut writer, mode, CommandName::Candidates),
+        Command::Candidates(arguments) if mode == OutputMode::JsonLines => {
+            let result = candidates::candidates_stream(&engine, arguments).await;
+            write_evidence_stream(&mut writer, CommandName::Candidates, result)
+        }
+        Command::Candidates(arguments) => {
+            let result = candidates::candidates(&engine, arguments).await;
+            write_session_result(&mut writer, mode, CommandName::Candidates, result)
+        }
         Command::Frame(arguments) => {
             not_implemented(&mut writer, mode, arguments.command.operation_name())
         }
@@ -434,8 +443,8 @@ impl From<EngineError> for CommandFailure {
     }
 }
 
-/// Fixed-prose remediation for local speech recognition and transcript
-/// reads; never a path, provider output or transcript text.
+/// Fixed-prose remediation for local speech recognition, transcript reads
+/// and visual candidates; never a path, provider output or evidence text.
 fn local_asr_remediation(error: &EngineError) -> Option<String> {
     match error {
         EngineError::LocalAsrToolUnavailable(_) => Some(LOCAL_ASR_TOOLS_REMEDIATION.to_owned()),
@@ -450,6 +459,9 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::NoAudioStream => Some(NO_AUDIO_STREAM_REMEDIATION.to_owned()),
         EngineError::TranscriptUnavailable => Some(NO_TRANSCRIPT_REMEDIATION.to_owned()),
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
+        EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
+        EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
+        EngineError::CandidateCursorWithoutIndex => Some(CANDIDATE_CURSOR_REMEDIATION.to_owned()),
         _ => None,
     }
 }

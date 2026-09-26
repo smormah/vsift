@@ -43,8 +43,8 @@ use vsift_application::{
     VisualIndexScope, VisualSampler, VisualSamplingError, extend_visual_index,
 };
 use vsift_domain::{
-    DurabilityRequirement, MediaSelection, MediaStreamKind, MediaTime, OperationId, SessionId,
-    TimeRange, VisualIndex, VisualIndexProfile, VisualSample, VisualWindow,
+    DurabilityRequirement, MediaSelection, MediaTime, OperationId, SessionId, TimeRange,
+    VisualIndex, VisualIndexProfile, VisualSample, VisualWindow,
 };
 use vsift_infrastructure::{
     BoundSource, ExecutableResolver, FfmpegMedia, FfmpegVisualSampler, FilesystemSessionStore,
@@ -131,12 +131,7 @@ async fn decode_fixture(
     )?;
     let media = FfmpegMedia::new(conformance.clone(), HostIsolation::ProcessOnly, &store);
     let description = media.probe(&snapshot, ProcessCancellation::new()).await?;
-    let video = description
-        .streams
-        .iter()
-        .find(|stream| stream.kind == MediaStreamKind::Video)
-        .ok_or("no video stream")?
-        .index;
+    let (video, displayed_dimensions) = description.visual_video_stream()?;
     let selection = MediaSelection {
         video: Some(video),
         audio: None,
@@ -165,6 +160,7 @@ async fn decode_fixture(
                 session_id: &session_id,
                 source_id: &source_id,
                 stream_index: video,
+                displayed_dimensions,
                 duration: description.duration,
                 profile: VisualIndexProfile::R0,
             },

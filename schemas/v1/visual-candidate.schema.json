@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/visual-candidate.schema.json",
+  "title": "VSift visual candidate v1",
+  "description": "One visual candidate, a published evidence record (P08, ADR 0018): a moment at which the selected video stream's screen changed, or a periodic sample of a screen that did not, proposed so an agent need not look at every frame. Each record names its own source, source segment and stream so it can be stored or indexed on its own. Times are integer microseconds on the normalized source timeline. representative_us is the presentation time of the actual decoded frame that represents the candidate (never an interpolated request time); P09 frame get extracts it. span is the half-open time the candidate stands for, from representative_us to the next candidate of its window or the window end. A candidate is never merged across its fixed 60 s window, and a screen that reappears later is a separate candidate with the same visual_hash. Candidates are evidence assistance, not evidence: the original frames are authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_id",
+    "source_id",
+    "source_segment_id",
+    "stream_index",
+    "window",
+    "representative_us",
+    "span",
+    "change_window",
+    "reasons",
+    "stability",
+    "change",
+    "visual_hash",
+    "sample_count",
+    "displayed_dimensions",
+    "analysis"
+  ],
+  "properties": {
+    "candidate_id": {
+      "description": "Derived from the session, source, stream, analysis profile, window and representative time, so it never changes when later windows are analysed.",
+      "type": "string",
+      "pattern": "^vcd_[a-z0-9]{16,64}$"
+    },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "source_segment_id": { "type": "string", "pattern": "^sgm_[a-z0-9]{16,64}$" },
+    "stream_index": {
+      "description": "Original index of the video stream that was sampled: the first video stream whose codec the media tools decode.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "window": {
+      "description": "The fixed 60 s analysis window the candidate belongs to: [60 * ordinal s, min(60 * (ordinal + 1) s, duration)).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "from_us", "to_us"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "representative_us": { "type": "integer", "minimum": 0 },
+    "span": { "$ref": "#/$defs/range" },
+    "change_window": {
+      "description": "Where the change that opened the candidate happened: after from_us (the previous sample) and at or before to_us (representative_us). Null for a first frame or periodic coverage, which no observed change opened.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/range" }
+      ]
+    },
+    "reasons": {
+      "description": "Why the candidate was proposed. first_frame: the window's first decoded frame with no earlier sample. visual_change: the screen differs from the state before it. motion_start: the first of three or more consecutive changing samples. settled_after_motion: the first still sample after motion. periodic_coverage: no change fell in its 10 s cell (or the window continues the screen before it), so its first sample represents it.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "first_frame",
+          "visual_change",
+          "motion_start",
+          "settled_after_motion",
+          "periodic_coverage"
+        ]
+      }
+    },
+    "stability": {
+      "description": "settled: the screen held for at least two consecutive samples. transient: seen in exactly one sample, then it changed. in_motion: changing from sample to sample. open_at_window_end: seen only in the window's last sample, so whether it held is unknown.",
+      "enum": ["settled", "transient", "in_motion", "open_at_window_end"]
+    },
+    "change": {
+      "description": "The size of the change that opened the candidate, null when change_window is null. Both values are uncalibrated integers of the r0-visual-v1 grey 16x9 block grid (changed_blocks 0..144 blocks whose mean moved by at least 4 levels; max_block_delta 0..255 levels). They order changes by size; they are not a confidence or a probability.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["changed_blocks", "max_block_delta"],
+          "properties": {
+            "changed_blocks": { "type": "integer", "minimum": 0, "maximum": 144 },
+            "max_block_delta": { "type": "integer", "minimum": 0, "maximum": 255 }
+          }
+        }
+      ]
+    },
+    "visual_hash": {
+      "description": "A 64-bit difference hash of the representative frame as 16 lowercase hexadecimal digits: a similarity key that shows when a screen repeats, not a security digest.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "sample_count": {
+      "description": "Decoded samples inside span.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 122
+    },
+    "displayed_dimensions": {
+      "description": "The sampled stream's orientation-correct displayed size in pixels; what the representative frame shows.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "analysis": {
+      "description": "How the candidate was found: the analysis profile and the size of the grey samples it compared (no image is kept).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "width", "height"],
+      "properties": {
+        "profile": { "const": "r0-visual-v1" },
+        "width": { "const": 128 },
+        "height": { "const": 72 }
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

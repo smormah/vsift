@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/candidates-data.schema.json",
+  "title": "VSift candidates data v1",
+  "description": "The data member of a complete or partial candidates result (P08): one bounded page of the visual candidates whose representative time lies in the requested range, in time order, as published visual-candidate evidence records. A call first analyses the range's missing 60 s windows, at most 30 (30 minutes of media) per call; index names the revision the page was read from and its fixed sampling grid. coverage says which parts of the range (clipped to the video) are analysed and lists every typed gap. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty. Pass next_cursor back with the same session and range to continue; it never analyses anything, and it is rejected for any other session or range, after the session expires, or once a later call has analysed a window of its range.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "range", "index", "coverage", "items", "next_cursor"],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "range": {
+      "description": "The requested half-open range.",
+      "$ref": "#/$defs/range"
+    },
+    "index": { "$ref": "#/$defs/index" },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "visual-candidate.schema.json" }
+    },
+    "next_cursor": { "$ref": "#/$defs/next_cursor" }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "index": {
+      "description": "The committed visual-index revision the page was read from. Each call that analyses anything commits a new revision holding every window of the one before it unchanged, so candidate identities never change.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index_id",
+        "number",
+        "profile",
+        "duration_us",
+        "window_us",
+        "sample_interval_us",
+        "coverage_interval_us"
+      ],
+      "properties": {
+        "index_id": { "type": "string", "pattern": "^vix_[a-z0-9]{16,64}$" },
+        "number": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "profile": { "const": "r0-visual-v1" },
+        "duration_us": {
+          "description": "The video's probed duration; windows and coverage are clipped to it.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "window_us": { "const": 60000000 },
+        "sample_interval_us": {
+          "description": "Decoded frames are sampled at least this far apart (2 Hz).",
+          "const": 500000
+        },
+        "coverage_interval_us": {
+          "description": "Every cell of this length that holds a decoded frame has at least one candidate.",
+          "const": 10000000
+        }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us", "reason", "dropped_candidates"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 },
+        "reason": {
+          "description": "not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped.",
+          "enum": [
+            "not_analyzed",
+            "deadline_exceeded",
+            "undecodable",
+            "no_decoded_frame",
+            "candidate_budget_exhausted"
+          ]
+        },
+        "dropped_candidates": {
+          "description": "Change candidates dropped by the window's budget; 0 for every other reason.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["searched_range", "analyzed", "gaps", "ranges_truncated"],
+      "properties": {
+        "searched_range": {
+          "description": "The requested range clipped to the video.",
+          "$ref": "#/$defs/range"
+        },
+        "analyzed": {
+          "description": "Parts of searched_range that analysed windows cover, merged and in start order. no_decoded_frame and candidate_budget_exhausted gaps lie inside them.",
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/range" }
+        },
+        "gaps": {
+          "description": "Every typed gap of searched_range in start order; touching gaps of one reason are merged, except budget gaps, which stay per window.",
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/gap" }
+        },
+        "ranges_truncated": {
+          "description": "True when analyzed or gaps held more than 100 entries and only the first 100 are listed.",
+          "type": "boolean"
+        }
+      }
+    },
+    "next_cursor": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 512 }
+      ]
+    }
+  }
+}

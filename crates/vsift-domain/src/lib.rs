@@ -38,7 +38,7 @@ pub use identity::{
 pub use job::{JobState, JobTransitionError};
 pub use media::{
     DisplayRotation, MediaDecodeSupport, MediaDescription, MediaSelection, MediaSelectionError,
-    MediaStream, MediaStreamKind,
+    MediaStream, MediaStreamKind, VisualStreamError,
 };
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
 pub use provisioning::{

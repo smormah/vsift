@@ -9,10 +9,11 @@
 use std::{error::Error, fmt};
 
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrStage, ClockError, IdentifierGenerationError,
-    LocalAsrVerificationFailure, MediaToolFailure, MediaToolPreflightFailure, OpenSessionError,
-    PlanAcceptanceError, SessionStorageError, SourceProbeError, TranscriptBuildError,
-    TranscriptQueryError,
+    AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError,
+    IdentifierGenerationError, LocalAsrVerificationFailure, MediaToolFailure,
+    MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
+    SourceProbeError, TranscriptBuildError, TranscriptQueryError, VisualExtensionStop,
+    VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
 use vsift_domain::{FailureCode, RuntimeDependency, SearchQueryRejection, TranscriptImportError};
@@ -99,6 +100,24 @@ pub enum EngineError {
     TranscriptAssembly(TranscriptBuildError),
     /// A search query was rejected before any transcript was read.
     SearchQueryRejected(SearchQueryRejection),
+    /// `FFmpeg` or `FFprobe`, needed to analyse the video's frames for visual
+    /// candidates, was neither configured nor found on the filtered `PATH`.
+    VisualToolUnavailable(RuntimeDependency),
+    /// The source has no video stream, so it has no visual candidates.
+    NoVideoStream,
+    /// The source's video streams use codecs (or lack dimensions) the media
+    /// adapter does not decode.
+    UnsupportedVideoStream,
+    /// A candidate page request, usually its cursor, was rejected.
+    CandidateQuery(CandidateQueryError),
+    /// A cursor was supplied for a session that has no visual index yet, so
+    /// it cannot belong to any page of this session.
+    CandidateCursorWithoutIndex,
+    /// Visual analysis stopped (deadline, busy admission or cancellation)
+    /// before it indexed anything of the requested range.
+    VisualAnalysisStopped(VisualExtensionStop),
+    /// Building the visual index failed; nothing was committed.
+    VisualIndexBuild(VisualIndexBuildError),
 }
 
 impl EngineError {
@@ -125,7 +144,8 @@ impl EngineError {
             Self::TranscriptRejected(rejected) => transcript_failure_code(*rejected),
             Self::TranscriptSource(
                 TranscriptSourceError::InvalidPath | TranscriptSourceError::NotRegularFile,
-            ) => FailureCode::InvalidSource,
+            )
+            | Self::UnsupportedVideoStream => FailureCode::InvalidSource,
             Self::UserConfiguration(error) => error.failure_code(),
             Self::SavedPlanRejected(code) => *code,
             Self::WorkingDirectoryUnavailable
@@ -141,6 +161,9 @@ impl EngineError {
             | Self::RangeOutsideSource
             | Self::TranscriptRevisionNotFound
             | Self::SearchQueryRejected(_)
+            | Self::NoVideoStream
+            | Self::CandidateQuery(_)
+            | Self::CandidateCursorWithoutIndex
             | Self::Executable(
                 ExecutableRejection::NotAbsolute
                 | ExecutableRejection::NotRegularFile
@@ -152,7 +175,10 @@ impl EngineError {
             | Self::LocalAsrToolUnavailable(_)
             | Self::LocalAsrModelUnavailable
             | Self::LocalAsrModelNotPinned
+            | Self::VisualToolUnavailable(_)
             | Self::Executable(ExecutableRejection::NotFound) => FailureCode::MissingCapability,
+            Self::VisualAnalysisStopped(stop) => visual_stop_failure_code(*stop),
+            Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
@@ -167,6 +193,39 @@ impl EngineError {
             Self::LocalAsrFailed(failure) => asr_failure_code(*failure),
             Self::SourceProbe(error) => probe_failure_code(*error),
         }
+    }
+}
+
+/// Public code for visual analysis that stopped before indexing anything of
+/// the requested range (ADR 0018): the stop's own retryable code.
+const fn visual_stop_failure_code(stop: VisualExtensionStop) -> FailureCode {
+    match stop {
+        VisualExtensionStop::Deadline { .. } => FailureCode::DeadlineExceeded,
+        VisualExtensionStop::Busy { .. } => FailureCode::Busy,
+        VisualExtensionStop::Cancelled { .. } => FailureCode::Cancelled,
+        // A window budget is only reached after recording a window.
+        VisualExtensionStop::WindowLimit => FailureCode::ResourceLimit,
+    }
+}
+
+/// Public code for a visual index that could not be built (ADR 0018).
+///
+/// A provider that could not run on a window means no working capability; a
+/// stored index that no longer describes the source is an integrity
+/// failure; anything else is an internal fault. Transient sampling stops are
+/// never errors of the build itself; they are mapped for completeness.
+const fn visual_index_failure_code(error: VisualIndexBuildError) -> FailureCode {
+    match error {
+        VisualIndexBuildError::RangeOutsideSource => FailureCode::InvalidArgument,
+        VisualIndexBuildError::ScopeMismatch => FailureCode::IntegrityFailure,
+        VisualIndexBuildError::Sampling(sampling) => match sampling {
+            VisualSamplingError::Io => FailureCode::MissingCapability,
+            VisualSamplingError::Busy => FailureCode::Busy,
+            VisualSamplingError::Deadline => FailureCode::DeadlineExceeded,
+            VisualSamplingError::Cancelled => FailureCode::Cancelled,
+            VisualSamplingError::Undecodable => FailureCode::InvalidSource,
+        },
+        VisualIndexBuildError::Invalid(_) => FailureCode::Internal,
     }
 }
 
@@ -308,6 +367,10 @@ const fn media_tool_verification_failure_code(failure: MediaToolFailure) -> Fail
 }
 
 impl fmt::Display for EngineError {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One exhaustive list of every failure's fixed prose"
+    )]
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::SessionRoot(error) => error.fmt(formatter),
@@ -396,6 +459,34 @@ impl fmt::Display for EngineError {
             }
             Self::TranscriptAssembly(error) => error.fmt(formatter),
             Self::SearchQueryRejected(rejection) => rejection.fmt(formatter),
+            Self::VisualToolUnavailable(dependency) => write!(
+                formatter,
+                "{} is needed to analyse the video's frames but was not found",
+                dependency.display_name()
+            ),
+            Self::NoVideoStream => formatter.write_str("the source has no video stream"),
+            Self::UnsupportedVideoStream => {
+                formatter.write_str("the source has no video stream the media tools decode")
+            }
+            Self::CandidateQuery(error) => error.fmt(formatter),
+            Self::CandidateCursorWithoutIndex => {
+                formatter.write_str("the session has no visual candidates this cursor could page")
+            }
+            Self::VisualAnalysisStopped(stop) => match stop {
+                VisualExtensionStop::Deadline { .. } => {
+                    formatter.write_str("visual analysis exceeded its deadline")
+                }
+                VisualExtensionStop::Busy { .. } => {
+                    formatter.write_str("visual analysis could not be admitted")
+                }
+                VisualExtensionStop::Cancelled { .. } => {
+                    formatter.write_str("visual analysis was cancelled")
+                }
+                VisualExtensionStop::WindowLimit => {
+                    formatter.write_str("visual analysis reached its window budget")
+                }
+            },
+            Self::VisualIndexBuild(error) => error.fmt(formatter),
         }
     }
 }
@@ -417,7 +508,14 @@ impl Error for EngineError {
             Self::SourceProbe(error) => Some(error),
             Self::TranscriptAssembly(error) => Some(error),
             Self::SearchQueryRejected(error) => Some(error),
-            Self::LocalAsrToolUnavailable(_)
+            Self::CandidateQuery(error) => Some(error),
+            Self::VisualIndexBuild(error) => Some(error),
+            Self::VisualToolUnavailable(_)
+            | Self::NoVideoStream
+            | Self::UnsupportedVideoStream
+            | Self::CandidateCursorWithoutIndex
+            | Self::VisualAnalysisStopped(_)
+            | Self::LocalAsrToolUnavailable(_)
             | Self::LocalAsrModelUnavailable
             | Self::LocalAsrModelNotPinned
             | Self::LocalAsrVerificationFailed(_)

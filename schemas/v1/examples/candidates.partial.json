@@ -1,0 +1,142 @@
+{
+  "command": "candidates",
+  "coverage": {
+    "gaps": [
+      "60000000-150000000"
+    ],
+    "reasons": [
+      "not_analyzed",
+      "undecodable"
+    ],
+    "truncated": true
+  },
+  "data": {
+    "coverage": {
+      "analyzed": [
+        {
+          "from_us": 0,
+          "to_us": 60000000
+        }
+      ],
+      "gaps": [
+        {
+          "dropped_candidates": 0,
+          "from_us": 60000000,
+          "reason": "undecodable",
+          "to_us": 120000000
+        },
+        {
+          "dropped_candidates": 0,
+          "from_us": 120000000,
+          "reason": "not_analyzed",
+          "to_us": 150000000
+        }
+      ],
+      "ranges_truncated": false,
+      "searched_range": {
+        "from_us": 0,
+        "to_us": 150000000
+      }
+    },
+    "index": {
+      "coverage_interval_us": 10000000,
+      "duration_us": 150000000,
+      "index_id": "vix_5278827a5eb80d85a88983f2e69a5cba",
+      "number": 1,
+      "profile": "r0-visual-v1",
+      "sample_interval_us": 500000,
+      "window_us": 60000000
+    },
+    "items": [
+      {
+        "analysis": {
+          "height": 72,
+          "profile": "r0-visual-v1",
+          "width": 128
+        },
+        "candidate_id": "vcd_37d54074a8f7963cee1c0bc7e23eaf79",
+        "change": null,
+        "change_window": null,
+        "displayed_dimensions": {
+          "height": 900,
+          "width": 1440
+        },
+        "reasons": [
+          "first_frame"
+        ],
+        "representative_us": 0,
+        "sample_count": 10,
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_segment_id": "sgm_02f1ec5104b39a416aa8182970f01c81",
+        "span": {
+          "from_us": 0,
+          "to_us": 5000000
+        },
+        "stability": "settled",
+        "stream_index": 0,
+        "visual_hash": "0000000000000028",
+        "window": {
+          "from_us": 0,
+          "ordinal": 0,
+          "to_us": 60000000
+        }
+      },
+      {
+        "analysis": {
+          "height": 72,
+          "profile": "r0-visual-v1",
+          "width": 128
+        },
+        "candidate_id": "vcd_d0a47607c893a97b6e9d4893ac51daca",
+        "change": {
+          "changed_blocks": 144,
+          "max_block_delta": 50
+        },
+        "change_window": {
+          "from_us": 4500000,
+          "to_us": 5000000
+        },
+        "displayed_dimensions": {
+          "height": 900,
+          "width": 1440
+        },
+        "reasons": [
+          "visual_change"
+        ],
+        "representative_us": 5000000,
+        "sample_count": 8,
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_segment_id": "sgm_02f1ec5104b39a416aa8182970f01c81",
+        "span": {
+          "from_us": 5000000,
+          "to_us": 9000000
+        },
+        "stability": "settled",
+        "stream_index": 0,
+        "visual_hash": "000000000000005a",
+        "window": {
+          "from_us": 0,
+          "ordinal": 0,
+          "to_us": 60000000
+        }
+      }
+    ],
+    "next_cursor": "v1|ses_0123456789abcdef0123456789abcdef|1|8c18b93b0fb2a8b9c5e377d0ef676dcf40a2c143e59f7e3e9dd974eaf69e2625|0-5000000|1790294400000000",
+    "range": {
+      "from_us": 0,
+      "to_us": 200000000
+    },
+    "session_id": "ses_0123456789abcdef0123456789abcdef"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "Part of the requested range has no visual candidates because it is not analysed yet or could not be analysed; coverage lists each gap and its reason. Run candidates again for the same range to continue not_analyzed and deadline_exceeded parts."
+  ]
+}

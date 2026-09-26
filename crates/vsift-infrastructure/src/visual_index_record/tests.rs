@@ -6,8 +6,8 @@ use vsift_application::{
     VisualSamplingError, extend_visual_index,
 };
 use vsift_domain::{
-    MediaTime, SessionId, SourceId, TimeRange, VISUAL_BLOCKS, VisualHash, VisualIndex,
-    VisualIndexProfile, VisualSample, VisualWindow,
+    FrameDimensions, MediaTime, SessionId, SourceId, TimeRange, VISUAL_BLOCKS, VisualHash,
+    VisualIndex, VisualIndexProfile, VisualSample, VisualWindow,
 };
 
 use super::{
@@ -65,6 +65,7 @@ async fn built(session: &SessionId) -> Result<VisualIndex, Box<dyn std::error::E
         session_id: session,
         source_id: &source,
         stream_index: 0,
+        displayed_dimensions: FrameDimensions::new(1280, 720)?,
         duration: MediaTime::from_micros(200 * SECOND),
         profile: VisualIndexProfile::R0,
     };

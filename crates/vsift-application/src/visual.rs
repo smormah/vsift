@@ -22,14 +22,19 @@
 //! window is never analysed again, so a candidate keeps its identity in
 //! every later revision of the index.
 
-use std::{error::Error, fmt, future::Future, num::NonZeroU32};
+use std::{
+    error::Error,
+    fmt,
+    future::Future,
+    num::{NonZeroU32, NonZeroUsize},
+};
 
 use vsift_domain::{
-    CoverageGapReason, CursorError, CursorToken, MediaTime, PageLimit, QueryDigest, SessionId,
-    SourceId, TimeRange, VISUAL_WINDOW_MICROS, VisualAnalysisError, VisualCandidate,
-    VisualCandidateId, VisualCoverageGap, VisualIndex, VisualIndexError, VisualIndexId,
-    VisualIndexParts, VisualIndexProfile, VisualIndexWindow, VisualSample, VisualWindow,
-    VisualWindowOutcome, analyse_window, visual_window_count,
+    CoverageGapReason, CursorError, CursorToken, FrameDimensions, MediaTime, PageLimit,
+    QueryDigest, SessionId, SourceId, TimeRange, VISUAL_WINDOW_MICROS, VisualAnalysisError,
+    VisualCandidate, VisualCandidateId, VisualCoverageGap, VisualIndex, VisualIndexError,
+    VisualIndexId, VisualIndexParts, VisualIndexProfile, VisualIndexWindow, VisualSample,
+    VisualWindow, VisualWindowOutcome, analyse_window, visual_window_count,
 };
 
 use crate::transcript::{derived_identity, sha256_hex};
@@ -94,10 +99,25 @@ pub struct VisualIndexScope<'a> {
     pub source_id: &'a SourceId,
     /// Selected video stream index.
     pub stream_index: u32,
+    /// The stream's orientation-correct displayed dimensions.
+    pub displayed_dimensions: FrameDimensions,
     /// Probed normalized source duration.
     pub duration: MediaTime,
     /// Analysis profile.
     pub profile: VisualIndexProfile,
+}
+
+impl VisualIndexScope<'_> {
+    /// Whether `index` describes this scope's source, stream, dimensions,
+    /// duration and profile (the session is checked through identities).
+    #[must_use]
+    pub fn describes(&self, index: &VisualIndex) -> bool {
+        index.source_id() == self.source_id
+            && index.stream_index() == self.stream_index
+            && index.displayed_dimensions() == self.displayed_dimensions
+            && index.duration() == self.duration
+            && index.profile() == self.profile
+    }
 }
 
 /// Derives a candidate's identity.
@@ -164,12 +184,7 @@ pub fn verify_visual_index_identities(
     scope: &VisualIndexScope<'_>,
     index: &VisualIndex,
 ) -> Result<(), VisualIndexError> {
-    if index.source_id() != scope.source_id
-        || index.stream_index() != scope.stream_index
-        || index.duration() != scope.duration
-        || index.profile() != scope.profile
-        || visual_index_id(scope, index.number())? != *index.id()
-    {
+    if !scope.describes(index) || visual_index_id(scope, index.number())? != *index.id() {
         return Err(VisualIndexError::InvalidWindow);
     }
     for window in index.windows() {
@@ -226,6 +241,20 @@ pub struct VisualIndexExtension {
     pub recorded: Vec<u32>,
     /// Why the call stopped early, if it did.
     pub stop: Option<VisualExtensionStop>,
+}
+
+impl VisualIndexExtension {
+    /// The windows this call recorded, in ascending ordinal order, as they
+    /// stand in its revision; empty when nothing was recorded.
+    #[must_use]
+    pub fn recorded_windows(&self) -> Vec<VisualIndexWindow> {
+        self.revision.as_ref().map_or_else(Vec::new, |revision| {
+            self.recorded
+                .iter()
+                .filter_map(|ordinal| revision.window(*ordinal).cloned())
+                .collect()
+        })
+    }
 }
 
 /// Why an extension call failed.
@@ -287,13 +316,35 @@ pub async fn extend_visual_index(
     request: ExtendVisualIndexRequest<'_>,
     sampler: &impl VisualSampler,
 ) -> Result<VisualIndexExtension, VisualIndexBuildError> {
+    extend_visual_index_within(request, sampler, MAX_WINDOW_BUDGET).await
+}
+
+/// [`MAX_WINDOWS_PER_EXTENSION`] as a budget.
+const MAX_WINDOW_BUDGET: NonZeroUsize = match NonZeroUsize::new(MAX_WINDOWS_PER_EXTENSION) {
+    Some(budget) => budget,
+    None => NonZeroUsize::MIN,
+};
+
+/// [`extend_visual_index`] with a smaller per-call window budget.
+///
+/// A host that must answer sooner than 30 windows of decoding allow (and
+/// the opt-in continuation tests) lowers the budget; a budget above
+/// [`MAX_WINDOWS_PER_EXTENSION`] is clamped to it, so no caller can make one
+/// call unbounded.
+///
+/// # Errors
+///
+/// As for [`extend_visual_index`].
+pub async fn extend_visual_index_within(
+    request: ExtendVisualIndexRequest<'_>,
+    sampler: &impl VisualSampler,
+    window_budget: NonZeroUsize,
+) -> Result<VisualIndexExtension, VisualIndexBuildError> {
+    let budget = window_budget.get().min(MAX_WINDOWS_PER_EXTENSION);
     let scope = request.scope;
     let range = clip_to_source(request.range, scope.duration)?;
     if let Some(previous) = request.previous
-        && (previous.source_id() != scope.source_id
-            || previous.stream_index() != scope.stream_index
-            || previous.duration() != scope.duration
-            || previous.profile() != scope.profile)
+        && !scope.describes(previous)
     {
         return Err(VisualIndexBuildError::ScopeMismatch);
     }
@@ -310,7 +361,7 @@ pub async fn extend_visual_index(
         {
             continue;
         }
-        if recorded.len() == MAX_WINDOWS_PER_EXTENSION {
+        if recorded.len() == budget {
             stop = Some(VisualExtensionStop::WindowLimit);
             break;
         }
@@ -364,21 +415,143 @@ pub async fn extend_visual_index(
         .ok_or(VisualIndexBuildError::Invalid(
             VisualIndexError::InvalidWindow,
         ))?;
-    let revision = VisualIndex::new(VisualIndexParts {
-        id: visual_index_id(&scope, number).map_err(VisualIndexBuildError::Invalid)?,
-        number,
-        source_id: scope.source_id.clone(),
-        stream_index: scope.stream_index,
-        duration: scope.duration,
-        profile: scope.profile,
-        windows,
-    })
-    .map_err(VisualIndexBuildError::Invalid)?;
+    let revision = assemble_revision(&scope, number, windows)?;
     Ok(VisualIndexExtension {
         revision: Some(revision),
         recorded,
         stop,
     })
+}
+
+fn assemble_revision(
+    scope: &VisualIndexScope<'_>,
+    number: NonZeroU32,
+    windows: Vec<VisualIndexWindow>,
+) -> Result<VisualIndex, VisualIndexBuildError> {
+    VisualIndex::new(VisualIndexParts {
+        id: visual_index_id(scope, number).map_err(VisualIndexBuildError::Invalid)?,
+        number,
+        source_id: scope.source_id.clone(),
+        stream_index: scope.stream_index,
+        displayed_dimensions: scope.displayed_dimensions,
+        duration: scope.duration,
+        profile: scope.profile,
+        windows,
+    })
+    .map_err(VisualIndexBuildError::Invalid)
+}
+
+/// Carries the windows one call recorded onto the session's newest
+/// committed index, for a commit that lost a race with another call.
+///
+/// Two calls may analyse overlapping ranges concurrently; the one that
+/// commits second finds a newer revision than the one it started from.
+/// Windows are pure functions of the source, stream and profile, so a
+/// window both calls analysed is identical in both, and the union is what
+/// either call would have produced from the other's revision: `newest` is
+/// kept unchanged and every recorded window it lacks is added. The result
+/// is revision `newest + 1`, or `None` when `newest` already holds every
+/// recorded window (nothing is left to commit).
+///
+/// # Errors
+///
+/// Returns [`VisualIndexBuildError::ScopeMismatch`] when `newest` describes
+/// another source or stream, and [`VisualIndexBuildError::Invalid`] for an
+/// internal fault.
+pub fn merge_visual_extension(
+    scope: &VisualIndexScope<'_>,
+    newest: Option<&VisualIndex>,
+    recorded: &[VisualIndexWindow],
+) -> Result<Option<VisualIndex>, VisualIndexBuildError> {
+    if newest.is_some_and(|index| !scope.describes(index)) {
+        return Err(VisualIndexBuildError::ScopeMismatch);
+    }
+    let mut windows: Vec<VisualIndexWindow> = newest
+        .map(|index| index.windows().to_vec())
+        .unwrap_or_default();
+    let before = windows.len();
+    for window in recorded {
+        let ordinal = window.window().ordinal();
+        if !windows
+            .iter()
+            .any(|existing| existing.window().ordinal() == ordinal)
+        {
+            windows.push(window.clone());
+        }
+    }
+    if windows.len() == before {
+        return Ok(None);
+    }
+    windows.sort_by_key(|window| window.window().ordinal());
+    let number = newest
+        .map_or(Some(NonZeroU32::MIN), |index| index.number().checked_add(1))
+        .ok_or(VisualIndexBuildError::Invalid(
+            VisualIndexError::InvalidWindow,
+        ))?;
+    assemble_revision(scope, number, windows).map(Some)
+}
+
+/// The parts of `range` (clipped to the source) that analysed windows
+/// cover, merged and in time order.
+///
+/// Undecodable and unanalysed windows are not analysed; frameless cells and
+/// budget-exhausted windows lie inside analysed windows and are reported as
+/// gaps by [`visual_coverage_gaps`] as well, so the two lists may overlap.
+#[must_use]
+pub fn analysed_ranges(index: &VisualIndex, range: TimeRange) -> Vec<TimeRange> {
+    let Ok(range) = clip_to_source(range, index.duration()) else {
+        return Vec::new();
+    };
+    let mut ranges: Vec<TimeRange> = Vec::new();
+    for ordinal in index.window_ordinals(range) {
+        let Some(window) = index.window(ordinal) else {
+            continue;
+        };
+        if matches!(window.outcome(), VisualWindowOutcome::Undecodable) {
+            continue;
+        }
+        let part = window.window().range();
+        let Ok(part) = TimeRange::new(part.start().max(range.start()), part.end().min(range.end()))
+        else {
+            continue;
+        };
+        match ranges.last_mut() {
+            Some(last) if last.end() == part.start() => {
+                if let Ok(joined) = TimeRange::new(last.start(), part.end()) {
+                    *last = joined;
+                }
+            }
+            _ => ranges.push(part),
+        }
+    }
+    ranges
+}
+
+/// Whether any window intersecting `range` is recorded in `index`
+/// (analysed or undecodable), so something of the range is indexed.
+#[must_use]
+pub fn indexes_any_of(index: Option<&VisualIndex>, range: TimeRange) -> bool {
+    index.is_some_and(|index| {
+        index
+            .window_ordinals(range)
+            .any(|ordinal| index.window(ordinal).is_some())
+    })
+}
+
+/// Ordinals of the windows of `range` (clipped to the source) that `index`
+/// has not recorded; every window when there is no index.
+#[must_use]
+pub fn missing_windows(
+    index: Option<&VisualIndex>,
+    duration: MediaTime,
+    range: TimeRange,
+) -> Vec<u32> {
+    let Ok(range) = clip_to_source(range, duration) else {
+        return Vec::new();
+    };
+    window_ordinals(range, duration)
+        .filter(|ordinal| index.is_none_or(|index| index.window(*ordinal).is_none()))
+        .collect()
 }
 
 fn identified_outcome(

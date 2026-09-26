@@ -8,9 +8,11 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > implemented, dependency detection, bring-your-own selection and read-only setup
 > plans work, an existing SRT or WebVTT transcript can be imported with a video, the
 > speech can be transcribed locally with whisper.cpp (P07), and the transcript can be
-> read back by time range and searched for words (P08, in progress). Visual candidates,
-> source reinspection, worker execution, managed dependency installation and the
-> complete agent handoff remain future R0 work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
+> read back by time range and searched for words, and the moments where the screen
+> changed can be listed as visual candidates with honest coverage (P08, pending
+> review and merge). Source reinspection (frames and crops), worker execution,
+> managed dependency installation and the complete agent handoff remain future R0
+> work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.
@@ -53,13 +55,14 @@ vsift ingest ./recording.mp4 --transcript ./recording.vtt --transcript-offset 50
 vsift transcript retranscribe ses_0123456789abcdef --json
 vsift transcript get ses_0123456789abcdef --from 0 --to 60000000 --json
 vsift search ses_0123456789abcdef --query "R-17" --json
+vsift candidates ses_0123456789abcdef --from 0 --to 60000000 --json
 vsift session list --json
 vsift session clean --expired --dry-run --json
 ```
 
 The full R0 command namespace is visible through `vsift --help` so integrations can
 target a stable grammar. `session status/renew/close/retain/clean` and
-`bundle validate` are also operational. Visual candidates, frame and audio retrieval
+`bundle validate` are also operational. Frame and audio retrieval
 and setup installation still return `COMMAND_NOT_IMPLEMENTED` until their owning
 packets ship.
 

@@ -26,10 +26,10 @@ use vsift_application::{
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CursorToken, MediaTime, SearchMatch,
-    SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange, VISUAL_BLOCKS, VISUAL_FRAME_BYTES,
-    VisualHash, VisualIndexProfile, VisualSample, VisualWindow, merge_chunks, plan_chunks,
-    validate_chunk_output,
+    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CursorToken, FrameDimensions, MediaTime,
+    SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange, VISUAL_BLOCKS,
+    VISUAL_FRAME_BYTES, VisualHash, VisualIndexProfile, VisualSample, VisualWindow, merge_chunks,
+    plan_chunks, validate_chunk_output,
 };
 use vsift_fuzz::{Target, VISUAL_FUZZ_SESSION, visual_samples_input};
 use vsift_infrastructure::{
@@ -586,6 +586,8 @@ fn visual_index_seed(fixture: &str) -> Result<Vec<u8>, Box<dyn Error>> {
                 session_id: &session,
                 source_id: &source,
                 stream_index: 0,
+                // F06 and F10 are 1280x720 in the corpus manifest.
+                displayed_dimensions: FrameDimensions::new(1280, 720)?,
                 duration,
                 profile: VisualIndexProfile::R0,
             },

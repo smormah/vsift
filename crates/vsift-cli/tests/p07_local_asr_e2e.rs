@@ -1017,7 +1017,6 @@ async fn local_asr_checkpoint() -> TestResult {
     };
     stages.push(json!({"name": "p07_local_asr", "status": overall}));
     let future_stages: Vec<_> = [
-        "p08_candidates_search",
         "p09_source_reinspection",
         "p10_recovery",
         "p11_worker_batch",
@@ -1054,7 +1053,7 @@ async fn local_asr_checkpoint() -> TestResult {
         "stages": stages,
         "coverage_gaps": [
             "WER, critical terms and timing (T-04) are measured by the opt-in p07_asr_qualification test, not by this checkpoint",
-            "Search, candidates and visual refinement belong to P08 and P09"
+            "Search and candidates are checked by the P08 checkpoints (p08_search_e2e, p08_candidates_e2e); visual refinement belongs to P09"
         ],
         "future_stages": future_stages,
         "overall": overall,

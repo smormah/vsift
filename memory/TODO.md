@@ -6,61 +6,50 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-Delivery was re-planned on 2026-09-23 ([ADR 0015](../docs/decisions/0015-r0-delivery-replan.md),
-[ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md)). **P00-P07 are
-complete** (P07 merge `9ea3180`). **P08 (candidates and search) is in progress**; the ledger
-marks it `in_progress`. P08 is delivered as four pull requests:
+P00-P07 are complete (P07 merge `9ea3180`; re-plan in ADR 0015/0016). **P08
+(candidates and search) is implemented across four pull requests; ADR 0018 was
+accepted on 2026-09-26.** PR 1 (#156) is merged; #157, #158 and #160 (this change) merge
+in that order. The packet completes with the ledger completion record. Local checks: CI is the default Linux/macOS
+check.
 
-1. **PR 1, transcript search: merged (PR #156, `a2fadc1`;
-   [ADR 0018](../docs/decisions/0018-visual-candidate-index-and-transcript-search.md)
-   accepted 2026-09-26).** Remaining merges in order: #157, #158, #160. `vsift search` end to end: domain normalisation, tiers,
-   ranking and coverage; application paging with query-bound cursors; `Engine::search`;
-   contract types, schemas `search-data`/`search-stream-data` and frozen F10 examples;
-   CLI; tests (C-03, S-11, contract, opt-in `p08_search_e2e`); fuzz target `search_query`.
-2. **PR 2, #148 bracketed source binding (PR #157, merges before PR 3):** one full hash when a
-   multi-call operation opens the source, a cheap identity check before each provider
-   call, a full hash before commit (ADR 0012 note). 869 MB, 24-chunk clip: 25.5 s vs 173.4 s.
-3. **PR 3, visual index core (PR #158, this change; not user-reachable yet):** 60 s pure
-   windows, 2 Hz actual-frame sampling, a candidate at least every 10 s, time-preserving
-   merges, stability, visual hash, batched `visual_index_record` artifacts, typed gaps,
-   `visual_sampling` preflight (profile 2). Recall: 10/10 stable events, 0 false changes.
-4. **PR 4, `candidates` command (after PR 3):** analyses missing windows in range, at most
-   30 minutes of media per call, remainder `not_analyzed`; recall report over `stable`
-   events of at least 1 s; completes ADR 0018's visual half; closes P08.
-
-#153 is fixed (PR #155, `10a251e`): the optimised Ubuntu whisper.cpp CPU backends are
-pinned; hosted Ubuntu RTF 0.244, Windows 0.264.
-
-## Decisions confirmed by the maintainer (ADR 0018, 2026-09-26)
-
-1. Visual index built inside `candidates`, 30 minutes of media per call.
-2. 2 Hz sampling with a candidate at least every 10 s.
-3. Recall gate over `stable` events of at least 1 s; F04-E02/F05-E02 reported as corpus
-   limitations; open an issue to regenerate the motion fixtures.
-4. #148 fixed in P08 by bracketed source binding.
-5. `search --events jsonl` streams existing `transcript_segment` records, then a terminal
-   event with the hit list (implemented in PR 1).
-6. No thumbnails in P08 (P09 frames).
-Also confirmed, PR 1's additions: a third coverage basis `mixed` (local ASR spliced into
-supplied text), and a supplied transcript taken to cover the whole source (unverified).
+1. **PR 1 (literal search, #156, merged `a2fadc1`)**; **PR 2 (bracketed source binding,
+   #148, #157)** and **PR 3 (visual index core, #158)** are green in CI.
+2. **PR 4, the `candidates` command (#160, this change; on PR 3)**. `Engine::candidates`, v1 command, `visual_candidate`
+   record type, four schemas and four frozen examples, C-03/V-04 tests, the opt-in
+   `p08_candidates_e2e` checkpoint (7 stages), ADR 0018 completed (Accepted),
+   recall record `docs/planning/p08-candidate-recall.md`.
+3. **Next (supervisor):** merge #157, #158 and #160 in order; write the P08 ledger
+   completion record citing the merge commits and checkpoint reports. P09 starts only
+   when the maintainer says so (governance rule 10).
+4. **Decisions confirmed in ADR 0018 (2026-09-26):** index built inside `candidates`, 30
+   windows per call, remainder `not_analyzed`; 2 Hz actual frames, a candidate at least
+   every 10 s; recall gated on stable events of at least 1 s; no thumbnails; search
+   streams existing `transcript_segment` records. PR 3 lowered the change thresholds
+   (one block moving 6, or two moving 4) and gives `-ss`/`-t` in normalised time with a
+   1 s margin. PR 4 clips a range past the video's end, stores the displayed dimensions
+   in the index, and lets a host lower the per-call budget.
 
 ## Tracked issues
 
+- #159: regenerate the motion fixtures so F04/F05/F12 E02 differ visibly (corpus
+  limitations today; F04-E02 is the corpus's only scroll).
 - #150: noisy-speech fixture set before any noise WER gate.
+- #148: per-chunk source rehash; fixed by P08 PR 2 (#157), closes when it merges.
 - #147: faster-whisper adapter (backlog); whisper.cpp stays the default.
 - #128: process-supervisor tests fail intermittently on Windows under load; add recurrences.
 - #144: a throttled Windows runner once exceeded the 5 s session-root provisioning wait.
 
 ## Other follow-ups
 
-- Search: no accent folding or Unicode normalisation (needs a dependency); phrases do not
-  cross segments; number compounds such as `thirty-two` are not converted. A spliced
-  revision whose older run left no carried segment reports that run's range as
-  untranscribed (understated, never overstated).
+- Candidates: real screen recordings (heavier compression noise) are unmeasured; no
+  denser on-demand pass for sub-0.5 s changes; the probe's duration is part of the index
+  scope, so a tools upgrade that probes another duration makes an old index an
+  integrity failure for that session.
+- Search: no accent folding or Unicode normalisation; phrases do not cross segments;
+  number compounds such as `thirty-two` are not converted.
 - A creator killed mid-provisioning leaves an unmarked root refused until removed.
 - F09: base starts a segment at its audio start after leading silence.
 - Ctrl-C is not trapped; the model is hashed up to three times per run (no cache).
-- The local-ASR checkpoint's word checks are written for `base`.
 
 ## Open decisions (maintainer)
 
@@ -72,12 +61,13 @@ supplied text), and a supplied transcript taken to cover the whole source (unver
 ## Known issues and gates
 
 - Real-tool success paths are opt-in (`--ignored`): `p07_transcript_e2e`,
-  `p07_local_asr_e2e`, `p07_asr_qualification`, `p08_search_e2e`, `engine_retranscribe`,
-  `p07_local_asr`, and the S-11 search measurement (`engine_search`, `--release`).
+  `p07_local_asr_e2e`, `p07_asr_qualification`, `p08_search_e2e`, `p08_candidates_e2e`,
+  `engine_retranscribe`, `p07_local_asr`, `p08_candidates_fixtures`, the S-11
+  measurements (`engine_search`, `engine_candidates`, `--release`) and
+  `source_binding::tests::a_real_multi_chunk_decode_hashes_the_copy_exactly_twice`.
 - whisper.cpp `-ojf` output: a split multi-byte token fails the chunk (`unparseable_output`).
-- The CLI keeps application, infrastructure and (since P08) domain as development
-  dependencies for tests that seed session records; hosts still depend only on `vsift`
-  and `vsift-contract`.
+- The CLI keeps application, infrastructure and domain as development dependencies for
+  tests that seed session records; hosts depend only on `vsift` and `vsift-contract`.
 - FS-01: strict OS/storage-crash durability is unqualified; durable requests fail closed
   until P10/P11/P14 run the Ubuntu/ext4 campaign (ADR 0010).
 - Baseline findings B-01..B-11 close through their mapped packets.
@@ -94,6 +84,7 @@ bounded version cleanup; kill and power-loss qualification; D-02..D-08 and the E
   both the supplied-transcript and local-ASR paths, in named Codex and Claude Code trials.
 - R1 packets P15..P20 start only after P14. Live capture (#107, #108) waits.
 - New features land in the engine once, never in a host. Any new media stage calls the
-  preflight hook first. Wire sequencing lives in `vsift-contract`.
+  preflight hook first; one that calls a provider more than once over a source takes a
+  `BoundSource`. Wire sequencing lives in `vsift-contract`.
 - A new public command, failure code, event kind or record type needs its `CommandName`,
   `FailureCode::ALL`, `EventKind::ALL` or `EvidenceRecordType::ALL` entry and v1 schemas.

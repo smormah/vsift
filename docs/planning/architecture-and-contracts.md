@@ -95,7 +95,7 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 | `transcript get <session> --from ... --to ... [--limit ...] [--cursor ...]` | Pageable timestamped text and alignment metadata (implemented in P07 increment 2) |
 | `transcript retranscribe <session> --from ... --to ...` | New transcript revision; preserve previous citations |
 | `search <session> --query ...` | Literal/ranked transcript search; no raw regex or executable query input |
-| `candidates <session> --from ... --to ... --limit ...` | Bounded ordered cards, thumbnails optional, stable continuation cursor |
+| `candidates <session> --from ... --to ... --limit ...` | Bounded ordered candidate records with honest coverage and a stable continuation cursor; no thumbnails in P08 (implemented in P08 PR 4) |
 | `frame get <session> --at ...`, `frame neighbours <evidence>` | Source-grounded frame and bounded adjacent states |
 | `frame burst <session> --from ... --to ... --max-frames ...` | Finite count, dimensions and total-byte budget; actual timestamps |
 | `crop <evidence> --rect ...`, `audio <session> --from ... --to ...` | Bounded source-derived image/audio artifact with lineage |
@@ -421,11 +421,25 @@ compromised decoder. Worker isolation requires host-enforced limits and reports 
    difference, regional change, stable post-scroll states and periodic coverage
    (proposal: 10-second checkpoints plus up to 2 Hz change analysis). Streaming
    processing may decode intervening frames; it need not save or send every frame.
+   P08 implements this inside `candidates`
+   ([ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)):
+   fixed 60 s windows, at most 30 per call, each decoded by one bounded FFmpeg run into
+   actual frames at most 2 Hz as 128x72 grey samples (16x9 block means and a difference
+   hash in the domain), with a candidate in every 10 s cell that has a frame; the
+   rest of the range is reported as `not_analyzed` and a later call continues it.
 6. Deduplicate similar candidates without dropping the timestamp sequence or mandatory
    coverage markers. A tiny UI change, transient tooltip or one-frame event can evade
    sparse sampling. Report coverage limits and offer an on-demand denser bounded pass.
+   P08: unchanged samples merge into one candidate with its span and sample count,
+   motion collapses into `motion_start` then `settled_after_motion`, a repeated screen
+   stays a separate candidate with the same visual hash, and every result lists its
+   typed gaps (`not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`,
+   `candidate_budget_exhausted`). A denser on-demand pass is not implemented.
 7. Search transcript text and timestamps first; optional enrichment attaches separately
    versioned hints. The agent tests lead/lag windows and verifies image content.
+   P08: `search` returns the hit's segment time; `candidates` over the hit time
+   plus or minus 10 s finds the candidate showing what was said (V-04, opt-in
+   `p08_lead_lag`); P09 extracts its `representative_us` frame.
 8. Extract a native-resolution frame/burst/crop/audio range from the bound source,
    recording actual source time, orientation, dimensions, requested parameters and
    any resampling. Upscaling adds no source detail and is labeled as a transform.

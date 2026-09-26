@@ -512,7 +512,7 @@ pub(crate) fn resolve_whisper(selected: Option<PathBuf>) -> Result<TrustedExecut
 }
 
 /// The committed status of an open, unexpired session.
-fn open_status(
+pub(crate) fn open_status(
     store: &FilesystemSessionStore,
     session: &SessionId,
     now: u64,
@@ -536,7 +536,7 @@ fn recognizer_threads() -> NonZeroU16 {
 }
 
 /// Storage failure for a committed source copy that could not be reopened.
-const fn snapshot_storage_error(error: &SourceError) -> SessionStorageError {
+pub(crate) const fn snapshot_storage_error(error: &SourceError) -> SessionStorageError {
     match error {
         SourceError::Storage(storage) => *storage,
         SourceError::SnapshotChanged
@@ -552,7 +552,7 @@ const fn snapshot_storage_error(error: &SourceError) -> SessionStorageError {
 }
 
 /// Probe failure of the committed source, as for supplied-transcript import.
-const fn probe_error(error: &MediaError) -> SourceProbeError {
+pub(crate) const fn probe_error(error: &MediaError) -> SourceProbeError {
     match error {
         MediaError::CapacityUnavailable => SourceProbeError::Busy,
         MediaError::Deadline => SourceProbeError::Deadline,

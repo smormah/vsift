@@ -42,8 +42,8 @@ use vsift_application::{
     extend_visual_index,
 };
 use vsift_domain::{
-    CandidateReason, MediaTime, SessionId, SourceId, TimeRange, VISUAL_BLOCKS, VisualCandidate,
-    VisualHash, VisualIndex, VisualIndexProfile, VisualSample, VisualWindow,
+    CandidateReason, FrameDimensions, MediaTime, SessionId, SourceId, TimeRange, VISUAL_BLOCKS,
+    VisualCandidate, VisualHash, VisualIndex, VisualIndexProfile, VisualSample, VisualWindow,
 };
 
 pub type Built<T> = Result<T, Box<dyn Error>>;
@@ -249,6 +249,9 @@ pub async fn index_recorded(recorded: &RecordedFixture) -> Built<VisualIndex> {
         session_id: &session,
         source_id: &source,
         stream_index: 0,
+        // Dimensions are carried for presentation only and never change
+        // which candidates a window's samples produce.
+        displayed_dimensions: FrameDimensions::new(1280, 720)?,
         duration: recorded.duration,
         profile: VisualIndexProfile::R0,
     };
