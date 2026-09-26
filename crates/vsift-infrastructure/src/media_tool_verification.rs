@@ -3,9 +3,10 @@
 //!
 //! A version probe only shows that an executable responds. This verifier stages
 //! the embedded fixture in a fresh private session, runs the same bounded P04
-//! probe, frame and audio operations and the P08 visual sampling an
-//! investigation uses, and compares each result with the fixture's recorded
-//! truth. The fixture is embedded so the
+//! probe, frame and audio operations, the P08 visual sampling and (since
+//! verification profile 3) the P09 frame listing, exact-timestamp extraction
+//! and crop an investigation uses, and compares each result with the
+//! fixture's recorded truth. The fixture is embedded so the
 //! check works on machines without the repository (ADR 0015).
 
 use std::{
@@ -20,14 +21,15 @@ use vsift_application::{
     MediaToolVerification, MediaToolVerifier, ModelVerification, ReviewedCompatibilityPolicy,
 };
 use vsift_domain::{
-    ArtifactIntegrity, CandidateReason, CandidateStability, DurabilityRequirement,
-    MediaDescription, MediaSelection, MediaStreamKind, MediaTime, OperationId, ReviewedAsrModel,
-    SessionId, TimeRange, VisualChangePolicy, VisualSample, VisualWindow, analyse_window,
+    ArtifactIntegrity, CandidateReason, CandidateStability, CropRect, DurabilityRequirement,
+    FrameDimensions, FrameSelection, FrameTolerance, MediaDescription, MediaSelection,
+    MediaStreamKind, MediaTime, OperationId, ReviewedAsrModel, SessionId, TimeRange,
+    VisualChangePolicy, VisualSample, VisualWindow, analyse_window, select_frame,
 };
 
 use crate::{
     BoundSource, ExtractedAudio, ExtractedFrame, FfmpegMedia, FilesystemSessionStore,
-    HostIsolation, ManagedCatalogueError, MediaError, MediaProviderConformance,
+    HostIsolation, ImageRegion, ManagedCatalogueError, MediaError, MediaProviderConformance,
     ProcessCancellation, RawGrayFrame, SourceSnapshot, file_lock::HeldFileLock,
     reviewed_whisper_models,
 };
@@ -63,6 +65,18 @@ const VISUAL_SAMPLE_SPACING_MICROS: u64 = 500_000;
 const VISUAL_PANEL_BLOCK: usize = 4 * 16 + 7;
 const VISUAL_BACKGROUND_BLOCK: usize = 143;
 const VISUAL_MIN_CONTRAST: u8 = 20;
+/// F01 is 20 frames per second from zero, so a listing of `[0.9 s, 1.2 s)`
+/// holds exactly the six frames 0.90, 0.95, ..., 1.15 s.
+const LISTING_FROM_MICROS: u64 = 900_000;
+const LISTING_TO_MICROS: u64 = 1_200_000;
+const LISTING_FRAME_SPACING_MICROS: u64 = 50_000;
+const LISTING_FRAME_COUNT: u64 = 6;
+/// A request between two frames: at or after 1.025 s is the 1.05 s frame.
+const EXACT_REQUEST_MICROS: u64 = 1_025_000;
+const EXACT_FRAME_MICROS: u64 = 1_050_000;
+/// An 80x80 crop inside F01's status panel (the full-size area of visual
+/// block row 4, column 7).
+const CROP: (u32, u32, u32, u32) = (560, 320, 80, 80);
 /// Every verification workspace is named this prefix followed by exactly
 /// [`WORKSPACE_RANDOM_BYTES`] random bytes in lowercase hex, and nothing else.
 const WORKSPACE_PREFIX: &str = "vsift-tool-verification-";
@@ -181,10 +195,15 @@ impl FixtureMediaToolVerifier {
             .map_err(|error| (MediaToolCheck::Audio, map_media_error(&error)))?;
         check_audio(&audio, &self.policy).map_err(|failure| (MediaToolCheck::Audio, failure))?;
 
-        // Visual indexing decodes window after window from a bound copy, so
-        // the check does too: the copy is hashed once more here.
+        // Evidence calls and visual indexing decode from a bound copy, so the
+        // remaining checks do too: the copy is hashed once more here.
+        let bound = BoundSource::bind(snapshot)
+            .map_err(|_| (MediaToolCheck::Frame, MediaToolFailure::Workspace))?;
+        self.check_evidence_frames(&media, &bound, &description)
+            .await
+            .map_err(|failure| (MediaToolCheck::Frame, failure))?;
+
         let visual = |failure| (MediaToolCheck::VisualSampling, failure);
-        let bound = BoundSource::bind(snapshot).map_err(|_| visual(MediaToolFailure::Workspace))?;
         let window = VisualWindow::new(0, description.duration)
             .map_err(|_| visual(MediaToolFailure::UnexpectedResult))?;
         let frames = media
@@ -198,6 +217,91 @@ impl FixtureMediaToolVerifier {
             .await
             .map_err(|error| visual(map_media_error(&error)))?;
         check_visual_samples(window, &frames).map_err(visual)
+    }
+
+    /// The P09 part of the `frame` check: list F01's frames in a short range,
+    /// choose the frame at or after a time between two frames, extract it by
+    /// its exact timestamp and crop it, and compare every result with F01's
+    /// recorded truth.
+    async fn check_evidence_frames(
+        &self,
+        media: &FfmpegMedia<'_>,
+        bound: &BoundSource,
+        description: &MediaDescription,
+    ) -> Result<(), MediaToolFailure> {
+        let unexpected = MediaToolFailure::UnexpectedResult;
+        let selection = MediaSelection {
+            video: F01_SELECTION.video,
+            audio: None,
+        };
+        let range = TimeRange::new(
+            MediaTime::from_micros(LISTING_FROM_MICROS),
+            MediaTime::from_micros(LISTING_TO_MICROS),
+        )
+        .map_err(|_| MediaToolFailure::FixtureIntegrity)?;
+        let listing = media
+            .list_frame_times(
+                bound,
+                description,
+                selection,
+                range,
+                self.cancellation.clone(),
+            )
+            .await
+            .map_err(|error| map_media_error(&error))?;
+        let expected_times = (0..LISTING_FRAME_COUNT)
+            .map(|step| LISTING_FROM_MICROS + step * LISTING_FRAME_SPACING_MICROS);
+        if !listing
+            .frames()
+            .iter()
+            .map(|frame| frame.time.as_micros())
+            .eq(expected_times)
+        {
+            return Err(unexpected);
+        }
+        let selected = select_frame(
+            &listing,
+            MediaTime::from_micros(EXACT_REQUEST_MICROS),
+            FrameSelection::AtOrAfter,
+            FrameTolerance::MAX,
+        )
+        .map_err(|_| unexpected)?;
+        let images = media
+            .frames_at(
+                bound,
+                description,
+                selection,
+                &[selected.frame.pts],
+                self.cancellation.clone(),
+            )
+            .await
+            .map_err(|error| map_media_error(&error))?;
+        let [image] = images.as_slice() else {
+            return Err(unexpected);
+        };
+        let full = FrameDimensions::new(F01_WIDTH, F01_HEIGHT).map_err(|_| unexpected)?;
+        if image.frame.time.as_micros() != EXACT_FRAME_MICROS
+            || image.region != ImageRegion::WholeFrame(full)
+        {
+            return Err(unexpected);
+        }
+        let (x, y, width, height) = CROP;
+        let rect = CropRect::new(x, y, width, height, full).map_err(|_| unexpected)?;
+        let crop = media
+            .crop_at(
+                bound,
+                description,
+                selection,
+                selected.frame.pts,
+                rect,
+                self.cancellation.clone(),
+            )
+            .await
+            .map_err(|error| map_media_error(&error))?;
+        if crop.frame != image.frame || crop.region != ImageRegion::Crop(rect) {
+            return Err(unexpected);
+        }
+        Ok(())
     }
 }
 
