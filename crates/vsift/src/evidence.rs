@@ -39,10 +39,10 @@ use vsift_application::{
     extract_neighbours, find_evidence_item, find_reusable_record,
 };
 use vsift_domain::{
-    AudioRange, BurstCount, BurstRange, CropRect, EvidenceId, EvidenceItem, EvidenceMediaKind,
-    EvidenceProfile, EvidenceRecord, EvidenceRequest, EvidenceSubject, FrameSelection,
-    FrameTolerance, MediaTime, NeighbourCount, SessionId, Sha256Hex, TimeRange, VisualCandidateId,
-    VisualStreamError,
+    AudioRange, BurstCount, BurstRange, CropParseError, CropRect, EvidenceId, EvidenceItem,
+    EvidenceMediaKind, EvidenceProfile, EvidenceRecord, EvidenceRequest, EvidenceSubject,
+    FrameDimensions, FrameSelection, FrameTolerance, MediaTime, NeighbourCount, SessionId,
+    Sha256Hex, TimeRange, VisualCandidateId, VisualStreamError,
 };
 use vsift_infrastructure::{
     BoundSource, EvidenceInventory, EvidenceMediaFile, EvidenceSourceCheck, FfmpegAudioExtractor,
@@ -138,6 +138,29 @@ pub struct CropRectangle {
     pub width: u32,
     /// Height.
     pub height: u32,
+}
+
+impl std::str::FromStr for CropRectangle {
+    type Err = CropParseError;
+
+    /// Parses `x,y,width,height`: exactly four canonical unsigned decimals
+    /// (no sign, space or leading zero), a positive width and height, and
+    /// right and bottom edges that fit in 32 bits.
+    ///
+    /// The domain parser is the one rule for the text; it is applied against
+    /// the largest possible frame because the parent image, and so the real
+    /// containment check, is known only once the session's evidence is read.
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let unbounded =
+            FrameDimensions::new(u32::MAX, u32::MAX).map_err(CropParseError::Geometry)?;
+        let rect = CropRect::parse(text, unbounded)?;
+        Ok(Self {
+            x: rect.x(),
+            y: rect.y(),
+            width: rect.width(),
+            height: rect.height(),
+        })
+    }
 }
 
 /// A request for a rectangle of an earlier frame or crop item.
