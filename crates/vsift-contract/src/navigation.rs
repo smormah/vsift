@@ -1,7 +1,8 @@
 //! The results of the evidence navigation commands (P09, ADR 0019): the
-//! `frame get`, `frame neighbours`, `frame burst` and `crop` data, their
-//! published `frame_evidence` record, their JSON Lines evidence stream, and
-//! the fixed prose for their partial results and failures.
+//! `frame get`, `frame neighbours`, `frame burst` and `crop` data with their
+//! published `frame_evidence` record, the `audio` data with its published
+//! `audio_evidence` record, their JSON Lines evidence streams, and the fixed
+//! prose for their partial results and failures.
 //!
 //! An evidence call returns the lineage record the engine committed (or the
 //! complete record an identical earlier request committed, `reused`), and
@@ -31,9 +32,9 @@ use std::{error::Error, fmt, path::Path};
 
 use serde::Serialize;
 use vsift_domain::{
-    BurstExtent, EvidenceDetail, EvidenceId, EvidenceItem, EvidenceMediaKind, EvidenceOperation,
-    EvidenceRecord, EvidenceRequest, EvidenceSelection, EvidenceSubject, FrameRef,
-    FrameSelectionError, NeighbourStop, PartialReason, SourceCheck,
+    AUDIO_CLIP_SAMPLE_RATE, BurstExtent, EvidenceDetail, EvidenceId, EvidenceItem,
+    EvidenceMediaKind, EvidenceOperation, EvidenceRecord, EvidenceRequest, EvidenceSelection,
+    EvidenceSubject, FrameRef, FrameSelectionError, NeighbourStop, PartialReason, SourceCheck,
 };
 
 use crate::{
@@ -43,6 +44,8 @@ use crate::{
 
 /// Media type of every delivered image: 8-bit RGB PNG at native resolution.
 const PNG_MEDIA_TYPE: &str = "image/png";
+/// Media type of every delivered clip: 16 kHz mono signed 16-bit WAV.
+const WAV_MEDIA_TYPE: &str = "audio/wav";
 
 /// Remediation when the session has no room for more evidence (ADR 0019 D4).
 pub const EVIDENCE_BUDGET_REMEDIATION: &str = "This session has no room for more evidence: it holds at most 160 evidence artifacts (images, audio clips and their records) within 256 artifacts and 10 GiB. Nothing was changed. Keep what it holds with session retain --output <new-directory>, then open a new session of the same video with ingest and continue there.";
@@ -52,6 +55,19 @@ pub const EVIDENCE_TOOLS_REMEDIATION: &str = "Frames, crops and audio clips are 
 
 /// Remediation for a burst range longer than sixty seconds.
 pub const BURST_RANGE_REMEDIATION: &str = "A frame burst covers at most 60 s. Nothing was changed. Run candidates over the longer range to find the moments where the screen changed, then burst or frame get around them, or split the range into bursts of at most 60 s.";
+
+/// Remediation for an audio range longer than thirty seconds.
+pub const AUDIO_RANGE_REMEDIATION: &str = "An audio clip covers at most 30 s. Nothing was changed. Split the range into clips of at most 30 s, or use transcript get and search for the speech of a longer range.";
+
+/// Remediation for an audio range that starts at or after the end of the source.
+pub const AUDIO_RANGE_START_REMEDIATION: &str = "The range starts at or after the end of the source, so it has no audio. Nothing was changed. Request a range that starts before the end; a range that runs past the end is clipped to it.";
+
+/// Remediation when the source has no audio stream to clip.
+pub const NO_AUDIO_CLIP_REMEDIATION: &str = "The source has no audio stream VSift can decode, so it has no audio clips. Nothing was changed. Use frame get, frame burst or candidates for its picture instead.";
+
+/// Remediation when the media tools could not decode the requested part of
+/// the source.
+pub const UNDECODABLE_EVIDENCE_REMEDIATION: &str = "The media tools could not decode that part of the source (it may be damaged or cut short), so nothing was extracted and nothing was changed. Request another time or a shorter range; candidates reports the parts of the video that cannot be decoded as undecodable.";
 
 /// Remediation when the video has no video stream to take frames from.
 pub const NO_FRAMES_REMEDIATION: &str = "The source has no video stream, so it has no frames. Nothing was changed. Use transcript get or search for its speech instead.";
@@ -312,7 +328,7 @@ pub(crate) struct FileData {
 pub(crate) const fn media_type(kind: EvidenceMediaKind) -> &'static str {
     match kind {
         EvidenceMediaKind::FramePng => PNG_MEDIA_TYPE,
-        EvidenceMediaKind::AudioWav => "audio/wav",
+        EvidenceMediaKind::AudioWav => WAV_MEDIA_TYPE,
     }
 }
 
@@ -751,6 +767,260 @@ impl FrameEvidenceStream {
 }
 
 impl EvidenceStream for FrameEvidenceStream {
+    fn records(&self) -> &[EvidenceEventResponse] {
+        &self.records
+    }
+
+    fn terminal(&self) -> &TerminalEventResponse {
+        &self.terminal
+    }
+}
+
+/// The delivered clip's format, content address and size.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct ClipData {
+    media_type: &'static str,
+    sample_rate: u32,
+    channels: u8,
+    sample_format: &'static str,
+    sha256: String,
+    bytes: u64,
+}
+
+/// One published `audio_evidence` record: a WAV clip of the source's audio.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct AudioEvidenceData {
+    evidence_id: String,
+    source_id: String,
+    stream_index: u32,
+    range: PlannedRange,
+    actual_start_us: u64,
+    audio: ClipData,
+    profile: &'static str,
+    tool_fingerprint: Option<String>,
+}
+
+impl AudioEvidenceData {
+    /// The item's identity, the record's upsert key.
+    pub(crate) fn evidence_id(&self) -> &str {
+        &self.evidence_id
+    }
+
+    /// Presents one audio item of `record`; `None` for a frame or crop.
+    fn new(record: &EvidenceRecord, item: &EvidenceItem) -> Option<Self> {
+        let EvidenceSubject::Audio {
+            stream_index,
+            range,
+            actual_start,
+        } = item.subject()
+        else {
+            return None;
+        };
+        Some(Self {
+            evidence_id: item.id().as_str().to_owned(),
+            source_id: record.source_id().as_str().to_owned(),
+            stream_index: *stream_index,
+            range: PlannedRange {
+                start_us: range.start().as_micros(),
+                end_us: range.end().as_micros(),
+            },
+            actual_start_us: actual_start.as_micros(),
+            audio: ClipData {
+                media_type: WAV_MEDIA_TYPE,
+                sample_rate: AUDIO_CLIP_SAMPLE_RATE,
+                channels: 1,
+                sample_format: "s16le",
+                sha256: item.media().sha256().as_str().to_owned(),
+                bytes: item.media().bytes(),
+            },
+            profile: record.profile().identifier(),
+            tool_fingerprint: item
+                .tool_fingerprint()
+                .map(|fingerprint| fingerprint.as_str().to_owned()),
+        })
+    }
+}
+
+/// Everything an audio result states besides its item.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AudioSummary {
+    session_id: String,
+    source_id: String,
+    request: RequestData,
+    request_key: String,
+    reused: bool,
+    profile: &'static str,
+    tool_fingerprint: Option<String>,
+    source_check: &'static str,
+    selections: Vec<SelectionData>,
+    range_clipped: bool,
+    files: Vec<FileData>,
+    partial: Option<PartialReason>,
+    items: Vec<AudioEvidenceData>,
+}
+
+impl AudioSummary {
+    fn new(presentation: &EvidencePresentation<'_>) -> Result<Self, EvidencePresentationError> {
+        let record = presentation.record;
+        let EvidenceDetail::Audio { range_clipped } = record.detail() else {
+            return Err(EvidencePresentationError::OperationMismatch);
+        };
+        let items = record
+            .items()
+            .iter()
+            .map(|item| {
+                AudioEvidenceData::new(record, item)
+                    .ok_or(EvidencePresentationError::OperationMismatch)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            session_id: record.session_id().as_str().to_owned(),
+            source_id: record.source_id().as_str().to_owned(),
+            request: RequestData::new(record.request()),
+            request_key: record.request_key().as_str().to_owned(),
+            reused: presentation.reused,
+            profile: record.profile().identifier(),
+            tool_fingerprint: record
+                .tool_fingerprint()
+                .map(|fingerprint| fingerprint.as_str().to_owned()),
+            source_check: record_source_check(record),
+            selections: record.selections().iter().map(SelectionData::new).collect(),
+            range_clipped,
+            files: files_data(record, presentation.files)?,
+            partial: record.partial(),
+            items,
+        })
+    }
+}
+
+/// Data of a complete `audio` result.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct AudioData {
+    session_id: String,
+    source_id: String,
+    operation: &'static str,
+    request: RequestData,
+    request_key: String,
+    reused: bool,
+    profile: &'static str,
+    tool_fingerprint: Option<String>,
+    source_check: &'static str,
+    selections: Vec<SelectionData>,
+    range_clipped: bool,
+    items: Vec<AudioEvidenceData>,
+    files: Vec<FileData>,
+    partial_reason: Option<&'static str>,
+}
+
+/// Data of the terminal event that ends an `audio` evidence stream: the
+/// result without its item, which was the preceding evidence event.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct AudioStreamData {
+    session_id: String,
+    source_id: String,
+    operation: &'static str,
+    request: RequestData,
+    request_key: String,
+    reused: bool,
+    profile: &'static str,
+    tool_fingerprint: Option<String>,
+    source_check: &'static str,
+    selections: Vec<SelectionData>,
+    range_clipped: bool,
+    record_count: usize,
+    files: Vec<FileData>,
+    partial_reason: Option<&'static str>,
+}
+
+/// The result of an `audio` call.
+///
+/// # Errors
+///
+/// Returns [`EvidencePresentationError`] for a record of another operation,
+/// files that do not match the item, a path that is not valid UTF-8 or data
+/// that cannot be represented as JSON.
+pub fn audio_response(
+    presentation: &EvidencePresentation<'_>,
+    lifecycle: LifecycleResponse,
+) -> Result<OperationResponse<serde_json::Value>, EvidencePresentationError> {
+    let summary = AudioSummary::new(presentation)?;
+    let partial = summary.partial;
+    let data = AudioData {
+        session_id: summary.session_id,
+        source_id: summary.source_id,
+        operation: EvidenceOperation::Audio.identifier(),
+        request: summary.request,
+        request_key: summary.request_key,
+        reused: summary.reused,
+        profile: summary.profile,
+        tool_fingerprint: summary.tool_fingerprint,
+        source_check: summary.source_check,
+        selections: summary.selections,
+        range_clipped: summary.range_clipped,
+        items: summary.items,
+        files: summary.files,
+        partial_reason: partial.map(PartialReason::identifier),
+    };
+    Ok(finish_evidence(
+        CommandName::Audio,
+        &data,
+        partial,
+        lifecycle,
+    )?)
+}
+
+/// One `audio` result as a JSON Lines evidence stream: the clip as an
+/// `audio_evidence` event, then the terminal event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AudioEvidenceStream {
+    records: Vec<EvidenceEventResponse>,
+    terminal: TerminalEventResponse,
+}
+
+impl AudioEvidenceStream {
+    /// Presents one `audio` result as an evidence stream.
+    ///
+    /// # Errors
+    ///
+    /// As [`audio_response`].
+    pub fn new(
+        presentation: &EvidencePresentation<'_>,
+        lifecycle: LifecycleResponse,
+    ) -> Result<Self, EvidencePresentationError> {
+        let summary = AudioSummary::new(presentation)?;
+        let partial = summary.partial;
+        let records: Vec<_> = (0_u64..)
+            .zip(summary.items)
+            .map(|(sequence, item)| {
+                EvidenceEventResponse::audio_evidence(sequence, CommandName::Audio, item)
+            })
+            .collect();
+        let data = AudioStreamData {
+            session_id: summary.session_id,
+            source_id: summary.source_id,
+            operation: EvidenceOperation::Audio.identifier(),
+            request: summary.request,
+            request_key: summary.request_key,
+            reused: summary.reused,
+            profile: summary.profile,
+            tool_fingerprint: summary.tool_fingerprint,
+            source_check: summary.source_check,
+            selections: summary.selections,
+            range_clipped: summary.range_clipped,
+            record_count: records.len(),
+            files: summary.files,
+            partial_reason: partial.map(PartialReason::identifier),
+        };
+        let result = finish_evidence(CommandName::Audio, &data, partial, lifecycle)?;
+        let terminal_sequence = u64::try_from(records.len()).unwrap_or(u64::MAX);
+        Ok(Self {
+            records,
+            terminal: TerminalEventResponse::at_sequence(result, terminal_sequence),
+        })
+    }
+}
+
+impl EvidenceStream for AudioEvidenceStream {
     fn records(&self) -> &[EvidenceEventResponse] {
         &self.records
     }

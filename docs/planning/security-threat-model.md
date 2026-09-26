@@ -359,6 +359,26 @@ a rewrite that restores the modification time is caught only by a later full has
 recorded identity lives in the private session manifest, writable only by the same
 user, the actor this residual already assumes.
 
+P09 delivery (PRs 3 and 4, 2026-09-26): `frame get`, `frame neighbours`,
+`frame burst`, `crop` and `audio` are public. The grammar is closed and typed: opaque
+`ses_`, `evd_` and `vcd_` identities, integer microseconds, counts and tolerances
+bounded by the parser, and a crop rectangle of exactly four canonical unsigned
+decimals with a positive size, parsed by the domain's own rule before any tool runs;
+containment in the parent is checked against the session's committed record, never
+the file (SEC-01/SEC-05). No request value reaches FFmpeg except the numbers the
+adapter's closed argument list already takes. Errors and remediation are fixed prose
+chosen by typed causes and never include a path, provider output or evidence text
+(SEC-03/SEC-16). Results name local paths in exactly one place, `files[].path`, the
+verified committed artifact inside the owner-private session (D2): the path is
+re-hashed before it is returned, is valid only while the session exists and must not
+be written to; a path that is not valid UTF-8 is `STORAGE_IO` rather than a lossy
+string that could name another file (SEC-07/SEC-18). Evidence records and retained
+bundles still hold no path, which the P09 checkpoint checks on a real retained
+bundle. Damaged or cut-short media is `INVALID_SOURCE` with nothing committed.
+Residual: an agent that copies a delivered path into later prose may leak the user's
+session-root location to whoever reads that prose; the path is the user's own and the
+default root is the per-user cache.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.

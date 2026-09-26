@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/audio-evidence.schema.json",
+  "title": "VSift audio evidence record v1",
+  "description": "One published audio_evidence record (P09, ADR 0019): a WAV clip of the session's audio, extracted by audio. Its evidence_id digests only what fixes its samples (session, source, audio stream, adapter profile, provider fingerprint and the clipped range), so every request that resolves to the same range names the same record. range is the half-open range the clip was decoded for (the request clipped to the source); actual_start_us is the normalized time of the first decoded sample, which may lie after range.start_us (for example AAC priming or a stream that starts late). The samples are the delivered file named in the result's files, never embedded. Times are integer microseconds on the normalized source timeline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidence_id",
+    "source_id",
+    "stream_index",
+    "range",
+    "actual_start_us",
+    "audio",
+    "profile",
+    "tool_fingerprint"
+  ],
+  "properties": {
+    "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "stream_index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_us", "end_us"],
+      "properties": {
+        "start_us": { "type": "integer", "minimum": 0 },
+        "end_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "actual_start_us": { "type": "integer", "minimum": 0 },
+    "audio": {
+      "description": "The delivered clip: WAV, 16 kHz mono signed 16-bit little-endian PCM (decision D5), at most 30 s and 1 MiB, its SHA-256 and size in bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["media_type", "sample_rate", "channels", "sample_format", "sha256", "bytes"],
+      "properties": {
+        "media_type": { "const": "audio/wav" },
+        "sample_rate": { "const": 16000 },
+        "channels": { "const": 1 },
+        "sample_format": { "const": "s16le" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 44, "maximum": 1048576 }
+      }
+    },
+    "profile": { "const": "p09-r0-v1" },
+    "tool_fingerprint": { "$ref": "frame-evidence.schema.json#/properties/tool_fingerprint" }
+  }
+}

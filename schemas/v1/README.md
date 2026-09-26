@@ -22,8 +22,9 @@ These files are the machine-readable public v1 boundary:
   stream: `record_type`, upsert `key` and the `record` itself (P07:
   `transcript_segment`, whose record is `transcript-segment.schema.json`; P08:
   `visual_candidate`, keyed by `candidate_id`, whose record is
-  `visual-candidate.schema.json`; P09: `frame_evidence`, keyed by `evidence_id`, whose
-  record is `frame-evidence.schema.json`);
+  `visual-candidate.schema.json`; P09: `frame_evidence` and `audio_evidence`, keyed by
+  `evidence_id`, whose records are `frame-evidence.schema.json` and
+  `audio-evidence.schema.json`);
 - `config.schema.json` — strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` — the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
@@ -67,7 +68,7 @@ These files are the machine-readable public v1 boundary:
   uncalibrated `change` sizes, `visual_hash`, `sample_count`, displayed dimensions
   and the analysis profile;
 - `frame-data.schema.json` — the `data` member of a complete or partial `frame.get`,
-  `frame.neighbours` or `frame.burst` result (P09 PR 3): the `operation`, its canonical
+  `frame.neighbours`, `frame.burst` (P09 PR 3) or `crop` (PR 4) result: the `operation`, its canonical
   `request`, `request_key`, `reused`, `profile`, `tool_fingerprint`, `source_check`, the
   `selections` (role, `evidence_id`, requested and actual time and their signed
   delta), the operation's `neighbours` side stops or `burst` plan, the items, the
@@ -82,6 +83,16 @@ These files are the machine-readable public v1 boundary:
   `frame` (timestamp, time base, time and size), `crop` (`null` for a whole frame),
   `image` (`image/png`, size, SHA-256 and bytes), `profile` and `tool_fingerprint`.
   Request facts and paths are never in it, so one key always carries one record;
+- `audio-data.schema.json` — the `data` member of a complete or partial `audio` result
+  (P09 PR 4): the requested range, `request_key`, `reused`, `source_check`, one
+  `requested` selection (requested start, first decoded sample, delta),
+  `range_clipped`, the one `audio_evidence` item, the delivered `files` and
+  `partial_reason`;
+- `audio-stream-data.schema.json` — the terminal data of an `audio --events jsonl`
+  stream: the result without its item, with `record_count` (P09 PR 4);
+- `audio-evidence.schema.json` — one audio clip, the fourth published evidence record
+  (P09 PR 4): `evidence_id`, `source_id`, `stream_index`, the clipped `range`,
+  `actual_start_us` and `audio` (`audio/wav`, 16 kHz, mono, `s16le`, SHA-256 and bytes);
 - `bundle-visual-index-record.schema.json` — the content of a session or retained
   bundle's `visual_index_record` artifact: one revision of the visual index with every
   recorded window and candidate, as stored (P08). A storage record, not a response:
@@ -109,9 +120,10 @@ from 0: for `transcript.get`, one `evidence` event per segment and then one
 `terminal` event; for `search`, one `evidence` event per matching segment (the same
 `transcript_segment` records, in rank order) and then one `terminal` event; for
 `candidates`, one `evidence` event per candidate (`visual_candidate` records, in time
-order) and then one `terminal` event; for `frame.get`, `frame.neighbours` and
-`frame.burst`, one `evidence` event per item (`frame_evidence` records, in the result's
-item order) and then one `terminal` event; for every other command, the terminal event
+order) and then one `terminal` event; for `frame.get`, `frame.neighbours`,
+`frame.burst` and `crop`, one `evidence` event per item (`frame_evidence` records, in the
+result's item order) and then one `terminal` event; for `audio`, one `audio_evidence`
+event and then one `terminal` event; for every other command, the terminal event
 alone. Dispatch on `event`; the terminal event's `sequence` and, for `transcript.get`,
 `search`, `candidates` and the frame commands, its `record_count` equal the number of evidence events
 before it. The exact consumer
@@ -173,12 +185,14 @@ frame at 1.05 s, delta 25,000 us), as a result and as a stream; `frame-neighbour
 takes two neighbours of F01's first frame (the before side stops at
 `start_of_stream`); `frame-burst.partial.json` bursts 4-8 s of the 6 s video with 12
 targets (clipped to 4-6 s) in a session with room for only four more images, so it is
-`partial` with `session_evidence_budget`. They are built by the application's
-extraction use cases over a stand-in of F01's stream (its real 1/10240 time base and
-1280x720), with stand-in image bytes and a synthetic provider fingerprint, and checked
-by `vsift-contract`'s `frame_contract`, the stream byte for byte. Their delivered paths
+`partial` with `session_evidence_budget`. `crop.json` crops the status line
+(150,235,550,55) of that 1.05 s frame, and `audio.json` clips 0-1 s of the source, whose
+first decoded sample is 64 ms in (as in F01's audio-only variant). They are built by the application's
+extraction use cases over a stand-in of F01's streams (its real 1/10240 time base and
+1280x720), with stand-in image and clip bytes and a synthetic provider fingerprint, and checked
+by `vsift-contract`'s `navigation_contract`, the stream byte for byte. Their delivered paths
 are written under the placeholder root `/vsift-session-root` (with the real
-`sessions/<session>/artifacts/artifact-<sha256>.png` layout below it), never a real
+`sessions/<session>/artifacts/artifact-<sha256>.png` or `.wav` layout below it), never a real
 user's folder; a real result names the absolute path on the machine that ran it.
 `storage-not-private.json` is the `setup configure` failure an agent receives when
 the per-user configuration folder already exists and other accounts can access it;

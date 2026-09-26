@@ -1,0 +1,67 @@
+{
+  "command": "audio",
+  "coverage": null,
+  "data": {
+    "files": [
+      {
+        "evidence_id": "evd_2b904387059d0b66eb69130b67f40e12",
+        "media_type": "audio/wav",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-b1353420280edb8eba808885917b8e07cf0f0d0392c03dba8de4f9ea85c09a66.wav"
+      }
+    ],
+    "items": [
+      {
+        "actual_start_us": 64000,
+        "audio": {
+          "bytes": 91,
+          "channels": 1,
+          "media_type": "audio/wav",
+          "sample_format": "s16le",
+          "sample_rate": 16000,
+          "sha256": "b1353420280edb8eba808885917b8e07cf0f0d0392c03dba8de4f9ea85c09a66"
+        },
+        "evidence_id": "evd_2b904387059d0b66eb69130b67f40e12",
+        "profile": "p09-r0-v1",
+        "range": {
+          "end_us": 1000000,
+          "start_us": 0
+        },
+        "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+        "stream_index": 1,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      }
+    ],
+    "operation": "audio",
+    "partial_reason": null,
+    "profile": "p09-r0-v1",
+    "range_clipped": false,
+    "request": {
+      "from_us": 0,
+      "to_us": 1000000
+    },
+    "request_key": "opk_sha256_9067184d0f68ca710eefb67efa0fc50f108e7bfbf3b9ef8ceb4ed04cd4ce0d18",
+    "reused": false,
+    "selections": [
+      {
+        "actual_us": 64000,
+        "delta_us": 64000,
+        "evidence_id": "evd_2b904387059d0b66eb69130b67f40e12",
+        "requested_us": 0,
+        "role": "requested"
+      }
+    ],
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_check": "identity",
+    "source_id": "src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070",
+    "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-27T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

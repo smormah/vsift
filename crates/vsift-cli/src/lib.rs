@@ -347,8 +347,22 @@ where
             let result = evidence::frame(&engine, arguments.command).await;
             write_session_result(&mut writer, mode, operation, result)
         }
-        Command::Audio(_) => not_implemented(&mut writer, mode, CommandName::Audio),
-        Command::Crop(_) => not_implemented(&mut writer, mode, CommandName::Crop),
+        Command::Crop(arguments) if mode == OutputMode::JsonLines => {
+            let result = evidence::crop_stream(&engine, arguments).await;
+            write_evidence_stream(&mut writer, CommandName::Crop, result)
+        }
+        Command::Crop(arguments) => {
+            let result = evidence::crop(&engine, arguments).await;
+            write_session_result(&mut writer, mode, CommandName::Crop, result)
+        }
+        Command::Audio(arguments) if mode == OutputMode::JsonLines => {
+            let result = evidence::audio_stream(&engine, arguments).await;
+            write_evidence_stream(&mut writer, CommandName::Audio, result)
+        }
+        Command::Audio(arguments) => {
+            let result = evidence::audio(&engine, arguments).await;
+            write_session_result(&mut writer, mode, CommandName::Audio, result)
+        }
         Command::Job(arguments) => {
             not_implemented(&mut writer, mode, arguments.command.operation_name())
         }

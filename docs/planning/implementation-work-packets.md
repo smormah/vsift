@@ -3,12 +3,12 @@
 Status: accepted R0 sequence with scoped R1 packets, re-planned by
 [ADR 0015](../decisions/0015-r0-delivery-replan.md) and
 [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) on 2026-09-23.
-P00-P07 are complete. P06 closes on detection, bring-your-own selection,
-verification and guidance; managed installation moved to P13. P08's implementation
-is complete across four pull requests (transcript search, bracketed source binding,
-the visual index core and the `candidates` command), pending maintainer confirmation
-of [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md), the
-merges and the ledger completion record; P09 follows. Tests reference
+P00-P08 are complete. P06 closes on detection, bring-your-own selection,
+verification and guidance; managed installation moved to P13. P09's implementation
+is complete across four pull requests (media primitives, the evidence core, the frame
+commands, and `crop` and `audio` with the
+[qualification record](p09-evidence-navigation.md)), pending their merges and the
+ledger completion record; P10 follows. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
 a packet must preserve its contracts and acceptance gate; unrelated feature changes
@@ -80,7 +80,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P06 — Dependency setup | Detect suitable existing tools; off-PATH BYO executable/model selection; read-only plans; bounded compatibility check of selected FFmpeg/FFprobe against F01 under the reviewed policy limits; model digest check or explicit unverified state; typed manual guidance. Managed installation moved to P13 (ADR 0015) | P02/P03/P04 | D-01, D-07 (unavailable-target guidance), D-09, D-10; preinstalled/partial/off-PATH/denied/offline/unqualified journeys on every named target; no automatic install or elevation; B-04 closed |
 | P07 — Engine boundary and transcription | First increment: extract the embeddable engine facade and contract crate with no behaviour change (ADR 0016). Then SRT/VTT import and alignment, segment-identified PCM chunks, whisper.cpp adapter and its functional verification in `setup check`, transcript revisions, bounded records, published transcript schemas, SRT/VTT fuzz targets | P04/P05/P06 | Existing C-suite and schema tests unchanged by the refactor; T-01..06; measured default model profile; imports avoid unnecessary ASR; chunk seams verified |
 | P08 — Candidate/search index | Streaming visual signal extraction, periodic coverage, dedupe with time preservation, local transcript search, cursor paging | P04/P05/P07 | V-02..05, C-03, S-11; fixture recall report and honest gap metadata. Implemented by PRs 1-4 (`search`, #148 source binding, visual index core, `candidates`); recall record [p08-candidate-recall.md](p08-candidate-recall.md) |
-| P09 — Evidence navigation | Exact frames, neighbours, bursts, source audio ranges, native crops, artifact reuse and lineage | P04/P05/P08 | V-01/V-06..08; identical request reuses compatible evidence; requested/actual time and dimensions visible |
+| P09 — Evidence navigation | Exact frames, neighbours, bursts, source audio ranges, native crops, artifact reuse and lineage | P04/P05/P08 | V-01/V-06..08; identical request reuses compatible evidence; requested/actual time and dimensions visible. Implemented by PRs 1-4 (media primitives, evidence core, `frame get/neighbours/burst`, `crop`/`audio`; [ADR 0019](../decisions/0019-evidence-navigation.md)); qualification record [p09-evidence-navigation.md](p09-evidence-navigation.md) |
 | P10 — Recovery integration | Stage checkpoints, operation-key handling, interrupted-job discovery/resume, cancellation/commit ordering and retry policy; Ubuntu/ext4 durable publication qualification | P03/P05/P07/P08/P09 | X-01..06/X-09/X-10, S-07/S-08; owned OS/storage crash campaign demonstrates no lost acknowledged durable evidence before enablement |
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualifies only after P10 durable evidence; repeated external-delivery simulation passes |
 | P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic |

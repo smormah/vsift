@@ -142,6 +142,8 @@ pub use vsift_application::{
 pub use vsift_application::{
     EvidenceMediaError, MAX_FRAMES_PER_CALL, MAX_IMAGE_BYTES_PER_CALL, MAX_PIXELS_PER_CALL,
 };
+/// Why a crop rectangle's text or geometry was rejected.
+pub use vsift_domain::GeometryError;
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
     AlignmentOrigin, CarriedFrom, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText,
@@ -162,7 +164,7 @@ pub use vsift_domain::{
 };
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_domain::{
-    BurstExtent, CropRect, CropRegion, EvidenceDetail, EvidenceItem, EvidenceMedia,
+    BurstExtent, CropParseError, CropRect, CropRegion, EvidenceDetail, EvidenceItem, EvidenceMedia,
     EvidenceMediaKind, EvidenceOperation, EvidenceProfile, EvidenceRecord, EvidenceRequest,
     EvidenceSelection, EvidenceSubject, FrameRef, FrameSelection, FrameSelectionError, FrameTiming,
     FrameTolerance, NavigationError, NeighbourStop, OperationKey, PartialReason, SelectionRole,

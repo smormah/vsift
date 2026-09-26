@@ -9,10 +9,11 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > plans work, an existing SRT or WebVTT transcript can be imported with a video, the
 > speech can be transcribed locally with whisper.cpp (P07), and the transcript can be
 > read back by time range and searched for words, and the moments where the screen
-> changed can be listed as visual candidates with honest coverage (P08, pending
-> review and merge). Source reinspection (frames and crops), worker execution,
-> managed dependency installation and the complete agent handoff remain future R0
-> work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
+> changed can be listed as visual candidates with honest coverage (P08). The exact
+> frame at a time, the frames around it, bursts, native-size crops and short audio
+> clips can be extracted with their requested and actual times, reused when asked
+> again (P09, pending review and merge). Worker execution, recovery, managed
+> dependency installation and the complete agent handoff remain future R0 work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.

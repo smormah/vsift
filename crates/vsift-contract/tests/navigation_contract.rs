@@ -1,19 +1,23 @@
-//! Conformance of the frame and crop evidence contract (P09, ADR 0019): the
-//! `--json` results of `frame get`, `frame neighbours` and `frame burst`, the
-//! `--events jsonl` stream of `frame_evidence` records ended by one terminal
-//! event, and the `partial` status of a call that stopped on a budget, against
-//! the published v1 schemas and the frozen examples `examples/frame-get.json`,
-//! `examples/frame-get.events.jsonl`, `examples/frame-neighbours.json` and
-//! `examples/frame-burst.partial.json`.
+//! Conformance of the evidence navigation contract (P09, ADR 0019): the
+//! `--json` results of `frame get`, `frame neighbours`, `frame burst`, `crop`
+//! and `audio`, the `--events jsonl` streams of `frame_evidence` and
+//! `audio_evidence` records ended by one terminal event, and the `partial`
+//! status of a call that stopped on a budget, against the published v1
+//! schemas and the frozen examples `examples/frame-get.json`,
+//! `examples/frame-get.events.jsonl`, `examples/frame-neighbours.json`,
+//! `examples/frame-burst.partial.json`, `examples/crop.json` and
+//! `examples/audio.json`.
 //!
 //! The records are built by the application's own extraction use cases over a
 //! fake extractor that stands for the F01 fixture: 120 frames at 20 fps, one
 //! every 50 ms, in F01's real 1/10240 time base, 1280x720, of the committed
-//! F01 source. The images are short stand-in PNG byte strings, so their
-//! digests are synthetic. Delivered paths are absolute on the machine that
+//! F01 source, whose audio stands in for F01's audio-only variant (the first
+//! decoded sample 64 ms after the requested start, as AAC priming puts it).
+//! The images and the clip are short stand-in byte strings, so their digests
+//! are synthetic. Delivered paths are absolute on the machine that
 //! runs a call; the examples name them under the neutral placeholder root
 //! `/vsift-session-root`, with the real layout below it
-//! (`sessions/<session>/artifacts/artifact-<sha256>.png`), and never a real
+//! (`sessions/<session>/artifacts/artifact-<sha256>.png` or `.wav`), and never a real
 //! user's folder.
 //!
 //! After an intended contract change, run with
@@ -31,19 +35,21 @@ use std::{
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_application::{
-    EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceExtraction, EvidenceMediaError,
-    EvidenceScope, EvidenceStop, ExtractedFrame, FrameAtRequest, FrameExtractor, VideoStreamFacts,
-    extract_burst, extract_frame_at, extract_neighbours,
+    AudioExtractor, CropRequest, EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceExtraction,
+    EvidenceMediaError, EvidenceScope, EvidenceStop, ExtractedClip, ExtractedFrame, FrameAtRequest,
+    FrameExtractor, VideoStreamFacts, extract_audio, extract_burst, extract_crop, extract_frame_at,
+    extract_neighbours,
 };
 use vsift_contract::{
-    DeliveredEvidenceFile, EvidencePresentation, EvidencePresentationError, EvidenceStream,
-    FrameEvidenceStream, LifecycleResponse, frame_response, partial_evidence_warning,
+    AudioEvidenceStream, DeliveredEvidenceFile, EvidencePresentation, EvidencePresentationError,
+    EvidenceStream, FrameEvidenceStream, LifecycleResponse, audio_response, frame_response,
+    partial_evidence_warning,
 };
 use vsift_domain::{
-    BurstCount, BurstRange, CropRect, EvidenceProfile, EvidenceRecord, FrameDimensions,
-    FrameListing, FrameSelection, FrameTolerance, ListedFrame, ListingTail, MediaTime,
-    NeighbourCount, PartialReason, SessionId, Sha256Hex, SourceCheck, SourceId, TimeBase,
-    TimeRange,
+    AudioRange, BurstCount, BurstRange, CropRect, EvidenceMediaKind, EvidenceProfile,
+    EvidenceRecord, FrameDimensions, FrameListing, FrameSelection, FrameTolerance, ListedFrame,
+    ListingTail, MediaTime, NeighbourCount, PartialReason, SessionId, Sha256Hex, SourceCheck,
+    SourceId, TimeBase, TimeRange,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -61,6 +67,8 @@ const GET_EXAMPLE: &str = "examples/frame-get.json";
 const GET_STREAM_EXAMPLE: &str = "examples/frame-get.events.jsonl";
 const NEIGHBOURS_EXAMPLE: &str = "examples/frame-neighbours.json";
 const BURST_EXAMPLE: &str = "examples/frame-burst.partial.json";
+const CROP_EXAMPLE: &str = "examples/crop.json";
+const AUDIO_EXAMPLE: &str = "examples/audio.json";
 /// F01: 20 fps in a 1/10240 time base, so frame `n` has timestamp `512 n`.
 const TICKS_PER_FRAME: i64 = 512;
 const FRAME_MICROS: u64 = 50_000;
@@ -236,6 +244,32 @@ impl FrameExtractor for F01 {
     }
 }
 
+/// F01's audio stream: its first decoded sample 64 ms after a clip's start.
+struct F01Audio;
+
+impl AudioExtractor for F01Audio {
+    fn stream_index(&self) -> u32 {
+        1
+    }
+
+    fn duration(&self) -> MediaTime {
+        micros(6_000_000)
+    }
+
+    fn clip(
+        &self,
+        range: TimeRange,
+    ) -> impl Future<Output = Result<ExtractedClip, EvidenceMediaError>> + Send {
+        let mut wav = b"RIFF".to_vec();
+        wav.extend_from_slice(&format!("stand-in 16 kHz mono clip of {range:?}").into_bytes());
+        wav.resize(wav.len().max(64), 0);
+        ready(Ok(ExtractedClip {
+            actual_start: micros(range.start().as_micros() + 64_000),
+            wav,
+        }))
+    }
+}
+
 struct Never;
 
 impl EvidenceControl for Never {
@@ -304,8 +338,12 @@ fn placeholder_paths(record: &EvidenceRecord) -> Vec<PathBuf> {
         .map(|item| {
             // Written with `/` on every platform, so the examples do not
             // depend on the machine that regenerates them.
+            let extension = match item.media().kind() {
+                EvidenceMediaKind::FramePng => "png",
+                EvidenceMediaKind::AudioWav => "wav",
+            };
             PathBuf::from(format!(
-                "{PLACEHOLDER_ROOT}/sessions/{SESSION}/artifacts/artifact-{}.png",
+                "{PLACEHOLDER_ROOT}/sessions/{SESSION}/artifacts/artifact-{}.{extension}",
                 item.media().sha256().as_str()
             ))
         })
@@ -693,5 +731,204 @@ async fn published_shapes_reject_what_they_do_not_define() -> TestResult {
         .ok_or("not an object")?
         .insert("items".to_owned(), Value::Array(Vec::new()));
     assert!(!is_valid("frame-stream-data.schema.json", &with_items)?);
+    Ok(())
+}
+
+/// A crop of the 1.05 s frame's status line: the rectangle in the frame's
+/// displayed pixels, its origin in source pixels, native size.
+#[tokio::test]
+async fn crop_matches_the_frozen_example() -> TestResult {
+    let fixture = Fixture::new()?;
+    let frame = fixture.frame_get(1_025_000).await?;
+    let parent = frame.record.items().first().ok_or("no frame")?;
+    let extraction = extract_crop(
+        &fixture.call(SourceCheck::Identity, 160),
+        &fixture.video,
+        CropRequest {
+            parent,
+            x: 150,
+            y: 235,
+            width: 550,
+            height: 55,
+        },
+    )
+    .await?;
+    let value = json_of(&extraction.record, false)?;
+    regenerate(CROP_EXAMPLE, &pretty(&value)?)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("frame-data.schema.json", &value["data"])?;
+    assert!(
+        value == load(CROP_EXAMPLE)?,
+        "the crop result differs from {CROP_EXAMPLE}"
+    );
+    assert_eq!(value["command"], "crop");
+    let data = &value["data"];
+    assert_eq!(data["operation"], "crop");
+    assert_eq!(
+        data["request"],
+        serde_json::json!({
+            "parent_evidence_id": parent.id().as_str(),
+            "rect": {"x": 150, "y": 235, "width": 550, "height": 55}
+        })
+    );
+    let item = &data["items"][0];
+    assert_eq!(item["kind"], "crop");
+    assert_eq!(item["crop"]["frame_x"], 150);
+    assert_eq!(item["crop"]["frame_y"], 235);
+    assert_eq!(
+        (&item["image"]["width"], &item["image"]["height"]),
+        (&Value::from(550), &Value::from(55))
+    );
+    assert_eq!(item["frame"]["width"], 1_280);
+    assert_eq!(data["selections"][0]["requested_us"], 1_050_000);
+    assert_eq!(data["selections"][0]["delta_us"], 0);
+    // A crop of the crop names source pixels.
+    let crop = extraction.record.items().first().ok_or("no crop")?;
+    let nested = extract_crop(
+        &fixture.call(SourceCheck::Identity, 160),
+        &fixture.video,
+        CropRequest {
+            parent: crop,
+            x: 10,
+            y: 5,
+            width: 40,
+            height: 30,
+        },
+    )
+    .await?;
+    let nested = json_of(&nested.record, false)?;
+    validate("frame-data.schema.json", &nested["data"])?;
+    assert_eq!(nested["data"]["items"][0]["crop"]["frame_x"], 160);
+    assert_eq!(nested["data"]["items"][0]["crop"]["frame_y"], 240);
+    assert_eq!(
+        nested["data"]["items"][0]["crop"]["parent_evidence_id"],
+        crop.id().as_str()
+    );
+    Ok(())
+}
+
+async fn audio_extraction(fixture: &Fixture, from: u64, to: u64) -> Built<EvidenceExtraction> {
+    Ok(extract_audio(
+        &fixture.call(SourceCheck::Identity, 160),
+        &F01Audio,
+        AudioRange::new(TimeRange::new(micros(from), micros(to))?)?,
+    )
+    .await?)
+}
+
+fn audio_json(record: &EvidenceRecord) -> Built<Value> {
+    let paths = placeholder_paths(record);
+    let files = delivered(record, &paths);
+    Ok(serde_json::to_value(audio_response(
+        &EvidencePresentation {
+            record,
+            reused: false,
+            files: &files,
+        },
+        lifecycle(),
+    )?)?)
+}
+
+/// `audio --from 0 --to 1000000`: one clip whose first sample is 64 ms in.
+#[tokio::test]
+async fn audio_matches_the_frozen_example() -> TestResult {
+    let fixture = Fixture::new()?;
+    let extraction = audio_extraction(&fixture, 0, 1_000_000).await?;
+    let value = audio_json(&extraction.record)?;
+    regenerate(AUDIO_EXAMPLE, &pretty(&value)?)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("audio-data.schema.json", &value["data"])?;
+    assert!(
+        value == load(AUDIO_EXAMPLE)?,
+        "the audio result differs from {AUDIO_EXAMPLE}"
+    );
+    assert_eq!(value["command"], "audio");
+    let data = &value["data"];
+    assert_eq!(
+        data["request"],
+        serde_json::json!({"from_us": 0, "to_us": 1_000_000})
+    );
+    assert_eq!(data["range_clipped"], false);
+    assert_eq!(data["selections"][0]["actual_us"], 64_000);
+    assert_eq!(data["selections"][0]["delta_us"], 64_000);
+    let item = &data["items"][0];
+    assert_eq!(item["actual_start_us"], 64_000);
+    assert_eq!(
+        item["range"],
+        serde_json::json!({"start_us": 0, "end_us": 1_000_000})
+    );
+    assert_eq!(item["audio"]["sample_rate"], 16_000);
+    assert_eq!(data["files"][0]["media_type"], "audio/wav");
+
+    // A range past the end is clipped and says so.
+    let clipped = audio_json(
+        &audio_extraction(&fixture, 5_000_000, 8_000_000)
+            .await?
+            .record,
+    )?;
+    validate("audio-data.schema.json", &clipped["data"])?;
+    assert_eq!(clipped["data"]["range_clipped"], true);
+    assert_eq!(
+        clipped["data"]["items"][0]["range"],
+        serde_json::json!({"start_us": 5_000_000, "end_us": 6_000_000})
+    );
+    Ok(())
+}
+
+/// The audio stream is the clip as one `audio_evidence` event, then the
+/// terminal event; a frame record is not an audio result and back.
+#[tokio::test]
+async fn the_audio_stream_is_one_clip_then_the_terminal_event() -> TestResult {
+    let fixture = Fixture::new()?;
+    let extraction = audio_extraction(&fixture, 0, 1_000_000).await?;
+    let record = &extraction.record;
+    let paths = placeholder_paths(record);
+    let files = delivered(record, &paths);
+    let presentation = EvidencePresentation {
+        record,
+        reused: false,
+        files: &files,
+    };
+    let stream = AudioEvidenceStream::new(&presentation, lifecycle())?;
+    let json = audio_json(record)?;
+    let [event] = stream.records() else {
+        return Err("expected one audio event".into());
+    };
+    let event = serde_json::to_value(event)?;
+    validate("evidence-event.schema.json", &event)?;
+    validate("audio-evidence.schema.json", &event["record"])?;
+    assert_eq!(event["record_type"], "audio_evidence");
+    assert_eq!(event["key"], json["data"]["items"][0]["evidence_id"]);
+    assert_eq!(event["record"], json["data"]["items"][0]);
+    let terminal = serde_json::to_value(stream.terminal())?;
+    validate("terminal-event.schema.json", &terminal)?;
+    validate("audio-stream-data.schema.json", &terminal["result"]["data"])?;
+    assert_eq!(terminal["sequence"], 1);
+    assert_eq!(terminal["result"]["data"]["record_count"], 1);
+
+    assert!(matches!(
+        frame_response(&presentation, lifecycle()),
+        Err(EvidencePresentationError::OperationMismatch)
+    ));
+    let frame = fixture.frame_get(1_025_000).await?;
+    let frame_paths = placeholder_paths(&frame.record);
+    let frame_files = delivered(&frame.record, &frame_paths);
+    assert!(matches!(
+        audio_response(
+            &EvidencePresentation {
+                record: &frame.record,
+                reused: false,
+                files: &frame_files,
+            },
+            lifecycle()
+        ),
+        Err(EvidencePresentationError::OperationMismatch)
+    ));
+    let mut foreign = event.clone();
+    foreign["record"]["audio"]["sample_rate"] = Value::from(48_000);
+    assert!(!is_valid("evidence-event.schema.json", &foreign)?);
+    let mut too_many = json["data"].clone();
+    too_many["items"] = Value::Array(vec![json["data"]["items"][0].clone(); 2]);
+    assert!(!is_valid("audio-data.schema.json", &too_many)?);
     Ok(())
 }

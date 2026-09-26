@@ -96,9 +96,9 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 | `transcript retranscribe <session> --from ... --to ...` | New transcript revision; preserve previous citations |
 | `search <session> --query ...` | Literal/ranked transcript search; no raw regex or executable query input |
 | `candidates <session> --from ... --to ... --limit ...` | Bounded ordered candidate records with honest coverage and a stable continuation cursor; no thumbnails in P08 (implemented in P08 PR 4) |
-| `frame get <session> --at ...`, `frame neighbours <evidence>` | Source-grounded frame and bounded adjacent states |
-| `frame burst <session> --from ... --to ... --max-frames ...` | Finite count, dimensions and total-byte budget; actual timestamps |
-| `crop <evidence> --rect ...`, `audio <session> --from ... --to ...` | Bounded source-derived image/audio artifact with lineage |
+| `frame get <session> (--at ... \| --candidate ...) [--select ...] [--tolerance-us ...]`, `frame neighbours <session> <evidence> [--count 1..20]` | Exact source frame with requested and actual time and delta, and consecutive neighbours with typed side stops (implemented in P09 PR 3, [ADR 0019](../decisions/0019-evidence-navigation.md)) |
+| `frame burst <session> --from ... --to ... [--max-frames 1..100]` | Even targets over at most 60 s, distinct frames, per-call frame/pixel/byte/time budgets; actual timestamps (P09 PR 3) |
+| `crop <session> <evidence> --rect x,y,w,h`, `audio <session> --from ... --to ...` | Native-size crop by FFmpeg re-decode with source-pixel lineage; 16 kHz mono WAV clip of at most 30 s with its first sample's time (P09 PR 4); every evidence result delivers the committed file's absolute path, valid while the session exists |
 | `bundle validate <dir>` | Validate schema, contained paths, counts, sizes and hashes without executing embedded content |
 | `job run --request <file>`, `job batch --requests <file>` | Versioned noninteractive worker inputs; explicit workspace, finite concurrency and admission |
 | `job status/resume/cancel <id>` | Read-only status or explicit lifecycle transition; no implicit detached daemon |
@@ -443,8 +443,19 @@ compromised decoder. Worker isolation requires host-enforced limits and reports 
 8. Extract a native-resolution frame/burst/crop/audio range from the bound source,
    recording actual source time, orientation, dimensions, requested parameters and
    any resampling. Upscaling adds no source detail and is labeled as a transform.
+   P09 implements this ([ADR 0019](../decisions/0019-evidence-navigation.md)): a
+   request lists the displayed frames of a bounded stretch, the domain chooses frames
+   (at-or-after by default, displayed-at, consecutive neighbours, deduplicated even
+   bursts), and FFmpeg extracts exactly those timestamps as 8-bit RGB PNG at native
+   size, crops by re-decoding the frame, and clips 16 kHz mono WAV. Each call commits
+   its files and one `evidence_record` lineage record; identical requests are answered
+   from it without a provider, and requests that resolve to one frame share one item.
+   Nothing is ever scaled, so no transform label is needed yet.
 9. Return only requested bounded evidence and stable references. A CLI path is useful
    only if the agent host can read images at that path; the skill checks that ability.
+   P09 returns the verified absolute path of the committed session artifact in the
+   result's `files` (decision D2), valid while the session exists; records and bundles
+   never contain a path.
 
 FFmpeg adapters own tested demuxer/protocol restrictions, explicit mapping and safe
 output templates. No arbitrary filter strings or extra provider flags from evidence

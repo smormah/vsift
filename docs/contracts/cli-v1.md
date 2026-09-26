@@ -3,8 +3,8 @@
 Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
-`candidates` (P08 visual candidates), `frame get`, `frame neighbours` and `frame burst` (P09
-evidence navigation) and `bundle validate` are operational. Other commands below
+`candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
+and `audio` (P09 evidence navigation) and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 
@@ -33,7 +33,7 @@ being created. An existing directory that VSift did not create is never adopted.
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
-| `audio`, `crop` | Source audio clips and native crops | P09 PR 4 |
+| `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job run/batch/status/resume/cancel` | Recoverable worker operations | P10/P11 |
 
@@ -83,8 +83,8 @@ Since P09 PR 2 a bundle may also carry `evidence_record` artifacts
 ([`bundle-evidence-record.schema.json`](../../schemas/v1/bundle-evidence-record.schema.json))
 with their `frame_png` and `audio_wav` files; `bundle validate` decodes each record
 strictly and checks every item against its file (ADR 0013 note of 2026-09-26). The
-frame commands write them since P09 PR 3 (see "P09 frames" below); `crop` and
-`audio` follow in PR 4.
+frame commands write them since P09 PR 3 and `crop` and `audio` since PR 4 (see "P09
+frames" and "P09 crops and audio clips" below).
 
 ### P07 supplied transcripts
 
@@ -743,6 +743,58 @@ nothing was extracted.
 
 Human output is the indented JSON result; readable terminal text is P13's.
 
+### P09 crops and audio clips
+
+```console
+vsift crop ses_0123456789abcdef evd_0123456789abcdef --rect 850,420,280,70 --json
+vsift audio ses_0123456789abcdef --from 0 --to 1000000 --json
+vsift audio ses_0123456789abcdef --from 5000000 --to 8000000 --events jsonl
+```
+
+**`crop <session> <evidence> --rect x,y,w,h`** cuts a rectangle out of a frame or an
+earlier crop that the session holds (D6, D7). The rectangle is in the parent image's
+own displayed pixels (orientation applied): exactly four canonical unsigned decimals
+(no sign, space or leading zero), with a positive width and height; `x + width` may
+equal the parent's width, one pixel more is refused. Syntax is a parse error;
+containment is checked against the parent before any tool runs (`INVALID_ARGUMENT`
+with the rectangle rule as remediation). FFmpeg decodes the parent's exact frame again
+and crops it, so the image is the source's pixels at native size; nothing is scaled,
+sharpened or invented (on the rotated F01 variant every tested crop equals FFmpeg's own
+decode of that region pixel for pixel). The result is `frame-data.schema.json` with
+`operation` `crop` (example [`crop.json`](../../schemas/v1/examples/crop.json)): the
+`request` names `parent_evidence_id` and `rect`, the item has `kind` `crop` and `crop`
+with `x`, `y`, `width`, `height` in the parent's pixels and `frame_x`, `frame_y` in the
+whole displayed frame's, so a crop of a crop still names source pixels. Its selection
+has role `requested`, `requested_us` the parent frame's time and delta 0. A crop's
+identity digests its frame, its parent and both rectangles, so repeating it is
+`reused`; a crop of an audio clip is `INVALID_ARGUMENT` (kind remediation). The stream
+writes the crop as one `frame_evidence` event.
+
+**`audio <session> --from <us> --to <us>`** extracts a WAV clip (16 kHz mono signed
+16-bit little-endian, D5) of the half-open range, at most 30 s. A range that runs past
+the end of the source is clipped to it and says so (`range_clipped: true`); one that
+starts at or after the end, an empty or reversed range and one over 30 s are
+`INVALID_ARGUMENT` with a remediation, as is a source without an audio stream. `data`
+([`audio-data.schema.json`](../../schemas/v1/audio-data.schema.json), example
+[`audio.json`](../../schemas/v1/examples/audio.json)) has `operation` `audio`, the
+`request` (`from_us`, `to_us`), `request_key`, `reused`, `profile`, `tool_fingerprint`,
+`source_check`, one `requested` selection (`requested_us` the requested start,
+`actual_us` the first decoded sample's time), `range_clipped`, one `audio_evidence`
+item ([`audio-evidence.schema.json`](../../schemas/v1/audio-evidence.schema.json):
+`evidence_id`, `source_id`, `stream_index`, the clipped `range`, `actual_start_us` and
+`audio` with `audio/wav`, 16000, 1, `s16le`, SHA-256 and bytes), `files` (the clip's
+absolute path, `audio/wav`, D2) and `partial_reason`. `actual_start_us` is when the
+first sample really is: 64 ms into F01's audio-only variant (AAC priming), 750 ms into
+F09 (its audio starts late). The clip's identity digests the stream and the clipped
+range, so two requests clipped to the same range share one clip. `--events jsonl`
+writes one `audio_evidence` event, then the terminal event
+([`audio-stream-data.schema.json`](../../schemas/v1/audio-stream-data.schema.json)).
+Whisper is not needed; clips are decoded by FFmpeg.
+
+A damaged or cut-short part of a source is `INVALID_SOURCE` with nothing committed and
+a remediation that names `candidates` for finding undecodable parts; the decodable
+parts stay usable.
+
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
 five-second total operation deadline; `--profile worker` and
@@ -884,9 +936,9 @@ Human output is readable terminal text on stdout (P05 session operations use
 indented JSON). In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
-`transcript get`, `search`, `candidates` and the frame commands evidence events precede
-it (see "Evidence stream", "P08 transcript search", "P08 visual candidates" and "P09
-frames" above), and every other
+`transcript get`, `search`, `candidates`, the frame commands, `crop` and `audio` evidence
+events precede it (see "Evidence stream", "P08 transcript search", "P08 visual
+candidates", "P09 frames" and "P09 crops and audio clips" above), and every other
 command, including `transcript retranscribe`, writes the terminal event alone. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.
 

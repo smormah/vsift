@@ -287,8 +287,34 @@ evidence record type `frame_evidence`.
   one; a missing tool names FFmpeg and FFprobe (not Whisper). `--select` and
   `--tolerance-us` are parse errors with `--candidate`, whose frame is at-or-after with
   tolerance zero by definition.
-- **Evidence:** `frame_contract` (frozen examples, schema rejections), the binary's
-  `frame_cli_contract` (reuse with stand-in tools that cannot run, the budget and parent
+- **Evidence:** `navigation_contract` (frozen examples, schema rejections), the binary's
+  `evidence_cli_contract` (reuse with stand-in tools that cannot run, the budget and parent
   failures, the grammar) and the opt-in `p09_evidence_e2e` stages `p09_frame_exact`,
   `p09_candidate_frames`, `p09_neighbours_burst` and `p09_reuse` against the frozen
   truth (passed on Windows 11 with FFmpeg 9.0).
+
+## 2026-09-26 implementation note: `crop`, `audio` and qualification (PR 4)
+
+PR 4 makes `crop <session> <evidence> --rect x,y,w,h` and `audio <session> --from --to`
+public, completing the D6 grammar, and records the packet's qualification in
+[p09-evidence-navigation.md](../planning/p09-evidence-navigation.md).
+
+- **Crop rectangles** are parsed by the domain's canonical rule (`CropRect::parse`)
+  against the largest possible frame, so the text is checked before any I/O and the
+  real containment check runs against the parent's committed record. Crops use the
+  frame result (`operation` `crop`, `frame_evidence` items).
+- **Audio** has its own result and published record type, `audio_evidence`
+  ([`audio-data.schema.json`](../../schemas/v1/audio-data.schema.json),
+  [`audio-evidence.schema.json`](../../schemas/v1/audio-evidence.schema.json)),
+  because a clip has a range, a first-sample time and a sample format rather than a
+  frame and dimensions.
+- **Remediation** is chosen per medium: a range over the limit names 60 s and
+  `candidates` for bursts and 30 s for clips; a missing audio stream points to frames
+  instead of transcription; damaged media is `INVALID_SOURCE` with the advice to use
+  another time or range, nothing committed.
+- **Evidence:** `navigation_contract` (frozen `crop.json`, `audio.json`), the binary's
+  `evidence_cli_contract` and the opt-in `p09_evidence_e2e` stages `p09_crop`,
+  `p09_audio`, `p09_malformed`, `p09_stream_and_bundle`, the mechanical journeys
+  `p09_mechanical_journey_supplied` and `p09_mechanical_journey_local_asr` (video to
+  cited, validated evidence on both transcript paths) and `p09_perf` (results in the
+  qualification record).

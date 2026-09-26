@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
-    EvidenceId, FrameSelection, JobId, RuntimeDependency, SessionId, SetupProfile,
+    CropRectangle, EvidenceId, FrameSelection, JobId, RuntimeDependency, SessionId, SetupProfile,
     TranscriptRevisionId, VisualCandidateId,
 };
 use vsift_contract::CommandName;
@@ -576,7 +576,8 @@ pub(crate) struct AudioArguments {
     /// Inclusive source-timeline start in microseconds.
     #[arg(long)]
     pub from: u64,
-    /// Exclusive source-timeline end in microseconds.
+    /// Exclusive source-timeline end in microseconds, at most 30 s after
+    /// --from; a range past the end of the source is clipped to it.
     #[arg(long)]
     pub to: u64,
 }
@@ -584,11 +585,14 @@ pub(crate) struct AudioArguments {
 /// Evidence crop request.
 #[derive(Args, Debug)]
 pub(crate) struct CropArguments {
-    /// Source evidence image.
+    /// Session containing the source.
+    pub session: SessionId,
+    /// Frame or crop evidence item (an `evd_` identity) to cut from.
     pub evidence: EvidenceId,
-    /// Rectangle as `x,y,width,height`; frame containment is checked before I/O.
-    #[arg(long)]
-    pub rect: String,
+    /// Rectangle as `x,y,width,height` in the parent image's displayed
+    /// pixels; containment in the parent is checked before any tool runs.
+    #[arg(long, value_name = "X,Y,WIDTH,HEIGHT")]
+    pub rect: CropRectangle,
 }
 
 /// Bundle namespace arguments.

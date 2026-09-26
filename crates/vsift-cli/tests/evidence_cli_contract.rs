@@ -1,5 +1,5 @@
-//! Public CLI contract for `frame get`, `frame neighbours` and `frame burst`
-//! (P09, ADR 0019).
+//! Public CLI contract for `frame get`, `frame neighbours`, `frame burst`,
+//! `crop` and `audio` (P09, ADR 0019).
 //!
 //! Every journey runs everywhere without `FFmpeg`. The configured "tools"
 //! are plain files that cannot run, so a call that reached a provider fails;
@@ -31,13 +31,14 @@ use assert_cmd::Command;
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_application::{
-    AudioExtractor, EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceExtraction,
+    AudioExtractor, CropRequest, EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceExtraction,
     EvidenceMediaError, EvidenceScope, EvidenceStop, ExtractedClip, ExtractedFrame, FrameAtRequest,
-    FrameExtractor, VideoStreamFacts, extract_audio, extract_frame_at,
+    FrameExtractor, VideoStreamFacts, extract_audio, extract_crop, extract_frame_at,
 };
 use vsift_contract::{
-    BURST_RANGE_REMEDIATION, EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION,
-    EVIDENCE_TOOLS_REMEDIATION, UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION,
+    AUDIO_RANGE_REMEDIATION, BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION,
+    EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION, EVIDENCE_TOOLS_REMEDIATION,
+    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION,
 };
 use vsift_domain::{
     AudioRange, CropRect, EvidenceMediaKind, EvidenceProfile, FrameDimensions, FrameListing,
@@ -168,11 +169,13 @@ fn json(output: &Output) -> Built<Value> {
     assert!(output.stderr.is_empty(), "a JSON command wrote to stderr");
     let value: Value = serde_json::from_slice(&output.stdout)?;
     validate("operation-response.schema.json", &value)?;
-    let evidence = value["command"]
-        .as_str()
-        .is_some_and(|command| command.starts_with("frame.") || command == "crop");
-    if evidence && value["error"].is_null() {
-        validate("frame-data.schema.json", &value["data"])?;
+    let command = value["command"].as_str().unwrap_or_default();
+    if value["error"].is_null() {
+        if command.starts_with("frame.") || command == "crop" {
+            validate("frame-data.schema.json", &value["data"])?;
+        } else if command == "audio" {
+            validate("audio-data.schema.json", &value["data"])?;
+        }
     }
     Ok(value)
 }
@@ -195,13 +198,23 @@ fn stream(output: &Output, command: &str) -> Built<Vec<Value>> {
         match value["event"].as_str() {
             Some("evidence") => {
                 validate("evidence-event.schema.json", &value)?;
-                validate("frame-evidence.schema.json", &value["record"])?;
+                let record = if command == "audio" {
+                    "audio-evidence.schema.json"
+                } else {
+                    "frame-evidence.schema.json"
+                };
+                validate(record, &value["record"])?;
             }
             Some("terminal") => {
                 validate("terminal-event.schema.json", &value)?;
                 validate("operation-response.schema.json", &value["result"])?;
                 if value["result"]["error"].is_null() {
-                    validate("frame-stream-data.schema.json", &value["result"]["data"])?;
+                    let data = if command == "audio" {
+                        "audio-stream-data.schema.json"
+                    } else {
+                        "frame-stream-data.schema.json"
+                    };
+                    validate(data, &value["result"]["data"])?;
                 }
             }
             _ => return Err("a stream line has no published event kind".into()),
@@ -474,6 +487,28 @@ impl Harness {
                 selection: FrameSelection::AtOrAfter,
                 tolerance: FrameTolerance::DEFAULT,
                 candidate: None,
+            },
+        )
+        .await?)
+    }
+
+    /// What an earlier `crop` of `parent` would have committed.
+    async fn seeded_crop(
+        &self,
+        parent: &vsift_domain::EvidenceItem,
+        (x, y, width, height): (u32, u32, u32, u32),
+    ) -> Built<EvidenceExtraction> {
+        let fingerprint = self.fingerprint()?;
+        let known = BTreeSet::new();
+        Ok(extract_crop(
+            &self.call(&fingerprint, &known),
+            &SeedVideo::new()?,
+            CropRequest {
+                parent,
+                x,
+                y,
+                width,
+                height,
             },
         )
         .await?)
@@ -873,5 +908,219 @@ async fn burst_ranges_are_checked_before_any_tool() -> TestResult {
     let lines = stream(&events, "frame.burst")?;
     assert_eq!(lines.len(), 1);
     assert_eq!(lines[0]["result"]["error"]["code"], "INVALID_ARGUMENT");
+    Ok(())
+}
+
+/// A committed crop and a committed clip are answered from their records,
+/// with their verified files, through `--json` and `--events jsonl`.
+#[tokio::test]
+async fn identical_crop_and_audio_requests_are_reused() -> TestResult {
+    let harness = Harness::open()?;
+    harness.trust_tools()?;
+    let frame = harness.seeded_frame(1_025_000).await?;
+    harness.seed(&frame, 0)?;
+    let parent = frame.record.items().first().ok_or("no frame")?;
+    let crop = harness.seeded_crop(parent, (8, 4, 20, 10)).await?;
+    harness.seed(&crop, 0)?;
+    let audio = harness.seeded_audio().await?;
+    harness.seed(&audio, 0)?;
+    let before = harness.artifact_count()?;
+
+    let crop_arguments = [
+        "crop",
+        harness.session.as_str(),
+        parent.id().as_str(),
+        "--rect",
+        "8,4,20,10",
+    ];
+    let mut json_arguments = crop_arguments.to_vec();
+    json_arguments.push("--json");
+    let value = json(&harness.run(&json_arguments)?)?;
+    assert_eq!(value["command"], "crop");
+    let data = &value["data"];
+    assert_eq!(data["reused"], true);
+    assert_eq!(data["operation"], "crop");
+    assert_eq!(data["items"][0]["kind"], "crop");
+    assert_eq!(
+        data["items"][0]["crop"]["parent_evidence_id"],
+        parent.id().as_str()
+    );
+    assert_eq!(
+        (
+            &data["items"][0]["image"]["width"],
+            &data["items"][0]["image"]["height"]
+        ),
+        (&Value::from(20), &Value::from(10))
+    );
+    let path = PathBuf::from(data["files"][0]["path"].as_str().ok_or("no path")?);
+    assert_eq!(fs::read(&path)?, crop.media.first().ok_or("no crop")?.bytes);
+    let mut stream_arguments = crop_arguments.to_vec();
+    stream_arguments.extend(["--events", "jsonl"]);
+    let lines = stream(&harness.run(&stream_arguments)?, "crop")?;
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0]["record_type"], "frame_evidence");
+
+    let audio_arguments = [
+        "audio",
+        harness.session.as_str(),
+        "--from",
+        "0",
+        "--to",
+        "1000000",
+    ];
+    let mut json_arguments = audio_arguments.to_vec();
+    json_arguments.push("--json");
+    let value = json(&harness.run(&json_arguments)?)?;
+    assert_eq!(value["command"], "audio");
+    assert_eq!(value["data"]["reused"], true);
+    assert_eq!(value["data"]["range_clipped"], false);
+    assert_eq!(value["data"]["files"][0]["media_type"], "audio/wav");
+    let path = PathBuf::from(
+        value["data"]["files"][0]["path"]
+            .as_str()
+            .ok_or("no path")?,
+    );
+    assert_eq!(
+        fs::read(&path)?,
+        audio.media.first().ok_or("no clip")?.bytes
+    );
+    let mut stream_arguments = audio_arguments.to_vec();
+    stream_arguments.extend(["--events", "jsonl"]);
+    let lines = stream(&harness.run(&stream_arguments)?, "audio")?;
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0]["record_type"], "audio_evidence");
+    assert_eq!(lines[1]["result"]["data"]["record_count"], 1);
+    assert_eq!(harness.artifact_count()?, before, "a reused call wrote");
+    Ok(())
+}
+
+/// Crop parents and rectangles are checked against the session's records
+/// before any provider runs.
+#[tokio::test]
+async fn crops_outside_their_parent_or_of_a_clip_are_invalid_arguments() -> TestResult {
+    let harness = Harness::open()?;
+    harness.trust_tools()?;
+    let frame = harness.seeded_frame(1_025_000).await?;
+    harness.seed(&frame, 0)?;
+    let audio = harness.seeded_audio().await?;
+    harness.seed(&audio, 0)?;
+    let parent = frame
+        .record
+        .items()
+        .first()
+        .ok_or("no frame")?
+        .id()
+        .as_str()
+        .to_owned();
+    let clip = audio
+        .record
+        .items()
+        .first()
+        .ok_or("no clip")?
+        .id()
+        .as_str()
+        .to_owned();
+    let before = harness.artifact_count()?;
+    for (evidence, rect, summary) in [
+        (parent.as_str(), "60,0,5,1", CROP_OUTSIDE_REMEDIATION),
+        (parent.as_str(), "0,0,64,37", CROP_OUTSIDE_REMEDIATION),
+        (clip.as_str(), "0,0,1,1", EVIDENCE_KIND_REMEDIATION),
+        (
+            "evd_ffffffffffffffffffffffffffffffff",
+            "0,0,1,1",
+            UNKNOWN_EVIDENCE_REMEDIATION,
+        ),
+    ] {
+        let output =
+            harness.run(&["crop", &harness.session, evidence, "--rect", rect, "--json"])?;
+        assert_eq!(output.status.code(), Some(2), "{rect}");
+        let value = json(&output)?;
+        assert_eq!(value["command"], "crop");
+        assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+        assert_eq!(remediation(&value), summary);
+    }
+    // The whole parent is a valid rectangle; it needs a provider, which the
+    // stand-ins cannot be, so it fails later without writing anything.
+    let whole = json(&harness.run(&[
+        "crop",
+        &harness.session,
+        &parent,
+        "--rect",
+        "0,0,64,36",
+        "--json",
+    ])?)?;
+    assert_ne!(whole["error"]["code"], "INVALID_ARGUMENT");
+    assert_eq!(harness.artifact_count()?, before);
+    Ok(())
+}
+
+/// The crop and audio grammar: a canonical `x,y,width,height` with a
+/// positive size, and a range of at most 30 s checked before any tool.
+#[tokio::test]
+async fn the_crop_and_audio_grammar_and_ranges_are_checked_first() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = "ses_0123456789abcdef";
+    let evidence = "evd_0123456789abcdef";
+    for rect in [
+        "1,2,3",
+        "1,2,3,4,5",
+        "01,2,3,4",
+        "0,0,0,5",
+        "0,0,5,0",
+        "-1,0,1,1",
+        "+1,0,1,1",
+        "1, 2,3,4",
+        "4294967295,0,1,1",
+        "a,b,c,d",
+    ] {
+        let output = vsift(
+            &root,
+            &["crop", session, evidence, "--rect", rect, "--json"],
+        )?;
+        assert_eq!(output.status.code(), Some(2), "{rect}");
+        assert_eq!(json(&output)?["command"], "parse", "{rect}");
+    }
+    for arguments in [
+        vec!["crop", session, evidence, "--json"],
+        vec!["crop", evidence, "--rect", "0,0,1,1", "--json"],
+        vec!["audio", session, "--from", "0", "--json"],
+    ] {
+        let output = vsift(&root, &arguments)?;
+        assert_eq!(output.status.code(), Some(2), "{arguments:?}");
+        assert_eq!(json(&output)?["command"], "parse", "{arguments:?}");
+    }
+    let long = vsift(
+        &root,
+        &[
+            "audio", session, "--from", "0", "--to", "30000001", "--json",
+        ],
+    )?;
+    assert_eq!(long.status.code(), Some(2));
+    let value = json(&long)?;
+    assert_eq!(value["command"], "audio");
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert_eq!(remediation(&value), AUDIO_RANGE_REMEDIATION);
+    for (from, to) in [("5", "5"), ("10", "5")] {
+        let output = vsift(
+            &root,
+            &["audio", session, "--from", from, "--to", to, "--json"],
+        )?;
+        assert_eq!(output.status.code(), Some(2), "{from}-{to}");
+        assert_eq!(json(&output)?["error"]["code"], "INVALID_ARGUMENT");
+    }
+
+    // Without media tools a clip names what to install.
+    let source = root.path("stand-in.mp4");
+    fs::write(&source, b"\0\0\0\x18ftypisomaudio-no-tools")?;
+    let opened = json(&vsift(&root, &["ingest", text(&source)?, "--json"])?)?;
+    let session = opened["data"]["session_id"].as_str().ok_or("no session")?;
+    let output = vsift(
+        &root,
+        &["audio", session, "--from", "0", "--to", "1000000", "--json"],
+    )?;
+    assert_eq!(output.status.code(), Some(2));
+    let value = json(&output)?;
+    assert_eq!(value["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(remediation(&value), EVIDENCE_TOOLS_REMEDIATION);
     Ok(())
 }
