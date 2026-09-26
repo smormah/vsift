@@ -15,19 +15,21 @@
 use std::{collections::BTreeSet, error::Error, fmt};
 
 use vsift_domain::{
-    CursorToken, FrameDimensions, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES,
-    MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES,
-    MediaStreamKind, MediaTime, PlannedChunk, SearchMatch, SearchQuery, SessionId, SourceSegmentId,
-    TimeRange, TranscriptFormat, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId,
-    VisualChangePolicy, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
-    analyse_window, normalise_search_text, validate_chunk_output,
+    CropRect, CursorToken, FrameDimensions, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES,
+    MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS,
+    MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, MediaStreamKind, MediaTime, PlannedChunk,
+    SearchMatch, SearchQuery, SessionId, SourceSegmentId, TimeRange, TranscriptFormat,
+    VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId, VisualChangePolicy, VisualIndexWindow,
+    VisualSample, VisualWindow, VisualWindowOutcome, analyse_window, normalise_search_text,
+    validate_chunk_output,
 };
 use vsift_infrastructure::{
     FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, SourceContainer,
-    VisualSamplingWindow, WhisperOutputLimits, decode_transcript_record,
-    decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
-    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_png_sequence, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    VisualSamplingWindow, WhisperOutputLimits, decode_evidence_record, decode_transcript_record,
+    decode_visual_index_record, encode_evidence_record, encode_transcript_record,
+    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
+    parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -43,6 +45,14 @@ const WHISPER_SOURCE_SEGMENT: &str = "sgm_0123456789abcdef";
 /// Session every fuzzed visual-index record is decoded for; the seeds are
 /// encoded for it.
 pub const VISUAL_FUZZ_SESSION: &str = "ses_0123456789abcdef";
+/// Session every fuzzed evidence record is decoded for: the session of the
+/// frozen bundle example the seed copies.
+pub const EVIDENCE_FUZZ_SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
+/// The displayed frame every [`Target::CropRect`] outer rectangle is parsed
+/// against: the 1440x900 frame of the domain's own crop tests.
+pub const CROP_FRAME_WIDTH: u32 = 1_440;
+/// See [`CROP_FRAME_WIDTH`].
+pub const CROP_FRAME_HEIGHT: u32 = 900;
 /// The visual-sampling window every input is parsed against: window 0 of a
 /// 60 s source with its origin at zero, so every in-bounds timestamp is
 /// reachable.
@@ -93,11 +103,19 @@ pub enum Target {
     /// An extraction run's standard output through `parse_png_sequence`. See
     /// [`png_sequence_input`] for the input layout.
     PngSequence,
+    /// The stored evidence record through `decode_evidence_record`, as a
+    /// session read and `bundle validate` read it (P09 PR 2).
+    EvidenceRecord,
+    /// The `crop --rect` text through `CropRect::parse`, then
+    /// `CropRect::compose`. The input is an outer rectangle (parsed against a
+    /// fixed 1440x900 frame), a line feed, and an inner rectangle (parsed
+    /// against the outer one's size).
+    CropRect,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 14] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -110,6 +128,8 @@ impl Target {
         Self::FrameShowinfo,
         Self::FrameListing,
         Self::PngSequence,
+        Self::EvidenceRecord,
+        Self::CropRect,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -128,6 +148,8 @@ impl Target {
             Self::FrameShowinfo => "frame_showinfo",
             Self::FrameListing => "frame_listing",
             Self::PngSequence => "png_sequence",
+            Self::EvidenceRecord => "evidence_record",
+            Self::CropRect => "crop_rect",
         }
     }
 
@@ -150,6 +172,8 @@ impl Target {
             Self::FrameShowinfo => check_frame_showinfo(data),
             Self::FrameListing => check_frame_listing(data),
             Self::PngSequence => check_png_sequence(data),
+            Self::EvidenceRecord => check_evidence_record(data),
+            Self::CropRect => check_crop_rect(data),
         }
     }
 }
@@ -216,6 +240,15 @@ pub enum Violation {
     /// Accepted PNG images are not exactly the input, split into the
     /// expected number of images of the expected size.
     PngSequenceMismatch,
+    /// An accepted evidence record could not be encoded again.
+    EvidenceRecordNotReencodable,
+    /// An accepted evidence record changed in a round trip, or holds more
+    /// items or selections than its bound.
+    EvidenceRecordRoundTripChanged,
+    /// An accepted crop is outside its frame, has another canonical
+    /// spelling, or composes to a rectangle that is not the inner one moved
+    /// by the outer one's origin inside the frame.
+    CropRectInvalid,
 }
 
 impl fmt::Display for Violation {
@@ -252,6 +285,13 @@ impl fmt::Display for Violation {
             }
             Self::ListingOutOfBounds => "an accepted frame listing is out of bounds",
             Self::PngSequenceMismatch => "accepted PNG images do not match the output",
+            Self::EvidenceRecordNotReencodable => {
+                "an accepted evidence record could not be encoded again"
+            }
+            Self::EvidenceRecordRoundTripChanged => {
+                "an accepted evidence record changed in a round trip or is unbounded"
+            }
+            Self::CropRectInvalid => "an accepted crop is outside its frame or not canonical",
         })
     }
 }
@@ -659,6 +699,69 @@ pub fn png_sequence_input(expected: u8, width: u16, height: u16, stdout: &[u8]) 
     data.extend_from_slice(&height.to_be_bytes());
     data.extend_from_slice(stdout);
     data
+}
+
+fn check_evidence_record(data: &[u8]) -> Result<(), Violation> {
+    let session = SessionId::parse(EVIDENCE_FUZZ_SESSION).map_err(|_| Violation::HarnessSetup)?;
+    let Ok(record) = decode_evidence_record(data, &session) else {
+        return Ok(());
+    };
+    if record.items().len() > MAX_RECORD_ITEMS || record.selections().len() > MAX_RECORD_SELECTIONS
+    {
+        return Err(Violation::EvidenceRecordRoundTripChanged);
+    }
+    let encoded =
+        encode_evidence_record(&record).map_err(|_| Violation::EvidenceRecordNotReencodable)?;
+    match decode_evidence_record(&encoded, &session) {
+        Ok(decoded) if decoded == record => Ok(()),
+        _ => Err(Violation::EvidenceRecordRoundTripChanged),
+    }
+}
+
+/// The canonical `x,y,width,height` spelling of a rectangle.
+fn crop_text(rect: CropRect) -> String {
+    format!(
+        "{},{},{},{}",
+        rect.x(),
+        rect.y(),
+        rect.width(),
+        rect.height()
+    )
+}
+
+fn check_crop_rect(data: &[u8]) -> Result<(), Violation> {
+    let frame = FrameDimensions::new(CROP_FRAME_WIDTH, CROP_FRAME_HEIGHT)
+        .map_err(|_| Violation::HarnessSetup)?;
+    let Ok(text) = std::str::from_utf8(data) else {
+        return Ok(());
+    };
+    let (outer_text, inner_text) = text.split_once('\n').unwrap_or((text, ""));
+    let Ok(outer) = CropRect::parse(outer_text, frame) else {
+        return Ok(());
+    };
+    let contained = |rect: CropRect, within: FrameDimensions| {
+        u64::from(rect.x()) + u64::from(rect.width()) <= u64::from(within.width())
+            && u64::from(rect.y()) + u64::from(rect.height()) <= u64::from(within.height())
+    };
+    if !contained(outer, frame) || crop_text(outer) != outer_text {
+        return Err(Violation::CropRectInvalid);
+    }
+    let Ok(inner) = CropRect::parse(inner_text, outer.dimensions()) else {
+        return Ok(());
+    };
+    if crop_text(inner) != inner_text {
+        return Err(Violation::CropRectInvalid);
+    }
+    let composed = outer
+        .compose(inner)
+        .map_err(|_| Violation::CropRectInvalid)?;
+    let moved = composed.x().checked_sub(outer.x()) == Some(inner.x())
+        && composed.y().checked_sub(outer.y()) == Some(inner.y())
+        && composed.dimensions() == inner.dimensions();
+    if !moved || !contained(composed, frame) {
+        return Err(Violation::CropRectInvalid);
+    }
+    Ok(())
 }
 
 fn check_png_sequence(data: &[u8]) -> Result<(), Violation> {
