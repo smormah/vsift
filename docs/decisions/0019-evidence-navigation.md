@@ -275,7 +275,9 @@ evidence record type `frame_evidence`.
   `evidence_id` and must always carry the same content, so the check is published once
   per result as `source_check` and kept out of the item.
 - **Paths (D2).** `files[].path` is the verified absolute artifact path as the engine
-  returns it; on Windows that is the extended-length form `\?\C:\...`. A path that is
+  returns it; on Windows that may be the extended-length form `\\?\C:\...`, kept
+  verbatim because it is valid and long-path safe (maintainer, 2026-09-26; friendlier
+  display is P13's human output). A path that is
   not valid UTF-8 cannot be written as JSON text and is `STORAGE_IO` with a remediation
   rather than a lossy string. The frozen examples write paths under the placeholder
   root `/vsift-session-root`.

@@ -7,9 +7,9 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 **P09 (evidence navigation) is in progress; the packet is not complete.** PR 1 (media
-primitives and SEC-17 hardening) is merged (`965617f`). PR 2, the evidence core, is on
-branch `p09/evidence-core` (#163) awaiting merge. **PR 3, the frame commands, is
-complete on branch `p09/frame-commands`** (built on PR 2) and awaits review. ADR 0019 is
+primitives and SEC-17 hardening) is merged (`965617f`). PR 2, the evidence core, is merged
+(`4aecdaa`, #163). **PR 3, the frame commands, is complete on branch
+`p09/frame-commands`** (on `main`) and awaits review. ADR 0019 is
 accepted with D1-D7. P00-P08 are complete.
 
 1. **PR 3 delivered (public CLI):**
@@ -44,8 +44,6 @@ accepted with D1-D7. P00-P08 are complete.
 - Evidence: a burst over a range denser than one 1,200-frame listing (60 fps over more
   than 20 s) is rejected (`outside_listing`); several listings would lift it. Tiny-text
   crops (V-06) are unmeasured. Neighbours list up to three windows (2, 10, 29 s).
-- Evidence paths on Windows are the extended-length form `\\?\C:\...` the engine
-  returns; decide whether hosts should present the plain form where it is safe.
 - Evidence records are read and decoded in full on every evidence call (at most 160
   records of 256 KiB); fine for R0, an index would help later.
 - Candidates: real screen recordings are unmeasured; no denser pass for sub-0.5 s

@@ -26,8 +26,8 @@ Today it can:
 
 **P09 (evidence navigation) is in progress; the packet is not complete.** PR 1 (media
 primitives and a security fix) is merged (`965617f`). PR 2, the evidence core in the
-engine library, is on branch `p09/evidence-core` (#163) awaiting merge. PR 3 is complete
-on branch `p09/frame-commands` (built on PR 2) and awaits review: `frame get`,
+engine library, is merged (`4aecdaa`, #163). PR 3 is complete on branch
+`p09/frame-commands` and awaits review: `frame get`,
 `frame neighbours` and `frame burst` are public. PR 4 makes `crop` and `audio` public
 and writes the qualification record. ADR 0019 is accepted with D1-D7. P00-P08 are
 complete.
@@ -52,7 +52,7 @@ complete.
   `p09_evidence_e2e` (4 stages passed, Windows 11, FFmpeg 9.0, 154 s debug: all 29
   candidate frames at delta 0, reuse about 150 ms, cold frame about 1.8 s).
 
-## P09 PR 2: the evidence core (engine only)
+## P09 PR 2: the evidence core (engine only; merged `4aecdaa`)
 
 - **Operations:** `Engine::frame_get` (a time with at-or-after or displayed-at and a
   tolerance, or a visual candidate's exact frame), `frame_neighbours` (1..20
@@ -125,7 +125,7 @@ crops and WAV clips; strict PNG walking; domain navigation rules; preflight prof
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
-| P09 | In progress: PR 1 merged; PR 2 (#163) and PR 3 complete on their branches; PR 4 remains |
+| P09 | In progress: PRs 1-2 merged; PR 3 complete on its branch; PR 4 remains |
 | P10–P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 

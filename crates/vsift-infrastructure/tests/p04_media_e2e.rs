@@ -432,11 +432,6 @@ fn incomplete(
 
 fn future_stages() -> Vec<StageReport> {
     [
-        "p05_session_lifecycle",
-        "p06_dependency_remediation",
-        "p07_supplied_transcript",
-        "p07_local_asr",
-        "p08_candidates_search",
         "p10_recovery",
         "p11_worker_batch",
         "p12_agent_clients",
@@ -558,7 +553,7 @@ async fn real_media_checkpoint() -> TestResult<()> {
         future_stages: future_stages(),
         source_reference_validation: "SHA-256 and observed frame/audio PTS checked against frozen F01/F09 truth",
         coverage_gaps: vec![
-            "P05-P14 stages are not implemented by this checkpoint".to_owned(),
+            "P05-P09 stages run in their own checkpoints; P10-P14 are not implemented".to_owned(),
             "Desktop provider process has no hard filesystem, network, or memory sandbox"
                 .to_owned(),
         ],
