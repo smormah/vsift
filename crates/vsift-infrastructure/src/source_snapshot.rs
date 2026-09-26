@@ -187,6 +187,73 @@ impl SourceSnapshot {
         ))
     }
 
+    /// Reopens an open session's committed source copy for a read-only
+    /// evidence call (ADR 0019 D1).
+    ///
+    /// When the session records a verified on-disk identity and the copy
+    /// still has exactly that identity, the bytes are not hashed again: the
+    /// snapshot is built from the committed identity and the file's header,
+    /// and the third value is `false`. Otherwise the copy is hashed in full
+    /// like [`Self::open_committed`] and the third value is `true`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::open_committed`].
+    pub(crate) fn open_committed_for_evidence(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<(Self, FileIdentity, bool), SourceError> {
+        let committed = store
+            .committed_source(session_id, now_unix_seconds)
+            .map_err(SourceError::Storage)?;
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let mut file = committed
+            .directory
+            .open_with(&committed.file_name, &options)
+            .map_err(|_| SourceError::SnapshotChanged)?;
+        let metadata = file.metadata().map_err(SourceError::Io)?;
+        let current = FileIdentity::of(&metadata);
+        let unchanged = metadata.is_file()
+            && metadata.len() == committed.bytes
+            && committed
+                .verified_identity
+                .as_ref()
+                .is_some_and(|recorded| {
+                    crate::VerifiedSourceIdentity::of(&current).as_ref() == Some(recorded)
+                });
+        let (container, identity, hashed) = if unchanged {
+            let mut header = [0_u8; 12];
+            let read = read_header(&mut file, &mut header)?;
+            let container = container_of(header.get(..read).unwrap_or_default())
+                .ok_or(SourceError::SnapshotChanged)?;
+            (container, current, false)
+        } else {
+            let (id, container, identity) = read_identified(&mut file, committed.bytes)?;
+            if id != committed.source_id {
+                return Err(SourceError::SnapshotChanged);
+            }
+            (container, identity, true)
+        };
+        Ok((
+            Self {
+                session_id: session_id.clone(),
+                id: committed.source_id,
+                bytes: committed.bytes,
+                container,
+                file_name: committed.file_name,
+                directory: committed.directory,
+                directory_path: committed.directory_path,
+                _hold: committed.hold,
+                #[cfg(test)]
+                full_hashes: std::sync::atomic::AtomicU32::new(u32::from(hashed)),
+            },
+            identity,
+            hashed,
+        ))
+    }
+
     /// Cryptographic identity of the staged bytes.
     #[must_use]
     pub fn id(&self) -> &SourceId {
@@ -477,6 +544,32 @@ fn read_identified(
     Ok((id, container, identity))
 }
 
+/// The admitted container family a file's first bytes announce.
+fn container_of(header: &[u8]) -> Option<SourceContainer> {
+    if header.get(4..8) == Some(b"ftyp".as_slice()) {
+        Some(SourceContainer::IsoMedia)
+    } else if header.get(..4) == Some([0x1a, 0x45, 0xdf, 0xa3].as_slice()) {
+        Some(SourceContainer::Matroska)
+    } else {
+        None
+    }
+}
+
+/// Reads up to `header.len()` leading bytes of an opened copy.
+fn read_header(file: &mut File, header: &mut [u8]) -> Result<usize, SourceError> {
+    let mut read = 0;
+    while let Some(rest) = header.get_mut(read..)
+        && !rest.is_empty()
+    {
+        let count = file.read(rest).map_err(SourceError::Io)?;
+        if count == 0 {
+            break;
+        }
+        read += count;
+    }
+    Ok(read)
+}
+
 fn copy_bounded(
     source: &mut impl Read,
     destination: &mut impl Write,
@@ -509,13 +602,8 @@ fn copy_bounded(
             .map_err(SourceError::Io)?;
         hash.update(&buffer[..read]);
     }
-    let container = if header_count >= 8 && &header[4..8] == b"ftyp" {
-        SourceContainer::IsoMedia
-    } else if header_count >= 4 && header[..4] == [0x1a, 0x45, 0xdf, 0xa3] {
-        SourceContainer::Matroska
-    } else {
-        return Err(SourceError::UnsupportedContainer);
-    };
+    let container = container_of(header.get(..header_count).unwrap_or_default())
+        .ok_or(SourceError::UnsupportedContainer)?;
     let mut digest = String::with_capacity(64);
     for byte in hash.finalize() {
         digest.push(char::from(HEX[usize::from(byte >> 4)]));

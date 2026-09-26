@@ -1,6 +1,7 @@
 //! Capability-scoped session storage for the qualified ephemeral desktop profile.
 
 use std::{
+    collections::BTreeSet,
     error::Error,
     fmt, fs,
     io::{self, Read, Write},
@@ -16,12 +17,15 @@ use vsift_application::{
     PublishSessionGenerationRequest, SessionStorageError, SessionStore, StorageCapabilities,
 };
 use vsift_domain::{
-    OperationId, PublicationGuarantee, SessionArtifactKind, SessionId, SessionLifetime,
-    SessionPhase, SourceId, StorageGeneration, TranscriptRevision, TranscriptRevisionId,
-    VisualIndex,
+    EvidenceMediaKind, EvidenceRecord, EvidenceSubject, OperationId, PublicationGuarantee,
+    SessionArtifactKind, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
+    TranscriptRevision, TranscriptRevisionId, VisualIndex,
 };
 
-use crate::{SourceSnapshot, file_lock::HeldFileLock, private_user_root::restrict_new_directory};
+use crate::{
+    SourceSnapshot, VerifiedSourceIdentity, file_lock::HeldFileLock,
+    private_user_root::restrict_new_directory,
+};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
 const OWNERSHIP_FILE: &str = "ownership.json";
@@ -55,6 +59,10 @@ const STORAGE_LAYOUT_VERSION: u16 = 1;
 const MAX_ADMISSION_CAPACITY: u16 = 64;
 const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
 const MAX_GENERATIONS_PER_SESSION: u64 = 4_096;
+/// Most artifacts one session holds.
+const MAX_SESSION_ARTIFACTS: usize = 256;
+/// Most artifact bytes one session holds: 10 GiB.
+const MAX_SESSION_ARTIFACT_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -200,6 +208,62 @@ pub(crate) struct CommittedSource {
     pub(crate) source_id: SourceId,
     pub(crate) file_name: String,
     pub(crate) bytes: u64,
+    /// The copy's on-disk identity recorded after its last full
+    /// verification by an evidence call (ADR 0019 D1), if any.
+    pub(crate) verified_identity: Option<VerifiedSourceIdentity>,
+}
+
+/// One media file an evidence call commits.
+#[derive(Clone, Copy, Debug)]
+pub struct EvidenceMediaFile<'a> {
+    /// What the file is.
+    pub kind: EvidenceMediaKind,
+    /// The file's bytes.
+    pub bytes: &'a [u8],
+}
+
+/// A session's committed evidence and what it may still take (ADR 0019 D4).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EvidenceInventory {
+    records: Vec<EvidenceRecord>,
+    status: SessionStatus,
+    evidence_artifacts: usize,
+    known_media: BTreeSet<String>,
+}
+
+impl EvidenceInventory {
+    /// Every committed evidence record, oldest first, each decoded strictly.
+    #[must_use]
+    pub fn records(&self) -> &[EvidenceRecord] {
+        &self.records
+    }
+
+    /// The committed session state the records were read from.
+    #[must_use]
+    pub const fn status(&self) -> &SessionStatus {
+        &self.status
+    }
+
+    /// SHA-256 digests of the committed frame images and audio clips.
+    #[must_use]
+    pub const fn known_media(&self) -> &BTreeSet<String> {
+        &self.known_media
+    }
+
+    /// Evidence artifacts the session can still take: the smaller of what is
+    /// left of the evidence sub-budget and of the session's artifact slots.
+    #[must_use]
+    pub const fn evidence_slots_left(&self) -> usize {
+        let evidence = crate::MAX_EVIDENCE_ARTIFACTS.saturating_sub(self.evidence_artifacts);
+        let total = MAX_SESSION_ARTIFACTS.saturating_sub(self.status.artifact_count);
+        if evidence < total { evidence } else { total }
+    }
+
+    /// Artifact bytes the session can still take.
+    #[must_use]
+    pub const fn bytes_left(&self) -> u64 {
+        MAX_SESSION_ARTIFACT_BYTES.saturating_sub(self.status.artifact_bytes)
+    }
 }
 
 /// Verified committed lifecycle state for one disposable session.
@@ -412,6 +476,13 @@ enum LifecycleUpdate {
     Close,
     AddArtifact {
         artifact: StoredArtifact,
+        now: u64,
+    },
+    /// An evidence call's media and record, all in one generation, and the
+    /// source identity it verified, if it hashed the copy in full.
+    AddEvidence {
+        artifacts: Vec<StoredArtifact>,
+        verified_identity: Option<String>,
         now: u64,
     },
 }
@@ -645,6 +716,237 @@ impl FilesystemSessionStore {
             },
             None,
         )
+    }
+
+    /// Commits one evidence call (P09, ADR 0019): its new media files and its
+    /// evidence record in one generation, and the source identity the call
+    /// verified with a full hash, if it did (D1).
+    ///
+    /// Every file is installed by digest before the generation commits. A
+    /// file the session already holds under the same name, kind, size and
+    /// digest is kept rather than rejected, so two calls that extracted the
+    /// same frame share one file; the same name with another kind or size is
+    /// an integrity failure. The generation is checked against the evidence
+    /// sub-budget ([`crate::MAX_EVIDENCE_ARTIFACTS`]), the 256 artifact slots
+    /// and the 10 GiB bound.
+    ///
+    /// # Errors
+    ///
+    /// Rejects closed/expired sessions and stale generations
+    /// ([`SessionStorageError::StateConflict`]), a file over its kind's bound
+    /// or a session over its budgets
+    /// ([`SessionStorageError::CapacityExhausted`]), contention, and a
+    /// conflicting existing file ([`SessionStorageError::IntegrityFailure`]).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "One generation's inputs; the store's other commits take the same"
+    )]
+    pub fn publish_evidence(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        media: &[EvidenceMediaFile<'_>],
+        record: &[u8],
+        verified_identity: Option<&VerifiedSourceIdentity>,
+        now_unix_seconds: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        let mut files: Vec<(StoredArtifactKind, &[u8])> = media
+            .iter()
+            .map(|file| (StoredArtifactKind::from_media(file.kind), file.bytes))
+            .collect();
+        files.push((StoredArtifactKind::EvidenceRecord, record));
+        let mut artifacts = Vec::with_capacity(files.len());
+        for (kind, bytes) in &files {
+            if bytes.is_empty() || bytes.len() > kind.max_bytes() {
+                return Err(SessionStorageError::CapacityExhausted);
+            }
+            let digest = sha256_hex(bytes);
+            artifacts.push(StoredArtifact {
+                kind: *kind,
+                name: format!("artifact-{digest}.{}", kind.extension()),
+                sha256: digest,
+                bytes: u64::try_from(bytes.len())
+                    .map_err(|_| SessionStorageError::CapacityExhausted)?,
+            });
+        }
+        self.revalidate_root()?;
+        let _admission = acquire_admission(&self.root, self.admission_capacity, 1)?;
+        let coordination = self
+            .root
+            .open_dir_nofollow(COORDINATION_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let _lifetime =
+            HeldFileLock::try_shared(open_session_lock(&coordination, session_id, "lifetime")?)
+                .map_err(map_lock_error)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let record_state = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = record_state.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let directory = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        for ((_, bytes), artifact) in files.iter().zip(&artifacts) {
+            install_content_addressed(&directory, &artifact.name, bytes, &artifact.sha256)?;
+        }
+        let _writer =
+            HeldFileLock::try_exclusive(open_session_lock(&coordination, session_id, "writer")?)
+                .map_err(map_lock_error)?;
+        let request = PublishSessionGenerationRequest::new(
+            session_id.clone(),
+            operation_id.clone(),
+            expected_generation,
+            vsift_domain::DurabilityRequirement::Ephemeral,
+        );
+        publish_generation_while_locked(
+            &self.root,
+            &request,
+            LifecycleUpdate::AddEvidence {
+                artifacts,
+                verified_identity: verified_identity.map(|identity| identity.as_str().to_owned()),
+                now: now_unix_seconds,
+            },
+            None,
+        )
+    }
+
+    /// Reads every committed evidence record of an open session, with what
+    /// the session may still take.
+    ///
+    /// Each record is read under a shared lifetime hold, its size and SHA-256
+    /// are checked against the committed manifest, and it is decoded strictly
+    /// (structure, request key and item identities re-derived) and must
+    /// describe the session's source. The media files the records name are
+    /// not read here; a caller that returns them verifies each one with
+    /// [`Self::verified_artifact_path`].
+    ///
+    /// # Errors
+    ///
+    /// Closed or expired sessions conflict; a changed, oversized or invalid
+    /// record is an integrity failure, and a newer record version is
+    /// unsupported.
+    pub fn read_evidence_records(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<EvidenceInventory, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let lifecycle = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = lifecycle.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let directory = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let mut records = Vec::new();
+        let mut known_media = BTreeSet::new();
+        for artifact in &lifecycle.artifacts {
+            match artifact.kind {
+                StoredArtifactKind::EvidenceRecord => records.push(read_evidence_artifact(
+                    &directory,
+                    artifact,
+                    session_id,
+                    status.source_id(),
+                )?),
+                StoredArtifactKind::FramePng | StoredArtifactKind::AudioWav => {
+                    known_media.insert(artifact.sha256.clone());
+                }
+                StoredArtifactKind::AudioPcm
+                | StoredArtifactKind::TranscriptRecord
+                | StoredArtifactKind::VisualIndexRecord => {}
+            }
+        }
+        Ok(EvidenceInventory {
+            records,
+            evidence_artifacts: evidence_artifact_count(&lifecycle.artifacts),
+            status,
+            known_media,
+        })
+    }
+
+    /// Verifies one committed evidence media file of an open session and
+    /// returns its absolute path (ADR 0019 D2).
+    ///
+    /// The file must be listed in the committed manifest with exactly this
+    /// kind, size and SHA-256, and its bytes are hashed again before the path
+    /// is returned (INV-02). The path stays valid while the session exists;
+    /// it is for the result that delivers the file, never for a record.
+    ///
+    /// # Errors
+    ///
+    /// Closed or expired sessions conflict; a file the manifest does not
+    /// list, or whose bytes differ, is an integrity failure.
+    pub fn verified_artifact_path(
+        &self,
+        session_id: &SessionId,
+        kind: EvidenceMediaKind,
+        sha256: &str,
+        bytes: u64,
+        now_unix_seconds: u64,
+    ) -> Result<PathBuf, SessionStorageError> {
+        let _hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let committed = read_committed_manifest(&session, session_id)?;
+        let lifecycle = committed
+            .manifest
+            .lifecycle
+            .ok_or(SessionStorageError::StateConflict)?;
+        let status = lifecycle.to_status(session_id.clone(), committed.manifest.generation)?;
+        if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
+            return Err(SessionStorageError::StateConflict);
+        }
+        let kind = StoredArtifactKind::from_media(kind);
+        let artifact = lifecycle
+            .artifacts
+            .iter()
+            .find(|artifact| {
+                artifact.kind == kind && artifact.sha256 == sha256 && artifact.bytes == bytes
+            })
+            .ok_or(SessionStorageError::IntegrityFailure)?;
+        let directory = session
+            .open_dir_nofollow(ARTIFACTS_DIRECTORY)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let file = open_regular_file(&directory, &artifact.name, false)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        if hash_bounded(file, artifact.bytes)? != artifact.sha256 {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        Ok(self
+            .root_path
+            .join(SESSIONS_DIRECTORY)
+            .join(session_id.as_str())
+            .join(ARTIFACTS_DIRECTORY)
+            .join(&artifact.name))
     }
 
     /// Claims and cleans one session only after verifying its ownership and state.
@@ -963,6 +1265,10 @@ impl FilesystemSessionStore {
     ///
     /// Rejects future versions, unexpected entries, links, size changes, and hash
     /// mismatches. Evidence-only bundles disclose the matching source requirement.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep every bundle check and its order visible together"
+    )]
     pub fn validate_bundle(path: &Path) -> Result<BundleStatus, SessionStorageError> {
         validate_root_selection(path).map_err(map_open_error)?;
         let metadata = fs::symlink_metadata(path).map_err(map_storage_io)?;
@@ -1026,9 +1332,22 @@ impl FilesystemSessionStore {
             }
         }
         let mut artifact_bytes = 0_u64;
+        let mut evidence = Vec::new();
         for artifact in &manifest.artifacts {
             validate_artifact_record(artifact)?;
-            if artifact.kind == StoredArtifactKind::TranscriptRecord {
+            if artifact.kind == StoredArtifactKind::EvidenceRecord {
+                // As for the other records, a matching digest proves only that
+                // the file is the one the manifest names; decoding re-derives
+                // the request key and every item identity (ADR 0013 note of
+                // 2026-09-26), and the items are checked against the media
+                // below.
+                evidence.push(read_evidence_artifact(
+                    &bundle,
+                    artifact,
+                    &session_id,
+                    &source_id,
+                )?);
+            } else if artifact.kind == StoredArtifactKind::TranscriptRecord {
                 // A matching digest only proves the file is the one the manifest
                 // names; both could have been rewritten together. Decoding
                 // applies the same strict record and import rules as a session
@@ -1052,9 +1371,13 @@ impl FilesystemSessionStore {
                 .checked_add(artifact.bytes)
                 .ok_or(SessionStorageError::CapacityExhausted)?;
         }
-        if artifact_bytes > 10 * 1024 * 1024 * 1024 {
+        if artifact_bytes > MAX_SESSION_ARTIFACT_BYTES {
             return Err(SessionStorageError::CapacityExhausted);
         }
+        if evidence_artifact_count(&manifest.artifacts) > crate::MAX_EVIDENCE_ARTIFACTS {
+            return Err(SessionStorageError::CapacityExhausted);
+        }
+        validate_bundled_evidence(&bundle, &manifest.artifacts, &evidence)?;
         Ok(BundleStatus {
             session_id,
             source_id,
@@ -1336,6 +1659,12 @@ impl FilesystemSessionStore {
             .join(SESSIONS_DIRECTORY)
             .join(session_id.as_str())
             .join(ARTIFACTS_DIRECTORY);
+        let verified_identity = match record.verified_source_identity.as_deref() {
+            None => None,
+            Some(text) => Some(
+                VerifiedSourceIdentity::parse(text).ok_or(SessionStorageError::IntegrityFailure)?,
+            ),
+        };
         Ok(CommittedSource {
             directory,
             directory_path,
@@ -1343,6 +1672,7 @@ impl FilesystemSessionStore {
             source_id: status.source_id().clone(),
             file_name: record.source_name,
             bytes: status.source_bytes(),
+            verified_identity,
         })
     }
 
@@ -2435,6 +2765,7 @@ fn update_lifecycle(
                 source_name,
                 source_bytes,
                 artifacts,
+                verified_source_identity: None,
             }))
         }
         LifecycleUpdate::Renew { now } => {
@@ -2473,16 +2804,7 @@ fn update_lifecycle(
             {
                 return Err(SessionStorageError::CapacityExhausted);
             }
-            // Visual-index revisions are bounded separately so a runaway
-            // caller cannot fill the session's 256 artifact slots with them.
-            if artifact.kind == StoredArtifactKind::VisualIndexRecord
-                && record
-                    .artifacts
-                    .iter()
-                    .filter(|existing| existing.kind == StoredArtifactKind::VisualIndexRecord)
-                    .count()
-                    >= crate::MAX_VISUAL_INDEX_RECORDS
-            {
+            if sub_budget_full(&record.artifacts, artifact.kind) {
                 return Err(SessionStorageError::CapacityExhausted);
             }
             let total = record
@@ -2490,13 +2812,97 @@ fn update_lifecycle(
                 .iter()
                 .try_fold(artifact.bytes, |sum, item| sum.checked_add(item.bytes))
                 .ok_or(SessionStorageError::CapacityExhausted)?;
-            if total > 10 * 1024 * 1024 * 1024 {
+            if total > MAX_SESSION_ARTIFACT_BYTES {
                 return Err(SessionStorageError::CapacityExhausted);
             }
             record.artifacts.push(artifact);
             Ok(Some(record))
         }
+        LifecycleUpdate::AddEvidence {
+            artifacts,
+            verified_identity,
+            now,
+        } => add_evidence(current, artifacts, verified_identity, now).map(Some),
     }
+}
+
+/// Adds one evidence call's artifacts and verified source identity.
+fn add_evidence(
+    current: Option<StoredLifecycle>,
+    artifacts: Vec<StoredArtifact>,
+    verified_identity: Option<String>,
+    now: u64,
+) -> Result<StoredLifecycle, SessionStorageError> {
+    let mut record = current.ok_or(SessionStorageError::StateConflict)?;
+    let lifetime = record.validated_lifetime()?;
+    if !matches!(record.phase, StoredSessionPhase::Open) || lifetime.expired(now) {
+        return Err(SessionStorageError::StateConflict);
+    }
+    for artifact in artifacts {
+        validate_artifact_record(&artifact)?;
+        if !artifact.kind.is_evidence() {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        // Evidence media is content-addressed, so a file an earlier call
+        // committed is kept rather than rejected; the same name with another
+        // kind or size is a corrupt manifest.
+        if let Some(existing) = record
+            .artifacts
+            .iter()
+            .find(|existing| existing.name == artifact.name)
+        {
+            if existing.kind != artifact.kind
+                || existing.sha256 != artifact.sha256
+                || existing.bytes != artifact.bytes
+            {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            continue;
+        }
+        record.artifacts.push(artifact);
+    }
+    if record.artifacts.len() > MAX_SESSION_ARTIFACTS
+        || evidence_artifact_count(&record.artifacts) > crate::MAX_EVIDENCE_ARTIFACTS
+    {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    let total = record
+        .artifacts
+        .iter()
+        .try_fold(0_u64, |sum, item| sum.checked_add(item.bytes))
+        .ok_or(SessionStorageError::CapacityExhausted)?;
+    if total > MAX_SESSION_ARTIFACT_BYTES {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    if let Some(identity) = verified_identity {
+        record.verified_source_identity = Some(identity);
+    }
+    Ok(record)
+}
+
+/// Whether the sub-budget an artifact of `kind` counts against is full.
+///
+/// Visual-index revisions and evidence (ADR 0019 D4) are bounded separately
+/// so a runaway caller cannot fill the session's 256 artifact slots with
+/// them.
+fn sub_budget_full(artifacts: &[StoredArtifact], kind: StoredArtifactKind) -> bool {
+    if kind == StoredArtifactKind::VisualIndexRecord {
+        artifacts
+            .iter()
+            .filter(|existing| existing.kind == StoredArtifactKind::VisualIndexRecord)
+            .count()
+            >= crate::MAX_VISUAL_INDEX_RECORDS
+    } else {
+        kind.is_evidence() && evidence_artifact_count(artifacts) >= crate::MAX_EVIDENCE_ARTIFACTS
+    }
+}
+
+/// How many of a session's artifacts count against the evidence sub-budget.
+fn evidence_artifact_count(artifacts: &[StoredArtifact]) -> usize {
+    artifacts
+        .iter()
+        .filter(|artifact| artifact.kind.is_evidence())
+        .count()
 }
 
 /// Reads, verifies and decodes one transcript record artifact.
@@ -2554,6 +2960,141 @@ fn read_visual_index_artifact(
         return Err(SessionStorageError::IntegrityFailure);
     }
     Ok(index)
+}
+
+/// Reads, verifies and decodes one evidence record artifact.
+///
+/// As for the other records, the recorded size and digest are checked
+/// before any byte is interpreted; the record is then decoded strictly,
+/// must belong to `session_id` and must describe `source_id`.
+fn read_evidence_artifact(
+    directory: &Dir,
+    artifact: &StoredArtifact,
+    session_id: &SessionId,
+    source_id: &SourceId,
+) -> Result<EvidenceRecord, SessionStorageError> {
+    let file = open_regular_file(directory, &artifact.name, false)
+        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let mut bytes = Vec::new();
+    file.take(artifact.bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(map_storage_io)?;
+    if u64::try_from(bytes.len()).ok() != Some(artifact.bytes)
+        || sha256_hex(&bytes) != artifact.sha256
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let record = crate::decode_evidence_record(&bytes, session_id)?;
+    if record.source_id() != source_id {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(record)
+}
+
+/// Checks a bundle's evidence records against its media (ADR 0013 note of
+/// 2026-09-26): every item's file is in the manifest with the item's kind,
+/// size and digest; an image's PNG header states the item's dimensions and
+/// a clip's WAV header the 16 kHz mono 16-bit format and its data size;
+/// every crop parent and neighbours anchor is an item of the bundle; and
+/// items with one identity agree on everything but their source check.
+fn validate_bundled_evidence(
+    bundle: &Dir,
+    artifacts: &[StoredArtifact],
+    records: &[EvidenceRecord],
+) -> Result<(), SessionStorageError> {
+    let mut items: Vec<&vsift_domain::EvidenceItem> = Vec::new();
+    for record in records {
+        for item in record.items() {
+            match items.iter().find(|known| known.id() == item.id()) {
+                Some(known) if !known.same_content(item) => {
+                    return Err(SessionStorageError::IntegrityFailure);
+                }
+                Some(_) => {}
+                None => items.push(item),
+            }
+        }
+    }
+    let mut checked: BTreeSet<&str> = BTreeSet::new();
+    for item in &items {
+        let media = item.media();
+        let kind = StoredArtifactKind::from_media(media.kind());
+        let artifact = artifacts
+            .iter()
+            .find(|artifact| {
+                artifact.kind == kind
+                    && artifact.sha256 == media.sha256().as_str()
+                    && artifact.bytes == media.bytes()
+            })
+            .ok_or(SessionStorageError::IntegrityFailure)?;
+        if let EvidenceSubject::Crop { region, .. } = item.subject()
+            && !items.iter().any(|parent| parent.id() == &region.parent)
+        {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        if !checked.insert(artifact.name.as_str()) {
+            continue;
+        }
+        let file = open_regular_file(bundle, &artifact.name, false)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let mut header = Vec::new();
+        file.take(u64::try_from(crate::WAV_HEADER_BYTES).unwrap_or(u64::MAX))
+            .read_to_end(&mut header)
+            .map_err(map_storage_io)?;
+        let matches = match item.subject().image_dimensions() {
+            Some(dimensions) => png_header_states(&header, dimensions),
+            None => wav_header_states(&header, media.bytes()),
+        };
+        if !matches {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+    }
+    for record in records {
+        if let vsift_domain::EvidenceRequest::Neighbours { anchor, .. } = record.request()
+            && !items.iter().any(|item| item.id() == anchor)
+        {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+    }
+    Ok(())
+}
+
+/// Whether `header` begins a PNG whose first chunk is an `IHDR` for an
+/// 8-bit RGB, non-interlaced image of `dimensions`.
+fn png_header_states(header: &[u8], dimensions: vsift_domain::FrameDimensions) -> bool {
+    const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+    let mut expected = SIGNATURE.to_vec();
+    expected.extend_from_slice(&13_u32.to_be_bytes());
+    expected.extend_from_slice(b"IHDR");
+    expected.extend_from_slice(&dimensions.width().to_be_bytes());
+    expected.extend_from_slice(&dimensions.height().to_be_bytes());
+    // Bit depth 8, colour type 2 (RGB), deflate, adaptive filtering, no
+    // interlace.
+    expected.extend_from_slice(&[8, 2, 0, 0, 0]);
+    header.get(..expected.len()) == Some(expected.as_slice())
+}
+
+/// Whether `header` is the canonical 44-byte header of a 16 kHz mono
+/// signed 16-bit WAV file of `bytes` bytes.
+fn wav_header_states(header: &[u8], bytes: u64) -> bool {
+    let Ok(data) = u32::try_from(bytes.saturating_sub(44)) else {
+        return false;
+    };
+    let Some(riff) = data.checked_add(36) else {
+        return false;
+    };
+    let mut expected = b"RIFF".to_vec();
+    expected.extend_from_slice(&riff.to_le_bytes());
+    expected.extend_from_slice(b"WAVEfmt ");
+    expected.extend_from_slice(&16_u32.to_le_bytes());
+    expected.extend_from_slice(&1_u16.to_le_bytes());
+    expected.extend_from_slice(&1_u16.to_le_bytes());
+    expected.extend_from_slice(&crate::WAV_SAMPLE_RATE.to_le_bytes());
+    expected.extend_from_slice(&(crate::WAV_SAMPLE_RATE * 2).to_le_bytes());
+    expected.extend_from_slice(&2_u16.to_le_bytes());
+    expected.extend_from_slice(&16_u16.to_le_bytes());
+    expected.extend_from_slice(b"data");
+    expected.extend_from_slice(&data.to_le_bytes());
+    bytes > 44 && header == expected.as_slice()
 }
 
 fn validate_artifact_record(artifact: &StoredArtifact) -> Result<(), SessionStorageError> {
@@ -2615,8 +3156,15 @@ impl StoredLifecycle {
                 .checked_add(artifact.bytes)
                 .ok_or(SessionStorageError::CapacityExhausted)?;
         }
-        if artifact_bytes > 10 * 1024 * 1024 * 1024 {
+        if artifact_bytes > MAX_SESSION_ARTIFACT_BYTES {
             return Err(SessionStorageError::CapacityExhausted);
+        }
+        if self
+            .verified_source_identity
+            .as_deref()
+            .is_some_and(|identity| !is_canonical_sha256(identity))
+        {
+            return Err(SessionStorageError::IntegrityFailure);
         }
         Ok(SessionStatus {
             session_id,
@@ -2675,6 +3223,10 @@ fn publish_generation_while_locked(
         lifecycle,
     };
     let bytes = serde_json::to_vec(&manifest).map_err(|_| SessionStorageError::Io)?;
+    // A manifest that could not be read back would strand the session.
+    if u64::try_from(bytes.len()).map_or(true, |size| size > MAX_METADATA_BYTES) {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
     let generations = session
         .open_dir_nofollow(GENERATIONS_DIRECTORY)
         .map_err(|_| SessionStorageError::IntegrityFailure)?;
@@ -3412,6 +3964,10 @@ struct StoredLifecycle {
     source_bytes: u64,
     #[serde(default)]
     artifacts: Vec<StoredArtifact>,
+    /// Digest of the source copy's on-disk identity after its last full
+    /// verification by an evidence call (ADR 0019 D1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    verified_source_identity: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -3430,6 +3986,8 @@ enum StoredArtifactKind {
     AudioPcm,
     TranscriptRecord,
     VisualIndexRecord,
+    AudioWav,
+    EvidenceRecord,
 }
 
 impl StoredArtifactKind {
@@ -3439,6 +3997,15 @@ impl StoredArtifactKind {
             SessionArtifactKind::AudioPcm => Self::AudioPcm,
             SessionArtifactKind::TranscriptRecord => Self::TranscriptRecord,
             SessionArtifactKind::VisualIndexRecord => Self::VisualIndexRecord,
+            SessionArtifactKind::AudioWav => Self::AudioWav,
+            SessionArtifactKind::EvidenceRecord => Self::EvidenceRecord,
+        }
+    }
+
+    const fn from_media(kind: EvidenceMediaKind) -> Self {
+        match kind {
+            EvidenceMediaKind::FramePng => Self::FramePng,
+            EvidenceMediaKind::AudioWav => Self::AudioWav,
         }
     }
 
@@ -3446,7 +4013,17 @@ impl StoredArtifactKind {
         match self {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
-            Self::TranscriptRecord | Self::VisualIndexRecord => "json",
+            Self::AudioWav => "wav",
+            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
+        }
+    }
+
+    /// Whether the kind counts against the evidence sub-budget: frame and
+    /// crop images, audio and evidence records (ADR 0019 D4).
+    const fn is_evidence(self) -> bool {
+        match self {
+            Self::FramePng | Self::AudioPcm | Self::AudioWav | Self::EvidenceRecord => true,
+            Self::TranscriptRecord | Self::VisualIndexRecord => false,
         }
     }
 
@@ -3457,6 +4034,8 @@ impl StoredArtifactKind {
             Self::AudioPcm => crate::MAX_AUDIO_BYTES,
             Self::TranscriptRecord => crate::MAX_TRANSCRIPT_RECORD_BYTES,
             Self::VisualIndexRecord => crate::MAX_VISUAL_INDEX_RECORD_BYTES,
+            Self::AudioWav => crate::MAX_AUDIO_WAV_BYTES,
+            Self::EvidenceRecord => crate::MAX_EVIDENCE_RECORD_BYTES,
         }
     }
 }

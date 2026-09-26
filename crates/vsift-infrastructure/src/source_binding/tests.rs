@@ -22,7 +22,7 @@ use vsift_domain::{
     plan_chunks,
 };
 
-use super::{BoundSource, SourceBinding};
+use super::{BoundSource, EvidenceSourceCheck, SourceBinding};
 use crate::{
     ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio, FilesystemSessionStore, HostIsolation,
     MediaProviderConformance, ProcessCancellation, SourceSnapshot,
@@ -181,6 +181,86 @@ async fn binding_a_staged_snapshot_hashes_it_once() -> TestResult {
     assert_eq!(bound.snapshot().full_hashes(), 1);
     bound.check_identity()?;
     assert_eq!(bound.release_verified()?.full_hashes(), 2);
+    Ok(())
+}
+
+/// Commits an evidence generation that records `check`'s verified identity.
+fn record_identity(
+    session: &CommittedSession,
+    check: &EvidenceSourceCheck,
+    operation: &str,
+) -> TestResult {
+    let status = session.store.session_status(&session.session_id)?;
+    let identity = check.verified_identity().ok_or("no verified identity")?;
+    session.store.publish_evidence(
+        &session.session_id,
+        &OperationId::parse(operation)?,
+        status.generation(),
+        &[],
+        format!("{{\"stand_in_record\":\"{operation}\"}}").as_bytes(),
+        Some(identity),
+        OPENED_AT,
+    )?;
+    Ok(())
+}
+
+/// ADR 0019 D1: after one full hash is committed with evidence, a later
+/// evidence call compares the copy's identity only; a changed identity with
+/// the same bytes is hashed in full and proceeds; changed bytes fail.
+#[tokio::test]
+async fn evidence_calls_hash_the_copy_only_when_its_identity_is_new_or_changed() -> TestResult {
+    let session = placeholder_session().await?;
+    let (first, check) =
+        BoundSource::open_for_evidence(&session.store, &session.session_id, OPENED_AT)?;
+    assert_eq!(check.check(), vsift_domain::SourceCheck::FullHash);
+    assert_eq!(first.snapshot().full_hashes(), 1);
+    let copy = first.snapshot().provider_path();
+    drop(first.release_identity_checked()?);
+    record_identity(&session, &check, "op_4444444444444444")?;
+
+    // Identity unchanged: no full hash, before or after the provider calls.
+    let (bound, check) =
+        BoundSource::open_for_evidence(&session.store, &session.session_id, OPENED_AT)?;
+    assert_eq!(check, EvidenceSourceCheck::Identity);
+    for _ in 0..PROVIDER_CALLS {
+        SourceBinding::check_before_provider_call(&bound)?;
+    }
+    let released = bound.release_identity_checked()?;
+    assert_eq!(
+        released.full_hashes(),
+        0,
+        "an identity check read the bytes"
+    );
+    drop(released);
+
+    // Identity changed, same bytes: one full hash, then the call proceeds and
+    // the new identity is recorded.
+    let later = SystemTime::now() + std::time::Duration::from_secs(120);
+    fs::File::options()
+        .write(true)
+        .open(&copy)?
+        .set_modified(later)?;
+    let (bound, check) =
+        BoundSource::open_for_evidence(&session.store, &session.session_id, OPENED_AT)?;
+    assert_eq!(check.check(), vsift_domain::SourceCheck::FullHash);
+    assert_eq!(bound.snapshot().full_hashes(), 1);
+    drop(bound.release_identity_checked()?);
+    record_identity(&session, &check, "op_5555555555555555")?;
+    let (bound, check) =
+        BoundSource::open_for_evidence(&session.store, &session.session_id, OPENED_AT)?;
+    assert_eq!(check, EvidenceSourceCheck::Identity);
+    drop(bound);
+
+    // Bytes changed: the full hash fails and nothing may be committed.
+    let mut bytes = fs::read(&copy)?;
+    if let Some(last) = bytes.last_mut() {
+        *last ^= 0x55;
+    }
+    fs::write(&copy, &bytes)?;
+    assert!(matches!(
+        BoundSource::open_for_evidence(&session.store, &session.session_id, OPENED_AT),
+        Err(crate::SourceError::SnapshotChanged)
+    ));
     Ok(())
 }
 

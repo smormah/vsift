@@ -40,8 +40,98 @@
 //! session directory (SEC-18) under the session's lifetime hold.
 
 use cap_std::fs::{File, Metadata};
+use sha2::{Digest, Sha256};
+use vsift_domain::SourceCheck;
 
 use crate::{FilesystemSessionStore, SourceError, SourceSnapshot};
+
+/// A digest of the on-disk identity a session's source copy had right after
+/// a full SHA-256 verification (ADR 0019 D1).
+///
+/// An evidence call that hashes the copy in full commits this digest with
+/// its evidence; later read-only evidence calls compare the copy's current
+/// identity with it instead of hashing the bytes again. It is a digest, so
+/// the session manifest holds no device or file numbers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VerifiedSourceIdentity(String);
+
+impl VerifiedSourceIdentity {
+    /// Digests an identity, or returns `None` when it has no modification
+    /// time after the Unix epoch; such a copy is always hashed in full.
+    pub(crate) fn of(identity: &FileIdentity) -> Option<Self> {
+        let modified = identity
+            .modified?
+            .into_std()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?;
+        let mut hasher = Sha256::new();
+        let mut field = |bytes: &[u8]| {
+            hasher.update((bytes.len() as u64).to_le_bytes());
+            hasher.update(bytes);
+        };
+        field(b"vsift.source-identity.v1");
+        field(&identity.bytes.to_le_bytes());
+        field(&modified.as_secs().to_le_bytes());
+        field(&modified.subsec_nanos().to_le_bytes());
+        field(&identity.device.to_le_bytes());
+        field(&identity.file_index.to_le_bytes());
+        identity.platform.digest_into(&mut field);
+        let digest = hasher.finalize();
+        let mut text = String::with_capacity(64);
+        for byte in digest {
+            text.push(char::from(b"0123456789abcdef"[usize::from(byte >> 4)]));
+            text.push(char::from(b"0123456789abcdef"[usize::from(byte & 0x0f)]));
+        }
+        Some(Self(text))
+    }
+
+    /// Accepts a stored digest: exactly 64 lowercase hexadecimal digits.
+    pub(crate) fn parse(text: &str) -> Option<Self> {
+        (text.len() == 64
+            && text
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
+        .then(|| Self(text.to_owned()))
+    }
+
+    /// The digest's canonical text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// How an evidence call bound the session's source copy (ADR 0019 D1).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EvidenceSourceCheck {
+    /// The copy's identity matched the one recorded after an earlier full
+    /// verification; its bytes were not read.
+    Identity,
+    /// The copy was hashed in full and matched the committed source. The
+    /// identity it had then is committed with the call's evidence, if it can
+    /// be recorded.
+    FullHash(Option<VerifiedSourceIdentity>),
+}
+
+impl EvidenceSourceCheck {
+    /// The check as recorded in evidence items.
+    #[must_use]
+    pub const fn check(&self) -> SourceCheck {
+        match self {
+            Self::Identity => SourceCheck::Identity,
+            Self::FullHash(_) => SourceCheck::FullHash,
+        }
+    }
+
+    /// The identity to commit with the call's evidence, if any.
+    #[must_use]
+    pub const fn verified_identity(&self) -> Option<&VerifiedSourceIdentity> {
+        match self {
+            Self::Identity => None,
+            Self::FullHash(identity) => identity.as_ref(),
+        }
+    }
+}
 
 /// How a media provider call proves that it reads the session's committed
 /// source bytes.
@@ -115,6 +205,49 @@ impl BoundSource {
         let (snapshot, identity) =
             SourceSnapshot::open_committed_identified(store, session_id, now_unix_seconds)?;
         Ok(Self { snapshot, identity })
+    }
+
+    /// Reopens an open session's committed source copy for a read-only
+    /// evidence call (ADR 0019 D1): an identity comparison when the session
+    /// records a verified identity the copy still has, a full verification
+    /// otherwise.
+    ///
+    /// The residual is ADR 0012's, extended across calls: on Windows a
+    /// same-user rewrite that restores the modification time is caught only
+    /// by a later full hash. Mutating and committing operations elsewhere
+    /// keep [`Self::open_committed`] and [`Self::release_verified`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::open_committed`]; a copy whose identity changed and whose
+    /// bytes differ from the committed source is
+    /// [`SourceError::SnapshotChanged`].
+    pub fn open_for_evidence(
+        store: &FilesystemSessionStore,
+        session_id: &vsift_domain::SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<(Self, EvidenceSourceCheck), SourceError> {
+        let (snapshot, identity, hashed) =
+            SourceSnapshot::open_committed_for_evidence(store, session_id, now_unix_seconds)?;
+        let check = if hashed {
+            EvidenceSourceCheck::FullHash(VerifiedSourceIdentity::of(&identity))
+        } else {
+            EvidenceSourceCheck::Identity
+        };
+        Ok((Self { snapshot, identity }, check))
+    }
+
+    /// Ends a read-only evidence call's provider calls with a last identity
+    /// comparison (ADR 0019 D1) and hands the snapshot back so the caller
+    /// keeps the session's hold until it has committed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SourceError::SnapshotChanged`] when the copy's identity
+    /// changed; the caller must then commit nothing.
+    pub fn release_identity_checked(self) -> Result<SourceSnapshot, SourceError> {
+        self.check_identity()?;
+        Ok(self.snapshot)
     }
 
     /// Binds an already staged snapshot, with one full verification.
@@ -244,6 +377,13 @@ struct PlatformIdentity {
 
 #[cfg(unix)]
 impl PlatformIdentity {
+    fn digest_into(&self, field: &mut impl FnMut(&[u8])) {
+        field(&self.mode.to_le_bytes());
+        field(&self.owner.to_le_bytes());
+        field(&self.changed_seconds.to_le_bytes());
+        field(&self.changed_nanos.to_le_bytes());
+    }
+
     fn of(metadata: &Metadata) -> Self {
         // `cap_fs_ext::MetadataExt` also defines `dev` and `ino`; name the
         // cap-std Unix trait explicitly.
@@ -269,6 +409,11 @@ struct PlatformIdentity {
 
 #[cfg(windows)]
 impl PlatformIdentity {
+    fn digest_into(&self, field: &mut impl FnMut(&[u8])) {
+        field(&self.created.to_le_bytes());
+        field(&self.attributes.to_le_bytes());
+    }
+
     fn of(metadata: &Metadata) -> Self {
         Self {
             created: cap_std::fs::MetadataExt::creation_time(metadata),

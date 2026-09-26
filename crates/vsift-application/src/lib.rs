@@ -8,6 +8,7 @@ use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, Runti
 
 mod asr;
 mod clock;
+mod evidence;
 mod identifiers;
 mod local_asr_setup;
 mod provisioning;
@@ -25,6 +26,15 @@ pub use asr::{
     transcribe_range,
 };
 pub use clock::{Clock, ClockError};
+pub use evidence::{
+    AudioExtractor, CropRequest, EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceError,
+    EvidenceExtraction, EvidenceIdentityError, EvidenceMediaError, EvidenceScope, EvidenceStop,
+    ExtractedClip, ExtractedFrame, ExtractedMedia, FrameAtRequest, FrameExtractor,
+    MAX_FRAMES_PER_CALL, MAX_IMAGE_BYTES_PER_CALL, MAX_PIXELS_PER_CALL, VideoStreamFacts,
+    evidence_id, evidence_request_key, extract_audio, extract_burst, extract_crop,
+    extract_frame_at, extract_neighbours, find_evidence_item, find_reusable_record,
+    verify_evidence_record,
+};
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{

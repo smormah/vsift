@@ -477,6 +477,38 @@ impl BurstPlan {
     pub fn distinct(&self) -> usize {
         self.frames.len()
     }
+
+    /// Returns the evenly spaced target times: `start + k * duration /
+    /// targets` for `k` in `0..targets`.
+    #[must_use]
+    pub fn target_times(&self) -> Vec<MediaTime> {
+        burst_targets(self.planned, self.targets)
+    }
+
+    /// Returns the frame `target` names: the first chosen frame at or after
+    /// it, or `None` when no chosen frame is.
+    ///
+    /// Every chosen frame is the first listed frame at or after its own
+    /// target, so the first chosen frame at or after any target is exactly
+    /// the frame that target named.
+    #[must_use]
+    pub fn frame_for(&self, target: MediaTime) -> Option<&ListedFrame> {
+        self.frames.iter().find(|frame| frame.time >= target)
+    }
+}
+
+/// The evenly spaced targets of a burst over `planned`.
+fn burst_targets(planned: TimeRange, targets: u8) -> Vec<MediaTime> {
+    let span = u128::from(planned.duration_micros());
+    let start = planned.start().as_micros();
+    (0..targets)
+        .map(|step| {
+            // step < targets, so the offset is below the span and fits in u64.
+            let offset =
+                u64::try_from(u128::from(step) * span / u128::from(targets)).unwrap_or(u64::MAX);
+            MediaTime::from_micros(start.saturating_add(offset))
+        })
+        .collect()
 }
 
 /// Plans a burst: `count` target times evenly spaced from the range's start
@@ -516,14 +548,8 @@ pub fn plan_burst(
         return Err(FrameSelectionError::OutsideListing);
     };
     let targets = count.get();
-    let span = u128::from(planned.duration_micros());
-    let start = planned.start().as_micros();
     let mut frames: Vec<ListedFrame> = Vec::with_capacity(usize::from(targets));
-    for step in 0..targets {
-        // step < targets, so the offset is below the span and fits in u64.
-        let offset = u64::try_from(u128::from(step) * span / u128::from(targets))
-            .map_err(|_| FrameSelectionError::OutsideListing)?;
-        let target = MediaTime::from_micros(start.saturating_add(offset));
+    for target in burst_targets(planned, targets) {
         let Some(frame) = listing.frames.get(listing.first_at_or_after(target)) else {
             break;
         };
