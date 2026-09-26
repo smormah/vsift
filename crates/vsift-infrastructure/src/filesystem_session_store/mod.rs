@@ -3,7 +3,9 @@
 //! This module holds the adapter's public types, stored metadata shapes and the
 //! small handle-relative I/O helpers every part shares. The operations live in
 //! submodules by concern: the root and admission (`root`), session
-//! initialization (`initialization`), generation publication (`publication`),
+//! initialization (`initialization`), how one commit touches the filesystem
+//! (`commit`: durability, fault points, the test trace), generation
+//! publication (`publication`),
 //! reading and validating the committed chain (`chain`), stored-metadata
 //! validation (`stored`), lifecycle generations (`lifecycle`), verified record
 //! reads (`reads`), evidence (`evidence`), work directories (`work`), the

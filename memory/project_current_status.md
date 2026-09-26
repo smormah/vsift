@@ -142,7 +142,7 @@ Design and decisions: [ADR 0020](../docs/decisions/0020-recoverable-jobs-and-dur
 ## Quality evidence
 
 - P10 PR 1 branch, Windows 11: fmt, strict Clippy (with and without features),
-  753 workspace tests passing (51 opt-in ignored), warning-denied rustdoc, governance,
+  754 workspace tests passing (51 opt-in ignored), warning-denied rustdoc, governance,
   fuzz fmt/Clippy/replay (15 targets). Results go in the PR description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
