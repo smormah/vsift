@@ -1,8 +1,8 @@
 # Incremental end-to-end test spine
 
 Status: P04, P05 and P06 checkpoints, the P07 supplied-transcript and local-ASR
-stages and the P08 search and visual-candidates stages are implemented; the complete
-journey remains `not_implemented`. Managed
+stages, the P08 search and visual-candidates stages and the P09 frame stages are
+implemented; the complete journey remains `not_implemented`. Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -190,6 +190,33 @@ encoder, present in the pinned CI builds that omit libx264. It prints `p08_candi
 passed` and writes `.vsift/e2e-runs/p08-candidates-<run-id>/report.json`. On Windows
 11 with FFmpeg 9.0 and whisper.cpp v1.9.2 it passed on 2026-09-26 in 165 s; results
 are in the [P08 candidate recall record](p08-candidate-recall.md).
+
+P09 PR 3 adds the evidence-navigation checkpoint (V-01, V-07, V-08):
+
+```console
+cargo test -p vsift-cli --locked --test p09_evidence_e2e -- --ignored --nocapture
+```
+
+It needs FFmpeg and FFprobe on `PATH`, registers them in isolated per-user bases and
+runs the binary with an empty `PATH`. Expectations come only from the frozen truth: the
+independent `ffprobe` frame lists in `fixtures/corpus/generated/verification.json` and
+FFmpeg's own decode of a fixture for pixel comparisons. Stages: `p09_frame_exact` (F01
+at a keyframe, before one, between frames, the final frame, after it and at the end,
+with both selection policies and a tight tolerance; F09's variable frame rate; the
+rotated F01 variant at 720x1280, pixel-equal to FFmpeg's decode); `p09_candidate_frames`
+(every candidate `candidates` returns for F01-F10 and F12, through
+`frame get --candidate`, at delta 0 with its displayed dimensions);
+`p09_neighbours_burst` (side stops at the start and end of the stream, 20 consecutive
+neighbours each side, bursts of 0 and 101 frames refused by the grammar and of 1, 12
+and 100 frames naming the truth's frames, a 60 s range clipped and 61 s refused with
+the remediation to use `candidates`); and `p09_reuse` (repeats `reused` without a
+write, two requests for one frame sharing one item and file, `full_hash` then
+`identity` source checks). It prints `p09_evidence: passed` and writes
+`.vsift/e2e-runs/p09-<run-id>/report.json`, listing the PR 4 stages (`p09_crop`,
+`p09_audio`, `p09_malformed`, `p09_stream_and_bundle`, `p09_perf`) as
+`not_implemented`. On Windows 11 with FFmpeg 9.0 it passed on 2026-09-26 in 154 s
+(debug build): a cold `frame get` about 1.8 s after the first call's preflight, a
+reused one about 150 ms, 29 candidate frames at delta 0.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

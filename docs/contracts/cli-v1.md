@@ -3,7 +3,8 @@
 Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
-`candidates` (P08 visual candidates) and `bundle validate` are operational. Other commands below
+`candidates` (P08 visual candidates), `frame get`, `frame neighbours` and `frame burst` (P09
+evidence navigation) and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 
@@ -31,7 +32,8 @@ being created. An existing directory that VSift did not create is never adopted.
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
-| `frame get/neighbours/burst`, `audio`, `crop` | Source-grounded evidence extraction | P09 |
+| `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
+| `audio`, `crop` | Source audio clips and native crops | P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job run/batch/status/resume/cancel` | Recoverable worker operations | P10/P11 |
 
@@ -81,7 +83,8 @@ Since P09 PR 2 a bundle may also carry `evidence_record` artifacts
 ([`bundle-evidence-record.schema.json`](../../schemas/v1/bundle-evidence-record.schema.json))
 with their `frame_png` and `audio_wav` files; `bundle validate` decodes each record
 strictly and checks every item against its file (ADR 0013 note of 2026-09-26). The
-evidence commands that write them arrive in P09 PR 3 and PR 4.
+frame commands write them since P09 PR 3 (see "P09 frames" below); `crop` and
+`audio` follow in PR 4.
 
 ### P07 supplied transcripts
 
@@ -604,6 +607,139 @@ analysed nothing and nothing of the range was analysed before; otherwise the res
 `INTEGRITY_FAILURE` or `UNSUPPORTED_SCHEMA` for a stored record that fails verification
 or a source copy that changed during the call.
 
+### P09 frames
+
+```console
+vsift frame get ses_0123456789abcdef --at 1025000 --json
+vsift frame get ses_0123456789abcdef --at 5970000 --select displayed-at --json
+vsift frame get ses_0123456789abcdef --candidate vcd_0123456789abcdef --json
+vsift frame neighbours ses_0123456789abcdef evd_0123456789abcdef --count 2 --json
+vsift frame burst ses_0123456789abcdef --from 4000000 --to 8000000 --max-frames 12 --events jsonl
+```
+
+The frame commands hand an agent the evidence itself: the exact displayed frame at a
+time, the frames around one, and the distinct frames over a stretch of time
+([ADR 0019](../decisions/0019-evidence-navigation.md), decisions D1-D7). Every frame is
+the video's own decoded pixels at native resolution (8-bit RGB PNG; nothing is scaled),
+in its displayed orientation, and every result says which frame each requested time
+resolved to, with the requested and actual time and their signed difference.
+
+**Grammar (D6).**
+
+- `frame get <session> (--at <us> | --candidate <vcd>) [--select at-or-after|displayed-at]
+  [--tolerance-us <0..=10000000>]`. Exactly one of `--at` and `--candidate`. With
+  `--at`, `at-or-after` (the default) takes the first frame whose time is at or after
+  the request, so the pixels were never on screen before the moment named, and
+  `displayed-at` the frame on screen at it (the last frame at or before it). The frame
+  may lie at most the tolerance from the request, in the policy's direction: 1,000,000
+  us (one second) unless `--tolerance-us` says otherwise. With `--candidate` (a
+  `candidate_id` that `candidates` returned for the session) the frame is the
+  candidate's `representative_us`, at-or-after with tolerance 0; `--select` and
+  `--tolerance-us` are then parse errors. F01 (20 fps): 1,025,000 gives 1,050,000
+  (delta 25,000); 5,970,000 is refused at-or-after (`after_final_frame`) and gives
+  5,950,000 displayed-at (delta -20,000); 6,000,000, the end, is refused for both.
+- `frame neighbours <session> <evidence> [--count 1..20]` (default 1) returns up to
+  `count` consecutive displayed frames on each side of a whole frame that `frame get`,
+  `frame neighbours` or `frame burst` returned in the session: consecutive frames,
+  never time-spaced samples. `neighbours.before_stop` and `after_stop` say why a side
+  holds fewer: `start_of_stream`, `end_of_stream` or `search_window` (the frames
+  searched, up to 29 s either side, ended; more may exist).
+- `frame burst <session> --from <us> --to <us> [--max-frames 1..100]` (default 12)
+  spreads `max-frames` even target times over the half-open range (`from + k *
+  duration / max-frames`), takes the first frame at or after each target and before the
+  range's end, and returns each distinct frame once. The range is at most 60 s; one
+  past the end of the video is clipped to it (`burst.extent`
+  `clipped_at_end_of_stream`). `burst.targets` and `burst.distinct` say how many targets
+  there were and how many distinct frames they named: a static screen returns one frame
+  once, not many times. A range denser than one 1,200-frame listing (more than 20 s of
+  60 fps video) is refused for now (`outside_listing`).
+
+**Result.** `data` ([`frame-data.schema.json`](../../schemas/v1/frame-data.schema.json),
+examples [`frame-get.json`](../../schemas/v1/examples/frame-get.json),
+[`frame-neighbours.json`](../../schemas/v1/examples/frame-neighbours.json) and
+[`frame-burst.partial.json`](../../schemas/v1/examples/frame-burst.partial.json)) holds
+`session_id`, `source_id`, `operation` (`frame_get`, `frame_neighbours`,
+`frame_burst`), the canonical `request` (with the defaults filled in), `request_key`,
+`reused`, `profile` (`p09-r0-v1`), `tool_fingerprint`, `source_check`, `selections`,
+`neighbours` and `burst` (the operation's detail, otherwise `null`), `items`, `files`
+and `partial_reason`. Each selection has a `role` (`requested`; `before` and `after`
+around an anchor; `target` in a burst), the `evidence_id` it resolved to,
+`requested_us` (the requested time, the anchor's time or the target's time),
+`actual_us` and `delta_us` (`actual_us - requested_us`). Each item is a published
+`frame_evidence` record ([`frame-evidence.schema.json`](../../schemas/v1/frame-evidence.schema.json)):
+`evidence_id`, `source_id`, `stream_index`, `kind` (`frame` or `crop`), `frame` (the
+stream timestamp `pts` in the stream's time base, the normalized `time_us` and the
+displayed frame's `width` and `height`), `crop` (`null` for a whole frame), `image`
+(`image/png`, its size, SHA-256 and bytes), `profile` and `tool_fingerprint`.
+
+**Identities and reuse (V-08).** An item's `evidence_id` digests only what fixes its
+pixels: the session, source, stream, profile, provider fingerprint and the frame's exact
+timestamp and time base. Two requests that resolve to one frame (1,025,000 and
+1,040,000 on F01) therefore name one item and one file. `request_key` digests the whole
+request with the profile and the media provider's fingerprint. Repeating a request with
+the same key returns the committed result with `reused: true` after verifying every
+file again: no FFmpeg runs and nothing is written (about 150 ms through the binary).
+Replacing FFmpeg or FFprobe is another provider and so another key; a session copy
+whose bytes changed is `INTEGRITY_FAILURE`. `source_check` says how the call that
+committed the record checked the session's copy: `full_hash` the first time, then
+`identity` (its on-disk identity was unchanged since that hash; decision D1, residual
+in ADR 0012).
+
+**Files (D2).** `files` delivers each item's image as `{evidence_id, media_type, path}`,
+in item order. `path` is the absolute path of the committed artifact inside the
+session (`<session root>/sessions/<session>/artifacts/artifact-<sha256>.png`; on Windows
+in the extended-length form `\\?\C:\...`). It is valid while the session exists: until
+`session close`, expiry and cleanup remove it. Read it; never write to it. To keep
+evidence, `session retain` the session; retained bundles and evidence records never
+contain a path. This is the only place public output names a local path. The frozen
+examples write paths under the placeholder root `/vsift-session-root`.
+
+**Partial results.** A call is bounded to 100 frames, 200 megapixels decoded, 256 MiB
+of images (or the session's remaining space), the session's evidence slots and 120 s.
+When a bound, the deadline or a cancellation stops a call after it extracted
+something, what it extracted is committed and returned with status `partial` (exit 0),
+a fixed warning chosen by `partial_reason` (`frame_budget`, `pixel_budget`,
+`byte_budget`, `session_evidence_budget`, `deadline_exceeded`, `cancelled`). A partial
+record is never reused: repeating the request runs again.
+
+**Evidence stream.** `--events jsonl` writes one evidence event per item, in item
+order, with `record_type` `frame_evidence` and key `evidence_id`, then one terminal
+event whose data
+([`frame-stream-data.schema.json`](../../schemas/v1/frame-stream-data.schema.json),
+example [`frame-get.events.jsonl`](../../schemas/v1/examples/frame-get.events.jsonl))
+is the result without its items plus `record_count`, with the same `status`. Stream
+rules are those of `transcript get` (above); a burst streams at most 100 items. Because
+an item's identity is fixed by its pixels, the same key always carries the same record,
+whichever request named it.
+
+**Storage.** Each extracting call commits its new images and one `evidence_record`
+([`bundle-evidence-record.schema.json`](../../schemas/v1/bundle-evidence-record.schema.json))
+in one generation. A session holds at most 160 evidence artifacts (images, clips and
+records) within its 256 artifacts and 10 GiB (D4); a call that would not fit a record
+and one image fails before any process.
+
+**Failures** use existing codes, each with a fixed remediation:
+`INVALID_ARGUMENT` when no frame satisfies the request (`at_or_after_end`,
+`after_final_frame`, `before_first_frame`, `no_frame_within_tolerance`,
+`outside_listing`; the remediation names the policy, tolerance or range to change), for
+an unknown candidate or evidence identity, a parent that is not a whole frame
+(neighbours of an audio clip or a crop), an empty or reversed range, a burst over 60 s
+(remediation: find the moments with `candidates`, then burst around them), a video
+with no video stream and a closed or expired session. `--count 0` or `21`,
+`--max-frames 0` or `101`, `--tolerance-us` over 10,000,000, both or neither of `--at`
+and `--candidate`, and `--select` or `--tolerance-us` with `--candidate` are parse
+errors (command `parse`). `RESOURCE_LIMIT` when the session has no room for more
+evidence (remediation: `session retain` it, then open a new session with `ingest`).
+`MISSING_CAPABILITY` when FFmpeg or FFprobe is missing (Whisper is not needed), the
+preflight fails, or FFmpeg cannot run or extract a frame it listed. `INVALID_SOURCE`
+when the video cannot be decoded. `INTEGRITY_FAILURE` when the session's copy changed,
+a candidate's frame is not at its time, or an earlier item no longer describes the
+video. `STORAGE_IO` when a delivered path is not valid UTF-8 (remediation: use a
+`--session-root` whose path is). `DEADLINE_EXCEEDED`, `BUSY` or `CANCELLED` only when
+nothing was extracted.
+
+Human output is the indented JSON result; readable terminal text is P13's.
+
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
 five-second total operation deadline; `--profile worker` and
@@ -745,8 +881,9 @@ Human output is readable terminal text on stdout (P05 session operations use
 indented JSON). In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
-`transcript get`, `search` and `candidates` evidence events precede it (see "Evidence
-stream", "P08 transcript search" and "P08 visual candidates" above), and every other
+`transcript get`, `search`, `candidates` and the frame commands evidence events precede
+it (see "Evidence stream", "P08 transcript search", "P08 visual candidates" and "P09
+frames" above), and every other
 command, including `transcript retranscribe`, writes the terminal event alone. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.
 
@@ -887,12 +1024,16 @@ an executable plus argument array and never shell text.
 Opaque IDs use a type prefix followed by 16 to 64 lowercase ASCII letters or digits:
 `ses_`, `job_`, `op_`, `art_`, `evd_`, and, since P07, `trv_` (transcript revision),
 `tsg_` (transcript segment) and `sgm_` (source segment), and since P08 `vix_` (visual
-index revision) and `vcd_` (visual candidate). Transcript and source-segment
+index revision) and `vcd_` (visual candidate); since P09 `evd_` names an evidence item
+(a frame, crop or audio clip). Transcript and source-segment
 identities are derived from content (session, sidecar digest, format, offset and
 ordinal; source identity and segment index), so re-importing the same sidecar with the
 same offset into the same session names them identically; visual identities derive from
 the session, source, stream, analysis profile, window and representative time (and the
-revision number for `vix_`), so a candidate keeps its identity in every later revision. Source and operation identities are
+revision number for `vix_`), so a candidate keeps its identity in every later revision;
+an `evd_` identity derives from the session, source, stream, adapter profile, provider
+fingerprint and the exact frame timestamp (with a crop's region or a clip's range), so
+every request that resolves to one frame names one item. Source and operation identities are
 `src_sha256_` or `opk_sha256_` followed by exactly 64 lowercase hexadecimal digits.
 They cannot contain paths, options, whitespace, or control characters.
 

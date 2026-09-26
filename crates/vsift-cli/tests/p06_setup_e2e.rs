@@ -767,7 +767,6 @@ async fn dependency_setup_checkpoint() -> TestResult {
     let future_stages: Vec<_> = [
         "p07_supplied_transcript",
         "p07_local_asr",
-        "p09_source_reinspection",
         "p10_recovery",
         "p11_worker_batch",
         "p12_agent_clients",

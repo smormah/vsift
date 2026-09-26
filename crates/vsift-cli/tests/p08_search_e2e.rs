@@ -383,7 +383,6 @@ fn search_checkpoint() -> TestResult {
     };
     let overall = stage["status"].clone();
     let future_stages: Vec<_> = [
-        "p09_source_reinspection",
         "p10_recovery",
         "p11_worker_batch",
         "p12_agent_clients",
