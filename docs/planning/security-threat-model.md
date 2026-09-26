@@ -379,6 +379,28 @@ Residual: an agent that copies a delivered path into later prose may leak the us
 session-root location to whoever reads that prose; the path is the user's own and the
 default root is the per-user cache.
 
+P10 PR 1 (2026-09-26, [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)):
+**SEC-08/SEC-10.** Reads now validate the manifest chain down to the writer's chain
+checkpoint (#164) rather than to generation 0. Every read still verifies the pointer,
+the head and every generation committed since the last full verification, and
+re-hashes every artifact it returns (INV-02); retained exports and cleanup still walk
+the whole chain. The checkpoint is written only by the writer under the writer lock,
+staged and renamed, never ahead of the head; a malformed or forged checkpoint is
+`INTEGRITY_FAILURE`, a newer one `UNSUPPORTED_SCHEMA`, and a missing one or one ahead
+of the head means a full walk. Residual: damage to a generation below the anchor is
+found by the next retain or cleanup, not by an ordinary read; old generations never
+feed a read's result. The checkpoint lives in the owner-private session directory, so
+forging it needs the same-user access that could rewrite the chain itself.
+**SEC-24.** The durable publication order (flushes, then directory syncs of
+`artifacts/`, `generations/` and the session, acknowledgement last; fsyncgate-safe
+retries; any flush, sync or rename error is `STORAGE_IO` with nothing acknowledged) is
+implemented but disabled: no profile claims `os_crash_durable` until the Ubuntu 24.04 /
+ext4 campaign passes, so SEC-24 stays open. The mount-table parser that gates it reads
+at most 1 MiB, refuses a damaged table whole and is fuzzed (`mountinfo`). Fault points
+can stop the process only in unit tests and `fault-injection` builds, which cannot be
+compiled without debug assertions and which the governance check refuses outside
+development dependencies.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.

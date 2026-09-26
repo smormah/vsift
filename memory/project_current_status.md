@@ -25,61 +25,77 @@ Today it can:
 - manage the session's lifetime and retention, and validate retained bundles;
 - keep every folder it creates private to the user.
 
-**P09 is complete** (2026-09-27, merge `e57c706`, ledger record written; PRs #162, #163,
-#165, #166; ADR 0019 accepted with D1-D7). P00-P09 are complete and the mechanical
-checkpoint is met; P10 (recovery integration) is next and not started.
+**P00-P09 are complete** (P09 merged `e57c706`, ADR 0019 accepted). **P10 (recovery
+integration) is in progress:** of its four pull requests, PR 1 (the commit path) is
+complete on branch `p10/commit-path` and not yet merged; PRs 2-4 have not started.
 Every known limit, residual risk and deferral is in `docs/planning/known-limits.md`.
 
-## P09 PR 4: `crop`, `audio` and qualification
+## P10 PR 1: the commit path (internal, on its branch)
 
-- **Grammar:** `crop <ses> <evd> --rect x,y,w,h` (canonical decimals parsed by the
-  domain rule against an unbounded frame, containment checked against the parent's
-  record before any tool; parent a frame or crop) and `audio <ses> --from --to` (at
-  most 30 s, clipped to the source with `range_clipped`).
-- **Contract:** crops use the frame result (`operation` `crop`); audio has
-  `audio_response`/`AudioEvidenceStream`, record type `audio_evidence`, schemas
-  `audio-data`, `audio-stream-data`, `audio-evidence`; frozen `crop.json`, `audio.json`.
-  Remediation per medium (30 s, range start, no audio, undecodable media).
-- **Qualification:** `docs/planning/p09-evidence-navigation.md`. Release run of
-  `p09_evidence_e2e` (Windows 11, Xeon E5-2698 v4, FFmpeg 9.0, whisper.cpp v1.9.2):
-  eleven stages passed in 471 s, including the mechanical journey on both transcript
-  paths (F03-speech: search, candidates, candidate frame, crop, audio, retained bundle;
-  10.6 s supplied, 24.0 s local ASR). Crops pixel-equal to FFmpeg; audio starts 64 ms and 750 ms; malformed media
-  `INVALID_SOURCE` with nothing committed; streams and a retained bundle validate. Perf
-  (recorded): warm reuse p95 141 ms; on a 1.17 GB 1080p clip cold frame p95 4.1 s,
-  12-frame burst 17.1 s, first full hash 10.9 s; warm cost grows about 3.7 ms per
-  session generation (1 s at 256, #164).
+Design and decisions: [ADR 0020](../docs/decisions/0020-recoverable-jobs-and-durable-publication.md)
+(Proposed; D-1..D-5 await the maintainer). No public contract changes.
 
-## P09 PR 3: the frame commands (public)
+- **Store split:** `filesystem_session_store.rs` (5,200 lines) is now a directory
+  module: `mod.rs` (types, stored shapes, shared I/O) and `root`, `initialization`,
+  `commit`, `publication`, `chain`, `stored`, `lifecycle`, `reads`, `evidence`, `work`,
+  `index`, `cleanup`, `bundle`, plus `tests.rs` and `p10_tests.rs`.
+- **#164, incremental chain validation:** the writer keeps
+  `sessions/<ses>/chain-verified.json` at the head it just committed (under the writer
+  lock, staged and renamed, best effort); readers never write it. A read verifies the
+  pointer, the head and every generation down to that checkpoint or the last head the
+  same store instance verified. Missing or ahead of the head -> full walk; malformed or
+  forged -> `INTEGRITY_FAILURE`; newer -> `UNSUPPORTED_SCHEMA`. Retain and cleanup
+  still walk everything; artifacts are still re-hashed (INV-02). Warm reuse through the
+  binary: p95 139 / 369 / 1,064 / 3,794 ms at 2 / 64 / 256 / 1,024 generations before;
+  136-175 ms at 256 and 149-156 ms at 1,024 after (three runs), slope about 0 (target
+  0.2 ms per generation met; 160 ms at 256 met in one of three runs, start-up jitter).
+- **Durable protocol (disabled):** a session records `durability` at generation 0
+  (absent = ephemeral; ephemeral manifests omit it) and every generation carries it;
+  `publish_artifact`/`publish_evidence` pass it. Durable commits: create/write/flush
+  each artifact, sync `artifacts/`; stage/flush/rename the manifest, sync
+  `generations/`; stage/flush/rename the pointer, sync the session; then acknowledge;
+  then the checkpoint. Initialization also syncs `sessions/` and the index bucket.
+  Directories sync via `dir.open(".")?.sync_all()` (FS-01). fsyncgate: never re-flush a
+  leftover file; accept an existing artifact only if the head lists it; a retry
+  re-syncs before acknowledging. `durable_profile` claims `os_crash_durable` only on
+  Linux, ext4 without `nobarrier`/`barrier=0` (bounded strict `mountinfo` parse) and
+  `QUALIFIED_UBUNTU_EXT4`, which is `false`: every profile still fails closed.
+- **Fault points:** `FaultPoint` (eleven, `artifact-install` .. `chain-checkpoint-write`)
+  in `fault_point.rs`; `VSIFT_FAULT_POINT=<name>[:n]` exits with 91 in unit tests and
+  `fault-injection` builds (feature off by default, `compile_error!` without debug
+  assertions, governance check). Commits take `CommitHooks` (fault plan, in-process
+  failure, test-only trace) and a `Commit` (the session's durability).
+- **Tests:** S-07 kill at every point (ephemeral everywhere, durable on Unix), durable
+  order trace on every platform, fsyncgate retries, S-08 checkpoint damage, the cache,
+  the mountinfo parser; fuzz target `mountinfo`; the opt-in
+  `s11_warm_reuse_as_the_manifest_chain_grows` measurement (`evidence_cli_contract`).
+- **Not compiled on Windows:** the `cfg(target_os = "linux")` profile check
+  (`os_crash_durable`, the constant) and the `cfg(unix)` directory sync and durable
+  kill variant; CI's Ubuntu and macOS jobs compile and run them.
 
-- **Grammar (D6):** `frame get <ses> (--at <us> | --candidate <vcd>) [--select
-  at-or-after|displayed-at] [--tolerance-us 0..10000000]` (default 1 s),
-  `frame neighbours <ses> <evd> [--count 1..20]`, `frame burst <ses> --from --to
-  [--max-frames 1..100]` (default 12). `--select`/`--tolerance-us` with `--candidate`,
-  counts 0/21, frames 0/101 and a tolerance over 10 s are parse errors.
-- **Contract:** `vsift-contract::navigation` presents the committed record
-  (`frame_response`, `FrameEvidenceStream`); record type `frame_evidence` keyed by
-  `evd_`; schemas `frame-data`, `frame-stream-data`, `frame-evidence`; `source_check` is
-  per result so one key always carries one record; `files[]` carries the verified
-  absolute path (D2; Windows `\\?\` form); a non-UTF-8 path is `STORAGE_IO`.
-- **Failures** carry fixed remediation: each selection reason, burst over 60 s ->
-  `candidates`, full session -> retain and reopen, unknown ids, wrong parent kind,
-  missing FFmpeg/FFprobe (not Whisper). Partial results carry a per-reason warning.
-- **Evidence:** `navigation_contract` (frozen examples), `evidence_cli_contract` (reuse
-  via a seeded record and preflight pass with stand-in tools that cannot run), opt-in
-  `p09_evidence_e2e` stages for V-01/V-07/V-08 (29 candidate frames at delta 0).
+## P10 still to do
 
-## P09 PRs 1-2: primitives and evidence core (engine)
+- **PR 2:** jobs keyed by `opk_sha256_` (job id from session + key), `ChunkCheckpoint`
+  files under `sessions/<ses>/jobs/<job>/chunks`, `JobState` `Interrupted` and
+  `Committing`, the OS lock as liveness authority, retry policy (BUSY auto-retry <= 2,
+  full jitter 200 ms / 2 s; poison chunk after 3), checkpointed `transcript
+  retranscribe`; needs D-1 and D-4.
+- **PR 3:** public job surface and cancellation serialized with the commit; Ctrl-C and
+  SIGTERM via Tokio `signal` (supersedes ADR 0017 decision 4).
+- **PR 4:** Ubuntu 24.04 / ext4 campaign (dm-log-writes >= 2,000 points, >= 300 QEMU
+  kills, dm-flakey EIO, negative control), X-10 host-loss boundary, then flip the
+  constant; D-5 decides where it runs.
 
-- PR 1 (merged): SEC-17 fix, integer-timestamp frame selection, `FfmpegMedia` listing,
-  exact extraction, crops and WAV clips, strict PNG walking, preflight profile 3.
-- PR 2 (merged `4aecdaa`, #163): `Engine::frame_get/frame_neighbours/frame_burst/crop/audio`; request
-  keys (`opk_sha256_`) and item identities (`evd_`, only what fixes the pixels, so
-  requests naming one frame share one item and file); warm reuse re-verifies files
-  and starts no process; one `evidence_record` per call (no path, no operation id);
-  D1 identity-only source checks after one full hash; budgets 100 frames, 200 MP,
-  256 MiB, 120 s per call, 160 evidence artifacts per session; `bundle validate`
-  checks records against files; fuzz targets `evidence_record`, `crop_rect`.
+## P09: evidence navigation (complete)
+
+- `frame get/neighbours/burst`, `crop`, `audio` with `--json`, `--events jsonl`
+  (`frame_evidence`, `audio_evidence`) and `files[]` absolute paths (D2); request keys
+  (`opk_sha256_`) and item identities (`evd_`); warm reuse starts no process; D1
+  identity-only source checks after one full hash; per-call budgets; 160 evidence
+  artifacts per session (D4, unchanged until D-2).
+- Qualified in `docs/planning/p09-evidence-navigation.md`: `p09_evidence_e2e` eleven
+  stages in 471 s (Windows 11, FFmpeg 9.0, whisper.cpp v1.9.2), including the mechanical
+  journey on both transcript paths.
 
 ## What works (public CLI)
 
@@ -89,28 +105,17 @@ Every known limit, residual risk and deferral is in `docs/planning/known-limits.
 - `transcript retranscribe <session> [--from --to]`, `transcript get ... [--events jsonl]`.
 - `search <session> --query <text> [--from --to] [--limit] [--cursor] [--revision]`.
 - `candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor]`.
-- `frame get/neighbours/burst`, `crop`, `audio` (P09, above).
-- `session list/status/renew/close/retain/clean` and `bundle validate` (which now also
-  validates evidence records).
+- `frame get/neighbours/burst`, `crop`, `audio` (P09).
+- `session list/status/renew/close/retain/clean` and `bundle validate` (records too).
 - Still `COMMAND_NOT_IMPLEMENTED`: job and setup
   install/repair/list/rollback/remove. Human-readable terminal output is P13's.
 
-## Visual candidates, search and local ASR (P07, P08)
+## Earlier packets and the engine
 
-- Candidates: 128x72 grey samples at most every 0.5 s in 60 s windows; a candidate in
-  every 10 s cell; typed gaps; recall record `docs/planning/p08-candidate-recall.md`.
-- Search normalises spelling and number words, phrase then all-terms tiers.
-- Local ASR: 30 s chunks with 5 s overlap, profiles `base` (default) and `base_q5_1`;
-  base 3.25% clean WER, RTF 0.39. Multi-call operations bind the copy with a
-  `BoundSource` (#148).
-
-## The engine library and contract
-
-- **`crates/vsift`:** setup, session, transcript, retranscribe, search, candidates,
-  evidence (frame get/neighbours/burst, crop, audio), `validate_bundle`,
-  `verify_media_tools`, `identify_model`. One typed `EngineError`; `failure_code()` is
-  the single public-code mapping. API 0.x.
-- **`crates/vsift-contract`:** every v1 wire type and fixed prose; **`vsift-cli`** is thin.
+- P07/P08: 30 s ASR chunks with 5 s overlap (`base` default, 3.25% clean WER), search
+  tiers, 0.5 s visual sampling with a candidate per 10 s cell (`p08-candidate-recall.md`).
+- **`crates/vsift`** is the engine (one typed `EngineError`, `failure_code()` the single
+  public mapping, API 0.x); **`vsift-contract`** holds every v1 wire type; the CLI is thin.
 
 ## Packet status
 
@@ -121,24 +126,24 @@ Every known limit, residual risk and deferral is in `docs/planning/known-limits.
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
-| P10–P12, P14 | Not started |
+| P10 | In progress (ledger `in_progress`): PR 1 complete on its branch; PRs 2-4 to do |
+| P11, P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
 ## Architecture snapshot
 
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <-
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
-<- `vsift-cli` (parse, present). `vsift-contract` sits beside the engine. Evidence:
-domain `evidence::{navigation, record}`, application `evidence` (identities, ports
-`FrameExtractor`/`AudioExtractor`, use cases), infrastructure `evidence_record`,
-`evidence_media` and the store's evidence methods, engine `evidence.rs`. Largest file:
-`filesystem_session_store.rs`.
+<- `vsift-cli` (parse, present). `vsift-contract` sits beside the engine. Storage:
+`filesystem_session_store/` (commit path in `commit.rs`/`publication.rs`, chain in
+`chain.rs`), `durable_profile.rs`, `fault_point.rs`. Largest files now:
+`managed_artifact_store.rs` and `filesystem_session_store/tests.rs`.
 
 ## Quality evidence
 
-- P09 PR 3 and PR 4 branches, Windows 11: fmt, strict Clippy, workspace tests,
-  warning-denied rustdoc, governance, fuzz fmt/Clippy/replay pass; the opt-in
-  `p09_evidence_e2e` passes with FFmpeg 9.0. Results go in the PR description.
+- P10 PR 1 branch, Windows 11: fmt, strict Clippy (with and without features),
+  753 workspace tests passing (51 opt-in ignored), warning-denied rustdoc, governance,
+  fuzz fmt/Clippy/replay (15 targets). Results go in the PR description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.
