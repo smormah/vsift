@@ -10,8 +10,8 @@
 //! frozen truth window cites, as a phrase, with complete coverage from the
 //! supplied transcript; the `--events jsonl` stream must carry the same
 //! record, and `transcript get` over the truth window must cite the same
-//! segment. Visual candidates are later P08 work and are reported
-//! `not_implemented`.
+//! segment. Visual candidates are checked by the separate
+//! `p08_candidates_e2e` checkpoint.
 //!
 //! `cargo test -p vsift-cli --locked --test p08_search_e2e -- --ignored --nocapture`
 //!
@@ -383,7 +383,6 @@ fn search_checkpoint() -> TestResult {
     };
     let overall = stage["status"].clone();
     let future_stages: Vec<_> = [
-        "p08_candidates",
         "p09_source_reinspection",
         "p10_recovery",
         "p11_worker_batch",
@@ -407,7 +406,7 @@ fn search_checkpoint() -> TestResult {
         "stages": [stage],
         "coverage_gaps": [
             "Search after local ASR is exercised by the engine and CLI contract tests on committed records, not by a whisper.cpp run here",
-            "Visual candidates are later P08 work"
+            "Visual candidates are checked by the separate p08_candidates_e2e checkpoint"
         ],
         "future_stages": future_stages,
         "overall": overall,

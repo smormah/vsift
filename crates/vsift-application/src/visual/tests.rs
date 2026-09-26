@@ -1,17 +1,18 @@
-use std::{future::Future, sync::Mutex};
+use std::{future::Future, num::NonZeroUsize, sync::Mutex};
 
 use proptest::prelude::{ProptestConfig, prop_assert, prop_assert_eq, proptest};
 use vsift_domain::{
-    CoverageGapReason, CursorError, MediaTime, PageLimit, SessionId, SourceId, TimeRange,
-    VISUAL_BLOCKS, VisualCandidate, VisualHash, VisualIndex, VisualIndexProfile, VisualSample,
-    VisualWindow, VisualWindowOutcome,
+    CoverageGapReason, CursorError, FrameDimensions, MediaTime, PageLimit, SessionId, SourceId,
+    TimeRange, VISUAL_BLOCKS, VisualCandidate, VisualHash, VisualIndex, VisualIndexProfile,
+    VisualSample, VisualWindow, VisualWindowOutcome,
 };
 
 use super::{
     CandidatePageRequest, CandidateQueryError, ExtendVisualIndexRequest, MAX_WINDOWS_PER_EXTENSION,
     VisualExtensionStop, VisualIndexBuildError, VisualIndexExtension, VisualIndexScope,
-    VisualSampler, VisualSamplingError, extend_visual_index, page_candidates,
-    verify_visual_index_identities, visual_coverage_gaps,
+    VisualSampler, VisualSamplingError, analysed_ranges, extend_visual_index,
+    extend_visual_index_within, indexes_any_of, merge_visual_extension, missing_windows,
+    page_candidates, verify_visual_index_identities, visual_coverage_gaps,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -119,6 +120,7 @@ fn busy(time: u64) -> u8 {
 struct Fixture {
     session: SessionId,
     source: SourceId,
+    dimensions: FrameDimensions,
 }
 
 impl Fixture {
@@ -126,6 +128,7 @@ impl Fixture {
         Ok(Self {
             session: SessionId::parse("ses_0123456789abcdef")?,
             source: SourceId::from_sha256(DIGEST)?,
+            dimensions: FrameDimensions::new(1280, 720)?,
         })
     }
 
@@ -134,6 +137,7 @@ impl Fixture {
             session_id: &self.session,
             source_id: &self.source,
             stream_index: 0,
+            displayed_dimensions: self.dimensions,
             duration: MediaTime::from_micros(duration_seconds * SECOND),
             profile: VisualIndexProfile::R0,
         }
@@ -509,5 +513,367 @@ proptest! {
         };
         prop_assert_eq!(at_once.windows(), stepwise.windows());
         prop_assert!(verify_visual_index_identities(&scope, &stepwise).is_ok());
+    }
+}
+
+// C-03 and V-04 for `candidates` (P08 PR 4): page bounds, empty pages,
+// cursor reuse and scope, complete paging, the per-call window budget, the
+// union a lost commit race merges, coverage helpers, and a search hit's
+// time leading to the candidate that shows what was said.
+
+fn page(
+    fixture: &Fixture,
+    index: &VisualIndex,
+    requested: TimeRange,
+    limit: u16,
+    cursor: Option<String>,
+) -> Result<(Vec<String>, Option<String>), Box<dyn std::error::Error>> {
+    let page = page_candidates(
+        &fixture.session,
+        index,
+        &CandidatePageRequest {
+            range: requested,
+            limit: PageLimit::new(limit)?,
+            cursor,
+        },
+        EXPIRES,
+        NOW,
+    )?;
+    Ok((
+        page.candidates
+            .iter()
+            .map(|candidate| candidate.id().to_string())
+            .collect(),
+        page.next_cursor.map(|cursor| cursor.encode()),
+    ))
+}
+
+/// Every page of `requested` at `limit`, concatenated.
+fn all_pages(
+    fixture: &Fixture,
+    index: &VisualIndex,
+    requested: TimeRange,
+    limit: u16,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut seen = Vec::new();
+    let mut cursor = None;
+    loop {
+        let (ids, next) = page(fixture, index, requested, limit, cursor)?;
+        seen.extend(ids);
+        match next {
+            Some(next) => cursor = Some(next),
+            None => return Ok(seen),
+        }
+    }
+}
+
+fn in_range(index: &VisualIndex, requested: TimeRange) -> Vec<String> {
+    index
+        .candidates_in(requested)
+        .map(|candidate| candidate.id().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn page_limits_one_and_one_hundred_cover_the_range_and_zero_and_101_are_rejected()
+-> TestResult {
+    assert!(PageLimit::new(0).is_err());
+    assert!(PageLimit::new(101).is_err());
+    let fixture = Fixture::new()?;
+    let scope = fixture.scope(5 * 60);
+    let index = extend(scope, None, range(0, 5 * 60)?, &FakeSampler::new(busy))
+        .await?
+        .revision
+        .ok_or("no revision")?;
+    let whole = range(0, 5 * 60)?;
+    let expected = in_range(&index, whole);
+    assert!(expected.len() > 100, "the busy screen needs several pages");
+    assert_eq!(all_pages(&fixture, &index, whole, 1)?, expected);
+    assert_eq!(all_pages(&fixture, &index, whole, 100)?, expected);
+    let (first, next) = page(&fixture, &index, whole, 100, None)?;
+    assert_eq!(first.len(), 100);
+    assert!(next.is_some());
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_empty_range_is_one_final_empty_page() -> TestResult {
+    let fixture = Fixture::new()?;
+    let scope = fixture.scope(60);
+    let index = extend(scope, None, range(0, 60)?, &FakeSampler::new(dialog))
+        .await?
+        .revision
+        .ok_or("no revision")?;
+    // Between the dialog's close at 9 s and the next cell at 10 s.
+    let quiet = TimeRange::new(
+        MediaTime::from_micros(9_100_000),
+        MediaTime::from_micros(9_900_000),
+    )?;
+    assert_eq!(page(&fixture, &index, quiet, 20, None)?, (Vec::new(), None));
+    Ok(())
+}
+
+/// A cursor may be used again (a retried request gets the same page); it is
+/// rejected for another range, and pages never skip or repeat.
+#[tokio::test]
+async fn a_cursor_is_reusable_and_bound_to_its_range() -> TestResult {
+    let fixture = Fixture::new()?;
+    let scope = fixture.scope(2 * 60);
+    let index = extend(scope, None, range(0, 2 * 60)?, &FakeSampler::new(busy))
+        .await?
+        .revision
+        .ok_or("no revision")?;
+    let whole = range(0, 2 * 60)?;
+    let (_, cursor) = page(&fixture, &index, whole, 5, None)?;
+    let cursor = cursor.ok_or("no cursor")?;
+    let first = page(&fixture, &index, whole, 5, Some(cursor.clone()))?;
+    let again = page(&fixture, &index, whole, 5, Some(cursor.clone()))?;
+    assert_eq!(first, again);
+    // The page size may change between pages, as for transcripts.
+    let (wider, _) = page(&fixture, &index, whole, 7, Some(cursor.clone()))?;
+    assert_eq!(wider.get(..5), Some(first.0.as_slice()));
+    let other = page_candidates(
+        &fixture.session,
+        &index,
+        &CandidatePageRequest {
+            range: range(0, 60)?,
+            limit: PageLimit::new(5)?,
+            cursor: Some(cursor),
+        },
+        EXPIRES,
+        NOW,
+    );
+    assert_eq!(
+        other.err(),
+        Some(CandidateQueryError::Cursor(CursorError::WrongQuery))
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_window_budget_bounds_a_call_and_is_clamped_to_thirty() -> TestResult {
+    let fixture = Fixture::new()?;
+    let scope = fixture.scope(40 * 60);
+    let sampler = FakeSampler::new(still);
+    let whole = range(0, 40 * 60)?;
+    let request = |previous| ExtendVisualIndexRequest {
+        scope,
+        previous,
+        range: whole,
+    };
+    let one = extend_visual_index_within(request(None), &sampler, NonZeroUsize::MIN).await?;
+    assert_eq!(one.recorded, vec![0]);
+    assert_eq!(one.stop, Some(VisualExtensionStop::WindowLimit));
+    let first = one.revision.ok_or("no revision")?;
+    let clamped = extend_visual_index_within(
+        request(Some(&first)),
+        &sampler,
+        NonZeroUsize::new(1_000).ok_or("zero")?,
+    )
+    .await?;
+    assert_eq!(clamped.recorded, (1..31).collect::<Vec<u32>>());
+    assert_eq!(clamped.stop, Some(VisualExtensionStop::WindowLimit));
+    Ok(())
+}
+
+/// A commit that lost a race carries only the windows the newest revision
+/// lacks, keeps every window of the newest unchanged, and commits nothing
+/// when the other call already recorded everything.
+#[tokio::test]
+async fn a_lost_commit_race_merges_onto_the_newest_revision() -> TestResult {
+    let fixture = Fixture::new()?;
+    let scope = fixture.scope(4 * 60);
+    let sampler = FakeSampler::new(dialog);
+    let base = extend(scope, None, range(0, 60)?, &sampler)
+        .await?
+        .revision
+        .ok_or("no revision")?;
+    // Two calls start from `base`: one indexes 60-180 s and commits first,
+    // the other 120-240 s.
+    let winner = extend(scope, Some(&base), range(60, 180)?, &sampler)
+        .await?
+        .revision
+        .ok_or("no revision")?;
+    let loser = extend(scope, Some(&base), range(120, 240)?, &sampler).await?;
+    let merged = merge_visual_extension(&scope, Some(&winner), &loser.recorded_windows())?
+        .ok_or("nothing merged")?;
+    assert_eq!(merged.number().get(), 3);
+    assert_eq!(
+        merged
+            .windows()
+            .iter()
+            .map(|window| window.window().ordinal())
+            .collect::<Vec<_>>(),
+        vec![0, 1, 2, 3]
+    );
+    for window in winner.windows() {
+        assert_eq!(merged.window(window.window().ordinal()), Some(window));
+    }
+    verify_visual_index_identities(&scope, &merged)?;
+    assert_eq!(
+        merge_visual_extension(&scope, Some(&merged), &loser.recorded_windows())?,
+        None
+    );
+    let other = SourceId::from_sha256(&"f".repeat(64))?;
+    let foreign = VisualIndexScope {
+        source_id: &other,
+        ..scope
+    };
+    assert_eq!(
+        merge_visual_extension(&foreign, Some(&winner), &loser.recorded_windows()),
+        Err(VisualIndexBuildError::ScopeMismatch)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn coverage_helpers_tell_analysed_missing_and_undecodable_windows_apart() -> TestResult {
+    let fixture = Fixture::new()?;
+    let scope = fixture.scope(4 * 60);
+    let failing = FakeSampler::failing(still, vec![(1, VisualSamplingError::Undecodable)]);
+    let index = extend(scope, None, range(0, 3 * 60)?, &failing)
+        .await?
+        .revision
+        .ok_or("no revision")?;
+    let whole = range(0, 10 * 60)?;
+    assert_eq!(
+        analysed_ranges(&index, whole),
+        vec![range(0, 60)?, range(120, 180)?]
+    );
+    assert_eq!(
+        missing_windows(Some(&index), scope.duration, whole),
+        vec![3]
+    );
+    assert_eq!(
+        missing_windows(None, scope.duration, whole),
+        vec![0, 1, 2, 3]
+    );
+    assert!(indexes_any_of(Some(&index), range(60, 70)?));
+    assert!(!indexes_any_of(Some(&index), range(200, 210)?));
+    assert!(!indexes_any_of(None, whole));
+    Ok(())
+}
+
+/// V-04: a search hit's time leads to the candidate that shows what was
+/// said. The dialog is on screen from 5 s to 9 s; the transcript cue saying
+/// "Dialog R-17 is displayed now." starts at 5.5 s. Candidates within 10 s
+/// of the hit include one inside the dialog's window.
+#[tokio::test]
+async fn a_search_hit_time_finds_the_candidate_that_shows_it() -> TestResult {
+    use std::num::NonZeroU32;
+
+    use vsift_domain::{
+        CueSource, CueText, CueTiming, ImportedCue, ParsedTranscript, SearchQuery, SidecarIdentity,
+        TranscriptFormat, TranscriptOffset, TranscriptWarnings,
+    };
+
+    use crate::{
+        ImportedRevisionRequest, SearchPageRequest, SuppliedTranscript, build_imported_revision,
+        page_search,
+    };
+
+    let fixture = Fixture::new()?;
+    let scope = fixture.scope(60);
+    let index = extend(scope, None, range(0, 60)?, &FakeSampler::new(dialog))
+        .await?
+        .revision
+        .ok_or("no revision")?;
+    let text = "Dialog R-17 is displayed now.";
+    let supplied = SuppliedTranscript {
+        transcript: ParsedTranscript::new(
+            TranscriptFormat::Srt,
+            None,
+            vec![ImportedCue {
+                source: CueSource::new(NonZeroU32::MIN, NonZeroU32::MIN),
+                timing: CueTiming::new(5_500_000, 8_000_000)?,
+                text: CueText::new(text.to_owned(), text.to_owned())?,
+                speaker: None,
+            }],
+            TranscriptWarnings::default(),
+        )?,
+        sidecar: SidecarIdentity::new(DIGEST, 64)?,
+    };
+    let revision = build_imported_revision(ImportedRevisionRequest {
+        session_id: &fixture.session,
+        source_id: &fixture.source,
+        source_duration: scope.duration,
+        supplied: &supplied,
+        offset: TranscriptOffset::ZERO,
+        number: NonZeroU32::MIN,
+    })?;
+    let hits = page_search(
+        &fixture.session,
+        &revision,
+        &SearchPageRequest {
+            query: SearchQuery::parse("R-17")?,
+            range: None,
+            limit: PageLimit::DEFAULT,
+            cursor: None,
+        },
+        EXPIRES,
+        NOW,
+    )?;
+    let hit = hits.hits.first().ok_or("no hit")?.segment().range().start();
+    let lead_lag = TimeRange::new(
+        MediaTime::from_micros(hit.as_micros().saturating_sub(10 * SECOND)),
+        MediaTime::from_micros(hit.as_micros() + 10 * SECOND),
+    )?;
+    let page = page_candidates(
+        &fixture.session,
+        &index,
+        &CandidatePageRequest {
+            range: lead_lag,
+            limit: PageLimit::DEFAULT,
+            cursor: None,
+        },
+        EXPIRES,
+        NOW,
+    )?;
+    let dialog_window = range(5, 9)?;
+    assert!(page.candidates.iter().any(|candidate| {
+        dialog_window.start() <= candidate.representative()
+            && candidate.representative() < dialog_window.end()
+    }));
+    Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(24))]
+
+    /// C-03: any range and page size pages every candidate of the range
+    /// exactly once, in time order.
+    #[test]
+    fn any_range_and_limit_page_without_gaps_or_duplicates(
+        from in 0_u64..240,
+        length in 1_u64..240,
+        limit in 1_u16..=100,
+    ) {
+        let Ok(runtime) = tokio::runtime::Builder::new_current_thread().build() else {
+            return Ok(());
+        };
+        let Ok(fixture) = Fixture::new() else {
+            return Ok(());
+        };
+        let scope = fixture.scope(4 * 60);
+        let Ok(Ok(extension)) = range(0, 4 * 60)
+            .map(|whole| runtime.block_on(extend(scope, None, whole, &FakeSampler::new(busy))))
+        else {
+            prop_assert!(false, "extension failed");
+            return Ok(());
+        };
+        let Some(index) = extension.revision else {
+            prop_assert!(false, "no revision");
+            return Ok(());
+        };
+        let Ok(requested) = range(from, from + length) else {
+            return Ok(());
+        };
+        let Ok(paged) = all_pages(&fixture, &index, requested, limit) else {
+            prop_assert!(false, "paging failed");
+            return Ok(());
+        };
+        let unique: std::collections::BTreeSet<&String> = paged.iter().collect();
+        prop_assert_eq!(unique.len(), paged.len());
+        prop_assert_eq!(paged, in_range(&index, requested));
     }
 }

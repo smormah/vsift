@@ -2,8 +2,8 @@
 
 Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
-`transcript retranscribe` (local speech recognition), `search` (P08 transcript search)
-and `bundle validate` are operational. Other commands below
+`transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
+`candidates` (P08 visual candidates) and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 
@@ -30,7 +30,7 @@ being created. An existing directory that VSift did not create is never adopted.
 | `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
-| `candidates` | Bounded visual-candidate retrieval | P08 (reserved) |
+| `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
 | `frame get/neighbours/burst`, `audio`, `crop` | Source-grounded evidence extraction | P09 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job run/batch/status/resume/cancel` | Recoverable worker operations | P10/P11 |
@@ -499,6 +499,106 @@ expired session; `--limit 0`, `--limit 101`, a lone `--from` or `--to` and a mal
 `--revision` are parse errors. A stored record that fails verification is
 `INTEGRITY_FAILURE` or `UNSUPPORTED_SCHEMA`, as for every read.
 
+### P08 visual candidates
+
+```console
+vsift candidates ses_0123456789abcdef --from 0 --to 12000000 --json
+vsift candidates ses_0123456789abcdef --from 0 --to 1800000000 --limit 100 --json
+vsift candidates ses_0123456789abcdef --from 60000000 --to 120000000 --events jsonl
+```
+
+`candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor <token>]` pages
+the visual candidates of the session's video whose representative time lies in the
+half-open range, 20 per page by default
+([ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md),
+decisions 9-14). A candidate is a moment at which the screen changed, or a periodic
+sample of a screen that did not, proposed so an agent need not look at every frame; it
+is a shortlist, not evidence, and never an image (P09 `frame get` extracts the frame).
+A range that runs past the end of the video is clipped to it; one that starts at or
+after the end is `INVALID_ARGUMENT`.
+
+**Analysis inside the call.** The video is cut into fixed 60 s windows. A call first
+analyses the missing windows of its range in ascending order, at most 30 (30 minutes of
+video) per call, then commits them as a new revision of the session's visual index;
+the remaining windows are reported as `not_analyzed` and the next call for the range
+continues them. Analysis decodes actual frames at most twice a second as 128x72 grey
+samples that are never kept, runs the automatic FFmpeg/FFprobe preflight first (now
+including a `visual_sampling` check), and verifies the session's source copy before
+committing. A range whose windows are all analysed, and every call with `--cursor`, is a
+warm read: no tool is needed or run and nothing is written. On Windows 11 with FFmpeg
+9.0, analysis ran at 29 media seconds per second on 1440x900 20 fps video and 67 on
+640x360 10 fps video; a warm page took about 150 ms through the binary on a 30-minute
+session, and about 100 ms in the engine on the largest index a session can hold
+([recall record](../planning/p08-candidate-recall.md)).
+
+**Result.** `data` ([`candidates-data.schema.json`](../../schemas/v1/candidates-data.schema.json),
+example [`candidates.json`](../../schemas/v1/examples/candidates.json)) holds
+`session_id`, the requested `range`, `index` (the revision `index_id`, its `number`,
+`profile` `r0-visual-v1`, the video's `duration_us` and the fixed `window_us`,
+`sample_interval_us` and `coverage_interval_us`), `coverage`, `items` and
+`next_cursor`. Each item is a published `visual_candidate` evidence record
+([`visual-candidate.schema.json`](../../schemas/v1/visual-candidate.schema.json)):
+`candidate_id`, `source_id`, `source_segment_id`, `stream_index`, its 60 s `window`,
+`representative_us` (the actual decoded frame's time), the `span` of time it stands
+for, `change_window` (the change happened after `from_us` and at or before `to_us`; null
+for a first frame or periodic coverage), `reasons` (`first_frame`, `visual_change`,
+`motion_start`, `settled_after_motion`, `periodic_coverage`), `stability` (`settled`,
+`transient`, `in_motion`, `open_at_window_end`), `change` (`changed_blocks`,
+`max_block_delta`: uncalibrated integers for ordering only, never a confidence),
+`visual_hash` (a screen that reappears later is a separate candidate with the same
+hash), `sample_count`, `displayed_dimensions` and `analysis`. Every 10 s of analysed
+video with a decoded frame has a candidate.
+
+**Coverage.** `coverage.searched_range` is the range clipped to the video;
+`coverage.analyzed` lists the analysed parts (merged); `coverage.gaps` lists every gap
+with its `reason` and `dropped_candidates`: `not_analyzed` (call again),
+`deadline_exceeded` (the window this call timed out on; call again), `undecodable` (the
+media tools could not decode it; not retried), `no_decoded_frame` (a 10 s cell with no
+frame) and `candidate_budget_exhausted` (a window that changed more often than its 32
+candidates, with the number dropped); `ranges_truncated` says a list was cut at 100.
+The envelope `coverage` is `truncated` exactly when there is a gap, `gaps` lists them
+merged as `"<from_us>-<to_us>"` (at most 100) and `reasons` the distinct gap reasons (and
+`gap_list_truncated`). Such a result has status `partial`, the fixed warning `Part of
+the requested range has no visual candidates because it is not analysed yet or could
+not be analysed; ...`, and exits 0
+([`candidates.partial.json`](../../schemas/v1/examples/candidates.partial.json)).
+
+**Paging.** Pass `next_cursor` back with the same session and range. It is bound to the
+source, stream, profile and range, the state of every window the range touches, the
+page's last candidate and the session expiry when it was issued. Analysing windows
+outside the range leaves it valid; once a later call analyses a window inside the
+range, or for any other session or range, after expiry or when forged, it is
+`INVALID_ARGUMENT` rather than a silent restart. Pages never repeat or skip a
+candidate; the page size may change between pages.
+
+**Evidence stream.** `candidates --events jsonl` writes one evidence event per candidate,
+in time order, with `record_type` `visual_candidate` and key `candidate_id`, then one
+terminal event whose data
+([`candidates-stream-data.schema.json`](../../schemas/v1/candidates-stream-data.schema.json),
+example [`candidates.events.jsonl`](../../schemas/v1/examples/candidates.events.jsonl))
+is the page without its items plus `record_count`, with the same `status` and envelope
+`coverage` as `--json`. Stream rules are those of `transcript get` (above).
+
+**Storage.** Each call that analyses anything commits one `visual_index_record`
+artifact (strict versioned JSON, at most 8 MiB, at most 64 per session; the shape is
+[`bundle-visual-index-record.schema.json`](../../schemas/v1/bundle-visual-index-record.schema.json)).
+It is removed with the session and carried by `session retain`; `bundle validate`
+re-checks every record's windows, spans, change rule, coverage and identities.
+
+**Failures** use existing codes: `INVALID_ARGUMENT` for an empty or reversed range, a
+range starting at or after the video's end, a rejected cursor, a cursor for a session
+with no visual candidates yet (remediation: run without `--cursor` first), a video with
+no video stream (remediation naming `transcript get` and `search`) and a closed or
+expired session; `--limit 0`, `--limit 101` and a missing `--from` or `--to` are parse
+errors. `INVALID_SOURCE` when no video stream can be decoded or the probe rejects the
+copy. `MISSING_CAPABILITY` when FFmpeg or FFprobe is missing (only when windows must be
+analysed; the remediation says Whisper is not needed), the preflight fails or FFmpeg
+cannot run on a window. `DEADLINE_EXCEEDED`, `BUSY` or `CANCELLED` only when the call
+analysed nothing and nothing of the range was analysed before; otherwise the result is
+`partial`. `RESOURCE_LIMIT` for a record over 8 MiB or a 65th index record.
+`INTEGRITY_FAILURE` or `UNSUPPORTED_SCHEMA` for a stored record that fails verification
+or a source copy that changed during the call.
+
 Running `vsift` or `vsift setup` without a leaf command prints help and performs no
 dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
 five-second total operation deadline; `--profile worker` and
@@ -640,9 +740,9 @@ Human output is readable terminal text on stdout (P05 session operations use
 indented JSON). In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
-`transcript get` and `search` evidence events precede it (see "Evidence stream" and
-"P08 transcript search" above), and every other command, including `transcript
-retranscribe`, writes the terminal event alone. stderr is
+`transcript get`, `search` and `candidates` evidence events precede it (see "Evidence
+stream", "P08 transcript search" and "P08 visual candidates" above), and every other
+command, including `transcript retranscribe`, writes the terminal event alone. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.
 
 Output limits apply before writing:
@@ -781,10 +881,13 @@ an executable plus argument array and never shell text.
 
 Opaque IDs use a type prefix followed by 16 to 64 lowercase ASCII letters or digits:
 `ses_`, `job_`, `op_`, `art_`, `evd_`, and, since P07, `trv_` (transcript revision),
-`tsg_` (transcript segment) and `sgm_` (source segment). Transcript and source-segment
+`tsg_` (transcript segment) and `sgm_` (source segment), and since P08 `vix_` (visual
+index revision) and `vcd_` (visual candidate). Transcript and source-segment
 identities are derived from content (session, sidecar digest, format, offset and
 ordinal; source identity and segment index), so re-importing the same sidecar with the
-same offset into the same session names them identically. Source and operation identities are
+same offset into the same session names them identically; visual identities derive from
+the session, source, stream, analysis profile, window and representative time (and the
+revision number for `vix_`), so a candidate keeps its identity in every later revision. Source and operation identities are
 `src_sha256_` or `opk_sha256_` followed by exactly 64 lowercase hexadecimal digits.
 They cannot contain paths, options, whitespace, or control characters.
 
@@ -804,6 +907,8 @@ metadata, not verified human identity.
 ## Pagination
 
 Candidate, transcript and search pages default to 20 items and accept 1 through 100.
+A candidate cursor's generation is the state of the windows its own range touches, not
+the index revision, so analysing other windows does not invalidate it.
 Continuation cursors are opaque, local tokens of at most 512 bytes. They contain no filesystem paths or
 credentials and are bound to session, canonical-query digest, immutable generation,
 last item, and expiry. A cursor from another query/session/generation or an expired
@@ -836,7 +941,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | --- | --- |
 | C-01 | CLI hierarchy, help/version, parse errors, reserved-command failure |
 | C-02 | deterministic ready/degraded/blocked setup and terminal response states |
-| C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages and search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) |
+| C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages, search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) and candidate pages (`candidates_cli_contract`, `engine_candidates`, the application's `visual` tests with the property `any_range_and_limit_page_without_gaps_or_duplicates`) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection |

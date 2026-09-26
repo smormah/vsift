@@ -38,7 +38,7 @@
 
 use std::{collections::HashSet, error::Error, fmt, num::NonZeroU32};
 
-use crate::{MediaTime, SourceId, TimeRange, VisualCandidateId, VisualIndexId};
+use crate::{FrameDimensions, MediaTime, SourceId, TimeRange, VisualCandidateId, VisualIndexId};
 
 /// Length of one analysis window: 60 s.
 pub const VISUAL_WINDOW_MICROS: u64 = 60_000_000;
@@ -1266,6 +1266,12 @@ pub struct VisualIndexParts {
     pub source_id: SourceId,
     /// Selected video stream index.
     pub stream_index: u32,
+    /// The stream's orientation-correct displayed dimensions.
+    ///
+    /// Kept with the index so a warm read can state what a candidate's
+    /// representative frame shows (and P09 can crop it) without probing the
+    /// source again.
+    pub displayed_dimensions: FrameDimensions,
     /// Normalized source duration the window grid is cut from.
     pub duration: MediaTime,
     /// Analysis profile.
@@ -1338,6 +1344,12 @@ impl VisualIndex {
     #[must_use]
     pub const fn stream_index(&self) -> u32 {
         self.parts.stream_index
+    }
+
+    /// Displayed dimensions of the selected video stream.
+    #[must_use]
+    pub const fn displayed_dimensions(&self) -> FrameDimensions {
+        self.parts.displayed_dimensions
     }
 
     /// Normalized source duration.

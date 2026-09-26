@@ -437,21 +437,24 @@ pub(crate) struct SearchArguments {
     pub revision: Option<TranscriptRevisionId>,
 }
 
-/// Visual-candidate page request.
+/// Visual-candidate page request; missing windows of the range are analysed
+/// first, at most 30 minutes of video per call.
 #[derive(Args, Debug)]
 pub(crate) struct CandidatesArguments {
-    /// Session containing visual evidence.
+    /// Session whose video is read.
     pub session: SessionId,
     /// Inclusive source-timeline start in microseconds.
     #[arg(long)]
     pub from: u64,
-    /// Exclusive source-timeline end in microseconds.
+    /// Exclusive source-timeline end in microseconds; a range past the end
+    /// of the video is clipped to it.
     #[arg(long)]
     pub to: u64,
-    /// Positive page size, capped by the application contract.
-    #[arg(long)]
+    /// Candidates per page, 1 through 100; defaults to 20.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
     pub limit: Option<u16>,
-    /// Opaque continuation token returned by the previous page.
+    /// Opaque continuation token returned by the previous page of the same
+    /// range; a call with a cursor never analyses anything.
     #[arg(long)]
     pub cursor: Option<String>,
 }

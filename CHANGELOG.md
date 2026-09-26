@@ -8,16 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- The internal core of the visual-candidate index (P08), not yet reachable from the
-  CLI (the `candidates` command follows): each 60-second window of a video is decoded
-  by FFmpeg at up to two frames per second as tiny grey thumbnails that are never
-  kept, and turned into candidates where the screen changed, with at least one
-  candidate every 10 seconds, the time span each one stands for, whether the screen
-  was settled, transient or moving, and a similarity hash that shows when a screen
-  repeats. Revisions of the index are stored in the session as validated records and
-  travel into retained bundles, and what could not be analysed is recorded as a typed
-  coverage gap rather than skipped. On the synthetic test videos every stable screen of
-  at least a second is found, with no false changes.
+- Visual candidates: `vsift candidates <session> --from <us> --to <us>` lists the
+  moments where the video's screen changed, plus a sample at least every 10 seconds so
+  a static screen is still represented, 20 per page (`--limit 1..100`, `--cursor` to
+  continue). Each candidate is a new `visual_candidate` evidence record with the time
+  of the actual decoded frame that shows it (which `frame get` will extract), the span
+  of time it stands for, why it was proposed, whether the screen was settled,
+  transient or moving, the size of the change (uncalibrated numbers for ordering only)
+  and a similarity hash that shows when a screen repeats. The first call over a range
+  analyses its 60-second windows with FFmpeg, at most 30 minutes of video per call, at
+  up to two frames per second as tiny grey thumbnails that are never kept; the rest is
+  reported as `not_analyzed` and the next call continues it. Later calls over analysed
+  time need no tool and take about 100 ms. Every result lists what is not analysed or
+  could not be (`not_analyzed`, `deadline_exceeded`, `undecodable`,
+  `no_decoded_frame`, `candidate_budget_exhausted`); a result with gaps is `partial`
+  (exit 0) with the gaps in the envelope `coverage`. `--events jsonl` streams the
+  records, then the coverage. The index is stored in the session as validated records
+  that travel into retained bundles. On the synthetic test videos every stable screen
+  of at least a second is found, with no false changes. New schemas `candidates-data`,
+  `candidates-stream-data`, `visual-candidate` and `bundle-visual-index-record` with
+  frozen examples; ADR 0018 (accepted 2026-09-26) records the design. A video without a video
+  stream is `INVALID_ARGUMENT` with fixed remediation; no new failure code.
 - The automatic FFmpeg/FFprobe check now also proves that visual sampling works
   (verification profile 2, check `visual_sampling`), so every recorded pass is
   verified once more after upgrading.
@@ -37,7 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `too_many_terms` over 16 words, `control_character`) is `INVALID_ARGUMENT` with
   fixed remediation naming the reason. New schemas `search-data` and
   `search-stream-data` with frozen examples; ADR 0018 (accepted 2026-09-26) records the design.
-- An opt-in P08 checkpoint (`p08_search_e2e`) and a `search_query` fuzz target.
+- Opt-in P08 checkpoints (`p08_search_e2e`, `p08_candidates_e2e`) and the
+  `search_query`, `visual_samples` and `visual_index_record` fuzz targets.
 
 - `setup check` now reports local speech recognition in a new `local_asr` object:
   whether the registered model is a reviewed pinned model and which profile, and

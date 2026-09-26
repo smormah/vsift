@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/candidates-stream-data.schema.json",
+  "title": "VSift candidates JSON Lines terminal data v1",
+  "description": "The data member of the complete or partial terminal result that ends a candidates --events jsonl stream (P08). It is the page of candidates-data.schema.json without its items: the candidates were the preceding evidence events (record_type visual_candidate), in time order, and record_count says how many there were. Pass next_cursor back with the same session and range to stream the next page; null means the range is exhausted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "range",
+    "index",
+    "coverage",
+    "record_count",
+    "next_cursor"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "range": { "$ref": "candidates-data.schema.json#/$defs/range" },
+    "index": { "$ref": "candidates-data.schema.json#/$defs/index" },
+    "coverage": { "$ref": "candidates-data.schema.json#/$defs/coverage" },
+    "record_count": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "next_cursor": { "$ref": "candidates-data.schema.json#/$defs/next_cursor" }
+  }
+}

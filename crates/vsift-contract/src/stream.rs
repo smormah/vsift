@@ -17,7 +17,7 @@ use vsift_domain::{SessionId, TimeRange, TranscriptRevision, TranscriptSegment};
 
 use crate::{
     CONTRACT_VERSION, CommandName, LifecycleResponse, OperationResponse, TerminalEventResponse,
-    TranscriptRevisionData, TranscriptSegmentData, transcript::RangeData,
+    TranscriptRevisionData, TranscriptSegmentData, VisualCandidateData, transcript::RangeData,
 };
 
 /// One published JSON Lines event kind, written to the event's `event` field.
@@ -77,6 +77,9 @@ pub enum EvidenceRecordType {
     /// A transcript segment (`transcript-segment.schema.json`); its key is the
     /// segment's `segment_id`.
     TranscriptSegment,
+    /// A visual candidate (`visual-candidate.schema.json`, P08); its key is
+    /// the candidate's `candidate_id`.
+    VisualCandidate,
 }
 
 impl EvidenceRecordType {
@@ -84,13 +87,14 @@ impl EvidenceRecordType {
     ///
     /// Contract tests compare this list with the `record_type` enum of
     /// `evidence-event.schema.json`.
-    pub const ALL: [Self; 1] = [Self::TranscriptSegment];
+    pub const ALL: [Self; 2] = [Self::TranscriptSegment, Self::VisualCandidate];
 
     /// Returns the stable identifier written to the `record_type` field.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::TranscriptSegment => "transcript_segment",
+            Self::VisualCandidate => "visual_candidate",
         }
     }
 
@@ -99,6 +103,7 @@ impl EvidenceRecordType {
     const fn ordinal(self) -> usize {
         match self {
             Self::TranscriptSegment => 0,
+            Self::VisualCandidate => 1,
         }
     }
 }
@@ -119,7 +124,8 @@ const _: () = {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
 enum EvidenceRecord {
-    TranscriptSegment(TranscriptSegmentData),
+    TranscriptSegment(Box<TranscriptSegmentData>),
+    VisualCandidate(Box<VisualCandidateData>),
 }
 
 /// One evidence record event: a single self-describing JSON Lines record.
@@ -154,9 +160,28 @@ impl EvidenceEventResponse {
             operation_id: None,
             record_type: EvidenceRecordType::TranscriptSegment.identifier(),
             key: segment.id().as_str().to_owned(),
-            record: EvidenceRecord::TranscriptSegment(TranscriptSegmentData::new(
+            record: EvidenceRecord::TranscriptSegment(Box::new(TranscriptSegmentData::new(
                 revision, segment,
-            )),
+            ))),
+        }
+    }
+}
+
+impl EvidenceEventResponse {
+    pub(crate) fn visual_candidate(
+        sequence: u64,
+        command: CommandName,
+        candidate: VisualCandidateData,
+    ) -> Self {
+        Self {
+            schema_version: CONTRACT_VERSION,
+            event: EventKind::Evidence.identifier(),
+            sequence,
+            command: command.identifier(),
+            operation_id: None,
+            record_type: EvidenceRecordType::VisualCandidate.identifier(),
+            key: candidate.candidate_id().to_owned(),
+            record: EvidenceRecord::VisualCandidate(Box::new(candidate)),
         }
     }
 }
@@ -165,7 +190,8 @@ impl EvidenceEventResponse {
 /// terminal event that ends it.
 ///
 /// Hosts write any stream through this one view, so every command that
-/// streams evidence (`transcript get`, `search`) is written identically.
+/// streams evidence (`transcript get`, `search`, `candidates`) is written
+/// identically.
 pub trait EvidenceStream {
     /// The evidence events, in stream order.
     fn records(&self) -> &[EvidenceEventResponse];

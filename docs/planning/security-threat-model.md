@@ -246,8 +246,8 @@ See [ADR 0012](../decisions/0012-p04-source-media-profile.md) and the
 [P04 qualification record](p04-media-qualification.md).
 
 Since 2026-09-26 (issue #148, SEC-08) an operation that calls a provider many times
-over one session's source copy (local speech recognition today, visual sampling
-next) binds the copy for the whole operation instead of rehashing it before every
+over one session's source copy (local speech recognition and, since P08 PR 4, visual
+sampling) binds the copy for the whole operation instead of rehashing it before every
 call: one full SHA-256 verification when it is opened, an on-disk identity
 comparison (size, modification time, device and file index, and the Unix
 status-change time or the Windows creation time and attributes) before each provider
@@ -290,6 +290,30 @@ rewritten or deleted, so an indexed citation cannot silently change (SEC-10/SEC-
 Residual: the recognizer is a native process with the user's filesystem access, and
 memory is bounded only by the operating system (an abnormal exit is reported as
 `RESOURCE_LIMIT`).
+
+P08 visual candidates (`candidates`, ADR 0018) decode user video only through
+`FfmpegMedia::visual_samples`: one run per 60 s window with a closed argument list in
+which only numbers and the private copy's path are filled in, the forced local
+demuxer and `file` protocol, MOV external references disabled, `-xerror`, a 64 MiB
+allocation cap, two threads, at most 122 frames of 128x72 grey pixels (about 1.1 MiB),
+256 KiB of diagnostics and a 120 s deadline per window, and at most 30 windows per
+call (SEC-05). A window FFmpeg rejects or whose output breaks a bound is recorded as
+`undecodable` rather than retried: a video truncated mid-stream ends as such a gap,
+not a failure or a false candidate, and F11's damaged tail, which damages only the
+audio, is analysed completely because audio is never decoded (SEC-05/SEC-17). The frames are reduced to block
+means and a 64-bit hash in memory and never written anywhere; the committed record
+holds candidate times, reasons, change sizes and hashes, no pixels, lives only in the
+disposable session and retained bundles, is bounded (8 MiB, 64 records) and is
+decoded strictly with every analysis and identity rule re-derived on every read and
+in `bundle validate`, so an edited record cannot claim coverage or changes the rules
+would not produce (SEC-18/SEC-21). Every result states which parts of the range were
+not analysed or could not be, and change sizes are published as uncalibrated
+integers, never as confidence, so a gap is never presented as absence (SEC-17). Each
+window's decode takes one of the session root's admission slots and a warm read runs
+no provider (SEC-20). The copy is bound for the whole call as described above (SEC-08).
+Residual: FFmpeg remains a native decoder with the user's filesystem access, as in
+P04, and sampling at 2 Hz can miss a change shorter than 0.5 s or smaller than the
+change rule; the result's coverage cannot report what sampling did not see.
 
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain

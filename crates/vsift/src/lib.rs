@@ -42,6 +42,10 @@
 //! - **Search:** [`Engine::search`] finds a literal query in a revision's
 //!   segments, ranked phrase matches first, and reports which parts of the
 //!   searched range no transcript covers.
+//! - **Visual candidates:** [`Engine::candidates`] pages the visual
+//!   candidates of a source range, first analysing the range's missing 60 s
+//!   windows with `FFmpeg` (at most 30 per call), and reports which parts of
+//!   the range are not analysed or could not be.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that
@@ -72,6 +76,7 @@
 #![forbid(unsafe_code)]
 
 mod asr;
+mod candidates;
 mod engine;
 mod error;
 mod local_asr_check;
@@ -82,6 +87,7 @@ mod transcripts;
 mod verification;
 
 pub use asr::{RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
+pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, SessionRootLocation,
     UserConfigurationLocation,
@@ -115,6 +121,11 @@ pub use vsift_application::{
     RuntimeDiagnosis, SessionStorageError, SetupProfile, SourceProbeError, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError, TranscriptQueryError,
 };
+/// Visual-candidate values that appear in this API.
+pub use vsift_application::{
+    CandidateQueryError, MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError,
+    VisualSamplingError,
+};
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
     AlignmentOrigin, CarriedFrom, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText,
@@ -132,6 +143,14 @@ pub use vsift_domain::{
     AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, ProviderChunkOutput,
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
     Sha256Hex,
+};
+/// Visual-candidate values that appear in this API.
+pub use vsift_domain::{
+    CandidateChange, CandidateReason, CandidateStability, CoverageGapReason, FrameDimensions,
+    VISUAL_CELL_MICROS, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_SAMPLE_INTERVAL_MICROS,
+    VISUAL_WINDOW_MICROS, VisualCandidate, VisualCandidateId, VisualCoverageGap, VisualDelta,
+    VisualHash, VisualIndex, VisualIndexError, VisualIndexId, VisualIndexProfile,
+    VisualIndexWindow, VisualWindow, VisualWindowOutcome,
 };
 /// Search values that appear in this API.
 pub use vsift_domain::{

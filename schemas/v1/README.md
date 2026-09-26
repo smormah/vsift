@@ -19,8 +19,10 @@ These files are the machine-readable public v1 boundary:
   `--events jsonl` stream (validate its `result` with
   `operation-response.schema.json` too);
 - `evidence-event.schema.json` — one evidence record line of an `--events jsonl`
-  stream: `record_type`, upsert `key` and the `record` itself (P07; today
-  `transcript_segment`, whose record is `transcript-segment.schema.json`);
+  stream: `record_type`, upsert `key` and the `record` itself (P07:
+  `transcript_segment`, whose record is `transcript-segment.schema.json`; P08:
+  `visual_candidate`, keyed by `candidate_id`, whose record is
+  `visual-candidate.schema.json`);
 - `config.schema.json` — strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` — the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
@@ -48,6 +50,25 @@ These files are the machine-readable public v1 boundary:
 - `search-stream-data.schema.json` — the `data` member of the terminal event that ends
   a `search --events jsonl` stream: the page without its items, with `hits`,
   `record_count` and the cursor (P08);
+- `candidates-data.schema.json` — the `data` member of a complete or partial
+  `candidates` result (P08 PR 4): the requested `range`, the `index` revision and its
+  fixed sampling grid, `coverage` (the searched range, the `analyzed` ranges and every
+  typed gap: `not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`,
+  `candidate_budget_exhausted`), the candidates as `items` in time order and the
+  continuation cursor. Its envelope `coverage` is `truncated`, and its status
+  `partial`, exactly when there is a gap;
+- `candidates-stream-data.schema.json` — the `data` member of the terminal event that
+  ends a `candidates --events jsonl` stream: the page without its items, with
+  `record_count` (P08);
+- `visual-candidate.schema.json` — one visual candidate, the second published evidence
+  record (P08): identities, window, the actual decoded frame time
+  `representative_us`, `span`, `change_window`, `reasons`, `stability`, the
+  uncalibrated `change` sizes, `visual_hash`, `sample_count`, displayed dimensions
+  and the analysis profile;
+- `bundle-visual-index-record.schema.json` — the content of a session or retained
+  bundle's `visual_index_record` artifact: one revision of the visual index with every
+  recorded window and candidate, as stored (P08). A storage record, not a response:
+  its `schema_version` is the integer record version `1`;
 - `transcript-segment.schema.json` — one transcript segment, the first published
   evidence record (ADR 0016): self-describing identities, normalized source time,
   sanitized text, confidence, alignment and cue provenance (P07). A local-ASR segment
@@ -63,10 +84,12 @@ These files are the machine-readable public v1 boundary:
 The `--events jsonl` stream is a sequence of events with a contiguous `sequence`
 from 0: for `transcript.get`, one `evidence` event per segment and then one
 `terminal` event; for `search`, one `evidence` event per matching segment (the same
-`transcript_segment` records, in rank order) and then one `terminal` event; for every
-other command, the terminal event alone. Dispatch on `event`; the terminal event's
-`sequence` and, for `transcript.get` and `search`, its `record_count` equal the number
-of evidence events before it. The exact consumer
+`transcript_segment` records, in rank order) and then one `terminal` event; for
+`candidates`, one `evidence` event per candidate (`visual_candidate` records, in time
+order) and then one `terminal` event; for every other command, the terminal event
+alone. Dispatch on `event`; the terminal event's `sequence` and, for `transcript.get`,
+`search` and `candidates`, its `record_count` equal the number of evidence events
+before it. The exact consumer
 rules (upsert keys, end of stream, paging) are in the CLI contract.
 
 Data schemas describe the `data` member only; validate the surrounding envelope with
@@ -105,7 +128,18 @@ hit, the segment F10-E01 cites, with complete coverage from the supplied transcr
 as a result and as a stream (one evidence event and the terminal event); both are
 checked by `vsift-contract`'s `search_contract`, the stream byte for byte.
 `search-stream-data.schema.json` references definitions of `search-data.schema.json`
-by JSON pointer (`search-data.schema.json#/$defs/hit`).
+by JSON pointer (`search-data.schema.json#/$defs/hit`), and
+`candidates-stream-data.schema.json` those of `candidates-data.schema.json`.
+`candidates.json` and `candidates.events.jsonl` page the F02 fixture (three slides,
+A-B-A) indexed from the samples FFmpeg 9.0 decoded from it
+(`crates/vsift-infrastructure/tests/data/visual_samples/F02.json`): four candidates
+(first frame, two slide changes and the periodic sample of the last slide), complete
+coverage, as a result and as a stream; `candidates.partial.json` pages a synthetic
+150 s video whose first window is analysed, second undecodable and third not analysed
+yet, so it is `partial` with both gaps. All three are checked by `vsift-contract`'s
+`candidates_contract`, the stream byte for byte. `bundle-visual-index-record.json` is
+F02's stored index record, checked by `vsift-infrastructure`'s `visual_index_store`
+tests, which also validate the records of a real retained bundle.
 `storage-not-private.json` is the `setup configure` failure an agent receives when
 the per-user configuration folder already exists and other accounts can access it;
 it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows

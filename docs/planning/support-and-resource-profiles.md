@@ -35,6 +35,15 @@ exact OS updates, Rust target, FFmpeg/whisper.cpp build, filesystem and host con
 | Durability | Ephemeral unless explicitly retained | Explicit durable workspace required |
 | Network/filesystem isolation | Report effective controls | Required external container/cgroup policy; fail if requested controls absent |
 
+Visual analysis (P08, `candidates`) in both profiles: 60 s windows, at most 30 per
+call; per window at most 122 decoded 128x72 grey frames (about 1.1 MiB), 256 KiB of
+FFmpeg diagnostics, two decoder threads, a 64 MiB decoder allocation cap and a 120 s
+deadline, each holding one admission slot; at most 32 candidates per window; a
+session holds at most 64 visual-index records of at most 8 MiB (the four-hour source
+bound at full budget is a 2.2 MB record). Measured on Windows 11 (Xeon E5-2698 v4,
+FFmpeg 9.0): about 30 media seconds per second of analysis on 1440x900 video, and a
+p95 warm page of about 100 ms for the largest index in an optimised build.
+
 These values are admission ceilings, not throughput promises. Provider threads count
 against weighted CPU admission. Source staging, model size and decoded outputs count
 against disk/memory budgets. P04/P07/P14 may tighten a default based on measurements;

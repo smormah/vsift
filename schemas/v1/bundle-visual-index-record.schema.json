@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/bundle-visual-index-record.schema.json",
+  "title": "VSift retained bundle visual-index record v1",
+  "description": "The content of a session or retained bundle artifact whose kind is visual_index_record (P08): one immutable revision of the session's visual-candidate index, stored as compact UTF-8 JSON and named artifact-<sha256>.json. This is a storage record, not an operation response: schema_version is the integer record version and format names the record. A revision holds every window of the revision before it unchanged, so only the newest is read; windows that are absent have not been analysed. Times are integer microseconds on the normalized source timeline. The record holds no pixels or sample data, only candidates. A session holds at most 64 such records of at most 8 MiB. bundle validate decodes every record strictly (unknown fields, values and newer versions are rejected) and re-derives what a record could claim without being true: each window's range from its ordinal and duration_us, each candidate's span start from its representative time and its end from the next candidate or the window end, sample counts, every change against the r0-visual-v1 policy, that every 10 s cell holds a candidate or is listed in frameless_cells, and every candidate and revision identity from the session, source, stream, profile, window and time. This schema describes its shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "format",
+    "index_id",
+    "revision",
+    "session_id",
+    "source_id",
+    "stream_index",
+    "displayed_dimensions",
+    "duration_us",
+    "profile",
+    "windows"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "format": { "const": "vsift.visual_index_record" },
+    "index_id": { "type": "string", "pattern": "^vix_[a-z0-9]{16,64}$" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "stream_index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "displayed_dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      }
+    },
+    "duration_us": {
+      "description": "The probed source duration the 60 s window grid is cut from; at most four hours.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 14400000000
+    },
+    "profile": { "const": "r0-visual-v1" },
+    "windows": {
+      "description": "Analysed and undecodable windows in strictly ascending ordinal order.",
+      "type": "array",
+      "maxItems": 240,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/analysed_window" },
+          { "$ref": "#/$defs/undecodable_window" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_us", "end_us"],
+      "properties": {
+        "start_us": { "type": "integer", "minimum": 0 },
+        "end_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "undecodable_window": {
+      "description": "A window the media tools could not decode; recorded so it is not decoded again.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "start_us", "end_us", "state"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0, "maximum": 239 },
+        "start_us": { "type": "integer", "minimum": 0 },
+        "end_us": { "type": "integer", "minimum": 1 },
+        "state": { "const": "undecodable" }
+      }
+    },
+    "analysed_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "start_us",
+        "end_us",
+        "state",
+        "sample_count",
+        "dropped_candidates",
+        "frameless_cells",
+        "candidates"
+      ],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0, "maximum": 239 },
+        "start_us": { "type": "integer", "minimum": 0 },
+        "end_us": { "type": "integer", "minimum": 1 },
+        "state": { "const": "analysed" },
+        "sample_count": {
+          "description": "Decoded samples inside the window (the lead-in sample is not counted).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 122
+        },
+        "dropped_candidates": {
+          "description": "Change candidates the 32-candidate budget dropped.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 122
+        },
+        "frameless_cells": {
+          "description": "10 s cells of the window in which no frame was decoded.",
+          "type": "array",
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/range" }
+        },
+        "candidates": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/candidate" }
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "reason",
+        "representative_us",
+        "span_end_us",
+        "sample_count",
+        "stability",
+        "visual_hash",
+        "change"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^vcd_[a-z0-9]{16,64}$" },
+        "reason": {
+          "enum": [
+            "first_frame",
+            "visual_change",
+            "motion_start",
+            "settled_after_motion",
+            "periodic_coverage"
+          ]
+        },
+        "representative_us": { "type": "integer", "minimum": 0 },
+        "span_end_us": { "type": "integer", "minimum": 1 },
+        "sample_count": { "type": "integer", "minimum": 1, "maximum": 122 },
+        "stability": {
+          "enum": ["settled", "transient", "in_motion", "open_at_window_end"]
+        },
+        "visual_hash": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+        "change": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["previous_sample_us", "changed_blocks", "max_block_delta"],
+              "properties": {
+                "previous_sample_us": { "type": "integer", "minimum": 0 },
+                "changed_blocks": { "type": "integer", "minimum": 0, "maximum": 144 },
+                "max_block_delta": { "type": "integer", "minimum": 0, "maximum": 255 }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

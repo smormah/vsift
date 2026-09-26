@@ -1,7 +1,8 @@
 # Incremental end-to-end test spine
 
-Status: P04, P05 and P06 checkpoints and the P07 supplied-transcript and local-ASR
-stages are implemented; the complete journey remains `not_implemented`. Managed
+Status: P04, P05 and P06 checkpoints, the P07 supplied-transcript and local-ASR
+stages and the P08 search and visual-candidates stages are implemented; the complete
+journey remains `not_implemented`. Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -158,8 +159,37 @@ spoken spelling `dialog r 17`. Both must find exactly the segment on F10-E01's f
 truth window, as a phrase, with complete coverage whose basis is the supplied transcript;
 the `--events jsonl` stream must carry the same record, and `transcript get` over the
 truth window must cite it. It writes `.vsift/e2e-runs/p08-<run-id>/report.json` and
-reports `p08_candidates` and later stages `not_implemented`. On Windows 11 with FFmpeg 9.0
+reports P09 and later stages `not_implemented`. On Windows 11 with FFmpeg 9.0
 it passed on 2026-09-26 in about 4 s (each search about 90 ms through the binary).
+
+P08 PR 4 adds the visual-candidates stages (V-02..V-05, S-11):
+
+```console
+cargo test --release -p vsift-cli --locked --test p08_candidates_e2e -- --ignored --nocapture
+```
+
+It needs FFmpeg and FFprobe on `PATH` (whisper.cpp only for the optional local-ASR
+variant, through `VSIFT_TEST_WHISPER_CLI` and `VSIFT_TEST_WHISPER_MODEL`), registers
+them in isolated per-user bases and runs the binary with an empty `PATH`. Stages:
+`p08_candidates_fixtures` (F01-F10 and F12 through `candidates`, scored against the
+manifest: every stable event of at least 1 s hit, no change candidate in F01 or F07,
+a warm second call identical); `p08_lead_lag` (F03/F04/F05/F09 speech variants
+imported with a SubRip cue written from the frozen script and speech placement; a
+searched term's candidates within 10 s include one inside the event it names; and the
+same after `transcript retranscribe` when whisper is set); `p08_candidates_budget` (a
+3-minute clip built at run time, indexed by the engine library with a one-window
+budget, continued from `not_analyzed` on each call, then read warm by the binary with
+no tool); `p08_candidates_stream_and_bundle` (the JSONL stream, `session retain`,
+`bundle validate`, the record conforming to its bundle schema);
+`p08_candidates_malformed` (F11's damaged tail, a video truncated at run time, an
+audio-only file); `p08_candidates_motion` (V-03 scroll-under-a-sticky-header and zoom
+clips built at run time: a `settled_after_motion` candidate within 1 s of each stop and
+a bounded count); `p08_candidates_s11` (a 30-minute session built at run time: cold
+analysis and warm page times through the binary). Clips use FFmpeg's native MPEG-4
+encoder, present in the pinned CI builds that omit libx264. It prints `p08_candidates:
+passed` and writes `.vsift/e2e-runs/p08-candidates-<run-id>/report.json`. On Windows
+11 with FFmpeg 9.0 and whisper.cpp v1.9.2 it passed on 2026-09-26 in 165 s; results
+are in the [P08 candidate recall record](p08-candidate-recall.md).
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

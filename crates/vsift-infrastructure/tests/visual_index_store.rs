@@ -1,7 +1,12 @@
 //! Visual-index records in session storage (P08 PR 3): committing revisions,
 //! reading the newest, the per-session record limit, retained bundles, and
 //! strict validation of the records a bundle carries (ADR 0013 note of
-//! 2026-09-26).
+//! 2026-09-26). Every record a bundle carries conforms to the published
+//! `bundle-visual-index-record.schema.json`, and the frozen example
+//! `bundle-visual-index-record.json` is the F02 index built from its
+//! recorded samples (P08 PR 4).
+
+mod candidate_recall;
 
 use std::{
     env,
@@ -20,7 +25,7 @@ use vsift_application::{
     SessionStorageError, VisualIndexScope, VisualSampler, VisualSamplingError, extend_visual_index,
 };
 use vsift_domain::{
-    DurabilityRequirement, MediaTime, OperationId, SessionArtifactKind, SessionId,
+    DurabilityRequirement, FrameDimensions, MediaTime, OperationId, SessionArtifactKind, SessionId,
     StorageGeneration, TimeRange, VISUAL_BLOCKS, VisualHash, VisualIndex, VisualIndexProfile,
     VisualSample, VisualWindow,
 };
@@ -153,6 +158,7 @@ async fn extended(
         session_id: &session.session_id,
         source_id: &session.source_id,
         stream_index: 0,
+        displayed_dimensions: FrameDimensions::new(1280, 720)?,
         duration: MediaTime::from_micros(DURATION),
         profile: VisualIndexProfile::R0,
     };
@@ -171,6 +177,52 @@ async fn extended(
     .await?
     .revision
     .ok_or("no revision")?)
+}
+
+fn repository(relative: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(relative)
+}
+
+/// Whether `instance` conforms to the published bundle visual-index record schema.
+fn conforms_to_record_schema(instance: &serde_json::Value) -> Built<bool> {
+    let schema: serde_json::Value = serde_json::from_slice(&fs::read(repository(
+        "schemas/v1/bundle-visual-index-record.schema.json",
+    ))?)?;
+    Ok(jsonschema::validator_for(&schema)?.is_valid(instance))
+}
+
+/// The stored record of F02's index (from its recorded samples) is the
+/// frozen example; it conforms to the schema, decodes back to the index,
+/// and the schema rejects fields the record does not define.
+#[tokio::test]
+async fn the_f02_record_is_the_frozen_bundle_example() -> TestResult {
+    let recorded = candidate_recall::load_recorded("F02")?;
+    let index = candidate_recall::index_recorded(&recorded).await?;
+    let session = SessionId::parse(candidate_recall::SCORING_SESSION)?;
+    let bytes = encode_visual_index_record(&session, &index)?;
+    let record: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let example_path = "schemas/v1/examples/bundle-visual-index-record.json";
+    if env::var("VSIFT_REGENERATE_CONTRACT_EXAMPLES").is_ok_and(|value| value == "1") {
+        let mut text = serde_json::to_string_pretty(&record)?;
+        text.push('\n');
+        fs::write(repository(example_path), text)?;
+    }
+    let example: serde_json::Value = serde_json::from_slice(&fs::read(repository(example_path))?)?;
+    assert!(
+        record == example,
+        "the F02 record differs from {example_path}"
+    );
+    assert!(conforms_to_record_schema(&example)?);
+    assert_eq!(
+        vsift_infrastructure::decode_visual_index_record(&serde_json::to_vec(&example)?, &session)?,
+        index
+    );
+    let mut extended = example.clone();
+    extended["windows"][0]["candidates"][0]["thumbnail"] = serde_json::Value::Bool(true);
+    assert!(!conforms_to_record_schema(&extended)?);
+    Ok(())
 }
 
 fn operation(number: u64) -> Built<OperationId> {
@@ -222,6 +274,23 @@ async fn revisions_are_committed_the_newest_is_read_and_bundles_validate_them() 
         FilesystemSessionStore::validate_bundle(&bundle)?.artifact_count(),
         2
     );
+    for entry in fs::read_dir(&bundle)? {
+        let path = entry?.path();
+        if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("artifact-"))
+            && path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+        {
+            let record: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
+            assert!(
+                conforms_to_record_schema(&record)?,
+                "a bundled record does not conform to its schema"
+            );
+        }
+    }
 
     // Rewrite a record and its manifest entry together: the digests agree,
     // but the record claims a span its candidates do not have.

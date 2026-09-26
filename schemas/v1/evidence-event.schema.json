@@ -30,7 +30,7 @@
         { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" }
       ]
     },
-    "record_type": { "enum": ["transcript_segment"] },
+    "record_type": { "enum": ["transcript_segment", "visual_candidate"] },
     "key": {
       "type": "string",
       "pattern": "^[a-z]+_[a-z0-9_]+$",
@@ -51,6 +51,21 @@
             "pattern": "^tsg_[a-z0-9]{16,64}$"
           },
           "record": { "$ref": "transcript-segment.schema.json" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "record_type": { "const": "visual_candidate" } },
+        "required": ["record_type"]
+      },
+      "then": {
+        "properties": {
+          "key": {
+            "description": "The record's candidate_id.",
+            "pattern": "^vcd_[a-z0-9]{16,64}$"
+          },
+          "record": { "$ref": "visual-candidate.schema.json" }
         }
       }
     }
