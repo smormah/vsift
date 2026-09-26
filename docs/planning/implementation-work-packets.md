@@ -84,7 +84,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P10 — Recovery integration | Stage checkpoints, operation-key handling, interrupted-job discovery/resume, cancellation/commit ordering and retry policy; Ubuntu/ext4 durable publication qualification | P03/P05/P07/P08/P09 | X-01..06/X-09/X-10, S-07/S-08; owned OS/storage crash campaign demonstrates no lost acknowledged durable evidence before enablement |
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualifies only after P10 durable evidence; repeated external-delivery simulation passes |
 | P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic |
-| P13 — Distribution and managed installation | Native artifacts and thin npm launcher; architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target | P06/P11/P12 | Fresh OS install without Rust; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02 |
+| P13 — Distribution and managed installation | Native artifacts and thin npm launcher; architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target. Human-readable terminal output for every command (ADR 0008; the readable terminal text of `cli-v1.md`), assigned 2026-09-26 | P06/P11/P12 | Fresh OS install without Rust; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02 |
 | P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
 
 ### P00/P03 feasibility decisions
@@ -158,6 +158,12 @@ not autonomously edit the investigated codebase; the user's coding assistant own
 any separately authorized code changes.
 
 ### P13 launcher boundary
+
+2026-09-26 (maintainer, with ADR 0019's decisions): human-readable terminal output
+moves into P13. ADR 0008 and `docs/contracts/cli-v1.md` promise readable terminal text
+without `--json`, while most commands print pretty JSON today; P13 delivers the
+readable presentation for every command with its user documentation. The JSON
+contracts are unchanged, and no requirement mapping changes.
 
 Keep the launcher tiny and typed if TypeScript is used. It only selects the correct
 native artifact, forwards arguments/signals/stdin/out/err and propagates status.

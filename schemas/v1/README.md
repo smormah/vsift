@@ -69,6 +69,12 @@ These files are the machine-readable public v1 boundary:
   bundle's `visual_index_record` artifact: one revision of the visual index with every
   recorded window and candidate, as stored (P08). A storage record, not a response:
   its `schema_version` is the integer record version `1`;
+- `bundle-evidence-record.schema.json` — the content of a session or retained bundle's
+  `evidence_record` artifact: the lineage of one evidence call (request key and
+  parameters, selections with requested and actual time, items with their media
+  digests, provider fingerprint and source check, and the partial reason), as stored
+  (P09 PR 2). A storage record, not a response: its `schema_version` is the integer
+  record version `1`; it never holds a path;
 - `transcript-segment.schema.json` — one transcript segment, the first published
   evidence record (ADR 0016): self-describing identities, normalized source time,
   sanitized text, confidence, alignment and cue provenance (P07). A local-ASR segment
@@ -140,6 +146,9 @@ yet, so it is `partial` with both gaps. All three are checked by `vsift-contract
 `candidates_contract`, the stream byte for byte. `bundle-visual-index-record.json` is
 F02's stored index record, checked by `vsift-infrastructure`'s `visual_index_store`
 tests, which also validate the records of a real retained bundle.
+`bundle-evidence-record.json` is the record of a `frame get` at 1.025 s over a fake
+20 fps stream, checked by `vsift-infrastructure`'s `evidence_store` tests, which also
+validate every operation's record and the evidence of retained bundles.
 `storage-not-private.json` is the `setup configure` failure an agent receives when
 the per-user configuration folder already exists and other accounts can access it;
 it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows

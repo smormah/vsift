@@ -129,6 +129,22 @@ doc = false
 bench = false
 required-features = ["libfuzzer"]
 
+[[bin]]
+name = "evidence_record"
+path = "fuzz_targets/evidence_record.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "crop_rect"
+path = "fuzz_targets/crop_rect.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
 # The workspace lints, repeated because this package cannot inherit them.
 [lints.rust]
 missing_docs = "warn"

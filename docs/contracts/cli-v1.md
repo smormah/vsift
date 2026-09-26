@@ -77,6 +77,11 @@ verifies the private snapshot; it never moves or deletes the original. An
 interrupted export can leave an incomplete private selected directory, which
 `bundle validate` rejects. The retained lifecycle does not upgrade the
 qualified publication guarantee; see [ADR 0013](../decisions/0013-retained-bundle-publication.md).
+Since P09 PR 2 a bundle may also carry `evidence_record` artifacts
+([`bundle-evidence-record.schema.json`](../../schemas/v1/bundle-evidence-record.schema.json))
+with their `frame_png` and `audio_wav` files; `bundle validate` decodes each record
+strictly and checks every item against its file (ADR 0013 note of 2026-09-26). The
+evidence commands that write them arrive in P09 PR 3 and PR 4.
 
 ### P07 supplied transcripts
 

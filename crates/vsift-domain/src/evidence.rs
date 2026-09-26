@@ -1,9 +1,11 @@
-//! Evidence metadata that preserves uncertainty and provider provenance, and
-//! the pure navigation rules that choose which frames a request names.
+//! Evidence metadata that preserves uncertainty and provider provenance, the
+//! pure navigation rules that choose which frames a request names, and the
+//! evidence items and lineage records of P09.
 
 use std::{error::Error, fmt};
 
 mod navigation;
+mod record;
 
 pub use navigation::{
     BurstCount, BurstExtent, BurstPlan, BurstRange, FrameListing, FrameSelection,
@@ -11,6 +13,13 @@ pub use navigation::{
     MAX_BURST_RANGE_MICROS, MAX_FRAME_TOLERANCE_MICROS, MAX_LISTED_FRAMES, MAX_NEIGHBOUR_COUNT,
     NavigationError, NeighbourCount, NeighbourPlan, NeighbourStop, SelectedFrame, plan_burst,
     plan_neighbours, select_frame,
+};
+pub use record::{
+    AUDIO_CLIP_SAMPLE_RATE, AudioRange, CropRegion, EvidenceDetail, EvidenceItem,
+    EvidenceItemParts, EvidenceMedia, EvidenceMediaKind, EvidenceOperation, EvidenceProfile,
+    EvidenceRecord, EvidenceRecordError, EvidenceRecordParts, EvidenceRequest, EvidenceSelection,
+    EvidenceSubject, FrameRef, MAX_AUDIO_CLIP_MICROS, MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS,
+    PartialReason, SelectionRole, SourceCheck, TimeBase,
 };
 
 const MAX_SPEAKER_LABEL_BYTES: usize = 128;

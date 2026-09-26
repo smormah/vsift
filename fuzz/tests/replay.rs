@@ -26,18 +26,21 @@ use vsift_application::{
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CursorToken, FrameDimensions, ListingTail,
-    MediaTime, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange, VISUAL_BLOCKS,
-    VISUAL_FRAME_BYTES, VisualHash, VisualIndexProfile, VisualSample, VisualWindow, merge_chunks,
-    plan_chunks, validate_chunk_output,
+    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CropRect, CursorToken, FrameDimensions,
+    ListingTail, MediaTime, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange,
+    VISUAL_BLOCKS, VISUAL_FRAME_BYTES, VisualHash, VisualIndexProfile, VisualSample, VisualWindow,
+    merge_chunks, plan_chunks, validate_chunk_output,
 };
-use vsift_fuzz::{Target, VISUAL_FUZZ_SESSION, png_sequence_input, visual_samples_input};
+use vsift_fuzz::{
+    CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, Target, VISUAL_FUZZ_SESSION,
+    png_sequence_input, visual_samples_input,
+};
 use vsift_infrastructure::{
     FrameListingWindow, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
-    decode_transcript_record, decode_visual_index_record, encode_transcript_record,
-    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
-    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
-    parse_whisper_full_json,
+    decode_evidence_record, decode_transcript_record, decode_visual_index_record,
+    encode_transcript_record, encode_visual_index_record, parse_ashowinfo_start,
+    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_png_sequence,
+    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -60,6 +63,14 @@ enum Origin {
     /// A `png_sequence` input: this many copies of the recorded 80x80 F01
     /// crop PNG ([`RECORDED_CROP`]), expected as 80x80 images.
     RecordedCrops(u8),
+    /// A `crop_rect` input: an outer rectangle that appears verbatim in the
+    /// first file, a line feed, and an inner one that appears in the second.
+    CropPair {
+        outer: &'static str,
+        outer_in: &'static str,
+        inner: &'static str,
+        inner_in: &'static str,
+    },
     /// A `search_query` input: a query that appears verbatim in the first
     /// file, a line feed, and segment text that appears verbatim in the second.
     SearchPair {
@@ -87,7 +98,45 @@ const RECORDED_CROP: &str =
     "crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/F01-crop-560-320-80x80.png";
 const RECORDED_CROP_SIZE: u16 = 80;
 
+/// The domain file whose crop tests the `crop_rect` seeds quote.
+const CROP_TESTS: &str = "crates/vsift-domain/src/timeline.rs";
+
 const SEEDS: &[Seed] = &[
+    seed(
+        Target::EvidenceRecord,
+        "bundle-evidence-record.json",
+        Origin::Copy("schemas/v1/examples"),
+    ),
+    seed(
+        Target::CropRect,
+        "whole-frame-then-corner.txt",
+        Origin::CropPair {
+            outer: "0,0,1440,900",
+            outer_in: CROP_TESTS,
+            inner: "1439,899,1,1",
+            inner_in: CROP_TESTS,
+        },
+    ),
+    seed(
+        Target::CropRect,
+        "g18-cell-then-empty.txt",
+        Origin::CropPair {
+            outer: "850,420,280,70",
+            outer_in: CROP_TESTS,
+            inner: "0,0,0,10",
+            inner_in: CROP_TESTS,
+        },
+    ),
+    seed(
+        Target::CropRect,
+        "leading-zero-then-outside.txt",
+        Origin::CropPair {
+            outer: "01,2,3,4",
+            outer_in: CROP_TESTS,
+            inner: "1,0,1440,900",
+            inner_in: CROP_TESTS,
+        },
+    ),
     seed(
         Target::TranscriptSrt,
         "F10.srt",
@@ -378,6 +427,8 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::FrameListing, "forged-title-listing-0-1000000.txt"),
         (Target::PngSequence, "F01-crop-x1.bin"),
         (Target::PngSequence, "F01-crop-x2.bin"),
+        (Target::EvidenceRecord, "bundle-evidence-record.json"),
+        (Target::CropRect, "whole-frame-then-corner.txt"),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
@@ -450,6 +501,20 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
             .is_ok(),
             _ => false,
         },
+        Target::EvidenceRecord => {
+            decode_evidence_record(data, &SessionId::parse(EVIDENCE_FUZZ_SESSION)?).is_ok()
+        }
+        // The outer and the inner rectangle are both accepted.
+        Target::CropRect => {
+            let (outer, inner) = std::str::from_utf8(data)?
+                .split_once('\n')
+                .ok_or("no line feed")?;
+            let frame = FrameDimensions::new(CROP_FRAME_WIDTH, CROP_FRAME_HEIGHT)?;
+            CropRect::parse(outer, frame).is_ok_and(|outer| {
+                CropRect::parse(inner, outer.dimensions())
+                    .is_ok_and(|inner| outer.compose(inner).is_ok())
+            })
+        }
     })
 }
 
@@ -488,6 +553,16 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
             | Origin::RecordedShowinfo(_)
             | Origin::RecordedVisualIndex(_) => true,
             Origin::RecordedCrops(count) => data == crops_seed(count)?,
+            Origin::CropPair {
+                outer,
+                outer_in,
+                inner,
+                inner_in,
+            } => {
+                data == format!("{outer}\n{inner}").as_bytes()
+                    && fs::read_to_string(repository(outer_in))?.contains(outer)
+                    && fs::read_to_string(repository(inner_in))?.contains(inner)
+            }
             Origin::SearchPair {
                 query,
                 query_in,
@@ -713,6 +788,7 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
             | Origin::RecordedCrops(_)
+            | Origin::CropPair { .. }
             | Origin::SearchPair { .. } => continue,
         };
         let path = seed_directory(seed.target).join(seed.file);

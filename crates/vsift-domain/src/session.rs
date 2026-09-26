@@ -11,7 +11,8 @@ pub enum SessionPhase {
     Closed,
 }
 
-/// Media evidence forms that P04 can publish within a P05 session.
+/// Artifact kinds a session publishes: P04 media evidence, P07 transcript
+/// records, P08 visual-index records and P09 evidence clips and records.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionArtifactKind {
     /// A source-grounded extracted frame encoded as PNG.
@@ -23,6 +24,12 @@ pub enum SessionArtifactKind {
     /// One immutable visual-candidate index revision, stored as versioned
     /// JSON (P08). Each revision is a superset of the one before it.
     VisualIndexRecord,
+    /// An evidence audio clip: a WAV file of 16 kHz mono signed 16-bit PCM,
+    /// at most 30 s (P09, ADR 0019 D5).
+    AudioWav,
+    /// The lineage of one evidence call: its request, the frames or clip it
+    /// selected and the items it extracted, stored as versioned JSON (P09).
+    EvidenceRecord,
 }
 
 impl SessionArtifactKind {
@@ -34,6 +41,8 @@ impl SessionArtifactKind {
             Self::AudioPcm => "audio_pcm",
             Self::TranscriptRecord => "transcript_record",
             Self::VisualIndexRecord => "visual_index_record",
+            Self::AudioWav => "audio_wav",
+            Self::EvidenceRecord => "evidence_record",
         }
     }
 
@@ -43,7 +52,8 @@ impl SessionArtifactKind {
         match self {
             Self::FramePng => "png",
             Self::AudioPcm => "pcm",
-            Self::TranscriptRecord | Self::VisualIndexRecord => "json",
+            Self::AudioWav => "wav",
+            Self::TranscriptRecord | Self::VisualIndexRecord | Self::EvidenceRecord => "json",
         }
     }
 }

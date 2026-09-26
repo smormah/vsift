@@ -161,3 +161,27 @@ invariant that indented copies of every line never change a result. Regression t
 (real `FFmpeg` 9.0 output of a clip with a forged title), and the opt-in
 `forged_metadata_cannot_move_a_reported_time`. No failure code changed. See
 [ADR 0019](0019-evidence-navigation.md).
+
+## 2026-09-26 implementation note: evidence calls compare the copy's identity across calls (ADR 0019 D1)
+
+Read-only evidence calls (P09) bind the copy with `BoundSource::open_for_evidence`.
+When the session's committed manifest records a verified identity of the copy (a
+digest of its size, modification time, device, file index and platform fields: Unix
+mode, owner and status-change time; Windows creation time and attributes) and the copy
+still has exactly that identity, its bytes are not hashed. Otherwise it is hashed in
+full and must equal the committed source, and the identity it then has is committed
+with the call's evidence. Provider calls compare the identity as before, and a last
+identity comparison, not a full hash, precedes the commit.
+
+This extends the residual accepted above for the bracketed binding across calls: a
+same-user actor who rewrites the copy in place between two evidence calls and restores
+every identity field is not detected by the later call. On Unix the kernel-set
+status-change time makes that impossible for an unprivileged process; on Windows,
+which has no such field, a rewrite that restores the modification time is caught only
+by a full hash (a later call whose identity differs, or any mutating operation, which
+still hashes). The recorded identity lives in the private session manifest, which
+only the same user can write. Mutating and committing operations (ingest,
+retranscription, candidates) keep their full-hash policy. Regression tests:
+`evidence_calls_hash_the_copy_only_when_its_identity_is_new_or_changed` (unit, with the
+test-only hash counter) and the engine's
+`a_modified_source_copy_is_an_integrity_failure_and_nothing_is_committed`.

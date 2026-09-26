@@ -4,6 +4,8 @@
 
 mod archive_inventory;
 mod bounded_tar_inventory;
+mod evidence_media;
+mod evidence_record;
 mod executable;
 mod ffmpeg_media;
 mod file_lock;
@@ -44,6 +46,11 @@ pub use bounded_tar_inventory::{
     MAX_TAR_STREAM_BYTES, ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory,
     inspect_tar_selected_files, stage_tar_selected_files,
 };
+pub use evidence_media::{FfmpegAudioExtractor, FfmpegFrameExtractor};
+pub use evidence_record::{
+    MAX_AUDIO_WAV_BYTES, MAX_EVIDENCE_ARTIFACTS, MAX_EVIDENCE_RECORD_BYTES, decode_evidence_record,
+    encode_evidence_record,
+};
 pub use executable::{
     ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
 };
@@ -58,9 +65,10 @@ pub use ffmpeg_media::{
     parse_png_sequence, parse_visual_samples, wav_from_pcm_s16le_mono,
 };
 pub use filesystem_session_store::{
-    BundleSourcePolicy, BundleStatus, CleanOutcome, ExclusiveSessionLifetimeHold,
-    FilesystemAdmissionPermit, FilesystemSessionStore, SessionIndexPage, SessionReadHold,
-    SessionRegistration, SessionStatus, SessionStoreOpenError, SessionWorkDirectory,
+    BundleSourcePolicy, BundleStatus, CleanOutcome, EvidenceInventory, EvidenceMediaFile,
+    ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemSessionStore,
+    SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus, SessionStoreOpenError,
+    SessionWorkDirectory,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
@@ -107,7 +115,7 @@ pub use random_identifiers::RandomIdentifierSource;
 pub use session_root::{
     SessionRootError, SessionRootProvisioning, open_session_root, platform_session_root,
 };
-pub use source_binding::{BoundSource, SourceBinding};
+pub use source_binding::{BoundSource, EvidenceSourceCheck, SourceBinding, VerifiedSourceIdentity};
 pub use source_duration_probe::FfprobeSourceDuration;
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,

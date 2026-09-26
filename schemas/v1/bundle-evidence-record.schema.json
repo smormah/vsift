@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/bundle-evidence-record.schema.json",
+  "title": "VSift retained bundle evidence record v1",
+  "description": "The content of a session or retained bundle artifact whose kind is evidence_record (P09, ADR 0019): the lineage of one evidence call (frame get, frame neighbours, frame burst, crop or audio), stored as compact UTF-8 JSON and named artifact-<sha256>.json. This is a storage record, not an operation response: schema_version is the integer record version and format names the record. It holds the call's request key and canonical parameters, which item each requested time resolved to with requested and actual time and their signed delta, the items (stream, exact timestamp and time base, crop region or clipped audio range, the digest and size of the frame_png or audio_wav artifact that holds the pixels or samples, the provider fingerprint and how the call checked the source copy) and why the call stopped short, if it did. It never holds an operation identifier, a path or media bytes. Times are integer microseconds on the normalized source timeline. A session holds at most 160 evidence artifacts (images, clips and records together) and a record is at most 256 KiB. bundle validate decodes every record strictly (unknown fields, values and newer versions are rejected), re-derives the request key and every item identity, checks that each item's file is in the bundle with the item's kind, size and digest, that an image's PNG header states the item's dimensions and a clip's WAV header 16 kHz mono signed 16-bit PCM, that every crop parent and neighbours anchor is an item of the bundle, and that items with one identity agree on everything but their source check. This schema describes its shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "format",
+    "request_key",
+    "session_id",
+    "source_id",
+    "profile",
+    "tool_fingerprint",
+    "request",
+    "selections",
+    "detail",
+    "items",
+    "partial_reason"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "format": { "const": "vsift.evidence_record" },
+    "request_key": {
+      "description": "Digest of the session, source, stream selector, operation, canonical parameters, adapter profile and provider fingerprint. A later call with the same key and a known fingerprint is answered from a complete record without running a provider.",
+      "type": "string",
+      "pattern": "^opk_sha256_[0-9a-f]{64}$"
+    },
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "profile": { "const": "p09-r0-v1" },
+    "tool_fingerprint": { "$ref": "#/$defs/fingerprint" },
+    "request": {
+      "description": "The canonical request, named by its operation.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frame_get"],
+          "properties": {
+            "frame_get": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["at_us", "policy", "tolerance_us", "candidate_id"],
+              "properties": {
+                "at_us": { "type": "integer", "minimum": 0 },
+                "policy": { "enum": ["at_or_after", "displayed_at"] },
+                "tolerance_us": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+                "candidate_id": {
+                  "description": "The visual candidate the frame was asked for by; its frame is then at_or_after with tolerance zero.",
+                  "oneOf": [
+                    { "type": "null" },
+                    { "type": "string", "pattern": "^vcd_[a-z0-9]{16,64}$" }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frame_neighbours"],
+          "properties": {
+            "frame_neighbours": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["anchor_evidence_id", "count"],
+              "properties": {
+                "anchor_evidence_id": { "$ref": "#/$defs/evidence_id" },
+                "count": { "type": "integer", "minimum": 1, "maximum": 20 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frame_burst"],
+          "properties": {
+            "frame_burst": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from_us", "to_us", "max_frames"],
+              "properties": {
+                "from_us": { "type": "integer", "minimum": 0 },
+                "to_us": { "type": "integer", "minimum": 1 },
+                "max_frames": { "type": "integer", "minimum": 1, "maximum": 100 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["crop"],
+          "properties": {
+            "crop": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["parent_evidence_id", "rect"],
+              "properties": {
+                "parent_evidence_id": { "$ref": "#/$defs/evidence_id" },
+                "rect": {
+                  "description": "The rectangle in the parent image's pixels.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["x", "y", "width", "height"],
+                  "properties": {
+                    "x": { "$ref": "#/$defs/u32" },
+                    "y": { "$ref": "#/$defs/u32" },
+                    "width": { "$ref": "#/$defs/positive_u32" },
+                    "height": { "$ref": "#/$defs/positive_u32" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["audio"],
+          "properties": {
+            "audio": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from_us", "to_us"],
+              "properties": {
+                "from_us": { "type": "integer", "minimum": 0 },
+                "to_us": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "selections": {
+      "description": "Which item each requested time resolved to. requested_us is the time the role refers to: the requested time (frame_get), a burst target (target), the anchor's time (before and after) or the parent frame's time (crop), and a clip's requested start (audio).",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "evidence_id", "requested_us", "actual_us", "delta_us"],
+        "properties": {
+          "role": { "enum": ["requested", "before", "after", "target"] },
+          "evidence_id": { "$ref": "#/$defs/evidence_id" },
+          "requested_us": { "type": "integer", "minimum": 0 },
+          "actual_us": { "type": "integer", "minimum": 0 },
+          "delta_us": { "description": "actual_us - requested_us.", "type": "integer" }
+        }
+      }
+    },
+    "detail": {
+      "oneOf": [
+        { "description": "A single frame or crop.", "const": "single" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["neighbours"],
+          "properties": {
+            "neighbours": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["before_stop", "after_stop"],
+              "properties": {
+                "before_stop": { "$ref": "#/$defs/side_stop" },
+                "after_stop": { "$ref": "#/$defs/side_stop" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["burst"],
+          "properties": {
+            "burst": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["planned", "extent", "targets", "distinct"],
+              "properties": {
+                "planned": { "$ref": "#/$defs/range" },
+                "extent": { "enum": ["requested", "clipped_at_end_of_stream"] },
+                "targets": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "distinct": {
+                  "description": "Distinct frames the even targets named; fewer than targets when targets shared a frame.",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["audio"],
+          "properties": {
+            "audio": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["range_clipped"],
+              "properties": {
+                "range_clipped": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "partial_reason": {
+      "description": "Why the call returned fewer items than its request named; null for a complete record. Only complete records are reused.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "enum": [
+            "frame_budget",
+            "pixel_budget",
+            "byte_budget",
+            "session_evidence_budget",
+            "deadline_exceeded",
+            "cancelled"
+          ]
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "positive_u32": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" },
+    "fingerprint": {
+      "description": "The media provider's fingerprint (executables' identity, adapter and policy), or null when it could not be computed; then the item identity also digests the media and nothing is reused.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      ]
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_us", "end_us"],
+      "properties": {
+        "start_us": { "type": "integer", "minimum": 0 },
+        "end_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "side_stop": {
+      "description": "Why a side holds fewer frames than asked, or null.",
+      "oneOf": [
+        { "type": "null" },
+        { "enum": ["start_of_stream", "end_of_stream", "search_window"] }
+      ]
+    },
+    "frame": {
+      "description": "One exactly identified displayed frame: its stream timestamp in the stream's time base, its normalized time and the displayed frame's size.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time_base_numerator", "time_base_denominator", "pts", "time_us", "width", "height"],
+      "properties": {
+        "time_base_numerator": { "$ref": "#/$defs/positive_u32" },
+        "time_base_denominator": { "$ref": "#/$defs/positive_u32" },
+        "pts": { "type": "integer" },
+        "time_us": { "type": "integer", "minimum": 0 },
+        "width": { "$ref": "#/$defs/positive_u32" },
+        "height": { "$ref": "#/$defs/positive_u32" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "stream_index", "subject", "media", "tool_fingerprint", "source_check"],
+      "properties": {
+        "evidence_id": {
+          "description": "Derived from the facts that fix the pixels or samples: session, source, stream, profile, provider fingerprint, exact timestamp and time base, and the crop region or clipped range. Requests that resolve to one frame share one item.",
+          "$ref": "#/$defs/evidence_id"
+        },
+        "stream_index": { "$ref": "#/$defs/u32" },
+        "subject": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["frame"],
+              "properties": { "frame": { "$ref": "#/$defs/frame" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["crop"],
+              "properties": {
+                "crop": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["frame", "region"],
+                  "properties": {
+                    "frame": { "$ref": "#/$defs/frame" },
+                    "region": {
+                      "description": "x and y in the parent image's pixels, frame_x and frame_y in the displayed source frame's; width and height are the crop's size in both.",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["parent_evidence_id", "x", "y", "width", "height", "frame_x", "frame_y"],
+                      "properties": {
+                        "parent_evidence_id": { "$ref": "#/$defs/evidence_id" },
+                        "x": { "$ref": "#/$defs/u32" },
+                        "y": { "$ref": "#/$defs/u32" },
+                        "width": { "$ref": "#/$defs/positive_u32" },
+                        "height": { "$ref": "#/$defs/positive_u32" },
+                        "frame_x": { "$ref": "#/$defs/u32" },
+                        "frame_y": { "$ref": "#/$defs/u32" }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["audio"],
+              "properties": {
+                "audio": {
+                  "description": "A clip of the clipped range; actual_start_us is the first decoded sample's time.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["start_us", "end_us", "actual_start_us", "sample_rate", "channels", "sample_format"],
+                  "properties": {
+                    "start_us": { "type": "integer", "minimum": 0 },
+                    "end_us": { "type": "integer", "minimum": 1 },
+                    "actual_start_us": { "type": "integer", "minimum": 0 },
+                    "sample_rate": { "const": 16000 },
+                    "channels": { "const": 1 },
+                    "sample_format": { "const": "s16le" }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "media": {
+          "description": "The session artifact holding the pixels (frame_png, at most 64 MiB) or samples (audio_wav, at most 1 MiB).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "sha256", "bytes"],
+          "properties": {
+            "kind": { "enum": ["frame_png", "audio_wav"] },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "bytes": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+          }
+        },
+        "tool_fingerprint": { "$ref": "#/$defs/fingerprint" },
+        "source_check": {
+          "description": "How the call that carries this copy of the item checked the session's source copy: identity (its on-disk identity matched the one recorded after an earlier full hash) or full_hash (ADR 0019 D1).",
+          "enum": ["identity", "full_hash"]
+        }
+      }
+    }
+  }
+}

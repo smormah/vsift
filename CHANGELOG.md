@@ -8,8 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- The evidence core of evidence navigation (P09 PR 2, in the engine library, not yet
+  reachable from the CLI; ADR 0019, now accepted with decisions D1-D7): exact frames at
+  a time or of a visual candidate, the consecutive frames around one, an even burst
+  over up to 60 seconds, a crop of a frame or of a crop (in source pixels) and a WAV
+  clip of up to 30 seconds. Each call commits its images or clip and one
+  `evidence_record` (a new strict, versioned session artifact with its published
+  bundle schema) that says which frame each requested time resolved to, with the
+  requested and actual time and their difference. Asking again for the same thing
+  returns the committed evidence without running FFmpeg; two requests that land on the
+  same frame share one item and one file; other tools are a new identity. Calls are
+  bounded (100 frames, 200 megapixels, 256 MiB, 120 seconds) and return what they
+  extracted, marked partial, when a bound stops them; a session holds at most 160
+  evidence files and records. After one full hash, later evidence calls check the
+  source copy by its file identity instead of hashing it again. `bundle validate`
+  checks every evidence record against its images and clips. New fuzz targets
+  `evidence_record` and `crop_rect`.
 - Groundwork for evidence navigation (P09 PR 1, not yet reachable from the CLI; ADR
-  0019, proposed): the media adapter can list a stretch of a video's actual frame
+  0019): the media adapter can list a stretch of a video's actual frame
   times, extract up to eight frames by their exact timestamps as full-resolution PNG
   images, crop a rectangle of a frame in its displayed orientation, and cut a WAV clip
   of up to 30 seconds (16 kHz mono) that says when its first sample really starts.
