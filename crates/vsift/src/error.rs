@@ -9,14 +9,17 @@
 use std::{error::Error, fmt};
 
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError,
+    AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError, EvidenceMediaError,
     IdentifierGenerationError, LocalAsrVerificationFailure, MediaToolFailure,
     MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
     SourceProbeError, TranscriptBuildError, TranscriptQueryError, VisualExtensionStop,
     VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
-use vsift_domain::{FailureCode, RuntimeDependency, SearchQueryRejection, TranscriptImportError};
+use vsift_domain::{
+    FailureCode, FrameSelectionError, NavigationError, RuntimeDependency, SearchQueryRejection,
+    TranscriptImportError,
+};
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
     SessionStoreOpenError, UserDependencyConfigError,
@@ -118,6 +121,32 @@ pub enum EngineError {
     VisualAnalysisStopped(VisualExtensionStop),
     /// Building the visual index failed; nothing was committed.
     VisualIndexBuild(VisualIndexBuildError),
+    /// No displayed frame satisfies the requested time, policy and tolerance
+    /// (ADR 0019); nothing was committed.
+    FrameNotSelected(FrameSelectionError),
+    /// The session holds no evidence item with the requested identity.
+    EvidenceNotFound,
+    /// The parent evidence is of a kind the operation cannot use: neighbours
+    /// of anything but a whole frame, or a crop of an audio clip.
+    EvidenceKindMismatch,
+    /// A crop rectangle is empty or not contained by its parent image.
+    CropOutsideParent,
+    /// A burst range is longer than sixty seconds or an audio range longer
+    /// than thirty.
+    NavigationRangeTooLong,
+    /// A frame tolerance, neighbour count or burst count is out of range.
+    InvalidNavigation(NavigationError),
+    /// The session's visual index holds no candidate with the requested
+    /// identity.
+    CandidateNotFound,
+    /// The session has no room left for evidence: its 160 evidence
+    /// artifacts, 256 artifacts or 10 GiB are used (ADR 0019 D4). Retain the
+    /// session and open a new one to continue.
+    EvidenceBudgetExhausted,
+    /// A media provider run for evidence failed with nothing extracted.
+    EvidenceMedia(EvidenceMediaError),
+    /// An evidence record could not be assembled; an internal fault.
+    EvidenceAssembly,
 }
 
 impl EngineError {
@@ -164,6 +193,13 @@ impl EngineError {
             | Self::NoVideoStream
             | Self::CandidateQuery(_)
             | Self::CandidateCursorWithoutIndex
+            | Self::FrameNotSelected(_)
+            | Self::EvidenceNotFound
+            | Self::EvidenceKindMismatch
+            | Self::CropOutsideParent
+            | Self::NavigationRangeTooLong
+            | Self::InvalidNavigation(_)
+            | Self::CandidateNotFound
             | Self::Executable(
                 ExecutableRejection::NotAbsolute
                 | ExecutableRejection::NotRegularFile
@@ -183,7 +219,10 @@ impl EngineError {
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
             | Self::Identifier(_)
-            | Self::TranscriptAssembly(_) => FailureCode::Internal,
+            | Self::TranscriptAssembly(_)
+            | Self::EvidenceAssembly => FailureCode::Internal,
+            Self::EvidenceBudgetExhausted => FailureCode::ResourceLimit,
+            Self::EvidenceMedia(error) => evidence_media_failure_code(*error),
             Self::MediaToolVerificationFailed(failure) => {
                 media_tool_verification_failure_code(failure.failure)
             }
@@ -205,6 +244,30 @@ const fn visual_stop_failure_code(stop: VisualExtensionStop) -> FailureCode {
         VisualExtensionStop::Cancelled { .. } => FailureCode::Cancelled,
         // A window budget is only reached after recording a window.
         VisualExtensionStop::WindowLimit => FailureCode::ResourceLimit,
+    }
+}
+
+/// Public code for an evidence provider run that failed with nothing
+/// extracted (ADR 0019).
+///
+/// A changed copy is an integrity failure; a provider that could not run,
+/// or that did not extract a frame it had listed, is no working capability;
+/// media the provider rejects is the source's; transient stops keep their
+/// retryable codes; a request the adapter rejected is an internal fault.
+pub(crate) const fn evidence_media_failure_code(error: EvidenceMediaError) -> FailureCode {
+    match error {
+        EvidenceMediaError::Busy => FailureCode::Busy,
+        EvidenceMediaError::Deadline => FailureCode::DeadlineExceeded,
+        EvidenceMediaError::Cancelled => FailureCode::Cancelled,
+        EvidenceMediaError::SourceChanged => FailureCode::IntegrityFailure,
+        EvidenceMediaError::FrameNotFound | EvidenceMediaError::Unavailable => {
+            FailureCode::MissingCapability
+        }
+        EvidenceMediaError::NoDecodedAudio | EvidenceMediaError::Undecodable => {
+            FailureCode::InvalidSource
+        }
+        EvidenceMediaError::ResourceLimit => FailureCode::ResourceLimit,
+        EvidenceMediaError::Invalid => FailureCode::Internal,
     }
 }
 
@@ -487,6 +550,29 @@ impl fmt::Display for EngineError {
                 }
             },
             Self::VisualIndexBuild(error) => error.fmt(formatter),
+            Self::FrameNotSelected(error) => error.fmt(formatter),
+            Self::EvidenceNotFound => {
+                formatter.write_str("the session has no evidence item with that identity")
+            }
+            Self::EvidenceKindMismatch => {
+                formatter.write_str("the parent evidence is of a kind this operation cannot use")
+            }
+            Self::CropOutsideParent => {
+                formatter.write_str("the crop rectangle is not inside the parent image")
+            }
+            Self::NavigationRangeTooLong => formatter
+                .write_str("the range is too long: at most 60 s for a burst and 30 s for audio"),
+            Self::InvalidNavigation(error) => error.fmt(formatter),
+            Self::CandidateNotFound => {
+                formatter.write_str("the session has no visual candidate with that identity")
+            }
+            Self::EvidenceBudgetExhausted => formatter.write_str(
+                "the session has no room for more evidence; retain it and open a new session",
+            ),
+            Self::EvidenceMedia(error) => error.fmt(formatter),
+            Self::EvidenceAssembly => {
+                formatter.write_str("the evidence record could not be assembled")
+            }
         }
     }
 }
@@ -510,7 +596,17 @@ impl Error for EngineError {
             Self::SearchQueryRejected(error) => Some(error),
             Self::CandidateQuery(error) => Some(error),
             Self::VisualIndexBuild(error) => Some(error),
-            Self::VisualToolUnavailable(_)
+            Self::FrameNotSelected(error) => Some(error),
+            Self::InvalidNavigation(error) => Some(error),
+            Self::EvidenceMedia(error) => Some(error),
+            Self::EvidenceNotFound
+            | Self::EvidenceKindMismatch
+            | Self::CropOutsideParent
+            | Self::NavigationRangeTooLong
+            | Self::CandidateNotFound
+            | Self::EvidenceBudgetExhausted
+            | Self::EvidenceAssembly
+            | Self::VisualToolUnavailable(_)
             | Self::NoVideoStream
             | Self::UnsupportedVideoStream
             | Self::CandidateCursorWithoutIndex
@@ -1096,6 +1192,80 @@ mod tests {
             ),
         ] {
             assert_eq!(error.failure_code(), code);
+        }
+    }
+
+    /// ADR 0019: evidence failures reuse existing public codes.
+    #[test]
+    fn evidence_failures_keep_existing_public_codes() {
+        use vsift_application::EvidenceMediaError;
+        for (error, code) in [
+            (
+                EngineError::FrameNotSelected(vsift_domain::FrameSelectionError::AtOrAfterEnd),
+                FailureCode::InvalidArgument,
+            ),
+            (EngineError::EvidenceNotFound, FailureCode::InvalidArgument),
+            (
+                EngineError::EvidenceKindMismatch,
+                FailureCode::InvalidArgument,
+            ),
+            (EngineError::CropOutsideParent, FailureCode::InvalidArgument),
+            (
+                EngineError::NavigationRangeTooLong,
+                FailureCode::InvalidArgument,
+            ),
+            (
+                EngineError::InvalidNavigation(vsift_domain::NavigationError::ToleranceTooLarge),
+                FailureCode::InvalidArgument,
+            ),
+            (EngineError::CandidateNotFound, FailureCode::InvalidArgument),
+            (
+                EngineError::EvidenceBudgetExhausted,
+                FailureCode::ResourceLimit,
+            ),
+            (EngineError::EvidenceAssembly, FailureCode::Internal),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::Busy),
+                FailureCode::Busy,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::Deadline),
+                FailureCode::DeadlineExceeded,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::Cancelled),
+                FailureCode::Cancelled,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::SourceChanged),
+                FailureCode::IntegrityFailure,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::FrameNotFound),
+                FailureCode::MissingCapability,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::Unavailable),
+                FailureCode::MissingCapability,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::NoDecodedAudio),
+                FailureCode::InvalidSource,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::Undecodable),
+                FailureCode::InvalidSource,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::ResourceLimit),
+                FailureCode::ResourceLimit,
+            ),
+            (
+                EngineError::EvidenceMedia(EvidenceMediaError::Invalid),
+                FailureCode::Internal,
+            ),
+        ] {
+            assert_eq!(error.failure_code(), code, "{error}");
         }
     }
 

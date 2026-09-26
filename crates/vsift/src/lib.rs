@@ -46,6 +46,12 @@
 //!   candidates of a source range, first analysing the range's missing 60 s
 //!   windows with `FFmpeg` (at most 30 per call), and reports which parts of
 //!   the range are not analysed or could not be.
+//! - **Evidence navigation (P09):** [`Engine::frame_get`] (a time or a visual
+//!   candidate), [`Engine::frame_neighbours`], [`Engine::frame_burst`],
+//!   [`Engine::crop`] and [`Engine::audio`] extract exact frames, their
+//!   neighbours, bursts, crops and WAV clips with lineage records; a repeated
+//!   request is answered from its committed record without running a
+//!   provider, and files are delivered as verified session artifact paths.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that
@@ -79,6 +85,7 @@ mod asr;
 mod candidates;
 mod engine;
 mod error;
+mod evidence;
 mod local_asr_check;
 mod search;
 mod sessions;
@@ -95,6 +102,11 @@ pub use engine::{
 pub use error::{
     EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError,
     UserConfigurationError,
+};
+pub use evidence::{
+    AudioClipRequest, CropEvidenceRequest, CropRectangle, DEFAULT_BURST_FRAMES,
+    DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
+    FrameNeighboursRequest, FrameTarget,
 };
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
@@ -126,6 +138,10 @@ pub use vsift_application::{
     CandidateQueryError, MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError,
     VisualSamplingError,
 };
+/// Evidence-navigation values that appear in this API (P09).
+pub use vsift_application::{
+    EvidenceMediaError, MAX_FRAMES_PER_CALL, MAX_IMAGE_BYTES_PER_CALL, MAX_PIXELS_PER_CALL,
+};
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
     AlignmentOrigin, CarriedFrom, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText,
@@ -143,6 +159,14 @@ pub use vsift_domain::{
     AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, ProviderChunkOutput,
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
     Sha256Hex,
+};
+/// Evidence-navigation values that appear in this API (P09).
+pub use vsift_domain::{
+    BurstExtent, CropRect, CropRegion, EvidenceDetail, EvidenceItem, EvidenceMedia,
+    EvidenceMediaKind, EvidenceOperation, EvidenceProfile, EvidenceRecord, EvidenceRequest,
+    EvidenceSelection, EvidenceSubject, FrameRef, FrameSelection, FrameSelectionError, FrameTiming,
+    FrameTolerance, NavigationError, NeighbourStop, OperationKey, PartialReason, SelectionRole,
+    SourceCheck, TimeBase,
 };
 /// Visual-candidate values that appear in this API.
 pub use vsift_domain::{
