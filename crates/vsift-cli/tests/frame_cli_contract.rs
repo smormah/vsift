@@ -100,6 +100,20 @@ impl Drop for OwnedRoot {
     }
 }
 
+/// The per-user VSift folder the binary derives from the test's `HOME`,
+/// `LOCALAPPDATA` or `XDG_CONFIG_HOME`: macOS keeps it under
+/// `Library/Application Support`.
+fn config_root(base: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        base.join("Library/Application Support/vsift")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        base.join("vsift")
+    }
+}
+
 fn repository(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -414,11 +428,7 @@ impl Harness {
     fn trust_tools(&self) -> TestResult {
         let first = json(&self.run(&["frame", "get", &self.session, "--at", "0", "--json"])?)?;
         assert_eq!(first["error"]["code"], "MISSING_CAPABILITY");
-        let state = self
-            .root
-            .user_base()
-            .join("vsift")
-            .join("media-tool-verification");
+        let state = config_root(&self.root.user_base()).join("media-tool-verification");
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         fs::write(
             state.join("verified-v1.json"),
