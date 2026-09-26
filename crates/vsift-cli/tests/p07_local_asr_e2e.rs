@@ -1017,7 +1017,6 @@ async fn local_asr_checkpoint() -> TestResult {
     };
     stages.push(json!({"name": "p07_local_asr", "status": overall}));
     let future_stages: Vec<_> = [
-        "p09_source_reinspection",
         "p10_recovery",
         "p11_worker_batch",
         "p12_agent_clients",

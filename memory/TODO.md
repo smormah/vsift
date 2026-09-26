@@ -7,28 +7,29 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 **P09 (evidence navigation) is in progress; the packet is not complete.** PR 1 (media
-primitives and SEC-17 hardening) is merged (`965617f`). **PR 2, the evidence core, is
-complete on branch `p09/evidence-core`** and awaits review. ADR 0019 is accepted with
-D1-D7 (maintainer, 2026-09-26). P00-P08 are complete.
+primitives and SEC-17 hardening) is merged (`965617f`). PR 2, the evidence core, is merged
+(`4aecdaa`, #163). **PR 3, the frame commands, is complete on branch
+`p09/frame-commands`** (on `main`) and awaits review. ADR 0019 is
+accepted with D1-D7. P00-P08 are complete.
 
-1. **PR 2 delivered (engine library only, not user-reachable):**
-   - `Engine::frame_get` (time or `--candidate`), `frame_neighbours`, `frame_burst`,
-     `crop`, `audio`; request keys `opk_sha256_`, item identities `evd_`, warm reuse
-     of complete records with every file re-verified and nothing written;
-   - `evidence_record` artifacts (strict codec, schema
-     `bundle-evidence-record.schema.json`), `audio_wav`, `publish_evidence`,
-     `read_evidence_records`, `verified_artifact_path`, the 160-artifact evidence
-     sub-budget, bundle validation of evidence against its files;
-   - D1 verified source identity (identity-only checks after one committed full
-     hash; items record `source_check`);
-   - per-call budgets with typed partial results; fuzz targets `evidence_record`,
-     `crop_rect`.
-2. **Next: PR 3** - `frame get`, `frame neighbours`, `frame burst` public in the CLI:
-   D6 grammar, `vsift-contract` wire types and command schemas, `files[]` with the
-   verified paths (D2), status `partial` with the reason, remediation text for
-   `RESOURCE_LIMIT` (retain the session, open a new one); V-01/V-07 at CLI level.
-3. **PR 4** - `crop` and `audio` public, the P09 qualification record (V-01, V-06..V-08
-   end to end, tiny-text crops), then the ledger completion follow-up.
+1. **PR 3 delivered (public CLI):**
+   - `frame get <ses> (--at <us> | --candidate <vcd>) [--select at-or-after|displayed-at]
+     [--tolerance-us 0..10000000]`, `frame neighbours <ses> <evd> [--count 1..20]`,
+     `frame burst <ses> --from --to [--max-frames 1..100]`, with `--json`, `--events jsonl`
+     and indented-JSON human output;
+   - `vsift-contract` `frame_response`/`FrameEvidenceStream`, record type
+     `frame_evidence`, schemas `frame-data`, `frame-stream-data`, `frame-evidence`,
+     frozen examples `frame-get.json`, `frame-get.events.jsonl`, `frame-neighbours.json`,
+     `frame-burst.partial.json`; `files[]` with verified absolute paths (D2);
+   - fixed remediation per typed failure (selection reasons, burst over 60 s ->
+     `candidates`, full session -> retain and reopen, missing tools, unknown ids);
+   - tests: `frame_contract`, `frame_cli_contract`, opt-in `p09_evidence_e2e` stages
+     `p09_frame_exact`, `p09_candidate_frames`, `p09_neighbours_burst`, `p09_reuse`
+     (passed on Windows 11, FFmpeg 9.0, 154 s debug).
+2. **Next: PR 4** - `crop <ses> <evd> --rect x,y,w,h` and `audio <ses> --from --to`
+   public, their schemas and examples, E2E stages `p09_crop`, `p09_audio`,
+   `p09_malformed`, `p09_stream_and_bundle`, `p09_perf`, and the qualification record
+   `docs/planning/p09-evidence-navigation.md`; then the ledger completion follow-up.
 
 ## Tracked issues
 
@@ -62,6 +63,7 @@ D1-D7 (maintainer, 2026-09-26). P00-P08 are complete.
 
 - Real-tool success paths are opt-in (`--ignored`): `p07_transcript_e2e`,
   `p07_local_asr_e2e`, `p07_asr_qualification`, `p08_search_e2e`, `p08_candidates_e2e`,
+  `p09_evidence_e2e`,
   `engine_retranscribe`, `p07_local_asr`, `p08_candidates_fixtures`,
   `p09_media_primitives`, `engine_evidence`, the S-11 measurements (`engine_search`,
   `engine_candidates`, `--release`) and

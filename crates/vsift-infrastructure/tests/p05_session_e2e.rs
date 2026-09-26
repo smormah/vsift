@@ -243,11 +243,6 @@ async fn real_media_session_checkpoint() -> TestResult {
         portable_status
     );
     let future_stages: Vec<_> = [
-        "p06_dependency_remediation",
-        "p07_supplied_transcript",
-        "p07_local_asr",
-        "p08_candidates_search",
-        "p09_source_reinspection",
         "p10_recovery",
         "p11_worker_batch",
         "p12_agent_clients",

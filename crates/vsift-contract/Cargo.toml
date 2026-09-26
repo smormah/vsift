@@ -17,6 +17,9 @@ vsift-domain.workspace = true
 
 [dev-dependencies]
 jsonschema.workspace = true
+# The evidence contract tests drive the application's extraction use cases
+# over fake extractors to build the records their frozen examples present.
+tokio.workspace = true
 
 [lints]
 workspace = true

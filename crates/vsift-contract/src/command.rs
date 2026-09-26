@@ -47,17 +47,17 @@ pub enum CommandName {
     SessionClean,
     /// `transcript get`.
     TranscriptGet,
-    /// `transcript retranscribe` (reserved).
+    /// `transcript retranscribe`.
     TranscriptRetranscribe,
-    /// `search` (reserved).
+    /// `search`.
     Search,
-    /// `candidates` (reserved).
+    /// `candidates`.
     Candidates,
-    /// `frame get` (reserved).
+    /// `frame get`.
     FrameGet,
-    /// `frame neighbours` (reserved).
+    /// `frame neighbours`.
     FrameNeighbours,
-    /// `frame burst` (reserved).
+    /// `frame burst`.
     FrameBurst,
     /// `audio` (reserved).
     Audio,

@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Frames from the command line (P09 PR 3, ADR 0019):
+  `vsift frame get <session> --at <us>` returns the first frame at or after a time
+  (`--select displayed-at` for the frame on screen at it, `--tolerance-us` up to 10 s,
+  1 s by default), `--candidate <vcd_...>` returns a visual candidate's own frame
+  exactly; `vsift frame neighbours <session> <evd_...> [--count 1..20]` the
+  consecutive frames on each side of an earlier frame, saying why a side stopped short
+  (`start_of_stream`, `end_of_stream`, `search_window`); and
+  `vsift frame burst <session> --from <us> --to <us> [--max-frames 1..100]` the
+  distinct frames at evenly spaced times over up to 60 seconds (12 by default). Each
+  result states which frame each requested time resolved to, with the requested and
+  actual time and their difference, publishes every frame as a new `frame_evidence`
+  record, and delivers the full-resolution PNG as the absolute path of the committed
+  session file, valid while the session exists. Repeating a request returns the same
+  result with `reused: true` in about 150 ms without running FFmpeg or writing
+  anything. A call stopped by a budget returns what it extracted as `partial` with the
+  reason; a full session (160 evidence files) is `RESOURCE_LIMIT` with the advice to
+  retain it and open a new one, and a burst over 60 s points to `candidates`.
+  `--events jsonl` streams the frames, then the rest. New schemas `frame-data`,
+  `frame-stream-data` and `frame-evidence`; frozen examples `frame-get.json`,
+  `frame-get.events.jsonl`, `frame-neighbours.json` and `frame-burst.partial.json`;
+  the opt-in checkpoint `p09_evidence_e2e` checks F01, F09, the rotated variant and
+  every visual candidate of the test videos against their frozen truth. `crop` and
+  `audio` stay reserved until PR 4.
 - The evidence core of evidence navigation (P09 PR 2, in the engine library, not yet
   reachable from the CLI; ADR 0019, now accepted with decisions D1-D7): exact frames at
   a time or of a visual candidate, the consecutive frames around one, an even burst

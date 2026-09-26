@@ -253,3 +253,42 @@ until PR 3 and PR 4.
   `INTEGRITY_FAILURE` with nothing committed; an exhausted budget fails before any
   process) and opt-in real-`FFmpeg` 9.0 engine tests against the PR 1 truth. Fuzz
   targets `evidence_record` and `crop_rect`.
+
+## 2026-09-26 implementation note: the frame commands (PR 3)
+
+PR 3 makes `frame get`, `frame neighbours` and `frame burst` public with the D6 grammar
+(`crop` and `audio` stay reserved until PR 4). The wire contract lives once in
+`vsift-contract` (`frame_response`, `FrameEvidenceStream`) and is published as
+[`frame-data.schema.json`](../../schemas/v1/frame-data.schema.json),
+[`frame-stream-data.schema.json`](../../schemas/v1/frame-stream-data.schema.json) and
+[`frame-evidence.schema.json`](../../schemas/v1/frame-evidence.schema.json), with the new
+evidence record type `frame_evidence`.
+
+- **A result presents the record.** Everything a result says comes from the committed
+  lineage record, so a reused result differs from the call that committed it only in
+  `reused`. Selections keep the record's `requested_us`, `actual_us` and `delta_us`
+  names (the bundle record's), not the P01 `FrameTimingResponse` names, which no
+  published schema used.
+- **`source_check` per result, not per published item.** The stored record notes, for
+  each copy of an item, how the committing call checked the source (D1), and two calls
+  that name one item can differ. The published `frame_evidence` record is keyed by its
+  `evidence_id` and must always carry the same content, so the check is published once
+  per result as `source_check` and kept out of the item.
+- **Paths (D2).** `files[].path` is the verified absolute artifact path as the engine
+  returns it; on Windows that may be the extended-length form `\\?\C:\...`, kept
+  verbatim because it is valid and long-path safe (maintainer, 2026-09-26; friendlier
+  display is P13's human output). A path that is
+  not valid UTF-8 cannot be written as JSON text and is `STORAGE_IO` with a remediation
+  rather than a lossy string. The frozen examples write paths under the placeholder
+  root `/vsift-session-root`.
+- **Remediation** is fixed prose chosen by the typed cause: each frame-selection
+  failure names the policy, tolerance or range to change; a burst over 60 s points to
+  `candidates`; an exhausted evidence budget says to retain the session and open a new
+  one; a missing tool names FFmpeg and FFprobe (not Whisper). `--select` and
+  `--tolerance-us` are parse errors with `--candidate`, whose frame is at-or-after with
+  tolerance zero by definition.
+- **Evidence:** `frame_contract` (frozen examples, schema rejections), the binary's
+  `frame_cli_contract` (reuse with stand-in tools that cannot run, the budget and parent
+  failures, the grammar) and the opt-in `p09_evidence_e2e` stages `p09_frame_exact`,
+  `p09_candidate_frames`, `p09_neighbours_burst` and `p09_reuse` against the frozen
+  truth (passed on Windows 11 with FFmpeg 9.0).

@@ -19,18 +19,40 @@ Today it can:
   stream of keyed evidence records;
 - search the transcript for words (`search`);
 - list the moments where the screen changed (`candidates`);
+- return the exact frame at a time or of a candidate, the frames around one, and bursts
+  over up to 60 s, as full-resolution PNG files with requested and actual time;
 - manage the session's lifetime and retention, and validate retained bundles;
 - keep every folder it creates private to the user.
 
 **P09 (evidence navigation) is in progress; the packet is not complete.** PR 1 (media
-primitives and a security fix) is merged (`965617f`). PR 2, the evidence core, is
-complete on branch `p09/evidence-core` and awaits review: the engine library can now
-extract exact frames, their neighbours, bursts, crops and audio clips with lineage and
-reuse, but no CLI command calls it yet. PR 3 makes the frame commands public and PR 4
-`crop` and `audio`, with the qualification record. ADR 0019 is accepted with its
-decisions D1-D7 (maintainer, 2026-09-26). P00-P08 are complete.
+primitives and a security fix) is merged (`965617f`). PR 2, the evidence core in the
+engine library, is merged (`4aecdaa`, #163). PR 3 is complete on branch
+`p09/frame-commands` and awaits review: `frame get`,
+`frame neighbours` and `frame burst` are public. PR 4 makes `crop` and `audio` public
+and writes the qualification record. ADR 0019 is accepted with D1-D7. P00-P08 are
+complete.
 
-## P09 PR 2: the evidence core (engine only)
+## P09 PR 3: the frame commands (public)
+
+- **Grammar (D6):** `frame get <ses> (--at <us> | --candidate <vcd>) [--select
+  at-or-after|displayed-at] [--tolerance-us 0..10000000]` (default 1 s),
+  `frame neighbours <ses> <evd> [--count 1..20]`, `frame burst <ses> --from --to
+  [--max-frames 1..100]` (default 12). `--select`/`--tolerance-us` with `--candidate`,
+  counts 0/21, frames 0/101 and a tolerance over 10 s are parse errors.
+- **Contract:** `vsift-contract::navigation` presents the committed record
+  (`frame_response`, `FrameEvidenceStream`); record type `frame_evidence` keyed by
+  `evd_`; schemas `frame-data`, `frame-stream-data`, `frame-evidence`; `source_check` is
+  per result so one key always carries one record; `files[]` carries the verified
+  absolute path (D2; Windows `\\?\` form); a non-UTF-8 path is `STORAGE_IO`.
+- **Failures** carry fixed remediation: each selection reason, burst over 60 s ->
+  `candidates`, full session -> retain and reopen, unknown ids, wrong parent kind,
+  missing FFmpeg/FFprobe (not Whisper). Partial results carry a per-reason warning.
+- **Evidence:** `frame_contract` (4 frozen examples), `frame_cli_contract` (reuse via a
+  seeded record and preflight pass with stand-in tools that cannot run), opt-in
+  `p09_evidence_e2e` (4 stages passed, Windows 11, FFmpeg 9.0, 154 s debug: all 29
+  candidate frames at delta 0, reuse about 150 ms, cold frame about 1.8 s).
+
+## P09 PR 2: the evidence core (engine only; merged `4aecdaa`)
 
 - **Operations:** `Engine::frame_get` (a time with at-or-after or displayed-at and a
   tolerance, or a visual candidate's exact frame), `frame_neighbours` (1..20
@@ -54,12 +76,9 @@ decisions D1-D7 (maintainer, 2026-09-26). P00-P08 are complete.
   full; items record `source_check`. Residual documented in ADR 0012.
 - **Budgets:** 100 frames, 200 MP, 256 MiB, 120 s per call; 160 evidence artifacts per
   session (D4); typed partial results; `RESOURCE_LIMIT` before any process when full.
-- **Storage:** new kinds `audio_wav` and `evidence_record`; `publish_evidence` keeps
-  identical files and rejects conflicts; `bundle validate` checks records against their
-  files (kinds, sizes, digests, PNG/WAV headers, crop parents).
-- **Evidence:** application, store, D1 and engine tests (stand-in tools prove warm
-  reuse starts no process); opt-in real-FFmpeg 9.0 engine tests passed on Windows 11
-  against the PR 1 truth; fuzz targets `evidence_record` and `crop_rect`.
+- **Storage and evidence:** kinds `audio_wav` and `evidence_record`; `bundle validate`
+  checks records against their files; application, store, D1 and engine tests; opt-in
+  real-FFmpeg engine tests; fuzz targets `evidence_record` and `crop_rect`.
 
 ## P09 PR 1 (merged `965617f`)
 
@@ -67,7 +86,7 @@ SEC-17 fix (diagnostics read only from the filter's own lines, numbered, time ba
 checked); integer-timestamp frame selection; `FfmpegMedia` listing, exact extraction,
 crops and WAV clips; strict PNG walking; domain navigation rules; preflight profile 3.
 
-## What works (public CLI, unchanged by P09 so far)
+## What works (public CLI)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`.
 - `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`: disposable
@@ -75,9 +94,10 @@ crops and WAV clips; strict PNG walking; domain navigation rules; preflight prof
 - `transcript retranscribe <session> [--from --to]`, `transcript get ... [--events jsonl]`.
 - `search <session> --query <text> [--from --to] [--limit] [--cursor] [--revision]`.
 - `candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor]`.
+- `frame get/neighbours/burst` (P09 PR 3, above).
 - `session list/status/renew/close/retain/clean` and `bundle validate` (which now also
   validates evidence records).
-- Still `COMMAND_NOT_IMPLEMENTED`: frame, audio, crop, job and setup
+- Still `COMMAND_NOT_IMPLEMENTED`: audio, crop, job and setup
   install/repair/list/rollback/remove. Human-readable terminal output is P13's.
 
 ## Visual candidates, search and local ASR (P07, P08)
@@ -105,7 +125,7 @@ crops and WAV clips; strict PNG walking; domain navigation rules; preflight prof
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
-| P09 | In progress: PR 1 merged, PR 2 complete on its branch; PRs 3-4 remain |
+| P09 | In progress: PRs 1-2 merged; PR 3 complete on its branch; PR 4 remains |
 | P10–P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
@@ -121,9 +141,9 @@ domain `evidence::{navigation, record}`, application `evidence` (identities, por
 
 ## Quality evidence
 
-- P09 PR 2 branch, Windows 11: fmt, strict Clippy, workspace tests (715 passed),
-  warning-denied rustdoc, governance, fuzz fmt/Clippy/replay pass; the opt-in
-  `engine_evidence` tests pass with FFmpeg 9.0. Results go in the PR description.
+- P09 PR 3 branch, Windows 11: fmt, strict Clippy, workspace tests, warning-denied
+  rustdoc, governance, fuzz fmt/Clippy/replay pass; the opt-in `p09_evidence_e2e`
+  passes with FFmpeg 9.0. Results go in the PR description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

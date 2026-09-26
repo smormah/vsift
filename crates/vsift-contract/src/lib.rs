@@ -42,6 +42,15 @@
 //!   [`CandidatesStreamData`]), built from a [`CandidatesPresentation`] by
 //!   [`candidates_response`], which fills the envelope coverage and the
 //!   `partial` status when the range has gaps (P08).
+//! - **Evidence navigation:** the `frame get`, `frame neighbours`,
+//!   `frame burst` and `crop` result [`FrameData`], its published evidence
+//!   record [`FrameEvidenceData`] and its stream [`FrameEvidenceStream`]
+//!   (`frame_evidence` evidence events, then [`FrameStreamData`]), built
+//!   from an [`EvidencePresentation`] by [`frame_response`], with the files
+//!   delivered as absolute session artifact paths (ADR 0019 D2), the
+//!   `partial` status and [`partial_evidence_warning`] when a call stopped
+//!   short, and fixed-prose remediation such as
+//!   [`EVIDENCE_BUDGET_REMEDIATION`] and [`frame_selection_summary`] (P09).
 //! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
 //!   remediation for a failed automatic media-tool preflight.
 //! - **Storage:** [`non_private_folder_summary`], the fixed-prose remediation
@@ -64,6 +73,7 @@ mod command;
 mod envelope;
 mod evidence;
 mod local_asr;
+mod navigation;
 mod search;
 mod session;
 mod setup;
@@ -88,6 +98,14 @@ pub use local_asr::{
     LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION,
     UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary,
+};
+pub use navigation::{
+    BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION, DeliveredEvidenceFile,
+    EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION, EVIDENCE_PATH_REMEDIATION,
+    EVIDENCE_TOOLS_REMEDIATION, EvidencePresentation, EvidencePresentationError, FrameData,
+    FrameEvidenceData, FrameEvidenceStream, FrameStreamData, NO_FRAMES_REMEDIATION,
+    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, frame_response,
+    frame_selection_summary, partial_evidence_warning,
 };
 pub use search::{
     MAX_COVERAGE_RANGES, SearchData, SearchEvidenceStream, SearchPresentation, SearchStreamData,

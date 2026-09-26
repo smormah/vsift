@@ -2129,6 +2129,7 @@ dependencies = [
  "jsonschema",
  "serde",
  "serde_json",
+ "tokio",
  "vsift-application",
  "vsift-domain",
 ]

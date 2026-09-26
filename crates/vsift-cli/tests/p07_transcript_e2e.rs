@@ -609,7 +609,6 @@ async fn supplied_transcript_checkpoint() -> TestResult {
         "passed"
     };
     let future_stages: Vec<_> = [
-        "p09_source_reinspection",
         "p10_recovery",
         "p11_worker_batch",
         "p12_agent_clients",
