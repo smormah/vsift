@@ -2,11 +2,21 @@
 
 #![forbid(unsafe_code)]
 
+// Fault points stop the process on request (ADR 0020). They exist for tests
+// and crash campaigns and must never reach a release build.
+#[cfg(all(feature = "fault-injection", not(debug_assertions)))]
+compile_error!(
+    "the fault-injection feature stops the process on request and must never be \
+     enabled in a release build"
+);
+
 mod archive_inventory;
 mod bounded_tar_inventory;
+mod durable_profile;
 mod evidence_media;
 mod evidence_record;
 mod executable;
+mod fault_point;
 mod ffmpeg_media;
 mod file_lock;
 mod filesystem_session_store;
@@ -46,6 +56,9 @@ pub use bounded_tar_inventory::{
     MAX_TAR_STREAM_BYTES, ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory,
     inspect_tar_selected_files, stage_tar_selected_files,
 };
+pub use durable_profile::{
+    MAX_MOUNTINFO_BYTES, MountDevice, MountInfoError, MountProfile, classify_mountinfo,
+};
 pub use evidence_media::{FfmpegAudioExtractor, FfmpegFrameExtractor};
 pub use evidence_record::{
     MAX_AUDIO_WAV_BYTES, MAX_EVIDENCE_ARTIFACTS, MAX_EVIDENCE_RECORD_BYTES, decode_evidence_record,
@@ -54,6 +67,8 @@ pub use evidence_record::{
 pub use executable::{
     ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
 };
+#[cfg(feature = "fault-injection")]
+pub use fault_point::{FAULT_EXIT_CODE, FAULT_MARKER, FAULT_POINT_VARIABLE, FaultPoint};
 pub use ffmpeg_media::{
     ExtractedAudio, ExtractedFrame, ExtractedImage, ExtractedWav, FfmpegMedia, FrameListingWindow,
     ImageRegion, MAX_AUDIO_BYTES, MAX_DIAGNOSTIC_BYTES, MAX_FRAME_BYTES, MAX_IMAGES_PER_RUN,

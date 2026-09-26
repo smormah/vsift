@@ -190,19 +190,29 @@ together with the P07 and P08 checkpoints' own coverage of each transcript path.
 | Cold `frame get`, 10 times across the clip | p95 4.1 s (3.2-4.1 s) |
 | 12-frame burst over 60 s of it | 17.1 s |
 | Warm reuse on it | p95 241 ms |
-| Warm reuse at 3 / 64 / 128 / 256 session generations | p95 159 / 398 / 652 / 1,086 ms |
+| Warm reuse at 3 / 64 / 128 / 256 session generations (before #164, see below) | p95 159 / 398 / 652 / 1,086 ms |
 
 The clip is F07 (1920x1080) with temporal noise so it does not compress, 30 s encoded
 with FFmpeg's native MPEG-4 encoder and looped by stream copy to about 1 GiB; it is a
 worst case for decoding, far denser than a screen recording.
 
-**Manifest-chain walk.** Every session read validates the whole manifest chain, so a
-warm call costs about 3.7 ms more per generation: over the 250 ms target from about 60
-generations. An evidence session reaches at most about 160 evidence commits (the D4
-sub-budget), where a warm call would take about 0.6 s. Incremental chain validation
-(P10, the D4 alternative; tracked as [#164](https://github.com/smormah/vsift/issues/164))
-removes the growth; until then the cost is bounded by the
-evidence and artifact budgets.
+**Manifest-chain walk.** At P09 every session read validated the whole manifest chain,
+so a warm call cost about 3.7 ms more per generation: over the 250 ms target from about
+60 generations. P10 PR 1 resolves this ([#164](https://github.com/smormah/vsift/issues/164),
+[ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md) section 1): a
+read walks the chain only down to the writer's chain checkpoint. Measured with the
+opt-in `s11_warm_reuse_as_the_manifest_chain_grows` (`evidence_cli_contract`, release,
+20 warm `frame get` calls through the binary per point, Windows 11, Xeon E5-2698 v4,
+2026-09-26):
+
+| Generations | 2 | 64 | 256 | 1,024 | Slope |
+| --- | --- | --- | --- | --- | --- |
+| Before (p95) | 139 ms | 369 ms | 1,064 ms | 3,794 ms | 3.58 ms per generation |
+| After, three runs (p95) | 148-167 ms | 146-164 ms | 136-175 ms | 149-156 ms | -0.016 to +0.008 ms per generation |
+
+The cost no longer grows (target slope at most 0.2 ms per generation: met). The p95 at
+256 generations met the 160 ms target in one run of three; the spread is the same as a
+two-generation session's, set by process start-up (fastest calls 104-116 ms throughout).
 
 ## Residuals and known limits
 
@@ -219,7 +229,7 @@ evidence and artifact budgets.
   `\\?\C:\...` the engine returns, kept verbatim because it is valid and long-path
   safe (hosts may display it as they wish); they are valid only while the session
   exists.
-- **Manifest chain:** warm cost grows linearly with session generations (above);
-  tracked as [#164](https://github.com/smormah/vsift/issues/164).
+- **Manifest chain:** resolved in P10 PR 1 (above); reads now re-verify only the
+  generations since the writer's chain checkpoint (known-limits L-047).
 - **Performance** was measured on one Windows machine; Ubuntu and macOS runs of the
   opt-in checkpoint have not been recorded.

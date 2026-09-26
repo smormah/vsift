@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Durable publication protocol and commit-path fault points (P10 PR 1,
+  [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md), Proposed;
+  internal, no public contract change). A session now records its durability at
+  creation; a durable session's commits flush every file and synchronise `artifacts/`,
+  `generations/` and the session directory in order before acknowledging, and never
+  trust what a failed earlier attempt flushed. Durable mode stays disabled on every
+  platform until the Ubuntu 24.04 / ext4 crash campaign passes: a root claims it only on
+  Linux ext4 with write barriers on, and only once that campaign's constant is set.
+  Every commit boundary is a named fault point that tests (and development builds with
+  the `fault-injection` feature, refused in release builds and by the governance check)
+  can stop the process at; a test kills a process at each one and checks the session
+  recovers. New fuzz target `mountinfo`.
 - Crops and audio clips from the command line (P09 PR 4, ADR 0019), completing
   evidence navigation: `vsift crop <session> <evd_...> --rect x,y,w,h` cuts a rectangle
   out of a frame or an earlier crop by decoding the frame again, at native size, in the
@@ -239,6 +251,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Documentation
 
+- The known limits register updates L-008, L-010 and L-012 for P10 PR 1 and adds
+  L-047 (reads stop at the chain checkpoint) and L-048 (after a crash between manifest
+  and pointer only the same operation can continue).
 - New [known limits register](docs/planning/known-limits.md): every current limitation,
   residual risk, deferral and accepted trade-off (L-001 to L-046) in one place, each with
   its evidence, impact, owner packet, tracking issue, status and a maintainer review
@@ -246,6 +261,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Warm requests no longer slow down as a session ages (#164, P10 PR 1): a session read
+  checks the manifest chain only down to a checkpoint its writer keeps
+  (`chain-verified.json`), instead of every generation back to the first. A reused
+  `frame get` through the binary stays at p95 136-175 ms at 256 generations and
+  149-156 ms at 1,024 (it was 1,064 ms and 3,794 ms). Every read still verifies the
+  head and every generation since the checkpoint, artifacts are still re-hashed, and
+  `session retain` and `session clean` still check the whole chain.
 - `transcript retranscribe` now checks the session's copy of the video twice per run
   instead of before every 30-second chunk: it verifies the copy's SHA-256 when the
   run starts and again before the new revision is saved, and before each chunk only

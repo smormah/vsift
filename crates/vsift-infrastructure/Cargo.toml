@@ -9,6 +9,13 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+# Lets VSIFT_FAULT_POINT stop the process at a named commit boundary (ADR 0020)
+# for crash tests and campaigns. Development only: the crate refuses to compile
+# it without debug assertions, and the governance check refuses it anywhere but
+# a development dependency.
+fault-injection = []
+
 [dependencies]
 cap-fs-ext.workspace = true
 cap-std.workspace = true

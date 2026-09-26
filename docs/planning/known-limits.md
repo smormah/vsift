@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-27 (after P09; P00-P09 complete, P10 not started).
+Date: 2026-09-27 (P00-P09 complete; P10 in progress, PR 1 on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -54,11 +54,11 @@ Each entry has these fields:
 | [L-005](#l-005) | Private Windows folders get their DACL just after creation, not atomically | security | low | unscheduled | none | accepted residual |
 | [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents | security | low | unscheduled | none | accepted residual |
 | [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
-| [L-008](#l-008) | Strict OS/storage-crash durability is unqualified (FS-01) | integrity/durability | high | P10, P11, P14 | [#13](https://github.com/smormah/vsift/issues/13), [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-008](#l-008) | Strict OS/storage-crash durability is unqualified (FS-01); protocol implemented, disabled | integrity/durability | high | P10, P11, P14 | [#13](https://github.com/smormah/vsift/issues/13), [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
-| [L-010](#l-010) | Recovery, cancellation and idempotency are not qualified | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
+| [L-010](#l-010) | Recovery, cancellation and idempotency are not qualified (fault points exist) | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
 | [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | none | monitoring |
-| [L-012](#l-012) | Warm requests slow down as a session's manifest chain grows | performance | medium | P10 | [#164](https://github.com/smormah/vsift/issues/164) | open |
+| [L-012](#l-012) | Warm requests slowed as the manifest chain grew (fixed in P10 PR 1) | performance | low | P10 | [#164](https://github.com/smormah/vsift/issues/164) | monitoring |
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | none | monitoring |
 | [L-014](#l-014) | A session holds at most 160 evidence files (256 artifacts, 64 KiB manifest) | contract/UX | medium | P10 | [#164](https://github.com/smormah/vsift/issues/164) | deferred |
 | [L-015](#l-015) | Bursts over more than 20 s of 60 fps video are refused | contract/UX | low | unscheduled | none | open |
@@ -93,8 +93,10 @@ Each entry has these fields:
 | [L-044](#l-044) | Accepted engineering trade-offs (CLI test dependencies, session compatibility) | contract/UX | low | unscheduled | none | accepted residual |
 | [L-045](#l-045) | Several documents and trackers state an outdated position | process/CI | low | unscheduled | none | open |
 | [L-046](#l-046) | Deliberate scope exclusions (live sources, OCR, speakers, URLs) | contract/UX | low | R1 or later | [#107](https://github.com/smormah/vsift/issues/107), [#108](https://github.com/smormah/vsift/issues/108) | accepted residual |
+| [L-047](#l-047) | A read no longer re-verifies generations below the chain checkpoint | integrity/durability | low | unscheduled | none | accepted residual |
+| [L-048](#l-048) | After a crash between manifest and pointer, only the same operation can continue | integrity/durability | low | P10 | [#13](https://github.com/smormah/vsift/issues/13) | open |
 
-Counts: 6 high, 16 medium, 24 low (46 entries).
+Counts: 6 high, 15 medium, 27 low (48 entries).
 
 ## Security
 
@@ -269,16 +271,26 @@ Counts: 6 high, 16 medium, 24 low (46 entries).
 - **What:** sessions are consistent across a VSift process crash, but no OS-crash or
   power-loss campaign has proved that a committed generation survives on NTFS, APFS or
   ext4. Explicit durable requests therefore fail before any change, and a retained
-  bundle does not gain an OS-crash durability claim by being retained.
-- **Evidence:** [ADR 0010](../decisions/0010-storage-qualification-gate.md);
-  [P03 feasibility record](p03-storage-feasibility.md) "Measured experiments and
-  remaining gate"; threat model SEC-24.
+  bundle does not gain an OS-crash durability claim by being retained. Since P10 PR 1
+  the durable publication order itself is implemented (flushes, then directory syncs
+  of `artifacts/`, `generations/` and the session, acknowledgement last, fsyncgate-safe
+  retries), but it stays disabled: `durable_profile` claims OS-crash durability only
+  on a Linux ext4 root without disabled barriers **and** once the campaign constant is
+  set, which it is not.
+- **Evidence:** [ADR 0010](../decisions/0010-storage-qualification-gate.md) and its
+  2026-09-26 note; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  section 2; [P03 feasibility record](p03-storage-feasibility.md) "Measured experiments
+  and remaining gate"; threat model SEC-24. The order is tested with a recorder on
+  every platform and with real directory syncs and kills on Unix, which is not
+  OS-crash evidence.
 - **Impact:** blocks the strict Linux worker profile and R-09/R-10; desktop users get
   ephemeral (process-crash-consistent) guarantees only.
 - **Why:** needs an owned disposable OS/storage fault harness, which the repository does
-  not have.
+  not have yet.
 - **Mitigation:** fail-closed durable mode; the effective guarantee is reported.
-- **Next step:** P10/P11/P14 run the Ubuntu 24.04/ext4 crash campaign.
+- **Next step:** P10 PR 4 runs the Ubuntu 24.04/ext4 crash campaign (dm-log-writes,
+  QEMU kills, dm-flakey, negative control; ADR 0020 D-5) and only then sets the
+  constant; P11/P14 qualify the worker profile.
 - **Owner:** P10, P11, P14. **Issue:** [#13](https://github.com/smormah/vsift/issues/13),
   [#14](https://github.com/smormah/vsift/issues/14),
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
@@ -317,17 +329,66 @@ Counts: 6 high, 16 medium, 24 low (46 entries).
 
 - **What:** interrupted operations are not discovered or resumed, there are no stage
   checkpoints or operation keys for jobs, and cancellation/commit ordering has not been
-  qualified (X-01..X-06, X-09, X-10, S-07, S-08).
+  qualified (X-01..X-06, X-09, X-10). Since P10 PR 1 the commit path has named fault
+  points, and a test kills a process at each of them and checks that the session
+  reopens at its last acknowledged generation or the new one with every listed file
+  whole, and that the same operation then completes (S-07); S-08 covers the new chain
+  checkpoint.
 - **Evidence:** [work packets](implementation-work-packets.md) P10 row; ledger P10
-  `planned`.
+  `in_progress`; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  sections 3-6.
 - **Impact:** a killed long run (for example a whole-video retranscription) starts over;
   R-09 is an R0 release gate.
-- **Why:** scheduled after P09.
+- **Why:** P10 is delivered in four pull requests; jobs, keys and checkpoints are PR 2,
+  the public job surface and cancellation PR 3.
 - **Mitigation:** partial results commit what finished (`candidates`, evidence calls),
   generations are process-crash consistent, and repeated evidence requests are reused.
-- **Next step:** P10.
+- **Next step:** P10 PRs 2-3; maintainer decisions D-1..D-5 in ADR 0020.
 - **Owner:** P10. **Issue:** [#13](https://github.com/smormah/vsift/issues/13).
   **Status:** deferred. **Review:** pending.
+
+### L-047
+
+**A read no longer re-verifies generations below the chain checkpoint.**
+
+- **What:** since P10 PR 1 (#164) an ordinary read verifies the pointer, the head and
+  every generation committed since the writer's chain checkpoint (or the last head the
+  same store instance verified). Damage to an older generation is found by the next
+  full walk, which `session retain` and `session clean` still perform, not by a read.
+  Old generations never feed a read's result, and every artifact a read returns is
+  still re-hashed (INV-02).
+- **Evidence:** [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  section 1 "Guarantee"; threat model P10 PR 1 note (SEC-08/SEC-10); unit tests
+  `reads_stop_at_the_checkpoint_and_walk_everything_without_one` and
+  `the_verified_head_cache_belongs_to_one_store_instance`.
+- **Impact:** bit rot or same-user tampering in an old manifest surfaces later, at
+  retain or cleanup.
+- **Why:** walking the whole chain on every read made long sessions slow ([L-012](#l-012)).
+- **Mitigation:** the checkpoint is written only by the writer and validated strictly;
+  forging it needs the same-user access that could rewrite the chain itself.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-048
+
+**After a crash between manifest and pointer, only the same operation can continue.**
+
+- **What:** if a process dies after renaming generation N's manifest and before the
+  pointer names it, a retry of the same operation completes generation N, but another
+  operation publishing N is refused as a conflict (the file is not the one it would
+  write) until the leftover is dealt with.
+- **Evidence:** P03 design (install of an immutable manifest);
+  [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Consequences"; the fault-point kill test retries the same operation.
+- **Impact:** a crashed operation that is never retried blocks later writes to that
+  session.
+- **Why:** manifests are immutable and never replaced by another operation's.
+- **Mitigation:** CLI operations are retried with the same identities by the job layer
+  P10 PR 2 adds; sessions are disposable.
+- **Next step:** P10 PR 2 (interrupted-job discovery and resume).
+- **Owner:** P10. **Issue:** [#13](https://github.com/smormah/vsift/issues/13).
+  **Status:** open. **Review:** pending.
 
 ## Performance
 
@@ -357,22 +418,28 @@ Counts: 6 high, 16 medium, 24 low (46 entries).
 
 ### L-012
 
-**Warm requests slow down as a session's manifest chain grows.**
+**Warm requests slowed down as a session's manifest chain grew (fixed in P10 PR 1).**
 
-- **What:** every session read validates the whole chain of committed generations, so
-  a repeated, reused request costs about 3.7 ms more per generation.
-- **Evidence:** [P09 record](p09-evidence-navigation.md) "Manifest-chain walk": warm
-  reuse p95 159 / 398 / 652 / 1,086 ms at 3 / 64 / 128 / 256 generations; above the
-  250 ms target from about 60 generations; a session full of evidence (160 artifacts)
-  near 0.6 s. Issue #164.
-- **Impact:** long investigations get steadily slower on every read.
-- **Why:** full validation keeps INV-02/SEC-08 simple; incremental validation belongs
-  with P10's commit work.
-- **Mitigation:** bounded by the artifact and evidence budgets ([L-014](#l-014)).
-- **Next step:** validate the chain incrementally from a verified checkpoint; record
-  before/after numbers in the P09 record.
+- **What:** every session read used to validate the whole chain of committed
+  generations, so a repeated, reused request cost about 3.6 ms more per generation.
+  P10 PR 1 validates the chain incrementally, down to the writer's chain checkpoint
+  or the last head the same store instance verified; the remaining trade-off is
+  [L-047](#l-047).
+- **Evidence:** opt-in `s11_warm_reuse_as_the_manifest_chain_grows`
+  (`evidence_cli_contract`, release, through the binary, Windows 11, Xeon
+  E5-2698 v4): before, p95 139 / 369 / 1,064 / 3,794 ms at 2 / 64 / 256 / 1,024
+  generations (3.58 ms per generation); after, over three runs, p95 148-167 /
+  146-164 / 136-175 / 149-156 ms (slope -0.016 to +0.008 ms per generation). See the
+  [P09 record](p09-evidence-navigation.md) "Manifest-chain walk". Issue #164.
+- **Impact:** none that grows with the session any more; a warm call costs what a young
+  session's does (about 105-115 ms at best, p95 dominated by process start-up).
+- **Why:** full validation kept INV-02/SEC-08 simple.
+- **Mitigation:** the checkpoint (ADR 0020 section 1).
+- **Next step:** delete this entry once P10 PR 1 is merged (register rule 2); the
+  p95 target of 160 ms at 256 generations was met in one of three runs, with the
+  spread matching that of a two-generation session.
 - **Owner:** P10. **Issue:** [#164](https://github.com/smormah/vsift/issues/164).
-  **Status:** open. **Review:** pending.
+  **Status:** monitoring. **Review:** pending.
 
 ### L-013
 

@@ -1124,3 +1124,82 @@ async fn the_crop_and_audio_grammar_and_ranges_are_checked_first() -> TestResult
     assert_eq!(remediation(&value), EVIDENCE_TOOLS_REMEDIATION);
     Ok(())
 }
+
+/// The generations at which [`s11_warm_reuse_as_the_manifest_chain_grows`]
+/// measures (#164).
+const CHAIN_MEASUREMENT_GENERATIONS: [u64; 4] = [1, 64, 256, 1_024];
+/// Warm calls timed at each of those generations.
+const CHAIN_MEASUREMENT_SAMPLES: usize = 20;
+
+/// The 95th percentile of `samples`, in milliseconds (nearest rank).
+fn p95_ms(samples: &mut [f64]) -> f64 {
+    samples.sort_by(f64::total_cmp);
+    let rank = (samples.len() * 95).div_ceil(100).max(1);
+    samples.get(rank - 1).copied().unwrap_or(f64::NAN)
+}
+
+/// S-11 and #164, opt-in and recorded (not gated): the p95 of a warm, reused
+/// `frame get` through the binary as the session's manifest chain grows to
+/// 1,024 generations. Renewals add one generation each, as in the P09
+/// performance record; the evidence is seeded, so no provider runs.
+///
+/// ```console
+/// cargo test -p vsift-cli --release --locked --test evidence_cli_contract -- --ignored --nocapture s11_warm_reuse
+/// ```
+#[tokio::test]
+#[ignore = "opt-in #164 measurement; run with --release --ignored --nocapture"]
+async fn s11_warm_reuse_as_the_manifest_chain_grows() -> TestResult {
+    let harness = Harness::open()?;
+    harness.trust_tools()?;
+    let seeded = harness.seeded_frame(1_025_000).await?;
+    harness.seed(&seeded, 0)?;
+    let store = harness.store()?;
+    let mut rows = Vec::new();
+    for target in CHAIN_MEASUREMENT_GENERATIONS {
+        let mut generation = store.session_status(&harness.session_id)?.generation();
+        while generation.value() < target {
+            let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+            let operation = OperationId::parse(format!(
+                "op_c4a1{:028x}",
+                generation.value().saturating_add(1)
+            ))?;
+            generation = store.renew_session(&harness.session_id, &operation, generation, now)?;
+        }
+        let mut samples = Vec::with_capacity(CHAIN_MEASUREMENT_SAMPLES);
+        for _ in 0..CHAIN_MEASUREMENT_SAMPLES {
+            let started = std::time::Instant::now();
+            let output = harness.run(&frame_get(&harness.session, "1025000", &["--json"]))?;
+            samples.push(started.elapsed().as_secs_f64() * 1_000.0);
+            assert_eq!(output.status.code(), Some(0), "a warm call failed");
+            assert_eq!(
+                json(&output)?["data"]["reused"],
+                true,
+                "a warm call was not reused"
+            );
+        }
+        let p95 = p95_ms(&mut samples);
+        println!(
+            "S11_CHAIN generation={} p95_ms={p95:.1} min_ms={:.1}",
+            generation.value(),
+            samples.first().copied().unwrap_or(f64::NAN)
+        );
+        rows.push((generation.value(), p95));
+    }
+    if let (Some(first), Some(last)) = (rows.first(), rows.last()) {
+        let generations = last.0.saturating_sub(first.0).max(1);
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "a generation count of at most 4,096 is exact in f64"
+        )]
+        let slope = (last.1 - first.1) / generations as f64;
+        println!(
+            "S11_CHAIN slope_ms_per_generation={slope:.3} build={}",
+            if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            }
+        );
+    }
+    Ok(())
+}

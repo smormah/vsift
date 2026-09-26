@@ -75,3 +75,19 @@ its production implementation and mapped ephemeral-profile tests in PR #42
 requirements R-09/R-10 remain open through P10/P11/P14, and release documentation
 must distinguish supported desktop sessions from the not-yet-qualified strict worker
 profile.
+
+## 2026-09-26 implementation note: the durable protocol exists, still disabled (P10 PR 1)
+
+[ADR 0020](0020-recoverable-jobs-and-durable-publication.md) implements the reviewed
+publication order this decision asked for: durability is a property a session fixes
+at generation 0; a durable commit flushes every file, synchronises `artifacts/`,
+`generations/` and the session directory in order (directories by reopening `.` with
+read access, the FS-01 finding), never re-flushes a file an earlier attempt left
+(fsyncgate), and acknowledges only after the session directory is synchronised;
+initialization also synchronises `sessions/` and the index bucket. The decision itself
+is unchanged: `durable_profile` claims `os_crash_durable` only for a Linux ext4 root
+without disabled barriers **and** a campaign constant that stays `false` until the
+Ubuntu 24.04 / ext4 crash campaign (P10 PR 4) passes, so every profile still fails
+durable requests closed with `MISSING_CAPABILITY` before mutation. The order is tested
+on every platform with a test-only recorder, and on Unix with real directory syncs
+and process kills at every fault point; none of that is OS-crash evidence.

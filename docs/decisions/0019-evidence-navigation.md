@@ -318,3 +318,13 @@ public, completing the D6 grammar, and records the packet's qualification in
   `p09_mechanical_journey_supplied` and `p09_mechanical_journey_local_asr` (video to
   cited, validated evidence on both transcript paths) and `p09_perf` (results in the
   qualification record).
+
+## 2026-09-26 note: incremental chain validation (#164) and D4
+
+P10 PR 1 ([ADR 0020](0020-recoverable-jobs-and-durable-publication.md) section 1)
+resolves #164: a read now verifies the head and every generation committed since the
+writer's chain checkpoint instead of the whole chain, so a warm reused evidence call no
+longer grows with the session's generations (before and after in the
+[P09 record](../planning/p09-evidence-navigation.md)). D4 itself is unchanged: 256
+artifacts, 160 evidence artifacts, a 64 KiB manifest and 10 GiB per session stay until
+the maintainer confirms ADR 0020's D-2 (512 / 384 / 128 KiB).

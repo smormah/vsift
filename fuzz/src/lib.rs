@@ -24,12 +24,12 @@ use vsift_domain::{
     validate_chunk_output,
 };
 use vsift_infrastructure::{
-    FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, SourceContainer,
-    VisualSamplingWindow, WhisperOutputLimits, decode_evidence_record, decode_transcript_record,
-    decode_visual_index_record, encode_evidence_record, encode_transcript_record,
-    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
-    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
-    parse_whisper_full_json,
+    FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, MountDevice,
+    SourceContainer, VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo,
+    decode_evidence_record, decode_transcript_record, decode_visual_index_record,
+    encode_evidence_record, encode_transcript_record, encode_visual_index_record,
+    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
+    parse_png_sequence, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -111,11 +111,15 @@ pub enum Target {
     /// fixed 1440x900 frame), a line feed, and an inner rectangle (parsed
     /// against the outer one's size).
     CropRect,
+    /// `/proc/self/mountinfo` text through `classify_mountinfo`, which decides
+    /// whether a session root may claim OS-crash durability (P10, ADR 0020).
+    /// The input is the table.
+    Mountinfo,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -130,6 +134,7 @@ impl Target {
         Self::PngSequence,
         Self::EvidenceRecord,
         Self::CropRect,
+        Self::Mountinfo,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -150,6 +155,7 @@ impl Target {
             Self::PngSequence => "png_sequence",
             Self::EvidenceRecord => "evidence_record",
             Self::CropRect => "crop_rect",
+            Self::Mountinfo => "mountinfo",
         }
     }
 
@@ -174,6 +180,7 @@ impl Target {
             Self::PngSequence => check_png_sequence(data),
             Self::EvidenceRecord => check_evidence_record(data),
             Self::CropRect => check_crop_rect(data),
+            Self::Mountinfo => check_mountinfo(data),
         }
     }
 }
@@ -249,6 +256,9 @@ pub enum Violation {
     /// spelling, or composes to a rectangle that is not the inner one moved
     /// by the outer one's origin inside the frame.
     CropRectInvalid,
+    /// The mount-table verdict depended on the device asked about in a way
+    /// whole-table parsing forbids, or changed when the table was repeated.
+    MountinfoInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -292,6 +302,7 @@ impl fmt::Display for Violation {
                 "an accepted evidence record changed in a round trip or is unbounded"
             }
             Self::CropRectInvalid => "an accepted crop is outside its frame or not canonical",
+            Self::MountinfoInconsistent => "the mount-table verdict is inconsistent",
         })
     }
 }
@@ -760,6 +771,36 @@ fn check_crop_rect(data: &[u8]) -> Result<(), Violation> {
         && composed.dimensions() == inner.dimensions();
     if !moved || !contained(composed, frame) {
         return Err(Violation::CropRectInvalid);
+    }
+    Ok(())
+}
+
+/// The devices every mount table is classified for: the first disk's first
+/// partition and the anonymous device of `/proc`.
+const MOUNTINFO_DEVICES: [(u32, u32); 2] = [(8, 1), (0, 21)];
+
+fn check_mountinfo(data: &[u8]) -> Result<(), Violation> {
+    let verdicts = MOUNTINFO_DEVICES
+        .map(|(major, minor)| classify_mountinfo(data, MountDevice::new(major, minor)));
+    // The whole table is parsed whatever the device, so a table is accepted
+    // or refused (with the same error) for every device alike.
+    let [first, second] = verdicts;
+    if first.is_ok() != second.is_ok() || (first.is_err() && first != second) {
+        return Err(Violation::MountinfoInconsistent);
+    }
+    let Ok(first) = first else {
+        return Ok(());
+    };
+    // Repeating a table's lines repeats its mounts: the verdict stays.
+    if data.last() == Some(&b'\n') || data.is_empty() {
+        let mut twice = data.to_vec();
+        twice.extend_from_slice(data);
+        let (major, minor) = MOUNTINFO_DEVICES[0];
+        match classify_mountinfo(&twice, MountDevice::new(major, minor)) {
+            Ok(repeated) if repeated == first => {}
+            Err(_) if twice.len() > vsift_infrastructure::MAX_MOUNTINFO_BYTES => {}
+            _ => return Err(Violation::MountinfoInconsistent),
+        }
     }
     Ok(())
 }
