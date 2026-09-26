@@ -5,6 +5,7 @@
 mod candidates;
 mod command;
 mod config;
+mod evidence;
 mod json_input;
 mod output;
 mod search;
@@ -336,8 +337,15 @@ where
             let result = candidates::candidates(&engine, arguments).await;
             write_session_result(&mut writer, mode, CommandName::Candidates, result)
         }
+        Command::Frame(arguments) if mode == OutputMode::JsonLines => {
+            let operation = arguments.command.operation_name();
+            let result = evidence::frame_stream(&engine, arguments.command).await;
+            write_evidence_stream(&mut writer, operation, result)
+        }
         Command::Frame(arguments) => {
-            not_implemented(&mut writer, mode, arguments.command.operation_name())
+            let operation = arguments.command.operation_name();
+            let result = evidence::frame(&engine, arguments.command).await;
+            write_session_result(&mut writer, mode, operation, result)
         }
         Command::Audio(_) => not_implemented(&mut writer, mode, CommandName::Audio),
         Command::Crop(_) => not_implemented(&mut writer, mode, CommandName::Crop),

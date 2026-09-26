@@ -2,8 +2,11 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
-use vsift::{EvidenceId, JobId, RuntimeDependency, SessionId, SetupProfile, TranscriptRevisionId};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
+use vsift::{
+    EvidenceId, FrameSelection, JobId, RuntimeDependency, SessionId, SetupProfile,
+    TranscriptRevisionId, VisualCandidateId,
+};
 use vsift_contract::CommandName;
 
 /// Complete public R0 command parser.
@@ -469,11 +472,11 @@ pub(crate) struct FrameArguments {
 /// Source-grounded frame operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum FrameCommand {
-    /// Extract the first displayed frame at or after a requested time.
+    /// Extract the frame a time or a visual candidate names.
     Get(FrameGetArguments),
-    /// Retrieve bounded adjacent evidence states.
+    /// Extract consecutive frames on each side of an earlier frame.
     Neighbours(NeighbourArguments),
-    /// Extract a finite sequence over a bounded range.
+    /// Extract distinct frames at evenly spaced times over a range.
     Burst(FrameBurstArguments),
 }
 
@@ -488,24 +491,63 @@ impl FrameCommand {
     }
 }
 
-/// Exact frame request.
+/// Which frame a time names (ADR 0019 decision 2).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum FrameSelectArgument {
+    /// The first frame at or after the time (the default), so evidence is
+    /// never taken from before the moment named.
+    AtOrAfter,
+    /// The frame on screen at the time: the last frame at or before it.
+    DisplayedAt,
+}
+
+impl From<FrameSelectArgument> for FrameSelection {
+    fn from(value: FrameSelectArgument) -> Self {
+        match value {
+            FrameSelectArgument::AtOrAfter => Self::AtOrAfter,
+            FrameSelectArgument::DisplayedAt => Self::DisplayedAt,
+        }
+    }
+}
+
+/// Exact frame request: a time, or a visual candidate's own frame.
 #[derive(Args, Debug)]
+#[command(group(ArgGroup::new("target").required(true).args(["at", "candidate"])))]
 pub(crate) struct FrameGetArguments {
     /// Session containing the source.
     pub session: SessionId,
     /// Requested source-timeline time in microseconds.
+    #[arg(long, value_name = "MICROSECONDS")]
+    pub at: Option<u64>,
+    /// A visual candidate (a `vcd_` identity from candidates) whose own frame
+    /// to extract, exactly at its representative time.
     #[arg(long)]
-    pub at: u64,
+    pub candidate: Option<VisualCandidateId>,
+    /// Which frame the time names; defaults to at-or-after.
+    #[arg(long, value_enum, requires = "at", conflicts_with = "candidate")]
+    pub select: Option<FrameSelectArgument>,
+    /// How far the frame may lie from the time, 0 through 10000000
+    /// microseconds; defaults to 1000000.
+    #[arg(
+        long,
+        requires = "at",
+        conflicts_with = "candidate",
+        value_name = "MICROSECONDS",
+        value_parser = clap::value_parser!(u64).range(0..=10_000_000)
+    )]
+    pub tolerance_us: Option<u64>,
 }
 
-/// Neighbouring evidence request.
+/// Neighbouring frames request.
 #[derive(Args, Debug)]
 pub(crate) struct NeighbourArguments {
-    /// Evidence item around which to navigate.
+    /// Session containing the source.
+    pub session: SessionId,
+    /// Frame evidence item (an `evd_` identity) around which to navigate.
     pub evidence: EvidenceId,
-    /// Maximum states on each side.
-    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=20))]
-    pub count: Option<u16>,
+    /// Frames on each side, 1 through 20; defaults to 1.
+    #[arg(long, value_parser = clap::value_parser!(u8).range(1..=20))]
+    pub count: Option<u8>,
 }
 
 /// Finite frame-sequence request.
@@ -516,12 +558,14 @@ pub(crate) struct FrameBurstArguments {
     /// Inclusive source-timeline start in microseconds.
     #[arg(long)]
     pub from: u64,
-    /// Exclusive source-timeline end in microseconds.
+    /// Exclusive source-timeline end in microseconds, at most 60 s after
+    /// --from; a range past the end of the video is clipped to it.
     #[arg(long)]
     pub to: u64,
-    /// Hard frame-count budget.
-    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
-    pub max_frames: u16,
+    /// Evenly spaced target times, 1 through 100; defaults to 12. Targets
+    /// that name the same frame return it once.
+    #[arg(long, value_parser = clap::value_parser!(u8).range(1..=100))]
+    pub max_frames: Option<u8>,
 }
 
 /// Bounded source-audio extraction request.
