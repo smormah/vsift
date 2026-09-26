@@ -395,7 +395,7 @@ impl Harness {
             FrameAtRequest {
                 at: MediaTime::from_micros(at_micros),
                 selection: FrameSelection::AtOrAfter,
-                tolerance: FrameTolerance::MAX,
+                tolerance: FrameTolerance::DEFAULT,
                 candidate: None,
             },
         )

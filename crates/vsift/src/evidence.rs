@@ -321,7 +321,7 @@ impl Engine {
                 at: MediaTime::from_micros(at_micros),
                 selection,
                 tolerance: tolerance_micros
-                    .map_or(Ok(FrameTolerance::MAX), FrameTolerance::new)
+                    .map_or(Ok(FrameTolerance::DEFAULT), FrameTolerance::new)
                     .map_err(EngineError::InvalidNavigation)?,
                 candidate: None,
             },

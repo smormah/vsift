@@ -74,6 +74,12 @@ impl FrameTolerance {
     pub const EXACT: Self = Self(0);
     /// The largest accepted tolerance.
     pub const MAX: Self = Self(MAX_FRAME_TOLERANCE_MICROS);
+    /// The tolerance used when a request names none: one second.
+    ///
+    /// Wide enough for any screen recording's frame spacing, narrow enough that
+    /// an unqualified request never silently returns a frame from a different
+    /// moment; a caller who wants more asks for it explicitly.
+    pub const DEFAULT: Self = Self(1_000_000);
 
     /// Creates a tolerance of `micros` microseconds.
     ///

@@ -57,7 +57,8 @@ extracted at delta 0 with the index's displayed dimensions.
   25,000 us); 5.97 s is `after_final_frame`.
 - **`displayed_at` (`--select displayed-at`):** the frame on screen at the request, the
   last frame at or before it. F01 5.97 s gives 5.95 s (delta -20,000 us).
-- **Tolerance** 0..=10,000,000 us bounds the distance in the policy's direction
+- **Tolerance** 0..=10,000,000 us, default 1,000,000 us when a request names none,
+  bounds the distance in the policy's direction
   (`no_frame_within_tolerance` beyond it). A request at or after the source's end is
   `at_or_after_end` for both policies. Every result keeps requested and actual time and
   the signed delta (ADR 0012).
