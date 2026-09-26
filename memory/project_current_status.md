@@ -22,77 +22,79 @@ Today it can:
 - manage the session's lifetime and retention, and validate retained bundles;
 - keep every folder it creates private to the user.
 
-**P09 (evidence navigation) is in progress.** PR 1, the media primitives and a
-security fix, is complete on branch `p09/media-primitives` and not yet merged. It adds
-nothing a user can call yet: frames, crops and audio clips become commands in PRs 3
-and 4, after the maintainer confirms ADR 0019's decisions D1-D7 and PR 2 builds the
-evidence core. P00-P08 are complete.
+**P09 (evidence navigation) is in progress; the packet is not complete.** PR 1 (media
+primitives and a security fix) is merged (`965617f`). PR 2, the evidence core, is
+complete on branch `p09/evidence-core` and awaits review: the engine library can now
+extract exact frames, their neighbours, bursts, crops and audio clips with lineage and
+reuse, but no CLI command calls it yet. PR 3 makes the frame commands public and PR 4
+`crop` and `audio`, with the qualification record. ADR 0019 is accepted with its
+decisions D1-D7 (maintainer, 2026-09-26). P00-P08 are complete.
 
-## P09 PR 1: what it delivers (internal)
+## P09 PR 2: the evidence core (engine only)
 
-- **Security fix (SEC-17):** FFmpeg repeats a file's metadata in the diagnostics VSift
-  reads frame and audio times from; two readers accepted any line containing the
-  filter's name, so a crafted title could move `transcript retranscribe`'s segment
-  times. Readers now take only lines the filter wrote, numbered without gaps, with the
-  time base checked. Regression tests failed on the old code (ADR 0012 note).
-- **Integer-timestamp selection:** `StreamTime::first_at_or_after`; the P04 `frame`
-  call and all new calls select `pts` integers, never decimal seconds. All 29 recorded
-  P08 candidates extract at delta 0.
-- **Adapter (`FfmpegMedia`):** `list_frame_times` (60 s, 1,200 frames, 1 MiB
-  diagnostics), `frames_at` (up to 8 exact frames, 64 MiB, rgb24 PNG), `crop_at`
-  (FFmpeg crop after display rotation, pixel-exact on the rotated fixture), `wav_clip`
-  (16 kHz mono, <= 30 s, header written in Rust); strict `parse_png_sequence`; new
-  `MediaError` variants `InvalidFrameRequest`, `CropOutsideFrame`, `FrameNotFound`,
-  `TimeBaseMismatch`.
-- **Domain `evidence::navigation`:** at-or-after (default) and displayed-at selection
-  with tolerance up to 10 s; neighbours 1..20 per side with typed stops; bursts of
-  1..100 even targets over at most 60 s, deduplicated; `CropRect::parse` and `compose`.
-- **Preflight profile 3:** the `frame` check also lists, extracts exactly and crops F01.
-- **Evidence:** opt-in `p09_media_primitives` (V-01/V-06 at adapter level) passed with
-  FFmpeg 9.0; always-run `p09_recorded_diagnostics` over real FFmpeg output; verifier
-  v2 records independent `ffprobe` frame lists (no hash or truth changed).
+- **Operations:** `Engine::frame_get` (a time with at-or-after or displayed-at and a
+  tolerance, or a visual candidate's exact frame), `frame_neighbours` (1..20
+  consecutive frames per side of an earlier frame item, typed side stops),
+  `frame_burst` (1..100 even targets, default 12, over at most 60 s, deduplicated),
+  `crop` (a rectangle of a frame or crop item, composed to source pixels, by FFmpeg
+  re-decode) and `audio` (WAV 16 kHz mono, at most 30 s, clipped to the source).
+- **Identities and reuse (V-08):** request keys (`opk_sha256_`) digest session,
+  source, stream selector, operation, parameters, profile `p09-r0-v1` and the provider
+  fingerprint; item identities (`evd_`) only what fixes the pixels or samples. Two
+  requests naming one frame share one item and one file. A repeated request is
+  answered from its complete record, every file re-verified, with no process and no
+  write; another provider is a new key; a changed copy is `INTEGRITY_FAILURE`.
+- **Lineage:** each extracting call commits its new files and one `evidence_record`
+  (strict JSON, at most 256 KiB, schema `bundle-evidence-record.schema.json`) in one
+  generation: request, selections with requested/actual time and delta, items, partial
+  reason. No operation id or path. Files are delivered as verified absolute paths of the
+  committed artifacts (D2).
+- **Source check (D1):** after one full hash, evidence calls compare the copy's
+  on-disk identity (recorded in the session manifest); a changed identity is hashed in
+  full; items record `source_check`. Residual documented in ADR 0012.
+- **Budgets:** 100 frames, 200 MP, 256 MiB, 120 s per call; 160 evidence artifacts per
+  session (D4); typed partial results; `RESOURCE_LIMIT` before any process when full.
+- **Storage:** new kinds `audio_wav` and `evidence_record`; `publish_evidence` keeps
+  identical files and rejects conflicts; `bundle validate` checks records against their
+  files (kinds, sizes, digests, PNG/WAV headers, crop parents).
+- **Evidence:** application, store, D1 and engine tests (stand-in tools prove warm
+  reuse starts no process); opt-in real-FFmpeg 9.0 engine tests passed on Windows 11
+  against the PR 1 truth; fuzz targets `evidence_record` and `crop_rect`.
 
-## What works (public CLI, unchanged by P09 PR 1)
+## P09 PR 1 (merged `965617f`)
+
+SEC-17 fix (diagnostics read only from the filter's own lines, numbered, time base
+checked); integer-timestamp frame selection; `FfmpegMedia` listing, exact extraction,
+crops and WAV clips; strict PNG walking; domain navigation rules; preflight profile 3.
+
+## What works (public CLI, unchanged by P09 so far)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`.
 - `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`: disposable
   session (24 idle hours, at most 7 days); supplied SRT/WebVTT import never needs whisper.
 - `transcript retranscribe <session> [--from --to]`, `transcript get ... [--events jsonl]`.
 - `search <session> --query <text> [--from --to] [--limit] [--cursor] [--revision]`.
-- `candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor]`: analysed
-  on first use (30 minutes per call), warm pages without tools, honest coverage.
-- `session list/status/renew/close/retain/clean` and `bundle validate`.
+- `candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor]`.
+- `session list/status/renew/close/retain/clean` and `bundle validate` (which now also
+  validates evidence records).
 - Still `COMMAND_NOT_IMPLEMENTED`: frame, audio, crop, job and setup
-  install/repair/list/rollback/remove.
+  install/repair/list/rollback/remove. Human-readable terminal output is P13's.
 
-## Visual candidates (P08)
+## Visual candidates, search and local ASR (P07, P08)
 
-- 128x72 grey samples at most every 0.5 s in fixed 60 s windows; a change is one block
-  moving >= 6 or two >= 4; a candidate in every 10 s cell; typed gaps; index stores the
-  displayed dimensions. Recall: every stable event of at least 1 s, 0 false changes,
-  12.9 candidates/min; F04-E02, F05-E02, F12-E02 are corpus limitations (#159).
-  Record: `docs/planning/p08-candidate-recall.md`.
-
-## Transcript search and local ASR (P07, P08)
-
-- Search normalises spelling (`2,048`→`2048`, `E-409`→`e409`, number words), phrase then
-  all-terms tiers, coverage from provenance, on demand (p95 about 150 ms at 20,000).
+- Candidates: 128x72 grey samples at most every 0.5 s in 60 s windows; a candidate in
+  every 10 s cell; typed gaps; recall record `docs/planning/p08-candidate-recall.md`.
+- Search normalises spelling and number words, phrase then all-terms tiers.
 - Local ASR: 30 s chunks with 5 s overlap, profiles `base` (default) and `base_q5_1`;
-  base 3.25% clean WER, RTF 0.39. A `BoundSource` hashes the copy on open and before
-  commit and compares on-disk identity per provider call (#148).
-
-## Evidence stream, private folders and fuzzing
-
-- `transcript get`, `search` and `candidates --events jsonl`: keyed evidence events.
-- Every folder VSift creates is made private before use (SEC-18).
-- Twelve `cargo-fuzz` targets, including `frame_showinfo`, `frame_listing` and
-  `png_sequence`; weekly nightly run, per-PR seed replay.
+  base 3.25% clean WER, RTF 0.39. Multi-call operations bind the copy with a
+  `BoundSource` (#148).
 
 ## The engine library and contract
 
 - **`crates/vsift`:** setup, session, transcript, retranscribe, search, candidates,
-  `validate_bundle`, `verify_media_tools`, `identify_model`. One typed `EngineError`;
-  `failure_code()` is the single public-code mapping. API 0.x.
+  evidence (frame get/neighbours/burst, crop, audio), `validate_bundle`,
+  `verify_media_tools`, `identify_model`. One typed `EngineError`; `failure_code()` is
+  the single public-code mapping. API 0.x.
 - **`crates/vsift-contract`:** every v1 wire type and fixed prose; **`vsift-cli`** is thin.
 
 ## Packet status
@@ -103,27 +105,25 @@ evidence core. P00-P08 are complete.
 | P06 | Complete: detect, select, verify and guide (PR #123, `b73df52`) |
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
-| P09 | In progress: PR 1 of 4 complete on its branch; PRs 2-4 remain |
+| P09 | In progress: PR 1 merged, PR 2 complete on its branch; PRs 3-4 remain |
 | P10–P12, P14 | Not started |
-| P13 | Not started; now also delivers managed dependency installation |
+| P13 | Not started; also delivers managed installation and human-readable output |
 
 ## Architecture snapshot
 
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <-
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
-<- `vsift-cli` (parse, present). `vsift-contract` sits beside the engine and depends on
-domain and application only. `tools/vsift-governance` checks the ledger and these
-files' sizes; `fuzz/` is the fuzz harness. The media adapter is
-`crates/vsift-infrastructure/src/ffmpeg_media.rs` with submodules `evidence`,
-`showinfo` and `png`. Largest file: `filesystem_session_store.rs`.
+<- `vsift-cli` (parse, present). `vsift-contract` sits beside the engine. Evidence:
+domain `evidence::{navigation, record}`, application `evidence` (identities, ports
+`FrameExtractor`/`AudioExtractor`, use cases), infrastructure `evidence_record`,
+`evidence_media` and the store's evidence methods, engine `evidence.rs`. Largest file:
+`filesystem_session_store.rs`.
 
 ## Quality evidence
 
-- P09 PR 1 branch, Windows 11: fmt, strict Clippy, workspace tests, warning-denied
-  rustdoc, governance, fuzz fmt/Clippy/replay and the verifier's Python tests pass; the
-  opt-in `p09_media_primitives`, `p04_media_e2e` and `p06_tool_verification` pass with
-  FFmpeg 9.0. Results go in the PR description.
+- P09 PR 2 branch, Windows 11: fmt, strict Clippy, workspace tests (715 passed),
+  warning-denied rustdoc, governance, fuzz fmt/Clippy/replay pass; the opt-in
+  `engine_evidence` tests pass with FFmpeg 9.0. Results go in the PR description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
-  protected `main`. Qualification records are in `docs/planning/`; history in git,
-  `CHANGELOG.md` and `docs/history/2026-09-09-to-23-delivery-log.md`.
+  protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

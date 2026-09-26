@@ -90,3 +90,30 @@ A non-conforming record fails with `INTEGRITY_FAILURE`, a newer record version w
 `UNSUPPORTED_SCHEMA`. Records hold candidates only, never pixels. The public schema for
 the record is published with the `candidates` command (P08 PR 4); until then no
 command writes one.
+
+## 2026-09-26 implementation note: evidence records and media are validated as data (P09)
+
+P09 PR 2 adds two artifact kinds: `audio_wav` (a 16 kHz mono 16-bit WAV clip, at most
+1 MiB) and `evidence_record` (one evidence call's lineage, at most 256 KiB); frame and
+crop images keep `frame_png`. Evidence (images, audio and records) has a sub-budget of
+160 of a session's 256 artifacts (ADR 0019 D4); the 64 KiB manifest and 10 GiB bounds
+are unchanged, and a manifest that would exceed 64 KiB is now refused before it is
+written. One evidence call commits its new files and its record in one generation; a
+file the session already holds with the same name, kind, size and digest is kept, and
+the same name with another kind is an integrity failure. The session manifest may also
+record `verified_source_identity`, the digest of ADR 0019 D1; it is not copied into
+bundles. The field is optional, so older manifests stay readable; a session written by
+this version is not readable by an older build (sessions are disposable).
+
+`bundle validate` (and therefore `session retain`) decodes every evidence record
+strictly, as for the other records:
+- unknown fields, values, versions and formats are rejected, and the request key and
+  every item identity are derived again;
+- each item's file must be in the bundle with the item's kind, size and digest;
+- an image's PNG header must state the item's size as 8-bit RGB without interlace, and
+  a clip's WAV header 16 kHz mono 16-bit PCM and its data size;
+- every crop parent and neighbours anchor must be an item of the bundle, and items that
+  share an identity must agree on everything but their source check.
+
+A non-conforming record fails with `INTEGRITY_FAILURE`, a newer record version with
+`UNSUPPORTED_SCHEMA`.

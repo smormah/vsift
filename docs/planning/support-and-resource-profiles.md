@@ -44,6 +44,18 @@ bound at full budget is a 2.2 MB record). Measured on Windows 11 (Xeon E5-2698 v
 FFmpeg 9.0): about 30 media seconds per second of analysis on 1440x900 video, and a
 p95 warm page of about 100 ms for the largest index in an optimised build.
 
+Evidence navigation (P09, ADR 0019) in both profiles: one call extracts at most 100
+frames, 200 megapixels decoded and 256 MiB of PNG (or what the session's 10 GiB has
+left), in provider runs of at most 8 frames, 64 MiB and 30 s, and runs for at most
+120 s; a frame listing covers at most 60 s and 1,200 frames. A burst defaults to 12 and
+allows 100 frames over at most 60 s; neighbours are 1 to 20 per side (default 1).
+Audio clips are WAV, 16 kHz mono signed 16-bit, at most 30 s (about 0.9 MiB,
+`audio_wav` at most 1 MiB). A session keeps its 256 artifacts, 64 KiB manifest and
+10 GiB, with a sub-budget of 160 evidence artifacts (images, clips and evidence
+records of at most 256 KiB); a call without room for its record and one file is
+`RESOURCE_LIMIT` before any provider runs, and one that runs out after extracting
+something is `partial` (`session_evidence_budget`).
+
 These values are admission ceilings, not throughput promises. Provider threads count
 against weighted CPU admission. Source staging, model size and decoded outputs count
 against disk/memory budgets. P04/P07/P14 may tighten a default based on measurements;

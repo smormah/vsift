@@ -1,6 +1,6 @@
 # ADR 0019: Evidence navigation
 
-- Status: Proposed
+- Status: Accepted (maintainer, 2026-09-26)
 - Date: 2026-09-26
 - Tracking: [P09 / issue #12](https://github.com/smormah/vsift/issues/12)
 - Refines: [ADR 0008](0008-cli-and-json-contract.md) (the reserved `frame get`,
@@ -12,7 +12,8 @@
   (a candidate's `representative_us` is what `frame get` extracts)
 - Scope of this record: the media primitives and the pure navigation rules delivered by
   P09 PR 1 (not user-reachable), and the design the later P09 pull requests follow. The
-  decisions D1-D7 below need maintainer confirmation before PR 2 starts.
+  maintainer confirmed decisions D1-D7 on 2026-09-26 (below); PR 2 builds the evidence
+  core on them (implementation note below).
 
 ## Context
 
@@ -117,37 +118,60 @@ last; a timestamp that decodes no frame is `FrameNotFound`, never replaced. The
 media-tool preflight (verification profile 3) exercises listing, exact extraction and a
 crop on F01 under the existing `frame` check.
 
-## Decisions for maintainer confirmation
+## Decisions D1-D7 (confirmed by the maintainer, 2026-09-26)
 
-- **D1 - source check per evidence call.** Recommended: persist a verified on-disk
-  identity of the session's source copy after one full hash; later read-only evidence
-  calls compare the identity only, and each evidence item records its `source_check`
-  (`identity` or `full_hash`). Alternatives: a full-hash bracket per call (ADR 0012's
-  bracketed binding around each call), or once per session per time window.
-- **D2 - image delivery.** Recommended: images are delivered as the absolute path of the
-  committed session artifact only, in the result's `files[]`. Alternatives: `--output`
+The maintainer accepted the recommended option of each decision, with these final
+details. The alternatives considered are kept for the record.
+
+- **D1 - source check per evidence call.** After one full SHA-256 of the session's
+  source copy, an evidence call commits a verified on-disk identity of the copy with its
+  evidence: a digest of its size, modification time, device and file index and the
+  platform fields the media-tool fingerprint uses (Unix mode, owner and status-change
+  time; Windows creation time and attributes). Later read-only evidence calls compare
+  that identity only; when none is recorded or it differs, the copy is hashed in full,
+  and bytes that differ from the committed source are `INTEGRITY_FAILURE` with nothing
+  committed. Every item records `source_check` (`identity` or `full_hash`). This extends
+  ADR 0012's accepted residual across calls (ADR 0012 note of 2026-09-26): on Windows a
+  same-user rewrite that restores the modification time is caught only by a full hash.
+  Mutating and committing operations elsewhere keep their existing policy.
+  Alternatives: a full-hash bracket per call, or once per session per time window.
+- **D2 - image delivery.** Images and clips are delivered only as the absolute path of
+  the committed session artifact, in the result's `files[]`, valid while the session
+  exists; evidence records and bundles never contain paths. Alternatives: `--output`
   export copies; inline base64.
-- **D3 - selection.** Recommended: `at_or_after` by default with `--select
-  displayed-at`; bursts use even time targets, deduplicated; neighbours are consecutive
-  frames.
-- **D4 - artifact bounds.** Recommended: keep 256 artifacts and a 64 KiB manifest per
-  session, with a P09 sub-budget of 160 evidence artifacts and `RESOURCE_LIMIT` beyond
-  it. Alternative: raise the caps, which needs incremental chain validation (P10).
-- **D5 - audio profile.** Recommended: WAV, 16 kHz mono, at most 30 s. Alternative: the
-  source's rate and channels, at most 60 s.
-- **D6 - command shapes.** Recommended: add `<session>` to `frame neighbours` and
-  `crop`, add `--candidate <vcd_id>`, make `--max-frames` optional with default 12, and
-  link frames to candidates rather than changing `visual_candidate` records.
-- **D7 - crop implementation.** Recommended: crops by `FFmpeg` re-decode (this record).
-  Alternative: an in-process `png` crate cropping the extracted frame.
+- **D3 - selection.** `at_or_after` by default with `--select displayed-at`; bursts use
+  even time targets, deduplicated, and report the distinct count; neighbours are
+  consecutive frames with typed side stops.
+- **D4 - artifact bounds.** 256 artifacts, a 64 KiB manifest and 10 GiB per session
+  stay; evidence (frame and crop images, audio clips and evidence records) has a
+  sub-budget of 160 artifacts (`MAX_EVIDENCE_ARTIFACTS`). Exhaustion is `RESOURCE_LIMIT`
+  with the remediation to retain the session and open a new one. Alternative: raise the
+  caps, which needs incremental chain validation (P10).
+- **D5 - audio profile.** WAV, 16 kHz mono signed 16-bit little-endian, at most 30 s,
+  artifact kind `audio_wav` (at most 1 MiB). Alternative: the source's rate and
+  channels, at most 60 s.
+- **D6 - command shapes.** `frame get <session> (--at <us> | --candidate <vcd>)
+  [--select at-or-after|displayed-at] [--tolerance-us <us>]`, `frame neighbours
+  <session> <evidence> [--count 1..20]`, `frame burst <session> --from <us> --to <us>
+  [--max-frames 1..100, default 12]`, `crop <session> <evidence> --rect x,y,w,h` and
+  `audio <session> --from <us> --to <us>`. Frames link to candidates through the
+  candidate id in the request; `visual_candidate` records are unchanged. The grammar
+  lands with the commands in PR 3 and PR 4; PR 2 adds only the engine request types.
+- **D7 - crop implementation.** Crops by `FFmpeg` re-decode (`crop_at`); no new
+  dependency. Alternative: an in-process `png` crate cropping the extracted frame.
+
+Human-readable terminal output (the promise of ADR 0008 and the "readable terminal
+text" of `docs/contracts/cli-v1.md`; most commands print pretty JSON today) is assigned
+to P13, distribution and user documentation, by the same decision.
 
 ## Consequences
 
 - PR 1 (this record, 2026-09-26) delivers the domain rules, the adapter calls, the
   hardened parsers, the preflight and fuzz targets; nothing is user-reachable.
-- PR 2 builds the evidence core (application use cases, session artifacts and reuse,
-  engine operations) on D1-D7. PR 3 makes `frame get`, `frame neighbours` and `frame
-  burst` public; PR 4 `crop` and `audio`, with the P09 qualification record.
+- PR 2 (2026-09-26) delivers the evidence core on D1-D7: application use cases,
+  session artifacts, reuse and lineage, and the engine operations (note below). PR 3
+  makes `frame get`, `frame neighbours` and `frame burst` public; PR 4 `crop` and
+  `audio`, with the P09 qualification record.
 - An evidence call re-decodes the source every time; reuse of identical requests (V-08)
   is PR 2's artifact identity, not a cache in the adapter.
 - Residuals: `FFmpeg` remains a native decoder with the user's filesystem access (ADR
@@ -165,3 +189,66 @@ crop on F01 under the existing `frame` check.
   extraction's decoder, filters and time base instead.
 - **Crop in Rust with a new image crate:** a new decoding dependency for pixels
   `FFmpeg` already decodes (D7 alternative).
+
+## 2026-09-26 implementation note: the evidence core (PR 2)
+
+PR 2 builds the evidence core in the engine library (`Engine::frame_get`,
+`frame_neighbours`, `frame_burst`, `crop`, `audio`); nothing is reachable from the CLI
+until PR 3 and PR 4.
+
+- **Identities.** A request key (`opk_sha256_...`) digests the session, source, stream
+  selector (the selection rule, because keys are derived before any probe), operation,
+  canonical parameters, adapter profile `p09-r0-v1` and the provider fingerprint (the
+  media-tool preflight's fingerprint: executables' identity, adapter, reviewed policy,
+  host isolation and verifying authority). An item identity (`evd_...`) digests only
+  what fixes the pixels or samples: session, source, stream, profile, provider
+  fingerprint, exact timestamp and time base, and the crop region (with its parent) or
+  the clipped audio range. Requested times, policies, tolerances and candidates live in
+  the request and its selections, so two requests that resolve to one frame share one
+  item and one file. When the fingerprint cannot be computed, the item records
+  `tool_fingerprint: null`, its identity also digests the file's SHA-256, and nothing
+  is reused.
+- **Reuse (V-08).** Before any provider runs, a call validates its request, reads the
+  session, resolves the tools and runs the preflight (no process when a pass is on
+  record), binds the copy (D1), reads the session's evidence records and derives its
+  key. A complete record with the same key is returned as `reused` after every file it
+  names is verified again (size and SHA-256, INV-02); nothing is written. A partial
+  record is never reused. Another provider is another key; a changed copy is
+  `INTEGRITY_FAILURE`.
+- **Lineage.** Each extracting call commits one `evidence_record` artifact (strict
+  versioned JSON, at most 256 KiB,
+  [`bundle-evidence-record.schema.json`](../../schemas/v1/bundle-evidence-record.schema.json))
+  with its new files in one generation: the request key and parameters, selections
+  with requested and actual time, delta and role (`requested`; `before` and `after`
+  with the side stops; `target` with its target time), the items and the partial
+  reason. It never holds an operation id or a path. Decoding re-derives the key and
+  every identity; `bundle validate` also checks the items against their files (ADR 0013
+  note of 2026-09-26).
+- **Budgets (SEC-05).** Per call: at most 100 frames, 200 megapixels decoded, 256 MiB
+  of images (or what the session has left), the session's remaining evidence slots,
+  30 s per provider run and 120 s per call. A budget, the deadline or a cancellation
+  after something was extracted commits that, and the record carries the reason
+  (`frame_budget`, `pixel_budget`, `byte_budget`, `session_evidence_budget`,
+  `deadline_exceeded`, `cancelled`); with nothing extracted the call fails with its
+  code. A session without room for a record and one file is `RESOURCE_LIMIT` before
+  any provider runs.
+- **Neighbours** list a 2 s window around the anchor first and widen to 10 s and 29 s
+  only when a side stopped at the listing's edge; the nearest frames are extracted
+  first, alternating sides, so a budget stop keeps the closest. A **burst** over a range
+  denser than one 1,200-frame listing is rejected (`outside_listing`) for now.
+- **Errors** use existing codes only: `INVALID_ARGUMENT` (no frame satisfies the
+  request, unknown evidence or candidate, a parent of the wrong kind, a crop outside
+  its parent, a range too long, a count or tolerance out of range, no audio or video
+  stream), `RESOURCE_LIMIT` (the evidence budget), `INTEGRITY_FAILURE` (a changed copy,
+  a candidate frame not at its time, a parent that no longer describes the stream) and
+  the provider codes (`MISSING_CAPABILITY`, `INVALID_SOURCE`, `DEADLINE_EXCEEDED`,
+  `BUSY`, `CANCELLED`).
+- **Evidence:** application tests over fake extractors (selection, shared items, reuse
+  rules, partial bursts, budgets), store tests (one-generation commits, kept and
+  conflicting files, the sub-budget, bundle validation against missing, tampered and
+  mis-kinded files, wrong image headers and missing crop parents), the D1 hash-count
+  test, engine tests with stand-in tools (warm reuse starts no process; a replaced
+  `FFmpeg` is a new provider while the old item stays readable; a modified copy is
+  `INTEGRITY_FAILURE` with nothing committed; an exhausted budget fails before any
+  process) and opt-in real-`FFmpeg` 9.0 engine tests against the PR 1 truth. Fuzz
+  targets `evidence_record` and `crop_rect`.

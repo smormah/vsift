@@ -52,8 +52,10 @@ analysis; the input is a frame count, a pixel seed and the diagnostics, and the 
 writes the frames itself), `visual_index_record`, `search_query` (query normalisation
 and matching over a query, a line feed and segment text), `frame_showinfo` (the
 single-frame and first-audio-sample diagnostics readers), `frame_listing` (a frame
-listing's diagnostics against a fixed 60 s window) and `png_sequence` (the PNG sequence
-walker; the input is an image count, a width and height, then the output). The two
+listing's diagnostics against a fixed 60 s window), `png_sequence` (the PNG sequence
+walker; the input is an image count, a width and height, then the output),
+`evidence_record` (the stored evidence record) and `crop_rect` (an outer crop against
+a 1440x900 frame, a line feed and an inner crop, parsed and composed). The two
 diagnostics targets also require that indented copies of every line, as FFmpeg echoes
 source metadata, never change a result; their seeds are the real FFmpeg 9.0 output in
 `crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/`. It is a separate package with its
@@ -149,9 +151,10 @@ cargo test --release -p vsift-cli --locked --test p08_candidates_e2e -- --ignore
 ```
 
 After an intended contract change, `VSIFT_REGENERATE_CONTRACT_EXAMPLES=1` rewrites the
-frozen `candidates*.json(l)` examples (`vsift-contract`'s `candidates_contract`) and
-`bundle-visual-index-record.json` (`vsift-infrastructure`'s `visual_index_store`);
-review the diff before committing.
+frozen `candidates*.json(l)` examples (`vsift-contract`'s `candidates_contract`),
+`bundle-visual-index-record.json` (`vsift-infrastructure`'s `visual_index_store`) and
+`bundle-evidence-record.json` (`vsift-infrastructure`'s `evidence_store`); review the
+diff before committing.
 
 ## Dependencies
 

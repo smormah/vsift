@@ -338,6 +338,27 @@ by text alone. For an extraction the count must still equal the images decoded; 
 forged listing entry names a timestamp the exact extraction then does not find
 (`FrameNotFound`), so it cannot become evidence.
 
+P09 evidence core (PR 2, ADR 0019 accepted 2026-09-26; engine only, the commands
+follow): every call runs the media-tool preflight and binds the source copy before
+any provider runs, and evidence is committed only after a last identity comparison of
+the copy (SEC-17/SEC-18). Per call at most 100 frames, 200 megapixels, 256 MiB of
+images, 120 s and the session's remaining evidence slots (160 of 256 artifacts), with
+typed partial results (SEC-05). Records are strict versioned JSON of at most 256 KiB
+that never hold an operation id, a path or media bytes; decoding re-derives the
+request key and every item identity, and `bundle validate` checks every item against
+its file's kind, size, digest and PNG or WAV header and requires crop parents and
+anchors to be present (SEC-07/SEC-17). Files reach the caller only as the absolute
+path of the verified committed artifact inside the private session, valid while the
+session exists (D2, SEC-07/SEC-18). The provider fingerprint in records and identities
+is a SHA-256 digest; it binds the executables' canonical paths and identity but
+reveals neither. Residual (D1, ADR 0012 note of 2026-09-26): after one full hash,
+read-only evidence calls compare the copy's on-disk identity instead of hashing it, so
+a same-user rewrite that restores every identity field between two calls is not seen
+by the later call; on Unix the kernel-set status-change time prevents that, on Windows
+a rewrite that restores the modification time is caught only by a later full hash. The
+recorded identity lives in the private session manifest, writable only by the same
+user, the actor this residual already assumes.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.
