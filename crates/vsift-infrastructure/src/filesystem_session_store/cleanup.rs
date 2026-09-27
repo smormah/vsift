@@ -7,6 +7,7 @@ use cap_std::fs::Dir;
 use vsift_application::SessionStorageError;
 use vsift_domain::{OperationId, SessionId, SessionLifetime, SessionPhase};
 
+use super::map_committed_io;
 use super::{
     COORDINATION_DIRECTORY, ChainCheck, CleanOutcome, FilesystemSessionStore,
     GENERATIONS_DIRECTORY, INITIAL_GENERATION_FILE, INITIALIZATION_LOCK, SESSION_INDEX_DIRECTORY,
@@ -69,7 +70,7 @@ impl FilesystemSessionStore {
         };
         let session = sessions
             .open_dir_nofollow(selected_name)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, ChainCheck::Full)?;
         let eligible = if existing_quarantine {
             true
@@ -82,9 +83,9 @@ impl FilesystemSessionStore {
             }
             let generations = session
                 .open_dir_nofollow(GENERATIONS_DIRECTORY)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                .map_err(map_committed_io)?;
             let initial = open_regular_file(&generations, INITIAL_GENERATION_FILE, false)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                .map_err(map_committed_io)?;
             let modified = initial
                 .metadata()
                 .map_err(map_storage_io)?
@@ -144,14 +145,14 @@ impl FilesystemSessionStore {
         let index = self
             .root
             .open_dir_nofollow(SESSION_INDEX_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let bucket_name = session_bucket(session_id);
         if !index.try_exists(&bucket_name).map_err(map_storage_io)? {
             return Ok(None);
         }
         let bucket = index
             .open_dir_nofollow(&bucket_name)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         if !bucket
             .try_exists(session_id.as_str())
             .map_err(map_storage_io)?
@@ -159,7 +160,7 @@ impl FilesystemSessionStore {
             return Ok(None);
         }
         let marker_lock = open_regular_file(&bucket, session_id.as_str(), true)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?
+            .map_err(map_committed_io)?
             .into_std();
         let marker = read_versioned_json_file::<SessionIndexMarker>(&bucket, session_id.as_str())?;
         let marker_lock = HeldFileLock::try_exclusive(marker_lock).map_err(map_lock_error)?;
@@ -213,12 +214,11 @@ pub(super) fn validate_owned_tree(
         if kind.is_dir() {
             let child = directory
                 .open_dir_nofollow(Path::new(&name))
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                .map_err(map_committed_io)?;
             validate_owned_tree(&child, depth + 1, budget)?;
         } else if kind.is_file() {
             let name = name.to_str().ok_or(SessionStorageError::IntegrityFailure)?;
-            let file = open_regular_file(directory, name, false)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let file = open_regular_file(directory, name, false).map_err(map_committed_io)?;
             let metadata = file.metadata().map_err(map_storage_io)?;
             budget.bytes = budget
                 .bytes

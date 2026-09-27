@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-27 (P00-P09 complete; P10 in progress: PRs 1-2 merged, PR 3 on its branch).
+Date: 2026-09-27 (P00-P09 complete; P10 implemented across PRs 1-4, PR 4 on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -54,9 +54,9 @@ Each entry has these fields:
 | [L-005](#l-005) | Private Windows folders get their DACL just after creation, not atomically | security | low | unscheduled | none | accepted residual |
 | [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents | security | low | unscheduled | none | accepted residual |
 | [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
-| [L-008](#l-008) | Strict OS/storage-crash durability is unqualified (FS-01); protocol implemented, disabled | integrity/durability | high | P10, P11, P14 | [#13](https://github.com/smormah/vsift/issues/13), [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-008](#l-008) | OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01) | integrity/durability | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
-| [L-010](#l-010) | Recovery works through the CLI; the OS-crash campaign and jobs beyond retranscription are still to come | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
+| [L-010](#l-010) | Recovery covers retranscription only; the worker host's jobs are still to come | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
 | [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | [#170](https://github.com/smormah/vsift/issues/170) | monitoring |
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
 | [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
@@ -100,8 +100,12 @@ Each entry has these fields:
 | [L-053](#l-053) | Windows: a process that inherited "ignore Ctrl-C" sees only Ctrl-Break | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-054](#l-054) | A second interruption cannot cut short VSift's own work between boundaries | contract/UX | low | unscheduled | none | accepted residual |
 | [L-055](#l-055) | On Unix a hard-killed CLI's running provider finishes its current unit | security | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
+| [L-056](#l-056) | Durability rests on storage that honours flushes | integrity/durability | medium | unscheduled | none | accepted residual |
+| [L-057](#l-057) | Losing the disk or the host loses the evidence (X-10) | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
+| [L-058](#l-058) | The durable profile recognises Ubuntu 24.04 by `os-release`, not by its kernel | integrity/durability | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-059](#l-059) | Durable sessions can be requested only through the engine API | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
 
-Counts: 6 high, 14 medium, 33 low (53 entries).
+Counts: 4 high, 19 medium, 34 low (57 entries).
 
 ## Security
 
@@ -317,35 +321,111 @@ Counts: 6 high, 14 medium, 33 low (53 entries).
 
 ### L-008
 
-**Strict OS/storage-crash durability is unqualified (FS-01).**
+**OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01).**
 
-- **What:** sessions are consistent across a VSift process crash, but no OS-crash or
-  power-loss campaign has proved that a committed generation survives on NTFS, APFS or
-  ext4. Explicit durable requests therefore fail before any change, and a retained
-  bundle does not gain an OS-crash durability claim by being retained. Since P10 PR 1
-  the durable publication order itself is implemented (flushes, then directory syncs
-  of `artifacts/`, `generations/` and the session, acknowledgement last, fsyncgate-safe
-  retries), but it stays disabled: `durable_profile` claims OS-crash durability only
-  on a Linux ext4 root without disabled barriers **and** once the campaign constant is
-  set, which it is not.
-- **Evidence:** [ADR 0010](../decisions/0010-storage-qualification-gate.md) and its
-  2026-09-26 note; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
-  section 2; [P03 feasibility record](p03-storage-feasibility.md) "Measured experiments
-  and remaining gate"; threat model SEC-24. The order is tested with a recorder on
-  every platform and with real directory syncs and kills on Unix, which is not
-  OS-crash evidence.
-- **Impact:** blocks the strict Linux worker profile and R-09/R-10; desktop users get
-  ephemeral (process-crash-consistent) guarantees only.
-- **Why:** needs an owned disposable OS/storage fault harness, which the repository does
-  not have yet.
-- **Mitigation:** fail-closed durable mode; the effective guarantee is reported.
-- **Next step:** P10 PR 4 runs the Ubuntu 24.04/ext4 crash campaign (dm-log-writes,
-  QEMU kills, dm-flakey, negative control; ADR 0020 D-5) and only then sets the
-  constant; P11/P14 qualify the worker profile.
-- **Owner:** P10, P11, P14. **Issue:** [#13](https://github.com/smormah/vsift/issues/13),
-  [#14](https://github.com/smormah/vsift/issues/14),
-  [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
-  **Review:** pending.
+- **What:** a durable session (requested through the engine API only, ADR 0020 D-3)
+  keeps every acknowledged generation through power loss, an OS crash and write or
+  flush errors on Ubuntu 24.04 with the session root on local ext4 mounts that keep
+  write barriers. Everywhere else (Windows/NTFS, macOS/APFS, other Linux
+  distributions and filesystems, network filesystems, ext4 with `nobarrier` or
+  `barrier=0`) a durable request fails with `MISSING_CAPABILITY` before anything is
+  changed, and sessions are consistent across a VSift process crash only. A retained
+  bundle keeps process-crash consistency even for a durable session: the export does
+  not run the durable protocol.
+- **Evidence:** [P10 durable-publication record](p10-durable-publication.md) (the
+  campaign: dm-log-writes power loss at every flush, QEMU kills, dm-flakey errors,
+  negative control); [ADR 0010](../decisions/0010-storage-qualification-gate.md) and its
+  2026-09-27 note; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  section 7 and PR 4 notes; threat model SEC-24.
+- **Impact:** desktop users on Windows and macOS get ephemeral guarantees only; the
+  command line cannot ask for a durable session until P11
+  ([L-059](#l-059)); the strict worker profile still needs P11 and P14.
+- **Why:** each further profile needs its own owned crash campaign; the Windows
+  writable-directory flush and APFS behaviour have no fault evidence (P03).
+- **Mitigation:** durable requests fail closed and the effective guarantee is
+  reported; the Ubuntu campaign reruns weekly.
+- **Next step:** P11 exposes durable workspaces on the qualified profile; other
+  profiles only with their own campaign and ADR.
+- **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
+  [#17](https://github.com/smormah/vsift/issues/17). **Status:** accepted residual
+  (desktop profiles), deferred (worker profile). **Review:** pending.
+
+### L-056
+
+**Durability rests on storage that honours flushes.**
+
+- **What:** VSift flushes files and directories in the qualified order and
+  acknowledges only afterwards; ext4 turns those flushes into device flushes and FUA
+  writes. A drive, controller, RAID layer or hypervisor that reports a flush complete
+  without making it durable (a volatile write cache without power-loss protection, a
+  virtual disk with `cache=unsafe`, firmware that ignores FLUSH) can lose acknowledged
+  generations on power loss, as it can for any filesystem or database.
+- **Evidence:** [P10 durable-publication record](p10-durable-publication.md)
+  "Residuals"; layer A models a device that honours every flush and FUA write, layer B
+  one attached `cache=none`.
+- **Impact:** a durable session on such storage is only as safe as the storage.
+- **Why:** the host's storage stack is outside VSift; it cannot detect a device that
+  lies about flushes.
+- **Mitigation:** use storage with power-loss protection or a write-through cache;
+  the durable profile already refuses ext4 mounted without write barriers.
+- **Next step:** state it in the P11 worker and P13 user documentation.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-057
+
+**Losing the disk or the host loses the evidence (X-10).**
+
+- **What:** local durability survives a worker crash, an OS crash and power loss; it
+  does not survive losing the disk, the filesystem or the machine. VSift keeps one
+  local copy and offers no replication.
+- **Evidence:** verification X-10; [P10 durable-publication record](p10-durable-publication.md)
+  "Residuals"; ADR 0020 section 7.
+- **Impact:** a caller that needs evidence to outlive the host must copy it off the
+  host.
+- **Why:** replication is a storage service's job, not a local-first tool's (ADR
+  0010, ADR 0020).
+- **Mitigation:** retain a bundle (`session retain`) onto replicated storage, or back
+  up the session root; `bundle validate` checks a copy.
+- **Next step:** document the responsibility in the P11 worker contract.
+- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
+  **Status:** accepted residual. **Review:** pending.
+
+### L-058
+
+**The durable profile recognises Ubuntu 24.04 by `os-release`, not by its kernel.**
+
+- **What:** the gate trusts `/etc/os-release` (`ID=ubuntu`, `VERSION_ID=24.04`) and the
+  mount table. An Ubuntu 24.04 user space in a container on another host kernel, or a
+  24.04 host on a hardware-enablement kernel the campaign did not run, passes it. The
+  campaign ran the hosted runner's kernel (layers A and C) and the pinned cloud
+  image's generic kernel (layer B); both are recorded in the qualification record.
+- **Evidence:** `durable_profile.rs` (`qualifies`, `classify_os_release`); [P10
+  durable-publication record](p10-durable-publication.md).
+- **Impact:** a durable claim on an unexercised kernel rests on ext4's stable fsync
+  semantics rather than on a campaign run.
+- **Why:** pinning kernel versions would refuse every security update; ext4's
+  journal-commit and directory-fsync semantics have been stable for years.
+- **Mitigation:** the campaign reruns weekly on the current hosted kernel; the image
+  pin is bumped deliberately.
+- **Next step:** P14 decides whether the worker profile pins a kernel series.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
+  **Status:** accepted residual. **Review:** pending.
+
+### L-059
+
+**Durable sessions can be requested only through the engine API.**
+
+- **What:** `IngestRequest::durability` asks the engine for a durable session; the
+  `vsift` command line still opens ephemeral sessions only (ADR 0020 D-3), so an agent
+  using the CLI cannot ask for durability yet.
+- **Evidence:** ADR 0020 D-3 and PR 4 notes; `a_durable_ingest_is_durable_or_fails_closed`.
+- **Impact:** durable evidence needs a host that embeds the engine.
+- **Why:** the command-line durable workspace belongs to P11's worker host.
+- **Mitigation:** embed the engine; desktop sessions stay ephemeral by design (ADR 0002).
+- **Next step:** P11's explicit durable workspace.
+- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
+  **Status:** deferred. **Review:** pending.
 
 ### L-009
 
@@ -376,8 +456,7 @@ Counts: 6 high, 14 medium, 33 low (53 entries).
 
 ### L-010
 
-**Recovery works through the CLI; the OS-crash campaign and jobs beyond
-retranscription are still to come.**
+**Recovery covers retranscription only; the worker host's jobs are still to come.**
 
 - **What:** a retranscription is a recoverable job: an interrupted run (a crash, a
   failure, Ctrl-C or `SIGTERM`, a library cancellation) is found by the same request, or
@@ -386,23 +465,22 @@ retranscription are still to come.**
   return the committed result without a new generation, and the same id with another
   request is `IDEMPOTENCY_CONFLICT`; `job status` and `session status` report jobs;
   `job cancel` is serialized with the commit and reaches a running owner within 250 ms;
-  `BUSY` contention is retried with jitter. What is still missing: jobs for anything
-  but retranscription (candidates and evidence calls are short and commit their
-  partial results instead), the worker host's durable workspace (P11), and the
-  OS/storage-crash campaign that X-10 and durable mode need (P10 PR 4,
-  [L-008](#l-008)).
-- **Evidence:** [verification](verification.md) "P10 PR 2 evidence" and "P10 PR 3
-  evidence" (X-01..X-06, X-09 at the storage, use-case, engine and CLI levels; the opt-in
-  `p10_recovery_e2e` recoverable mechanical run with real FFmpeg and whisper.cpp);
-  [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
-  "Implementation notes" for PRs 2 and 3.
-- **Impact:** recovery from an OS crash or power loss is not qualified; R-09 and R-10
-  are R0 release gates.
-- **Why:** P10 is delivered in four pull requests; the campaign is PR 4.
-- **Mitigation:** process crashes, kills and interruptions are qualified; durable
-  requests fail closed ([L-008](#l-008)).
-- **Next step:** P10 PR 4 (Ubuntu 24.04 / ext4 campaign, D-5).
-- **Owner:** P10. **Issue:** [#13](https://github.com/smormah/vsift/issues/13).
+  `BUSY` contention is retried with jitter. On the qualified profile a durable
+  session's jobs and generations also survive an OS crash and power loss (P10 PR 4,
+  [L-008](#l-008)). What is still missing: jobs for anything but retranscription
+  (candidates and evidence calls are short and commit their partial results instead)
+  and the worker host's durable workspace, job requests and batches (P11).
+- **Evidence:** [verification](verification.md) "P10 PR 2 evidence", "P10 PR 3
+  evidence" and "P10 PR 4 evidence" (X-01..X-06, X-09, X-10; the opt-in
+  `p10_recovery_e2e` recoverable mechanical run with real FFmpeg and whisper.cpp; the
+  crash campaign); [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Implementation notes" for PRs 2 to 4.
+- **Impact:** R-09 and R-10 still need P11's worker host.
+- **Why:** P10 delivers the recoverable core; the worker host is P11.
+- **Mitigation:** process crashes, kills and interruptions are qualified everywhere,
+  OS crashes on the durable profile.
+- **Next step:** P11.
+- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** deferred. **Review:** pending.
 
 ### L-047

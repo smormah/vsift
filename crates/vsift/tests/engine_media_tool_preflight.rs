@@ -238,6 +238,7 @@ impl Harness {
                 offset_micros: 0,
             }),
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
     }
 }
@@ -489,6 +490,7 @@ impl Harness {
                 offset_micros: 0,
             }),
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
     }
 }
@@ -553,6 +555,7 @@ async fn plain_ingest_setup_and_rejected_transcripts_never_run_the_preflight() -
             source: harness.write("plain.mp4", PLACEHOLDER_SOURCE)?,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?;
     let rejected = engine
@@ -563,6 +566,7 @@ async fn plain_ingest_setup_and_rejected_transcripts_never_run_the_preflight() -
                 offset_micros: 0,
             }),
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await;
 
@@ -595,6 +599,7 @@ fn f10_request() -> IngestRequest {
             offset_micros: 500_000,
         }),
         cancellation: Cancellation::new(),
+        durability: vsift::DurabilityRequirement::Ephemeral,
     }
 }
 

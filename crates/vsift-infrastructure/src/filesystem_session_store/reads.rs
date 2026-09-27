@@ -10,6 +10,7 @@ use vsift_domain::{
     VisualIndex,
 };
 
+use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, CommittedSource, FilesystemSessionStore, SESSIONS_DIRECTORY,
     SessionReadHold, SessionStatus, StoredArtifact, StoredArtifactKind,
@@ -113,7 +114,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
@@ -135,7 +136,7 @@ impl FilesystemSessionStore {
         }
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         for artifact in records {
             let revision = read_transcript_artifact(&artifacts, artifact, status.source_id())?;
             if wanted(&revision) {
@@ -170,7 +171,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
@@ -190,7 +191,7 @@ impl FilesystemSessionStore {
         };
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let index = read_visual_index_artifact(&artifacts, newest, session_id, status.source_id())?;
         Ok(Some((index, status)))
     }
@@ -209,7 +210,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
@@ -221,7 +222,7 @@ impl FilesystemSessionStore {
         }
         let directory = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let directory_path = self
             .root_path
             .join(SESSIONS_DIRECTORY)
@@ -293,8 +294,7 @@ pub(super) fn read_transcript_artifact(
     artifact: &StoredArtifact,
     source_id: &SourceId,
 ) -> Result<TranscriptRevision, SessionStorageError> {
-    let file = open_regular_file(directory, &artifact.name, false)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let file = open_regular_file(directory, &artifact.name, false).map_err(map_committed_io)?;
     let mut bytes = Vec::new();
     file.take(artifact.bytes.saturating_add(1))
         .read_to_end(&mut bytes)
@@ -322,8 +322,7 @@ pub(super) fn read_visual_index_artifact(
     session_id: &SessionId,
     source_id: &SourceId,
 ) -> Result<VisualIndex, SessionStorageError> {
-    let file = open_regular_file(directory, &artifact.name, false)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let file = open_regular_file(directory, &artifact.name, false).map_err(map_committed_io)?;
     let mut bytes = Vec::new();
     file.take(artifact.bytes.saturating_add(1))
         .read_to_end(&mut bytes)
@@ -351,8 +350,7 @@ pub(super) fn read_evidence_artifact(
     session_id: &SessionId,
     source_id: &SourceId,
 ) -> Result<EvidenceRecord, SessionStorageError> {
-    let file = open_regular_file(directory, &artifact.name, false)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let file = open_regular_file(directory, &artifact.name, false).map_err(map_committed_io)?;
     let mut bytes = Vec::new();
     file.take(artifact.bytes.saturating_add(1))
         .read_to_end(&mut bytes)

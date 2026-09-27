@@ -273,8 +273,9 @@ pub struct BundleData {
 impl BundleData {
     /// Presents a validated retained bundle.
     ///
-    /// Bundles are published with process-crash consistency only (strict OS
-    /// durability is unqualified, FS-01), and the response says so.
+    /// Bundles are published with process-crash consistency only: the export
+    /// does not run the durable protocol (ADR 0020), even for a durable
+    /// session on the qualified profile, and the response says so.
     #[must_use]
     pub fn new(
         session_id: &SessionId,

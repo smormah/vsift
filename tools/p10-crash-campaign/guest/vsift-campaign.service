@@ -1,0 +1,13 @@
+[Unit]
+Description=VSift P10 crash campaign cycle (layer B)
+RequiresMountsFor=/opt/campaign
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/opt/campaign/guest-cycle.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

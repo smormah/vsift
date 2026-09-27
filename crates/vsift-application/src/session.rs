@@ -316,7 +316,10 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
             _registration: registration,
             initialized,
             snapshot,
-            publication: capabilities.publication(),
+            // The session's own guarantee, not the store's strongest: an
+            // ephemeral session on a qualified root commits without the
+            // durable protocol and must never be reported as durable.
+            publication: request.durability.required_guarantee(),
             lifetime,
         })
     }

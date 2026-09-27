@@ -716,6 +716,49 @@ fn map_lock_error(error: fs::TryLockError) -> SessionStorageError {
     }
 }
 
+/// Maps a failure to open or read committed state.
+///
+/// The committed layout is known, so a missing, mistyped, oversized, linked
+/// or otherwise unexpected entry is damage: an integrity failure. A failure
+/// of the storage itself says nothing about the bytes and is a storage
+/// failure instead: an I/O error (`EIO`, for example from a disk that fails
+/// or from ext4 after it shut itself down on a write error), a read-only or
+/// full filesystem, a stale network handle, a busy resource or an interrupted
+/// call. Before P10 PR 4 every such failure was reported as an integrity
+/// failure, so a failing disk looked like tampered evidence; the crash
+/// campaign's write-error layer found it.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Result::map_err requires ownership of the source error"
+)]
+fn map_committed_io(error: io::Error) -> SessionStorageError {
+    if is_storage_failure(&error) {
+        map_storage_io(error)
+    } else {
+        SessionStorageError::IntegrityFailure
+    }
+}
+
+/// Whether `error` is a failure of the storage rather than of the stored
+/// layout (see [`map_committed_io`]).
+fn is_storage_failure(error: &io::Error) -> bool {
+    #[cfg(unix)]
+    if error.raw_os_error() == Some(rustix::io::Errno::IO.raw_os_error()) {
+        return true;
+    }
+    matches!(
+        error.kind(),
+        io::ErrorKind::ReadOnlyFilesystem
+            | io::ErrorKind::StorageFull
+            | io::ErrorKind::QuotaExceeded
+            | io::ErrorKind::StaleNetworkFileHandle
+            | io::ErrorKind::ResourceBusy
+            | io::ErrorKind::Interrupted
+            | io::ErrorKind::TimedOut
+            | io::ErrorKind::OutOfMemory
+    )
+}
+
 #[allow(
     clippy::needless_pass_by_value,
     reason = "Result::map_err requires ownership of the source error"

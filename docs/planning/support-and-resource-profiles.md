@@ -117,12 +117,19 @@ experiments and missing OS/storage crash evidence. [ADR 0010](../decisions/0010-
 accepts ephemeral desktop qualification as the P03 target. PR #42 (`3eef9b7`)
 qualifies process-crash-consistent internal publication through native
 tests on each protected OS; it does not expose a user command or claim OS-crash
-durability. Strict durable acknowledgement remains disabled until the Ubuntu/ext4
-P10/P11/P14 crash campaign passes. Since P10 PR 1 ([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md))
-the durable publication order is implemented, and a root claims OS-crash durability
-only on Linux, on an ext4 mount without disabled write barriers (read from
-`/proc/self/mountinfo`), and once the campaign constant is set; until then every
-profile, the Ubuntu one included, reports `process_crash_consistent`.
+durability. Since P10 PR 4 the **durable profile** is qualified: Ubuntu 24.04
+(`/etc/os-release`) with the session root on local ext4 mounts that keep write
+barriers (`/proc/self/mountinfo`), and nothing else. There a durable session,
+requested through the engine API (`IngestRequest::durability`; the command line
+gains it with P11's durable workspace), acknowledges a generation only after the
+protocol of [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+has made it survive an OS crash or power loss, as the
+[P10 durable-publication record](p10-durable-publication.md) shows. Every other
+profile, and every ephemeral session, reports `process_crash_consistent`, and a
+durable request there fails with `MISSING_CAPABILITY` before anything changes.
+Storage that ignores flushes and the loss of the disk or host stay outside the
+guarantee (known limits L-056 and L-057); the strict worker profile still needs P11
+and P14.
 
 - Fresh-machine installation without Rust, upgrade, rollback and uninstall.
 - All deterministic PR checks plus platform process/filesystem conformance tests.

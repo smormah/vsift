@@ -12,6 +12,7 @@ use cap_std::fs::{Dir, OpenOptions};
 use vsift_application::SessionStorageError;
 use vsift_domain::{EvidenceRecord, EvidenceSubject, PublicationGuarantee, SessionId, SourceId};
 
+use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, BundleManifest, BundleSourcePolicy, BundleStatus, ChainCheck,
     FilesystemSessionStore, MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, SESSIONS_DIRECTORY,
@@ -55,7 +56,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, ChainCheck::Full)?;
         let record = committed
             .manifest
@@ -110,9 +111,9 @@ impl FilesystemSessionStore {
         };
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let source = open_regular_file(&artifacts, &record.source_name, false)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
+        let source =
+            open_regular_file(&artifacts, &record.source_name, false).map_err(map_committed_io)?;
         let source_digest = hash_bounded(source, status.source_bytes())?;
         if source_digest
             != status
@@ -124,8 +125,8 @@ impl FilesystemSessionStore {
         }
         for artifact in &record.artifacts {
             validate_artifact_record(artifact)?;
-            let input = open_regular_file(&artifacts, &artifact.name, false)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let input =
+                open_regular_file(&artifacts, &artifact.name, false).map_err(map_committed_io)?;
             let mut target_options = OpenOptions::new();
             target_options
                 .write(true)
@@ -142,7 +143,7 @@ impl FilesystemSessionStore {
         }
         if source_policy == BundleSourcePolicy::IncludeSource {
             let source = open_regular_file(&artifacts, &record.source_name, false)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                .map_err(map_committed_io)?;
             let mut target_options = OpenOptions::new();
             target_options
                 .write(true)
@@ -193,7 +194,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let bundle = parent
             .open_dir_nofollow(Path::new(name))
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
         validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
         let manifest = read_versioned_manifest_file::<BundleManifest>(&bundle, "bundle.json")?;
@@ -236,8 +237,8 @@ impl FilesystemSessionStore {
             return Err(SessionStorageError::IntegrityFailure);
         }
         if manifest.source_included {
-            let source = open_regular_file(&bundle, "source.media", false)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let source =
+                open_regular_file(&bundle, "source.media", false).map_err(map_committed_io)?;
             let digest = hash_bounded(source, manifest.source_bytes)?;
             if digest != source_id.as_str().trim_start_matches("src_sha256_") {
                 return Err(SessionStorageError::IntegrityFailure);
@@ -273,8 +274,8 @@ impl FilesystemSessionStore {
                 // of 2026-09-26).
                 read_visual_index_artifact(&bundle, artifact, &session_id, &source_id)?;
             } else {
-                let file = open_regular_file(&bundle, &artifact.name, false)
-                    .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                let file =
+                    open_regular_file(&bundle, &artifact.name, false).map_err(map_committed_io)?;
                 if hash_bounded(file, artifact.bytes)? != artifact.sha256 {
                     return Err(SessionStorageError::IntegrityFailure);
                 }
@@ -348,8 +349,7 @@ pub(super) fn validate_bundled_evidence(
         if !checked.insert(artifact.name.as_str()) {
             continue;
         }
-        let file = open_regular_file(bundle, &artifact.name, false)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let file = open_regular_file(bundle, &artifact.name, false).map_err(map_committed_io)?;
         let mut header = Vec::new();
         file.take(u64::try_from(crate::WAV_HEADER_BYTES).unwrap_or(u64::MAX))
             .read_to_end(&mut header)

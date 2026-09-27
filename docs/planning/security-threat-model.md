@@ -90,7 +90,9 @@ ADR 0010 permits P03 production expansion only for ephemeral desktop publication
 requires durable requests to fail before mutation. See the
 [evidence and unclosed controls](p03-storage-feasibility.md). Missing OS/storage crash
 evidence remains a SEC-24 blocker for Ubuntu/ext4 durable enablement in P10/P11/P14,
-not a released vulnerability or closure of SEC-07..SEC-11 and SEC-18.
+not a released vulnerability or closure of SEC-07..SEC-11 and SEC-18. (2026-09-27:
+P10 PR 4 supplied that evidence for Ubuntu 24.04 / local ext4 only; see the P10 PR 4
+note below.)
 
 PR #36 established the SEC-07/SEC-10 initialization seam. PR #42 (`3eef9b7`) adds
 owned-root provisioning, Unix ownership/mode and Windows DACL validation,
@@ -467,6 +469,27 @@ and codes (no path, transcript text or provider output); the one suggested comma
 the executable `vsift` with the fixed words `job resume` and a validated job id, never
 shell text, and needs no authority. `--operation-id` and job ids are parsed by the
 grammar before any I/O.
+
+P10 PR 4 (2026-09-27): the Ubuntu 24.04 / ext4 crash campaign and durable enablement.
+**SEC-24.** The campaign ([P10 durable-publication record](p10-durable-publication.md))
+replayed a power loss at every flush of a dm-log-writes log, killed Ubuntu 24.04
+virtual machines at random moments and injected write and flush errors with
+dm-flakey; no acknowledged durable generation was lost, every injected failure was
+`STORAGE_IO` and never acknowledged, and a negative control proved the harness sees
+loss. `QUALIFIED_UBUNTU_EXT4` is set; the profile check also requires Ubuntu 24.04 by a
+bounded, strictly parsed and fuzzed `os-release` read, and everything unread or
+unparsed fails closed. SEC-24 is closed for that profile; it stays open for every other
+(durable requests there fail with `MISSING_CAPABILITY`), for storage that ignores
+flushes (L-056) and for disk or host loss, which is the caller's to cover with
+replicated storage (X-10, L-057). The campaign also found that a storage failure while
+committed state was read (a filesystem that shut itself down after a write error) was
+reported as `INTEGRITY_FAILURE`, which would present a failing disk as tampered
+evidence; such failures are now `STORAGE_IO`, and a missing, mistyped or linked entry
+is still an integrity failure (**SEC-10**: a typed integrity failure keeps meaning
+damaged or altered bytes). The negative control can only be compiled
+into development builds (the `durability-campaign` feature is refused without debug
+assertions and by the governance check outside the campaign tool's non-default
+feature).
 
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain

@@ -1,0 +1,239 @@
+name: P10 durability campaign
+
+# The Ubuntu 24.04 / ext4 durable-publication qualification (P10 PR 4,
+# ADR 0020 section 7, docs/planning/p10-durable-publication.md). Hosted
+# ubuntu-24.04 runners provide KVM, dm-log-writes and dm-flakey (D-5).
+#
+# Layer A: power loss at every flush (dm-log-writes replay) and the mandatory
+#          negative control, which must lose acknowledgements.
+# Layer B: OS crash: SIGKILL of an Ubuntu 24.04 QEMU guest, in shards.
+# Layer C: write errors (dm-flakey error_writes).
+# The summary job fails unless every layer meets its acceptance numbers.
+
+on:
+  workflow_dispatch:
+    inputs:
+      layer_a_operations:
+        description: Workload operations for layer A (positive run)
+        required: false
+        default: "400"
+      layer_b_kills_per_shard:
+        description: QEMU kills per layer-B shard (four shards)
+        required: false
+        default: "80"
+      layer_c_rounds:
+        description: Write-error rounds for layer C
+        required: false
+        default: "60"
+  schedule:
+    # Weekly, Sunday 03:17 UTC: the campaign guards the qualified profile
+    # against kernel, image and store changes.
+    - cron: "17 3 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p10-durability-campaign-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: never
+  # The pinned Ubuntu 24.04 cloud image for layer B (release 20260911, kernel
+  # 6.8.0-139-generic), its SHA-256 from the release's SHA256SUMS, and its size.
+  UBUNTU_IMAGE_URL: https://cloud-images.ubuntu.com/releases/noble/release-20260911/ubuntu-24.04-server-cloudimg-amd64.img
+  UBUNTU_IMAGE_SHA256: 612b2c0cc1bc413a6cb8c38fd611794caf0f2b436c50013d8b3794db12ad7354
+  UBUNTU_IMAGE_BYTES: "625256960"
+
+jobs:
+  build:
+    name: Build campaign binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test the campaign harness
+        run: cargo test --locked -p vsift-crash-campaign
+
+      - name: Build the plain and the negative-control binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p vsift-crash-campaign
+          cargo build --locked --profile campaign --features campaign -p vsift-crash-campaign
+          mkdir -p bin
+          cp target/release/vsift-crash-campaign bin/plain
+          cp target/campaign/vsift-crash-campaign bin/campaign
+          # Until the campaign constant is set, only a campaign build may
+          # claim the qualified profile, so it also runs the positive layers.
+          if grep -q 'const QUALIFIED_UBUNTU_EXT4: bool = true;' crates/vsift-infrastructure/src/durable_profile.rs; then
+            cp bin/plain bin/positive
+            echo "positive=plain (release build, campaign constant set)" | tee bin/build.txt
+          else
+            cp bin/campaign bin/positive
+            echo "positive=campaign (campaign constant not yet set)" | tee bin/build.txt
+          fi
+          echo "commit=$GITHUB_SHA" >> bin/build.txt
+          rustc --version >> bin/build.txt
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: campaign-binaries
+          path: bin/
+          retention-days: 7
+
+  layer-a:
+    name: Layer A (${{ matrix.mode }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [positive, negative]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: campaign-binaries
+          path: bin
+
+      - name: Replay every flush
+        shell: bash
+        env:
+          MODE: ${{ matrix.mode }}
+          OPERATIONS: ${{ matrix.mode == 'negative' && '80' || inputs.layer_a_operations || '400' }}
+        run: |
+          set -euo pipefail
+          chmod +x bin/*
+          binary=bin/positive
+          if [ "$MODE" = negative ]; then binary=bin/campaign; fi
+          sudo modprobe dm_log_writes
+          sudo tools/p10-crash-campaign/scripts/layer-a.sh "$PWD/$binary" /dev/shm/vsift-a \
+            "$OPERATIONS" 20260927 "$MODE" "$PWD/out"
+          cat out/result.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: layer-a-${{ matrix.mode }}
+          path: out/
+          retention-days: 90
+
+  layer-b:
+    name: Layer B (shard ${{ matrix.shard }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: campaign-binaries
+          path: bin
+
+      - name: Install QEMU and the cloud-init seed tool
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils
+          sudo chmod 0666 /dev/kvm
+          qemu-system-x86_64 --version
+
+      - name: Download and verify the pinned Ubuntu 24.04 cloud image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/image"
+          image="$RUNNER_TEMP/image/noble.img"
+          curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --silent --show-error \
+            --location --retry 3 --max-filesize 734003200 --output "$image" "$UBUNTU_IMAGE_URL"
+          test "$(stat -c %s "$image")" = "$UBUNTU_IMAGE_BYTES"
+          echo "$UBUNTU_IMAGE_SHA256  $image" | sha256sum --check --strict
+
+      - name: Kill the guest at random moments
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+          KILLS: ${{ inputs.layer_b_kills_per_shard || '80' }}
+        run: |
+          set -euo pipefail
+          chmod +x bin/*
+          tools/p10-crash-campaign/scripts/layer-b.sh "$PWD/bin/positive" "$RUNNER_TEMP/image/noble.img" \
+            "$RUNNER_TEMP/vsift-b" "$KILLS" $(( 20260927 + SHARD )) "$PWD/out"
+          cat out/result.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: layer-b-shard-${{ matrix.shard }}
+          path: out/
+          retention-days: 90
+
+  layer-c:
+    name: Layer C (write errors)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: campaign-binaries
+          path: bin
+
+      - name: Fail writes and flushes at random moments
+        shell: bash
+        env:
+          ROUNDS: ${{ inputs.layer_c_rounds || '60' }}
+        run: |
+          set -euo pipefail
+          chmod +x bin/*
+          sudo modprobe dm_flakey
+          sudo tools/p10-crash-campaign/scripts/layer-c.sh "$PWD/bin/positive" /dev/shm/vsift-c \
+            "$ROUNDS" 20260927 "$PWD/out"
+          cat out/result.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: layer-c
+          path: out/
+          retention-days: 90
+
+  summary:
+    name: Acceptance
+    needs: [layer-a, layer-b, layer-c]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: evidence
+
+      - name: Check the acceptance numbers
+        shell: bash
+        run: tools/p10-crash-campaign/scripts/acceptance.sh evidence | tee -a "$GITHUB_STEP_SUMMARY"

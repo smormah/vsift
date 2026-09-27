@@ -8,6 +8,7 @@ use vsift_domain::{
     EvidenceMediaKind, OperationId, SessionArtifactKind, SessionId, SessionPhase, StorageGeneration,
 };
 
+use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, ATTEMPTS_DIRECTORY, COORDINATION_DIRECTORY, EvidenceInventory,
     EvidenceMediaFile, FilesystemSessionStore, LifecycleUpdate, SESSIONS_DIRECTORY, StoredArtifact,
@@ -74,7 +75,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
@@ -88,10 +89,10 @@ impl FilesystemSessionStore {
         let name = format!("artifact-{digest}.{}", kind.extension());
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let attempts = session
             .open_dir_nofollow(ATTEMPTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let hooks = CommitHooks::new();
         let durability = committed.manifest.durability;
         let installer = ArtifactInstaller {
@@ -229,7 +230,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record_state = committed
             .manifest
@@ -241,10 +242,10 @@ impl FilesystemSessionStore {
         }
         let directory = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let attempts = session
             .open_dir_nofollow(ATTEMPTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let durability = committed.manifest.durability;
         let installer = ArtifactInstaller {
             commit: hooks.commit(durability),
@@ -307,7 +308,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let lifecycle = committed
             .manifest
@@ -319,7 +320,7 @@ impl FilesystemSessionStore {
         }
         let directory = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let mut records = Vec::new();
         let mut known_media = BTreeSet::new();
         for artifact in &lifecycle.artifacts {
@@ -373,7 +374,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let lifecycle = committed
             .manifest
@@ -393,9 +394,9 @@ impl FilesystemSessionStore {
             .ok_or(SessionStorageError::IntegrityFailure)?;
         let directory = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let file = open_regular_file(&directory, &artifact.name, false)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
+        let file =
+            open_regular_file(&directory, &artifact.name, false).map_err(map_committed_io)?;
         if hash_bounded(file, artifact.bytes)? != artifact.sha256 {
             return Err(SessionStorageError::IntegrityFailure);
         }

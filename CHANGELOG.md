@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Durable sessions on Ubuntu 24.04 with local ext4 (P10 PR 4,
+  [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md) section 7,
+  [ADR 0010](docs/decisions/0010-storage-qualification-gate.md)). An owned crash
+  campaign (`tools/p10-crash-campaign/`, workflow `P10 durability campaign`, manual and
+  weekly) qualified the durable publication protocol: a power loss replayed at every
+  flush of a dm-log-writes log, SIGKILLed Ubuntu 24.04 virtual machines and injected
+  write and flush errors lost no acknowledged generation, and a negative control
+  proved the harness sees loss ([record](docs/planning/p10-durable-publication.md)).
+  A host embedding the engine can now ask for a durable session
+  (`IngestRequest::durability`); on Ubuntu 24.04 with its session root on ext4 mounts
+  that keep write barriers it is honoured (`os_crash_durable`), everywhere else it still
+  fails with `MISSING_CAPABILITY` before anything changes. The command line keeps
+  opening ephemeral sessions until the worker host (P11). The profile check now also
+  reads `/etc/os-release` (bounded, strictly parsed, fuzzed as `os_release`). Losing the
+  disk or host remains the caller's to cover with replicated storage.
+
 - Job commands, operation ids and interruption handling (P10 PR 3,
   [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md)).
   `vsift job status <job>` reports a recoverable job: its state, whether `job resume`
@@ -360,6 +376,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A storage failure while committed state was read (for example `EIO` from a disk,
+  or from ext4 after it shut itself down on a write error) was reported as
+  `INTEGRITY_FAILURE`, as if the evidence had been altered; it is now `STORAGE_IO`,
+  and a missing, mistyped or linked entry is still an integrity failure. Found by the
+  P10 crash campaign's write-error layer.
+- An ingest reported the store's strongest guarantee rather than its session's own;
+  on the newly qualified durable profile an ephemeral session would have been reported
+  as `os_crash_durable`. It now reports what the session gets.
+- The weekly fuzz workflow now also runs the `mountinfo` target (added in P10 PR 1 but
+  missing from its list) and the new `os_release` target.
 - The concurrent-preflight engine test no longer fails when a throttled runner makes
   the root's creator outlast the five-second wait (#144): the wait is injectable
   (`EnginePorts::with_session_root_wait`, at most 60 s) and that test waits longer.

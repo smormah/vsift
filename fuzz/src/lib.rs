@@ -24,12 +24,13 @@ use vsift_domain::{
     validate_chunk_output,
 };
 use vsift_infrastructure::{
-    FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, MountDevice,
-    SourceContainer, VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo,
-    decode_evidence_record, decode_transcript_record, decode_visual_index_record,
-    encode_evidence_record, encode_transcript_record, encode_visual_index_record,
-    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_png_sequence, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, MAX_OS_RELEASE_BYTES,
+    MountDevice, SourceContainer, VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo,
+    classify_os_release, decode_evidence_record, decode_transcript_record,
+    decode_visual_index_record, encode_evidence_record, encode_transcript_record,
+    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
+    parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -115,11 +116,15 @@ pub enum Target {
     /// whether a session root may claim OS-crash durability (P10, ADR 0020).
     /// The input is the table.
     Mountinfo,
+    /// An `os-release` file through `classify_os_release`, which decides
+    /// whether the host is the qualified Ubuntu 24.04 (P10 PR 4). The input
+    /// is the file.
+    OsRelease,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -135,6 +140,7 @@ impl Target {
         Self::EvidenceRecord,
         Self::CropRect,
         Self::Mountinfo,
+        Self::OsRelease,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -156,6 +162,7 @@ impl Target {
             Self::EvidenceRecord => "evidence_record",
             Self::CropRect => "crop_rect",
             Self::Mountinfo => "mountinfo",
+            Self::OsRelease => "os_release",
         }
     }
 
@@ -181,6 +188,7 @@ impl Target {
             Self::EvidenceRecord => check_evidence_record(data),
             Self::CropRect => check_crop_rect(data),
             Self::Mountinfo => check_mountinfo(data),
+            Self::OsRelease => check_os_release(data),
         }
     }
 }
@@ -259,6 +267,9 @@ pub enum Violation {
     /// The mount-table verdict depended on the device asked about in a way
     /// whole-table parsing forbids, or changed when the table was repeated.
     MountinfoInconsistent,
+    /// The os-release verdict changed when a comment was appended or the
+    /// file was repeated.
+    OsReleaseInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -303,6 +314,7 @@ impl fmt::Display for Violation {
             }
             Self::CropRectInvalid => "an accepted crop is outside its frame or not canonical",
             Self::MountinfoInconsistent => "the mount-table verdict is inconsistent",
+            Self::OsReleaseInconsistent => "the os-release verdict is inconsistent",
         })
     }
 }
@@ -803,6 +815,32 @@ fn check_mountinfo(data: &[u8]) -> Result<(), Violation> {
         }
     }
     Ok(())
+}
+
+fn check_os_release(data: &[u8]) -> Result<(), Violation> {
+    let Ok(verdict) = classify_os_release(data) else {
+        return Ok(());
+    };
+    // Only whole lines are appended or repeated, so the file must end with
+    // one (or be empty); a result over the bound may be refused instead.
+    if !(data.is_empty() || data.last() == Some(&b'\n')) {
+        return Ok(());
+    }
+    let unchanged = |extended: &[u8]| match classify_os_release(extended) {
+        Ok(again) => again == verdict,
+        Err(_) => extended.len() > MAX_OS_RELEASE_BYTES,
+    };
+    // A comment and a blank line change nothing.
+    let mut commented = data.to_vec();
+    commented.extend_from_slice(b"# comment\n\n");
+    // Repeating every assignment in order leaves the last value of each key.
+    let mut twice = data.to_vec();
+    twice.extend_from_slice(data);
+    if unchanged(&commented) && unchanged(&twice) {
+        Ok(())
+    } else {
+        Err(Violation::OsReleaseInconsistent)
+    }
 }
 
 fn check_png_sequence(data: &[u8]) -> Result<(), Violation> {

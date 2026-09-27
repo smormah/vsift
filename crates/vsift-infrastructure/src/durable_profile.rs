@@ -3,18 +3,22 @@
 //! ADR 0010 qualifies OS-crash-durable publication only on Ubuntu 24.04 with a
 //! local ext4 filesystem, and only after an owned crash campaign has passed.
 //! The store therefore claims [`PublicationGuarantee::OsCrashDurable`] only
-//! when all of these hold:
+//! when all of these hold (the decision table is [`qualifies`]):
 //!
 //! - the build targets Linux;
+//! - `/etc/os-release` (or `/usr/lib/os-release`), read with a bound and
+//!   parsed strictly by [`classify_os_release`], names Ubuntu 24.04;
 //! - the root's device appears in `/proc/self/mountinfo` only as ext4 mounts
 //!   that do not disable write barriers (`nobarrier` or `barrier=0`), read
 //!   with a bound and parsed strictly by [`classify_mountinfo`];
-//! - the campaign constant `QUALIFIED_UBUNTU_EXT4` is set. It is `false`
-//!   until P10's campaign evidence is recorded, so every profile still fails
-//!   durable requests closed with an unsupported-guarantee error.
+//! - the campaign constant `QUALIFIED_UBUNTU_EXT4` is set, which it is since
+//!   P10 PR 4's crash campaign passed (`docs/planning/p10-durable-publication.md`).
 //!
-//! The mountinfo parser is public so the fuzz harness reaches it through the
-//! same surface as the store.
+//! Every other profile answers a durable request with an unsupported-guarantee
+//! error before anything is changed. Anything that cannot be read or parsed
+//! fails closed. Both parsers are
+//! public so the fuzz harness reaches them through the same surface as the
+//! store.
 
 use std::{error::Error, fmt};
 
@@ -26,9 +30,15 @@ use vsift_domain::PublicationGuarantee;
 /// host's mount table and small enough to hold in memory.
 pub const MAX_MOUNTINFO_BYTES: usize = 1024 * 1024;
 
-/// Set only when the Ubuntu 24.04 / ext4 crash campaign has passed (P10 PR 4).
+/// Largest os-release file the profile check reads: 64 KiB, far above any
+/// distribution's file.
+pub const MAX_OS_RELEASE_BYTES: usize = 64 * 1024;
+
+/// Set: the Ubuntu 24.04 / ext4 crash campaign passed (P10 PR 4, ADR 0020
+/// section 7; evidence and run links in the P10 durable-publication record).
+/// Clearing it withdraws the durable profile everywhere.
 #[cfg(target_os = "linux")]
-const QUALIFIED_UBUNTU_EXT4: bool = false;
+const QUALIFIED_UBUNTU_EXT4: bool = true;
 
 /// A Linux device number split into its major and minor parts, as
 /// `/proc/self/mountinfo` prints it.
@@ -205,6 +215,150 @@ fn disables_barriers(options: &str) -> bool {
         .any(|option| option == "nobarrier" || option == "barrier=0")
 }
 
+/// What an os-release file says about the distribution.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OsReleaseProfile {
+    /// `ID=ubuntu` and `VERSION_ID=24.04`: the one qualified release.
+    Ubuntu2404,
+    /// Any other distribution or release, or a file naming none.
+    Other,
+}
+
+/// Why an os-release file was refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OsReleaseError {
+    /// Larger than [`MAX_OS_RELEASE_BYTES`].
+    TooLarge,
+    /// Not UTF-8 text.
+    NotUtf8,
+    /// A line (numbered from 1) is not blank, a comment or a documented
+    /// `KEY=value` assignment.
+    Malformed {
+        /// The 1-based line number.
+        line: usize,
+    },
+}
+
+impl fmt::Display for OsReleaseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TooLarge => formatter.write_str("the os-release file is too large"),
+            Self::NotUtf8 => formatter.write_str("the os-release file is not UTF-8"),
+            Self::Malformed { line } => write!(formatter, "os-release line {line} is malformed"),
+        }
+    }
+}
+
+impl Error for OsReleaseError {}
+
+/// Classifies an `os-release(5)` file.
+///
+/// Every line is parsed, so a file damaged anywhere is refused rather than
+/// half trusted. A line is blank, a comment starting with `#`, or
+/// `KEY=value`: the key is ASCII letters, digits and underscores, not
+/// starting with a digit; the value is unquoted (no whitespace, quotes,
+/// backslashes, `$` or backticks), wholly single-quoted, or wholly
+/// double-quoted with a backslash escaping only `"`, `\`, `$` and a
+/// backtick. As in the shell the format mirrors, a later assignment of the
+/// same key wins. The file names the qualified release only when `ID` is
+/// exactly `ubuntu` and `VERSION_ID` exactly `24.04`; a derivative that
+/// lists Ubuntu only in `ID_LIKE` is another distribution, because the
+/// campaign qualified Ubuntu's own kernel and packages.
+///
+/// # Errors
+///
+/// A file over [`MAX_OS_RELEASE_BYTES`], not UTF-8, or with a malformed line.
+pub fn classify_os_release(text: &[u8]) -> Result<OsReleaseProfile, OsReleaseError> {
+    if text.len() > MAX_OS_RELEASE_BYTES {
+        return Err(OsReleaseError::TooLarge);
+    }
+    let text = std::str::from_utf8(text).map_err(|_| OsReleaseError::NotUtf8)?;
+    let mut id = None;
+    let mut version = None;
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let (key, value) =
+            parse_assignment(trimmed).ok_or(OsReleaseError::Malformed { line: index + 1 })?;
+        match key {
+            "ID" => id = Some(value),
+            "VERSION_ID" => version = Some(value),
+            _ => {}
+        }
+    }
+    Ok(
+        if id.as_deref() == Some("ubuntu") && version.as_deref() == Some("24.04") {
+            OsReleaseProfile::Ubuntu2404
+        } else {
+            OsReleaseProfile::Other
+        },
+    )
+}
+
+/// One `KEY=value` line of an os-release file, its value unquoted.
+fn parse_assignment(line: &str) -> Option<(&str, String)> {
+    let (key, raw) = line.split_once('=')?;
+    let mut characters = key.chars();
+    let first = characters.next()?;
+    if !(first.is_ascii_alphabetic() || first == '_')
+        || !characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return None;
+    }
+    Some((key, parse_value(raw)?))
+}
+
+/// The value of an assignment with its quoting removed.
+fn parse_value(raw: &str) -> Option<String> {
+    if let Some(inner) = raw.strip_prefix('\'') {
+        let inner = inner.strip_suffix('\'')?;
+        return (!inner.contains('\'')).then(|| inner.to_owned());
+    }
+    if let Some(inner) = raw.strip_prefix('"') {
+        let inner = inner.strip_suffix('"')?;
+        let mut value = String::with_capacity(inner.len());
+        let mut characters = inner.chars();
+        while let Some(character) = characters.next() {
+            match character {
+                '\\' => {
+                    let escaped = characters.next()?;
+                    if !is_shell_special(escaped) || escaped == '\'' {
+                        return None;
+                    }
+                    value.push(escaped);
+                }
+                '"' | '$' | '`' => return None,
+                other => value.push(other),
+            }
+        }
+        return Some(value);
+    }
+    (!raw.contains(|character: char| character.is_whitespace() || is_shell_special(character)))
+        .then(|| raw.to_owned())
+}
+
+/// Characters an unquoted os-release value may not contain.
+const fn is_shell_special(character: char) -> bool {
+    matches!(character, '"' | '\'' | '\\' | '$' | '`')
+}
+
+/// The decision table of ADR 0010 and ADR 0020: a root claims OS-crash
+/// durability only when the campaign has passed, the host is Ubuntu 24.04
+/// and the root's device is mounted only as ext4 with write barriers.
+/// Anything that could not be read or parsed is `None` and fails closed.
+#[must_use]
+pub const fn qualifies(
+    campaign_passed: bool,
+    os: Option<OsReleaseProfile>,
+    mount: Option<MountProfile>,
+) -> bool {
+    campaign_passed
+        && matches!(os, Some(OsReleaseProfile::Ubuntu2404))
+        && matches!(mount, Some(MountProfile::Ext4WithBarriers))
+}
+
 /// The capabilities a store over `root` may claim on this host.
 pub(crate) fn storage_capabilities(root: &Dir) -> StorageCapabilities {
     StorageCapabilities::new(if os_crash_durable(root) {
@@ -217,23 +371,36 @@ pub(crate) fn storage_capabilities(root: &Dir) -> StorageCapabilities {
 /// Whether the root sits on the qualified Ubuntu/ext4 profile.
 #[cfg(target_os = "linux")]
 fn os_crash_durable(root: &Dir) -> bool {
-    use std::io::Read as _;
     if !QUALIFIED_UBUNTU_EXT4 {
         return false;
     }
-    let Ok(metadata) = root.dir_metadata() else {
-        return false;
-    };
-    let device = MountDevice::from_linux_dev(cap_std::fs::MetadataExt::dev(&metadata));
-    let Ok(file) = std::fs::File::open("/proc/self/mountinfo") else {
-        return false;
-    };
-    let mut table = Vec::new();
-    let limit = u64::try_from(MAX_MOUNTINFO_BYTES).unwrap_or(u64::MAX);
-    if file.take(limit + 1).read_to_end(&mut table).is_err() {
-        return false;
-    }
-    classify_mountinfo(&table, device) == Ok(MountProfile::Ext4WithBarriers)
+    let os = read_bounded_file(
+        &["/etc/os-release", "/usr/lib/os-release"],
+        MAX_OS_RELEASE_BYTES,
+    )
+    .and_then(|text| classify_os_release(&text).ok());
+    let mount = root.dir_metadata().ok().and_then(|metadata| {
+        let device = MountDevice::from_linux_dev(cap_std::fs::MetadataExt::dev(&metadata));
+        read_bounded_file(&["/proc/self/mountinfo"], MAX_MOUNTINFO_BYTES)
+            .and_then(|table| classify_mountinfo(&table, device).ok())
+    });
+    qualifies(QUALIFIED_UBUNTU_EXT4, os, mount)
+}
+
+/// Reads the first of `paths` that opens: at most `limit` bytes and one more,
+/// so an oversized file is refused by its parser rather than truncated.
+#[cfg(target_os = "linux")]
+fn read_bounded_file(paths: &[&str], limit: usize) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    let file = paths
+        .iter()
+        .find_map(|path| std::fs::File::open(path).ok())?;
+    let mut bytes = Vec::new();
+    let limit = u64::try_from(limit).unwrap_or(u64::MAX);
+    file.take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .ok()?;
+    Some(bytes)
 }
 
 /// No other target has a qualified durable profile (ADR 0010).
@@ -245,8 +412,161 @@ fn os_crash_durable(_root: &Dir) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_MOUNTINFO_BYTES, MountDevice, MountInfoError, MountProfile, classify_mountinfo,
+        MAX_MOUNTINFO_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, MountInfoError, MountProfile,
+        OsReleaseError, OsReleaseProfile, classify_mountinfo, classify_os_release, qualifies,
     };
+
+    /// Ubuntu 24.04's own file, as `/usr/lib/os-release` ships it.
+    const NOBLE: &str = r#"PRETTY_NAME="Ubuntu 24.04.3 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.3 LTS (Noble Numbat)"
+VERSION_CODENAME=noble
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=noble
+LOGO=ubuntu-logo
+"#;
+
+    #[test]
+    fn only_ubuntu_24_04_itself_is_the_qualified_release() {
+        assert_eq!(
+            classify_os_release(NOBLE.as_bytes()),
+            Ok(OsReleaseProfile::Ubuntu2404)
+        );
+        for (text, expected) in [
+            (
+                "ID=ubuntu\nVERSION_ID=24.04\n",
+                OsReleaseProfile::Ubuntu2404,
+            ),
+            (
+                "ID='ubuntu'\nVERSION_ID='24.04'",
+                OsReleaseProfile::Ubuntu2404,
+            ),
+            (
+                "# comment\n\n  ID=ubuntu  \nVERSION_ID=\"24.04\"\n",
+                OsReleaseProfile::Ubuntu2404,
+            ),
+            // A later assignment wins, as in the shell.
+            (
+                "ID=debian\nID=ubuntu\nVERSION_ID=24.04\n",
+                OsReleaseProfile::Ubuntu2404,
+            ),
+            (
+                "ID=ubuntu\nVERSION_ID=24.04\nID=debian\n",
+                OsReleaseProfile::Other,
+            ),
+            ("ID=ubuntu\nVERSION_ID=\"22.04\"\n", OsReleaseProfile::Other),
+            ("ID=ubuntu\nVERSION_ID=\"24.10\"\n", OsReleaseProfile::Other),
+            (
+                "ID=ubuntu\nVERSION_ID=\"24.04.3\"\n",
+                OsReleaseProfile::Other,
+            ),
+            ("ID=Ubuntu\nVERSION_ID=24.04\n", OsReleaseProfile::Other),
+            (
+                "ID=linuxmint\nID_LIKE=\"ubuntu debian\"\nVERSION_ID=24.04\n",
+                OsReleaseProfile::Other,
+            ),
+            ("ID=ubuntu\n", OsReleaseProfile::Other),
+            ("VERSION_ID=24.04\n", OsReleaseProfile::Other),
+            ("", OsReleaseProfile::Other),
+            (
+                "ID=ubuntu\nVERSION_ID=24.04\nNAME=\"a \\\"quoted\\\" \\$ \\` \\\\ name\"\n",
+                OsReleaseProfile::Ubuntu2404,
+            ),
+        ] {
+            assert_eq!(
+                classify_os_release(text.as_bytes()),
+                Ok(expected),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_damaged_os_release_is_refused_whole() {
+        for (text, line) in [
+            ("ID=ubuntu\nVERSION_ID=24.04\nnot an assignment\n", 3),
+            ("ID ubuntu\n", 1),
+            ("=ubuntu\n", 1),
+            ("1D=ubuntu\n", 1),
+            ("I-D=ubuntu\n", 1),
+            ("ID=ubu ntu\n", 1),
+            ("ID=\"ubuntu\n", 1),
+            ("ID='ubuntu\n", 1),
+            ("ID=ubuntu\"\n", 1),
+            ("ID='ub'untu'\n", 1),
+            ("ID=\"ub\"untu\"\n", 1),
+            ("ID=\"$(reboot)\"\n", 1),
+            ("ID=\"`reboot`\"\n", 1),
+            ("ID=\"ubuntu\\n\"\n", 1),
+            ("ID=\"ubuntu\\\"\n", 1),
+            ("ID=$ubuntu\n", 1),
+            ("ID=ubuntu\\\n", 1),
+            ("ID=ubuntu\nVERSION_ID=24.04;reboot\nX=a b\n", 3),
+        ] {
+            assert_eq!(
+                classify_os_release(text.as_bytes()),
+                Err(OsReleaseError::Malformed { line }),
+                "{text:?}"
+            );
+        }
+        assert_eq!(
+            classify_os_release(b"ID=\xff\n"),
+            Err(OsReleaseError::NotUtf8)
+        );
+        let mut oversized = b"ID=ubuntu\nVERSION_ID=24.04\n".to_vec();
+        oversized.resize(MAX_OS_RELEASE_BYTES + 1, b'\n');
+        assert_eq!(
+            classify_os_release(&oversized),
+            Err(OsReleaseError::TooLarge)
+        );
+        oversized.truncate(MAX_OS_RELEASE_BYTES);
+        assert_eq!(
+            classify_os_release(&oversized),
+            Ok(OsReleaseProfile::Ubuntu2404)
+        );
+    }
+
+    /// Every combination of the three inputs: only a passed campaign on
+    /// Ubuntu 24.04 over ext4 with barriers qualifies; anything unread or
+    /// unparsed (`None`) fails closed.
+    #[test]
+    fn the_decision_table_qualifies_one_combination_only() {
+        let oses = [
+            None,
+            Some(OsReleaseProfile::Ubuntu2404),
+            Some(OsReleaseProfile::Other),
+        ];
+        let mounts = [
+            None,
+            Some(MountProfile::Ext4WithBarriers),
+            Some(MountProfile::Ext4WithoutBarriers),
+            Some(MountProfile::OtherFilesystem),
+            Some(MountProfile::NotMounted),
+        ];
+        let mut qualified = 0;
+        for campaign in [false, true] {
+            for os in oses {
+                for mount in mounts {
+                    let expected = campaign
+                        && os == Some(OsReleaseProfile::Ubuntu2404)
+                        && mount == Some(MountProfile::Ext4WithBarriers);
+                    assert_eq!(
+                        qualifies(campaign, os, mount),
+                        expected,
+                        "{campaign} {os:?} {mount:?}"
+                    );
+                    qualified += usize::from(expected);
+                }
+            }
+        }
+        assert_eq!(qualified, 1);
+    }
 
     const TABLE: &str = "\
 22 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw,errors=remount-ro

@@ -13,6 +13,7 @@ use cap_std::fs::Dir;
 use vsift_application::{AuthorizedSessionStorageInitialization, SessionStorageError};
 use vsift_domain::{OperationId, SessionId, StorageGeneration};
 
+use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, ATTEMPTS_DIRECTORY, COORDINATION_DIRECTORY, CURRENT_FILE, ChainCheck,
     CommitPointer, GENERATIONS_DIRECTORY, GenerationManifest, INITIAL_GENERATION_FILE,
@@ -160,14 +161,14 @@ fn make_session_reachable(
     }
     let index = root
         .open_dir_nofollow(SESSION_INDEX_DIRECTORY)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     let bucket_name = session_bucket(session_id);
     if !index.try_exists(&bucket_name).map_err(map_storage_io)? {
         return Ok(());
     }
     let bucket = index
         .open_dir_nofollow(&bucket_name)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     commit.sync_directory(&bucket, DirRole::IndexBucket)?;
     commit.sync_directory(&index, DirRole::SessionIndex)
 }
@@ -178,7 +179,7 @@ pub(super) fn discard_incomplete_initial_attempt(
 ) -> Result<(), SessionStorageError> {
     let attempt = sessions
         .open_dir_nofollow(attempt_name)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     let _ = attempt.remove_file(CURRENT_FILE);
     for directory_name in [
         GENERATIONS_DIRECTORY,
@@ -193,13 +194,11 @@ pub(super) fn discard_incomplete_initial_attempt(
             drop(directory);
             attempt
                 .remove_dir(directory_name)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                .map_err(map_committed_io)?;
         }
     }
     drop(attempt);
-    sessions
-        .remove_dir(attempt_name)
-        .map_err(|_| SessionStorageError::IntegrityFailure)
+    sessions.remove_dir(attempt_name).map_err(map_committed_io)
 }
 
 pub(super) fn ensure_session_lock_anchor(
@@ -319,7 +318,7 @@ pub(super) fn validate_session_directory(
 ) -> Result<StorageGeneration, SessionStorageError> {
     let session = sessions
         .open_dir_nofollow(directory_name)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     for directory in [
         GENERATIONS_DIRECTORY,
         RECORDS_DIRECTORY,
@@ -328,7 +327,7 @@ pub(super) fn validate_session_directory(
     ] {
         session
             .open_dir_nofollow(directory)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
     }
 
     let committed = read_committed_manifest(&session, session_id, ChainCheck::Full)?;

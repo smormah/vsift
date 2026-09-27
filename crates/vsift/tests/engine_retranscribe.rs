@@ -271,6 +271,7 @@ impl Harness {
                 source,
                 transcript: None,
                 cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
             })
             .await?
             .session

@@ -13,6 +13,7 @@ use vsift_application::{
 };
 use vsift_domain::{DurabilityRequirement, OperationId, SessionLifetime, StorageGeneration};
 
+use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, ATTEMPTS_DIRECTORY, CHAIN_CHECKPOINT_FILE, COORDINATION_DIRECTORY,
     CURRENT_FILE, ChainCheck, ChainCheckpoint, CommitPointer, CommittedManifest,
@@ -384,7 +385,7 @@ pub(super) fn publish_generation_while_locked(
         .map_err(map_storage_io)?;
     let session = sessions
         .open_dir_nofollow(request.session_id().as_str())
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     let current = read_committed_manifest(
         &session,
         request.session_id(),
@@ -423,15 +424,15 @@ pub(super) fn publish_generation_while_locked(
         // the generation that names it.
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         commit.sync_directory(&artifacts, DirRole::Artifacts)?;
     }
     let generations = session
         .open_dir_nofollow(GENERATIONS_DIRECTORY)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     let attempts = session
         .open_dir_nofollow(ATTEMPTS_DIRECTORY)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     let generation_name = format!("{}.json", next.value());
     let staged_manifest = format!(
         "{}.{}.manifest.tmp",
@@ -520,7 +521,7 @@ fn acknowledge_retry(commit: Commit<'_>, session: &Dir) -> Result<(), SessionSto
     if commit.durable() {
         let generations = session
             .open_dir_nofollow(GENERATIONS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         commit.sync_directory(&generations, DirRole::Generations)?;
         commit.sync_directory(session, DirRole::Session)?;
     }
@@ -559,7 +560,7 @@ fn install_pointer(
         )
     });
     commit.reach(FaultPoint::PointerRename)?;
-    commit.sync_directory(session, DirRole::Session)?;
+    commit.sync_pointer_directory(session)?;
     commit.reach(FaultPoint::PointerDirectorySync)
 }
 
@@ -584,14 +585,26 @@ fn write_chain_checkpoint(
     };
     let bytes = serde_json::to_vec(&checkpoint).map_err(|_| SessionStorageError::Io)?;
     let staged = format!("{}.{generation}.chain.tmp", operation.as_str());
-    prepare_staged_file(
-        commit,
-        attempts,
-        &staged,
-        &bytes,
-        Some(FaultPoint::ChainCheckpointWrite),
-        None,
-    )?;
+    if commit.negative_control() {
+        // The crash campaign's negative control flushes nothing after the
+        // pointer rename (`Commit::negative_control`).
+        if attempts.try_exists(&staged).map_err(map_storage_io)? {
+            attempts.remove_file(&staged).map_err(map_storage_io)?;
+        }
+        create_new(attempts, &staged)
+            .and_then(|mut file| file.write_all(&bytes))
+            .map_err(map_storage_io)?;
+        commit.reach(FaultPoint::ChainCheckpointWrite)?;
+    } else {
+        prepare_staged_file(
+            commit,
+            attempts,
+            &staged,
+            &bytes,
+            Some(FaultPoint::ChainCheckpointWrite),
+            None,
+        )?;
+    }
     attempts
         .rename(&staged, session, CHAIN_CHECKPOINT_FILE)
         .map_err(map_storage_io)?;
@@ -631,10 +644,8 @@ pub(super) fn install_immutable_file(
         .map_err(map_storage_io)?
     {
         let existing = open_regular_file(destination_directory, destination_name, false)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let identical = read_bounded_manifest(existing)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?
-            == bytes;
+            .map_err(map_committed_io)?;
+        let identical = read_bounded_manifest(existing).map_err(map_committed_io)? == bytes;
         if identical && !commit.durable() {
             commit.record(|| FsOp::Accept(DirRole::Generations, destination_name.to_owned()));
             return Ok(());
@@ -802,8 +813,8 @@ impl ArtifactInstaller<'_> {
                         )
                     });
                 } else {
-                    let existing = open_regular_file(self.artifacts, name, false)
-                        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+                    let existing =
+                        open_regular_file(self.artifacts, name, false).map_err(map_committed_io)?;
                     let expected = u64::try_from(bytes.len())
                         .map_err(|_| SessionStorageError::CapacityExhausted)?;
                     if hash_bounded(existing, expected)? != digest {

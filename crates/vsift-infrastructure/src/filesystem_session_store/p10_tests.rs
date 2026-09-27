@@ -438,16 +438,29 @@ fn an_ephemeral_session_cannot_be_published_durably() -> TestResult {
     Ok(())
 }
 
-/// No profile is qualified yet (ADR 0010): durable requests keep failing
-/// closed with an unsupported guarantee.
+/// Only the qualified profile (ADR 0010) offers OS-crash durability: every
+/// other target offers process-crash consistency, and a Linux root that
+/// claims durability runs on Ubuntu 24.04 (the mount side of the decision is
+/// covered by the parser and decision-table tests).
 #[test]
-fn every_root_still_offers_only_process_crash_consistency() -> TestResult {
+fn a_root_claims_durability_only_on_the_qualified_profile() -> TestResult {
     let fixture = Fixture::new()?;
     let store = FilesystemSessionStore::open_existing(&fixture.path)?;
-    assert_eq!(
-        store.capabilities,
-        StorageCapabilities::new(PublicationGuarantee::ProcessCrashConsistent)
-    );
+    if cfg!(target_os = "linux")
+        && store.capabilities == StorageCapabilities::new(PublicationGuarantee::OsCrashDurable)
+    {
+        let os_release =
+            fs::read("/etc/os-release").or_else(|_| fs::read("/usr/lib/os-release"))?;
+        assert_eq!(
+            crate::classify_os_release(&os_release),
+            Ok(crate::OsReleaseProfile::Ubuntu2404)
+        );
+    } else {
+        assert_eq!(
+            store.capabilities,
+            StorageCapabilities::new(PublicationGuarantee::ProcessCrashConsistent)
+        );
+    }
     Ok(())
 }
 
@@ -1125,4 +1138,53 @@ fn readers_never_report_damage_while_generations_are_published() -> TestResult {
     let head = read_committed_manifest(&session, &session_id()?, ChainCheck::Full)?;
     assert_eq!(head.manifest.generation, PUBLICATIONS + 1);
     Ok(())
+}
+
+/// A failure of the storage while committed state is read is `STORAGE_IO`,
+/// never an integrity failure: the P10 PR 4 write-error layer found an
+/// evidence call on a filesystem that had shut itself down after a write
+/// error answering `INTEGRITY_FAILURE`, as if the evidence were forged. A
+/// missing, mistyped or linked entry is still damage.
+#[test]
+fn storage_failures_reading_committed_state_are_not_damage() {
+    use std::io::{Error as IoError, ErrorKind};
+    for kind in [
+        ErrorKind::ReadOnlyFilesystem,
+        ErrorKind::StaleNetworkFileHandle,
+        ErrorKind::ResourceBusy,
+        ErrorKind::Interrupted,
+        ErrorKind::TimedOut,
+        ErrorKind::OutOfMemory,
+    ] {
+        assert_eq!(
+            super::map_committed_io(IoError::from(kind)),
+            SessionStorageError::Io,
+            "{kind:?}"
+        );
+    }
+    assert_eq!(
+        super::map_committed_io(IoError::from(ErrorKind::StorageFull)),
+        SessionStorageError::CapacityExhausted
+    );
+    #[cfg(unix)]
+    assert_eq!(
+        super::map_committed_io(IoError::from_raw_os_error(
+            rustix::io::Errno::IO.raw_os_error()
+        )),
+        SessionStorageError::Io
+    );
+    for kind in [
+        ErrorKind::NotFound,
+        ErrorKind::InvalidData,
+        ErrorKind::NotADirectory,
+        ErrorKind::IsADirectory,
+        ErrorKind::PermissionDenied,
+        ErrorKind::UnexpectedEof,
+    ] {
+        assert_eq!(
+            super::map_committed_io(IoError::from(kind)),
+            SessionStorageError::IntegrityFailure,
+            "{kind:?}"
+        );
+    }
 }

@@ -285,6 +285,7 @@ impl Harness {
                 source,
                 transcript: None,
                 cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
             })
             .await?
             .session
@@ -704,6 +705,7 @@ async fn a_real_whisper_run_interrupted_after_its_first_checkpoint_resumes() -> 
             source: clip.clone(),
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?
         .session
@@ -723,6 +725,7 @@ async fn a_real_whisper_run_interrupted_after_its_first_checkpoint_resumes() -> 
             source: clip,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?
         .session

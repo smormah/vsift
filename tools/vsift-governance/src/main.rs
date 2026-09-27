@@ -323,11 +323,23 @@ fn validate_fault_injection_features(messages: &mut Vec<String>, root: &Path) {
     }
 }
 
-/// The feature name, and the one manifest allowed to define it.
-const FAULT_INJECTION_FEATURE: &str = "fault-injection";
+/// The development-only features, and the one manifest allowed to define them.
+///
+/// `fault-injection` stops the process at a named commit boundary;
+/// `durability-campaign` lets the crash campaign's negative control remove a
+/// directory synchronisation (ADR 0020). Both weaken a build on request.
+const DEVELOPMENT_FEATURES: [&str; 2] = ["fault-injection", "durability-campaign"];
 const FAULT_INJECTION_OWNER: &str = "crates/vsift-infrastructure/Cargo.toml";
+/// The crash campaign tool, which is never published and may enable
+/// `durability-campaign` through a non-default feature of its own.
+const CAMPAIGN_TOOL: &str = "tools/p10-crash-campaign/Cargo.toml";
+const CAMPAIGN_FEATURE: &str = "durability-campaign";
 
 fn check_fault_injection_manifest(messages: &mut Vec<String>, manifest: &str, text: &str) {
+    let unpublished = text.lines().any(|line| {
+        line.split_once('=')
+            .is_some_and(|(key, value)| key.trim() == "publish" && value.trim() == "false")
+    });
     let mut section = "";
     for (index, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -338,19 +350,26 @@ fn check_fault_injection_manifest(messages: &mut Vec<String>, manifest: &str, te
             section = trimmed;
             continue;
         }
-        if !trimmed.contains(FAULT_INJECTION_FEATURE) {
-            continue;
-        }
-        let definition = manifest == FAULT_INJECTION_OWNER
-            && section == "[features]"
-            && trimmed.starts_with(&format!("{FAULT_INJECTION_FEATURE} ="));
-        let development = section.ends_with("dev-dependencies]");
-        if !definition && !development {
-            messages.push(format!(
-                "{manifest} line {} enables {FAULT_INJECTION_FEATURE} outside a development \
-                 dependency; it must never reach a release build (ADR 0020)",
-                index + 1
-            ));
+        for feature in DEVELOPMENT_FEATURES {
+            if !trimmed.contains(feature) {
+                continue;
+            }
+            let definition = manifest == FAULT_INJECTION_OWNER
+                && section == "[features]"
+                && trimmed.starts_with(&format!("{feature} ="));
+            let development = section.ends_with("dev-dependencies]");
+            let campaign_tool = manifest == CAMPAIGN_TOOL
+                && feature == CAMPAIGN_FEATURE
+                && unpublished
+                && section == "[features]"
+                && !trimmed.starts_with("default");
+            if !definition && !development && !campaign_tool {
+                messages.push(format!(
+                    "{manifest} line {} enables {feature} outside a development dependency; \
+                     it must never reach a release build (ADR 0020)",
+                    index + 1
+                ));
+            }
         }
     }
 }
@@ -890,6 +909,55 @@ mod tests {
             (
                 "crates/vsift/Cargo.toml",
                 "[features]\ntests = [\"vsift-infrastructure/fault-injection\"]\n",
+            ),
+        ] {
+            let mut messages = Vec::new();
+            check_fault_injection_manifest(&mut messages, manifest, text);
+            assert_eq!(messages.len(), 1, "{manifest}: {text}");
+        }
+    }
+
+    #[test]
+    fn the_campaign_feature_reaches_only_the_unpublished_campaign_tool() {
+        let tool = "tools/p10-crash-campaign/Cargo.toml";
+        let mut messages = Vec::new();
+        check_fault_injection_manifest(
+            &mut messages,
+            "crates/vsift-infrastructure/Cargo.toml",
+            "[features]\ndurability-campaign = []\n",
+        );
+        check_fault_injection_manifest(
+            &mut messages,
+            tool,
+            "[package]\npublish = false\n[features]\ncampaign = [\"vsift-infrastructure/durability-campaign\"]\n",
+        );
+        check_fault_injection_manifest(
+            &mut messages,
+            "crates/vsift/Cargo.toml",
+            "[dev-dependencies]\nx = { features = [\"durability-campaign\"] }\n",
+        );
+        assert!(messages.is_empty(), "{messages:#?}");
+
+        for (manifest, text) in [
+            (
+                tool,
+                "[package]\n[features]\ncampaign = [\"vsift-infrastructure/durability-campaign\"]\n",
+            ),
+            (
+                tool,
+                "[package]\npublish = false\n[features]\ndefault = [\"vsift-infrastructure/durability-campaign\"]\n",
+            ),
+            (
+                tool,
+                "[package]\npublish = false\n[dependencies]\nx = { features = [\"durability-campaign\"] }\n",
+            ),
+            (
+                tool,
+                "[package]\npublish = false\n[features]\ncampaign = [\"vsift-infrastructure/fault-injection\"]\n",
+            ),
+            (
+                "crates/vsift-cli/Cargo.toml",
+                "[package]\npublish = false\n[features]\ncampaign = [\"vsift-infrastructure/durability-campaign\"]\n",
             ),
         ] {
             let mut messages = Vec::new();

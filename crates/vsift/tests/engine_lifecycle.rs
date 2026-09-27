@@ -175,6 +175,7 @@ impl Harness {
                 source: self.root.source()?,
                 transcript: None,
                 cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
             })
             .await?;
         Ok(opened.session.session_id)
@@ -183,6 +184,64 @@ impl Harness {
 
 fn session(number: u64) -> Result<SessionId, Box<dyn Error>> {
     Ok(SessionId::parse(format!("ses_{number:032x}"))?)
+}
+
+/// A durable ingest (engine level only, ADR 0020 D-3) is honoured only on
+/// the qualified profile (Ubuntu 24.04, local ext4 with write barriers);
+/// anywhere else it fails with `MISSING_CAPABILITY` before any session is
+/// registered, and it is never downgraded to an ephemeral session.
+#[tokio::test]
+async fn a_durable_ingest_is_durable_or_fails_closed() -> TestResult {
+    let harness = Harness::new()?;
+    let opened = harness
+        .engine
+        .ingest(IngestRequest {
+            source: harness.root.source()?,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Durable,
+        })
+        .await;
+    let sessions = harness.root.path("sessions").join("sessions");
+    match opened {
+        Ok(outcome) => {
+            assert_eq!(std::env::consts::OS, "linux", "only Linux can be qualified");
+            assert_eq!(
+                outcome.session.publication,
+                vsift::PublicationGuarantee::OsCrashDurable
+            );
+            let manifest = fs::read_to_string(
+                sessions
+                    .join(outcome.session.session_id.as_str())
+                    .join("generations")
+                    .join("0.json"),
+            )?;
+            assert!(manifest.contains(r#""durability":"durable""#), "{manifest}");
+        }
+        Err(error) => {
+            assert_eq!(error.failure_code(), FailureCode::MissingCapability);
+            assert!(
+                !sessions.exists() || fs::read_dir(&sessions)?.next().is_none(),
+                "a session was created"
+            );
+        }
+    }
+    // An ephemeral session reports its own guarantee, never the root's
+    // strongest one, on every host.
+    let opened = harness
+        .engine
+        .ingest(IngestRequest {
+            source: harness.root.source()?,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
+        })
+        .await?;
+    assert_eq!(
+        opened.session.publication,
+        vsift::PublicationGuarantee::ProcessCrashConsistent
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -195,6 +254,7 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
             source: harness.root.source()?,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?;
     // One session identity, then initialize, stage and activate operations.
@@ -371,6 +431,7 @@ async fn requests_the_engine_cannot_honour_fail_before_any_work() -> TestResult 
                 offset_micros: 0,
             }),
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await;
     assert_eq!(
@@ -428,6 +489,7 @@ async fn relative_session_roots_and_unreadable_clocks_are_typed_failures() -> Te
             source: root.source()?,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await;
     assert_eq!(opened, Err(EngineError::Clock(ClockError::BeforeUnixEpoch)));

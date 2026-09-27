@@ -294,7 +294,21 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
-## 2026-09-27 P10 PR 3 evidence (job surface and interruptions, branch `p10/job-surface`)
+## 2026-09-27 P10 PR 4 evidence (crash campaign and durable enablement, branch `p10/durability-campaign`)
+
+The last of P10's four pull requests (ADR 0020 section 7 and "PR 4" notes). Method,
+numbers and run links: the [P10 durable-publication record](p10-durable-publication.md).
+
+| Gate | Evidence |
+| --- | --- |
+| X-10 (disk survives worker/OS crash) | Layer A: power loss replayed at every flush and FUA write of a dm-log-writes log (11,037 points in the gating run and 11,041 in the confirmation run), every acknowledgement made before a point held, every recently acknowledged session accepted a new commit, `e2fsck -fn` clean. Layer B: 320 SIGKILLs of an Ubuntu 24.04 QEMU guest (`cache=none` data disk) in each of the two runs, every reboot recovered, clean and verified. Host or disk loss is documented as the caller's responsibility (known limit L-057, the record's residuals) |
+| S-07 (write and flush failures) | Layer C: dm-flakey `error_writes` swapped in at random, 60 rounds: 180 of 180 injected failures `STORAGE_IO`, none acknowledged, nothing half committed after recovery; 144 of 144 in the confirmation run's 48 injected rounds; `storage_failures_reading_committed_state_are_not_damage` (a storage failure reading committed state is `STORAGE_IO`, damage is still `INTEGRITY_FAILURE`) |
+| Negative control | The campaign build without the synchronisations after the pointer rename lost 54 of 80 acknowledgements in every full run (at 596 of 2,200 and 592 of 2,180 replay points): the harness detects loss |
+| SEC-24 (durable profile) | `only_ubuntu_24_04_itself_is_the_qualified_release`, `a_damaged_os_release_is_refused_whole`, `the_decision_table_qualifies_one_combination_only` (with the existing mount-table tests); fuzz target `os_release` with seeds replayed on stable; `a_root_claims_durability_only_on_the_qualified_profile`; `a_durable_ingest_is_durable_or_fails_closed` (engine: durable on the qualified profile, `MISSING_CAPABILITY` and no session anywhere else, an ephemeral ingest always `process_crash_consistent`); `durable_initialization_fails_without_creating_session_state` and `durable_publication_fails_before_admission_or_mutation` now pin the unqualified store explicitly |
+| Governance | `the_campaign_feature_reaches_only_the_unpublished_campaign_tool` (the `durability-campaign` feature only in development dependencies and the campaign tool's non-default `campaign` feature) |
+| Harness | `vsift-crash-campaign` unit tests: the dm-log-writes reader (entries, marks, truncated and foreign logs) and replay planning (an acknowledgement binds from the last durability point before its mark), the acknowledgement protocol, the layer C assessment and the verifier's reports |
+
+## 2026-09-27 P10 PR 3 evidence (job surface and interruptions, merged as `8af331b`)
 
 P10 is in progress; this records the third of its four pull requests (ADR 0020 "PR 3"
 notes). CLI tests are in `crates/vsift-cli/tests/job_cli_contract.rs` (jobs put in each

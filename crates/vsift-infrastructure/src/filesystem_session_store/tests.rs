@@ -168,7 +168,7 @@ fn ownership_marker_cannot_be_an_external_hard_link() -> TestResult {
 #[tokio::test]
 async fn durable_initialization_fails_without_creating_session_state() -> TestResult {
     let fixture = Fixture::new()?;
-    let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+    let store = FilesystemSessionStore::open_existing(&fixture.path)?.without_durable_profile();
     let use_case = InitializeSessionStorage::new(store);
 
     let result = use_case
@@ -763,7 +763,7 @@ async fn later_generation_is_monotonic_idempotent_and_stale_fenced() -> TestResu
 #[tokio::test]
 async fn durable_publication_fails_before_admission_or_mutation() -> TestResult {
     let fixture = Fixture::new()?;
-    let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+    let store = FilesystemSessionStore::open_existing(&fixture.path)?.without_durable_profile();
     InitializeSessionStorage::new(FilesystemSessionStore::open_existing(&fixture.path)?)
         .execute(request(DurabilityRequirement::Ephemeral)?)
         .await?;

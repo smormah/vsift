@@ -153,6 +153,14 @@ doc = false
 bench = false
 required-features = ["libfuzzer"]
 
+[[bin]]
+name = "os_release"
+path = "fuzz_targets/os_release.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
 # The workspace lints, repeated because this package cannot inherit them.
 [lints.rust]
 missing_docs = "warn"

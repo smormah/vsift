@@ -10,6 +10,14 @@ compile_error!(
      enabled in a release build"
 );
 
+// The crash campaign's negative control can remove a directory
+// synchronisation on request (ADR 0020). It must never reach a release build.
+#[cfg(all(feature = "durability-campaign", not(debug_assertions)))]
+compile_error!(
+    "the durability-campaign feature can weaken durable commits on request and must \
+     never be enabled in a release build"
+);
+
 mod archive_inventory;
 mod bounded_tar_inventory;
 mod durable_profile;
@@ -58,7 +66,8 @@ pub use bounded_tar_inventory::{
     inspect_tar_selected_files, stage_tar_selected_files,
 };
 pub use durable_profile::{
-    MAX_MOUNTINFO_BYTES, MountDevice, MountInfoError, MountProfile, classify_mountinfo,
+    MAX_MOUNTINFO_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, MountInfoError, MountProfile,
+    OsReleaseError, OsReleaseProfile, classify_mountinfo, classify_os_release, qualifies,
 };
 pub use evidence_media::{FfmpegAudioExtractor, FfmpegFrameExtractor};
 pub use evidence_record::{

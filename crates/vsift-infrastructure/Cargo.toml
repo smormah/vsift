@@ -15,6 +15,15 @@ homepage.workspace = true
 # it without debug assertions, and the governance check refuses it anywhere but
 # a development dependency.
 fault-injection = []
+# The Ubuntu 24.04 / ext4 crash campaign (ADR 0020, tools/p10-crash-campaign).
+# With VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1 a durable commit skips every
+# synchronisation after its pointer rename (the session directory's and the
+# chain checkpoint's flush): the negative control that shows the campaign
+# can see a lost acknowledgement. Development only,
+# like fault-injection: refused without debug assertions and, by the
+# governance check, anywhere but a development dependency or the campaign
+# tool's own non-default feature.
+durability-campaign = []
 
 [dependencies]
 cap-fs-ext.workspace = true

@@ -205,6 +205,7 @@ pub(crate) async fn ingest(
             source: arguments.source,
             transcript,
             cancellation: cancellation.clone(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?;
     let expires_at = rfc3339(outcome.session.lifetime.expires_at_unix_seconds())?;
