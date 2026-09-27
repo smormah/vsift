@@ -522,6 +522,31 @@ impl<C: AsrCancellation, O: JobOwner> AsrCancellation for JobAwareCancellation<'
     }
 }
 
+/// A recognition failure observed after the caller asked the run to stop is
+/// the cancellation, whatever the provider reported.
+///
+/// A console interrupt reaches every process attached to the console, so a
+/// provider can die of the same Ctrl-C before the cancellation reaches it
+/// and report an abnormal exit. Recording that as a provider failure would
+/// count towards poisoning the chunk (three identical failures fail the job)
+/// and give the caller the wrong code; the stage and chunk are kept.
+fn cancelled_if_requested<C: AsrCancellation>(
+    failure: AsrRunFailure,
+    cancellation: &C,
+) -> AsrRunFailure {
+    if cancellation.is_cancelled() && failure.failure.reason != AsrFailureReason::Cancelled {
+        AsrRunFailure {
+            failure: AsrFailure {
+                stage: failure.failure.stage,
+                reason: AsrFailureReason::Cancelled,
+            },
+            chunk: failure.chunk,
+        }
+    } else {
+        failure
+    }
+}
+
 type AttemptResult =
     Result<(TranscriptRevision, CheckpointUse, OperationId), (AttemptStop, Option<CheckpointUse>)>;
 
@@ -569,6 +594,7 @@ where
     let (transcription, usage) = match recognised {
         Ok(result) => result,
         Err(failure) => {
+            let failure = cancelled_if_requested(failure, ports.cancellation);
             let chunk = failure.chunk;
             let stop = AttemptStop::Failed {
                 error: JobRunError::Asr {

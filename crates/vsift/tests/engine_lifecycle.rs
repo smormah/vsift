@@ -174,6 +174,7 @@ impl Harness {
             .ingest(IngestRequest {
                 source: self.root.source()?,
                 transcript: None,
+                cancellation: Cancellation::new(),
             })
             .await?;
         Ok(opened.session.session_id)
@@ -193,6 +194,7 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
         .ingest(IngestRequest {
             source: harness.root.source()?,
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await?;
     // One session identity, then initialize, stage and activate operations.
@@ -368,6 +370,7 @@ async fn requests_the_engine_cannot_honour_fail_before_any_work() -> TestResult 
                 path: harness.root.path("captions.srt"),
                 offset_micros: 0,
             }),
+            cancellation: Cancellation::new(),
         })
         .await;
     assert_eq!(
@@ -424,6 +427,7 @@ async fn relative_session_roots_and_unreadable_clocks_are_typed_failures() -> Te
         .ingest(IngestRequest {
             source: root.source()?,
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await;
     assert_eq!(opened, Err(EngineError::Clock(ClockError::BeforeUnixEpoch)));

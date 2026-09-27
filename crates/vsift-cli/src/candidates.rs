@@ -16,6 +16,7 @@ use crate::{CommandFailure, command::CandidatesArguments, session::rfc3339};
 async fn run(
     engine: &Engine,
     arguments: CandidatesArguments,
+    cancellation: &Cancellation,
 ) -> Result<CandidatesResults, CommandFailure> {
     Ok(engine
         .candidates(CandidatesRequest {
@@ -26,7 +27,7 @@ async fn run(
             },
             limit: arguments.limit,
             cursor: arguments.cursor,
-            cancellation: Cancellation::new(),
+            cancellation: cancellation.clone(),
         })
         .await?)
 }
@@ -56,8 +57,9 @@ fn lifecycle(results: &CandidatesResults) -> Result<LifecycleResponse, FailureCo
 pub(crate) async fn candidates(
     engine: &Engine,
     arguments: CandidatesArguments,
+    cancellation: &Cancellation,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
-    let results = run(engine, arguments).await?;
+    let results = run(engine, arguments, cancellation).await?;
     candidates_response(&presentation(&results), lifecycle(&results)?)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
@@ -67,8 +69,9 @@ pub(crate) async fn candidates(
 pub(crate) async fn candidates_stream(
     engine: &Engine,
     arguments: CandidatesArguments,
+    cancellation: &Cancellation,
 ) -> Result<CandidatesEvidenceStream, CommandFailure> {
-    let results = run(engine, arguments).await?;
+    let results = run(engine, arguments, cancellation).await?;
     CandidatesEvidenceStream::new(&presentation(&results), lifecycle(&results)?)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }

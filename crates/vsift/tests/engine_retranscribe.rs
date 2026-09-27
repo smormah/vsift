@@ -270,6 +270,7 @@ impl Harness {
             .ingest(IngestRequest {
                 source,
                 transcript: None,
+                cancellation: Cancellation::new(),
             })
             .await?
             .session

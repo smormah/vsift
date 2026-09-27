@@ -21,9 +21,9 @@ use std::{
 };
 
 use vsift::{
-    Clock, ClockError, CueMarkup, Engine, EngineConfig, EngineError, EnginePorts, FailureCode,
-    HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest, OperationId,
-    RuntimeDependency, SegmentOrigin, SessionId, SessionListEntry, SessionRootError,
+    Cancellation, Clock, ClockError, CueMarkup, Engine, EngineConfig, EngineError, EnginePorts,
+    FailureCode, HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
+    OperationId, RuntimeDependency, SegmentOrigin, SessionId, SessionListEntry, SessionRootError,
     SessionRootLocation, SuppliedTranscriptRequest, TranscriptImportError, TranscriptProvenance,
     TranscriptQuery, TranscriptRejection, TranscriptSegment, UserConfigurationLocation,
 };
@@ -178,6 +178,7 @@ impl Harness {
                     path: sidecar,
                     offset_micros,
                 }),
+                cancellation: Cancellation::new(),
             })
             .await
     }
@@ -326,6 +327,7 @@ async fn transcript_reads_are_typed_for_bad_ranges_and_sessions_without_one() ->
         .ingest(IngestRequest {
             source: harness.placeholder_source()?,
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await?;
     assert!(opened.transcript.is_none());

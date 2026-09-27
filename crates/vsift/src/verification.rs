@@ -38,14 +38,33 @@ impl Cancellation {
     }
 
     /// Requests cancellation. Repeated requests are idempotent.
+    ///
+    /// A provider process that is running is asked to stop gracefully (on
+    /// Unix `SIGTERM` to its process group, then a kill after five seconds);
+    /// the operation returns only after it has been reaped.
     pub fn cancel(&self) {
         self.0.cancel();
+    }
+
+    /// Requests cancellation and skips the rest of the graceful provider
+    /// stop: running provider processes are killed at once and reaped
+    /// within the forced five-second budget. A host calls it when its user
+    /// asks a second time (a second Ctrl-C). Implies [`Cancellation::cancel`];
+    /// repeated requests are idempotent.
+    pub fn escalate(&self) {
+        self.0.escalate();
     }
 
     /// Reports whether cancellation was requested.
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.0.is_cancelled()
+    }
+
+    /// Reports whether cancellation was escalated.
+    #[must_use]
+    pub fn is_escalated(&self) -> bool {
+        self.0.is_escalated()
     }
 }
 

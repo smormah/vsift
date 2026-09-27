@@ -1,0 +1,34 @@
+{
+  "command": "transcript.retranscribe",
+  "coverage": null,
+  "data": null,
+  "error": {
+    "affected_ids": [
+      "ses_0123456789abcdef0123456789abcdef",
+      "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70"
+    ],
+    "code": "CANCELLED",
+    "message": "The operation was cancelled.",
+    "remediation": [
+      {
+        "command": {
+          "arguments": [
+            "job",
+            "resume",
+            "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70"
+          ],
+          "executable": "vsift"
+        },
+        "required_authority": "none",
+        "summary": "The run was cancelled before it committed, so nothing was committed; affected_ids names its session and job. The job is interrupted and keeps the chunks it finished: resume it with job resume <job>, or run the same command again."
+      }
+    ],
+    "retry_after_ms": null,
+    "retryable": false
+  },
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "cancelled",
+  "warnings": []
+}

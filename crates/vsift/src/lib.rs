@@ -102,7 +102,7 @@ mod verification;
 pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
-    Engine, EngineConfig, EnginePorts, HostIsolation, SessionRootLocation,
+    Engine, EngineConfig, EnginePorts, HostIsolation, MAX_SESSION_ROOT_WAIT, SessionRootLocation,
     UserConfigurationLocation,
 };
 pub use error::{
@@ -114,7 +114,10 @@ pub use evidence::{
     DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
     FrameNeighboursRequest, FrameTarget,
 };
-pub use jobs::{JobCancelOutcome, JobCancelReport, JobResumeRequest, JobStatusReport};
+pub use jobs::{
+    JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,
+    MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
+};
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
@@ -136,7 +139,7 @@ pub use vsift_application::{
     LocalAsrNotRunReason, LocalAsrSetupStatus, LocalAsrVerification, LocalAsrVerificationFailure,
     LocalAsrVerificationSource, LocalAsrVerifier, MediaToolCheck, MediaToolFailure,
     MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier, ModelVerification,
-    OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RecognizerIdentity,
+    OpenSessionError, OpenSessionOutcome, PlanAcceptanceError, RecognizerIdentity, Resumability,
     RuntimeDiagnosis, SessionStorageError, SetupProfile, SourceProbeError, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError, TranscriptQueryError,
 };
@@ -169,6 +172,12 @@ pub use vsift_domain::{
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
     Sha256Hex,
 };
+pub use vsift_domain::{
+    AttemptFailure, DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId,
+    FailureClass, FailureCode, IdentifierError, JobId, JobKind, JobState, OperationId,
+    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
+    SessionLifetime, SessionPhase, SourceId, StorageGeneration,
+};
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_domain::{
     BurstExtent, CropParseError, CropRect, CropRegion, EvidenceDetail, EvidenceItem, EvidenceMedia,
@@ -189,10 +198,4 @@ pub use vsift_domain::{
 pub use vsift_domain::{
     CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchMatch,
     SearchQuery, SearchQueryRejection,
-};
-pub use vsift_domain::{
-    DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
-    FailureCode, IdentifierError, JobId, JobKind, JobState, OperationId, PublicationGuarantee,
-    RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime,
-    SessionPhase, SourceId, StorageGeneration,
 };

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/job-data.schema.json",
+  "title": "VSift job data v1",
+  "description": "The data member of a complete job.status or job.cancel result: one recoverable job (P10, ADR 0020). Validate the envelope with operation-response.schema.json. state is what a reader observes: a job whose process ended without recording it is reported interrupted (or succeeded, when its commit is in the session's manifest chain), never running. live_owner says a process holds the job right now. resumable says whether job resume would run it now, and resumable_reason why (interrupted, not_started) or why not (live_owner, succeeded, failed, cancelled, session_not_open). operation_id is the id a retry should carry: the first one a caller bound with --operation-id, or for a succeeded job the one its commit is recorded under. request.range is the range the caller asked for (null for the whole source). progress.chunks_total is how many chunks the recognised range is cut into (null for a job created before P10 PR 3) and chunks_checkpointed how many chunk checkpoints the job keeps now (a succeeded, failed or cancelled job keeps none). attempts counts attempts in the job's current epoch. result names the revision and generation a succeeded job committed; failure the public code that ended the last attempt of an interrupted or failed job. A job never names a path, transcript text or provider output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_id",
+    "session_id",
+    "kind",
+    "state",
+    "live_owner",
+    "resumable",
+    "resumable_reason",
+    "operation_id",
+    "request",
+    "progress",
+    "attempts",
+    "result",
+    "failure"
+  ],
+  "properties": {
+    "job_id": { "type": "string", "pattern": "^job_[a-z0-9]{16,64}$" },
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "kind": { "enum": ["retranscribe"] },
+    "state": {
+      "enum": [
+        "queued",
+        "running",
+        "cancelling",
+        "committing",
+        "interrupted",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "live_owner": { "type": "boolean" },
+    "resumable": { "type": "boolean" },
+    "resumable_reason": {
+      "enum": [
+        "interrupted",
+        "not_started",
+        "live_owner",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "session_not_open"
+      ]
+    },
+    "operation_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" }
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["range"],
+      "properties": {
+        "range": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from_us", "to_us"],
+              "properties": {
+                "from_us": { "type": "integer", "minimum": 0 },
+                "to_us": { "type": "integer", "minimum": 1 }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunks_total", "chunks_checkpointed"],
+      "properties": {
+        "chunks_total": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1, "maximum": 1024 }
+          ]
+        },
+        "chunks_checkpointed": { "type": "integer", "minimum": 0, "maximum": 1024 }
+      }
+    },
+    "attempts": { "type": "integer", "minimum": 0, "maximum": 16 },
+    "result": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["revision_id", "generation"],
+          "properties": {
+            "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
+            "generation": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "failure": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "retryable"],
+          "properties": {
+            "code": {
+              "enum": [
+                "INTERNAL",
+                "INVALID_ARGUMENT",
+                "UNSUPPORTED_SCHEMA",
+                "MISSING_CAPABILITY",
+                "ISOLATION_UNAVAILABLE",
+                "COMMAND_NOT_IMPLEMENTED",
+                "INVALID_SOURCE",
+                "BUSY",
+                "DEADLINE_EXCEEDED",
+                "RESOURCE_LIMIT",
+                "CANCELLED",
+                "STORAGE_IO",
+                "INTEGRITY_FAILURE",
+                "IDEMPOTENCY_CONFLICT"
+              ]
+            },
+            "retryable": { "type": "boolean" }
+          }
+        }
+      ]
+    }
+  }
+}

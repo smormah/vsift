@@ -253,6 +253,38 @@ impl OperationResponse<serde_json::Value> {
         response
     }
 
+    /// Creates a failure whose remediation also suggests one `vsift`
+    /// command, as the executable `vsift` and an argument array a caller
+    /// runs without a shell (for example `job resume <job>`).
+    ///
+    /// `summary` follows [`OperationResponse::failure_with_remediation`];
+    /// `arguments` must be fixed words and validated identifiers only, never
+    /// a path or untrusted text. The command changes nothing the caller did
+    /// not already ask for, so it needs no authority.
+    #[must_use]
+    pub fn failure_with_suggested_command(
+        command: &'static str,
+        code: FailureCode,
+        summary: String,
+        arguments: &[&str],
+    ) -> Self {
+        let mut response = Self::failure(command, code);
+        if let Some(error) = response.error.as_mut() {
+            error.remediation.push(RemediationResponse {
+                summary,
+                required_authority: "none",
+                command: Some(CommandResponse {
+                    executable: "vsift".to_owned(),
+                    arguments: arguments
+                        .iter()
+                        .map(|argument| (*argument).to_owned())
+                        .collect(),
+                }),
+            });
+        }
+        response
+    }
+
     /// Names the operation the result is recorded under, so a caller can
     /// retry with it and receive the same result (P10, ADR 0020).
     #[must_use]

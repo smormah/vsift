@@ -172,6 +172,7 @@ impl Harness {
             .ingest(IngestRequest {
                 source,
                 transcript: None,
+                cancellation: Cancellation::new(),
             })
             .await?;
         Ok(Self {
@@ -460,6 +461,7 @@ async fn concurrent_calls_over_one_window_commit_it_once() -> TestResult {
         .ingest(IngestRequest {
             source: fixture("F05.mp4"),
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await?
         .session

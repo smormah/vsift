@@ -90,8 +90,9 @@ fn presentation_failure(error: &EvidencePresentationError) -> CommandFailure {
 async fn run_frame(
     engine: &Engine,
     command: FrameCommand,
+    cancellation: &Cancellation,
 ) -> Result<EvidenceResults, CommandFailure> {
-    let cancellation = Cancellation::new();
+    let cancellation = cancellation.clone();
     let result = match command {
         FrameCommand::Get(arguments) => {
             let target = match (arguments.at, arguments.candidate) {
@@ -144,13 +145,14 @@ async fn run_frame(
 async fn run_crop(
     engine: &Engine,
     arguments: CropArguments,
+    cancellation: &Cancellation,
 ) -> Result<EvidenceResults, CommandFailure> {
     engine
         .crop(CropEvidenceRequest {
             session: arguments.session,
             parent: arguments.evidence,
             rect: arguments.rect,
-            cancellation: Cancellation::new(),
+            cancellation: cancellation.clone(),
         })
         .await
         .map_err(|error| evidence_failure(error, Medium::Picture))
@@ -159,13 +161,14 @@ async fn run_crop(
 async fn run_audio(
     engine: &Engine,
     arguments: AudioArguments,
+    cancellation: &Cancellation,
 ) -> Result<EvidenceResults, CommandFailure> {
     engine
         .audio(AudioClipRequest {
             session: arguments.session,
             from_micros: arguments.from,
             to_micros: arguments.to,
-            cancellation: Cancellation::new(),
+            cancellation: cancellation.clone(),
         })
         .await
         .map_err(|error| evidence_failure(error, Medium::Sound))
@@ -224,40 +227,45 @@ fn picture_stream(results: &EvidenceResults) -> Result<FrameEvidenceStream, Comm
 pub(crate) async fn frame(
     engine: &Engine,
     command: FrameCommand,
+    cancellation: &Cancellation,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
-    picture_response(&run_frame(engine, command).await?)
+    picture_response(&run_frame(engine, command, cancellation).await?)
 }
 
 /// Runs a frame command and presents its result as an evidence stream.
 pub(crate) async fn frame_stream(
     engine: &Engine,
     command: FrameCommand,
+    cancellation: &Cancellation,
 ) -> Result<FrameEvidenceStream, CommandFailure> {
-    picture_stream(&run_frame(engine, command).await?)
+    picture_stream(&run_frame(engine, command, cancellation).await?)
 }
 
 /// Runs `crop` and presents its result.
 pub(crate) async fn crop(
     engine: &Engine,
     arguments: CropArguments,
+    cancellation: &Cancellation,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
-    picture_response(&run_crop(engine, arguments).await?)
+    picture_response(&run_crop(engine, arguments, cancellation).await?)
 }
 
 /// Runs `crop` and presents its result as an evidence stream.
 pub(crate) async fn crop_stream(
     engine: &Engine,
     arguments: CropArguments,
+    cancellation: &Cancellation,
 ) -> Result<FrameEvidenceStream, CommandFailure> {
-    picture_stream(&run_crop(engine, arguments).await?)
+    picture_stream(&run_crop(engine, arguments, cancellation).await?)
 }
 
 /// Runs `audio` and presents its result.
 pub(crate) async fn audio(
     engine: &Engine,
     arguments: AudioArguments,
+    cancellation: &Cancellation,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
-    let results = run_audio(engine, arguments).await?;
+    let results = run_audio(engine, arguments, cancellation).await?;
     let files = delivered(&results);
     audio_response(
         &EvidencePresentation {
@@ -275,8 +283,9 @@ pub(crate) async fn audio(
 pub(crate) async fn audio_stream(
     engine: &Engine,
     arguments: AudioArguments,
+    cancellation: &Cancellation,
 ) -> Result<AudioEvidenceStream, CommandFailure> {
-    let results = run_audio(engine, arguments).await?;
+    let results = run_audio(engine, arguments, cancellation).await?;
     let files = delivered(&results);
     AudioEvidenceStream::new(
         &EvidencePresentation {

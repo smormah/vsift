@@ -303,6 +303,7 @@ impl Harness {
             .ingest(IngestRequest {
                 source: stand_in,
                 transcript: None,
+                cancellation: Cancellation::new(),
             })
             .await?;
         Ok(Self {
@@ -823,6 +824,7 @@ async fn real_session(root: &OwnedRoot, source: &Path) -> Built<(Engine, Session
         .ingest(IngestRequest {
             source: source.to_path_buf(),
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await?;
     Ok((engine, opened.session.session_id))

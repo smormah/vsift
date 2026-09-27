@@ -55,7 +55,7 @@ use vsift_domain::{
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
-pub use jobs::FilesystemJobOwner;
+pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;

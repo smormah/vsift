@@ -15,10 +15,10 @@ use vsift_application::{
 };
 use vsift_domain::{
     AttemptFailure, CheckpointOutcome, ChunkCheckpoint, ChunkTime, CueText, FailureCode, JobId,
-    JobKind, JobState, LanguageTag, MAX_JOB_ATTEMPTS, MAX_PROVIDER_SEGMENTS, MAX_PROVIDER_TOKENS,
-    MediaTime, OperationId, OperationKey, ProviderChunkOutput, ProviderSegment, ProviderToken,
-    ProviderTokenKind, RecognitionKey, SessionId, Sha256Hex, StorageGeneration, TimeRange,
-    TranscriptRevisionId,
+    JobKind, JobState, LanguageTag, MAX_JOB_ATTEMPTS, MAX_PLANNED_CHUNKS, MAX_PROVIDER_SEGMENTS,
+    MAX_PROVIDER_TOKENS, MediaTime, OperationId, OperationKey, ProviderChunkOutput,
+    ProviderSegment, ProviderToken, ProviderTokenKind, RecognitionKey, SessionId, Sha256Hex,
+    StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 
 use super::{MetadataVersion, STORAGE_SCHEMA_VERSION, sha256_hex, stored::parse_versioned_json};
@@ -86,6 +86,10 @@ struct StoredJob {
     operation_key: String,
     recognition_key: String,
     request: StoredJobRequest,
+    /// Added in P10 PR 3; absent from records written before it (P10 PR 2
+    /// builds reject records that have it, and sessions are disposable).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    planned_chunks: Option<u32>,
     operation_ids: Vec<String>,
     state: String,
     epoch: u32,
@@ -120,6 +124,7 @@ pub(super) fn encode_job(record: &JobRecord) -> Result<Vec<u8>, SessionStorageEr
         request: StoredJobRequest {
             range: range.map(StoredRange::of),
         },
+        planned_chunks: record.planned_chunks,
         operation_ids: record
             .operation_ids
             .iter()
@@ -191,6 +196,10 @@ fn validate_job(stored: StoredJob, job_id: &JobId, session_id: &SessionId) -> Op
         || stored.attempt > MAX_JOB_ATTEMPTS
         || stored.failures.len() > vsift_application::MAX_RECORDED_FAILURES
         || stored.created_at_unix_seconds > stored.updated_at_unix_seconds
+        || stored.planned_chunks.is_some_and(|planned| {
+            planned == 0
+                || usize::try_from(planned).map_or(true, |planned| planned > MAX_PLANNED_CHUNKS)
+        })
     {
         return None;
     }
@@ -229,6 +238,7 @@ fn validate_job(stored: StoredJob, job_id: &JobId, session_id: &SessionId) -> Op
         operation_key,
         recognition_key: RecognitionKey::new(Sha256Hex::parse(stored.recognition_key).ok()?),
         request,
+        planned_chunks: stored.planned_chunks,
         operation_ids,
         state,
         epoch: stored.epoch,

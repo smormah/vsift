@@ -640,3 +640,9 @@ impl AsrCancellation for ProcessCancellation {
         Self::is_cancelled(self)
     }
 }
+
+impl vsift_application::StageCancellation for ProcessCancellation {
+    fn is_cancelled(&self) -> bool {
+        Self::is_cancelled(self)
+    }
+}

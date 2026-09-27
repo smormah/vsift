@@ -8,15 +8,16 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, Cancellation, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest,
-    CleanScope, Engine, FailureCode, IngestRequest, RetranscribeRange, RetranscribeRequest,
-    SessionListEntry, SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
-    TranscriptExcerpt, TranscriptQuery,
+    CleanScope, Engine, FailureCode, IngestRequest, RetranscribeOutcome, RetranscribeRange,
+    RetranscribeRequest, SessionJobs, SessionListEntry, SessionPage, SessionSnapshot,
+    SourceRetention, SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
     LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RetranscribeJob,
-    SessionState, StatusData, TranscriptEvidenceStream, TranscriptPageData,
-    TranscriptRetranscribeData, job_warning_messages, transcript_warning_messages,
+    SessionJobData, SessionState, SessionStatusData, StatusData, TranscriptEvidenceStream,
+    TranscriptPageData, TranscriptRetranscribeData, job_warning_messages,
+    transcript_warning_messages,
 };
 
 use crate::{
@@ -73,6 +74,32 @@ fn status_response(
     let data = status_data(snapshot)?;
     Ok(response(command, &data)?
         .with_lifecycle(LifecycleResponse::ephemeral(data.expires_at.clone())))
+}
+
+/// `session status`: the committed status and, since P10 PR 3, the
+/// session's newest jobs.
+fn session_status_response(
+    snapshot: &SessionSnapshot,
+    jobs: &SessionJobs,
+) -> Result<Response, FailureCode> {
+    let status = status_data(snapshot)?;
+    let expires_at = status.expires_at.clone();
+    let listed = jobs
+        .entries()
+        .iter()
+        .map(|job| {
+            SessionJobData::new(
+                job.job_id(),
+                job.kind(),
+                job.state(),
+                job.live(),
+                job.resumability(),
+            )
+        })
+        .collect();
+    let data = SessionStatusData::new(status, listed, jobs.truncated());
+    Ok(response(CommandName::SessionStatus, &data)?
+        .with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
 }
 
 fn bundle_data(bundle: &BundleSummary) -> BundleData {
@@ -161,10 +188,13 @@ fn clean_response(page: CleanPage) -> Result<Response, FailureCode> {
     }
 }
 
-/// Opens a disposable session, importing a supplied transcript when one is given.
+/// Opens a disposable session, importing a supplied transcript when one is
+/// given. A first interruption stops the copy of the video between blocks
+/// and opens no session (`CANCELLED`).
 pub(crate) async fn ingest(
     engine: &Engine,
     arguments: IngestArguments,
+    cancellation: &Cancellation,
 ) -> Result<Response, CommandFailure> {
     let transcript = arguments.transcript.map(|path| SuppliedTranscriptRequest {
         path,
@@ -174,6 +204,7 @@ pub(crate) async fn ingest(
         .ingest(IngestRequest {
             source: arguments.source,
             transcript,
+            cancellation: cancellation.clone(),
         })
         .await?;
     let expires_at = rfc3339(outcome.session.lifetime.expires_at_unix_seconds())?;
@@ -202,36 +233,19 @@ fn read_transcript(
     })?)
 }
 
-/// Transcribes a session's speech locally into a new revision.
-///
-/// With `--events jsonl` the result is one terminal event, like every command
-/// other than `transcript get`: a whole-video revision can hold thousands of
-/// segments, more than one bounded stream may carry, so its records are read
-/// with `transcript get --revision <revision_id> --events jsonl`, page by page.
-/// The run is a recoverable job: the result names it (`data.job`) and the
-/// operation id it is recorded under (`operation_id`). The command-line host
-/// does not trap Ctrl-C yet (P10 PR 3); an interrupted run commits nothing,
-/// running the same command again continues it from its checkpoints, and its
-/// work directory is removed by the session's next run or cleanup.
-pub(crate) async fn retranscribe(
-    engine: &Engine,
-    arguments: TranscriptRetranscribeArguments,
-) -> Result<Response, CommandFailure> {
-    let range = arguments
-        .from
-        .zip(arguments.to)
-        .map(|(from_micros, to_micros)| RetranscribeRange {
-            from_micros,
-            to_micros,
-        });
-    let outcome = engine
-        .retranscribe(RetranscribeRequest {
-            session: arguments.session,
-            range,
-            operation_id: None,
-            cancellation: Cancellation::new(),
-        })
-        .await?;
+/// A committed retranscription as the contract presents it: its data, the
+/// session's lifecycle and every warning, in a stable order.
+pub(crate) struct PresentedRetranscription {
+    pub(crate) data: TranscriptRetranscribeData,
+    pub(crate) lifecycle: LifecycleResponse,
+    pub(crate) warnings: Vec<&'static str>,
+}
+
+/// Presents a committed (or replayed) retranscription; shared by
+/// `transcript retranscribe` and `job resume`.
+pub(crate) fn retranscription(
+    outcome: &RetranscribeOutcome,
+) -> Result<PresentedRetranscription, FailureCode> {
     let job = outcome.job();
     let data = TranscriptRetranscribeData::new(
         outcome.session().session_id(),
@@ -245,14 +259,57 @@ pub(crate) async fn retranscribe(
         },
     );
     let expires_at = rfc3339(outcome.session().lifetime().expires_at_unix_seconds())?;
-    Ok(response(CommandName::TranscriptRetranscribe, &data)?
-        .with_operation_id(job.operation_id())
-        .with_lifecycle(LifecycleResponse::ephemeral(expires_at))
-        .with_warnings(&transcript_warning_messages(outcome.revision()))
-        .with_warnings(&job_warning_messages(
-            job.chunks_reused(),
-            job.checkpoints_discarded(),
-        )))
+    let mut warnings = transcript_warning_messages(outcome.revision());
+    warnings.extend(job_warning_messages(
+        job.chunks_reused(),
+        job.checkpoints_discarded(),
+    ));
+    Ok(PresentedRetranscription {
+        data,
+        lifecycle: LifecycleResponse::ephemeral(expires_at),
+        warnings,
+    })
+}
+
+/// Transcribes a session's speech locally into a new revision.
+///
+/// With `--events jsonl` the result is one terminal event, like every command
+/// other than `transcript get`: a whole-video revision can hold thousands of
+/// segments, more than one bounded stream may carry, so its records are read
+/// with `transcript get --revision <revision_id> --events jsonl`, page by page.
+/// The run is a recoverable job: the result names it (`data.job`) and the
+/// operation id it is recorded under (`operation_id`), the caller's own
+/// `--operation-id` when given. A first Ctrl-C or `SIGTERM` stops it before
+/// its commit: nothing is committed, the job stays interrupted and the
+/// failure (`CANCELLED`) names the session and job and suggests
+/// `job resume <job>`.
+pub(crate) async fn retranscribe(
+    engine: &Engine,
+    arguments: TranscriptRetranscribeArguments,
+    cancellation: &Cancellation,
+) -> Result<Response, CommandFailure> {
+    let range = arguments
+        .from
+        .zip(arguments.to)
+        .map(|(from_micros, to_micros)| RetranscribeRange {
+            from_micros,
+            to_micros,
+        });
+    let outcome = engine
+        .retranscribe(RetranscribeRequest {
+            session: arguments.session,
+            range,
+            operation_id: arguments.operation_id,
+            cancellation: cancellation.clone(),
+        })
+        .await?;
+    let presented = retranscription(&outcome)?;
+    Ok(
+        response(CommandName::TranscriptRetranscribe, &presented.data)?
+            .with_operation_id(outcome.job().operation_id())
+            .with_lifecycle(presented.lifecycle)
+            .with_warnings(&presented.warnings),
+    )
 }
 
 /// Reads one bounded page of a session's transcript as one result.
@@ -303,10 +360,11 @@ pub(crate) fn execute_session(
         SessionCommand::List(arguments) => {
             Ok(list_response(engine.list_sessions(arguments.cursor)?)?)
         }
-        SessionCommand::Status(arguments) => Ok(status_response(
-            CommandName::SessionStatus,
-            &engine.session_status(&arguments.session)?,
-        )?),
+        SessionCommand::Status(arguments) => {
+            let snapshot = engine.session_status(&arguments.session)?;
+            let jobs = engine.session_jobs(&arguments.session)?;
+            Ok(session_status_response(&snapshot, &jobs)?)
+        }
         SessionCommand::Renew(arguments) => Ok(status_response(
             CommandName::SessionRenew,
             &engine.renew_session(&arguments.session)?,

@@ -284,6 +284,7 @@ impl Harness {
             .ingest(IngestRequest {
                 source,
                 transcript: None,
+                cancellation: Cancellation::new(),
             })
             .await?
             .session
@@ -410,6 +411,7 @@ async fn committed_through_the_use_case(
         operation_key,
         recognition_key: key,
         request: JobRequest::Retranscribe { range },
+        planned_chunks: None,
     };
     let outcome = run_retranscription(
         RetranscriptionRun {
@@ -621,9 +623,9 @@ async fn a_job_is_resumed_and_cancelled_by_its_id() -> TestResult {
             cancellation: Cancellation::new(),
         })
         .await?;
-    assert_eq!(resumed.job().job_id(), &job);
-    assert_eq!(resumed.job().operation_id(), &operation);
-    assert_eq!(resumed.job().chunks_reused(), 1);
+    assert_eq!(resumed.outcome().job().job_id(), &job);
+    assert_eq!(resumed.outcome().job().operation_id(), &operation);
+    assert_eq!(resumed.outcome().job().chunks_reused(), 1);
     assert_eq!(engine.job_status(&job)?.state(), JobState::Succeeded);
     assert_eq!(engine.job_status(&job)?.checkpoints(), 0);
     assert_eq!(
@@ -701,6 +703,7 @@ async fn a_real_whisper_run_interrupted_after_its_first_checkpoint_resumes() -> 
         .ingest(IngestRequest {
             source: clip.clone(),
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await?
         .session
@@ -719,6 +722,7 @@ async fn a_real_whisper_run_interrupted_after_its_first_checkpoint_resumes() -> 
         .ingest(IngestRequest {
             source: clip,
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await?
         .session

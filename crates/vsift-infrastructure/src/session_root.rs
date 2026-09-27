@@ -27,7 +27,7 @@ use crate::{
 ///
 /// Provisioning writes a handful of small files and normally completes within
 /// milliseconds; the bound only absorbs a slow disk or a busy machine.
-const PROVISIONING_WAIT: Duration = Duration::from_secs(5);
+pub const PROVISIONING_WAIT: Duration = Duration::from_secs(5);
 /// How recently a root must have changed to be treated as just created while
 /// it holds nothing yet beyond the creator's first steps.
 const PROVISIONING_RECENT: Duration = Duration::from_secs(10);
@@ -142,9 +142,15 @@ pub fn open_session_root(
     open_session_root_within(root, provisioning, PROVISIONING_WAIT)
 }
 
-/// [`open_session_root`] with an explicit wait bound, so tests can exercise
-/// the bound without spending the production five seconds.
-pub(crate) fn open_session_root_within(
+/// [`open_session_root`] with an explicit wait bound: tests exercise the
+/// bound without spending the production five seconds, and a test whose
+/// racing creators may be slowed by a throttled machine can wait longer
+/// (issue #144) instead of treating the documented `BUSY` as a failure.
+///
+/// # Errors
+///
+/// As [`open_session_root`], with `wait` as the bound.
+pub fn open_session_root_within(
     root: &Path,
     provisioning: SessionRootProvisioning,
     wait: Duration,

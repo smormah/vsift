@@ -83,8 +83,8 @@ pub use ffmpeg_media::{
 pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, EvidenceInventory, EvidenceMediaFile,
     ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemJobOwner,
-    FilesystemSessionStore, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
-    SessionStoreOpenError, SessionWorkDirectory,
+    FilesystemSessionStore, JOB_CANCEL_POLL, SessionIndexPage, SessionReadHold,
+    SessionRegistration, SessionStatus, SessionStoreOpenError, SessionWorkDirectory,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
@@ -121,7 +121,7 @@ pub use process_supervisor::{
     CapturedOutput, ControlStatus, DEFAULT_STREAM_LIMIT, EffectiveControls, HardIsolation,
     HostIsolation, IsolationRequirement, OutputStream, ProcessCancellation, ProcessContainment,
     ProcessError, ProcessOutcome, ProcessRequest, ProcessRequestError, ProcessSupervisor,
-    ProcessWorkingDirectory, SupervisorPolicy, TerminationReason,
+    ProcessWorkingDirectory, SupervisorPolicy, TerminationReason, completed_termination,
 };
 pub use publisher_artifact_transfer::{
     PublisherOrigin, PublisherSourceError, PublisherTransferCancellation, PublisherTransferError,
@@ -130,7 +130,8 @@ pub use publisher_artifact_transfer::{
 pub use random_identifiers::RandomIdentifierSource;
 pub use retry_timer::TokioRetryTimer;
 pub use session_root::{
-    SessionRootError, SessionRootProvisioning, open_session_root, platform_session_root,
+    PROVISIONING_WAIT, SessionRootError, SessionRootProvisioning, open_session_root,
+    open_session_root_within, platform_session_root,
 };
 pub use source_binding::{BoundSource, EvidenceSourceCheck, SourceBinding, VerifiedSourceIdentity};
 pub use source_duration_probe::FfprobeSourceDuration;

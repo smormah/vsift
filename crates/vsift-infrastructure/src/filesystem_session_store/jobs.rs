@@ -30,7 +30,7 @@
 //! and attempt, so a cancellation requested by another process between two
 //! changes is seen and a stale owner cannot change the job.
 
-use std::{fs, io::Write, path::Path, thread, time::Duration};
+use std::{fs, future::Future, io::Write, path::Path, thread, time::Duration};
 
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
@@ -60,7 +60,7 @@ use super::{
     stored::{parse_versioned_json, read_versioned_json_file},
 };
 use crate::{
-    encode_transcript_record,
+    ProcessCancellation, encode_transcript_record,
     fault_point::{FaultPlan, FaultPoint},
     file_lock::HeldFileLock,
 };
@@ -77,6 +77,10 @@ const JOB_INDEX_DIRECTORY: &str = "job-index";
 const MAX_SESSION_BINDINGS: usize = 256;
 /// Most entries a scan of `jobs/` or `chunks/` reads before it gives up.
 const MAX_SCANNED_ENTRIES: usize = 2 * MAX_PLANNED_CHUNKS;
+/// How often a running job reads its own record for a cancellation that
+/// `job cancel` recorded (P10 PR 3): the bound on how late the owner stops
+/// its provider, well inside the 500 ms the contract promises.
+pub const JOB_CANCEL_POLL: Duration = Duration::from_millis(250);
 /// How often, one millisecond apart, a busy state lock is tried again. Its
 /// holders never wait while holding it, so it frees in far less.
 const STATE_LOCK_ATTEMPTS: u32 = 500;
@@ -369,6 +373,73 @@ impl FilesystemSessionStore {
         for name in names {
             if let Ok(job_id) = JobId::parse(name) {
                 self.unindex_job(&job_id);
+            }
+        }
+    }
+
+    /// The state a job's record holds, read without probing its owner lock
+    /// or taking any job lock; `None` when the session or job is gone.
+    ///
+    /// A running job's own process polls this to learn that `job cancel`
+    /// asked it to stop (P10 PR 3): the owner already holds the job, so a
+    /// liveness probe would only tell it what it knows, and the state lock
+    /// would slow down the canceller it is waiting for.
+    ///
+    /// # Errors
+    ///
+    /// Storage failures, including integrity and version failures of the record.
+    pub fn recorded_job_state(
+        &self,
+        session_id: &SessionId,
+        job_id: &JobId,
+    ) -> Result<Option<JobState>, JobStoreError> {
+        let Some(opened) = self.session_jobs_directory(session_id, false)? else {
+            return Ok(None);
+        };
+        let Some(jobs) = &opened.jobs else {
+            return Ok(None);
+        };
+        if !jobs.try_exists(job_id.as_str()).map_err(map_storage_io)? {
+            return Ok(None);
+        }
+        let job = jobs
+            .open_dir_nofollow(job_id.as_str())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        Ok(read_record(&job, job_id, session_id)?.map(|record| record.state))
+    }
+
+    /// Runs `run`, the owner's work on a job, while reading the job's record
+    /// every [`JOB_CANCEL_POLL`]: once `job cancel` in another process has
+    /// recorded `cancelling`, `cancellation` fires, so the provider running
+    /// now is stopped by the supervisor (gracefully, then killed) instead of
+    /// the request waiting for its chunk to end. The run then meets the
+    /// request under the job's state lock and cancels the job.
+    ///
+    /// Polling stops once `cancellation` fired for any reason. A record that
+    /// cannot be read is skipped: the run's own checks at every chunk and
+    /// before its commit still see the request.
+    pub async fn watch_for_job_cancel<T>(
+        &self,
+        session_id: &SessionId,
+        job_id: &JobId,
+        cancellation: &ProcessCancellation,
+        run: impl Future<Output = T>,
+    ) -> T {
+        let mut run = std::pin::pin!(run);
+        let mut poll = tokio::time::interval(JOB_CANCEL_POLL);
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+                biased;
+                result = &mut run => return result,
+                _ = poll.tick(), if !cancellation.is_cancelled() => {
+                    if matches!(
+                        self.recorded_job_state(session_id, job_id),
+                        Ok(Some(JobState::Cancelling))
+                    ) {
+                        cancellation.cancel();
+                    }
+                }
             }
         }
     }
