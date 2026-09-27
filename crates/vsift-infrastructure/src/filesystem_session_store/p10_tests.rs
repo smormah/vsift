@@ -31,33 +31,33 @@ use super::{
 };
 use crate::fault_point::{FAULT_EXIT_CODE, FAULT_MARKER, FAULT_POINT_VARIABLE, FaultPoint};
 
-type Built<T> = Result<T, Box<dyn Error>>;
+pub(super) type Built<T> = Result<T, Box<dyn Error>>;
 
-const SESSION: &str = "ses_0123456789abcdef";
+pub(super) const SESSION: &str = "ses_0123456789abcdef";
 const INITIALIZE: &str = "op_0123456789abcdef";
 const ACTIVATE: &str = "op_2222222222222222";
 const FIRST_EVIDENCE: &str = "op_3333333333333333";
 const CRASHED_EVIDENCE: &str = "op_7777777777777777";
-const SOURCE_BYTES: &[u8] = b"stand-in source copy";
+pub(super) const SOURCE_BYTES: &[u8] = b"stand-in source copy";
 const CHILD_ROOT: &str = "VSIFT_TEST_COMMIT_ROOT";
 
-fn session_id() -> Built<SessionId> {
+pub(super) fn session_id() -> Built<SessionId> {
     Ok(SessionId::parse(SESSION)?)
 }
 
-fn operation(text: &str) -> Built<OperationId> {
+pub(super) fn operation(text: &str) -> Built<OperationId> {
     Ok(OperationId::parse(text)?)
 }
 
-fn now() -> Built<u64> {
+pub(super) fn now() -> Built<u64> {
     Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
 }
 
-fn session_path(fixture: &Fixture) -> PathBuf {
+pub(super) fn session_path(fixture: &Fixture) -> PathBuf {
     fixture.path.join(SESSIONS_DIRECTORY).join(SESSION)
 }
 
-fn initialize_as(
+pub(super) fn initialize_as(
     store: &FilesystemSessionStore,
     durability: StoredDurability,
     hooks: &CommitHooks<'_>,
@@ -74,7 +74,7 @@ fn initialize_as(
 }
 
 /// Generation 1: activation over a source copy as staging leaves it.
-fn activate(
+pub(super) fn activate(
     fixture: &Fixture,
     store: &FilesystemSessionStore,
     hooks: &CommitHooks<'_>,
@@ -142,7 +142,10 @@ fn commit_evidence(
 
 /// An open session at generation 2: initialized, activated and holding one
 /// evidence commit.
-fn open_session(fixture: &Fixture, durability: StoredDurability) -> Built<FilesystemSessionStore> {
+pub(super) fn open_session(
+    fixture: &Fixture,
+    durability: StoredDurability,
+) -> Built<FilesystemSessionStore> {
     let store = FilesystemSessionStore::open_existing(&fixture.path)?;
     let hooks = CommitHooks::new();
     initialize_as(&store, durability, &hooks)?;
@@ -710,7 +713,7 @@ fn commit_crash_child() -> TestResult {
 
 /// Hashes every artifact the committed head lists against its manifest
 /// entry, and walks the whole chain.
-fn assert_committed_state_is_whole(store: &FilesystemSessionStore) -> TestResult {
+pub(super) fn assert_committed_state_is_whole(store: &FilesystemSessionStore) -> TestResult {
     let session = store
         .root
         .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
@@ -726,7 +729,7 @@ fn assert_committed_state_is_whole(store: &FilesystemSessionStore) -> TestResult
 /// S-07 and the fault-point registry: a process killed at every fault point
 /// of an evidence commit leaves a session that reopens at its last
 /// acknowledged generation or the new one, with every listed file whole, and
-/// the same operation then completes. Every point in [`FaultPoint::ALL`] must
+/// the same operation then completes. Every point in [`FaultPoint::COMMIT`] must
 /// be reached, so a point no commit passes fails this test.
 #[test]
 fn every_fault_point_is_reached_and_a_kill_there_recovers() -> TestResult {
@@ -737,7 +740,7 @@ fn every_fault_point_is_reached_and_a_kill_there_recovers() -> TestResult {
         modes.push(StoredDurability::Durable);
     }
     for durability in modes {
-        for point in FaultPoint::ALL {
+        for point in FaultPoint::COMMIT {
             let fixture = Fixture::new()?;
             let store = open_session(&fixture, durability)?;
             let before = store.session_status(&session_id()?)?;
@@ -801,5 +804,325 @@ fn every_fault_point_is_reached_and_a_kill_there_recovers() -> TestResult {
             assert_committed_state_is_whole(&reopened)?;
         }
     }
+    Ok(())
+}
+
+/// ADR 0020 D-2: a session holds 384 evidence artifacts, and its manifest,
+/// larger than any other metadata file may be, is written and read back by
+/// a new store instance; the next evidence artifact does not fit.
+#[test]
+fn the_raised_evidence_cap_holds_and_its_manifest_reads_back() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    // Generation 2 holds one image and one record; this call adds the rest
+    // and its own record.
+    let images: Vec<Vec<u8>> = (0..crate::MAX_EVIDENCE_ARTIFACTS - 3)
+        .map(|number| image(&format!("filler {number}")))
+        .collect();
+    commit_evidence(
+        &store,
+        CRASHED_EVIDENCE,
+        2,
+        &images,
+        "fill",
+        &CommitHooks::new(),
+    )?;
+    let manifest = session_path(&fixture)
+        .join(GENERATIONS_DIRECTORY)
+        .join("3.json");
+    let size = fs::metadata(manifest)?.len();
+    assert!(
+        size > super::MAX_METADATA_BYTES && size <= super::MAX_MANIFEST_BYTES,
+        "{size}"
+    );
+    let reopened = FilesystemSessionStore::open_existing(&fixture.path)?;
+    let status = reopened.session_status(&session_id()?)?;
+    assert_eq!(status.artifact_count(), crate::MAX_EVIDENCE_ARTIFACTS);
+    let session = reopened
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    read_committed_manifest(&session, &session_id()?, ChainCheck::Full)?;
+    let one_more = [image("one too many")];
+    let media = [EvidenceMediaFile {
+        kind: EvidenceMediaKind::FramePng,
+        bytes: &one_more[0],
+    }];
+    assert_eq!(
+        reopened
+            .commit_evidence(
+                &session_id()?,
+                &operation("op_8888888888888888")?,
+                StorageGeneration::from_value(3),
+                &EvidenceFiles {
+                    media: &media,
+                    record: b"{\"marker\":\"more\"}",
+                    verified_identity: None,
+                    now_unix_seconds: now()?,
+                },
+                &CommitHooks::new(),
+            )
+            .err(),
+        Some(SessionStorageError::CapacityExhausted)
+    );
+    Ok(())
+}
+
+/// ADR 0020 D-2: 512 artifacts fit (a 512-entry manifest stays within the
+/// manifest bound even with the largest sizes); the 513th does not.
+#[test]
+fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
+    let lifetime = vsift_domain::SessionLifetime::open(now()?)?;
+    let lifecycle = |count: usize| super::StoredLifecycle {
+        phase: super::StoredSessionPhase::Open,
+        opened_at_unix_seconds: lifetime.opened_at_unix_seconds(),
+        expires_at_unix_seconds: lifetime.expires_at_unix_seconds(),
+        source_id: format!("src_sha256_{}", sha256_hex(SOURCE_BYTES)),
+        source_name: format!("source-{ACTIVATE}.media"),
+        source_bytes: u64::try_from(SOURCE_BYTES.len()).unwrap_or(1),
+        artifacts: (0..count).map(record_artifact).collect(),
+        verified_source_identity: None,
+    };
+    let add = |count: usize| {
+        super::publication::update_lifecycle(
+            Some(lifecycle(count)),
+            LifecycleUpdate::AddArtifact {
+                artifact: record_artifact(count),
+                now: lifetime.opened_at_unix_seconds(),
+            },
+        )
+    };
+    let full = add(super::MAX_SESSION_ARTIFACTS - 1)?.ok_or("no lifecycle")?;
+    assert_eq!(full.artifacts.len(), super::MAX_SESSION_ARTIFACTS);
+    assert_eq!(
+        add(super::MAX_SESSION_ARTIFACTS).err(),
+        Some(SessionStorageError::CapacityExhausted)
+    );
+    let manifest = super::GenerationManifest {
+        schema_version: super::STORAGE_SCHEMA_VERSION,
+        session_id: SESSION.to_owned(),
+        operation_id: FIRST_EVIDENCE.to_owned(),
+        generation: super::MAX_GENERATIONS_PER_SESSION - 1,
+        previous_manifest_sha256: Some("f".repeat(64)),
+        durability: StoredDurability::Durable,
+        lifecycle: Some(full),
+    };
+    let size = serde_json::to_vec(&manifest)?.len();
+    assert!(u64::try_from(size)? <= super::MAX_MANIFEST_BYTES, "{size}");
+    Ok(())
+}
+
+/// A transcript-record entry with a distinct digest and an eight-digit size
+/// (512 of them stay within the session's 10 GiB).
+fn record_artifact(number: usize) -> super::StoredArtifact {
+    let digest = sha256_hex(number.to_string().as_bytes());
+    super::StoredArtifact {
+        kind: super::StoredArtifactKind::TranscriptRecord,
+        name: format!("artifact-{digest}.json"),
+        sha256: digest,
+        bytes: 20_000_000,
+    }
+}
+
+/// L-048 (resolved in P10 PR 2): a publication that ended between its
+/// manifest and pointer renames leaves an unreferenced manifest; another
+/// operation then publishes that generation over it instead of being
+/// refused, in both publication modes.
+#[test]
+fn another_operation_publishes_over_an_abandoned_manifest() -> TestResult {
+    let mut modes = vec![StoredDurability::Ephemeral];
+    if cfg!(unix) {
+        modes.push(StoredDurability::Durable);
+    }
+    for durability in modes {
+        let fixture = Fixture::new()?;
+        let store = open_session(&fixture, durability)?;
+        let abandoned = commit_evidence(
+            &store,
+            CRASHED_EVIDENCE,
+            2,
+            &[image("abandoned")],
+            "abandoned",
+            &CommitHooks::failing_at(FaultPoint::ManifestRename),
+        );
+        assert!(abandoned.is_err(), "{durability:?}");
+        assert!(
+            session_path(&fixture)
+                .join(GENERATIONS_DIRECTORY)
+                .join("3.json")
+                .exists()
+        );
+        let published = commit_evidence(
+            &store,
+            "op_9999999999999999",
+            2,
+            &[image("replacement")],
+            "replacement",
+            &CommitHooks::new(),
+        )?;
+        assert_eq!(
+            published,
+            StorageGeneration::from_value(3),
+            "{durability:?}"
+        );
+        let reopened = FilesystemSessionStore::open_existing(&fixture.path)?;
+        assert_committed_state_is_whole(&reopened)?;
+        assert_eq!(
+            reopened.session_status(&session_id()?)?.generation(),
+            StorageGeneration::from_value(3)
+        );
+    }
+    Ok(())
+}
+
+/// Opens the session's commit pointer the way a reader does, without the
+/// single-link check, so a test can act between the open and the check.
+fn raw_pointer(session: &cap_std::fs::Dir) -> std::io::Result<cap_std::fs::File> {
+    use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    session.open_with(CURRENT_FILE, &options)
+}
+
+/// Replaces the commit pointer with the same bytes, staged and renamed as
+/// a correct writer does.
+fn reinstall_pointer(session: &cap_std::fs::Dir) -> std::io::Result<()> {
+    let bytes = session.read(CURRENT_FILE)?;
+    session.write("pointer.test.tmp", bytes)?;
+    session.rename("pointer.test.tmp", session, CURRENT_FILE)
+}
+
+/// Regression (PR #179 X-04 stress): a reader that opens a metadata file a
+/// writer is replacing by rename meets two states a correct writer causes:
+/// the file it opened has no link left by the time it reads its metadata
+/// (every platform), and the name is briefly absent (Windows). Before the
+/// fix the first was reported as a damaged file and both became
+/// `INTEGRITY_FAILURE`; now both are retried and the reader gets the
+/// committed pointer. The interleavings are driven on the real filesystem
+/// in a fixed order.
+#[test]
+fn a_reader_that_meets_a_rename_retries_instead_of_reporting_damage() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = chain_of(&fixture, 2)?;
+    let session = store
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    let mut step = 0;
+    let mut met = Vec::new();
+    let opened = super::open_replaced_file_with(|| {
+        step += 1;
+        match step {
+            // Opened, then renamed over before its metadata is read.
+            1 => {
+                let old = raw_pointer(&session)?;
+                reinstall_pointer(&session)?;
+                let checked = super::checked_regular_file(old);
+                met.push(checked.as_ref().err().map(std::io::Error::kind));
+                checked
+            }
+            // The name is absent for a moment during the rename.
+            2 => {
+                session.rename(CURRENT_FILE, &session, "current.moving")?;
+                let absent = super::open_regular_file(&session, CURRENT_FILE, false);
+                met.push(absent.as_ref().err().map(std::io::Error::kind));
+                session.rename("current.moving", &session, CURRENT_FILE)?;
+                absent
+            }
+            _ => super::open_regular_file(&session, CURRENT_FILE, false),
+        }
+    })?;
+    assert_eq!(
+        met,
+        vec![
+            Some(std::io::ErrorKind::NotFound),
+            Some(std::io::ErrorKind::NotFound)
+        ]
+    );
+    assert_eq!(step, 3);
+    let pointer: super::CommitPointer =
+        super::stored::parse_versioned_json(&super::read_bounded(opened)?)?;
+    assert_eq!(pointer.generation, 2);
+    // The real read path reads the same committed head.
+    let head = read_committed_manifest(&session, &session_id()?, ChainCheck::Full)?;
+    assert_eq!(head.manifest.generation, 2);
+    Ok(())
+}
+
+/// The retry never hides damage: a hard-linked pointer is refused at once,
+/// and a pointer that stays missing is still an integrity failure.
+#[test]
+fn a_linked_or_missing_pointer_is_still_damage() -> TestResult {
+    let fixture = Fixture::new()?;
+    chain_of(&fixture, 1)?;
+    let pointer = session_path(&fixture).join(CURRENT_FILE);
+    let linked = session_path(&fixture).join("linked.json");
+    fs::hard_link(&pointer, &linked)?;
+    let session = FilesystemSessionStore::open_existing(&fixture.path)?
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    let started = std::time::Instant::now();
+    let refused = super::open_replaced_file(&session, CURRENT_FILE, false);
+    assert_eq!(
+        refused.err().map(|error| error.kind()),
+        Some(std::io::ErrorKind::InvalidData)
+    );
+    assert!(started.elapsed() < super::REPLACED_FILE_RETRY);
+    assert_eq!(
+        read_error(&fixture)?,
+        Some(SessionStorageError::IntegrityFailure)
+    );
+    fs::remove_file(&linked)?;
+    assert_eq!(read_error(&fixture)?, None);
+    fs::remove_file(&pointer)?;
+    assert_eq!(
+        read_error(&fixture)?,
+        Some(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
+/// Regression (PR #179): readers running through the real read path while
+/// another store instance publishes generation after generation (each
+/// replacing the pointer and the chain checkpoint by rename) always read a
+/// committed head and never report damage.
+#[test]
+fn readers_never_report_damage_while_generations_are_published() -> TestResult {
+    const PUBLICATIONS: u64 = 300;
+    let fixture = Fixture::new()?;
+    chain_of(&fixture, 1)?;
+    let root = fixture.path.clone();
+    let writer = std::thread::spawn(move || -> Result<(), String> {
+        let store =
+            FilesystemSessionStore::open_existing(&root).map_err(|error| error.to_string())?;
+        for expected in 1..=PUBLICATIONS {
+            publish_keep(&store, &format!("op_{:016x}", expected + 0x9000), expected)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    });
+    let session = FilesystemSessionStore::open_existing(&fixture.path)?
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    let (mut reads, mut failures) = (0_u64, Vec::new());
+    let mut last = 0;
+    while !writer.is_finished() {
+        match read_committed_manifest(&session, &session_id()?, ChainCheck::Incremental(None)) {
+            Ok(head) => {
+                assert!(head.manifest.generation >= last, "the head went back");
+                last = head.manifest.generation;
+            }
+            Err(error) => failures.push(error),
+        }
+        reads += 1;
+    }
+    writer.join().map_err(|_| "writer panicked")??;
+    assert!(reads > 0);
+    assert_eq!(
+        failures,
+        Vec::new(),
+        "{} of {reads} reads failed",
+        failures.len()
+    );
+    let head = read_committed_manifest(&session, &session_id()?, ChainCheck::Full)?;
+    assert_eq!(head.manifest.generation, PUBLICATIONS + 1);
     Ok(())
 }

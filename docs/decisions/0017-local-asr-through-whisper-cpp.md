@@ -187,7 +187,7 @@ These were not settled by D1–D8; each follows the existing contracts most clos
 3. `retranscribe --events jsonl` emits only the terminal event (section 6).
 4. The CLI does not trap Ctrl-C: the default handler ends the process, the supervisor
    kills whisper.cpp with it, nothing is committed, and the work directory is swept
-   later. The engine's `Cancellation` is honoured between stages for library hosts.
+   later (superseded in P10 PR 3; see the 2026-09-27 note). The engine's `Cancellation` is honoured between stages for library hosts.
    Trapping signals needs Tokio's `signal` feature, a dependency change left for a
    separate review.
 5. The verification's segment-end bound is one second (section 9).
@@ -266,3 +266,20 @@ staged fixture the same way. Failure mapping (section 8) is unchanged: a copy th
 changed is `STORAGE_IO` at a chunk's decode, as before, and `INTEGRITY_FAILURE` at the
 new closing verification; nothing is committed. The source-integrity residual of ADR
 0012 is unchanged.
+
+## 2026-09-27 note: recoverable retranscription (P10) and decision 4
+
+Since P10 PR 2 ([ADR 0020](0020-recoverable-jobs-and-durable-publication.md), accepted
+2026-09-27) a retranscription is a recoverable job. Each chunk's raw recognizer output
+is kept as a private checkpoint in the session, so running the same request again after
+an interruption (a crash, a failure, a cancellation) continues from the finished chunks
+and commits the revision an uninterrupted run would; resume information is never
+written into the revision. The result's data names the job (`job`), and the envelope
+the operation id it is recorded under.
+
+Decision 4 still describes the command-line host in PR 2: Ctrl-C is not trapped, the
+default handler ends the process and nothing is committed; the run's finished chunks
+now survive it, and the next run of the same command resumes from them. P10 PR 3
+supersedes decision 4: the CLI traps Ctrl-C and SIGTERM through Tokio's `signal`
+feature and turns them into cancellation serialized with the commit (ADR 0020
+section 5).

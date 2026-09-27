@@ -8,9 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Recoverable retranscription (P10 PR 2,
+  [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md), accepted
+  2026-09-27 with maintainer decisions D-1..D-5). `transcript retranscribe` now runs as
+  a job whose identity derives from the request: each chunk's recognizer output is kept
+  as a private checkpoint in the session, so running the same command again after an
+  interruption (a crash, a failure, Ctrl-C) continues from the finished chunks and
+  commits exactly the revision an uninterrupted run gives; a damaged checkpoint is
+  removed and its chunk recognised again. The result's data gains `job` (`job_id`,
+  `resumed`, `chunks_reused`, `replayed`), the envelope names its `operation_id`, and
+  the warnings `resumed_from_checkpoint` and `checkpoint_discarded` say when checkpoints
+  were used. A run another process is running is `BUSY` naming its job in
+  `affected_ids` with a `retry_after_ms` hint; a renewal or another revision during the
+  run is followed instead of failing after all the work; contention is retried at most
+  twice with jittered backoff. Library hosts can pass an operation id (a retry with it
+  returns the committed result without a new generation; the same id with another
+  request is the new failure code `IDEMPOTENCY_CONFLICT`, exit 2) and have
+  `Engine::job_status`, `job_resume` and `job_cancel`; the command-line flag and the
+  `job` commands follow in P10 PR 3. Nine job fault points join the kill tests.
+
 - Durable publication protocol and commit-path fault points (P10 PR 1,
-  [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md), Proposed;
-  internal, no public contract change). A session now records its durability at
+  [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md), accepted
+  2026-09-27; internal, no public contract change). A session now records its durability at
   creation; a durable session's commits flush every file and synchronise `artifacts/`,
   `generations/` and the session directory in order before acknowledging, and never
   trust what a failed earlier attempt flushed. Durable mode stays disabled on every
@@ -251,6 +270,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Documentation
 
+- The known limits register removes L-012 (fixed by P10 PR 1, merged) and L-048, raises
+  L-014 to the new caps, updates L-010 and L-025, links L-011, L-013, L-015, L-018,
+  L-024, L-028, L-042, L-043 and L-045 to their tracking issues (#170-#178), and adds
+  L-049 (checkpoints resist corruption, not a same-user forger), L-050 (bounded jobs
+  and operation ids) and L-051 (some interrupted work is redone).
 - The known limits register updates L-008, L-010 and L-012 for P10 PR 1 and adds
   L-047 (reads stop at the chain checkpoint) and L-048 (after a crash between manifest
   and pointer only the same operation can continue).
@@ -260,6 +284,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   field. New limits are added to it in the same change that finds them.
 
 ### Changed
+
+- Session caps raised (ADR 0020 D-2): a session holds 512 artifacts, of which 384 may
+  be evidence (160 before), and a generation or bundle manifest may be 128 KiB; the
+  evidence-budget remediation names the new numbers. Measured with the evidence budget
+  full, warm reused requests do not grow with the manifest chain.
+- A publication that crashed between its manifest and its pointer no longer blocks the
+  session: the next publication replaces the unreferenced manifest (known limit L-048
+  removed). A commit that follows a moved session now reads the newest revision and the
+  generation from one manifest.
 
 - Warm requests no longer slow down as a session ages (#164, P10 PR 1): a session read
   checks the manifest chain only down to a checkpoint its writer keeps
@@ -294,6 +327,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   size. The earlier day-by-day log is archived in `docs/history/`.
 
 ### Fixed
+
+- Several identical `transcript retranscribe` requests started at the same moment could
+  make one of them fail with `STORAGE_IO` on macOS while creating the shared job's lock
+  files; that open now retries briefly, as a file met mid-replacement does.
+- A session could be reported as damaged (`INTEGRITY_FAILURE`) while another process was
+  committing to it: a reader that opened the commit pointer, the chain checkpoint or a
+  job record just as a writer replaced it by rename saw a file with no link left, or
+  on Windows briefly no file, and took either for damage. Readers now retry such a
+  file for at most half a second and read the committed version; linked, non-regular
+  and missing files are still refused (P10 PR 2, found by the concurrent
+  retranscription stress test).
 
 - **Security (SEC-17):** the media adapter could report a time taken from a video's
   own metadata instead of what FFmpeg decoded. FFmpeg repeats a file's metadata (for

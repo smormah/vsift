@@ -48,7 +48,7 @@ const PNG_MEDIA_TYPE: &str = "image/png";
 const WAV_MEDIA_TYPE: &str = "audio/wav";
 
 /// Remediation when the session has no room for more evidence (ADR 0019 D4).
-pub const EVIDENCE_BUDGET_REMEDIATION: &str = "This session has no room for more evidence: it holds at most 160 evidence artifacts (images, audio clips and their records) within 256 artifacts and 10 GiB. Nothing was changed. Keep what it holds with session retain --output <new-directory>, then open a new session of the same video with ingest and continue there.";
+pub const EVIDENCE_BUDGET_REMEDIATION: &str = "This session has no room for more evidence: it holds at most 384 evidence artifacts (images, audio clips and their records) within 512 artifacts and 10 GiB. Nothing was changed. Keep what it holds with session retain --output <new-directory>, then open a new session of the same video with ingest and continue there.";
 
 /// Remediation when `FFmpeg` or `FFprobe` is missing for evidence.
 pub const EVIDENCE_TOOLS_REMEDIATION: &str = "Frames, crops and audio clips are decoded from the video with FFmpeg and FFprobe; Whisper and a model are not needed. Nothing was changed. Install or locate trusted builds, register them with setup configure ffmpeg|ffprobe --executable <path>, then run setup check.";
@@ -127,7 +127,7 @@ pub const fn partial_evidence_warning(reason: PartialReason) -> &'static str {
             "The call reached its limit of 256 MiB of images or the session's remaining space; the items returned are committed evidence. Request fewer frames, or retain the session and open a new one."
         }
         PartialReason::SessionEvidenceBudget => {
-            "The session's 160 evidence artifacts are used up; the items returned are committed evidence. Keep them with session retain, then open a new session to continue."
+            "The session's 384 evidence artifacts are used up; the items returned are committed evidence. Keep them with session retain, then open a new session to continue."
         }
         PartialReason::DeadlineExceeded => {
             "The call reached its 120 s deadline; the items returned are committed evidence. Repeat the request for the rest."

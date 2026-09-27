@@ -284,6 +284,7 @@ fn request(session: &SessionId, range: Option<(u64, u64)>) -> RetranscribeReques
             from_micros,
             to_micros,
         }),
+        operation_id: None,
         cancellation: Cancellation::new(),
     }
 }

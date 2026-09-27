@@ -1149,10 +1149,30 @@ fn p95_ms(samples: &mut [f64]) -> f64 {
 #[tokio::test]
 #[ignore = "opt-in #164 measurement; run with --release --ignored --nocapture"]
 async fn s11_warm_reuse_as_the_manifest_chain_grows() -> TestResult {
+    measure_warm_reuse(0, "S11_CHAIN").await
+}
+
+/// The same measurement with the session's evidence budget full (ADR 0020
+/// D-2): 384 evidence artifacts, so every generation's manifest is about
+/// 75 KiB instead of 1 KiB; the slope must stay about zero.
+///
+/// ```console
+/// cargo test -p vsift-cli --release --locked --test evidence_cli_contract -- --ignored --nocapture s11_warm_reuse_with
+/// ```
+#[tokio::test]
+#[ignore = "opt-in D-2 measurement; run with --release --ignored --nocapture"]
+async fn s11_warm_reuse_with_a_full_evidence_budget() -> TestResult {
+    measure_warm_reuse(MAX_EVIDENCE_ARTIFACTS - 3, "S11_FULL").await
+}
+
+/// Seeds one frame and `fillers` more evidence files, then times warm reused
+/// `frame get` calls as renewals grow the chain, printing rows labelled
+/// `label`.
+async fn measure_warm_reuse(fillers: usize, label: &str) -> TestResult {
     let harness = Harness::open()?;
     harness.trust_tools()?;
     let seeded = harness.seeded_frame(1_025_000).await?;
-    harness.seed(&seeded, 0)?;
+    harness.seed(&seeded, fillers)?;
     let store = harness.store()?;
     let mut rows = Vec::new();
     for target in CHAIN_MEASUREMENT_GENERATIONS {
@@ -1179,7 +1199,7 @@ async fn s11_warm_reuse_as_the_manifest_chain_grows() -> TestResult {
         }
         let p95 = p95_ms(&mut samples);
         println!(
-            "S11_CHAIN generation={} p95_ms={p95:.1} min_ms={:.1}",
+            "{label} generation={} p95_ms={p95:.1} min_ms={:.1}",
             generation.value(),
             samples.first().copied().unwrap_or(f64::NAN)
         );
@@ -1193,7 +1213,7 @@ async fn s11_warm_reuse_as_the_manifest_chain_grows() -> TestResult {
         )]
         let slope = (last.1 - first.1) / generations as f64;
         println!(
-            "S11_CHAIN slope_ms_per_generation={slope:.3} build={}",
+            "{label} slope_ms_per_generation={slope:.3} build={}",
             if cfg!(debug_assertions) {
                 "debug"
             } else {

@@ -9,7 +9,8 @@
 //! reading and validating the committed chain (`chain`), stored-metadata
 //! validation (`stored`), lifecycle generations (`lifecycle`), verified record
 //! reads (`reads`), evidence (`evidence`), work directories (`work`), the
-//! session index (`index`), cleanup (`cleanup`) and retained bundles (`bundle`).
+//! session index (`index`), cleanup (`cleanup`), retained bundles (`bundle`)
+//! and recoverable jobs with their chunk checkpoints (`jobs`, `job_records`).
 
 mod bundle;
 mod chain;
@@ -18,6 +19,10 @@ mod commit;
 mod evidence;
 mod index;
 mod initialization;
+mod job_records;
+#[cfg(test)]
+mod job_tests;
+mod jobs;
 mod lifecycle;
 #[cfg(test)]
 mod p10_tests;
@@ -50,9 +55,14 @@ use vsift_domain::{
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
+pub use jobs::FilesystemJobOwner;
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
+/// Largest generation manifest (and retained bundle manifest), which lists
+/// every artifact: 512 entries of about 200 bytes need about 100 KiB (ADR
+/// 0020 D-2). Every other metadata file keeps [`MAX_METADATA_BYTES`].
+const MAX_MANIFEST_BYTES: u64 = 128 * 1024;
 const OWNERSHIP_FILE: &str = "ownership.json";
 const COORDINATION_DIRECTORY: &str = "coordination";
 const SESSIONS_DIRECTORY: &str = "sessions";
@@ -87,8 +97,8 @@ const STORAGE_LAYOUT_VERSION: u16 = 1;
 const MAX_ADMISSION_CAPACITY: u16 = 64;
 const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
 const MAX_GENERATIONS_PER_SESSION: u64 = 4_096;
-/// Most artifacts one session holds.
-const MAX_SESSION_ARTIFACTS: usize = 256;
+/// Most artifacts one session holds (ADR 0020 D-2; 256 before P10).
+const MAX_SESSION_ARTIFACTS: usize = 512;
 /// Most artifact bytes one session holds: 10 GiB.
 const MAX_SESSION_ARTIFACT_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -590,21 +600,106 @@ fn create_regular_file(directory: &Dir, name: &str, bytes: &[u8]) -> io::Result<
     file.sync_all()
 }
 
+/// Opens `name` without following a link and requires a regular file with
+/// exactly one link.
+///
+/// A file with more links is rejected as [`io::ErrorKind::InvalidData`]: it
+/// could be a hard link to data outside the root. A file with no link left
+/// was renamed over or removed between the open and the metadata read, so the
+/// name no longer names it; that is [`io::ErrorKind::NotFound`], never an
+/// integrity failure, and [`open_replaced_file`] tries the name again.
 fn open_regular_file(directory: &Dir, name: &str, write: bool) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.read(true).write(write).follow(FollowSymlinks::No);
-    let file = directory.open_with(name, &options)?;
+    checked_regular_file(directory.open_with(name, &options)?)
+}
+
+/// The single-link regular-file check of [`open_regular_file`] on an opened file.
+fn checked_regular_file(file: File) -> io::Result<File> {
     let metadata = file.metadata()?;
-    if !metadata.is_file() || !has_one_link(&metadata) {
+    if !metadata.is_file() {
         return Err(io::ErrorKind::InvalidData.into());
     }
-    Ok(file)
+    match metadata.nlink() {
+        1 => Ok(file),
+        0 => Err(io::ErrorKind::NotFound.into()),
+        _ => Err(io::ErrorKind::InvalidData.into()),
+    }
+}
+
+/// How long a reader keeps trying a file a writer is replacing by rename.
+///
+/// The window is a rename: microseconds when the machine is idle, a few
+/// milliseconds under heavy load. A file still missing after this is missing.
+const REPLACED_FILE_RETRY: std::time::Duration = std::time::Duration::from_millis(500);
+/// Attempts that only yield the thread before the retry starts sleeping.
+const REPLACED_FILE_SPINS: u32 = 8;
+
+/// Opens a metadata file that a correct writer replaces by staging it and
+/// renaming it over the old one: the commit pointer, the chain checkpoint,
+/// job records, bindings and index entries.
+///
+/// A reader can meet that replacement. On every platform it can open the old
+/// file just before the rename and read its metadata just after, when the
+/// old file has no link left; on Windows the name can also be absent for a
+/// moment during the rename, and a file being deleted can refuse to open.
+/// Those states are reported as `NotFound` (or, on Windows, `PermissionDenied`)
+/// and are retried, a few times at once and then a millisecond apart, for
+/// at most [`REPLACED_FILE_RETRY`]. Whatever the reader then opens is a file
+/// the writer committed, old or new; the old one is a consistent earlier
+/// snapshot. A hard link, a non-regular file and every other error are
+/// returned at once, and a file still absent after the budget is absent, so
+/// real damage or tampering is still reported.
+fn open_replaced_file(directory: &Dir, name: &str, write: bool) -> io::Result<File> {
+    open_replaced_file_with(|| open_regular_file(directory, name, write))
+}
+
+/// [`open_replaced_file`] over any opener; the retry policy on its own, so a
+/// test can drive the exact interleavings a concurrent writer causes.
+fn open_replaced_file_with(mut open: impl FnMut() -> io::Result<File>) -> io::Result<File> {
+    let started = std::time::Instant::now();
+    let mut attempts = 0_u32;
+    loop {
+        match open() {
+            Err(error)
+                if in_replacement_window(&error) && started.elapsed() < REPLACED_FILE_RETRY =>
+            {
+                attempts = attempts.saturating_add(1);
+                if attempts <= REPLACED_FILE_SPINS {
+                    std::thread::yield_now();
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            }
+            result => return result,
+        }
+    }
+}
+
+/// Whether an open failed in a way a concurrent rename-replace can cause.
+fn in_replacement_window(error: &io::Error) -> bool {
+    match error.kind() {
+        io::ErrorKind::NotFound => true,
+        // A file being deleted (the replaced one) refuses a new open with
+        // access denied on Windows only.
+        io::ErrorKind::PermissionDenied => cfg!(windows),
+        _ => false,
+    }
 }
 
 fn read_bounded(file: File) -> io::Result<Vec<u8>> {
+    read_bounded_to(file, MAX_METADATA_BYTES)
+}
+
+/// Reads a generation or bundle manifest, bounded by [`MAX_MANIFEST_BYTES`].
+fn read_bounded_manifest(file: File) -> io::Result<Vec<u8>> {
+    read_bounded_to(file, MAX_MANIFEST_BYTES)
+}
+
+fn read_bounded_to(file: File, limit: u64) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    file.take(MAX_METADATA_BYTES + 1).read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_METADATA_BYTES {
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
         return Err(io::ErrorKind::InvalidData.into());
     }
     Ok(bytes)
@@ -626,6 +721,8 @@ fn map_lock_error(error: fs::TryLockError) -> SessionStorageError {
     reason = "Result::map_err requires ownership of the source error"
 )]
 fn map_storage_io(error: io::Error) -> SessionStorageError {
+    #[cfg(test)]
+    report_erased_io_error(&error);
     match error.kind() {
         io::ErrorKind::PermissionDenied => SessionStorageError::AccessDenied,
         io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded => {
@@ -633,6 +730,52 @@ fn map_storage_io(error: io::Error) -> SessionStorageError {
         }
         _ => SessionStorageError::Io,
     }
+}
+
+/// Under test, writes the OS error that [`SessionStorageError::Io`] erases,
+/// with the descriptor load and the call site, to the test's captured output.
+///
+/// `Io` is deliberately a unit variant: the public contract never carries OS
+/// detail. A rare `Io` in a concurrent test on one platform is then
+/// undiagnosable from the failure alone, so the unit tests keep the errno,
+/// the open-descriptor count against the soft limit (a process near its
+/// descriptor limit fails any open with `EMFILE`) and a backtrace. The test
+/// harness shows captured output only for a failing test, and worker threads
+/// inherit the capture of the test that spawned them.
+#[cfg(test)]
+fn report_erased_io_error(error: &io::Error) {
+    let kind = error.kind();
+    if matches!(
+        kind,
+        io::ErrorKind::PermissionDenied | io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded
+    ) {
+        return;
+    }
+    eprintln!(
+        "session storage I/O failed: {kind:?}, OS error {:?}, {}\n{}",
+        error.raw_os_error(),
+        descriptor_load(),
+        std::backtrace::Backtrace::force_capture()
+    );
+}
+
+/// This process's open descriptors and its soft descriptor limit.
+#[cfg(all(test, unix))]
+fn descriptor_load() -> String {
+    let open = fs::read_dir("/dev/fd").map_or_else(
+        |error| format!("unknown ({error})"),
+        |entries| entries.count().to_string(),
+    );
+    let limit = rustix::process::getrlimit(rustix::process::Resource::Nofile)
+        .current
+        .map_or_else(|| "unlimited".to_owned(), |limit| limit.to_string());
+    format!("{open} descriptors open, soft limit {limit}")
+}
+
+/// Windows has no small per-process handle limit to report.
+#[cfg(all(test, not(unix)))]
+fn descriptor_load() -> String {
+    "no descriptor limit on this platform".to_owned()
 }
 
 fn initialization_attempt_name(session_id: &SessionId, operation_id: &OperationId) -> String {

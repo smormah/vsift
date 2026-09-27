@@ -302,6 +302,15 @@ mod tests {
         }
     }
 
+    /// D-4 (ADR 0020): reusing an operation id for another request is a
+    /// usage error, exit 2, and never retryable.
+    #[test]
+    fn an_idempotency_conflict_exits_as_a_usage_error() {
+        let code = FailureCode::IdempotencyConflict;
+        assert_eq!(ProcessExit::from(code.class()).code(), 2);
+        assert!(!code.retryable());
+    }
+
     #[test]
     fn output_modes_reject_ambiguous_selection() {
         assert_eq!(OutputMode::resolve(false, false), Ok(OutputMode::Human));

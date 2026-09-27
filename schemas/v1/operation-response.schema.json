@@ -92,7 +92,8 @@
             "RESOURCE_LIMIT",
             "CANCELLED",
             "STORAGE_IO",
-            "INTEGRITY_FAILURE"
+            "INTEGRITY_FAILURE",
+            "IDEMPOTENCY_CONFLICT"
           ]
         },
         "message": { "type": "string", "minLength": 1, "maxLength": 1024 },

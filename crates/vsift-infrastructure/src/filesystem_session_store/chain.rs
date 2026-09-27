@@ -34,7 +34,8 @@ use vsift_domain::SessionId;
 use super::{
     CHAIN_CHECKPOINT_FILE, CURRENT_FILE, ChainCheck, ChainCheckpoint, CommitPointer,
     CommittedManifest, GENERATIONS_DIRECTORY, GenerationManifest, MAX_GENERATIONS_PER_SESSION,
-    VerifiedHead, is_canonical_sha256, map_storage_io, open_regular_file, read_bounded, sha256_hex,
+    VerifiedHead, is_canonical_sha256, map_storage_io, open_regular_file, read_bounded_manifest,
+    sha256_hex,
     stored::{parse_versioned_json, read_versioned_json_file},
 };
 
@@ -55,7 +56,7 @@ pub(super) fn read_committed_manifest(
     let name = format!("{}.json", pointer.generation);
     let file = open_regular_file(&generations, &name, false)
         .map_err(|_| SessionStorageError::IntegrityFailure)?;
-    let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let bytes = read_bounded_manifest(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
     if sha256_hex(&bytes) != pointer.manifest_sha256 {
         return Err(SessionStorageError::IntegrityFailure);
     }
@@ -171,7 +172,8 @@ pub(super) fn validate_manifest_chain(
         let expected = expected_digest.ok_or(SessionStorageError::IntegrityFailure)?;
         let file = open_regular_file(generations, &format!("{generation}.json"), false)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let bytes =
+            read_bounded_manifest(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
         let digest = sha256_hex(&bytes);
         if digest != expected {
             return Err(SessionStorageError::IntegrityFailure);

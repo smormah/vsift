@@ -52,6 +52,11 @@
 //!   neighbours, bursts, crops and WAV clips with lineage records; a repeated
 //!   request is answered from its committed record without running a
 //!   provider, and files are delivered as verified session artifact paths.
+//! - **Jobs (P10):** [`Engine::retranscribe`] runs as a recoverable job: the
+//!   same request after an interruption continues it from its chunk
+//!   checkpoints, and a retry with the same operation id returns its commit.
+//!   [`Engine::job_status`], [`Engine::job_resume`] and [`Engine::job_cancel`]
+//!   act on a job by its id.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that
@@ -86,6 +91,7 @@ mod candidates;
 mod engine;
 mod error;
 mod evidence;
+mod jobs;
 mod local_asr_check;
 mod search;
 mod sessions;
@@ -93,7 +99,7 @@ mod setup;
 mod transcripts;
 mod verification;
 
-pub use asr::{RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
+pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, SessionRootLocation,
@@ -108,6 +114,7 @@ pub use evidence::{
     DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
     FrameNeighboursRequest, FrameTarget,
 };
+pub use jobs::{JobCancelOutcome, JobCancelReport, JobResumeRequest, JobStatusReport};
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
@@ -185,7 +192,7 @@ pub use vsift_domain::{
 };
 pub use vsift_domain::{
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
-    FailureCode, IdentifierError, JobId, OperationId, PublicationGuarantee, RuntimeCapability,
-    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionPhase, SourceId,
-    StorageGeneration,
+    FailureCode, IdentifierError, JobId, JobKind, JobState, OperationId, PublicationGuarantee,
+    RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime,
+    SessionPhase, SourceId, StorageGeneration,
 };

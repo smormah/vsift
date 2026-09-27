@@ -102,7 +102,8 @@ pre-existing dependency-tree cases.
   fails validation, and requires explicit caller inspection/removal. VSift
   never treats it as a completed bundle or deletes it automatically.
 - The source snapshot is at most 20 GiB. Committed evidence is at most 10 GiB
-  across 256 artifacts; a generation chain is capped at 4,096. Cleanup
+  across 256 artifacts (512 since P10 PR 2, ADR 0020 D-2); a generation chain is
+  capped at 4,096. Cleanup
   refuses more than 100,000 contained entries, 30 GiB, or five nested levels.
 - The P05 checkpoint exercises one real-media fixture; the P04 checkpoint
   continues to exercise seven media scenarios. Future packet stages attach

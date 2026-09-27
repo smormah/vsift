@@ -141,7 +141,7 @@ impl FilesystemSessionStore {
     /// digest is kept rather than rejected, so two calls that extracted the
     /// same frame share one file; the same name with another kind or size is
     /// an integrity failure. The generation is checked against the evidence
-    /// sub-budget ([`crate::MAX_EVIDENCE_ARTIFACTS`]), the 256 artifact slots
+    /// sub-budget ([`crate::MAX_EVIDENCE_ARTIFACTS`]), the 512 artifact slots
     /// and the 10 GiB bound.
     ///
     /// # Errors

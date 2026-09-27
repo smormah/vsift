@@ -14,9 +14,9 @@ use vsift::{
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
-    LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, SessionState,
-    StatusData, TranscriptEvidenceStream, TranscriptPageData, TranscriptRetranscribeData,
-    transcript_warning_messages,
+    LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RetranscribeJob,
+    SessionState, StatusData, TranscriptEvidenceStream, TranscriptPageData,
+    TranscriptRetranscribeData, job_warning_messages, transcript_warning_messages,
 };
 
 use crate::{
@@ -208,9 +208,11 @@ fn read_transcript(
 /// other than `transcript get`: a whole-video revision can hold thousands of
 /// segments, more than one bounded stream may carry, so its records are read
 /// with `transcript get --revision <revision_id> --events jsonl`, page by page.
-/// The command-line host does not trap Ctrl-C; an interrupted run commits
-/// nothing, and its work directory is removed by the session's next run or
-/// cleanup.
+/// The run is a recoverable job: the result names it (`data.job`) and the
+/// operation id it is recorded under (`operation_id`). The command-line host
+/// does not trap Ctrl-C yet (P10 PR 3); an interrupted run commits nothing,
+/// running the same command again continues it from its checkpoints, and its
+/// work directory is removed by the session's next run or cleanup.
 pub(crate) async fn retranscribe(
     engine: &Engine,
     arguments: TranscriptRetranscribeArguments,
@@ -226,18 +228,31 @@ pub(crate) async fn retranscribe(
         .retranscribe(RetranscribeRequest {
             session: arguments.session,
             range,
+            operation_id: None,
             cancellation: Cancellation::new(),
         })
         .await?;
+    let job = outcome.job();
     let data = TranscriptRetranscribeData::new(
         outcome.session().session_id(),
         outcome.requested(),
         outcome.revision(),
+        &RetranscribeJob {
+            job_id: job.job_id().clone(),
+            resumed: job.resumed(),
+            chunks_reused: job.chunks_reused(),
+            replayed: job.replayed(),
+        },
     );
     let expires_at = rfc3339(outcome.session().lifetime().expires_at_unix_seconds())?;
     Ok(response(CommandName::TranscriptRetranscribe, &data)?
+        .with_operation_id(job.operation_id())
         .with_lifecycle(LifecycleResponse::ephemeral(expires_at))
-        .with_warnings(&transcript_warning_messages(outcome.revision())))
+        .with_warnings(&transcript_warning_messages(outcome.revision()))
+        .with_warnings(&job_warning_messages(
+            job.chunks_reused(),
+            job.checkpoints_discarded(),
+        )))
 }
 
 /// Reads one bounded page of a session's transcript as one result.

@@ -104,6 +104,8 @@ impl FilesystemSessionStore {
         }
         let mut budget = CleanupBudget::default();
         validate_owned_tree(&session, 0, &mut budget)?;
+        // The root job index must not outlive the jobs it names.
+        self.unindex_session_jobs(&session);
         drop(session);
         if !existing_quarantine {
             if sessions

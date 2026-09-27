@@ -208,7 +208,7 @@ impl Commit<'_> {
 /// cannot be flushed (`EBADF`, the P03/P05 FS-01 finding), so `.` is reopened
 /// relative to it with read access and that handle is flushed.
 #[cfg(unix)]
-fn sync_directory(directory: &Dir) -> std::io::Result<()> {
+pub(super) fn sync_directory(directory: &Dir) -> std::io::Result<()> {
     directory.open(".")?.sync_all()
 }
 
@@ -216,6 +216,6 @@ fn sync_directory(directory: &Dir) -> std::io::Result<()> {
 /// directory cannot be synchronised through a capability handle, and a durable
 /// commit fails rather than acknowledge.
 #[cfg(not(unix))]
-fn sync_directory(_directory: &Dir) -> std::io::Result<()> {
+pub(super) fn sync_directory(_directory: &Dir) -> std::io::Result<()> {
     Err(std::io::ErrorKind::Unsupported.into())
 }

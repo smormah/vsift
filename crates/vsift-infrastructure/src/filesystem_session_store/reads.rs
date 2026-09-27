@@ -59,11 +59,52 @@ impl FilesystemSessionStore {
         })
     }
 
+    /// Reads the newest committed transcript revision of an open session, if
+    /// it has one, and the committed status, both from one manifest.
+    ///
+    /// A caller that needs both, such as a commit that must follow the
+    /// session, never pairs a head without a revision with a generation that
+    /// already holds one: separate reads could see a commit in between.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::read_transcript`].
+    pub fn read_transcript_head(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+    ) -> Result<(Option<TranscriptRevision>, SessionStatus), SessionStorageError> {
+        let mut status = None;
+        let newest = self.read_transcript_scan(
+            session_id,
+            now_unix_seconds,
+            |_| true,
+            |observed| status = Some(observed.clone()),
+        )?;
+        match (newest, status) {
+            (Some((revision, status)), _) => Ok((Some(revision), status)),
+            (None, Some(status)) => Ok((None, status)),
+            (None, None) => Err(SessionStorageError::StateConflict),
+        }
+    }
+
     pub(super) fn read_transcript_where(
         &self,
         session_id: &SessionId,
         now_unix_seconds: u64,
+        wanted: impl FnMut(&TranscriptRevision) -> bool,
+    ) -> Result<Option<(TranscriptRevision, SessionStatus)>, SessionStorageError> {
+        self.read_transcript_scan(session_id, now_unix_seconds, wanted, |_| {})
+    }
+
+    /// The first revision, newest first, that `wanted` accepts; `observed`
+    /// sees the status of the manifest read, whatever is found.
+    fn read_transcript_scan(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
         mut wanted: impl FnMut(&TranscriptRevision) -> bool,
+        observed: impl FnOnce(&SessionStatus),
     ) -> Result<Option<(TranscriptRevision, SessionStatus)>, SessionStorageError> {
         let _hold = self.acquire_read(session_id)?;
         let sessions = self
@@ -82,6 +123,7 @@ impl FilesystemSessionStore {
         if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
             return Err(SessionStorageError::StateConflict);
         }
+        observed(&status);
         let mut records = record
             .artifacts
             .iter()

@@ -301,12 +301,28 @@ impl BoundSource {
     /// bytes changed at any point the checks can observe; the caller must
     /// then commit nothing.
     pub fn release_verified(self) -> Result<SourceSnapshot, SourceError> {
+        self.verify_unchanged()?;
+        Ok(self.snapshot)
+    }
+
+    /// The closing verification of [`Self::release_verified`] without
+    /// ending the binding: compares the identity, verifies the full SHA-256
+    /// again and requires the identity the hash read to be the bound one.
+    ///
+    /// A resumable job verifies before each commit attempt and keeps
+    /// decoding from the same binding if an attempt fails (P10).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SourceError::SnapshotChanged`] when the copy's identity or
+    /// bytes changed; the caller must then commit nothing.
+    pub fn verify_unchanged(&self) -> Result<(), SourceError> {
         self.check_identity()?;
         let identity = self.snapshot.rehash(open_bound_copy(&self.snapshot)?)?;
         if identity != self.identity {
             return Err(SourceError::SnapshotChanged);
         }
-        Ok(self.snapshot)
+        Ok(())
     }
 }
 

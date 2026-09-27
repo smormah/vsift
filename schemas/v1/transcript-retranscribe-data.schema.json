@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/transcript-retranscribe-data.schema.json",
   "title": "VSift transcript.retranscribe data v1",
-  "description": "The data member of a complete transcript.retranscribe result: the new local-ASR revision, committed and now the session's newest. Validate the envelope with operation-response.schema.json. requested_range is the range the caller asked for (null for the whole source); the revision's replaced_range is that range widened to whole segments of the superseded revision. recognised_segment_count is how many of the revision's segments this run recognised; the rest were carried from earlier revisions. The segments themselves are read with transcript get --revision <revision.revision_id>, as a page or an evidence stream.",
+  "description": "The data member of a complete transcript.retranscribe result: the new local-ASR revision, committed and now the session's newest. Validate the envelope with operation-response.schema.json. requested_range is the range the caller asked for (null for the whole source); the revision's replaced_range is that range widened to whole segments of the superseded revision. recognised_segment_count is how many of the revision's segments this run recognised; the rest were carried from earlier revisions. The segments themselves are read with transcript get --revision <revision.revision_id>, as a page or an evidence stream. job describes the recoverable job behind the result (P10, ADR 0020): job_id derives from the session and the request's operation key, so rerunning the same request finds the same job; resumed says an interrupted run of it was continued, chunks_reused how many chunks came from its private checkpoints, and replayed that the revision is an earlier commit returned again for a retry with the same operation id, without a new generation. Resume information is never written into the revision, which is the same as an uninterrupted run's.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["session_id", "requested_range", "revision", "recognised_segment_count"],
+  "required": ["session_id", "requested_range", "revision", "recognised_segment_count", "job"],
   "properties": {
     "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
     "requested_range": {
@@ -32,6 +32,17 @@
         }
       ]
     },
-    "recognised_segment_count": { "type": "integer", "minimum": 0, "maximum": 20000 }
+    "recognised_segment_count": { "type": "integer", "minimum": 0, "maximum": 20000 },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "resumed", "chunks_reused", "replayed"],
+      "properties": {
+        "job_id": { "type": "string", "pattern": "^job_[a-z0-9]{16,64}$" },
+        "resumed": { "type": "boolean" },
+        "chunks_reused": { "type": "integer", "minimum": 0, "maximum": 1024 },
+        "replayed": { "type": "boolean" }
+      }
+    }
   }
 }

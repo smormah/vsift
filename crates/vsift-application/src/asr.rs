@@ -16,17 +16,18 @@ use std::{error::Error, fmt, future::Future, num::NonZeroU16, num::NonZeroU32};
 
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile,
-    AsrProviderBuild, AsrRun, AsrRunParts, CarriedFrom, ChunkPlan, ChunkPlanError,
-    InheritedRevision, LanguageTag, MediaTime, MergedSegment, PlannedChunk, ProviderChunkOutput,
-    ProviderOutputError, SegmentOrigin, SessionId, SourceId, SourceSegment, TimeRange,
-    TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
-    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptWarningKind,
-    TranscriptWarnings, decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks,
-    validate_chunk_output,
+    AsrProviderBuild, AsrRun, AsrRunParts, CarriedFrom, CheckpointOutcome, ChunkCheckpoint,
+    ChunkPlan, ChunkPlanError, InheritedRevision, LanguageTag, MediaTime, MergedSegment,
+    PlannedChunk, ProviderChunkOutput, ProviderOutputError, RecognitionKey, SegmentOrigin,
+    SessionId, SourceId, SourceSegment, TimeRange, TranscriptProvenance, TranscriptRevision,
+    TranscriptRevisionError, TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment,
+    TranscriptSegmentParts, TranscriptWarningKind, TranscriptWarnings, ValidatedChunk,
+    decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks, validate_chunk_output,
 };
 
 use crate::{
     TranscriptBuildError,
+    job::{CheckpointRead, ChunkCheckpoints, NoCheckpoints},
     transcript::{derived_identity, transcript_segment_id},
 };
 
@@ -383,10 +384,138 @@ where
     R: SpeechRecognizer,
     C: AsrCancellation,
 {
+    run_chunks(
+        request,
+        None::<CheckpointScope<'_, NoCheckpoints>>,
+        audio,
+        recognizer,
+        cancellation,
+    )
+    .await
+    .map(|(transcription, _)| transcription)
+    .map_err(|failure| failure.failure)
+}
+
+/// The chunk checkpoints a run reads and writes, and the run they belong to.
+pub struct CheckpointScope<'a, K> {
+    /// Where the job keeps its checkpoints.
+    pub checkpoints: &'a K,
+    /// The recognition every usable checkpoint must belong to.
+    pub key: &'a RecognitionKey,
+}
+
+// Two references: copyable whatever `K` is, which a derive would not allow.
+impl<K> Clone for CheckpointScope<'_, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for CheckpointScope<'_, K> {}
+
+/// How a run used its chunk checkpoints.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CheckpointUse {
+    /// Chunks taken from a stored checkpoint instead of being decoded and
+    /// recognised again.
+    pub reused: u32,
+    /// Checkpoints found unusable (damaged, another run's, or holding output
+    /// the domain rules reject) and done again.
+    pub discarded: u32,
+}
+
+/// A failed run and the chunk it failed at, if it was working on one.
+///
+/// The chunk lets the job apply the poison rule: three identical failures at
+/// the same chunk make the job non-resumable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AsrRunFailure {
+    /// Stage and reason.
+    pub failure: AsrFailure,
+    /// Zero-based index of the chunk.
+    pub chunk: Option<u32>,
+}
+
+impl fmt::Display for AsrRunFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.failure.fmt(formatter)
+    }
+}
+
+impl Error for AsrRunFailure {}
+
+impl From<AsrFailure> for AsrRunFailure {
+    fn from(failure: AsrFailure) -> Self {
+        Self {
+            failure,
+            chunk: None,
+        }
+    }
+}
+
+/// [`transcribe_range`] that continues from the chunk checkpoints of an
+/// earlier, interrupted run (P10, ADR 0020).
+///
+/// Before a chunk is decoded its checkpoint is read. A checkpoint of this
+/// run (the same recognition key, index and window) is used in place of
+/// decoding and recognising: a silent or empty chunk as recorded, and stored
+/// recognizer output through exactly the validation and merge a fresh run
+/// applies, so an interrupted and resumed run yields the same revision as an
+/// uninterrupted one. A checkpoint that is unreadable, of another run, or
+/// whose output the rules reject is removed and the chunk done again; it is
+/// counted in [`CheckpointUse::discarded`], never guessed at (S-08). After a
+/// chunk is done fresh its outcome (the raw output, once it has passed
+/// validation) is stored before the next chunk starts; a checkpoint that
+/// cannot be stored costs only the redo.
+///
+/// # Errors
+///
+/// As [`transcribe_range`], with the chunk the run failed at.
+pub async fn transcribe_range_checkpointed<A, R, C, K>(
+    request: TranscribeRangeRequest<'_>,
+    scope: CheckpointScope<'_, K>,
+    audio: &A,
+    recognizer: &R,
+    cancellation: &C,
+) -> Result<(AsrTranscription, CheckpointUse), AsrRunFailure>
+where
+    A: SpeechAudioSource,
+    R: SpeechRecognizer,
+    C: AsrCancellation,
+    K: ChunkCheckpoints,
+{
+    run_chunks(request, Some(scope), audio, recognizer, cancellation).await
+}
+
+/// What one chunk became.
+enum ChunkResult {
+    /// No audio, or silent audio: a gap.
+    Gap(AsrChunkOutcome),
+    /// Recognised output that passed validation.
+    Transcribed {
+        audio: TimeRange,
+        validated: ValidatedChunk,
+    },
+}
+
+async fn run_chunks<A, R, C, K>(
+    request: TranscribeRangeRequest<'_>,
+    scope: Option<CheckpointScope<'_, K>>,
+    audio: &A,
+    recognizer: &R,
+    cancellation: &C,
+) -> Result<(AsrTranscription, CheckpointUse), AsrRunFailure>
+where
+    A: SpeechAudioSource,
+    R: SpeechRecognizer,
+    C: AsrCancellation,
+    K: ChunkCheckpoints,
+{
     let bounds = request.source_segment.range();
     let chunks = plan_run(&request)?;
     ensure_identity(recognizer, request.expected).await?;
 
+    let mut usage = CheckpointUse::default();
     let mut records = Vec::with_capacity(chunks.len());
     let mut merge_input = Vec::with_capacity(chunks.len());
     let mut warnings = TranscriptWarnings::default();
@@ -394,53 +523,49 @@ where
     let mut gaps = 0_u32;
     let mut first_gap = None;
     for chunk in chunks {
-        stop_if_cancelled(cancellation, AsrStage::AudioExtraction)?;
-        let outcome = match audio.speech_pcm(&chunk).await {
-            Ok(pcm) => {
-                decoded_audio_range(pcm.actual_start, pcm.samples.len()).map(|range| (pcm, range))
-            }
-            Err(SpeechAudioError::NoAudio) => None,
-            Err(error) => {
-                return Err(AsrFailure::at(AsrStage::AudioExtraction, error.into()));
-            }
+        let index = chunk.index();
+        let at_chunk = |failure: AsrFailure| AsrRunFailure {
+            failure,
+            chunk: Some(index),
         };
-        let Some((pcm, decoded)) = outcome else {
-            gaps = gaps.saturating_add(1);
-            first_gap.get_or_insert(chunk.ordinal());
-            records.push(AsrChunkRecord::new(chunk.clone(), AsrChunkOutcome::NoAudio));
-            merge_input.push(empty_chunk(chunk));
-            continue;
+        stop_if_cancelled(cancellation, AsrStage::AudioExtraction).map_err(at_chunk)?;
+        let reused = scope
+            .as_ref()
+            .and_then(|scope| reuse_checkpoint(scope, &chunk, bounds, &mut usage));
+        let result = if let Some(result) = reused {
+            result
+        } else {
+            let (result, checkpoint) = fresh_chunk(&chunk, bounds, audio, recognizer, cancellation)
+                .await
+                .map_err(at_chunk)?;
+            if let Some(scope) = &scope {
+                // Best effort by design: see the port's documentation.
+                let _ = scope.checkpoints.store(&ChunkCheckpoint::new(
+                    scope.key.clone(),
+                    &chunk,
+                    checkpoint,
+                ));
+            }
+            result
         };
-        if is_silent_pcm(&pcm.samples) {
-            gaps = gaps.saturating_add(1);
-            first_gap.get_or_insert(chunk.ordinal());
-            records.push(AsrChunkRecord::new(
-                chunk.clone(),
-                AsrChunkOutcome::Silent { audio: decoded },
-            ));
-            merge_input.push(empty_chunk(chunk));
-            continue;
+        match result {
+            ChunkResult::Gap(outcome) => {
+                gaps = gaps.saturating_add(1);
+                first_gap.get_or_insert(chunk.ordinal());
+                records.push(AsrChunkRecord::new(chunk.clone(), outcome));
+                merge_input.push(empty_chunk(chunk));
+            }
+            ChunkResult::Transcribed { audio, validated } => {
+                records.push(AsrChunkRecord::new(
+                    chunk,
+                    AsrChunkOutcome::Transcribed { audio },
+                ));
+                let (segments, language, chunk_warnings) = validated.into_parts();
+                warnings.extend(&chunk_warnings);
+                languages.push(language);
+                merge_input.push(segments);
+            }
         }
-        stop_if_cancelled(cancellation, AsrStage::Recognition)?;
-        let output = recognizer
-            .recognize(&chunk, &pcm)
-            .await
-            .map_err(|error| AsrFailure::at(AsrStage::Recognition, error.into()))?;
-        let validated =
-            validate_chunk_output(&chunk, decoded, bounds, output).map_err(|error| {
-                AsrFailure::at(
-                    AsrStage::OutputValidation,
-                    AsrFailureReason::MalformedOutput(error),
-                )
-            })?;
-        records.push(AsrChunkRecord::new(
-            chunk,
-            AsrChunkOutcome::Transcribed { audio: decoded },
-        ));
-        let (segments, language, chunk_warnings) = validated.into_parts();
-        warnings.extend(&chunk_warnings);
-        languages.push(language);
-        merge_input.push(segments);
     }
     if let Some(first) = first_gap {
         warnings.add(TranscriptWarningKind::SilentChunksSkipped, gaps, first);
@@ -460,12 +585,116 @@ where
         chunks: records,
     })
     .map_err(|error| AsrFailure::at(AsrStage::Assembly, AsrFailureReason::InvalidRun(error)))?;
-    Ok(AsrTranscription {
-        run,
-        language: agreed_language(languages),
-        segments: merged.segments,
-        warnings,
-    })
+    Ok((
+        AsrTranscription {
+            run,
+            language: agreed_language(languages),
+            segments: merged.segments,
+            warnings,
+        },
+        usage,
+    ))
+}
+
+/// The chunk's stored result, if a usable checkpoint of this run holds it.
+///
+/// Anything else found is removed and counted as discarded, so the chunk is
+/// done again from the audio.
+fn reuse_checkpoint<K: ChunkCheckpoints>(
+    scope: &CheckpointScope<'_, K>,
+    chunk: &PlannedChunk,
+    bounds: TimeRange,
+    usage: &mut CheckpointUse,
+) -> Option<ChunkResult> {
+    let checkpoint = match scope.checkpoints.load(chunk.index()) {
+        CheckpointRead::Absent => return None,
+        CheckpointRead::Unusable => {
+            usage.discarded = usage.discarded.saturating_add(1);
+            return None;
+        }
+        CheckpointRead::Found(checkpoint) => checkpoint,
+    };
+    let result = if checkpoint.belongs_to(scope.key, chunk) {
+        match checkpoint.into_outcome() {
+            CheckpointOutcome::NoAudio => Some(ChunkResult::Gap(AsrChunkOutcome::NoAudio)),
+            CheckpointOutcome::Silent { audio } => {
+                Some(ChunkResult::Gap(AsrChunkOutcome::Silent { audio }))
+            }
+            CheckpointOutcome::Recognised { audio, output } => {
+                validate_chunk_output(chunk, audio, bounds, output)
+                    .ok()
+                    .map(|validated| ChunkResult::Transcribed { audio, validated })
+            }
+        }
+    } else {
+        None
+    };
+    if result.is_some() {
+        usage.reused = usage.reused.saturating_add(1);
+    } else {
+        scope.checkpoints.discard(chunk.index());
+        usage.discarded = usage.discarded.saturating_add(1);
+    }
+    result
+}
+
+/// Decodes and, unless it is silent, recognises one chunk; returns what it
+/// became and the checkpoint outcome that records it.
+async fn fresh_chunk<A, R, C>(
+    chunk: &PlannedChunk,
+    bounds: TimeRange,
+    audio: &A,
+    recognizer: &R,
+    cancellation: &C,
+) -> Result<(ChunkResult, CheckpointOutcome), AsrFailure>
+where
+    A: SpeechAudioSource,
+    R: SpeechRecognizer,
+    C: AsrCancellation,
+{
+    let decoded = match audio.speech_pcm(chunk).await {
+        Ok(pcm) => {
+            decoded_audio_range(pcm.actual_start, pcm.samples.len()).map(|range| (pcm, range))
+        }
+        Err(SpeechAudioError::NoAudio) => None,
+        Err(error) => {
+            return Err(AsrFailure::at(AsrStage::AudioExtraction, error.into()));
+        }
+    };
+    let Some((pcm, decoded)) = decoded else {
+        return Ok((
+            ChunkResult::Gap(AsrChunkOutcome::NoAudio),
+            CheckpointOutcome::NoAudio,
+        ));
+    };
+    if is_silent_pcm(&pcm.samples) {
+        return Ok((
+            ChunkResult::Gap(AsrChunkOutcome::Silent { audio: decoded }),
+            CheckpointOutcome::Silent { audio: decoded },
+        ));
+    }
+    stop_if_cancelled(cancellation, AsrStage::Recognition)?;
+    let output = recognizer
+        .recognize(chunk, &pcm)
+        .await
+        .map_err(|error| AsrFailure::at(AsrStage::Recognition, error.into()))?;
+    let raw = output.clone();
+    let validated = validate_chunk_output(chunk, decoded, bounds, output).map_err(|error| {
+        AsrFailure::at(
+            AsrStage::OutputValidation,
+            AsrFailureReason::MalformedOutput(error),
+        )
+    })?;
+    Ok((
+        ChunkResult::Transcribed {
+            audio: decoded,
+            validated,
+        },
+        CheckpointOutcome::Recognised {
+            audio: decoded,
+            output: raw,
+        },
+    ))
 }
 
 /// Refuses a range outside the source and an unpinned model, then cuts the
@@ -573,6 +802,27 @@ pub struct AsrRevisionRequest<'a> {
     /// The revision this one supersedes and splices into, if the session
     /// already had one.
     pub splice: Option<RevisionSplice<'a>>,
+}
+
+/// The range a retranscription replaces: the whole source without a
+/// request, the request itself when there is no revision yet, and otherwise
+/// the request widened to whole segments of the newest revision
+/// ([`TranscriptRevision::snap_to_segments`]).
+///
+/// A job commits only if this range is unchanged when it commits: widening
+/// over a newer revision that another run committed meanwhile may cut
+/// different segments.
+#[must_use]
+pub fn retranscription_range(
+    newest: Option<&TranscriptRevision>,
+    requested: Option<TimeRange>,
+    source: TimeRange,
+) -> TimeRange {
+    match (newest, requested) {
+        (_, None) => source,
+        (Some(newest), Some(range)) => newest.snap_to_segments(range),
+        (None, Some(range)) => range,
+    }
 }
 
 /// One segment of a revision being assembled, before ordinals are assigned.

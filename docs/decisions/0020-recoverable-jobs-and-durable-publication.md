@@ -1,7 +1,8 @@
 # ADR 0020: Recoverable jobs and durable publication
 
-- Status: Proposed
-- Date: 2026-09-26
+- Status: Accepted (maintainer, 2026-09-27). Decisions D-1..D-5 below are confirmed as
+  recommended.
+- Date: 2026-09-26 (accepted 2026-09-27)
 - Tracking: [P10 / issue #13](https://github.com/smormah/vsift/issues/13),
   [#164](https://github.com/smormah/vsift/issues/164)
 - Refines: [ADR 0004](0004-recoverable-worker-core.md) (the recoverable core),
@@ -10,9 +11,10 @@
   qualification gate), [ADR 0017](0017-local-asr-through-whisper-cpp.md) (decision 4,
   Ctrl-C) and [ADR 0019](0019-evidence-navigation.md) (D4, the artifact caps)
 - Scope of this record: the design of the whole P10 packet. PR 1 implements the
-  commit path (sections 1-3); the jobs, keys, checkpoints, cancellation, retry and
-  crash campaign (sections 4-7) follow in PRs 2-4. Nothing here is user-reachable
-  yet, and durable publication stays disabled on every profile.
+  commit path (sections 1-3); PR 2 the jobs, keys, checkpoints, retry policy and the
+  engine-level job operations (sections 4-5, and D-2 and D-4); PR 3 the public job
+  surface and signal handling (sections 5-6); PR 4 the crash campaign (section 7).
+  Durable publication stays disabled on every profile until PR 4.
 
 ## Context
 
@@ -165,16 +167,107 @@ durability survives a worker or OS crash on the qualified disk; losing the disk 
 host is out of scope and must be covered by the caller's own replicated storage, which
 the documentation states.
 
-## Decisions for maintainer confirmation
+## Maintainer decisions (confirmed 2026-09-27)
 
-- **D-1** `--operation-id op_…` on `transcript retranscribe` only.
-- **D-2** Caps of 512 artifacts / 384 evidence / 128 KiB generation manifests, after
-  #164 is measured.
+- **D-1** A caller-supplied `--operation-id op_…` on `transcript retranscribe` only.
+  The engine request carries an optional operation id from PR 2; the CLI flag lands in
+  PR 3.
+- **D-2** Caps of 512 artifacts / 384 evidence / 128 KiB, for generation manifests
+  (and the retained bundle manifest that repeats their artifact list) only, now that
+  #164 is measured (warm reads no longer grow with the chain). The 10 GiB bound is
+  unchanged. Implemented in PR 2.
 - **D-3** Durable mode requestable via the engine API only in P10; CLI via P11's
   durable workspace.
-- **D-4** New failure code `IDEMPOTENCY_CONFLICT` (exit 2).
+- **D-4** New failure code `IDEMPOTENCY_CONFLICT` (exit 2, not retryable) for the same
+  operation id with a different request digest. Implemented in PR 2 (engine level).
 - **D-5** Campaign on hosted `ubuntu-24.04` with KVM first, falling back to a
-  maintainer-owned disposable KVM host.
+  maintainer-owned disposable KVM host (PR 4).
+
+## Implementation notes: PR 2 (2026-09-27)
+
+PR 2 implements sections 4 and 5 at the engine and storage level. Where it refines the
+design above:
+
+- **Keys.** The request digest (`vsift.retranscribe-request.v1`) is the session, the
+  command and its canonical parameters (the range, or none). The *recognition key*
+  (`vsift.recognition.v1`) is the session, source, audio stream, replaced range, chunk
+  plan, decoding profile, recognizer identity and the local-ASR verification
+  fingerprint (which binds the tools, isolation, verifier and `VSift` version); it
+  deliberately leaves out the base revision, so checkpoints stay valid when only the
+  base changes. The operation key (`opk_sha256_`, `vsift.retranscribe-op.v1`) is the
+  recognition key and the base revision id; the job id is `job_` and 32 hex digits of
+  `sha256("vsift.job.v1\n" + session + "\n" + opk)`, so an identical request after a
+  crash finds the same job. Each commit uses a deterministic operation id derived from
+  the job, its epoch and its attempt.
+- **States.** Two edges are added to section 4's states: `Committing -> Interrupted`,
+  taken only after recovery found in the manifest chain that the commit did not land,
+  and `Running -> Failed` for a poisoned chunk or used-up attempts. A failed or
+  cancelled job is restarted by the same request in a new *epoch* (attempts and
+  failures reset); `job resume` refuses it.
+- **Checkpoints.** `chunks/<ordinal:05>.json` v1 holds the raw provider output (token
+  probabilities as their IEEE bits, so a decimal round trip cannot change a resumed
+  revision), the decoded audio range and the outcome kind; a checkpoint is stored only
+  after the output passed validation, and a resumed chunk passes the same validation
+  and merge again, so the resumed revision is byte-identical. Reading one returns
+  absent, found or unusable (removed, counted as `checkpoint_discarded`). Storing is an
+  optimisation: a checkpoint over 256 KiB or one that cannot be written costs only the
+  redo.
+- **Retry and poison.** `BUSY` (admission, the writer, a generation moved by a renewal
+  or another revision) is retried at most twice with full jitter (200 ms, doubling, cap
+  2 s); every other failure ends the call with the job interrupted and resumable, and
+  the job fails for good only on a poisoned chunk (three identical codes at the same
+  chunk; cancellations and failures outside a chunk never count), after 16 attempts, or
+  when a superseding revision changes the range.
+- **Commit.** Under the job's state lock the job records `committing` with its commit
+  operation id, the generation it expects to follow and the revision id, then
+  publishes. A failure after the pointer moved is reconciled at once from the chain.
+  A generation moved meanwhile is followed: with the same base the commit is retried
+  against the new head; with a new newest revision the request is widened over it
+  again, and the same range re-splices the recognised segments onto it (else the job
+  fails as superseded and `BUSY` asks for a rerun). Reconciliation of a job whose owner
+  is gone runs one way only: its commit operation above its recorded generation in the
+  chain makes it `succeeded`.
+- **Locks.** Every lock is taken without waiting, so no order can deadlock. The order
+  used is the session's shared lifetime hold (the bound source copy, the work
+  directory, the job owner), the job's `owner.lock`, then inside a publication
+  admission, the lifetime hold again and the writer. `state.lock` is held only for a
+  few file operations, with a bounded 500 ms retry to take it. A liveness probe takes a
+  shared lock on `owner.lock` for an instant, so a racing acquisition may be told busy.
+- **Operation ids.** A caller's id is bound to its job (`jobs/by-operation/<op>.json`,
+  at most 8 per job and 256 per session) and pins the job; when the caller gives none,
+  the commit's own id is bound after the commit as an alias that can replay the result
+  and pins nothing. At 64 jobs the oldest ended, unowned, unpinned job is pruned. Ids
+  are session-scoped and expire with the session.
+- **Abandoned manifests (L-048).** A publication holds the writer lock from its
+  manifest rename to its pointer rename, so a manifest found above the head under the
+  writer lock is always one an ended publication left. It is now replaced by the next
+  publication (staged again, as a durable retry already did) instead of refusing every
+  other operation, so a crash between the two renames no longer blocks the session.
+- **Readers meeting a replacement (found by the X-04 stress of PR #179).** Every
+  metadata file a writer replaces by staging and renaming (the commit pointer, the
+  chain checkpoint, job records, bindings and index entries) can be met mid-rename by
+  a reader in another process. On every platform the reader can open the old file
+  just before the rename and read its metadata just after, when it has no link left;
+  on Windows the name can also be absent for a moment (a probe of 200,000 opens during
+  continuous renames saw 701 of the first and 395 of the second). The single-link
+  check reported the first as a damaged file, and every reader turned both into
+  `INTEGRITY_FAILURE` for a healthy session: a latent P03 defect that PR 1's chain
+  checkpoint and PR 2's job records made far more frequent. A file with no link left
+  is now reported as no longer at its name (`NotFound`), and these files are opened
+  with a bounded retry (a few immediate attempts, then 1 ms apart, at most 500 ms,
+  also for access denied on Windows). What the reader then opens is a committed
+  file, old or new; the old one is a consistent earlier snapshot. A hard-linked or
+  non-regular file is still refused at once, and a file still missing after the
+  budget is still an integrity failure. Generations are never replaced while a
+  pointer names them, so manifest reads need no retry.
+- **Racing creators of a lock anchor (found by the X-03 stress on macOS).** Eight
+  identical requests create a job's `owner.lock` and `state.lock` at the same moment.
+  On macOS one create-if-missing open occasionally reported `NotFound` (raw OS error
+  2, from `jobs.rs` `create_or_open`, with 29 descriptors open of 10,240) although
+  the job directory existed: a peer's concurrent creation of the same name, not
+  damage. That open now uses the same bounded retry (at most 0.5 s), so the peer's
+  file is opened once it appears; a directory that really vanished still fails
+  after the budget.
 
 ## Consequences
 
@@ -184,11 +277,14 @@ the documentation states.
 - A read no longer notices damage to a generation below its anchor; retain and
   cleanup still do. This is the stated guarantee, not a silent weakening.
 - The durable protocol exists and is tested for order, fsyncgate handling and kills,
-  but no profile can use it until the campaign passes. The artifact caps are unchanged
-  (ADR 0019 D4) until D-2 is confirmed.
-- A different operation still cannot publish generation N after a crash left another
-  operation's manifest N but no pointer to it (a conflict, as in P03); the retry of the
-  same operation completes it. P10's job recovery (PR 2) owns the case.
+  but no profile can use it until the campaign passes. PR 1 left the artifact caps
+  unchanged (ADR 0019 D4); PR 2 raises them (D-2).
+- After a crash between a manifest and its pointer, any later publication replaces the
+  unreferenced manifest (PR 2); the retry of the same operation still acknowledges an
+  identical one.
+- PR 2 raises the artifact caps (D-2); every retranscription is a job with private
+  checkpoint files under the session (never in a manifest or bundle), and the public
+  `transcript.retranscribe` data gains `job` and the envelope's `operation_id`.
 
 ## Alternatives
 

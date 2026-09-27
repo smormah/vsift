@@ -22,6 +22,41 @@ pub const NO_AUDIO_STREAM_REMEDIATION: &str = "The video has no audio stream VSi
 /// Remediation when a requested revision is not in the session.
 pub const UNKNOWN_REVISION_REMEDIATION: &str = "The session holds no transcript revision with that identity. Use a revision_id returned by ingest, transcript get or transcript retranscribe for this session.";
 
+/// Warning `resumed_from_checkpoint`: the result continued an interrupted
+/// run from its private chunk checkpoints (P10, ADR 0020).
+pub const RESUMED_FROM_CHECKPOINT_WARNING: &str = "resumed_from_checkpoint: The retranscription continued an interrupted run. Chunks recognised before the interruption were taken from its private checkpoints instead of being decoded again; the revision is the one an uninterrupted run gives.";
+
+/// Warning `checkpoint_discarded`: a stored checkpoint could not be used and
+/// its chunk was recognised again.
+pub const CHECKPOINT_DISCARDED_WARNING: &str = "checkpoint_discarded: A stored checkpoint of the interrupted run could not be used (damaged, incomplete or not this run's), so it was removed and its chunk recognised again. Nothing was guessed.";
+
+/// Warning `cancellation_too_late`: the job had already committed, or was
+/// committing, when cancellation was requested, so its result stands.
+pub const CANCELLATION_TOO_LATE_WARNING: &str = "cancellation_too_late: The job was already committing or had committed when cancellation was requested, so its result stands and nothing was cancelled.";
+
+/// Remediation when an operation id is reused for a different request.
+pub const IDEMPOTENCY_CONFLICT_REMEDIATION: &str = "The operation id was used earlier in this session for a different request, whose result is kept. Nothing was changed. Retry the original request with that id, or send this request with a new operation id.";
+
+/// Remediation when a job is running in another process.
+pub const JOB_BUSY_REMEDIATION: &str = "The same retranscription is running in another process; affected_ids names its job. Nothing was changed. Retry after retry_after_ms: a retry of the same request continues the job or returns its result.";
+
+/// Remediation when another revision replaced part of the range during the run.
+pub const SUPERSEDED_REMEDIATION: &str = "Another revision changed the transcript around the requested range while this one ran, so the range it recognised no longer matches. Nothing was committed. Run the request again: it is widened over the newest revision.";
+
+/// Fixed-prose warnings for how a retranscription used its checkpoints, in
+/// a stable order.
+#[must_use]
+pub fn job_warning_messages(chunks_reused: u32, checkpoints_discarded: u32) -> Vec<&'static str> {
+    let mut warnings = Vec::new();
+    if chunks_reused > 0 {
+        warnings.push(RESUMED_FROM_CHECKPOINT_WARNING);
+    }
+    if checkpoints_discarded > 0 {
+        warnings.push(CHECKPOINT_DISCARDED_WARNING);
+    }
+    warnings
+}
+
 /// Structured remediation for a local speech-recognition run that failed.
 ///
 /// The summary starts with `Local speech recognition failed at the <stage>

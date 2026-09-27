@@ -37,9 +37,10 @@ pub const MAX_EVIDENCE_RECORD_BYTES: usize = 256 * 1024;
 /// 16-bit samples (960,044 bytes) fit in one mebibyte.
 pub const MAX_AUDIO_WAV_BYTES: usize = 1024 * 1024;
 /// Most evidence artifacts one session holds: frame and crop images, audio
-/// clips and evidence records together (ADR 0019 D4). The session's 256
-/// artifact slots keep the rest for transcripts and visual indexes.
-pub const MAX_EVIDENCE_ARTIFACTS: usize = 160;
+/// clips and evidence records together (ADR 0019 D4, raised from 160 by ADR
+/// 0020 D-2 once reads stopped growing with the chain, #164). The session's
+/// 512 artifact slots keep the rest for transcripts and visual indexes.
+pub const MAX_EVIDENCE_ARTIFACTS: usize = 384;
 const RECORD_VERSION: u16 = 1;
 const RECORD_FORMAT: &str = "vsift.evidence_record";
 

@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-27 (P00-P09 complete; P10 in progress, PR 1 on its branch).
+Date: 2026-09-27 (P00-P09 complete; P10 in progress: PR 1 merged, PR 2 on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -56,25 +56,24 @@ Each entry has these fields:
 | [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-008](#l-008) | Strict OS/storage-crash durability is unqualified (FS-01); protocol implemented, disabled | integrity/durability | high | P10, P11, P14 | [#13](https://github.com/smormah/vsift/issues/13), [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
-| [L-010](#l-010) | Recovery, cancellation and idempotency are not qualified (fault points exist) | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
-| [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | none | monitoring |
-| [L-012](#l-012) | Warm requests slowed as the manifest chain grew (fixed in P10 PR 1) | performance | low | P10 | [#164](https://github.com/smormah/vsift/issues/164) | monitoring |
-| [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | none | monitoring |
-| [L-014](#l-014) | A session holds at most 160 evidence files (256 artifacts, 64 KiB manifest) | contract/UX | medium | P10 | [#164](https://github.com/smormah/vsift/issues/164) | deferred |
-| [L-015](#l-015) | Bursts over more than 20 s of 60 fps video are refused | contract/UX | low | unscheduled | none | open |
+| [L-010](#l-010) | Recovery and idempotency work at the engine level; the public job surface, signals and the OS-crash campaign are still to come | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
+| [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | [#170](https://github.com/smormah/vsift/issues/170) | monitoring |
+| [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
+| [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
+| [L-015](#l-015) | Bursts over more than 20 s of 60 fps video are refused | contract/UX | low | unscheduled | [#172](https://github.com/smormah/vsift/issues/172) | open |
 | [L-016](#l-016) | Delivered file paths use the Windows `\\?\` form and die with the session | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | accepted residual |
 | [L-017](#l-017) | Human-readable output is pretty-printed JSON | contract/UX | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-018](#l-018) | Tiny text is measured on synthetic glyphs only; crops are never upscaled | visual detection | low | unscheduled | none | open |
+| [L-018](#l-018) | Tiny text is measured on synthetic glyphs only; crops are never upscaled | visual detection | low | unscheduled | [#173](https://github.com/smormah/vsift/issues/173) | open |
 | [L-019](#l-019) | A seek that lands past the requested frame reports "not found" | contract/UX | low | unscheduled | none | accepted residual |
 | [L-020](#l-020) | Noisy speech: `base` word error rate 61.5% on F08, not gated | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
 | [L-021](#l-021) | Reviewed known misses: "queued", "4407", "E-409" | accuracy/ASR | medium | unscheduled | none | accepted residual |
 | [L-022](#l-022) | No accent, crosstalk, human-voice or long-recording ASR evidence | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | open |
 | [L-023](#l-023) | ASR output differs across CPU backends; revision ids differ by host | accuracy/ASR | low | unscheduled | none | accepted residual |
-| [L-024](#l-024) | An ASR segment can start at the audio's start, before the speech | accuracy/ASR | medium | unscheduled | none | open |
-| [L-025](#l-025) | Local ASR runs: Ctrl-C not trapped, no progress events, model hashed per run | contract/UX | low | unscheduled | none | accepted residual |
+| [L-024](#l-024) | An ASR segment can start at the audio's start, before the speech | accuracy/ASR | medium | unscheduled | [#174](https://github.com/smormah/vsift/issues/174) | open |
+| [L-025](#l-025) | Local ASR runs: Ctrl-C not trapped until P10 PR 3, no progress events, model hashed per run | contract/UX | low | P10 (Ctrl-C) | [#13](https://github.com/smormah/vsift/issues/13) | accepted residual |
 | [L-026](#l-026) | whisper.cpp output with a split multi-byte token fails the chunk | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-027](#l-027) | whisper.cpp is the only speech engine | accuracy/ASR | low | unscheduled | [#147](https://github.com/smormah/vsift/issues/147) | deferred |
-| [L-028](#l-028) | Change thresholds are calibrated only on the synthetic corpus | visual detection | medium | unscheduled | none | open |
+| [L-028](#l-028) | Change thresholds are calibrated only on the synthetic corpus | visual detection | medium | unscheduled | [#175](https://github.com/smormah/vsift/issues/175) | open |
 | [L-029](#l-029) | 2 Hz sampling misses changes shorter than 0.5 s or below the change rule | visual detection | medium | unscheduled | none | accepted residual |
 | [L-030](#l-030) | Motion fixtures draw no motion; scrolling and cursors only synthetic (F04/F05/F12-E02) | corpus/fixtures | medium | unscheduled | [#159](https://github.com/smormah/vsift/issues/159) | open |
 | [L-031](#l-031) | The visual index is tied to the probed duration; 30 minutes per call | visual detection | low | unscheduled | none | accepted residual |
@@ -88,15 +87,18 @@ Each entry has these fields:
 | [L-039](#l-039) | No agent skill; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A throttled Windows runner exceeded the 5 s provisioning wait | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | monitoring |
-| [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | none | open |
-| [L-043](#l-043) | Library API unstable; MSRV, pre-release and MCP decisions open | contract/UX | low | unscheduled | none | open |
+| [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
+| [L-043](#l-043) | Library API unstable; MSRV, pre-release and MCP decisions open | contract/UX | low | unscheduled | [#176](https://github.com/smormah/vsift/issues/176) | open |
 | [L-044](#l-044) | Accepted engineering trade-offs (CLI test dependencies, session compatibility) | contract/UX | low | unscheduled | none | accepted residual |
-| [L-045](#l-045) | Several documents and trackers state an outdated position | process/CI | low | unscheduled | none | open |
+| [L-045](#l-045) | Several documents and trackers state an outdated position | process/CI | low | unscheduled | [#177](https://github.com/smormah/vsift/issues/177) | open |
 | [L-046](#l-046) | Deliberate scope exclusions (live sources, OCR, speakers, URLs) | contract/UX | low | R1 or later | [#107](https://github.com/smormah/vsift/issues/107), [#108](https://github.com/smormah/vsift/issues/108) | accepted residual |
 | [L-047](#l-047) | A read no longer re-verifies generations below the chain checkpoint | integrity/durability | low | unscheduled | none | accepted residual |
-| [L-048](#l-048) | After a crash between manifest and pointer, only the same operation can continue | integrity/durability | low | P10 | [#13](https://github.com/smormah/vsift/issues/13) | open |
+| [L-049](#l-049) | Checkpoints resist corruption, not a same-user forger | security | low | unscheduled | none | accepted residual |
+| [L-050](#l-050) | Jobs and operation ids are bounded per session | contract/UX | low | unscheduled | none | accepted residual |
+| [L-051](#l-051) | Some interrupted work is redone rather than resumed | performance | low | unscheduled | none | accepted residual |
+| [L-052](#l-052) | A read that meets a file being replaced waits for it, at most 0.5 s | performance | low | unscheduled | none | accepted residual |
 
-Counts: 6 high, 15 medium, 27 low (48 entries).
+Counts: 6 high, 14 medium, 30 low (50 entries).
 
 ## Security
 
@@ -262,6 +264,30 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** deferred. **Review:** pending.
 
+### L-049
+
+**Checkpoints resist corruption, not a same-user forger.**
+
+- **What:** a retranscription job keeps each chunk's raw recognizer output as a
+  private checkpoint file in the session. A checkpoint is decoded strictly, its payload
+  must match its SHA-256, its ordinal its file name and its recognition key the run,
+  and its output passes the same validation as fresh output; anything else is removed
+  and the chunk recognised again. A process running as the same user can still write a
+  consistent checkpoint (recomputing the digest) with invented but plausible text,
+  which a resumed run would commit.
+- **Evidence:** [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Implementation notes: PR 2"; threat model P10 PR 2 note (SEC-10); tests
+  `damaged_forged_or_future_checkpoints_are_unusable`,
+  `foreign_or_invalid_checkpoints_are_discarded_and_redone`.
+- **Impact:** only an actor who already controls the user's account, which can
+  rewrite committed evidence as well.
+- **Why:** a keyed MAC would need a secret the same user could read anyway.
+- **Mitigation:** the owner-private session root; checkpoints live only until the job
+  commits, fails or is cancelled.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
 ## Integrity and durability
 
 ### L-008
@@ -325,25 +351,30 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 
 ### L-010
 
-**Recovery, cancellation and idempotency are not qualified.**
+**Recovery and idempotency work at the engine level; the public job surface, signals
+and the OS-crash campaign are still to come.**
 
-- **What:** interrupted operations are not discovered or resumed, there are no stage
-  checkpoints or operation keys for jobs, and cancellation/commit ordering has not been
-  qualified (X-01..X-06, X-09, X-10). Since P10 PR 1 the commit path has named fault
-  points, and a test kills a process at each of them and checks that the session
-  reopens at its last acknowledged generation or the new one with every listed file
-  whole, and that the same operation then completes (S-07); S-08 covers the new chain
-  checkpoint.
-- **Evidence:** [work packets](implementation-work-packets.md) P10 row; ledger P10
-  `in_progress`; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
-  sections 3-6.
-- **Impact:** a killed long run (for example a whole-video retranscription) starts over;
-  R-09 is an R0 release gate.
-- **Why:** P10 is delivered in four pull requests; jobs, keys and checkpoints are PR 2,
-  the public job surface and cancellation PR 3.
-- **Mitigation:** partial results commit what finished (`candidates`, evidence calls),
-  generations are process-crash consistent, and repeated evidence requests are reused.
-- **Next step:** P10 PRs 2-3; maintainer decisions D-1..D-5 in ADR 0020.
+- **What:** since P10 PR 2 a retranscription is a recoverable job: an interrupted run
+  (a crash, a failure, a library cancellation) is found by the same request and
+  resumed from its chunk checkpoints to the revision an uninterrupted run commits; a
+  retry with the same operation id returns the committed result without a new
+  generation, and the same id with another request is `IDEMPOTENCY_CONFLICT`;
+  cancellation is serialized with the commit; `BUSY` contention is retried with
+  jitter. What is still missing: the public `job status/resume/cancel` commands, the
+  `--operation-id` flag and the trapping of Ctrl-C and SIGTERM (P10 PR 3; the engine
+  operations exist), jobs for anything but retranscription, and the OS/storage-crash
+  campaign that X-10 and durable mode need (P10 PR 4, [L-008](#l-008)).
+- **Evidence:** [verification](verification.md) "P10 PR 2 evidence" (X-01..X-05, X-09,
+  S-08 at the storage, use-case and engine levels, a real whisper.cpp run interrupted
+  and resumed); [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Implementation notes: PR 2".
+- **Impact:** a command-line user cannot yet name an operation id or cancel a job by
+  id, and Ctrl-C ends the process (the finished chunks survive; the same command
+  resumes them). R-09 is an R0 release gate.
+- **Why:** P10 is delivered in four pull requests.
+- **Mitigation:** rerunning the same command resumes; library hosts have the full job
+  API.
+- **Next step:** P10 PRs 3 and 4.
 - **Owner:** P10. **Issue:** [#13](https://github.com/smormah/vsift/issues/13).
   **Status:** deferred. **Review:** pending.
 
@@ -363,32 +394,13 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
   `the_verified_head_cache_belongs_to_one_store_instance`.
 - **Impact:** bit rot or same-user tampering in an old manifest surfaces later, at
   retain or cleanup.
-- **Why:** walking the whole chain on every read made long sessions slow ([L-012](#l-012)).
+- **Why:** walking the whole chain on every read made long sessions slow (issue #164,
+  fixed in P10 PR 1).
 - **Mitigation:** the checkpoint is written only by the writer and validated strictly;
   forging it needs the same-user access that could rewrite the chain itself.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
-
-### L-048
-
-**After a crash between manifest and pointer, only the same operation can continue.**
-
-- **What:** if a process dies after renaming generation N's manifest and before the
-  pointer names it, a retry of the same operation completes generation N, but another
-  operation publishing N is refused as a conflict (the file is not the one it would
-  write) until the leftover is dealt with.
-- **Evidence:** P03 design (install of an immutable manifest);
-  [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
-  "Consequences"; the fault-point kill test retries the same operation.
-- **Impact:** a crashed operation that is never retried blocks later writes to that
-  session.
-- **Why:** manifests are immutable and never replaced by another operation's.
-- **Mitigation:** CLI operations are retried with the same identities by the job layer
-  P10 PR 2 adds; sessions are disposable.
-- **Next step:** P10 PR 2 (interrupted-job discovery and resume).
-- **Owner:** P10. **Issue:** [#13](https://github.com/smormah/vsift/issues/13).
-  **Status:** open. **Review:** pending.
 
 ## Performance
 
@@ -413,40 +425,15 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
   12 frames by default.
 - **Next step:** consider recording the verified identity at `ingest`; measure on
   Ubuntu and macOS ([L-035](#l-035)); P14 load gates.
-- **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
+- **Owner:** unscheduled. **Issue:** [#170](https://github.com/smormah/vsift/issues/170). **Status:** monitoring.
   **Review:** pending.
-
-### L-012
-
-**Warm requests slowed down as a session's manifest chain grew (fixed in P10 PR 1).**
-
-- **What:** every session read used to validate the whole chain of committed
-  generations, so a repeated, reused request cost about 3.6 ms more per generation.
-  P10 PR 1 validates the chain incrementally, down to the writer's chain checkpoint
-  or the last head the same store instance verified; the remaining trade-off is
-  [L-047](#l-047).
-- **Evidence:** opt-in `s11_warm_reuse_as_the_manifest_chain_grows`
-  (`evidence_cli_contract`, release, through the binary, Windows 11, Xeon
-  E5-2698 v4): before, p95 139 / 369 / 1,064 / 3,794 ms at 2 / 64 / 256 / 1,024
-  generations (3.58 ms per generation); after, over three runs, p95 148-167 /
-  146-164 / 136-175 / 149-156 ms (slope -0.016 to +0.008 ms per generation). See the
-  [P09 record](p09-evidence-navigation.md) "Manifest-chain walk". Issue #164.
-- **Impact:** none that grows with the session any more; a warm call costs what a young
-  session's does (about 105-115 ms at best, p95 dominated by process start-up).
-- **Why:** full validation kept INV-02/SEC-08 simple.
-- **Mitigation:** the checkpoint (ADR 0020 section 1).
-- **Next step:** delete this entry once P10 PR 1 is merged (register rule 2); the
-  p95 target of 160 ms at 256 generations was met in one of three runs, with the
-  spread matching that of a two-generation session.
-- **Owner:** P10. **Issue:** [#164](https://github.com/smormah/vsift/issues/164).
-  **Status:** monitoring. **Review:** pending.
 
 ### L-013
 
 **Evidence records and transcripts are re-read in full on every call.**
 
 - **What:** each evidence call reads and decodes all of the session's evidence records
-  (at most 160 records of at most 256 KiB); `search` matches the whole transcript
+  (at most 384 records of at most 256 KiB since P10 PR 2 raised the cap); `search` matches the whole transcript
   revision on every request with no persisted index.
 - **Evidence:** [work record](../../memory/TODO.md) "Other follow-ups";
   [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
@@ -455,28 +442,101 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Why:** an index is new persistent state with its own integrity rules.
 - **Mitigation:** hard bounds on record count and size.
 - **Next step:** add an index only if a measurement misses the target.
-- **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
+- **Owner:** unscheduled. **Issue:** [#171](https://github.com/smormah/vsift/issues/171). **Status:** monitoring.
+  **Review:** pending.
+
+### L-051
+
+**Some interrupted work is redone rather than resumed.**
+
+- **What:** a resumed retranscription reuses a chunk only from a checkpoint of exactly
+  the same recognition: the same source, stream, range, chunk plan, recognizer and
+  model, and local-ASR verification fingerprint, which includes the VSift version. An
+  upgrade, a new model, a changed setup or a request whose widened range changed since
+  (another revision committed meanwhile) starts over. A chunk whose checkpoint would be
+  larger than 256 KiB is not checkpointed and is recognised again after an
+  interruption, as is one whose checkpoint could not be written.
+- **Evidence:** [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Implementation notes: PR 2" (keys, checkpoints).
+- **Impact:** after such a change an interrupted long run costs its full time again.
+- **Why:** reusing recognizer output across setups could mix outputs of two models or
+  tools; storing is an optimisation that never fails the run.
+- **Mitigation:** the checkpoint budget fits normal speech output many times over.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-052
+
+**A read that meets a file being replaced waits for it, at most 0.5 s.**
+
+- **What:** the commit pointer, the chain checkpoint and job records are replaced by
+  rename while other processes read them. A reader that meets a replacement (the file
+  it opened has no link left, or on Windows the name is briefly absent) retries: a few
+  times at once, then a millisecond apart, for at most half a second, blocking its
+  thread meanwhile. A file still missing after that is reported as damage.
+- **Evidence:** [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Readers meeting a replacement"; tests
+  `a_reader_that_meets_a_rename_retries_instead_of_reporting_damage`,
+  `readers_never_report_damage_while_generations_are_published`,
+  `a_linked_or_missing_pointer_is_still_damage`.
+- **Impact:** normally microseconds; a truly missing pointer or job record is
+  reported half a second later than before.
+- **Why:** before, such a reader reported a healthy session as damaged.
+- **Mitigation:** the budget is bounded; hard links and non-regular files are still
+  refused at once.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
 ## Evidence contract and user experience
 
 ### L-014
 
-**A session holds at most 160 evidence files (256 artifacts, 64 KiB manifest).**
+**A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest).**
 
-- **What:** a session keeps at most 256 artifacts, a 64 KiB manifest, 10 GiB and a
+- **What:** a session keeps at most 512 artifacts, a 128 KiB manifest, 10 GiB and a
   4,096-generation chain; evidence (images, clips and their records) has a sub-budget of
-  160 artifacts. A 12-frame burst uses up to 13 of those slots.
-- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) D4;
-  [resource profiles](support-and-resource-profiles.md) "Evidence navigation";
-  [P05 record](p05-session-qualification.md) limits.
-- **Impact:** a long investigation hits `RESOURCE_LIMIT` (or a `partial` result with
-  `session_evidence_budget`) and must retain the session and open a new one.
-- **Why:** raising the caps needs incremental chain validation ([L-012](#l-012)).
+  384 artifacts. A 12-frame burst uses up to 13 of those slots. P10 PR 2 raised the
+  caps from 256 artifacts, a 64 KiB manifest and 160 evidence artifacts (ADR 0020 D-2).
+- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) D4 and its
+  2026-09-27 note; [resource profiles](support-and-resource-profiles.md) "Evidence
+  navigation"; tests `the_raised_evidence_cap_holds_and_its_manifest_reads_back` and
+  `a_session_holds_at_most_512_artifacts_in_a_bounded_manifest`; the full-budget
+  measurement `s11_warm_reuse_with_a_full_evidence_budget` (slope about 0).
+- **Impact:** a very long investigation still hits `RESOURCE_LIMIT` (or a `partial`
+  result with `session_evidence_budget`) and must retain the session and open a new one.
+- **Why:** every read hashes the head manifest and evidence calls decode every record
+  ([L-013](#l-013)); bounds keep both small.
 - **Mitigation:** fixed remediation (retain and reopen); reuse does not consume slots.
-- **Next step:** raise the caps with #164 in P10.
-- **Owner:** P10. **Issue:** [#164](https://github.com/smormah/vsift/issues/164).
-  **Status:** deferred. **Review:** pending.
+- **Next step:** none planned; an index ([L-013](#l-013)) would allow more.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-050
+
+**Jobs and operation ids are bounded per session.**
+
+- **What:** a session keeps at most 64 jobs; at the bound the oldest ended job that no
+  process owns and no caller's operation id pins is pruned, and when every ended job is
+  pinned a new job is `RESOURCE_LIMIT`. A job answers to at most 8 caller operation
+  ids and a session keeps at most 256 bindings. Operation ids are session-scoped and
+  expire with the session: after it is cleaned, the id means nothing. A job that
+  failed or was cancelled is started again from nothing by the same request. Asking
+  for a job's status takes a shared lock on its owner lock for an instant, so a run of
+  the same job starting at that moment may be told `BUSY`.
+- **Evidence:** [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Implementation notes: PR 2"; [resource profiles](support-and-resource-profiles.md)
+  "Recoverable jobs"; test
+  `ended_jobs_are_pruned_at_the_bound_unless_an_operation_id_pins_them`.
+- **Impact:** a caller replaying a very old operation id after its job was pruned
+  (only possible without its own id) runs new work; a heavy user of operation ids in
+  one session can run out of room.
+- **Why:** job state is bounded like every other session store.
+- **Mitigation:** sessions last at most seven days; `BUSY` is retryable.
+- **Next step:** revisit with P11's durable workspace.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-015
 
@@ -492,7 +552,7 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Why:** bounded listing per provider run (SEC-05); multi-listing bursts not built.
 - **Mitigation:** typed failure; the stop reason says more may exist.
 - **Next step:** list in several bounded runs for dense ranges.
-- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#172](https://github.com/smormah/vsift/issues/172). **Status:** open. **Review:** pending.
 
 ### L-016
 
@@ -540,7 +600,7 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Why:** no real recordings in the corpus; no scaling so no detail is invented.
 - **Mitigation:** native pixels are exact (pixel-equal to FFmpeg's decode).
 - **Next step:** add real-recording text fixtures with [L-028](#l-028).
-- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#173](https://github.com/smormah/vsift/issues/173). **Status:** open. **Review:** pending.
 
 ### L-019
 
@@ -650,15 +710,18 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Mitigation:** segments still contain the speech; audio clips let an agent check.
 - **Next step:** measure segment-start error on #150's fixtures; decide whether word
   timestamps or trimming are needed before R0.
-- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#174](https://github.com/smormah/vsift/issues/174). **Status:** open. **Review:** pending.
 
 ### L-025
 
-**Local ASR runs: Ctrl-C not trapped, no progress events, model hashed per run.**
+**Local ASR runs: Ctrl-C not trapped until P10 PR 3, no progress events, model hashed
+per run.**
 
 - **What:**
-  - The CLI does not trap Ctrl-C: the process ends, whisper.cpp is killed with it,
-    nothing is committed, and the work directory is swept later.
+  - The CLI does not trap Ctrl-C yet: the process ends, whisper.cpp is killed with it
+    and nothing is committed. Since P10 PR 2 the chunks it finished are kept as private
+    checkpoints and the same command resumes from them ([L-010](#l-010)); the work
+    directory is swept later.
   - `transcript retranscribe` emits no progress events; `--events jsonl` writes one
     terminal event. At a real-time factor of 0.39, an hour of audio is about 23 minutes
     of silence for the caller.
@@ -666,14 +729,16 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
     with no identity cache; the first run with a new tool, model or VSift version adds
     a fixture transcription (about 6 s).
 - **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md) decision
-  4, section 6, consequences.
-- **Impact:** long runs look stalled; an interrupted run restarts from scratch
-  ([L-010](#l-010)).
-- **Why:** trapping signals needs Tokio's `signal` feature (a dependency review); readers
-  already skip unknown event kinds, so progress can be added later.
-- **Mitigation:** library hosts get `Cancellation` between stages.
-- **Next step:** review the signal feature and progress events with P10/P11.
-- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  4, section 6, consequences and its 2026-09-27 note.
+- **Impact:** long runs look stalled; an interrupted run resumes only when the caller
+  reruns the command.
+- **Why:** trapping signals needs Tokio's `signal` feature, reviewed with P10 PR 3;
+  readers already skip unknown event kinds, so progress can be added later.
+- **Mitigation:** library hosts get `Cancellation` between stages; rerunning resumes.
+- **Next step:** P10 PR 3 traps Ctrl-C and SIGTERM (superseding ADR 0017 decision 4);
+  progress events with P11.
+- **Owner:** P10 (Ctrl-C); progress unscheduled. **Issue:**
+  [#13](https://github.com/smormah/vsift/issues/13). **Status:** accepted residual.
   **Review:** pending.
 
 ### L-026
@@ -727,7 +792,7 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Mitigation:** candidates are a shortlist, not evidence; periodic coverage every
   10 s; frames and bursts let agents inspect directly.
 - **Next step:** measure noise and recall on project-owned real screen recordings.
-- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#175](https://github.com/smormah/vsift/issues/175). **Status:** open. **Review:** pending.
 
 ### L-029
 
@@ -995,7 +1060,7 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Mitigation:** recorded samples keep the P08 recall gate in every CI run; stand-in
   tools cover contracts.
 - **Next step:** consider a scheduled hosted run of the P08/P09 checkpoints.
-- **Owner:** P14 (release runs); scheduled runs unscheduled. **Issue:** none.
+- **Owner:** P14 (release runs); scheduled runs unscheduled. **Issue:** [#178](https://github.com/smormah/vsift/issues/178).
   **Status:** open. **Review:** pending.
 
 ### L-043
@@ -1012,7 +1077,7 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Why:** pre-release.
 - **Mitigation:** CLI contract tests and frozen examples.
 - **Next step:** maintainer decisions.
-- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#176](https://github.com/smormah/vsift/issues/176). **Status:** open. **Review:** pending.
 
 ### L-044
 
@@ -1058,7 +1123,7 @@ Counts: 6 high, 15 medium, 27 low (48 entries).
 - **Why:** per-packet updates missed these files.
 - **Mitigation:** this list.
 - **Next step:** one documentation sweep PR; tick #40's met checkpoints.
-- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#177](https://github.com/smormah/vsift/issues/177). **Status:** open. **Review:** pending.
 
 ### L-046
 

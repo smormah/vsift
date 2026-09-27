@@ -328,3 +328,20 @@ longer grows with the session's generations (before and after in the
 [P09 record](../planning/p09-evidence-navigation.md)). D4 itself is unchanged: 256
 artifacts, 160 evidence artifacts, a 64 KiB manifest and 10 GiB per session stay until
 the maintainer confirms ADR 0020's D-2 (512 / 384 / 128 KiB).
+
+## 2026-09-27 note: D4 caps raised (ADR 0020 D-2)
+
+The maintainer confirmed ADR 0020's D-2 on 2026-09-27, and P10 PR 2 implements it: a
+session now holds 512 artifacts, of which at most 384 are evidence artifacts (frame and
+crop images, audio clips and evidence records; `MAX_EVIDENCE_ARTIFACTS`), and a
+generation manifest (and a retained bundle's manifest, which repeats its artifact
+list) may be 128 KiB. Every other metadata file keeps 64 KiB, and the 10 GiB bound is
+unchanged. The rest of D4 stands: exhaustion is `RESOURCE_LIMIT` with the remediation
+to retain the session and open a new one, whose prose now names the new numbers. The
+change is safe because reads no longer grow with the chain (#164): a read hashes the
+head manifest (about 100 KiB at 512 entries) and the generations since the chain
+checkpoint, not every generation. Evidence records are still read and decoded in full
+on each evidence call (now at most 384 of 256 KiB), which known limit L-014 tracks.
+Measured through the binary with the budget full (Windows 11, release build), a warm
+reused `frame get` has p95 177 / 164 / 166 / 177 ms at 2 / 64 / 256 / 1,024
+generations: the slope stays about zero (`s11_warm_reuse_with_a_full_evidence_budget`).

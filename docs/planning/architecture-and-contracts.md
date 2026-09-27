@@ -297,6 +297,28 @@ success from an artifact filename. Corrupted committed evidence becomes an expli
 integrity failure; preserve remaining valid evidence and diagnostics. Resume verifies
 source/config/provider identity before reusing anything.
 
+P10 PR 2 ([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md))
+adds recoverable jobs beside the committed state, as private uncommitted stage files
+never named by a manifest or exported by `session retain`:
+
+```text
+sessions/<id>/jobs/<job_id>/job.json          versioned record, replaced atomically
+sessions/<id>/jobs/<job_id>/owner.lock        held exclusively while an attempt runs
+sessions/<id>/jobs/<job_id>/state.lock        held briefly to serialize changes with cancel
+sessions/<id>/jobs/<job_id>/chunks/<n>.json   immutable chunk checkpoints (raw provider output)
+sessions/<id>/jobs/by-operation/<op>.json     operation id -> job (session-scoped)
+job-index/<bucket>/<job_id>.json              job -> session, pruned by cleanup
+```
+
+A job id derives from the session and the request's operation key, so the same
+request after a crash finds its job; a resumed run validates every checkpoint again
+and yields the revision an uninterrupted run gives. A commit records `committing`
+with a deterministic operation id first; recovery reconciles one way only, from the
+manifest chain. A session holds at most 64 jobs (the oldest ended, unpinned one is
+pruned), 16 attempts per job and 1,024 checkpoints of 256 KiB. An unreferenced
+manifest that an ended publication left above the head is replaced by the next
+publication rather than refusing it.
+
 Do not build a general transaction engine. R0 has single-writer metadata publication,
 no cross-session transactions and no network filesystem guarantee. If the feasibility
 spike cannot meet the invariant with this narrow design, stop and propose a proven
@@ -363,8 +385,20 @@ transition is serialized with cancellation so a terminal result cannot simultane
 be cancelled and succeeded. Retrying creates a new attempt under the same logical
 job and reuses only verified compatible stage outputs.
 
+As implemented in P10 PR 2 (`vsift-domain` `JobState`): queued -> running | cancelling
+| cancelled; running -> committing | interrupted | cancelling | failed; committing ->
+succeeded | failed | interrupted (the last only when the chain shows the commit did
+not land); interrupted -> running | cancelled; cancelling -> cancelled | failed. The
+job's OS lock is the liveness authority: a job recorded as running whose lock can be
+taken is interrupted; a suspended owner keeps its lock. Every lock is a non-waiting
+try-lock, taken as the session's shared lifetime hold, the job's owner lock, then
+(inside a publication) admission, the lifetime hold and the writer; the state lock is
+held only for a few file operations. Jobs never renew their session.
+
 Retry only classified transient failures with capped exponential backoff and jitter
-within an overall deadline (proposal: at most two retries). Do not retry malformed
+within an overall deadline (at most two retries; P10 PR 2 implements `BUSY` retries
+with full jitter over 200 ms doubling to 2 s, skipped past the deadline, and a
+poisoned chunk after three identical failures; `vsift-domain` `RetryPolicy`). Do not retry malformed
 media, signature mismatch, policy rejection, deterministic OOM or missing dependencies
 without an explicit changed input/policy. Repeated failing provider health can suppress
 new admissions for that provider within the host; persistent circuits require an
