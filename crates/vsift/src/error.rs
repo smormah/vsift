@@ -18,7 +18,7 @@ use vsift_application::{
 use vsift_contract::PrivateFolder;
 use vsift_domain::{
     FailureCode, FrameSelectionError, JobId, JobState, NavigationError, RuntimeDependency,
-    SearchQueryRejection, TranscriptImportError,
+    SearchQueryRejection, SessionId, TranscriptImportError,
 };
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
@@ -181,6 +181,24 @@ pub enum EngineError {
         /// Its state.
         state: JobState,
     },
+    /// The caller cancelled the run (Ctrl-C, `SIGTERM` or a library
+    /// [`crate::Cancellation`]) before it committed. Nothing was committed;
+    /// the job is `interrupted` and `job resume` (or the same request)
+    /// continues it from its checkpoints.
+    JobInterrupted {
+        /// The session the job belongs to.
+        session: SessionId,
+        /// The interrupted job.
+        job: JobId,
+    },
+    /// The job's session is closed or expired, so the job cannot continue;
+    /// nothing was run or changed. Jobs never renew their session.
+    JobSessionNotOpen {
+        /// The session the job belongs to.
+        session: SessionId,
+        /// The job.
+        job: JobId,
+    },
     /// No session of the root holds a job with that identity.
     JobNotFound,
     /// A job record or key violated an invariant; an internal fault.
@@ -207,6 +225,7 @@ impl EngineError {
                     transcript_failure_code(*rejected)
                 }
                 OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
+                OpenSessionError::Cancelled => FailureCode::Cancelled,
             },
             Self::TranscriptRejected(rejected) => transcript_failure_code(*rejected),
             Self::TranscriptSource(
@@ -220,6 +239,7 @@ impl EngineError {
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
             | Self::JobNotResumable { .. }
+            | Self::JobSessionNotOpen { .. }
             | Self::JobNotFound
             | Self::PlanAcceptance(_)
             | Self::TranscriptUnavailable
@@ -264,7 +284,7 @@ impl EngineError {
             | Self::JobInvariant => FailureCode::Internal,
             Self::JobBusy { .. } | Self::RetranscriptionSuperseded { .. } => FailureCode::Busy,
             Self::IdempotencyConflict { .. } => FailureCode::IdempotencyConflict,
-            Self::JobCancelled { .. } => FailureCode::Cancelled,
+            Self::JobCancelled { .. } | Self::JobInterrupted { .. } => FailureCode::Cancelled,
             Self::EvidenceBudgetExhausted => FailureCode::ResourceLimit,
             Self::EvidenceMedia(error) => evidence_media_failure_code(*error),
             Self::MediaToolVerificationFailed(failure) => {
@@ -630,6 +650,11 @@ impl fmt::Display for EngineError {
                 "the job is {} and cannot be resumed",
                 state.identifier()
             ),
+            Self::JobInterrupted { .. } => formatter
+                .write_str("the run was cancelled before it committed; the job is resumable"),
+            Self::JobSessionNotOpen { .. } => {
+                formatter.write_str("the job's session is closed or expired")
+            }
             Self::JobNotFound => formatter.write_str("no session holds a job with that identity"),
             Self::JobInvariant => formatter.write_str("a job record violated an invariant"),
         }
@@ -695,6 +720,8 @@ impl Error for EngineError {
             | Self::JobCancelled { .. }
             | Self::RetranscriptionSuperseded { .. }
             | Self::JobNotResumable { .. }
+            | Self::JobInterrupted { .. }
+            | Self::JobSessionNotOpen { .. }
             | Self::JobNotFound
             | Self::JobInvariant => None,
         }
@@ -710,8 +737,39 @@ impl EngineError {
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
             | Self::RetranscriptionSuperseded { job }
-            | Self::JobNotResumable { job, .. } => Some(job),
+            | Self::JobNotResumable { job, .. }
+            | Self::JobInterrupted { job, .. }
+            | Self::JobSessionNotOpen { job, .. } => Some(job),
             _ => None,
+        }
+    }
+
+    /// The session a failure concerns, when the failure names one: hosts
+    /// report it in `affected_ids` before the job.
+    #[must_use]
+    pub const fn affected_session(&self) -> Option<&SessionId> {
+        match self {
+            Self::JobInterrupted { session, .. } | Self::JobSessionNotOpen { session, .. } => {
+                Some(session)
+            }
+            _ => None,
+        }
+    }
+
+    /// Turns a run the caller cancelled into [`EngineError::JobInterrupted`]
+    /// for `session`, so the caller learns which job to resume; every other
+    /// failure is converted as usual.
+    pub(crate) fn from_job_run(error: JobRunError, session: &SessionId) -> Self {
+        match error {
+            JobRunError::Asr { job, failure }
+                if failure.failure.reason == AsrFailureReason::Cancelled =>
+            {
+                Self::JobInterrupted {
+                    session: session.clone(),
+                    job,
+                }
+            }
+            other => Self::from(other),
         }
     }
 
@@ -1090,6 +1148,61 @@ mod tests {
     use vsift_infrastructure::{SessionStoreOpenError, UserDependencyConfigError};
 
     use super::{EngineError, SessionRootError, job_failure_code};
+
+    /// P10 PR 3: a run its caller cancelled names the session and job to
+    /// resume (`CANCELLED`); a job whose session ended names both too
+    /// (`INVALID_ARGUMENT`); any other run failure converts as before and
+    /// names no session.
+    #[test]
+    fn interrupted_and_session_less_jobs_name_their_session_and_job()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use vsift_application::{
+            AsrFailure, AsrFailureReason, AsrRunFailure, AsrStage, JobRunError,
+        };
+        use vsift_domain::{JobId, SessionId};
+
+        let job = JobId::parse("job_0123456789abcdef")?;
+        let session = SessionId::parse("ses_0123456789abcdef")?;
+        let failure = |reason| JobRunError::Asr {
+            job: job.clone(),
+            failure: AsrRunFailure {
+                failure: AsrFailure {
+                    stage: AsrStage::Recognition,
+                    reason,
+                },
+                chunk: Some(1),
+            },
+        };
+        let interrupted = EngineError::from_job_run(failure(AsrFailureReason::Cancelled), &session);
+        assert_eq!(
+            interrupted,
+            EngineError::JobInterrupted {
+                session: session.clone(),
+                job: job.clone()
+            }
+        );
+        assert_eq!(interrupted.failure_code(), FailureCode::Cancelled);
+        assert_eq!(interrupted.affected_session(), Some(&session));
+        assert_eq!(interrupted.affected_job(), Some(&job));
+        assert_eq!(interrupted.retry_after_ms(), None);
+
+        let deadline = EngineError::from_job_run(failure(AsrFailureReason::Deadline), &session);
+        assert!(matches!(deadline, EngineError::LocalAsrFailed(_)));
+        assert_eq!(deadline.affected_session(), None);
+
+        let ended = EngineError::JobSessionNotOpen {
+            session: session.clone(),
+            job: job.clone(),
+        };
+        assert_eq!(ended.failure_code(), FailureCode::InvalidArgument);
+        assert_eq!(ended.affected_session(), Some(&session));
+        assert_eq!(ended.affected_job(), Some(&job));
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::Cancelled).failure_code(),
+            FailureCode::Cancelled
+        );
+        Ok(())
+    }
 
     /// P10 PR 2: every job failure has its public code, names its job and,
     /// only for a live job, a retry hint; job-store and job-run failures

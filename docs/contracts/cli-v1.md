@@ -4,7 +4,8 @@ Status: published v1 boundary. `setup check/plan/configure/configure-model`, for
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
 `candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
-and `audio` (P09 evidence navigation) and `bundle validate` are operational. Other commands below
+and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
+recoverable jobs) and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 
@@ -18,6 +19,22 @@ that needs the root creates it. Commands that race to create it converge on one
 root: the others wait at most five seconds for the creator and use the root only
 after the full ownership and privacy checks, failing with `BUSY` if it is still
 being created. An existing directory that VSift did not create is never adopted.
+
+**Interruption (P10 PR 3).** While a long command runs (`ingest`, `transcript
+retranscribe`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`, `job
+resume`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
+(Windows) cancels it: it stops at its next boundary (a provider process is stopped, on
+Unix with `SIGTERM` to its process group and a kill after 5 s, on Windows at once) and
+writes its one documented terminal result: `CANCELLED` (exit 6), or the `partial`
+result of `candidates` and the evidence commands, which commit what they finished. A
+second interruption kills running providers without the graceful wait; either way the
+process exits only after every provider it started has been reaped, within the
+supervisor's 5 s + 5 s budget. An `ingest` copy is checked every 64 KiB; a
+retranscription stops before its commit, and one already committing completes. Every
+other command is short and keeps the operating system's default (an interruption ends
+it; a commit is never half-visible). On Windows a console event reaches every process
+on the console, and a process that inherited the "ignore Ctrl-C" attribute is never
+told about a Ctrl-C (only Ctrl-Break); see L-053.
 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
@@ -35,7 +52,8 @@ being created. An existing directory that VSift did not create is never adopted.
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
-| `job run/batch/status/resume/cancel` | Recoverable worker operations | `status/resume/cancel` in P10 PR 3 (engine operations since PR 2); `run/batch` in P11 |
+| `job status/resume/cancel` | Report, continue or cancel one recoverable job by its id | Implemented in P10 PR 3 |
+| `job run/batch` | Versioned worker requests and finite batches | P11 |
 
 ### P05 disposable sessions and bundles
 
@@ -338,7 +356,7 @@ vsift transcript get ses_0123456789abcdef --from 0 --to 30000000 --json
 vsift transcript get ses_0123456789abcdef --from 0 --to 30000000 --revision trv_0123456789abcdef --json
 ```
 
-`transcript retranscribe <session> [--from <us> --to <us>]` transcribes the session's
+`transcript retranscribe <session> [--from <us> --to <us>] [--operation-id op_...]` transcribes the session's
 speech locally with whisper.cpp and commits a new transcript revision
 ([ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md)). Give both range
 flags or neither; neither transcribes the whole video. It is the only command that
@@ -399,10 +417,14 @@ Warnings use the envelope's fixed prose and the revision's typed codes; for loca
 codes `first_cue` is the first affected chunk. Segments are read with `transcript get`
 (the new revision is the default). With `--events jsonl`, `transcript retranscribe`
 writes its terminal event only; stream the records with `transcript get --revision
-<revision_id> --events jsonl`, page by page. The command-line host does not trap
-Ctrl-C yet (P10 PR 3 will): interrupting it commits nothing, the work directory is
-removed by the session's next run or cleanup, and the chunks it finished are kept for a
-resume (below).
+<revision_id> --events jsonl`, page by page. A first Ctrl-C or `SIGTERM` (see
+Interruption above) stops the run before its commit: nothing is committed, whisper.cpp
+is stopped and reaped, the chunks it finished are kept for a resume (below), and the
+failure is `CANCELLED` (exit 6) with the session and job in `error.affected_ids` and a
+remediation whose `command` is `vsift job resume <job>`
+([example](../../schemas/v1/examples/retranscribe-cancelled.json)). A run killed
+outright (for example `SIGKILL`) leaves the same interrupted job; its work directory is
+removed by the session's next run or cleanup.
 
 **Recoverable runs (P10 PR 2, [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)).**
 Every run is a *job* whose identity (`job_...`) derives from the session and the
@@ -426,14 +448,17 @@ is unchanged. A run that another process is running is `BUSY` with its job in
 returns its result. Contention (a busy processing slot or writer, a moved generation)
 is retried automatically at most twice with jittered backoff.
 
-An operation id makes a retry safe (maintainer decision D-1): repeating a request with
-the id its first attempt used returns the committed revision again (`replayed: true`,
-no new generation), and the same id with a different request fails
-`IDEMPOTENCY_CONFLICT` (exit 2, not retryable) without changing anything. Operation ids
-are session-scoped and expire with the session. The engine API takes one today; the
-`--operation-id op_...` flag on `transcript retranscribe` arrives with the public job
-commands in P10 PR 3. Without one, every successful run is new work: after a success
-the newest revision is the new base, so the same command commits another revision.
+An operation id makes a retry safe (maintainer decision D-1): `--operation-id op_...`
+(`op_` and 16 to 64 lowercase letters or digits, checked by the grammar before
+anything is read; a malformed one is a `parse` failure) names the request. Repeating
+the request with the id its first attempt used returns the committed revision again
+(`replayed: true`, no new generation), even where the tools have since gone, because
+a request with an id is answered from its record before any tool is resolved; the
+same id with a different request (another range) fails `IDEMPOTENCY_CONFLICT` (exit
+2, not retryable, the job in `affected_ids`) without changing anything; the same id
+while its job runs elsewhere is `BUSY`. Operation ids are session-scoped and expire
+with the session. Without one, every successful run is new work: after a success the
+newest revision is the new base, so the same command commits another revision.
 
 **Failures** use the existing codes, and `IDEMPOTENCY_CONFLICT` (new in P10 PR 2) for a
 reused operation id. A failed run carries one fixed-prose remediation
@@ -448,15 +473,83 @@ neither contains a path, provider output or transcript text.
 | Audio stream present but undecodable | `INVALID_SOURCE` |
 | Output over its bounds, more than 1,024 chunks, a record over 24 MiB, or whisper-cli ended abnormally (usually out of memory) | `RESOURCE_LIMIT` |
 | A chunk exceeded its 120 s deadline | `DEADLINE_EXCEEDED` |
-| Cancelled (library hosts); the job stays resumable, or is cancelled if cancellation was requested through the job | `CANCELLED` |
+| Interrupted by Ctrl-C/`SIGTERM` or a library cancellation before the commit (the session and job in `affected_ids`, `job resume <job>` suggested; the job stays resumable); or cancelled with `job cancel` while it ran (the job is cancelled) | `CANCELLED` |
 | Work directory or the session's copy of the video unusable | `STORAGE_IO` |
 | The same job is running in another process (`affected_ids` names it, `retry_after_ms` 2000); the session is held by cleanup; every processing slot or the writer stayed busy after two automatic retries; another revision changed the transcript around the range during the run so the recognised range no longer matches (rerun: it is widened again) | `BUSY` |
-| The operation id was used earlier in the session for a different request (engine API in P10 PR 2; the CLI flag in PR 3) | `IDEMPOTENCY_CONFLICT` |
+| The `--operation-id` was used earlier in the session for a different request (the job in `affected_ids`) | `IDEMPOTENCY_CONFLICT` |
 
 A failed attempt leaves the job resumable: the next run of the same command continues
 it. It fails for good only when one chunk failed three times with the same code, after
 16 attempts, or when its range was superseded; the same command then starts it again
 from nothing.
+
+### P10 recoverable jobs
+
+```console
+vsift job status job_0123456789abcdef0123456789abcdef --json
+vsift job resume job_0123456789abcdef0123456789abcdef --json
+vsift job cancel job_0123456789abcdef0123456789abcdef --json
+vsift session status ses_0123456789abcdef --json
+```
+
+Every `transcript retranscribe` runs as a recoverable job
+([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)); its id is
+in the result's `data.job.job_id`, in `error.affected_ids` of an interrupted or busy
+run, and in `session status`. The job commands take the job id only: the job's session
+is found through the session root's job index. They are grammar-checked first (one
+`job_...` identity; a malformed one is a `parse` failure). `--events jsonl` writes the
+one terminal event, like every command without evidence records.
+
+- `job status <job>` reports one job
+  ([`job-data.schema.json`](../../schemas/v1/job-data.schema.json), example
+  [`job-status.json`](../../schemas/v1/examples/job-status.json)): `job_id`,
+  `session_id`, `kind` (`retranscribe`), `state` (`queued`, `running`, `cancelling`,
+  `committing`, `interrupted`, `succeeded`, `failed`, `cancelled`), `live_owner`
+  (a process holds the job now), `resumable` and `resumable_reason` (`interrupted`,
+  `not_started`, or why not: `live_owner`, `succeeded`, `failed`, `cancelled`,
+  `session_not_open`), `operation_id` (the caller's first id, or a succeeded job's own
+  commit id, which replays it), `request.range`, `progress` (`chunks_total`, `null` for a
+  job created before P10 PR 3, and `chunks_checkpointed`, the checkpoints it keeps now),
+  `attempts` in its current epoch, `result` (`revision_id` and `generation` of a
+  succeeded job) and `failure` (`code` and `retryable` of the failure that ended the
+  last attempt of an interrupted or failed job). A job whose process ended without
+  recording it is reconciled first: `succeeded` when its commit is in the session's
+  manifest chain, else `interrupted`; a live job is never taken over. No member names a
+  path, transcript text or provider output.
+- `job resume <job>` continues an interrupted (or never started) job from its
+  checkpoints, under the operation id the caller first bound to it, and answers
+  ([`job-resume-data.schema.json`](../../schemas/v1/job-resume-data.schema.json), example
+  [`job-resume.json`](../../schemas/v1/examples/job-resume.json)) with `job` (the job
+  afterwards) and `outcome` (exactly `transcript retranscribe`'s data), the envelope's
+  `operation_id`, the session's lifecycle and the same warnings, including
+  `resumed_from_checkpoint` and `checkpoint_discarded`. It is a long command:
+  interruptible as above. Jobs never renew their session.
+- `job cancel <job>` cancels a job and reports it afterwards (`job-data`, example
+  [`job-cancel.json`](../../schemas/v1/examples/job-cancel.json)). Cancellation is
+  serialized with the commit under the job's state lock: an interrupted or queued job
+  no process owns is `cancelled` at once and its checkpoints are removed; a live job is
+  marked `cancelling` and its owner notices within 250 ms, stops its provider and
+  cancels the job before any commit (the owner's own command then fails `CANCELLED`); a
+  job that is `committing` or `succeeded` keeps its result and the answer carries the
+  warning `cancellation_too_late`; a failed or cancelled job is reported as it is.
+  Repeating a cancel changes nothing. A cancelled or failed job is started afresh (a
+  new epoch) by running the original command again.
+
+`session status <session>` additionally lists the session's newest jobs, most recently
+changed first: `jobs` (at most 16 items of `job_id`, `kind`, `state`, `live_owner`,
+`resumable`, `resumable_reason`) and `jobs_truncated` (whether it holds more). The list
+is read-only: a crashed job is shown as reconciliation would record it. Every other
+member of the status is unchanged; `session list`, `renew` and `close` do not list jobs.
+
+| Condition | Code |
+| --- | --- |
+| No session of the root holds the job (also a missing root) | `INVALID_ARGUMENT` (fixed remediation) |
+| `job resume` of a succeeded, failed or cancelled job | `INVALID_ARGUMENT` (the job in `affected_ids`) |
+| `job resume` of a job whose session is closed or expired | `INVALID_ARGUMENT` (the session and job in `affected_ids`; renew an expired session within its seven days, or open a new session with `ingest` and run the request there) |
+| `job resume` of a job a process owns now | `BUSY` (the job in `affected_ids`, `retry_after_ms` 2000) |
+| `job resume` interrupted by Ctrl-C/`SIGTERM` | `CANCELLED` (exit 6; the session and job named, `job resume` suggested again) |
+| `job cancel` while an owner appeared meanwhile, or the state lock stayed busy | `BUSY` |
+| Every failure of `transcript retranscribe` (the resumed run) | as listed above |
 
 ### P08 transcript search
 
@@ -1110,8 +1203,9 @@ against `operation-response.schema.json`; evidence events validate against
 
 Every machine error includes a stable code, safe message, retryability, optional retry
 delay, affected identifiers, and structured remediation. Evidence or provider text is
-not interpolated into the public message. Remediation commands, when introduced, are
-an executable plus argument array and never shell text.
+not interpolated into the public message. A remediation command (since P10 PR 3:
+`vsift job resume <job>` after an interruption) is an executable plus argument array
+of fixed words and validated identifiers, never shell text, and needs no authority.
 
 ## Identifiers, time, geometry, and confidence
 
@@ -1187,7 +1281,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-06 | strict bounded JSON decoding and schema/identifier rejection |
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) |
-| C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit) |
+| C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 
 These tests establish the public boundary only. Provider execution, filesystem

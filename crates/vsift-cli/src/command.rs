@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
-    CropRectangle, EvidenceId, FrameSelection, JobId, RuntimeDependency, SessionId, SetupProfile,
-    TranscriptRevisionId, VisualCandidateId,
+    CropRectangle, EvidenceId, FrameSelection, JobId, OperationId, RuntimeDependency, SessionId,
+    SetupProfile, TranscriptRevisionId, VisualCandidateId,
 };
 use vsift_contract::CommandName;
 
@@ -411,6 +411,12 @@ pub(crate) struct TranscriptRetranscribeArguments {
     /// Exclusive source-timeline end in microseconds; requires --from.
     #[arg(long, requires = "from")]
     pub to: Option<u64>,
+    /// Caller-chosen operation id (`op_` and 16 to 64 lowercase letters or
+    /// digits): repeating the request with it returns the committed result
+    /// without a new revision; the same id with another request is
+    /// `IDEMPOTENCY_CONFLICT`. Checked before anything is read.
+    #[arg(long, value_name = "OPERATION_ID")]
+    pub operation_id: Option<OperationId>,
 }
 
 /// Bounded literal transcript search.
@@ -635,15 +641,15 @@ pub(crate) struct JobArguments {
 /// Recoverable worker-job operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum JobCommand {
-    /// Execute one versioned request.
+    /// Execute one versioned request (reserved for the worker host).
     Run(JobRequestArguments),
-    /// Execute a finite JSONL request stream.
+    /// Execute a finite JSONL request stream (reserved for the worker host).
     Batch(JobBatchArguments),
-    /// Read one job's durable status.
+    /// Report one job: state, resumability, progress, result or failure.
     Status(JobIdentityArguments),
-    /// Resume one compatible interrupted job.
+    /// Continue one interrupted job from its checkpoints.
     Resume(JobIdentityArguments),
-    /// Request cancellation of one job.
+    /// Cancel one job, or ask the process running it to stop.
     Cancel(JobIdentityArguments),
 }
 
@@ -676,10 +682,11 @@ pub(crate) struct JobBatchArguments {
     pub requests: PathBuf,
 }
 
-/// One validated job identifier.
+/// One validated job identifier; the job's session is found through the
+/// session root's job index, so no session is given.
 #[derive(Args, Debug)]
 pub(crate) struct JobIdentityArguments {
-    /// Job to inspect or change.
+    /// Job to inspect or change (a `job_` identity).
     pub job: JobId,
 }
 

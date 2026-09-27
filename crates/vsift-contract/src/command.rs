@@ -59,9 +59,9 @@ pub enum CommandName {
     FrameNeighbours,
     /// `frame burst`.
     FrameBurst,
-    /// `audio` (reserved).
+    /// `audio`.
     Audio,
-    /// `crop` (reserved).
+    /// `crop`.
     Crop,
     /// `bundle validate`.
     BundleValidate,
@@ -69,11 +69,11 @@ pub enum CommandName {
     JobRun,
     /// `job batch` (reserved).
     JobBatch,
-    /// `job status` (reserved).
+    /// `job status`.
     JobStatus,
-    /// `job resume` (reserved).
+    /// `job resume`.
     JobResume,
-    /// `job cancel` (reserved).
+    /// `job cancel`.
     JobCancel,
 }
 

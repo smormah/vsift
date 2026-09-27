@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Job commands, operation ids and interruption handling (P10 PR 3,
+  [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md)).
+  `vsift job status <job>` reports a recoverable job: its state, whether `job resume`
+  can continue it and why not, progress in chunks, attempts, the committed revision and
+  generation, and the last failure (`job-data.schema.json`); `vsift job resume <job>`
+  continues an interrupted job from its checkpoints and answers with the job and the
+  retranscription (`job-resume-data.schema.json`); `vsift job cancel <job>` cancels an
+  interrupted job at once (removing its checkpoints), asks a running one to stop (its
+  process notices within 250 ms and stops whisper.cpp) and leaves a committing or
+  committed one alone with the warning `cancellation_too_late`; repeating it changes
+  nothing. `session status` lists the session's 16 newest jobs (`jobs`,
+  `jobs_truncated`). `transcript retranscribe --operation-id op_...` makes a retry return
+  the committed result without a new revision (even without the tools); the same id
+  with another request is `IDEMPOTENCY_CONFLICT`. The first Ctrl-C or `SIGTERM`
+  (Ctrl-C or Ctrl-Break on Windows) now cancels a long command at its next boundary: a
+  retranscription commits nothing, keeps its job resumable and answers `CANCELLED`
+  (exit 6) naming the session and job and suggesting `vsift job resume <job>`; `ingest`
+  stops its copy; `candidates` and the evidence commands commit what they finished. A
+  second interruption kills providers without the graceful wait; the process never
+  exits before they are reaped. `job run` and `job batch` stay reserved for the worker
+  host (P11). Uses Tokio's `signal` feature (no new crate). Opt-in checkpoint
+  `p10_recovery_e2e` (the recoverable mechanical run).
+
 - Recoverable retranscription (P10 PR 2,
   [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md), accepted
   2026-09-27 with maintainer decisions D-1..D-5). `transcript retranscribe` now runs as
@@ -285,6 +308,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- ADR 0017 decision 4 is superseded: the CLI traps Ctrl-C and `SIGTERM` (see Added).
+- A provider that fails after its caller cancelled is reported as cancelled, so an
+  interrupt can no longer be recorded as an `undecodable` visual window or count
+  towards poisoning a transcription chunk.
+- A retranscription with an operation id is answered from its record before the tools
+  are resolved; without one, the model is still checked before the session is read.
+- Job records written by this version carry `planned_chunks`; P10 PR 2 builds reject
+  them (sessions are disposable). The engine's `IngestRequest` takes a `Cancellation`,
+  `Engine::job_resume` returns a `JobResumeReport` and `job_cancel` reports the job.
 - Session caps raised (ADR 0020 D-2): a session holds 512 artifacts, of which 384 may
   be evidence (160 before), and a generation or bundle manifest may be 128 KiB; the
   evidence-budget remediation names the new numbers. Measured with the evidence budget
@@ -328,6 +360,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The concurrent-preflight engine test no longer fails when a throttled runner makes
+  the root's creator outlast the five-second wait (#144): the wait is injectable
+  (`EnginePorts::with_session_root_wait`, at most 60 s) and that test waits longer.
 - Several identical `transcript retranscribe` requests started at the same moment could
   make one of them fail with `STORAGE_IO` on macOS while creating the shared job's lock
   files; that open now retries briefly, as a file met mid-replacement does.

@@ -1,6 +1,6 @@
 # ADR 0017: Local speech recognition through whisper.cpp
 
-- Status: Accepted (maintainer, 2026-09-25)
+- Status: Accepted (maintainer, 2026-09-25); decision 4 (Ctrl-C) superseded by [ADR 0020](0020-recoverable-jobs-and-durable-publication.md) in P10 PR 3 (2026-09-27)
 - Date: 2026-09-25
 - Tracking: [P07 / issue #10](https://github.com/smormah/vsift/issues/10), increment 3b
 - Refines: [ADR 0005](0005-r0-scope-and-qualification-profiles.md) (the CPU speech
@@ -187,7 +187,7 @@ These were not settled by D1–D8; each follows the existing contracts most clos
 3. `retranscribe --events jsonl` emits only the terminal event (section 6).
 4. The CLI does not trap Ctrl-C: the default handler ends the process, the supervisor
    kills whisper.cpp with it, nothing is committed, and the work directory is swept
-   later (superseded in P10 PR 3; see the 2026-09-27 note). The engine's `Cancellation` is honoured between stages for library hosts.
+   later (superseded by P10 PR 3; see the second 2026-09-27 note). The engine's `Cancellation` is honoured between stages for library hosts.
    Trapping signals needs Tokio's `signal` feature, a dependency change left for a
    separate review.
 5. The verification's segment-end bound is one second (section 9).
@@ -283,3 +283,15 @@ now survive it, and the next run of the same command resumes from them. P10 PR 3
 supersedes decision 4: the CLI traps Ctrl-C and SIGTERM through Tokio's `signal`
 feature and turns them into cancellation serialized with the commit (ADR 0020
 section 5).
+
+## 2026-09-27 note: decision 4 superseded (P10 PR 3)
+
+Decision 4 is superseded by ADR 0020's PR 3 notes. The CLI now traps the first
+`SIGINT`/`SIGTERM` (Unix) or console Ctrl-C/Ctrl-Break (Windows) during a long command
+and cancels it: a retranscription stops at its next boundary (the supervisor stops
+whisper.cpp gracefully, then kills it), commits nothing, keeps its job `interrupted`
+with its finished chunks, and answers `CANCELLED` (exit 6) naming the session and job
+and suggesting `vsift job resume <job>`. A second interruption kills providers without
+the graceful wait; the process still exits only after they are reaped. The dependency
+review of Tokio's `signal` feature is recorded in ADR 0020. The rest of this ADR is
+unchanged.

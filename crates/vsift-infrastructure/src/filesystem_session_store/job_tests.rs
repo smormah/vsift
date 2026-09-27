@@ -250,6 +250,7 @@ fn resolve(store: &FilesystemSessionStore, requested: Option<TimeRange>) -> Buil
             operation_key,
             recognition_key: key,
             request: JobRequest::Retranscribe { range: requested },
+            planned_chunks: None,
         },
         replaced,
         base: head.newest,
@@ -581,6 +582,72 @@ fn a_cancel_request_reaches_the_owner_and_wins_before_the_commit() -> TestResult
         cancel_job(&other, &session, &job, now()?)?,
         CancelOutcome::AlreadyEnded(JobState::Cancelled)
     );
+    Ok(())
+}
+
+/// X-06 (running, P10 PR 3): `job cancel` from another process only records
+/// `cancelling`; the owner's watcher reads it within its poll interval and
+/// fires the run's cancellation, which is what stops a running provider
+/// (the supervisor kills it). The watcher never fires for a job nobody asked
+/// to stop, and returns the run's own result.
+#[test]
+fn the_owner_notices_a_cancel_request_within_its_poll_interval() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    let resolved = resolve(&store, requested()?)?;
+    let session = session_id()?;
+    let job = resolved.spec.job_id.clone();
+    let (mut owner, _) = store.open_or_create(&resolved.spec, now()?)?;
+    owner.apply(&JobChange::Start, now()?)?;
+    assert_eq!(
+        store.recorded_job_state(&session, &job)?,
+        Some(JobState::Running)
+    );
+
+    // Unasked, the watcher only returns what the run returns.
+    let quiet = crate::ProcessCancellation::new();
+    let answered = block_on(store.watch_for_job_cancel(&session, &job, &quiet, async {
+        tokio::time::sleep(super::jobs::JOB_CANCEL_POLL * 3).await;
+        7_u8
+    }))?;
+    assert_eq!(answered, 7);
+    assert!(!quiet.is_cancelled());
+
+    // A run that stops only when its cancellation fires, as a provider does.
+    let cancellation = crate::ProcessCancellation::new();
+    let root = fixture.path.clone();
+    let (asked_session, asked_job, asked_now) = (session.clone(), job.clone(), now()?);
+    let requester = thread::spawn(move || -> Result<(CancelRequest, Instant), String> {
+        thread::sleep(Duration::from_millis(300));
+        let other =
+            FilesystemSessionStore::open_existing(&root).map_err(|error| error.to_string())?;
+        let requested = other
+            .request_cancel(&asked_session, &asked_job, asked_now)
+            .map_err(|error| error.to_string())?;
+        Ok((requested, Instant::now()))
+    });
+    let signal = cancellation.clone();
+    let stopped = block_on(
+        store.watch_for_job_cancel(&session, &job, &cancellation, async {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            while !signal.is_cancelled() && Instant::now() < deadline {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            Instant::now()
+        }),
+    )?;
+    let (answer, asked_at) = requester.join().map_err(|_| "requester panicked")??;
+    assert_eq!(answer, CancelRequest::Requested);
+    assert!(cancellation.is_cancelled(), "the watcher never fired");
+    // One poll interval (250 ms) plus one record read; the bound leaves
+    // room for a loaded machine without hiding a watcher that never polls.
+    let noticed = stopped.saturating_duration_since(asked_at);
+    assert!(
+        noticed <= Duration::from_secs(1),
+        "noticed after {noticed:?}"
+    );
+    assert!(owner.cancel_requested());
+    owner.apply(&JobChange::Cancel, now()?)?;
     Ok(())
 }
 

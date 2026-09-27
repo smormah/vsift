@@ -12,7 +12,9 @@ use std::{
 
 use vsift_application::{InitializeSessionStorage, InitializeSessionStorageRequest};
 use vsift_domain::{DurabilityRequirement, OperationId, SessionId};
-use vsift_infrastructure::{FilesystemSessionStore, SourceError, SourceSnapshot};
+use vsift_infrastructure::{
+    FilesystemSessionStore, ProcessCancellation, SourceError, SourceSnapshot,
+};
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -119,5 +121,49 @@ async fn playlist_and_external_reference_sources_fail_before_provider_execution(
         ),
         Err(SourceError::InvalidPath)
     ));
+    Ok(())
+}
+
+/// P10 PR 3: a cancelled copy stops between blocks, removes its partial
+/// private file and never touches the original; an uncancelled one of the
+/// same source still stages.
+#[tokio::test]
+async fn a_cancelled_copy_stops_and_leaves_no_partial_file() -> TestResult {
+    let root = OwnedRoot::create()?;
+    let (store, session_id) = workspace(&root).await?;
+    let corpus =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/corpus/generated/F01.mp4");
+    let original = fs::read(&corpus)?;
+    let source = root.0.join("source.mp4");
+    fs::write(&source, &original)?;
+    let cancellation = ProcessCancellation::new();
+    cancellation.cancel();
+    let result = SourceSnapshot::stage_cancellable(
+        &store,
+        &session_id,
+        &OperationId::parse("op_abcdef0123456789")?,
+        &source,
+        &cancellation,
+    );
+    assert!(matches!(result, Err(SourceError::Cancelled)));
+    let artifacts = root
+        .0
+        .join("workspace/sessions")
+        .join(session_id.as_str())
+        .join("artifacts");
+    let left: Vec<_> = fs::read_dir(&artifacts)?
+        .map(|entry| entry.map(|entry| entry.file_name()))
+        .collect::<Result<_, _>>()?;
+    assert!(left.is_empty(), "{left:?}");
+    assert_eq!(fs::read(&source)?, original);
+
+    let staged = SourceSnapshot::stage_cancellable(
+        &store,
+        &session_id,
+        &OperationId::parse("op_abcdef0123456780")?,
+        &source,
+        &ProcessCancellation::new(),
+    )?;
+    staged.verify()?;
     Ok(())
 }

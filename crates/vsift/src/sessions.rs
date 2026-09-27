@@ -10,22 +10,26 @@ use vsift_domain::{
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, FfprobeSourceDuration, FilesystemSessionStore,
-    ProcessCancellation, SessionIndexPage, SessionRootProvisioning, SessionStatus,
+    SessionIndexPage, SessionRootProvisioning, SessionStatus,
 };
 
 use crate::{
     engine::{Engine, absolute_selection},
     error::{EngineError, SessionRootError},
+    verification::Cancellation,
 };
 
 /// A request to open a local video as a new disposable session.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct IngestRequest {
     /// Local source media; a relative path is resolved against the process
     /// working directory.
     pub source: PathBuf,
     /// Optional supplied `SubRip` or `WebVTT` transcript to import with it.
     pub transcript: Option<SuppliedTranscriptRequest>,
+    /// Signal that stops the copy of the source between 64 KiB blocks and
+    /// the transcript's duration probe; a cancelled ingest opens no session.
+    pub cancellation: Cancellation,
 }
 
 /// A supplied transcript file and the explicit offset that aligns it.
@@ -400,7 +404,8 @@ impl Engine {
             self.ensure_media_tools_verified(tools).await?;
         }
         let root = self.session_root_path()?;
-        let store = Self::open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
+        let store = self
+            .open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let now = self.now_unix_seconds()?;
         let open = OpenSessionRequest {
@@ -414,7 +419,7 @@ impl Engine {
         };
         let Some((import, tools)) = import else {
             let session = OpenSession::new(store)
-                .execute(open)
+                .execute(open, &request.cancellation.0)
                 .await
                 .map_err(EngineError::OpenSession)?;
             return Ok(IngestOutcome {
@@ -422,16 +427,17 @@ impl Engine {
                 transcript: None,
             });
         };
-        let probe_store = Self::open_session_store(&root, SessionRootProvisioning::ExistingOnly)?
+        let probe_store = self
+            .open_session_store(&root, SessionRootProvisioning::ExistingOnly)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let probe = FfprobeSourceDuration::new(
             tools,
             self.config().host_isolation.into_infrastructure(),
             probe_store,
-            ProcessCancellation::new(),
+            request.cancellation.0.clone(),
         );
         let (session, revision) = OpenSession::new(store)
-            .execute_with_transcript(open, &import, &probe)
+            .execute_with_transcript(open, &import, &probe, &request.cancellation.0)
             .await
             .map_err(EngineError::OpenSession)?;
         Ok(IngestOutcome {
@@ -619,7 +625,7 @@ impl Engine {
     ) -> Result<(Option<FilesystemSessionStore>, u64), EngineError> {
         let root = self.session_root_path()?;
         let now = self.now_unix_seconds()?;
-        let store = Self::open_session_store(&root, SessionRootProvisioning::ExistingOnly)?;
+        let store = self.open_session_store(&root, SessionRootProvisioning::ExistingOnly)?;
         Ok((store, now))
     }
 }

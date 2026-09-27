@@ -441,6 +441,33 @@ refused at once and a file still missing is still an integrity failure.
 session synchronises their directories after each rename. Durable mode stays disabled
 on every profile until P10 PR 4's campaign, so SEC-24 stays open.
 
+P10 PR 3 (2026-09-27): the public job surface and interruption handling.
+**SEC-04.** The CLI traps the first `SIGINT`/`SIGTERM` or console Ctrl-C/Ctrl-Break of a
+long command and turns it into the command's cancellation: the supervisor stops the
+running provider tree (Unix: `SIGTERM` to its process group, a kill after 5 s;
+Windows: the Job Object at once) and reaps it before the command returns; a second
+interruption skips the graceful 5 s. The process exits only after its command has
+returned, so an interruption never leaves a provider running (checked: no descendant
+alive 10 s after the command ended, in `p10_recovery_e2e`). Because a console event
+reaches every process on the console, a provider that ended unsuccessfully after the
+caller cancelled is reported as cancelled, never as a decoding or recognition
+failure, so an interrupt cannot plant a false `undecodable` window or poison a chunk.
+`job cancel` from another process only records `cancelling` under the job's state lock
+(never while committing); the owner notices within 250 ms and stops its own provider,
+so no process ever signals another. Residuals: a process that inherited "ignore
+Ctrl-C" on Windows sees only Ctrl-Break (L-053); VSift's own hashing and publication run
+to their next check (L-054); a hard-killed CLI on Unix leaves its running provider to
+finish its current unit (L-055).
+**SEC-20.** Interruption adds no admission, thread or retry: the command's one
+cancellation reaches its admission-bounded stages, and a resumed or cancelled job's
+retries keep ADR 0020's policy (`BUSY` twice with jitter). The owner's cancel watcher
+is one timer per running job, reading one small record per 250 ms without a lock.
+**SEC-16/SEC-18.** Job results and remediation name only identifiers, states, counts
+and codes (no path, transcript text or provider output); the one suggested command is
+the executable `vsift` with the fixed words `job resume` and a validated job id, never
+shell text, and needs no authority. `--operation-id` and job ids are parsed by the
+grammar before any I/O.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.

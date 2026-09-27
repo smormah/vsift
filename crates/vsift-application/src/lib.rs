@@ -43,16 +43,16 @@ pub use job::{
     CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner, JobRecord,
     JobReport, JobRequest, JobRunError, JobSpec, JobStore, JobStoreError, JobView,
     LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES, MAX_SESSION_JOBS,
-    NoCheckpoints, OperationLookup, RecognitionScope, Reconciled, RequestDigest,
+    NoCheckpoints, OperationLookup, RecognitionScope, Reconciled, RequestDigest, Resumability,
     RetranscriptionOutcome, RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore,
     SessionHead, cancel_job, commit_operation_id, job_id, job_status, lookup_operation,
-    recognition_key, reconcile, resumable_request, retranscribe_operation_key,
+    observed_state, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
     retranscribe_request_digest, run_retranscription,
 };
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{
-    ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
-    StagedSessionSource,
+    ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
+    OpenSessionRequest, StageCancellation, StagedSessionSource,
 };
 
 pub use local_asr_setup::{

@@ -14,7 +14,12 @@
 //! - **Setup:** [`SetupCheckResponse`], [`SetupPlanResponse`], the strict
 //!   [`SavedSetupPlan`] input, and the configured-selection responses.
 //! - **Session:** [`OpenData`], [`StatusData`], [`PageData`], [`CleanData`],
-//!   [`BundleData`] and their item types.
+//!   [`BundleData`] and their item types; `session status` adds its newest
+//!   jobs through [`SessionStatusData`].
+//! - **Jobs:** [`JobData`] for `job status` and `job cancel`, built from a
+//!   host's [`JobPresentation`], [`JobResumeData`] for `job resume`, and the
+//!   fixed-prose remediation for interrupted, unknown, ended and session-less
+//!   jobs (P10 PR 3).
 //! - **Evidence:** [`ConfidenceResponse`] and [`FrameTimingResponse`], frozen
 //!   before the packets that produce them.
 //! - **Transcript:** [`TranscriptSegmentData`] (the published evidence
@@ -75,6 +80,7 @@ mod candidates;
 mod command;
 mod envelope;
 mod evidence;
+mod job;
 mod local_asr;
 mod navigation;
 mod search;
@@ -97,6 +103,11 @@ pub use envelope::{
     OperationResponse, TerminalEventResponse,
 };
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
+pub use job::{
+    JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
+    JOB_SESSION_NOT_OPEN_REMEDIATION, JobData, JobPresentation, JobResumeData, SessionJobData,
+    SessionStatusData, UNKNOWN_JOB_REMEDIATION,
+};
 pub use local_asr::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
     JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,

@@ -17,25 +17,29 @@ use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_application::{
     AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, AsrTranscription,
-    LocalAsrVerificationFailure, RevisionSplice, TranscriptPageRequest, build_asr_revision,
-    page_transcript, whole_file_source_segment,
+    LocalAsrVerificationFailure, Resumability, RevisionSplice, TranscriptPageRequest,
+    build_asr_revision, page_transcript, whole_file_source_segment,
 };
 use vsift_contract::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
-    JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
-    LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, OperationResponse,
-    RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION,
-    TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData,
-    TranscriptRetranscribeData, TranscriptRevisionData, UNKNOWN_REVISION_REMEDIATION,
-    UNPINNED_MODEL_REMEDIATION, job_warning_messages, local_asr_failure_summary,
-    local_asr_verification_summary, transcript_warning_messages,
+    JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION,
+    JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION, JobData, JobPresentation,
+    JobResumeData, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse,
+    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, OperationResponse,
+    RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION, SessionJobData,
+    SessionState, SessionStatusData, StatusData, TerminalEventResponse, TranscriptEvidenceStream,
+    TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    job_warning_messages, local_asr_failure_summary, local_asr_verification_summary,
+    transcript_warning_messages,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, ChunkTime, CueText, FailureCode, JobId,
-    LanguageTag, MediaTime, OperationId, PageLimit, ProviderChunkOutput, ProviderOutputError,
-    ProviderSegment, ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId,
-    SourceSegment, TimeRange, TranscriptRevision, TranscriptRevisionError, TranscriptWarningKind,
+    AsrProviderBuild, AsrRun, AsrRunParts, AttemptFailure, ChunkPlan, ChunkTime, CueText,
+    FailureCode, JobId, JobKind, JobState, LanguageTag, MediaTime, OperationId, PageLimit,
+    ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind,
+    SessionId, Sha256Hex, SourceId, SourceSegment, StorageGeneration, TimeRange,
+    TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId, TranscriptWarningKind,
     TranscriptWarnings, merge_chunks, plan_chunks, validate_chunk_output,
 };
 
@@ -564,6 +568,263 @@ fn published_local_asr_examples_validate_against_their_schemas() -> TestResult {
             .ok_or("not an object")?
             .insert("unreviewed".to_owned(), Value::Bool(true));
         assert!(validate(schema, &extended).is_err(), "{schema}");
+    }
+    Ok(())
+}
+
+// ------------------------------------------------ P10 PR 3: the job surface
+
+/// Compares `value` with the frozen example `name`.
+fn assert_example(name: &str, value: &Value) -> TestResult {
+    assert_eq!(*value, load(&format!("examples/{name}"))?, "{name}");
+    Ok(())
+}
+
+/// The F01 retranscription job of the frozen examples, as `job status`
+/// presents it in `state` with `resumability`.
+fn f01_job(
+    state: JobState,
+    resumability: Resumability,
+    result: Option<(&TranscriptRevisionId, StorageGeneration)>,
+    failure: Option<AttemptFailure>,
+    checkpoints: usize,
+) -> Built<JobData> {
+    let job = JobId::parse(JOB)?;
+    let session = SessionId::parse(SESSION)?;
+    let operation = OperationId::parse(OPERATION)?;
+    Ok(JobData::new(&JobPresentation {
+        job_id: &job,
+        session_id: &session,
+        kind: JobKind::Retranscribe,
+        state,
+        live_owner: resumability == Resumability::LiveOwner,
+        resumability,
+        operation_id: Some(&operation),
+        requested: Some(range(5_500_000, 6 * SECOND)?),
+        planned_chunks: Some(1),
+        checkpoints,
+        attempts: 1,
+        result,
+        failure,
+    }))
+}
+
+/// `job status` of a job whose run a Ctrl-C stopped: interrupted,
+/// resumable, with the failure that ended its attempt.
+#[test]
+fn an_interrupted_job_status_matches_the_frozen_example() -> TestResult {
+    let data = f01_job(
+        JobState::Interrupted,
+        Resumability::Interrupted,
+        None,
+        Some(AttemptFailure {
+            chunk: Some(0),
+            code: FailureCode::Cancelled,
+        }),
+        0,
+    )?;
+    let response = serde_json::to_value(OperationResponse::complete("job.status", &data)?)?;
+    validate("operation-response.schema.json", &response)?;
+    validate("job-data.schema.json", &response["data"])?;
+    assert_eq!(response["data"]["resumable"], true);
+    assert_eq!(response["data"]["failure"]["code"], "CANCELLED");
+    assert_example("job-status.json", &response)
+}
+
+/// `job cancel` of a job that had committed: its result stands, with the
+/// warning `cancellation_too_late`.
+#[test]
+fn a_late_cancel_matches_the_frozen_example() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    let data = f01_job(
+        JobState::Succeeded,
+        Resumability::Succeeded,
+        Some((second.id(), StorageGeneration::from_value(3))),
+        None,
+        0,
+    )?;
+    let response = serde_json::to_value(
+        OperationResponse::complete("job.cancel", &data)?
+            .with_warnings(&[CANCELLATION_TOO_LATE_WARNING]),
+    )?;
+    validate("operation-response.schema.json", &response)?;
+    validate("job-data.schema.json", &response["data"])?;
+    assert_eq!(
+        response["data"]["result"]["revision_id"],
+        second.id().as_str()
+    );
+    assert_example("job-cancel.json", &response)
+}
+
+/// `job resume` of the interrupted job: the job afterwards and the
+/// retranscription it committed from its checkpoint.
+#[test]
+fn a_resumed_job_matches_the_frozen_example() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    let job = f01_job(
+        JobState::Succeeded,
+        Resumability::Succeeded,
+        Some((second.id(), StorageGeneration::from_value(3))),
+        None,
+        0,
+    )?;
+    let resumed = RetranscribeJob {
+        resumed: true,
+        chunks_reused: 1,
+        ..fresh_job()?
+    };
+    let outcome = TranscriptRetranscribeData::new(
+        &SessionId::parse(SESSION)?,
+        Some(range(5_500_000, 6 * SECOND)?),
+        &second,
+        &resumed,
+    );
+    let mut warnings = transcript_warning_messages(&second);
+    warnings.extend(job_warning_messages(1, 0));
+    let response = serde_json::to_value(
+        OperationResponse::complete("job.resume", &JobResumeData::new(job, outcome))?
+            .with_operation_id(&OperationId::parse(OPERATION)?)
+            .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()))
+            .with_warnings(&warnings),
+    )?;
+    validate("operation-response.schema.json", &response)?;
+    validate("job-resume-data.schema.json", &response["data"])?;
+    validate("job-data.schema.json", &response["data"]["job"])?;
+    validate(
+        "transcript-retranscribe-data.schema.json",
+        &response["data"]["outcome"],
+    )?;
+    assert_eq!(response["data"]["outcome"]["job"]["chunks_reused"], 1);
+    assert_example("job-resume.json", &response)
+}
+
+/// A retranscription stopped by Ctrl-C: `CANCELLED`, the session and job in
+/// `affected_ids`, and a remediation that suggests `job resume <job>` as an
+/// executable and argument array.
+#[test]
+fn an_interrupted_retranscription_matches_the_frozen_example() -> TestResult {
+    let response = OperationResponse::failure_with_suggested_command(
+        "transcript.retranscribe",
+        FailureCode::Cancelled,
+        JOB_INTERRUPTED_REMEDIATION.to_owned(),
+        &["job", "resume", JOB],
+    )
+    .with_affected_ids(&[SESSION, JOB]);
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value["status"], "cancelled");
+    assert_eq!(
+        value["error"]["affected_ids"],
+        serde_json::json!([SESSION, JOB])
+    );
+    let command = &value["error"]["remediation"][0]["command"];
+    assert_eq!(command["executable"], "vsift");
+    assert_eq!(
+        command["arguments"],
+        serde_json::json!(["job", "resume", JOB])
+    );
+    let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+    validate("terminal-event.schema.json", &event)?;
+    assert_example("retranscribe-cancelled.json", &value)
+}
+
+/// Every state, resumability and failure code a job can report gives
+/// schema-valid job data, and malformed members are rejected.
+#[test]
+fn every_job_state_and_reason_is_schema_valid() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    for state in JobState::ALL {
+        for resumability in Resumability::ALL {
+            let result = (state == JobState::Succeeded)
+                .then(|| (second.id(), StorageGeneration::from_value(2)));
+            let data = serde_json::to_value(f01_job(state, resumability, result, None, 1)?)?;
+            validate("job-data.schema.json", &data)?;
+            assert_eq!(data["resumable"], resumability.resumable());
+        }
+    }
+    for code in FailureCode::ALL {
+        let data = serde_json::to_value(f01_job(
+            JobState::Failed,
+            Resumability::Failed,
+            None,
+            Some(AttemptFailure { chunk: None, code }),
+            0,
+        )?)?;
+        validate("job-data.schema.json", &data)?;
+        assert_eq!(data["failure"]["retryable"], code.retryable());
+    }
+    let valid = serde_json::to_value(f01_job(
+        JobState::Queued,
+        Resumability::NotStarted,
+        None,
+        None,
+        0,
+    )?)?;
+    for (member, bad) in [
+        ("job_id", Value::from("job-1")),
+        ("state", Value::from("paused")),
+        ("resumable_reason", Value::from("maybe")),
+        ("operation_id", Value::from("op-1")),
+        ("path", Value::from("C:/private")),
+    ] {
+        let mut invalid = valid.clone();
+        invalid[member] = bad;
+        assert!(
+            validate("job-data.schema.json", &invalid).is_err(),
+            "{member}"
+        );
+    }
+    for prose in [
+        JOB_INTERRUPTED_REMEDIATION,
+        JOB_SESSION_NOT_OPEN_REMEDIATION,
+        UNKNOWN_JOB_REMEDIATION,
+        JOB_NOT_RESUMABLE_REMEDIATION,
+        JOB_CANCELLED_REMEDIATION,
+    ] {
+        assert!(prose.len() <= 1_024 && !prose.contains('/') && !prose.contains('\\'));
+    }
+    Ok(())
+}
+
+/// `session status` adds its newest jobs and whether it holds more; every
+/// earlier member is unchanged.
+#[test]
+fn session_status_lists_jobs_additively() -> TestResult {
+    let status = StatusData {
+        session_id: SESSION.to_owned(),
+        state: SessionState::Open,
+        source_id: F01_SPEECH_SOURCE.to_owned(),
+        source_bytes: 1,
+        artifact_count: 2,
+        artifact_bytes: 3,
+        generation: 3,
+        expires_at: EXPIRES_AT.to_owned(),
+    };
+    let plain = serde_json::to_value(&status)?;
+    let job = SessionJobData::new(
+        &JobId::parse(JOB)?,
+        JobKind::Retranscribe,
+        JobState::Interrupted,
+        false,
+        Resumability::Interrupted,
+    );
+    let listed = serde_json::to_value(SessionStatusData::new(status, vec![job], false))?;
+    for (member, value) in plain.as_object().ok_or("not an object")? {
+        assert_eq!(&listed[member], value, "{member}");
+    }
+    assert_eq!(listed["jobs_truncated"], false);
+    assert_eq!(listed["jobs"][0]["job_id"], JOB);
+    assert_eq!(listed["jobs"][0]["resumable_reason"], "interrupted");
+    let job_data = load("job-data.schema.json")?;
+    for member in [
+        "job_id",
+        "kind",
+        "state",
+        "live_owner",
+        "resumable",
+        "resumable_reason",
+    ] {
+        assert!(job_data["properties"].get(member).is_some(), "{member}");
     }
     Ok(())
 }

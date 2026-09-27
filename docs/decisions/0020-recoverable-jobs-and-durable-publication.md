@@ -269,6 +269,90 @@ design above:
   file is opened once it appears; a directory that really vanished still fails
   after the budget.
 
+## Implementation notes: PR 3 (2026-09-27)
+
+PR 3 implements section 6 and the host half of section 5. Where it refines the design:
+
+- **Public commands.** `job status <job>`, `job resume <job>` and `job cancel <job>` take
+  no session: the job is found through the root's `job-index/`. `job-data.schema.json`
+  reports the job's state, `live_owner`, `resumable` and `resumable_reason`
+  (`interrupted`, `not_started`, `live_owner`, `succeeded`, `failed`, `cancelled`,
+  `session_not_open`), the operation id a retry should carry, the requested range,
+  progress (`chunks_total`, `chunks_checkpointed`), attempts, the committed revision
+  and generation, and the last failure's code; never a path or text. `job resume`
+  answers `job-resume-data.schema.json` (the job and the retranscription). `session
+  status` adds its 16 newest jobs, read-only: `observed_state` reports what
+  reconciliation would record without taking ownership. `job run` and `job batch` stay
+  reserved for P11.
+- **Planned chunks.** Job records written since PR 3 carry `planned_chunks` (optional,
+  so PR 2 records still decode; PR 2 builds reject the new field, and sessions are
+  disposable). It derives from the recognition key's range and plan, so it cannot
+  disagree with the job's identity.
+- **Resume rules.** `job resume` is `BUSY` for any live owner (also one that has only
+  just created the job), `INVALID_ARGUMENT` with `JobNotResumable` for an ended job, and
+  `INVALID_ARGUMENT` with the new `JobSessionNotOpen` (session and job in
+  `affected_ids`, a renew-or-reopen remediation) for a closed or expired session, all
+  before any tool is resolved.
+- **Operation ids (D-1).** `transcript retranscribe --operation-id op_...` is parsed by
+  the grammar before any I/O. A request that carries an id is now answered from its
+  binding before tools are resolved (a committed id replays, another request with it
+  is `IDEMPOTENCY_CONFLICT`, a live job is `BUSY`), so a retry works even where the
+  tools have gone; a request without an id keeps ADR 0017's D5 order (the model is
+  checked before any session read).
+- **Job cancel reaching a running provider.** `job cancel` only records `cancelling`
+  under the state lock (unless the job is committing: then it is too late). The owner
+  reads its record every 250 ms (`JOB_CANCEL_POLL`) while it runs and fires its own
+  cancellation, which makes the supervisor stop the provider it is running; the run
+  then meets the request under the state lock and cancels the job (its checkpoints are
+  removed). Before PR 3 a request was seen only between chunks.
+- **Interruption of the command line (supersedes ADR 0017 decision 4).** The first
+  `SIGINT`/`SIGTERM` (Unix) or console Ctrl-C/Ctrl-Break (Windows) during a long command
+  (`ingest`, `transcript retranscribe`, `candidates`, `frame`, `crop`, `audio`, `job
+  resume`) cancels the command's one `Cancellation`; a second escalates it
+  (`Cancellation::escalate`): providers are killed without the 5 s graceful wait and
+  reaped within the forced 5 s. The process only exits when the command has returned,
+  so it never leaves a provider running (SEC-04). A retranscription stopped this way
+  commits nothing, keeps its job `interrupted` and answers `CANCELLED` (exit 6) with the
+  session and job in `affected_ids` and a remediation whose command is `vsift job
+  resume <job>` (new `EngineError::JobInterrupted`). `ingest` checks the cancellation
+  before every 64 KiB block of its copy and removes the partial copy; `candidates` and
+  the evidence commands keep their partial-commit semantics. Short commands keep the
+  default behaviour.
+- **Failures caused by the interrupt itself.** A console event reaches every process on
+  the console, so on Windows `FFmpeg` or whisper.cpp can die of the same Ctrl-C before
+  the supervisor stops it. The supervisor reports a provider that ended unsuccessfully
+  after cancellation was requested as `Cancelled` (`completed_termination`), and a
+  retranscription records a chunk failure seen after its caller cancelled as the
+  cancellation. Otherwise the interrupt would record false evidence gaps (an
+  `undecodable` window) or count towards poisoning a chunk.
+- **Windows Ctrl-C and the inherited ignore attribute.** Windows never tells a process
+  that inherited "ignore Ctrl-C" (a child of a service, of some IDE and agent hosts, or
+  of a process created in a new process group) about a Ctrl-C; Ctrl-Break is always
+  delivered. Clearing the attribute needs `SetConsoleCtrlHandler(NULL, FALSE)`, i.e.
+  `unsafe` platform code, which this ADR does not introduce. It is a known limit.
+- **Session-root wait (#144).** `EnginePorts::with_session_root_wait` (at most 60 s)
+  lets the concurrent-preflight test wait longer than the production five seconds, so
+  a throttled runner no longer turns the documented `BUSY` into a test failure.
+
+**Dependency review: Tokio's `signal` feature (2026-09-27).**
+
+- *Purpose:* trap `SIGINT`/`SIGTERM` (Unix, `tokio::signal::unix`) and console
+  Ctrl-C/Ctrl-Break (Windows, `tokio::signal::windows`) without `unsafe` code in VSift.
+  The alternatives (the `ctrlc` or `signal-hook` crates directly, or our own FFI) add
+  crates or need `unsafe`.
+- *Lockfile impact:* none. The feature enables `signal-hook-registry` on Unix (already
+  in `Cargo.lock` through the `process` feature) and more `windows-sys` features
+  (`Win32_System_Console`) of a version already locked; `Cargo.lock` is byte-for-byte
+  unchanged and no new crate is compiled on any target.
+- *Licence:* unchanged: Tokio and `signal-hook-registry` are MIT (or MIT/Apache-2.0),
+  `windows-sys` MIT OR Apache-2.0, all already allowed by `deny.toml`.
+- *Maintenance:* the feature is part of Tokio itself (tokio-rs, actively maintained,
+  1.x LTS releases), the version VSift already pins; `signal-hook-registry` is
+  maintained by the `signal-hook` project and already reviewed with `process`.
+- *Exposure:* the feature is enabled in the workspace dependency but used only by the
+  CLI's `signal` module; the engine and libraries install no handler, so an embedding
+  host keeps control of its own signals.
+
 ## Consequences
 
 - PR 1 changes no public contract. Warm reads no longer grow with the chain; every
@@ -285,6 +369,10 @@ design above:
 - PR 2 raises the artifact caps (D-2); every retranscription is a job with private
   checkpoint files under the session (never in a manifest or bundle), and the public
   `transcript.retranscribe` data gains `job` and the envelope's `operation_id`.
+- PR 3 adds the `job status`, `job resume` and `job cancel` commands, two schemas, the
+  `jobs` of `session status`, `--operation-id` and trapped interruptions. A long
+  command no longer ends at the first Ctrl-C but at its next boundary; a caller that
+  needs it gone at once sends a second one.
 
 ## Alternatives
 

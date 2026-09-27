@@ -6,6 +6,7 @@ use std::{
     num::NonZeroUsize,
     path::{Path, PathBuf},
     pin::Pin,
+    time::Duration,
 };
 
 use vsift_application::{
@@ -14,8 +15,8 @@ use vsift_application::{
 };
 use vsift_domain::{OperationId, SessionId};
 use vsift_infrastructure::{
-    FilesystemSessionStore, RandomIdentifierSource, SessionRootProvisioning, SystemClock,
-    UserDependencyConfigStore, open_session_root, platform_session_root,
+    FilesystemSessionStore, PROVISIONING_WAIT, RandomIdentifierSource, SessionRootProvisioning,
+    SystemClock, UserDependencyConfigStore, open_session_root_within, platform_session_root,
 };
 
 use crate::{
@@ -86,7 +87,12 @@ pub struct EnginePorts {
     local_asr_verifier: Option<Box<dyn HostLocalAsrVerifier>>,
     speech_recognizer: Option<HostAsr>,
     visual_window_budget: NonZeroUsize,
+    session_root_wait: Duration,
 }
+
+/// The longest [`EnginePorts::with_session_root_wait`] accepts, so no host
+/// can make an operation wait unboundedly for a stalled creator.
+pub const MAX_SESSION_ROOT_WAIT: Duration = Duration::from_secs(60);
 
 /// [`MAX_WINDOWS_PER_EXTENSION`] as the default window budget.
 const DEFAULT_VISUAL_WINDOW_BUDGET: NonZeroUsize =
@@ -109,7 +115,21 @@ impl EnginePorts {
             local_asr_verifier: None,
             speech_recognizer: None,
             visual_window_budget: DEFAULT_VISUAL_WINDOW_BUDGET,
+            session_root_wait: PROVISIONING_WAIT,
         }
+    }
+
+    /// Changes how long an operation waits for another process that is
+    /// still creating the session root before it answers `BUSY`; the
+    /// default is five seconds and the most is [`MAX_SESSION_ROOT_WAIT`].
+    ///
+    /// Intended for tests that race many engines to create one root on a
+    /// machine that may be throttled (issue #144), where the documented
+    /// `BUSY` is a correct but unwanted outcome.
+    #[must_use]
+    pub fn with_session_root_wait(mut self, wait: Duration) -> Self {
+        self.session_root_wait = wait.min(MAX_SESSION_ROOT_WAIT);
+        self
     }
 
     /// Lowers how many 60 s windows one [`Engine::candidates`] call analyses
@@ -252,10 +272,11 @@ impl Engine {
     }
 
     pub(crate) fn open_session_store(
+        &self,
         root: &Path,
         provisioning: SessionRootProvisioning,
     ) -> Result<Option<FilesystemSessionStore>, EngineError> {
-        open_session_root(root, provisioning)
+        open_session_root_within(root, provisioning, self.ports.session_root_wait)
             .map_err(|error| EngineError::SessionRoot(SessionRootError::from(error)))
     }
 
@@ -311,5 +332,26 @@ pub(crate) struct HostVerifier<'a>(&'a dyn HostMediaToolVerifier);
 impl MediaToolVerifier for HostVerifier<'_> {
     fn verify(&self) -> impl Future<Output = MediaToolVerification> + Send {
         self.0.verify_boxed()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use vsift_infrastructure::PROVISIONING_WAIT;
+
+    use super::{EnginePorts, MAX_SESSION_ROOT_WAIT};
+
+    /// Issue #144: the wait for another creator of the session root is the
+    /// production five seconds unless a host changes it, and never more
+    /// than the maximum, so no host can make an operation wait unboundedly.
+    #[test]
+    fn the_session_root_wait_is_injectable_and_bounded() {
+        assert_eq!(EnginePorts::system().session_root_wait, PROVISIONING_WAIT);
+        let longer = EnginePorts::system().with_session_root_wait(Duration::from_secs(30));
+        assert_eq!(longer.session_root_wait, Duration::from_secs(30));
+        let clamped = EnginePorts::system().with_session_root_wait(Duration::from_secs(3_600));
+        assert_eq!(clamped.session_root_wait, MAX_SESSION_ROOT_WAIT);
     }
 }

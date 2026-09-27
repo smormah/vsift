@@ -40,6 +40,7 @@ use vsift_application::{
 use vsift_domain::{
     AsrModelProfile, ChunkPlan, JobId, MediaSelection, MediaTime, OperationId, PlannedChunk,
     ProviderChunkOutput, RuntimeDependency, SessionId, SessionPhase, TimeRange, TranscriptRevision,
+    plan_chunks,
 };
 use vsift_infrastructure::{
     BoundSource, ExecutableResolutionError, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio,
@@ -231,17 +232,23 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Fails before running anything for an invalid range, a missing tool or
-    /// model, or a model that is not a reviewed pinned profile; then for a
-    /// missing, closed or expired session; then with
+    /// Fails before running anything for an invalid range; with an
+    /// operation id, then for a missing, closed or expired session and with
     /// [`EngineError::IdempotencyConflict`] or [`EngineError::JobBusy`] for an
-    /// operation id bound to another request or to a live job; then for a
+    /// id bound to another request or to a live job (a committed one is
+    /// replayed here, before any tool is needed); then for a missing tool or
+    /// model, or a model that is not a reviewed pinned profile; then (without
+    /// an operation id) for a missing, closed or expired session; then for a
     /// failed media-tool or local-ASR preflight; and during the run for a
     /// source without audio, a typed recognition failure, cancellation, a
     /// storage failure (including a source copy that changed), the same job
     /// running in another process, or a range another revision changed.
     /// Nothing is committed on failure, and the job stays resumable unless
-    /// the error says otherwise.
+    /// the error says otherwise. A cancellation by the caller before the
+    /// commit is [`EngineError::JobInterrupted`], naming the job to resume; a
+    /// `job cancel` from another process is noticed within
+    /// [`vsift_infrastructure::JOB_CANCEL_POLL`], stops the running provider
+    /// and ends the run with [`EngineError::JobCancelled`].
     #[allow(
         clippy::too_many_lines,
         reason = "The stage order is the contract; keep it visible in one place"
@@ -264,7 +271,28 @@ impl Engine {
         let digest = retranscribe_request_digest(&request.session, requested)
             .map_err(|_| EngineError::JobInvariant)?;
 
-        // 1. Resolve and identify everything before anything runs.
+        // 1. A retry with an operation id is answered first. A committed one
+        // is replayed from its commit before any tool is resolved, checked or
+        // run and before any hash (X-02); the same id with another request
+        // is a conflict (X-03); a live job is busy. All three need only the
+        // request digest and a read of the session, so a retry is answered
+        // even where the tools have since gone. A request without an id
+        // keeps the D5 order: nothing about the session is read before the
+        // model is known to be a reviewed pinned profile.
+        if let Some(operation) = &request.operation_id {
+            let (store, now) = self.existing_store()?;
+            let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+            store.read_transcript_head(&request.session, now)?;
+            match lookup_operation(&store, &request.session, operation, &digest, now)? {
+                OperationLookup::Replay(record) => {
+                    return self.replayed(&store, requested, &record, operation.clone());
+                }
+                OperationLookup::Busy(job) => return Err(EngineError::JobBusy { job }),
+                OperationLookup::Unbound | OperationLookup::Continue(_) => {}
+            }
+        }
+
+        // 2. Resolve and identify everything before anything runs.
         let tools = self.local_asr_media_tools()?;
         let recognizer = self.select_recognizer()?;
         let identity = match &recognizer {
@@ -282,25 +310,12 @@ impl Engine {
             return Err(EngineError::LocalAsrModelNotPinned);
         }
 
-        // 2. The session must exist and be open before minutes of work start.
+        // 3. The session must exist and be open before minutes of work start.
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         // The newest revision and the generation come from one manifest, so
         // the commit below never builds on a base older than it expects.
         let (base, status) = store.read_transcript_head(&request.session, now)?;
-
-        // 3. A retry whose operation id already committed is answered from
-        // the commit, before any check or hash runs (X-02); the same id with
-        // another request is a conflict (X-03).
-        if let Some(operation) = &request.operation_id {
-            match lookup_operation(&store, &request.session, operation, &digest, now)? {
-                OperationLookup::Replay(record) => {
-                    return self.replayed(&store, requested, &record, operation.clone());
-                }
-                OperationLookup::Busy(job) => return Err(EngineError::JobBusy { job }),
-                OperationLookup::Unbound | OperationLookup::Continue(_) => {}
-            }
-        }
 
         // 4. Prove the tools and the recognizer work before touching user media.
         self.ensure_media_tools_verified(&tools).await?;
@@ -334,6 +349,11 @@ impl Engine {
             return Err(EngineError::RangeOutsideSource);
         }
         let replaced = retranscription_range(base.as_ref(), requested, source.range());
+        // Reported by `job status` as progress; a plan that cannot be made
+        // fails the run itself at planning.
+        let planned_chunks = plan_chunks(source.id(), replaced, ChunkPlan::R0)
+            .ok()
+            .and_then(|chunks| u32::try_from(chunks.len()).ok());
 
         // 6. The job the request's keys name (ADR 0020 section 4).
         let key = recognition_key(&RecognitionScope {
@@ -357,6 +377,7 @@ impl Engine {
             operation_key,
             recognition_key: key,
             request: JobRequest::Retranscribe { range: requested },
+            planned_chunks,
         };
 
         // 7. Recognise from the job's checkpoints and the audio, assemble the
@@ -390,7 +411,7 @@ impl Engine {
             now,
         };
         let mut guard = SourceUnchanged(&bound);
-        let outcome = match &recognizer {
+        let selected = match &recognizer {
             SelectedRecognizer::Whisper(cli) => {
                 let chunks = ProcessWorkingDirectory::new(work.path()).map_err(|_| {
                     EngineError::LocalAsrFailed(AsrFailure {
@@ -398,40 +419,35 @@ impl Engine {
                         reason: AsrFailureReason::Workspace,
                     })
                 })?;
-                let whisper =
-                    WhisperSpeechRecognizer::new(cli.clone(), chunks, cancellation.clone());
-                run_retranscription(
-                    run,
-                    RetranscriptionPorts {
-                        store: &store,
-                        audio: &audio,
-                        recognizer: &whisper,
-                        cancellation: &cancellation,
-                        timer: &TokioRetryTimer,
-                        classify: job_failure_code,
-                    },
-                    &mut guard,
-                )
-                .await
+                RunRecognizer::Whisper(WhisperSpeechRecognizer::new(
+                    cli.clone(),
+                    chunks,
+                    cancellation.clone(),
+                ))
             }
             SelectedRecognizer::Host(host) => {
-                let supplied = HostRecognizerRef(host.recognizer.as_ref());
-                run_retranscription(
-                    run,
-                    RetranscriptionPorts {
-                        store: &store,
-                        audio: &audio,
-                        recognizer: &supplied,
-                        cancellation: &cancellation,
-                        timer: &TokioRetryTimer,
-                        classify: job_failure_code,
-                    },
-                    &mut guard,
-                )
-                .await
+                RunRecognizer::Host(HostRecognizerRef(host.recognizer.as_ref()))
             }
-        }
-        .map_err(EngineError::from)?;
+        };
+        let running = run_retranscription(
+            run,
+            RetranscriptionPorts {
+                store: &store,
+                audio: &audio,
+                recognizer: &selected,
+                cancellation: &cancellation,
+                timer: &TokioRetryTimer,
+                classify: job_failure_code,
+            },
+            &mut guard,
+        );
+        // A `job cancel` from another process only records the request;
+        // this run notices it within the poll interval and stops its
+        // provider instead of finishing the chunk first.
+        let outcome = store
+            .watch_for_job_cancel(&spec.session_id, &spec.job_id, &cancellation, running)
+            .await
+            .map_err(|error| EngineError::from_job_run(error, &request.session))?;
         drop(audio);
         drop(work);
         drop(bound);
@@ -703,6 +719,7 @@ pub(crate) const fn snapshot_storage_error(error: &SourceError) -> SessionStorag
         | SourceError::NotRegularFile
         | SourceError::Deadline
         | SourceError::ChangedDuringStage
+        | SourceError::Cancelled
         | SourceError::Io(_) => SessionStorageError::Io,
     }
 }
@@ -777,6 +794,35 @@ impl<Recognizer: SpeechRecognizer> HostSpeechRecognizer for Recognizer {
 }
 
 struct HostRecognizerRef<'a>(&'a dyn HostSpeechRecognizer);
+
+/// The recognizer one retranscription runs with, chosen before it starts,
+/// so the job runs through a single call whichever it is.
+enum RunRecognizer<'a> {
+    /// whisper.cpp in the session's work directory.
+    Whisper(WhisperSpeechRecognizer),
+    /// The embedding host's recognizer.
+    Host(HostRecognizerRef<'a>),
+}
+
+impl SpeechRecognizer for RunRecognizer<'_> {
+    async fn identity(&self) -> Result<RecognizerIdentity, SpeechRecognitionError> {
+        match self {
+            Self::Whisper(whisper) => whisper.identity().await,
+            Self::Host(host) => host.identity().await,
+        }
+    }
+
+    async fn recognize(
+        &self,
+        chunk: &PlannedChunk,
+        pcm: &SpeechPcm,
+    ) -> Result<ProviderChunkOutput, SpeechRecognitionError> {
+        match self {
+            Self::Whisper(whisper) => whisper.recognize(chunk, pcm).await,
+            Self::Host(host) => host.recognize(chunk, pcm).await,
+        }
+    }
+}
 
 impl SpeechRecognizer for HostRecognizerRef<'_> {
     async fn identity(&self) -> Result<RecognizerIdentity, SpeechRecognitionError> {

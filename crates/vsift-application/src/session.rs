@@ -18,6 +18,24 @@ use crate::{
     },
 };
 
+/// A caller's request that a long stage stop at its next boundary (P10 PR 3):
+/// the first Ctrl-C or `SIGTERM` of a command-line run, or a library host's
+/// cancellation. Adapters check it between bounded units of work.
+pub trait StageCancellation: Send + Sync {
+    /// Whether the caller has asked the stage to stop.
+    fn is_cancelled(&self) -> bool;
+}
+
+/// A stage nobody can cancel, for callers without a cancellation signal.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NeverCancelled;
+
+impl StageCancellation for NeverCancelled {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
 /// A held, verified source snapshot produced by an infrastructure adapter.
 pub trait StagedSessionSource {
     /// Hash identity of the private bytes.
@@ -45,16 +63,19 @@ pub trait ForegroundSessionPort: SessionStore {
         now_unix_seconds: u64,
     ) -> Result<Self::Registration, OpenSessionError>;
 
-    /// Copies and hashes one selected local source under the session capability.
+    /// Copies and hashes one selected local source under the session
+    /// capability, checking `cancellation` between bounded blocks.
     ///
     /// # Errors
     ///
-    /// Rejects unsafe, changed, or unreadable input and storage failures.
+    /// Rejects unsafe, changed, or unreadable input and storage failures;
+    /// [`OpenSessionError::Cancelled`] when the caller stopped the copy.
     fn stage_source(
         &self,
         session_id: &SessionId,
         operation_id: &OperationId,
         source: &std::path::Path,
+        cancellation: &dyn StageCancellation,
     ) -> Result<Self::Snapshot, OpenSessionError>;
 
     /// Publishes source binding and expiry in a fenced immutable generation.
@@ -140,6 +161,10 @@ pub enum OpenSessionError {
     TranscriptRejected(TranscriptImportError),
     /// An assembled transcript revision violated an invariant (internal fault).
     TranscriptInvalid(TranscriptRevisionError),
+    /// The caller cancelled while the source was copied; nothing was
+    /// activated, and the unactivated registration is cleaned like any
+    /// interrupted open.
+    Cancelled,
 }
 
 impl fmt::Display for OpenSessionError {
@@ -154,6 +179,7 @@ impl fmt::Display for OpenSessionError {
             Self::SourceProbe(error) => error.fmt(formatter),
             Self::TranscriptRejected(error) => error.fmt(formatter),
             Self::TranscriptInvalid(error) => error.fmt(formatter),
+            Self::Cancelled => formatter.write_str("opening the session was cancelled"),
         }
     }
 }
@@ -186,8 +212,9 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
     pub async fn execute(
         &self,
         request: OpenSessionRequest,
+        cancellation: &dyn StageCancellation,
     ) -> Result<OpenSessionOutcome, OpenSessionError> {
-        let prepared = self.prepare(&request).await?;
+        let prepared = self.prepare(&request, cancellation).await?;
         let generation = self.port.activate(
             &prepared.snapshot,
             &request.activate_operation_id,
@@ -216,11 +243,12 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
         request: OpenSessionRequest,
         import: &TranscriptImportRequest,
         probe: &P,
+        cancellation: &dyn StageCancellation,
     ) -> Result<(OpenSessionOutcome, TranscriptRevision), OpenSessionError>
     where
         P: SourceDurationProbe<S::Snapshot>,
     {
-        let prepared = self.prepare(&request).await?;
+        let prepared = self.prepare(&request, cancellation).await?;
         let duration = probe
             .source_duration(&prepared.snapshot)
             .await
@@ -254,6 +282,7 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
     async fn prepare(
         &self,
         request: &OpenSessionRequest,
+        cancellation: &dyn StageCancellation,
     ) -> Result<PreparedOpen<S::Registration, S::Snapshot>, OpenSessionError> {
         let capabilities = self.port.capabilities();
         if !capabilities.supports(request.durability) {
@@ -281,6 +310,7 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
             &request.session_id,
             &request.stage_operation_id,
             &request.source,
+            cancellation,
         )?;
         Ok(PreparedOpen {
             _registration: registration,
@@ -401,6 +431,7 @@ mod tests {
             _session_id: &SessionId,
             _operation_id: &OperationId,
             _source: &std::path::Path,
+            _cancellation: &dyn super::StageCancellation,
         ) -> Result<Self::Snapshot, OpenSessionError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Err(SessionStorageError::Io.into())
@@ -438,15 +469,18 @@ mod tests {
             calls: Arc::clone(&calls),
         });
         let result = use_case
-            .execute(OpenSessionRequest {
-                source: PathBuf::from("unused"),
-                session_id: SessionId::parse("ses_0123456789abcdef")?,
-                initialize_operation_id: OperationId::parse("op_0123456789abcdef")?,
-                stage_operation_id: OperationId::parse("op_1111111111111111")?,
-                activate_operation_id: OperationId::parse("op_2222222222222222")?,
-                durability: DurabilityRequirement::Durable,
-                now_unix_seconds: 1_000,
-            })
+            .execute(
+                OpenSessionRequest {
+                    source: PathBuf::from("unused"),
+                    session_id: SessionId::parse("ses_0123456789abcdef")?,
+                    initialize_operation_id: OperationId::parse("op_0123456789abcdef")?,
+                    stage_operation_id: OperationId::parse("op_1111111111111111")?,
+                    activate_operation_id: OperationId::parse("op_2222222222222222")?,
+                    durability: DurabilityRequirement::Durable,
+                    now_unix_seconds: 1_000,
+                },
+                &super::NeverCancelled,
+            )
             .await;
         assert_eq!(
             result,
@@ -565,6 +599,7 @@ mod transcript_open_tests {
             _session_id: &SessionId,
             _operation_id: &OperationId,
             _source: &std::path::Path,
+            _cancellation: &dyn super::StageCancellation,
         ) -> Result<Self::Snapshot, OpenSessionError> {
             Ok(Snapshot(
                 SourceId::from_sha256(DIGEST).map_err(|_| OpenSessionError::InvalidSource)?,
@@ -667,6 +702,7 @@ mod transcript_open_tests {
                 request()?,
                 &f10_import(500_000)?,
                 &FixedDuration(Ok(MediaTime::from_micros(12_000_000))),
+                &super::NeverCancelled,
             )
             .await?;
 
@@ -699,6 +735,7 @@ mod transcript_open_tests {
                 request()?,
                 &f10_import(-20_000_000)?,
                 &FixedDuration(Ok(MediaTime::from_micros(12_000_000))),
+                &super::NeverCancelled,
             )
             .await;
 
@@ -722,6 +759,7 @@ mod transcript_open_tests {
                 request()?,
                 &f10_import(0)?,
                 &FixedDuration(Err(SourceProbeError::InvalidSource)),
+                &super::NeverCancelled,
             )
             .await;
 

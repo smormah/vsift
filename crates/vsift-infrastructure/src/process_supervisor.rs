@@ -241,15 +241,26 @@ impl ProcessRequest {
 }
 
 /// A clonable caller-cancellation signal for a supervised process operation.
+///
+/// It has two steps. [`ProcessCancellation::cancel`] stops the operation at
+/// its next boundary and stops a running provider tree gracefully (on Unix a
+/// `SIGTERM` to its process group, then a kill after the graceful budget).
+/// [`ProcessCancellation::escalate`] additionally skips whatever remains of
+/// that graceful wait, so a caller that asked twice (a second Ctrl-C) waits
+/// only for the forced kill and the reap, never for a provider that ignores
+/// `SIGTERM`. Neither step ever abandons a provider: the supervisor still
+/// reaps the whole tree before it returns (SEC-04).
 #[derive(Clone, Debug)]
 pub struct ProcessCancellation {
     sender: watch::Sender<CancellationState>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// The steps of a cancellation, in order; a signal only moves forward.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum CancellationState {
     Active,
     Cancelled,
+    Escalated,
 }
 
 impl ProcessCancellation {
@@ -262,25 +273,61 @@ impl ProcessCancellation {
 
     /// Requests cancellation. Repeated requests are idempotent.
     pub fn cancel(&self) {
-        self.sender.send_replace(CancellationState::Cancelled);
+        self.advance(CancellationState::Cancelled);
+    }
+
+    /// Requests cancellation and that running providers be killed without
+    /// the graceful wait. Implies [`ProcessCancellation::cancel`];
+    /// repeated requests are idempotent.
+    pub fn escalate(&self) {
+        self.advance(CancellationState::Escalated);
     }
 
     /// Reports whether cancellation was already requested.
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
-        *self.sender.borrow() == CancellationState::Cancelled
+        *self.sender.borrow() >= CancellationState::Cancelled
     }
 
-    async fn cancelled(&self) {
+    /// Reports whether the graceful stop was skipped by a second request.
+    #[must_use]
+    pub fn is_escalated(&self) -> bool {
+        *self.sender.borrow() == CancellationState::Escalated
+    }
+
+    fn advance(&self, next: CancellationState) {
+        self.sender.send_if_modified(|state| {
+            if *state < next {
+                *state = next;
+                true
+            } else {
+                false
+            }
+        });
+    }
+
+    async fn reached(&self, step: CancellationState) {
         let mut receiver = self.sender.subscribe();
         loop {
-            if *receiver.borrow_and_update() == CancellationState::Cancelled {
+            if *receiver.borrow_and_update() >= step {
                 return;
             }
             if receiver.changed().await.is_err() {
                 return;
             }
         }
+    }
+
+    async fn cancelled(&self) {
+        self.reached(CancellationState::Cancelled).await;
+    }
+
+    /// Resolves once the cancellation is escalated. A caller races it
+    /// against the graceful wait only, so a dropped sender (impossible while
+    /// `self` lives) could never end a wait early.
+    #[cfg(unix)]
+    async fn escalated(&self) {
+        self.reached(CancellationState::Escalated).await;
     }
 }
 
@@ -317,7 +364,9 @@ pub enum TerminationReason {
     Exited,
     /// The operation deadline elapsed.
     Deadline,
-    /// The caller cancellation signal won the terminal transition.
+    /// The caller cancellation signal won the terminal transition, or the
+    /// provider ended unsuccessfully after cancellation was requested (see
+    /// [`completed_termination`]).
     Cancelled,
     /// A provider emitted more than the configured output budget.
     OutputLimit(OutputStream),
@@ -439,17 +488,20 @@ impl ProcessSupervisor {
         .await;
 
         let (status, termination) = match trigger {
-            Trigger::Completed(status) => (status, TerminationReason::Exited),
+            Trigger::Completed(status) => (
+                status,
+                completed_termination(status, cancellation.is_cancelled()),
+            ),
             Trigger::Deadline => (
-                terminate_and_reap(spawned.child.as_mut(), self.policy).await?,
+                terminate_and_reap(spawned.child.as_mut(), self.policy, &cancellation).await?,
                 TerminationReason::Deadline,
             ),
             Trigger::Cancelled => (
-                terminate_and_reap(spawned.child.as_mut(), self.policy).await?,
+                terminate_and_reap(spawned.child.as_mut(), self.policy, &cancellation).await?,
                 TerminationReason::Cancelled,
             ),
             Trigger::OutputLimit(stream) => (
-                terminate_and_reap(spawned.child.as_mut(), self.policy).await?,
+                terminate_and_reap(spawned.child.as_mut(), self.policy, &cancellation).await?,
                 TerminationReason::OutputLimit(stream),
             ),
             Trigger::ProcessWaitFailed(error) => {
@@ -811,22 +863,32 @@ async fn collect_after_exit(
     }
 }
 
+/// Stops the tree gracefully where the platform can (Unix: `SIGTERM` to the
+/// process group, at most the graceful budget, cut short by an escalated
+/// cancellation), then kills and reaps it within the forced budget.
 async fn terminate_and_reap(
     child: &mut dyn ChildWrapper,
     policy: SupervisorPolicy,
+    cancellation: &ProcessCancellation,
 ) -> Result<ExitStatus, ProcessError> {
     #[cfg(unix)]
-    {
+    if !cancellation.is_escalated() {
         const SIGTERM: i32 = 15;
-        if child.signal(SIGTERM).is_ok()
-            && let Ok(result) = timeout(policy.graceful_shutdown, child.wait()).await
-        {
-            return result.map_err(ProcessError::Wait);
+        if child.signal(SIGTERM).is_ok() {
+            let graceful = tokio::select! {
+                biased;
+                () = cancellation.escalated() => None,
+                result = timeout(policy.graceful_shutdown, child.wait()) => result.ok(),
+            };
+            if let Some(result) = graceful {
+                return result.map_err(ProcessError::Wait);
+            }
         }
     }
 
+    // Windows has no graceful tree stop: the Job Object is killed at once.
     #[cfg(not(unix))]
-    let _ = policy.graceful_shutdown;
+    let _ = (policy.graceful_shutdown, cancellation);
 
     force_terminate_and_reap(child, policy.forced_shutdown).await
 }
@@ -844,6 +906,26 @@ async fn force_terminate_and_reap(
     match timeout(forced_shutdown, child.wait()).await {
         Ok(result) => result.map_err(ProcessError::Wait),
         Err(_) => Err(ProcessError::ReapDeadlineExceeded),
+    }
+}
+
+/// Why a provider that ended by itself stopped.
+///
+/// A provider that failed after the caller asked the operation to stop is
+/// reported as cancelled, not as its own failure: a console Ctrl-C or
+/// Ctrl-Break reaches every process attached to the console, so on Windows
+/// `FFmpeg` or whisper.cpp can die of the very interrupt that cancelled the
+/// caller before the supervisor stops it. Reporting that as a decoding or
+/// recognition failure would record a false gap (an `undecodable` window, a
+/// failed chunk counting towards poisoning it) for media that is fine. A
+/// provider that succeeded keeps its result; the caller's next boundary
+/// sees the cancellation.
+#[must_use]
+pub fn completed_termination(status: ExitStatus, cancel_requested: bool) -> TerminationReason {
+    if cancel_requested && !status.success() {
+        TerminationReason::Cancelled
+    } else {
+        TerminationReason::Exited
     }
 }
 
@@ -1034,6 +1116,7 @@ mod tests {
     use super::{
         HostIsolation, IsolationRequirement, ProcessCancellation, ProcessError, ProcessRequest,
         ProcessRequestError, ProcessSupervisor, ProcessWorkingDirectory, SupervisorPolicy,
+        TerminationReason, completed_termination,
     };
 
     #[test]
@@ -1094,6 +1177,113 @@ mod tests {
 
             tokio::time::timeout(Duration::from_secs(1), waiter).await??;
         }
+        Ok(())
+    }
+
+    /// A provider that failed once the caller had cancelled is cancelled
+    /// (it may have died of the same console interrupt); a success, or a
+    /// failure nobody cancelled, is the provider's own exit.
+    #[test]
+    fn a_failure_after_cancellation_is_the_cancellation() {
+        #[cfg(windows)]
+        let (success, failure) = {
+            use std::os::windows::process::ExitStatusExt;
+            (
+                std::process::ExitStatus::from_raw(0),
+                std::process::ExitStatus::from_raw(0xC000_013A),
+            )
+        };
+        #[cfg(unix)]
+        let (success, failure) = {
+            use std::os::unix::process::ExitStatusExt;
+            (
+                std::process::ExitStatus::from_raw(0),
+                std::process::ExitStatus::from_raw(2),
+            )
+        };
+        assert_eq!(
+            completed_termination(failure, true),
+            TerminationReason::Cancelled
+        );
+        assert_eq!(
+            completed_termination(failure, false),
+            TerminationReason::Exited
+        );
+        assert_eq!(
+            completed_termination(success, true),
+            TerminationReason::Exited
+        );
+    }
+
+    /// A cancellation only moves forward: escalating implies cancelling, a
+    /// later plain cancel keeps it escalated, and a waiter for the first
+    /// step is released by the second.
+    #[tokio::test]
+    async fn escalation_implies_cancellation_and_never_goes_back()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let cancellation = ProcessCancellation::new();
+        assert!(!cancellation.is_cancelled() && !cancellation.is_escalated());
+        let waiter_signal = cancellation.clone();
+        let waiter = tokio::spawn(async move { waiter_signal.cancelled().await });
+        tokio::task::yield_now().await;
+
+        cancellation.escalate();
+        tokio::time::timeout(Duration::from_secs(1), waiter).await??;
+        cancellation.cancel();
+        assert!(cancellation.is_cancelled() && cancellation.is_escalated());
+
+        let plain = ProcessCancellation::new();
+        plain.cancel();
+        assert!(plain.is_cancelled() && !plain.is_escalated());
+        Ok(())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod unix_tests {
+    use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
+
+    use tokio::time::Instant;
+
+    use super::{
+        HostIsolation, ProcessCancellation, ProcessRequest, ProcessSupervisor,
+        ProcessWorkingDirectory, SupervisorPolicy, TerminationReason,
+    };
+
+    /// SEC-04 with a second request: a provider tree that ignores `SIGTERM`
+    /// would hold a plain cancellation for the whole graceful budget; an
+    /// escalation kills it at once, and the supervisor still returns only
+    /// after reaping it.
+    #[tokio::test]
+    async fn an_escalated_cancellation_skips_the_graceful_wait()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let shell = crate::TrustedExecutable::explicit(PathBuf::from("/bin/sh"))?;
+        let directory = ProcessWorkingDirectory::new(std::env::temp_dir())?;
+        let request = ProcessRequest::new(shell, directory, Duration::from_secs(60))?
+            .with_arguments(["-c", "trap '' TERM; /bin/sleep 30"]);
+        let limit = NonZeroUsize::new(1024).ok_or("test limit must be non-zero")?;
+        let supervisor = ProcessSupervisor::new(
+            SupervisorPolicy::new(limit, Duration::from_secs(30), Duration::from_secs(5)),
+            HostIsolation::ProcessOnly,
+        );
+        let cancellation = ProcessCancellation::new();
+        let signal = cancellation.clone();
+        let started = Instant::now();
+        let stopper = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            signal.cancel();
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            signal.escalate();
+        });
+
+        let outcome = supervisor.run(request, cancellation).await?;
+        stopper.await?;
+
+        assert_eq!(outcome.termination, TerminationReason::Cancelled);
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the graceful wait was not skipped"
+        );
         Ok(())
     }
 }

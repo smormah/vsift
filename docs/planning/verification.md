@@ -294,6 +294,40 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
+## 2026-09-27 P10 PR 3 evidence (job surface and interruptions, branch `p10/job-surface`)
+
+P10 is in progress; this records the third of its four pull requests (ADR 0020 "PR 3"
+notes). CLI tests are in `crates/vsift-cli/tests/job_cli_contract.rs` (jobs put in each
+state through the application's use case over the real store; the test process holds
+a job to stand for a live owner in another process), `interrupt_cli_contract.rs` and
+the opt-in `p10_recovery_e2e.rs`; contract tests in `vsift-contract`'s
+`local_asr_contract`.
+
+| Gate | Mechanical evidence |
+| --- | --- |
+| X-06 (CLI) | `a_live_job_is_busy_and_cancel_only_asks_its_owner` (admitting and running: `job cancel` twice answers `cancelling`, the owner sees the request, `job resume` is `BUSY`; after the owner ends, status reconciles `cancelled`); `a_cancel_while_committing_is_too_late` (twice `committing` with `cancellation_too_late`; the owner ending without its commit leaves `interrupted`, never cancelled); `an_interrupted_job_is_cancelled_and_its_checkpoints_removed` (and a repeat changes nothing); `a_succeeded_job_reports_its_result_and_a_late_cancel_changes_nothing`; `the_owner_notices_a_cancel_request_within_its_poll_interval` (storage: the watcher fires the run's cancellation within one 250 ms poll of another process's request); `a_failure_after_the_callers_cancellation_is_the_cancellation` and `a_failure_after_cancellation_is_the_cancellation` (a provider that died of the interrupt is recorded as cancelled, never as its own failure); `an_escalated_cancellation_skips_the_graceful_wait` (Unix, CI: a tree ignoring `SIGTERM` is killed at once on escalation and still reaped) |
+| X-06 (signals) | Unix, in CI: `sigint_cancels_an_ingest_copy`, `sigterm_cancels_an_ingest_copy` (a 16 GiB sparse copy interrupted once it began: one terminal result, `CANCELLED`, exit 6, within 10 s, the partial copy removed). Windows, opt-in: `console_interrupts_cancel_an_ingest_copy` through `tools/send-console-ctrl.ps1` (Ctrl-Break; Ctrl-C too with `VSIFT_TEST_CONSOLE_CTRL_C`, see L-053); `a_cancelled_copy_stops_and_leaves_no_partial_file` (storage) |
+| X-02/X-03 (CLI) | `an_operation_id_reused_for_another_request_conflicts_through_the_flag`: with no tool on `PATH`, `--operation-id` with another range is `IDEMPOTENCY_CONFLICT` (exit 2, not retryable, the job named) and the same request replays (`replayed: true`) without a new generation; malformed ids are `parse` failures (`job_grammar_is_validated_before_any_io`) |
+| X-09 (CLI) | `BUSY` for a live job carries `retry_after_ms` 2000 and the job in `affected_ids` through the binary; unknown jobs, ended jobs and closed sessions are `INVALID_ARGUMENT` with fixed remediation (`an_unknown_job_is_an_invalid_argument`, `a_closed_sessions_job_cannot_resume`) |
+| Contract | `job-data` and `job-resume-data` schemas; frozen `job-status.json`, `job-cancel.json`, `job-resume.json`, `retranscribe-cancelled.json`; every state, resumability and failure code schema-valid; `session status` `jobs` additive |
+| #144 | `concurrent_preflights_all_proceed_and_leave_one_valid_record` waits up to 60 s through `EnginePorts::with_session_root_wait`; `the_session_root_wait_is_injectable_and_bounded` |
+| Stress (Windows 11, 4 parallel lanes) | the watcher test 120 of 120 runs; the whole `job_cli_contract` suite 120 of 120 runs (960 tests); the opt-in console-interrupt test 40 of 40 runs |
+
+**Recoverable mechanical run** (`p10_recovery_e2e`, opt-in, debug build, Windows 11,
+FFmpeg 9.0, whisper.cpp v1.9.2 base model; passed 2026-09-27 in 756 s):
+
+| Stage | Result |
+| --- | --- |
+| `p10_local_asr_journey` | 81 s clip, 4 chunks, control retranscription 127.5 s; the term heard in all 9 loops; the first-loop segment 3.1-8.7 s inside the speech span; candidate at 4.0 s inside F03-E02; the cell crop red (203, 92, 88); retain (8 artifacts) and `bundle validate` with the cited segment and the frame, crop and clip lineage |
+| `p10_kill_and_resume` | killed after its first checkpoint: `interrupted`, 1 checkpoint kept, nothing committed; the same command resumed it (1 chunk reused, 75.0 s) to the control run's 15 segments; a damaged committed transcript record is `INTEGRITY_FAILURE` |
+| `p10_interrupt_and_job_resume` | console Ctrl-Break after the first checkpoint: `CANCELLED` exit 6 in 1.3 s with the session and job and `vsift job resume <job>`; the providers seen before it (whisper.cpp and the console host) gone within 10 s; a damaged checkpoint discarded by `job resume` (`checkpoint_discarded`), which committed the control segments (79.6 s) |
+| `p10_job_cancel_twice` | two `job cancel` answers `cancelling`; the owner answered `CANCELLED` 0.4 s after the first; the job `cancelled` without checkpoints; no generation; no provider left |
+| `p10_operation_replay` | killed as its commit's pointer moved (the job already `succeeded`); the same request and `--operation-id` replayed in 0.14 s without a new generation; another range with the id `IDEMPOTENCY_CONFLICT` |
+| `p10_interrupt_candidates` | 492 s clip, control call 21.9 s; Ctrl-Break at 10.9 s: `partial`, ended in 2.0 s, no provider left; the rerun completed in 6.5 s to the control's candidates |
+
+Not covered here: OS or storage crashes (PR 4); on Unix the E2E interruption is
+`SIGINT` and has not been run by this change (CI runs the ingest-copy signal tests).
+
 ## 2026-09-27 P10 PR 2 evidence (jobs and checkpointed retranscription, branch `p10/jobs-checkpoints`)
 
 P10 is in progress; this records the second of its four pull requests

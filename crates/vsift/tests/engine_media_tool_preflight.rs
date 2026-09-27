@@ -27,11 +27,11 @@ use std::{
 
 use tokio::sync::Barrier;
 use vsift::{
-    Clock, ClockError, Engine, EngineConfig, EngineError, EnginePorts, FailureCode, HostIsolation,
-    IdentifierGenerationError, IdentifierSource, IngestRequest, MediaToolCheck, MediaToolFailure,
-    MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier, OpenSessionError,
-    OperationId, RuntimeDependency, SessionId, SessionRootLocation, SuppliedTranscriptRequest,
-    UserConfigurationLocation,
+    Cancellation, Clock, ClockError, Engine, EngineConfig, EngineError, EnginePorts, FailureCode,
+    HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
+    MAX_SESSION_ROOT_WAIT, MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure,
+    MediaToolVerification, MediaToolVerifier, OpenSessionError, OperationId, RuntimeDependency,
+    SessionId, SessionRootLocation, SuppliedTranscriptRequest, UserConfigurationLocation,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -183,7 +183,12 @@ impl Harness {
     }
 
     fn engine(&self, verifier: Option<&CountingVerifier>) -> Engine {
-        let ports = EnginePorts::new(self.clock.clone(), self.identifiers.clone());
+        // Six engines race to create one root; on a throttled runner the
+        // creator once outlasted the production five-second wait and a racer
+        // got the documented `BUSY` (issue #144). The convergence this file
+        // checks is not about that bound, so racers wait up to the maximum.
+        let ports = EnginePorts::new(self.clock.clone(), self.identifiers.clone())
+            .with_session_root_wait(MAX_SESSION_ROOT_WAIT);
         let ports = match verifier {
             Some(verifier) => ports.with_media_tool_verifier(verifier.clone()),
             None => ports,
@@ -232,6 +237,7 @@ impl Harness {
                 path: self.write("captions.srt", SIDECAR)?,
                 offset_micros: 0,
             }),
+            cancellation: Cancellation::new(),
         })
     }
 }
@@ -482,6 +488,7 @@ impl Harness {
                 path: self.write(&format!("captions-{index}.srt"), SIDECAR)?,
                 offset_micros: 0,
             }),
+            cancellation: Cancellation::new(),
         })
     }
 }
@@ -545,6 +552,7 @@ async fn plain_ingest_setup_and_rejected_transcripts_never_run_the_preflight() -
         .ingest(IngestRequest {
             source: harness.write("plain.mp4", PLACEHOLDER_SOURCE)?,
             transcript: None,
+            cancellation: Cancellation::new(),
         })
         .await?;
     let rejected = engine
@@ -554,6 +562,7 @@ async fn plain_ingest_setup_and_rejected_transcripts_never_run_the_preflight() -
                 path: harness.write("bad.srt", b"not a transcript")?,
                 offset_micros: 0,
             }),
+            cancellation: Cancellation::new(),
         })
         .await;
 
@@ -585,6 +594,7 @@ fn f10_request() -> IngestRequest {
             path: repository("fixtures/corpus/transcripts/F10.srt"),
             offset_micros: 500_000,
         }),
+        cancellation: Cancellation::new(),
     }
 }
 

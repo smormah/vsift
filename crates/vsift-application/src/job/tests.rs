@@ -197,6 +197,9 @@ enum Fault {
     Fails(SpeechRecognitionError),
     /// Sets the shared flag (a cancellation or an interruption) first.
     Raises,
+    /// Sets the shared flag, then fails with this error: a provider that
+    /// died of the same console interrupt that cancelled the caller.
+    RaisesAndFails(SpeechRecognitionError),
 }
 
 /// A deterministic recognizer: chunk `i` always says the same words.
@@ -269,6 +272,10 @@ impl SpeechRecognizer for FakeRecognizer {
             Some(Fault::Raises) => {
                 self.flag.store(true, Ordering::SeqCst);
                 words(chunk)
+            }
+            Some(Fault::RaisesAndFails(error)) => {
+                self.flag.store(true, Ordering::SeqCst);
+                Err(error)
             }
             None => words(chunk),
         };
@@ -775,6 +782,7 @@ impl Harness {
                 operation_key,
                 recognition_key: key,
                 request: JobRequest::Retranscribe { range: requested },
+                planned_chunks: None,
             },
             replaced,
             base: head.newest,
@@ -1242,6 +1250,46 @@ async fn three_identical_failures_at_one_chunk_poison_the_job() -> TestResult {
     let restarted = harness.run(&resolved, None).await?;
     assert!(!restarted.report.resumed);
     assert_eq!(harness.record(&resolved.spec.job_id)?.epoch, 1);
+    Ok(())
+}
+
+/// A provider that fails after the caller cancelled (on Windows a console
+/// Ctrl-C reaches the provider too) is recorded as the cancellation: the
+/// job stays interrupted and resumable, the failure never counts towards
+/// poisoning its chunk, and the caller is told `CANCELLED`.
+#[tokio::test]
+async fn a_failure_after_the_callers_cancellation_is_the_cancellation() -> TestResult {
+    let harness = Harness::new()?;
+    harness
+        .recognizer
+        .fault_at(1, Fault::RaisesAndFails(SpeechRecognitionError::Io));
+    let resolved = harness.resolve(None)?;
+    for attempt in 1..=3 {
+        harness.recognizer.flag.store(false, Ordering::SeqCst);
+        let failure = harness.run(&resolved, None).await;
+        assert!(
+            matches!(&failure, Err(JobRunError::Asr { failure, .. })
+                if failure.chunk == Some(1)
+                    && failure.failure.reason == AsrFailureReason::Cancelled),
+            "attempt {attempt}: {failure:?}"
+        );
+        let record = harness.record(&resolved.spec.job_id)?;
+        assert_eq!(record.state, JobState::Interrupted, "attempt {attempt}");
+        assert!(
+            record
+                .failures
+                .iter()
+                .all(|failure| failure.code == FailureCode::Cancelled)
+        );
+    }
+    assert_eq!(harness.publishes()?, 0);
+    assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 1);
+
+    harness.recognizer.clear();
+    harness.recognizer.flag.store(false, Ordering::SeqCst);
+    let resumed = harness.run(&resolved, None).await?;
+    assert!(resumed.report.resumed);
+    assert_eq!(resumed.report.chunks_reused, 1);
     Ok(())
 }
 

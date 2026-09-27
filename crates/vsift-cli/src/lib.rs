@@ -6,46 +6,85 @@ mod candidates;
 mod command;
 mod config;
 mod evidence;
+mod job;
 mod json_input;
 mod output;
 mod search;
 mod session;
 mod setup;
+mod signal;
 
 use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode};
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{
-    BundleCommand, Cli, Command, EventFormat, ExecutionProfile, SetupCommand, TranscriptCommand,
+    BundleCommand, Cli, Command, EventFormat, ExecutionProfile, JobCommand, SetupCommand,
+    TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{JsonLines, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
-    DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
+    Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
     EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, SessionRootLocation,
     SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
 };
 use vsift_contract::{
     CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
     ConfiguredSelectionResponse, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
-    JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SUPERSEDED_REMEDIATION, TerminalEventResponse,
+    JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION,
+    JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION,
+    LOCAL_ASR_TOOLS_REMEDIATION, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
+    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, NO_VIDEO_STREAM_REMEDIATION,
+    OperationResponse, SUPERSEDED_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
     UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION,
     local_asr_failure_summary, local_asr_verification_summary, media_tool_verification_summary,
     non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
+///
+/// Long commands trap console interruptions (see the `signal` module): the
+/// first cancels the command, the second escalates the stop of its provider
+/// processes, and the process ends only after its command has returned.
 pub async fn run() -> ExitCode {
     let status = execute_with(
         std::env::args_os(),
         io::stdout().lock(),
         io::stderr().lock(),
         EnginePorts::system(),
+        Interruption::Trapped,
     )
     .await;
     ExitCode::from(status.code())
+}
+
+/// Whether long commands trap console interruptions. Only the process entry
+/// point traps them; in-process tests keep the default, so a test runner's
+/// own Ctrl-C still ends it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Interruption {
+    /// `SIGINT`/`SIGTERM` or Ctrl-C/Ctrl-Break cancel the running command.
+    Trapped,
+    /// Nothing is trapped (in-process tests only).
+    #[cfg(test)]
+    Default,
+}
+
+/// Whether `command` runs long enough (copying, decoding, recognising) that
+/// an interruption must cancel it rather than end the process.
+const fn is_long_running(command: &Command) -> bool {
+    match command {
+        Command::Ingest(_)
+        | Command::Candidates(_)
+        | Command::Frame(_)
+        | Command::Crop(_)
+        | Command::Audio(_) => true,
+        Command::Transcript(arguments) => {
+            matches!(arguments.command, TranscriptCommand::Retranscribe(_))
+        }
+        Command::Job(arguments) => matches!(arguments.command, JobCommand::Resume(_)),
+        Command::Setup(_) | Command::Session(_) | Command::Search(_) | Command::Bundle(_) => false,
+    }
 }
 
 /// Builds the engine a command-line invocation uses.
@@ -76,6 +115,7 @@ async fn execute_with<Arguments, Argument, StandardOutput, StandardError>(
     standard_output: StandardOutput,
     standard_error: StandardError,
     ports: EnginePorts,
+    interruption: Interruption,
 ) -> ProcessExit
 where
     Arguments: IntoIterator<Item = Argument>,
@@ -126,6 +166,13 @@ where
         return write_root_help(&mut writer);
     };
     let engine = compose_engine(cli.session_root, ports);
+    // One cancellation for the whole command; registered before any work
+    // starts, so an early interruption is not missed. A handler the system
+    // refuses leaves the default behaviour, which commits nothing partial.
+    let cancellation = Cancellation::new();
+    let _interrupts = (interruption == Interruption::Trapped && is_long_running(&command))
+        .then(|| signal::listen(cancellation.clone()).ok())
+        .flatten();
     match command {
         Command::Setup(arguments) => match arguments.command {
             Some(SetupCommand::Check(arguments)) => {
@@ -287,7 +334,7 @@ where
             ) => not_implemented(&mut writer, mode, reserved.operation_name()),
         },
         Command::Ingest(arguments) => {
-            let result = session::ingest(&engine, arguments).await;
+            let result = session::ingest(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Ingest, result)
         }
         Command::Transcript(arguments) => {
@@ -302,7 +349,7 @@ where
                     write_session_result(&mut writer, mode, operation, result)
                 }
                 TranscriptCommand::Retranscribe(arguments) => {
-                    let result = session::retranscribe(&engine, arguments).await;
+                    let result = session::retranscribe(&engine, arguments, &cancellation).await;
                     write_session_result(&mut writer, mode, operation, result)
                 }
             }
@@ -330,41 +377,53 @@ where
             write_session_result(&mut writer, mode, CommandName::Search, result)
         }
         Command::Candidates(arguments) if mode == OutputMode::JsonLines => {
-            let result = candidates::candidates_stream(&engine, arguments).await;
+            let result = candidates::candidates_stream(&engine, arguments, &cancellation).await;
             write_evidence_stream(&mut writer, CommandName::Candidates, result)
         }
         Command::Candidates(arguments) => {
-            let result = candidates::candidates(&engine, arguments).await;
+            let result = candidates::candidates(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Candidates, result)
         }
         Command::Frame(arguments) if mode == OutputMode::JsonLines => {
             let operation = arguments.command.operation_name();
-            let result = evidence::frame_stream(&engine, arguments.command).await;
+            let result = evidence::frame_stream(&engine, arguments.command, &cancellation).await;
             write_evidence_stream(&mut writer, operation, result)
         }
         Command::Frame(arguments) => {
             let operation = arguments.command.operation_name();
-            let result = evidence::frame(&engine, arguments.command).await;
+            let result = evidence::frame(&engine, arguments.command, &cancellation).await;
             write_session_result(&mut writer, mode, operation, result)
         }
         Command::Crop(arguments) if mode == OutputMode::JsonLines => {
-            let result = evidence::crop_stream(&engine, arguments).await;
+            let result = evidence::crop_stream(&engine, arguments, &cancellation).await;
             write_evidence_stream(&mut writer, CommandName::Crop, result)
         }
         Command::Crop(arguments) => {
-            let result = evidence::crop(&engine, arguments).await;
+            let result = evidence::crop(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Crop, result)
         }
         Command::Audio(arguments) if mode == OutputMode::JsonLines => {
-            let result = evidence::audio_stream(&engine, arguments).await;
+            let result = evidence::audio_stream(&engine, arguments, &cancellation).await;
             write_evidence_stream(&mut writer, CommandName::Audio, result)
         }
         Command::Audio(arguments) => {
-            let result = evidence::audio(&engine, arguments).await;
+            let result = evidence::audio(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Audio, result)
         }
         Command::Job(arguments) => {
-            not_implemented(&mut writer, mode, arguments.command.operation_name())
+            let operation = arguments.command.operation_name();
+            let result = match &arguments.command {
+                JobCommand::Status(arguments) => job::status(&engine, arguments),
+                JobCommand::Cancel(arguments) => job::cancel(&engine, arguments),
+                JobCommand::Resume(arguments) => {
+                    job::resume(&engine, arguments, &cancellation).await
+                }
+                // The worker and batch host is P11.
+                JobCommand::Run(_) | JobCommand::Batch(_) => {
+                    return not_implemented(&mut writer, mode, operation);
+                }
+            };
+            write_session_result(&mut writer, mode, operation, result)
         }
     }
 }
@@ -427,6 +486,9 @@ pub(crate) struct CommandFailure {
     remediation: Option<String>,
     retry_after_ms: Option<u64>,
     affected_ids: Vec<String>,
+    /// Arguments of a `vsift` command the remediation suggests, when a
+    /// typed cause names one (`job resume <job>` after an interruption).
+    suggested_command: Vec<String>,
 }
 
 impl CommandFailure {
@@ -437,6 +499,7 @@ impl CommandFailure {
             remediation: Some(summary),
             retry_after_ms: None,
             affected_ids: Vec::new(),
+            suggested_command: Vec::new(),
         }
     }
 }
@@ -448,6 +511,7 @@ impl From<FailureCode> for CommandFailure {
             remediation: None,
             retry_after_ms: None,
             affected_ids: Vec::new(),
+            suggested_command: Vec::new(),
         }
     }
 }
@@ -474,14 +538,29 @@ impl From<EngineError> for CommandFailure {
                     .map(search_query_rejection_summary)
             })
             .or_else(|| local_asr_remediation(&error));
+        // The session first, then the job: the order an agent resolves them.
+        let affected_ids = error
+            .affected_session()
+            .map(|session| session.as_str().to_owned())
+            .into_iter()
+            .chain(error.affected_job().map(|job| job.as_str().to_owned()))
+            .collect();
+        let suggested_command = match &error {
+            EngineError::JobInterrupted { job, .. } => {
+                vec![
+                    "job".to_owned(),
+                    "resume".to_owned(),
+                    job.as_str().to_owned(),
+                ]
+            }
+            _ => Vec::new(),
+        };
         Self {
             code: error.failure_code(),
             remediation,
             retry_after_ms: error.retry_after_ms(),
-            affected_ids: error
-                .affected_job()
-                .map(|job| vec![job.as_str().to_owned()])
-                .unwrap_or_default(),
+            affected_ids,
+            suggested_command,
         }
     }
 }
@@ -510,6 +589,11 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
             Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
         }
         EngineError::RetranscriptionSuperseded { .. } => Some(SUPERSEDED_REMEDIATION.to_owned()),
+        EngineError::JobInterrupted { .. } => Some(JOB_INTERRUPTED_REMEDIATION.to_owned()),
+        EngineError::JobSessionNotOpen { .. } => Some(JOB_SESSION_NOT_OPEN_REMEDIATION.to_owned()),
+        EngineError::JobNotFound => Some(UNKNOWN_JOB_REMEDIATION.to_owned()),
+        EngineError::JobNotResumable { .. } => Some(JOB_NOT_RESUMABLE_REMEDIATION.to_owned()),
+        EngineError::JobCancelled { .. } => Some(JOB_CANCELLED_REMEDIATION.to_owned()),
         _ => None,
     }
 }
@@ -661,7 +745,20 @@ where
     if failure.remediation.is_none() && failure.retry_after_ms.is_none() && affected.is_empty() {
         return write_failure(writer, mode, command, failure.code, None);
     }
+    let suggested: Vec<&str> = failure
+        .suggested_command
+        .iter()
+        .map(String::as_str)
+        .collect();
     let mut response = match failure.remediation {
+        Some(summary) if !suggested.is_empty() => {
+            OperationResponse::failure_with_suggested_command(
+                command.identifier(),
+                failure.code,
+                summary,
+                &suggested,
+            )
+        }
         Some(summary) => {
             OperationResponse::failure_with_remediation(command.identifier(), failure.code, summary)
         }
@@ -729,7 +826,8 @@ mod tests {
     use vsift_contract::{CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION};
 
     use super::{
-        CommandFailure, OutputMode, OutputWriter, ProcessExit, execute_with, write_command_failure,
+        CommandFailure, Interruption, OutputMode, OutputWriter, ProcessExit, execute_with,
+        write_command_failure,
     };
 
     /// P10 PR 2: a busy job's failure names the job and a retry hint; an
@@ -778,8 +876,14 @@ mod tests {
         for arguments in [vec!["vsift"], vec!["vsift", "setup"]] {
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();
-            let exit =
-                execute_with(arguments, &mut stdout, &mut stderr, EnginePorts::system()).await;
+            let exit = execute_with(
+                arguments,
+                &mut stdout,
+                &mut stderr,
+                EnginePorts::system(),
+                Interruption::Default,
+            )
+            .await;
 
             assert_eq!(exit, ProcessExit::Success);
             assert!(String::from_utf8(stdout)?.contains("Usage:"));
@@ -799,6 +903,7 @@ mod tests {
             &mut stdout,
             &mut stderr,
             EnginePorts::system(),
+            Interruption::Default,
         )
         .await;
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
@@ -831,6 +936,7 @@ mod tests {
             &mut stdout,
             &mut stderr,
             EnginePorts::system(),
+            Interruption::Default,
         )
         .await;
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;

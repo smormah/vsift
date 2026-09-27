@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-27 (P00-P09 complete; P10 in progress: PR 1 merged, PR 2 on its branch).
+Date: 2026-09-27 (P00-P09 complete; P10 in progress: PRs 1-2 merged, PR 3 on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -56,7 +56,7 @@ Each entry has these fields:
 | [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-008](#l-008) | Strict OS/storage-crash durability is unqualified (FS-01); protocol implemented, disabled | integrity/durability | high | P10, P11, P14 | [#13](https://github.com/smormah/vsift/issues/13), [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
-| [L-010](#l-010) | Recovery and idempotency work at the engine level; the public job surface, signals and the OS-crash campaign are still to come | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
+| [L-010](#l-010) | Recovery works through the CLI; the OS-crash campaign and jobs beyond retranscription are still to come | integrity/durability | high | P10 | [#13](https://github.com/smormah/vsift/issues/13) | deferred |
 | [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | [#170](https://github.com/smormah/vsift/issues/170) | monitoring |
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
 | [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
@@ -70,7 +70,7 @@ Each entry has these fields:
 | [L-022](#l-022) | No accent, crosstalk, human-voice or long-recording ASR evidence | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | open |
 | [L-023](#l-023) | ASR output differs across CPU backends; revision ids differ by host | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-024](#l-024) | An ASR segment can start at the audio's start, before the speech | accuracy/ASR | medium | unscheduled | [#174](https://github.com/smormah/vsift/issues/174) | open |
-| [L-025](#l-025) | Local ASR runs: Ctrl-C not trapped until P10 PR 3, no progress events, model hashed per run | contract/UX | low | P10 (Ctrl-C) | [#13](https://github.com/smormah/vsift/issues/13) | accepted residual |
+| [L-025](#l-025) | Local ASR runs: no progress events, model hashed per run | contract/UX | low | unscheduled | none | accepted residual |
 | [L-026](#l-026) | whisper.cpp output with a split multi-byte token fails the chunk | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-027](#l-027) | whisper.cpp is the only speech engine | accuracy/ASR | low | unscheduled | [#147](https://github.com/smormah/vsift/issues/147) | deferred |
 | [L-028](#l-028) | Change thresholds are calibrated only on the synthetic corpus | visual detection | medium | unscheduled | [#175](https://github.com/smormah/vsift/issues/175) | open |
@@ -83,10 +83,10 @@ Each entry has these fields:
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-038](#l-038) | No worker or batch host; `job` commands are reserved | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-038](#l-038) | No worker or batch host; `job run` and `job batch` are reserved | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
 | [L-039](#l-039) | No agent skill; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
-| [L-041](#l-041) | A throttled Windows runner exceeded the 5 s provisioning wait | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | monitoring |
+| [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
 | [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
 | [L-043](#l-043) | Library API unstable; MSRV, pre-release and MCP decisions open | contract/UX | low | unscheduled | [#176](https://github.com/smormah/vsift/issues/176) | open |
 | [L-044](#l-044) | Accepted engineering trade-offs (CLI test dependencies, session compatibility) | contract/UX | low | unscheduled | none | accepted residual |
@@ -97,8 +97,11 @@ Each entry has these fields:
 | [L-050](#l-050) | Jobs and operation ids are bounded per session | contract/UX | low | unscheduled | none | accepted residual |
 | [L-051](#l-051) | Some interrupted work is redone rather than resumed | performance | low | unscheduled | none | accepted residual |
 | [L-052](#l-052) | A read that meets a file being replaced waits for it, at most 0.5 s | performance | low | unscheduled | none | accepted residual |
+| [L-053](#l-053) | Windows: a process that inherited "ignore Ctrl-C" sees only Ctrl-Break | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-054](#l-054) | A second interruption cannot cut short VSift's own work between boundaries | contract/UX | low | unscheduled | none | accepted residual |
+| [L-055](#l-055) | On Unix a hard-killed CLI's running provider finishes its current unit | security | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
 
-Counts: 6 high, 14 medium, 30 low (50 entries).
+Counts: 6 high, 14 medium, 33 low (53 entries).
 
 ## Security
 
@@ -288,6 +291,28 @@ Counts: 6 high, 14 medium, 30 low (50 entries).
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
+### L-055
+
+**On Unix a hard-killed CLI's running provider finishes its current unit.**
+
+- **What:** every provider runs in its own process group, which keeps a terminal's
+  Ctrl-C away from it and lets the supervisor stop the whole tree. If `vsift` itself is
+  killed outright (`SIGKILL`), no destructor runs, so a whisper.cpp or `FFmpeg` process
+  already running keeps going until its current chunk or window ends (its output then
+  goes nowhere). Windows is not affected: the Job Object kills the tree when `vsift`
+  dies. An interrupted (Ctrl-C, `SIGTERM`) command always reaps its providers first.
+- **Evidence:** `process_supervisor.rs` (process groups, kill-on-drop), the P10
+  `p10_kill_and_resume` stage.
+- **Impact:** after a hard kill a provider can use CPU for up to one chunk (at most
+  120 s by the chunk deadline it no longer enforces, usually a few seconds).
+- **Why:** a group leader's death does not signal its group; a Linux parent-death
+  signal needs `prctl`, platform code outside the reviewed dependencies.
+- **Mitigation:** send `SIGTERM`, not `SIGKILL`; the worker host (P11) owns
+  supervision of killed hosts.
+- **Next step:** P11 worker supervision.
+- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
+  **Status:** accepted residual. **Review:** pending.
+
 ## Integrity and durability
 
 ### L-008
@@ -351,30 +376,32 @@ Counts: 6 high, 14 medium, 30 low (50 entries).
 
 ### L-010
 
-**Recovery and idempotency work at the engine level; the public job surface, signals
-and the OS-crash campaign are still to come.**
+**Recovery works through the CLI; the OS-crash campaign and jobs beyond
+retranscription are still to come.**
 
-- **What:** since P10 PR 2 a retranscription is a recoverable job: an interrupted run
-  (a crash, a failure, a library cancellation) is found by the same request and
-  resumed from its chunk checkpoints to the revision an uninterrupted run commits; a
-  retry with the same operation id returns the committed result without a new
-  generation, and the same id with another request is `IDEMPOTENCY_CONFLICT`;
-  cancellation is serialized with the commit; `BUSY` contention is retried with
-  jitter. What is still missing: the public `job status/resume/cancel` commands, the
-  `--operation-id` flag and the trapping of Ctrl-C and SIGTERM (P10 PR 3; the engine
-  operations exist), jobs for anything but retranscription, and the OS/storage-crash
-  campaign that X-10 and durable mode need (P10 PR 4, [L-008](#l-008)).
-- **Evidence:** [verification](verification.md) "P10 PR 2 evidence" (X-01..X-05, X-09,
-  S-08 at the storage, use-case and engine levels, a real whisper.cpp run interrupted
-  and resumed); [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
-  "Implementation notes: PR 2".
-- **Impact:** a command-line user cannot yet name an operation id or cancel a job by
-  id, and Ctrl-C ends the process (the finished chunks survive; the same command
-  resumes them). R-09 is an R0 release gate.
-- **Why:** P10 is delivered in four pull requests.
-- **Mitigation:** rerunning the same command resumes; library hosts have the full job
-  API.
-- **Next step:** P10 PRs 3 and 4.
+- **What:** a retranscription is a recoverable job: an interrupted run (a crash, a
+  failure, Ctrl-C or `SIGTERM`, a library cancellation) is found by the same request, or
+  resumed by id with `job resume`, from its chunk checkpoints to the revision an
+  uninterrupted run commits; `transcript retranscribe --operation-id` makes a retry
+  return the committed result without a new generation, and the same id with another
+  request is `IDEMPOTENCY_CONFLICT`; `job status` and `session status` report jobs;
+  `job cancel` is serialized with the commit and reaches a running owner within 250 ms;
+  `BUSY` contention is retried with jitter. What is still missing: jobs for anything
+  but retranscription (candidates and evidence calls are short and commit their
+  partial results instead), the worker host's durable workspace (P11), and the
+  OS/storage-crash campaign that X-10 and durable mode need (P10 PR 4,
+  [L-008](#l-008)).
+- **Evidence:** [verification](verification.md) "P10 PR 2 evidence" and "P10 PR 3
+  evidence" (X-01..X-06, X-09 at the storage, use-case, engine and CLI levels; the opt-in
+  `p10_recovery_e2e` recoverable mechanical run with real FFmpeg and whisper.cpp);
+  [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Implementation notes" for PRs 2 and 3.
+- **Impact:** recovery from an OS crash or power loss is not qualified; R-09 and R-10
+  are R0 release gates.
+- **Why:** P10 is delivered in four pull requests; the campaign is PR 4.
+- **Mitigation:** process crashes, kills and interruptions are qualified; durable
+  requests fail closed ([L-008](#l-008)).
+- **Next step:** P10 PR 4 (Ubuntu 24.04 / ext4 campaign, D-5).
 - **Owner:** P10. **Issue:** [#13](https://github.com/smormah/vsift/issues/13).
   **Status:** deferred. **Review:** pending.
 
@@ -618,6 +645,27 @@ and the OS-crash campaign are still to come.**
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
+### L-054
+
+**A second interruption cannot cut short VSift's own work between boundaries.**
+
+- **What:** the second Ctrl-C or `SIGTERM` skips the providers' graceful stop, but work
+  VSift does itself runs to its next cancellation check: hashing the session's source
+  copy when a command binds it (up to 20 GiB), a publication in progress, and one 64 KiB
+  block of an `ingest` copy. The process never exits before that, so it never leaves a
+  provider or a half-written file behind.
+- **Evidence:** ADR 0020 PR 3 notes; [L-011](#l-011) (the first evidence call hashes
+  the whole copy).
+- **Impact:** a command interrupted while hashing a large source can take as long as
+  the hash (seconds per GiB) to end.
+- **Why:** those steps are the integrity checks and atomic writes the result depends
+  on; abandoning them would need an exit that skips cleanup.
+- **Mitigation:** `SIGKILL` or closing the console still ends the process (on Unix see
+  [L-055](#l-055)); nothing partial is ever committed.
+- **Next step:** make the source hash check cancellation per block with L-011's work.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
 ## Speech recognition
 
 ### L-020
@@ -714,31 +762,28 @@ and the OS-crash campaign are still to come.**
 
 ### L-025
 
-**Local ASR runs: Ctrl-C not trapped until P10 PR 3, no progress events, model hashed
-per run.**
+**Local ASR runs: no progress events, model hashed per run.**
 
 - **What:**
-  - The CLI does not trap Ctrl-C yet: the process ends, whisper.cpp is killed with it
-    and nothing is committed. Since P10 PR 2 the chunks it finished are kept as private
-    checkpoints and the same command resumes from them ([L-010](#l-010)); the work
-    directory is swept later.
   - `transcript retranscribe` emits no progress events; `--events jsonl` writes one
     terminal event. At a real-time factor of 0.39, an hour of audio is about 23 minutes
-    of silence for the caller.
+    of silence for the caller (`job status` from another process shows the chunks
+    checkpointed so far).
   - The model file is hashed up to three times per run (about 0.3 s each in release),
     with no identity cache; the first run with a new tool, model or VSift version adds
     a fixture transcription (about 6 s).
-- **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md) decision
-  4, section 6, consequences and its 2026-09-27 note.
-- **Impact:** long runs look stalled; an interrupted run resumes only when the caller
-  reruns the command.
-- **Why:** trapping signals needs Tokio's `signal` feature, reviewed with P10 PR 3;
-  readers already skip unknown event kinds, so progress can be added later.
-- **Mitigation:** library hosts get `Cancellation` between stages; rerunning resumes.
-- **Next step:** P10 PR 3 traps Ctrl-C and SIGTERM (superseding ADR 0017 decision 4);
-  progress events with P11.
-- **Owner:** P10 (Ctrl-C); progress unscheduled. **Issue:**
-  [#13](https://github.com/smormah/vsift/issues/13). **Status:** accepted residual.
+  - Since P10 PR 3 Ctrl-C and `SIGTERM` are trapped (ADR 0017 decision 4 superseded):
+    the run stops before its commit, keeps its finished chunks and names the job to
+    resume; that part of this entry is closed.
+- **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md) section
+  6 and consequences; ADR 0020 PR 3 notes.
+- **Impact:** long runs look stalled to the caller that started them.
+- **Why:** readers already skip unknown event kinds, so progress can be added later
+  without breaking v1.
+- **Mitigation:** `job status <job>` reports `progress.chunks_checkpointed` of
+  `chunks_total`.
+- **Next step:** progress events with P11's structured events.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
 ### L-026
@@ -975,11 +1020,12 @@ per run.**
 
 ### L-038
 
-**No worker or batch host; `job` commands are reserved.**
+**No worker or batch host; `job run` and `job batch` are reserved.**
 
-- **What:** `job run/batch/status/resume/cancel` return `COMMAND_NOT_IMPLEMENTED`; there
-  is no durable workspace, finite batch reader, graceful shutdown or supervisor event
-  stream, and the strict Linux worker is qualified only at the process boundary (P02).
+- **What:** `job run` and `job batch` return `COMMAND_NOT_IMPLEMENTED` (`job status`,
+  `resume` and `cancel` work since P10 PR 3); there is no durable workspace, finite
+  batch reader, supervisor event stream or worker-level graceful shutdown, and the
+  strict Linux worker is qualified only at the process boundary (P02).
 - **Evidence:** [CLI contract](../contracts/cli-v1.md) command table; P11 row of the
   [work packets](implementation-work-packets.md) (X-07..X-11, O-01..O-04, SEC-T01).
 - **Impact:** no server use; R-10..R-12 are R0 release gates.
@@ -1006,6 +1052,25 @@ per run.**
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** deferred. **Review:** pending.
 
+### L-053
+
+**Windows: a process that inherited "ignore Ctrl-C" sees only Ctrl-Break.**
+
+- **What:** Windows never tells a console process that inherited the "ignore Ctrl-C"
+  attribute about a Ctrl-C (a child of a service, of some IDE and agent hosts, or of a
+  process created in a new process group); such a `vsift` keeps running to its end.
+  Ctrl-Break is always delivered and cancels it. Found while qualifying P10 PR 3: the
+  agent host that ran the opt-in tests starts its processes this way.
+- **Evidence:** ADR 0020 PR 3 notes; the opt-in `console_interrupts_cancel_an_ingest_copy`
+  (Ctrl-Break always, Ctrl-C only with `VSIFT_TEST_CONSOLE_CTRL_C`).
+- **Impact:** in such a host, Ctrl-C does not stop a long command.
+- **Why:** clearing the attribute needs `SetConsoleCtrlHandler(NULL, FALSE)`, platform
+  code that needs `unsafe`, which VSift forbids without an ADR.
+- **Mitigation:** Ctrl-Break, `job cancel` from another process, or closing the console.
+- **Next step:** none planned; revisit if an agent host is found that needs Ctrl-C.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
 ## Process and CI
 
 ### L-040
@@ -1028,18 +1093,23 @@ per run.**
 
 ### L-041
 
-**A throttled Windows runner exceeded the 5 s provisioning wait.**
+**A creator slower than 5 s makes a racing command `BUSY`.**
 
-- **What:** on one slow hosted runner (test binary 93 s instead of about 3 s) a
-  concurrent-preflight test got the documented `BUSY` (`ProvisioningInProgress`) after
-  the 5 s wait; 30/30 stress runs passed on the branch and on `main`.
-- **Evidence:** issue #144.
-- **Impact:** a rare CI failure; the product behaviour (`BUSY`, retryable) is correct.
-- **Why:** the test treats the documented outcome as a failure.
-- **Mitigation:** none yet; options are listed in the issue.
-- **Next step:** decide between accepting `BUSY` in the test or an injectable wait.
+- **What:** commands that race to create a new session root wait at most 5 s for the
+  creator. On one heavily throttled hosted runner (test binary 93 s instead of about
+  3 s) the creator took longer and a concurrent-preflight test got the documented
+  `BUSY` (`ProvisioningInProgress`), which the test treated as a failure (#144).
+- **Evidence:** issue #144; `concurrent_preflights_all_proceed_and_leave_one_valid_record`.
+- **Impact:** on a very slow machine the first commands against a new root can answer
+  `BUSY` (retryable); a retry succeeds. The test no longer fails: since P10 PR 3 the
+  wait is injectable (`EnginePorts::with_session_root_wait`, at most 60 s) and that test
+  waits 60 s, since what it checks is convergence, not the bound.
+- **Why:** the production bound keeps a stalled creator from holding every other
+  command.
+- **Mitigation:** `BUSY` is typed and retryable; hosts can lengthen the wait.
+- **Next step:** close #144 once the stabilised test has run in CI without recurrence.
 - **Owner:** unscheduled. **Issue:** [#144](https://github.com/smormah/vsift/issues/144).
-  **Status:** monitoring. **Review:** pending.
+  **Status:** accepted residual. **Review:** pending.
 
 ### L-042
 

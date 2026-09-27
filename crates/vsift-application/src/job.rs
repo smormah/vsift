@@ -303,6 +303,9 @@ pub struct JobSpec {
     pub recognition_key: RecognitionKey,
     /// The request, kept so the job can be resumed by id.
     pub request: JobRequest,
+    /// How many chunks the recognised range is cut into, when the plan
+    /// could be made; `job status` reports progress against it.
+    pub planned_chunks: Option<u32>,
 }
 
 /// The publication a job recorded before committing.
@@ -334,6 +337,9 @@ pub struct JobRecord {
     pub recognition_key: RecognitionKey,
     /// The request, for a resume by id.
     pub request: JobRequest,
+    /// Chunks the recognised range is cut into; `None` for a record written
+    /// before P10 PR 3 or when the plan could not be made.
+    pub planned_chunks: Option<u32>,
     /// Operation ids bound to this job, oldest first, at most
     /// [`MAX_JOB_OPERATION_IDS`].
     pub operation_ids: Vec<OperationId>,
@@ -364,6 +370,7 @@ impl JobRecord {
             operation_key: spec.operation_key.clone(),
             recognition_key: spec.recognition_key.clone(),
             request: spec.request,
+            planned_chunks: spec.planned_chunks,
             operation_ids: Vec::new(),
             state: JobState::Queued,
             epoch: 0,
@@ -1036,6 +1043,126 @@ where
     }
 }
 
+/// Whether `job resume` can continue a job, and why, as `job status`
+/// reports it (P10 PR 3).
+///
+/// Only a job no process owns, in an open session, that was interrupted or
+/// never started is resumable; every other answer names what stands in the
+/// way, so a caller knows whether to wait, rerun or give up.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Resumability {
+    /// Interrupted: `job resume` continues it from its checkpoints.
+    Interrupted,
+    /// Created but never started: `job resume` starts it.
+    NotStarted,
+    /// A process owns the job right now; ask again later.
+    LiveOwner,
+    /// It committed; its result stands.
+    Succeeded,
+    /// It failed for good in this epoch; the same request starts it again.
+    Failed,
+    /// It was cancelled; the same request starts it again.
+    Cancelled,
+    /// Its session is closed or expired, so it cannot continue.
+    SessionNotOpen,
+}
+
+impl Resumability {
+    /// Every answer, in declaration order.
+    pub const ALL: [Self; 7] = [
+        Self::Interrupted,
+        Self::NotStarted,
+        Self::LiveOwner,
+        Self::Succeeded,
+        Self::Failed,
+        Self::Cancelled,
+        Self::SessionNotOpen,
+    ];
+
+    /// Decides the answer for a job in `state` (as a reader observes it,
+    /// see [`observed_state`]) with `liveness`, in a session that is or is
+    /// not open.
+    #[must_use]
+    pub const fn of(state: JobState, liveness: JobLiveness, session_open: bool) -> Self {
+        if matches!(liveness, JobLiveness::Owned) {
+            return Self::LiveOwner;
+        }
+        match state {
+            JobState::Succeeded => Self::Succeeded,
+            JobState::Failed => Self::Failed,
+            JobState::Cancelled => Self::Cancelled,
+            _ if !session_open => Self::SessionNotOpen,
+            JobState::Queued => Self::NotStarted,
+            JobState::Interrupted
+            | JobState::Running
+            | JobState::Committing
+            | JobState::Cancelling => Self::Interrupted,
+        }
+    }
+
+    /// Whether `job resume` would run the job now.
+    #[must_use]
+    pub const fn resumable(self) -> bool {
+        matches!(self, Self::Interrupted | Self::NotStarted)
+    }
+
+    /// The stable public identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Interrupted => "interrupted",
+            Self::NotStarted => "not_started",
+            Self::LiveOwner => "live_owner",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::SessionNotOpen => "session_not_open",
+        }
+    }
+}
+
+/// The state a reader reports for a job without changing anything.
+///
+/// It is what [`reconcile`] would record for a job whose owner is gone,
+/// decided the same one-way manner from the manifest chain, but read-only:
+/// a listing such as `session status` must not take ownership of every job
+/// it shows. A live job is reported as its owner last recorded it.
+///
+/// # Errors
+///
+/// Ledger failures (a chain that fails validation).
+pub fn observed_state<L>(view: &JobView, ledger: &L) -> Result<JobState, SessionStorageError>
+where
+    L: CommitLedger + ?Sized,
+{
+    let record = &view.record;
+    if view.liveness == JobLiveness::Owned || !record.state.claims_an_owner() {
+        return Ok(record.state);
+    }
+    if record.state == JobState::Cancelling {
+        return Ok(JobState::Cancelled);
+    }
+    if record.state == JobState::Committing
+        && let Some(commit) = &record.commit
+        && ledger
+            .committed_generation(
+                &record.session_id,
+                &commit.operation_id,
+                commit.observed_generation,
+            )?
+            .is_some()
+    {
+        return Ok(JobState::Succeeded);
+    }
+    let exhausted = record.attempt >= vsift_domain::MAX_JOB_ATTEMPTS
+        || vsift_domain::poisoned_chunk(&record.failures).is_some();
+    Ok(if exhausted {
+        JobState::Failed
+    } else {
+        JobState::Interrupted
+    })
+}
+
 /// Whether a job may be resumed by id (the `ResumeJob` use case's check):
 /// only an interrupted or queued job can; a live one is busy.
 ///
@@ -1056,7 +1183,9 @@ where
     S: JobStore + CommitLedger,
 {
     let view = job_status(store, session_id, job_id, now).map_err(JobRunError::Job)?;
-    if view.liveness == JobLiveness::Owned && view.record.state.claims_an_owner() {
+    // Any owner makes it busy, even one that has only just created or taken
+    // the job and has not recorded `running` yet.
+    if view.liveness == JobLiveness::Owned {
         return Err(JobRunError::Busy {
             job: job_id.clone(),
         });

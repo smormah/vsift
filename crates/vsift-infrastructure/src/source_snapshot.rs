@@ -12,7 +12,8 @@ use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, File, OpenOptions};
 use sha2::{Digest, Sha256};
 use vsift_application::{
-    ForegroundSessionPort, OpenSessionError, SessionStorageError, StagedSessionSource,
+    ForegroundSessionPort, NeverCancelled, OpenSessionError, SessionStorageError,
+    StageCancellation, StagedSessionSource,
 };
 use vsift_domain::{OperationId, SessionId, SourceId};
 
@@ -75,6 +76,30 @@ impl SourceSnapshot {
         operation_id: &OperationId,
         source_path: &Path,
     ) -> Result<Self, SourceError> {
+        Self::stage_cancellable(
+            store,
+            session_id,
+            operation_id,
+            source_path,
+            &NeverCancelled,
+        )
+    }
+
+    /// [`SourceSnapshot::stage`] that checks `cancellation` before every
+    /// 64 KiB block of the copy, so a first Ctrl-C stops a copy of a large
+    /// video within one block instead of after the whole file (P10 PR 3).
+    /// A cancelled copy removes its partial private file.
+    ///
+    /// # Errors
+    ///
+    /// As [`SourceSnapshot::stage`], and [`SourceError::Cancelled`].
+    pub fn stage_cancellable(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        source_path: &Path,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
         let (mut source, initial) = open_source(source_path)?;
         if initial.len() > MAX_SOURCE_BYTES {
             return Err(SourceError::TooLarge);
@@ -93,16 +118,18 @@ impl SourceSnapshot {
         let mut output = directory
             .open_with(&file_name, &options)
             .map_err(SourceError::Io)?;
-        let result = copy_bounded(&mut source, &mut output).and_then(|(id, bytes, container)| {
-            output.sync_all().map_err(SourceError::Io)?;
-            let final_meta = source.metadata().map_err(SourceError::Io)?;
-            if initial.len() != final_meta.len()
-                || initial.modified().ok() != final_meta.modified().ok()
-            {
-                return Err(SourceError::ChangedDuringStage);
-            }
-            Ok((id, bytes, container))
-        });
+        let result = copy_bounded(&mut source, &mut output, cancellation).and_then(
+            |(id, bytes, container)| {
+                output.sync_all().map_err(SourceError::Io)?;
+                let final_meta = source.metadata().map_err(SourceError::Io)?;
+                if initial.len() != final_meta.len()
+                    || initial.modified().ok() != final_meta.modified().ok()
+                {
+                    return Err(SourceError::ChangedDuringStage);
+                }
+                Ok((id, bytes, container))
+            },
+        );
         let (id, bytes, container) = match result {
             Ok(value) => value,
             Err(error) => {
@@ -345,7 +372,7 @@ impl SourceSnapshot {
             }
             Err(error) => return Err(error),
         };
-        match copy_bounded(&mut file, &mut std::io::sink()) {
+        match copy_bounded(&mut file, &mut std::io::sink(), &NeverCancelled) {
             Ok((id, bytes, _)) => Ok(id != self.id || bytes != self.bytes),
             Err(SourceError::UnsupportedContainer) => Ok(true),
             Err(error) => Err(error),
@@ -382,19 +409,22 @@ impl ForegroundSessionPort for FilesystemSessionStore {
         session_id: &SessionId,
         operation_id: &OperationId,
         source: &Path,
+        cancellation: &dyn StageCancellation,
     ) -> Result<Self::Snapshot, OpenSessionError> {
-        SourceSnapshot::stage(self, session_id, operation_id, source).map_err(|error| match error {
-            SourceError::Storage(storage) => OpenSessionError::Storage(storage),
-            SourceError::Io(_) => OpenSessionError::SourceIo,
-            SourceError::InvalidPath
-            | SourceError::NotRegularFile
-            | SourceError::TooLarge
-            | SourceError::Deadline
-            | SourceError::UnsupportedContainer
-            | SourceError::ChangedDuringStage
-            | SourceError::SnapshotChanged
-            | SourceError::IdentityFailure => OpenSessionError::InvalidSource,
-        })
+        SourceSnapshot::stage_cancellable(self, session_id, operation_id, source, cancellation)
+            .map_err(|error| match error {
+                SourceError::Storage(storage) => OpenSessionError::Storage(storage),
+                SourceError::Cancelled => OpenSessionError::Cancelled,
+                SourceError::Io(_) => OpenSessionError::SourceIo,
+                SourceError::InvalidPath
+                | SourceError::NotRegularFile
+                | SourceError::TooLarge
+                | SourceError::Deadline
+                | SourceError::UnsupportedContainer
+                | SourceError::ChangedDuringStage
+                | SourceError::SnapshotChanged
+                | SourceError::IdentityFailure => OpenSessionError::InvalidSource,
+            })
     }
 
     fn activate(
@@ -535,7 +565,7 @@ fn read_identified(
     if !before.is_file() || before.len() != expected_bytes {
         return Err(SourceError::SnapshotChanged);
     }
-    let (id, bytes, container) = copy_bounded(file, &mut std::io::sink())?;
+    let (id, bytes, container) = copy_bounded(file, &mut std::io::sink(), &NeverCancelled)?;
     let after = file.metadata().map_err(SourceError::Io)?;
     let identity = FileIdentity::of(&after);
     if bytes != expected_bytes || FileIdentity::of(&before) != identity {
@@ -573,6 +603,7 @@ fn read_header(file: &mut File, header: &mut [u8]) -> Result<usize, SourceError>
 fn copy_bounded(
     source: &mut impl Read,
     destination: &mut impl Write,
+    cancellation: &dyn StageCancellation,
 ) -> Result<(SourceId, u64, SourceContainer), SourceError> {
     let started = Instant::now();
     let mut hash = Sha256::new();
@@ -583,6 +614,9 @@ fn copy_bounded(
     loop {
         if started.elapsed() > MAX_SOURCE_READ_DURATION {
             return Err(SourceError::Deadline);
+        }
+        if cancellation.is_cancelled() {
+            return Err(SourceError::Cancelled);
         }
         let read = source.read(&mut buffer).map_err(SourceError::Io)?;
         if read == 0 {
@@ -636,6 +670,8 @@ pub enum SourceError {
     IdentityFailure,
     /// Filesystem access failed.
     Io(std::io::Error),
+    /// The caller cancelled the copy; its partial private file was removed.
+    Cancelled,
 }
 
 impl fmt::Display for SourceError {
@@ -655,6 +691,7 @@ impl fmt::Display for SourceError {
                 formatter.write_str("source identity could not be represented")
             }
             Self::Io(_) => formatter.write_str("source filesystem operation failed"),
+            Self::Cancelled => formatter.write_str("source staging was cancelled"),
         }
     }
 }
