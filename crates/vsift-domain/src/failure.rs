@@ -48,6 +48,11 @@ pub enum FailureCode {
     StorageIo,
     /// Committed or imported data failed integrity validation.
     IntegrityFailure,
+    /// The same operation id was reused for a different request (ADR 0020,
+    /// maintainer decision D-4). The earlier request's result is kept; retrying
+    /// cannot help until the caller sends a new operation id or the original
+    /// request.
+    IdempotencyConflict,
 }
 
 impl FailureCode {
@@ -56,7 +61,7 @@ impl FailureCode {
     /// Contract tests iterate this list to prove each identifier is published in
     /// the v1 schemas. An exhaustive private `ordinal` match and a compile-time
     /// assertion keep it in step with the variants.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Internal,
         Self::InvalidArgument,
         Self::UnsupportedSchema,
@@ -70,6 +75,7 @@ impl FailureCode {
         Self::Cancelled,
         Self::StorageIo,
         Self::IntegrityFailure,
+        Self::IdempotencyConflict,
     ];
 
     /// Returns the variant's position in [`FailureCode::ALL`].
@@ -95,6 +101,7 @@ impl FailureCode {
             Self::Cancelled => 10,
             Self::StorageIo => 11,
             Self::IntegrityFailure => 12,
+            Self::IdempotencyConflict => 13,
         }
     }
 
@@ -115,6 +122,7 @@ impl FailureCode {
             Self::Cancelled => "CANCELLED",
             Self::StorageIo => "STORAGE_IO",
             Self::IntegrityFailure => "INTEGRITY_FAILURE",
+            Self::IdempotencyConflict => "IDEMPOTENCY_CONFLICT",
         }
     }
 
@@ -127,7 +135,8 @@ impl FailureCode {
             | Self::UnsupportedSchema
             | Self::MissingCapability
             | Self::IsolationUnavailable
-            | Self::CommandNotImplemented => FailureClass::UsageOrCapability,
+            | Self::CommandNotImplemented
+            | Self::IdempotencyConflict => FailureClass::UsageOrCapability,
             Self::InvalidSource => FailureClass::Source,
             Self::Busy => FailureClass::Retryable,
             Self::DeadlineExceeded | Self::ResourceLimit => FailureClass::Limit,
@@ -199,6 +208,14 @@ mod tests {
         assert_eq!(FailureCode::Cancelled.class(), FailureClass::Cancelled);
         assert_eq!(FailureCode::StorageIo.class(), FailureClass::StorageOrIo);
         assert_eq!(FailureCode::Internal.class(), FailureClass::Internal);
+        assert_eq!(
+            FailureCode::IdempotencyConflict.class(),
+            FailureClass::UsageOrCapability
+        );
+        assert_eq!(
+            FailureCode::IdempotencyConflict.identifier(),
+            "IDEMPOTENCY_CONFLICT"
+        );
     }
 
     #[test]
@@ -217,6 +234,7 @@ mod tests {
             FailureCode::Cancelled,
             FailureCode::StorageIo,
             FailureCode::IntegrityFailure,
+            FailureCode::IdempotencyConflict,
         ] {
             assert!(!code.retryable());
         }

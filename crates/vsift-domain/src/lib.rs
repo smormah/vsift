@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod asr;
+mod checkpoint;
 mod evidence;
 mod failure;
 mod identity;
@@ -10,6 +11,7 @@ mod job;
 mod media;
 mod pagination;
 mod provisioning;
+mod retry;
 mod search;
 mod session;
 mod storage;
@@ -27,6 +29,7 @@ pub use asr::{
     Sha256Hex, ValidatedChunk, decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks,
     validate_chunk_output,
 };
+pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
 pub use evidence::{
     AUDIO_CLIP_SAMPLE_RATE, AudioRange, BurstCount, BurstExtent, BurstPlan, BurstRange, Confidence,
     ConfidenceError, ConfidenceOrigin, CropRegion, EvidenceDetail, EvidenceItem, EvidenceItemParts,
@@ -44,7 +47,7 @@ pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, SessionId, SourceId,
     SourceSegmentId, TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
-pub use job::{JobState, JobTransitionError};
+pub use job::{JobKind, JobState, JobTransitionError};
 pub use media::{
     DisplayRotation, MediaDecodeSupport, MediaDescription, MediaSelection, MediaSelectionError,
     MediaStream, MediaStreamKind, VisualStreamError,
@@ -53,6 +56,10 @@ pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryD
 pub use provisioning::{
     ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES, ManagedArtifactFormat,
     ManagedComponent, ManagedTarget,
+};
+pub use retry::{
+    AttemptFailure, Jitter, MAX_AUTOMATIC_RETRIES, MAX_JOB_ATTEMPTS, POISON_THRESHOLD,
+    RETRY_BASE_DELAY, RETRY_MAX_DELAY, RetryClass, RetryDecision, RetryPolicy, poisoned_chunk,
 };
 pub use search::{
     CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchHit,

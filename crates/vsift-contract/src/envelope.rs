@@ -346,6 +346,9 @@ const fn safe_message(code: FailureCode) -> &'static str {
         FailureCode::Cancelled => "The operation was cancelled.",
         FailureCode::StorageIo => "Storage or output I/O prevented completion.",
         FailureCode::IntegrityFailure => "Stored or imported data failed integrity validation.",
+        FailureCode::IdempotencyConflict => {
+            "The operation id was already used for a different request."
+        }
     }
 }
 
@@ -405,6 +408,25 @@ mod tests {
             serde_json::json!(["Some session records could not be read."])
         );
         assert_eq!(value["error"], Value::Null);
+        Ok(())
+    }
+
+    /// D-4 (ADR 0020): the idempotency conflict is published with fixed
+    /// prose and is not retryable.
+    #[test]
+    fn an_idempotency_conflict_is_a_fixed_prose_non_retryable_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let value = serde_json::to_value(OperationResponse::failure(
+            "transcript.retranscribe",
+            FailureCode::IdempotencyConflict,
+        ))?;
+        assert_eq!(value["status"], "failed");
+        assert_eq!(value["error"]["code"], "IDEMPOTENCY_CONFLICT");
+        assert_eq!(value["error"]["retryable"], false);
+        assert_eq!(
+            value["error"]["message"],
+            "The operation id was already used for a different request."
+        );
         Ok(())
     }
 
