@@ -285,10 +285,9 @@ impl Engine {
         // 2. The session must exist and be open before minutes of work start.
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let (base, status) = match store.read_transcript(&request.session, now)? {
-            Some((base, status)) => (Some(base), status),
-            None => (None, open_status(&store, &request.session, now)?),
-        };
+        // The newest revision and the generation come from one manifest, so
+        // the commit below never builds on a base older than it expects.
+        let (base, status) = store.read_transcript_head(&request.session, now)?;
 
         // 3. A retry whose operation id already committed is answered from
         // the commit, before any check or hash runs (X-02); the same id with

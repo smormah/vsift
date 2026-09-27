@@ -800,19 +800,12 @@ impl RevisionStore for FilesystemSessionStore {
     }
 
     fn head(&self, session_id: &SessionId, now: u64) -> Result<SessionHead, SessionStorageError> {
-        if let Some((newest, status)) = self.read_transcript(session_id, now)? {
-            return Ok(SessionHead {
-                generation: status.generation(),
-                newest: Some(newest),
-            });
-        }
-        let status = self.session_status(session_id)?;
-        if status.phase() != SessionPhase::Open || status.lifetime().expired(now) {
-            return Err(SessionStorageError::StateConflict);
-        }
+        // One manifest: a revision committed between two reads would pair a
+        // head without it with a generation that holds it.
+        let (newest, status) = self.read_transcript_head(session_id, now)?;
         Ok(SessionHead {
             generation: status.generation(),
-            newest: None,
+            newest,
         })
     }
 
