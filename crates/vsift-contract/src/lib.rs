@@ -93,14 +93,16 @@ pub use candidates::{
 };
 pub use command::CommandName;
 pub use envelope::{
-    CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, OperationResponse,
-    TerminalEventResponse,
+    CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, MAX_AFFECTED_IDS,
+    OperationResponse, TerminalEventResponse,
 };
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
 pub use local_asr::{
-    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary,
-    local_asr_verification_summary,
+    CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
+    JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
+    NO_AUDIO_STREAM_REMEDIATION, RESUMED_FROM_CHECKPOINT_WARNING, SUPERSEDED_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, job_warning_messages,
+    local_asr_failure_summary, local_asr_verification_summary,
 };
 pub use navigation::{
     AUDIO_RANGE_REMEDIATION, AUDIO_RANGE_START_REMEDIATION, AudioData, AudioEvidenceData,
@@ -131,8 +133,8 @@ pub use stream::{
 };
 pub use text::{MAX_PROVIDER_DETAIL_BYTES, sanitize_untrusted_text};
 pub use transcript::{
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, SourceSegmentData,
-    TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData, TranscriptSegmentData,
-    transcript_rejection_summary, transcript_warning_messages,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, RetranscribeJob,
+    SourceSegmentData, TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
+    TranscriptSegmentData, transcript_rejection_summary, transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;

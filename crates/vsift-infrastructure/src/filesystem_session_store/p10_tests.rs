@@ -959,7 +959,11 @@ fn another_operation_publishes_over_an_abandoned_manifest() -> TestResult {
             "replacement",
             &CommitHooks::new(),
         )?;
-        assert_eq!(published, StorageGeneration::from_value(3), "{durability:?}");
+        assert_eq!(
+            published,
+            StorageGeneration::from_value(3),
+            "{durability:?}"
+        );
         let reopened = FilesystemSessionStore::open_existing(&fixture.path)?;
         assert_committed_state_is_whole(&reopened)?;
         assert_eq!(

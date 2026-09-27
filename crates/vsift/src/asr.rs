@@ -12,39 +12,47 @@
 //! every `FFprobe` and `FFmpeg` call, and hashed again before the new revision
 //! is committed with one generation publication. A failure, a changed copy or
 //! a cancellation commits nothing.
+//!
+//! Since P10 the run is a recoverable job (ADR 0020): the application's
+//! `run_retranscription` owns the retry table, the chunk checkpoints and the
+//! exactly-once commit; this module resolves the request into the job's keys
+//! and supplies the ports.
 
 use std::{
     ffi::OsStr,
     future::Future,
-    num::{NonZeroU16, NonZeroU32},
+    num::NonZeroU16,
     path::{Path, PathBuf},
     pin::Pin,
 };
 
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrStage, CachedMediaToolVerification,
-    LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier, MediaToolCheck,
-    MediaToolFailure, MediaToolFingerprint, MediaToolPreflightFailure, MediaToolPreflightOutcome,
-    MediaToolVerificationCache, RecognizerIdentity, RevisionSplice, SessionStorageError,
-    SourceProbeError, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest,
-    build_asr_revision, preflight_local_asr, transcribe_range, whole_file_source_segment,
+    AsrFailure, AsrFailureReason, AsrStage, CachedMediaToolVerification, CommitGuard, JobRecord,
+    JobReport, JobRequest, JobSpec, LocalAsrVerification, LocalAsrVerificationFailure,
+    LocalAsrVerifier, MediaToolCheck, MediaToolFailure, MediaToolFingerprint,
+    MediaToolPreflightFailure, MediaToolPreflightOutcome, MediaToolVerificationCache,
+    OperationLookup, RecognitionScope, RecognizerIdentity, RetranscriptionPorts,
+    RetranscriptionRun, RevisionStore, SessionStorageError, SourceProbeError, SpeechPcm,
+    SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, job_id, lookup_operation,
+    preflight_local_asr, recognition_key, retranscribe_operation_key, retranscribe_request_digest,
+    retranscription_range, run_retranscription, whole_file_source_segment,
 };
 use vsift_domain::{
-    AsrModelProfile, ChunkPlan, MediaSelection, MediaTime, PlannedChunk, ProviderChunkOutput,
-    RuntimeDependency, SessionArtifactKind, SessionId, SessionPhase, TimeRange, TranscriptRevision,
+    AsrModelProfile, ChunkPlan, JobId, MediaSelection, MediaTime, OperationId, PlannedChunk,
+    ProviderChunkOutput, RuntimeDependency, SessionId, SessionPhase, TimeRange, TranscriptRevision,
 };
 use vsift_infrastructure::{
     BoundSource, ExecutableResolutionError, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio,
     FilesystemMediaToolVerificationCache, FilesystemSessionStore, FixtureAsrVerifier,
     LocalAsrFiles, MediaError, MediaProviderConformance, MediaToolVerificationAuthority,
-    ProcessCancellation, ProcessWorkingDirectory, SessionStatus, SourceError, TrustedExecutable,
-    WhisperCli, WhisperError, WhisperSpeechRecognizer, encode_transcript_record,
-    local_asr_fingerprint, media_tool_fingerprint, reviewed_compatibility_policy,
+    ProcessCancellation, ProcessWorkingDirectory, SessionStatus, SourceError, TokioRetryTimer,
+    TrustedExecutable, WhisperCli, WhisperError, WhisperSpeechRecognizer, local_asr_fingerprint,
+    media_tool_fingerprint, reviewed_compatibility_policy,
 };
 
 use crate::{
     engine::Engine,
-    error::{EngineError, ExecutableRejection, SessionRootError},
+    error::{EngineError, ExecutableRejection, SessionRootError, job_failure_code},
     sessions::SessionSnapshot,
     verification::Cancellation,
 };
@@ -60,8 +68,14 @@ pub struct RetranscribeRequest {
     pub session: SessionId,
     /// Source range to transcribe; `None` transcribes the whole source.
     pub range: Option<RetranscribeRange>,
+    /// The caller's operation id (maintainer decision D-1): a retry with the
+    /// same id and request continues its job or returns its committed result
+    /// without a new generation; the same id with another request is
+    /// [`EngineError::IdempotencyConflict`]. `None` treats every request as
+    /// new work (an identical one still continues an interrupted job).
+    pub operation_id: Option<OperationId>,
     /// Signal that stops the run at its next provider boundary; nothing is
-    /// committed after it fires.
+    /// committed after it fires, and the job stays resumable.
     pub cancellation: Cancellation,
 }
 
@@ -74,12 +88,77 @@ pub struct RetranscribeRange {
     pub to_micros: u64,
 }
 
+/// What the recoverable job behind a retranscription did (P10, ADR 0020).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JobSummary {
+    job_id: JobId,
+    operation_id: OperationId,
+    resumed: bool,
+    chunks_reused: u32,
+    checkpoints_discarded: u32,
+    replayed: bool,
+}
+
+impl JobSummary {
+    pub(crate) fn from_report(report: JobReport) -> Self {
+        Self {
+            job_id: report.job_id,
+            operation_id: report.operation_id,
+            resumed: report.resumed,
+            chunks_reused: report.chunks_reused,
+            checkpoints_discarded: report.checkpoints_discarded,
+            replayed: report.replayed,
+        }
+    }
+
+    /// The job: derived from the session and the request's operation key,
+    /// so running the same request again finds it.
+    #[must_use]
+    pub const fn job_id(&self) -> &JobId {
+        &self.job_id
+    }
+
+    /// The operation the result is recorded under: the caller's operation
+    /// id, or the commit's own when the caller gave none. A retry with it
+    /// returns this result.
+    #[must_use]
+    pub const fn operation_id(&self) -> &OperationId {
+        &self.operation_id
+    }
+
+    /// Whether an interrupted run of the job was continued.
+    #[must_use]
+    pub const fn resumed(&self) -> bool {
+        self.resumed
+    }
+
+    /// Chunks taken from the interrupted run's checkpoints.
+    #[must_use]
+    pub const fn chunks_reused(&self) -> u32 {
+        self.chunks_reused
+    }
+
+    /// Checkpoints found unusable and recognised again.
+    #[must_use]
+    pub const fn checkpoints_discarded(&self) -> u32 {
+        self.checkpoints_discarded
+    }
+
+    /// Whether the revision is an earlier commit returned again, without a
+    /// new generation.
+    #[must_use]
+    pub const fn replayed(&self) -> bool {
+        self.replayed
+    }
+}
+
 /// A committed retranscription.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RetranscribeOutcome {
     session: SessionSnapshot,
     requested: Option<TimeRange>,
     revision: TranscriptRevision,
+    job: JobSummary,
 }
 
 impl RetranscribeOutcome {
@@ -95,10 +174,17 @@ impl RetranscribeOutcome {
         self.requested
     }
 
-    /// The new revision, now the session's newest.
+    /// The new revision, now the session's newest (or, when replayed, the
+    /// revision the earlier commit made).
     #[must_use]
     pub const fn revision(&self) -> &TranscriptRevision {
         &self.revision
+    }
+
+    /// What the job behind the result did.
+    #[must_use]
+    pub const fn job(&self) -> &JobSummary {
+        &self.job
     }
 }
 
@@ -108,6 +194,18 @@ pub(crate) enum SelectedRecognizer<'a> {
     Whisper(WhisperCli),
     /// The embedding host's recognizer and verifier.
     Host(&'a HostAsr),
+}
+
+/// The closing verification before each commit attempt: the session's source
+/// copy must still hold the committed bytes (issue #148).
+struct SourceUnchanged<'a>(&'a BoundSource);
+
+impl CommitGuard for SourceUnchanged<'_> {
+    fn verify(&mut self) -> Result<(), SessionStorageError> {
+        self.0
+            .verify_unchanged()
+            .map_err(|error| snapshot_storage_error(&error))
+    }
 }
 
 impl Engine {
@@ -123,16 +221,27 @@ impl Engine {
     /// revision recording its chunk outcomes, with a `no_speech_recognised`
     /// warning.
     ///
+    /// The run is a recoverable job (P10, ADR 0020). Its identity derives
+    /// from the request, so rerunning the same request after an interruption
+    /// (a crash, a cancellation, a failure) continues it from its chunk
+    /// checkpoints and commits the revision an uninterrupted run would; a
+    /// retry with the same operation id after a commit returns that commit.
+    /// A session that moved during the run (a renewal, another revision) is
+    /// followed rather than reported busy after all the work.
+    ///
     /// # Errors
     ///
     /// Fails before running anything for an invalid range, a missing tool or
     /// model, or a model that is not a reviewed pinned profile; then for a
-    /// missing, closed or expired session; then for a failed media-tool or
-    /// local-ASR preflight; and during the run for a source without audio, a
-    /// typed recognition failure, cancellation or a storage failure, including
-    /// a session source copy that changed while the run used it. A
-    /// concurrent change to the session (a renewal or another revision) fails
-    /// the commit with a busy storage error. Nothing is committed on failure.
+    /// missing, closed or expired session; then with
+    /// [`EngineError::IdempotencyConflict`] or [`EngineError::JobBusy`] for an
+    /// operation id bound to another request or to a live job; then for a
+    /// failed media-tool or local-ASR preflight; and during the run for a
+    /// source without audio, a typed recognition failure, cancellation, a
+    /// storage failure (including a source copy that changed), the same job
+    /// running in another process, or a range another revision changed.
+    /// Nothing is committed on failure, and the job stays resumable unless
+    /// the error says otherwise.
     #[allow(
         clippy::too_many_lines,
         reason = "The stage order is the contract; keep it visible in one place"
@@ -152,6 +261,8 @@ impl Engine {
             })
             .transpose()?;
         let cancellation = request.cancellation.0.clone();
+        let digest = retranscribe_request_digest(&request.session, requested)
+            .map_err(|_| EngineError::JobInvariant)?;
 
         // 1. Resolve and identify everything before anything runs.
         let tools = self.local_asr_media_tools()?;
@@ -179,14 +290,28 @@ impl Engine {
             None => (None, open_status(&store, &request.session, now)?),
         };
 
-        // 3. Prove the tools and the recognizer work before touching user media.
+        // 3. A retry whose operation id already committed is answered from
+        // the commit, before any check or hash runs (X-02); the same id with
+        // another request is a conflict (X-03).
+        if let Some(operation) = &request.operation_id {
+            match lookup_operation(&store, &request.session, operation, &digest, now)? {
+                OperationLookup::Replay(record) => {
+                    return self.replayed(&store, requested, &record, operation.clone());
+                }
+                OperationLookup::Busy(job) => return Err(EngineError::JobBusy { job }),
+                OperationLookup::Unbound | OperationLookup::Continue(_) => {}
+            }
+        }
+
+        // 4. Prove the tools and the recognizer work before touching user media.
         self.ensure_media_tools_verified(&tools).await?;
-        self.ensure_local_asr_verified(&tools, &recognizer, &identity, &cancellation)
+        let verification = self
+            .ensure_local_asr_verified(&tools, &recognizer, &identity, &cancellation)
             .await?;
 
-        // 4. Hold the session's committed source and a private work directory.
-        // The copy is hashed once here and compared by identity before each
-        // provider call below (issue #148).
+        // 5. Hold the session's committed source and a private work directory.
+        // The copy is hashed once here, compared by identity before each
+        // provider call below, and hashed again before each commit (#148).
         let bound = BoundSource::open_committed(&store, &request.session, now)
             .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
         let work = store.session_work_directory(&request.session, now)?;
@@ -209,17 +334,36 @@ impl Engine {
         {
             return Err(EngineError::RangeOutsideSource);
         }
-        let replaced = match (&base, requested) {
-            (_, None) => source.range(),
-            (Some(base), Some(range)) => base.snap_to_segments(range),
-            (None, Some(range)) => range,
+        let replaced = retranscription_range(base.as_ref(), requested, source.range());
+
+        // 6. The job the request's keys name (ADR 0020 section 4).
+        let key = recognition_key(&RecognitionScope {
+            session_id: &request.session,
+            source_id: bound.snapshot().id(),
+            audio_stream: stream,
+            replaced_range: replaced,
+            plan: ChunkPlan::R0,
+            recognizer: &identity,
+            verification: verification.as_ref(),
+        })
+        .map_err(|_| EngineError::JobInvariant)?;
+        let operation_key =
+            retranscribe_operation_key(&key, base.as_ref().map(TranscriptRevision::id))
+                .map_err(|_| EngineError::JobInvariant)?;
+        let spec = JobSpec {
+            session_id: request.session.clone(),
+            job_id: job_id(&request.session, &operation_key)
+                .map_err(|_| EngineError::JobInvariant)?,
+            request_digest: digest,
+            operation_key,
+            recognition_key: key,
+            request: JobRequest::Retranscribe { range: requested },
         };
 
-        // 5. Recognise, then assemble the complete revision. One admission slot
-        // of the session root is held for the whole run, so concurrent
-        // retranscriptions cannot oversubscribe the machine (SEC-20); each
-        // chunk's decoding takes its own slot as every media stage does.
-        let _recognition = store.try_admit(1)?;
+        // 7. Recognise from the job's checkpoints and the audio, assemble the
+        // complete revision, verify the copy and commit exactly once. The job
+        // holds one admission slot of the root while it recognises (SEC-20);
+        // each chunk's decoding takes its own slot as every media stage does.
         let audio = FfmpegSpeechAudio::new(
             &media,
             &bound,
@@ -230,14 +374,24 @@ impl Engine {
             },
             cancellation.clone(),
         );
-        let transcribe = TranscribeRangeRequest {
-            source_segment: &source,
-            range: replaced,
-            plan: ChunkPlan::R0,
-            audio_stream: stream,
-            expected: &identity,
+        let run = RetranscriptionRun {
+            spec: &spec,
+            operation_id: request.operation_id.as_ref(),
+            transcribe: TranscribeRangeRequest {
+                source_segment: &source,
+                range: replaced,
+                plan: ChunkPlan::R0,
+                audio_stream: stream,
+                expected: &identity,
+            },
+            source_id: bound.snapshot().id(),
+            requested,
+            base: base.as_ref(),
+            observed: status.generation(),
+            now,
         };
-        let transcription = match &recognizer {
+        let mut guard = SourceUnchanged(&bound);
+        let outcome = match &recognizer {
             SelectedRecognizer::Whisper(cli) => {
                 let chunks = ProcessWorkingDirectory::new(work.path()).map_err(|_| {
                     EngineError::LocalAsrFailed(AsrFailure {
@@ -247,76 +401,78 @@ impl Engine {
                 })?;
                 let whisper =
                     WhisperSpeechRecognizer::new(cli.clone(), chunks, cancellation.clone());
-                transcribe_range(transcribe, &audio, &whisper, &cancellation).await
+                run_retranscription(
+                    run,
+                    RetranscriptionPorts {
+                        store: &store,
+                        audio: &audio,
+                        recognizer: &whisper,
+                        cancellation: &cancellation,
+                        timer: &TokioRetryTimer,
+                        classify: job_failure_code,
+                    },
+                    &mut guard,
+                )
+                .await
             }
             SelectedRecognizer::Host(host) => {
                 let supplied = HostRecognizerRef(host.recognizer.as_ref());
-                transcribe_range(transcribe, &audio, &supplied, &cancellation).await
+                run_retranscription(
+                    run,
+                    RetranscriptionPorts {
+                        store: &store,
+                        audio: &audio,
+                        recognizer: &supplied,
+                        cancellation: &cancellation,
+                        timer: &TokioRetryTimer,
+                        classify: job_failure_code,
+                    },
+                    &mut guard,
+                )
+                .await
             }
         }
-        .map_err(EngineError::LocalAsrFailed)?;
+        .map_err(EngineError::from)?;
         drop(audio);
-        let number = base
-            .as_ref()
-            .map_or(Some(1), |base| base.number().checked_add(1))
-            .and_then(NonZeroU32::new)
-            .ok_or(EngineError::Storage(SessionStorageError::CapacityExhausted))?;
-        let revision = build_asr_revision(AsrRevisionRequest {
-            session_id: &request.session,
-            source_id: bound.snapshot().id(),
-            source_segment: &source,
-            number,
-            transcription,
-            splice: base.as_ref().map(|base| RevisionSplice {
-                base,
-                replaced_range: replaced,
-            }),
-        })
-        .map_err(EngineError::TranscriptAssembly)?;
-        if cancellation.is_cancelled() {
-            return Err(EngineError::LocalAsrFailed(AsrFailure {
-                stage: AsrStage::Assembly,
-                reason: AsrFailureReason::Cancelled,
-            }));
-        }
-
-        // The closing full verification: the revision is committed only if
-        // the copy still holds the committed bytes; the snapshot keeps the
-        // session held until the commit is done.
-        let snapshot = bound
-            .release_verified()
-            .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
-
-        // 6. Commit against the generation observed before the run.
-        let record = encode_transcript_record(&revision)?;
-        let committed = store.publish_artifact(
-            &request.session,
-            &self.new_operation_id()?,
-            status.generation(),
-            SessionArtifactKind::TranscriptRecord,
-            &record,
-            self.now_unix_seconds()?,
-        );
         drop(work);
-        drop(snapshot);
+        drop(bound);
         let now = self.now_unix_seconds()?;
-        match committed {
-            Ok(_) => {}
-            Err(SessionStorageError::StateConflict) => {
-                // A session that is still open lost a race with another
-                // writer (a renewal or another revision): retry later.
-                return Err(match open_status(&store, &request.session, now) {
-                    Ok(_) => EngineError::Storage(SessionStorageError::Busy),
-                    Err(error) => error,
-                });
-            }
-            Err(error) => return Err(EngineError::Storage(error)),
-        }
         let status = store.session_status(&request.session)?;
         Ok(RetranscribeOutcome {
             session: SessionSnapshot::observe(&status, now),
             requested,
+            revision: outcome.revision,
+            job: JobSummary::from_report(outcome.report),
+        })
+    }
+
+    /// The committed result of a succeeded job, returned again without
+    /// running or committing anything.
+    fn replayed(
+        &self,
+        store: &FilesystemSessionStore,
+        requested: Option<TimeRange>,
+        record: &JobRecord,
+        operation_id: OperationId,
+    ) -> Result<RetranscribeOutcome, EngineError> {
+        let now = self.now_unix_seconds()?;
+        let commit = record.commit.as_ref().ok_or(EngineError::JobInvariant)?;
+        let revision = store
+            .revision(&record.session_id, &commit.revision_id, now)?
+            .ok_or(EngineError::Storage(SessionStorageError::IntegrityFailure))?;
+        let status = store.session_status(&record.session_id)?;
+        Ok(RetranscribeOutcome {
+            session: SessionSnapshot::observe(&status, now),
+            requested,
             revision,
+            job: JobSummary {
+                job_id: record.job_id.clone(),
+                operation_id,
+                resumed: false,
+                chunks_reused: 0,
+                checkpoints_discarded: 0,
+                replayed: true,
+            },
         })
     }
 
@@ -364,19 +520,20 @@ impl Engine {
 
     /// Ensures the selected recognizer transcribes the reviewed speech fixture
     /// before it touches user media, once per identity (see
-    /// [`preflight_local_asr`]).
+    /// [`preflight_local_asr`]), and returns the fingerprint the pass is
+    /// recorded under, which the recognition key binds.
     async fn ensure_local_asr_verified(
         &self,
         tools: &MediaProviderConformance,
         recognizer: &SelectedRecognizer<'_>,
         identity: &RecognizerIdentity,
         cancellation: &ProcessCancellation,
-    ) -> Result<(), EngineError> {
+    ) -> Result<Option<MediaToolFingerprint>, EngineError> {
         let preflight = self.prepare_local_asr_preflight(tools, recognizer, identity)?;
         self.run_local_asr_preflight(&preflight, tools, recognizer, identity, cancellation)
             .await
-            .map(|_| ())
-            .map_err(EngineError::LocalAsrVerificationFailed)
+            .map_err(EngineError::LocalAsrVerificationFailed)?;
+        Ok(preflight.fingerprint)
     }
 
     /// Opens the per-user verification record and derives the fingerprint a

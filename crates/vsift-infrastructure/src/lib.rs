@@ -31,6 +31,7 @@ mod process_dependency_probe;
 mod process_supervisor;
 mod publisher_artifact_transfer;
 mod random_identifiers;
+mod retry_timer;
 mod session_root;
 mod source_binding;
 mod source_duration_probe;
@@ -127,6 +128,7 @@ pub use publisher_artifact_transfer::{
     ReviewedPublisherArtifact, download_reviewed_publisher_artifact,
 };
 pub use random_identifiers::RandomIdentifierSource;
+pub use retry_timer::TokioRetryTimer;
 pub use session_root::{
     SessionRootError, SessionRootProvisioning, open_session_root, platform_session_root,
 };

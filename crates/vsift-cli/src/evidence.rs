@@ -65,10 +65,7 @@ fn evidence_failure(error: EngineError, medium: Medium) -> CommandFailure {
         _ => None,
     };
     match remediation {
-        Some(summary) => CommandFailure {
-            code: error.failure_code(),
-            remediation: Some(summary.to_owned()),
-        },
+        Some(summary) => CommandFailure::with_remediation(error.failure_code(), summary.to_owned()),
         None => CommandFailure::from(error),
     }
 }
@@ -77,10 +74,10 @@ fn evidence_failure(error: EngineError, medium: Medium) -> CommandFailure {
 /// fault, anything else an internal one.
 fn presentation_failure(error: &EvidencePresentationError) -> CommandFailure {
     match error {
-        EvidencePresentationError::NonUtf8Path => CommandFailure {
-            code: FailureCode::StorageIo,
-            remediation: Some(EVIDENCE_PATH_REMEDIATION.to_owned()),
-        },
+        EvidencePresentationError::NonUtf8Path => CommandFailure::with_remediation(
+            FailureCode::StorageIo,
+            EVIDENCE_PATH_REMEDIATION.to_owned(),
+        ),
         EvidencePresentationError::OperationMismatch
         | EvidencePresentationError::FileMismatch
         | EvidencePresentationError::Serialization(_) => {

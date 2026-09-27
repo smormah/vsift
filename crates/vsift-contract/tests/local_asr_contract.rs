@@ -21,20 +21,22 @@ use vsift_application::{
     page_transcript, whole_file_source_segment,
 };
 use vsift_contract::{
-    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse,
-    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, OperationResponse,
+    CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
+    JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
+    LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, OperationResponse,
+    RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION,
     TerminalEventResponse, TranscriptEvidenceStream, TranscriptPageData,
     TranscriptRetranscribeData, TranscriptRevisionData, UNKNOWN_REVISION_REMEDIATION,
-    UNPINNED_MODEL_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
-    transcript_warning_messages,
+    UNPINNED_MODEL_REMEDIATION, job_warning_messages, local_asr_failure_summary,
+    local_asr_verification_summary, transcript_warning_messages,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
-    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, ChunkTime, CueText, FailureCode, LanguageTag,
-    MediaTime, PageLimit, ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken,
-    ProviderTokenKind, SessionId, Sha256Hex, SourceId, SourceSegment, TimeRange,
-    TranscriptRevision, TranscriptRevisionError, TranscriptWarningKind, TranscriptWarnings,
-    merge_chunks, plan_chunks, validate_chunk_output,
+    AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, ChunkTime, CueText, FailureCode, JobId,
+    LanguageTag, MediaTime, OperationId, PageLimit, ProviderChunkOutput, ProviderOutputError,
+    ProviderSegment, ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId,
+    SourceSegment, TimeRange, TranscriptRevision, TranscriptRevisionError, TranscriptWarningKind,
+    TranscriptWarnings, merge_chunks, plan_chunks, validate_chunk_output,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -50,6 +52,8 @@ const CURSOR_EXPIRES_US: u64 = 1_790_294_400_000_000;
 const NOW_US: u64 = 1_790_208_000_000_000;
 const SECOND: u64 = 1_000_000;
 const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
+const JOB: &str = "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70";
+const OPERATION: &str = "op_4f0c2b8e9a1d3c5e7f60718293a4b5c6";
 
 fn repository(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -204,12 +208,116 @@ fn retranscribe_response(
     revision: &TranscriptRevision,
     requested: Option<TimeRange>,
 ) -> Built<OperationResponse<Value>> {
+    job_response(revision, requested, &fresh_job()?)
+}
+
+fn fresh_job() -> Built<RetranscribeJob> {
+    Ok(RetranscribeJob {
+        job_id: JobId::parse(JOB)?,
+        resumed: false,
+        chunks_reused: 0,
+        replayed: false,
+    })
+}
+
+fn job_response(
+    revision: &TranscriptRevision,
+    requested: Option<TimeRange>,
+    job: &RetranscribeJob,
+) -> Built<OperationResponse<Value>> {
     Ok(OperationResponse::complete(
         "transcript.retranscribe",
-        &TranscriptRetranscribeData::new(&SessionId::parse(SESSION)?, requested, revision),
+        &TranscriptRetranscribeData::new(&SessionId::parse(SESSION)?, requested, revision, job),
     )?
+    .with_operation_id(&OperationId::parse(OPERATION)?)
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()))
     .with_warnings(&transcript_warning_messages(revision)))
+}
+
+/// P10 PR 2: a resumed result names its job and reused chunks and warns in
+/// fixed prose; a replayed one says so; both validate, and the terminal
+/// event repeats the operation id.
+#[test]
+fn resumed_and_replayed_retranscriptions_validate() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    let resumed = RetranscribeJob {
+        resumed: true,
+        chunks_reused: 1,
+        ..fresh_job()?
+    };
+    let response = job_response(&second, None, &resumed)?
+        .with_warnings(&job_warning_messages(resumed.chunks_reused, 1));
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("transcript-retranscribe-data.schema.json", &value["data"])?;
+    assert_eq!(value["operation_id"], OPERATION);
+    assert_eq!(value["data"]["job"]["job_id"], JOB);
+    assert_eq!(value["data"]["job"]["resumed"], true);
+    assert_eq!(value["data"]["job"]["chunks_reused"], 1);
+    let warnings = value["warnings"].as_array().ok_or("no warnings")?;
+    assert!(warnings.contains(&Value::from(RESUMED_FROM_CHECKPOINT_WARNING)));
+    assert!(warnings.contains(&Value::from(CHECKPOINT_DISCARDED_WARNING)));
+    assert_eq!(job_warning_messages(0, 0), Vec::<&str>::new());
+
+    let replayed = RetranscribeJob {
+        replayed: true,
+        ..fresh_job()?
+    };
+    let event = serde_json::to_value(TerminalEventResponse::new(job_response(
+        &second, None, &replayed,
+    )?))?;
+    validate("terminal-event.schema.json", &event)?;
+    validate(
+        "transcript-retranscribe-data.schema.json",
+        &event["result"]["data"],
+    )?;
+    assert_eq!(event["operation_id"], OPERATION);
+    assert_eq!(event["result"]["data"]["job"]["replayed"], true);
+
+    let mut invalid = value["data"].clone();
+    invalid["job"]["job_id"] = Value::from("not-a-job");
+    assert!(validate("transcript-retranscribe-data.schema.json", &invalid).is_err());
+    Ok(())
+}
+
+/// P10 PR 2 (D-4): the job failures a retranscription can end with validate
+/// with their fixed-prose remediation, retry hint and affected job.
+#[test]
+fn job_failures_validate_with_their_hints() -> TestResult {
+    let busy = OperationResponse::failure_with_remediation(
+        "transcript.retranscribe",
+        FailureCode::Busy,
+        JOB_BUSY_REMEDIATION.to_owned(),
+    )
+    .with_retry_after(2_000)
+    .with_affected_ids(&[JOB]);
+    let conflict = OperationResponse::failure_with_remediation(
+        "transcript.retranscribe",
+        FailureCode::IdempotencyConflict,
+        IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned(),
+    )
+    .with_affected_ids(&[JOB]);
+    let superseded = OperationResponse::failure_with_remediation(
+        "transcript.retranscribe",
+        FailureCode::Busy,
+        SUPERSEDED_REMEDIATION.to_owned(),
+    );
+    for response in [busy, conflict, superseded] {
+        let value = serde_json::to_value(TerminalEventResponse::new(response))?;
+        validate("terminal-event.schema.json", &value)?;
+        validate("operation-response.schema.json", &value["result"])?;
+    }
+    for prose in [
+        CANCELLATION_TOO_LATE_WARNING,
+        RESUMED_FROM_CHECKPOINT_WARNING,
+        CHECKPOINT_DISCARDED_WARNING,
+        IDEMPOTENCY_CONFLICT_REMEDIATION,
+        JOB_BUSY_REMEDIATION,
+        SUPERSEDED_REMEDIATION,
+    ] {
+        assert!(prose.len() <= 1_024 && !prose.contains('/') && !prose.contains('\\'));
+    }
+    Ok(())
 }
 
 fn page(revision: &TranscriptRevision) -> Built<(Vec<vsift_domain::TranscriptSegment>, TimeRange)> {

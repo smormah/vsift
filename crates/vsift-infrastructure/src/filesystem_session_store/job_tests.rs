@@ -327,7 +327,10 @@ fn chunk_files(fixture: &Fixture, job: &JobId) -> Built<Vec<String>> {
     let mut names = Vec::new();
     for entry in fs::read_dir(chunks)? {
         let name = entry?.file_name().to_string_lossy().into_owned();
-        if name.strip_suffix(".json").is_some_and(|ordinal| !ordinal.starts_with('.')) {
+        if name
+            .strip_suffix(".json")
+            .is_some_and(|ordinal| !ordinal.starts_with('.'))
+        {
             names.push(name);
         }
     }

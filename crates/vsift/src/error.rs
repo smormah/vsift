@@ -10,15 +10,15 @@ use std::{error::Error, fmt};
 
 use vsift_application::{
     AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError, EvidenceMediaError,
-    IdentifierGenerationError, LocalAsrVerificationFailure, MediaToolFailure,
-    MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
-    SourceProbeError, TranscriptBuildError, TranscriptQueryError, VisualExtensionStop,
-    VisualIndexBuildError, VisualSamplingError,
+    IdentifierGenerationError, JobRunError, JobStoreError, LIVE_JOB_RETRY_AFTER,
+    LocalAsrVerificationFailure, MediaToolFailure, MediaToolPreflightFailure, OpenSessionError,
+    PlanAcceptanceError, SessionStorageError, SourceProbeError, TranscriptBuildError,
+    TranscriptQueryError, VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
 use vsift_domain::{
-    FailureCode, FrameSelectionError, NavigationError, RuntimeDependency, SearchQueryRejection,
-    TranscriptImportError,
+    FailureCode, FrameSelectionError, JobId, JobState, NavigationError, RuntimeDependency,
+    SearchQueryRejection, TranscriptImportError,
 };
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
@@ -148,6 +148,43 @@ pub enum EngineError {
     EvidenceMedia(EvidenceMediaError),
     /// An evidence record could not be assembled; an internal fault.
     EvidenceAssembly,
+    /// The same job is running in another process (P10, ADR 0020); retry
+    /// after [`EngineError::retry_after_ms`]: the retry continues the job or
+    /// returns its result.
+    JobBusy {
+        /// The live job.
+        job: JobId,
+    },
+    /// The operation id was used earlier in the session for a different
+    /// request, whose result is kept (maintainer decision D-4).
+    IdempotencyConflict {
+        /// The job the operation id is bound to.
+        job: JobId,
+    },
+    /// The job was cancelled through its job id before it committed.
+    JobCancelled {
+        /// The cancelled job.
+        job: JobId,
+    },
+    /// Another revision changed the transcript around the requested range
+    /// during the run, so the recognised range no longer matches; nothing was
+    /// committed and the job failed. Running the request again widens it over
+    /// the newest revision.
+    RetranscriptionSuperseded {
+        /// The failed job.
+        job: JobId,
+    },
+    /// The job ended in a state it cannot be resumed from.
+    JobNotResumable {
+        /// The job.
+        job: JobId,
+        /// Its state.
+        state: JobState,
+    },
+    /// No session of the root holds a job with that identity.
+    JobNotFound,
+    /// A job record or key violated an invariant; an internal fault.
+    JobInvariant,
 }
 
 impl EngineError {
@@ -182,6 +219,8 @@ impl EngineError {
             | Self::TranscriptSource(TranscriptSourceError::Io)
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
+            | Self::JobNotResumable { .. }
+            | Self::JobNotFound
             | Self::PlanAcceptance(_)
             | Self::TranscriptUnavailable
             | Self::InvalidTimeRange
@@ -221,7 +260,11 @@ impl EngineError {
             | Self::Clock(_)
             | Self::Identifier(_)
             | Self::TranscriptAssembly(_)
-            | Self::EvidenceAssembly => FailureCode::Internal,
+            | Self::EvidenceAssembly
+            | Self::JobInvariant => FailureCode::Internal,
+            Self::JobBusy { .. } | Self::RetranscriptionSuperseded { .. } => FailureCode::Busy,
+            Self::IdempotencyConflict { .. } => FailureCode::IdempotencyConflict,
+            Self::JobCancelled { .. } => FailureCode::Cancelled,
             Self::EvidenceBudgetExhausted => FailureCode::ResourceLimit,
             Self::EvidenceMedia(error) => evidence_media_failure_code(*error),
             Self::MediaToolVerificationFailed(failure) => {
@@ -574,6 +617,21 @@ impl fmt::Display for EngineError {
             Self::EvidenceAssembly => {
                 formatter.write_str("the evidence record could not be assembled")
             }
+            Self::JobBusy { .. } => formatter.write_str("the job is running in another process"),
+            Self::IdempotencyConflict { .. } => {
+                formatter.write_str("the operation id is bound to a different request")
+            }
+            Self::JobCancelled { .. } => formatter.write_str("the job was cancelled"),
+            Self::RetranscriptionSuperseded { .. } => {
+                formatter.write_str("another revision replaced part of the range during the run")
+            }
+            Self::JobNotResumable { state, .. } => write!(
+                formatter,
+                "the job is {} and cannot be resumed",
+                state.identifier()
+            ),
+            Self::JobNotFound => formatter.write_str("no session holds a job with that identity"),
+            Self::JobInvariant => formatter.write_str("a job record violated an invariant"),
         }
     }
 }
@@ -631,9 +689,76 @@ impl Error for EngineError {
             | Self::ModelNotSelected
             | Self::ReviewedPolicyInvalid
             | Self::SavedPlanRejected(_)
-            | Self::PlanAcceptance(_) => None,
+            | Self::PlanAcceptance(_)
+            | Self::JobBusy { .. }
+            | Self::IdempotencyConflict { .. }
+            | Self::JobCancelled { .. }
+            | Self::RetranscriptionSuperseded { .. }
+            | Self::JobNotResumable { .. }
+            | Self::JobNotFound
+            | Self::JobInvariant => None,
         }
     }
+}
+
+impl EngineError {
+    /// The job a failure concerns, which hosts report in `affected_ids`.
+    #[must_use]
+    pub const fn affected_job(&self) -> Option<&JobId> {
+        match self {
+            Self::JobBusy { job }
+            | Self::IdempotencyConflict { job }
+            | Self::JobCancelled { job }
+            | Self::RetranscriptionSuperseded { job }
+            | Self::JobNotResumable { job, .. } => Some(job),
+            _ => None,
+        }
+    }
+
+    /// How long a caller should wait before retrying, in milliseconds, when
+    /// the failure says so: a job running in another process.
+    #[must_use]
+    pub fn retry_after_ms(&self) -> Option<u64> {
+        match self {
+            Self::JobBusy { .. } => u64::try_from(LIVE_JOB_RETRY_AFTER.as_millis()).ok(),
+            _ => None,
+        }
+    }
+}
+
+impl From<JobRunError> for EngineError {
+    fn from(value: JobRunError) -> Self {
+        match value {
+            JobRunError::Busy { job } => Self::JobBusy { job },
+            JobRunError::IdempotencyConflict { job } => Self::IdempotencyConflict { job },
+            JobRunError::NotResumable { job, state } => Self::JobNotResumable { job, state },
+            JobRunError::Cancelled { job } => Self::JobCancelled { job },
+            JobRunError::Superseded { job } => Self::RetranscriptionSuperseded { job },
+            JobRunError::Asr { failure, .. } => Self::LocalAsrFailed(failure.failure),
+            JobRunError::Assembly(error) => Self::TranscriptAssembly(error),
+            JobRunError::Storage(error) => Self::Storage(error),
+            JobRunError::Job(error) => error.into(),
+            JobRunError::Key(_) => Self::JobInvariant,
+        }
+    }
+}
+
+impl From<JobStoreError> for EngineError {
+    fn from(value: JobStoreError) -> Self {
+        match value {
+            JobStoreError::Storage(error) => Self::Storage(error),
+            JobStoreError::NotFound => Self::JobNotFound,
+            // Another attempt owns the job now.
+            JobStoreError::StaleOwner => Self::Storage(SessionStorageError::Busy),
+            JobStoreError::Transition(_) => Self::JobInvariant,
+        }
+    }
+}
+
+/// The public code the retry policy and the poison rule decide a job
+/// failure by: the engine's single mapping.
+pub(crate) fn job_failure_code(error: &JobRunError) -> FailureCode {
+    EngineError::from(error.clone()).failure_code()
 }
 
 impl From<EngineError> for FailureCode {
@@ -964,7 +1089,75 @@ mod tests {
     use vsift_domain::FailureCode;
     use vsift_infrastructure::{SessionStoreOpenError, UserDependencyConfigError};
 
-    use super::{EngineError, SessionRootError};
+    use super::{EngineError, SessionRootError, job_failure_code};
+
+    /// P10 PR 2: every job failure has its public code, names its job and,
+    /// only for a live job, a retry hint; job-store and job-run failures
+    /// map through the same authority.
+    #[test]
+    fn job_failures_have_their_public_codes_jobs_and_hints()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use vsift_application::{JobRunError, JobStoreError};
+        use vsift_domain::{JobId, JobState};
+
+        let job = JobId::parse("job_0123456789abcdef")?;
+        for (error, code, hint) in [
+            (
+                EngineError::JobBusy { job: job.clone() },
+                FailureCode::Busy,
+                Some(2_000),
+            ),
+            (
+                EngineError::IdempotencyConflict { job: job.clone() },
+                FailureCode::IdempotencyConflict,
+                None,
+            ),
+            (
+                EngineError::JobCancelled { job: job.clone() },
+                FailureCode::Cancelled,
+                None,
+            ),
+            (
+                EngineError::RetranscriptionSuperseded { job: job.clone() },
+                FailureCode::Busy,
+                None,
+            ),
+            (
+                EngineError::JobNotResumable {
+                    job: job.clone(),
+                    state: JobState::Failed,
+                },
+                FailureCode::InvalidArgument,
+                None,
+            ),
+        ] {
+            assert_eq!(error.failure_code(), code, "{error}");
+            assert_eq!(error.affected_job(), Some(&job), "{error}");
+            assert_eq!(error.retry_after_ms(), hint, "{error}");
+        }
+        assert_eq!(
+            EngineError::JobNotFound.failure_code(),
+            FailureCode::InvalidArgument
+        );
+        assert_eq!(
+            EngineError::JobInvariant.failure_code(),
+            FailureCode::Internal
+        );
+        assert_eq!(EngineError::JobNotFound.affected_job(), None);
+        assert_eq!(
+            EngineError::from(JobStoreError::StaleOwner),
+            EngineError::Storage(SessionStorageError::Busy)
+        );
+        assert_eq!(
+            job_failure_code(&JobRunError::Busy { job: job.clone() }),
+            FailureCode::Busy
+        );
+        assert_eq!(
+            job_failure_code(&JobRunError::Storage(SessionStorageError::Io)),
+            FailureCode::StorageIo
+        );
+        Ok(())
+    }
 
     #[test]
     fn storage_failures_keep_their_public_codes() {

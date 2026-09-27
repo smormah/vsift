@@ -27,13 +27,13 @@ use vsift::{
 };
 use vsift_contract::{
     CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
-    ConfiguredSelectionResponse, EvidenceStream, LOCAL_ASR_MODEL_REMEDIATION,
-    LOCAL_ASR_TOOLS_REMEDIATION, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
-    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, NO_VIDEO_STREAM_REMEDIATION,
-    OperationResponse, TerminalEventResponse, UNKNOWN_REVISION_REMEDIATION,
-    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, local_asr_failure_summary,
-    local_asr_verification_summary, media_tool_verification_summary, non_private_folder_summary,
-    search_query_rejection_summary, transcript_rejection_summary,
+    ConfiguredSelectionResponse, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
+    JOB_BUSY_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
+    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SUPERSEDED_REMEDIATION, TerminalEventResponse,
+    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION,
+    local_asr_failure_summary, local_asr_verification_summary, media_tool_verification_summary,
+    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -419,12 +419,26 @@ fn complete<T: serde::Serialize>(
     OperationResponse::complete(command.identifier(), data).map_err(|_| FailureCode::Internal)
 }
 
-/// A failed command's public code and, when a typed cause allows one, a
-/// fixed-prose remediation for the caller.
+/// A failed command's public code and, when a typed cause allows them, a
+/// fixed-prose remediation, a retry hint and the identifiers it concerns.
 #[derive(Debug)]
 pub(crate) struct CommandFailure {
     code: FailureCode,
     remediation: Option<String>,
+    retry_after_ms: Option<u64>,
+    affected_ids: Vec<String>,
+}
+
+impl CommandFailure {
+    /// A failure with a fixed-prose remediation and nothing else.
+    pub(crate) const fn with_remediation(code: FailureCode, summary: String) -> Self {
+        Self {
+            code,
+            remediation: Some(summary),
+            retry_after_ms: None,
+            affected_ids: Vec::new(),
+        }
+    }
 }
 
 impl From<FailureCode> for CommandFailure {
@@ -432,6 +446,8 @@ impl From<FailureCode> for CommandFailure {
         Self {
             code,
             remediation: None,
+            retry_after_ms: None,
+            affected_ids: Vec::new(),
         }
     }
 }
@@ -461,6 +477,11 @@ impl From<EngineError> for CommandFailure {
         Self {
             code: error.failure_code(),
             remediation,
+            retry_after_ms: error.retry_after_ms(),
+            affected_ids: error
+                .affected_job()
+                .map(|job| vec![job.as_str().to_owned()])
+                .unwrap_or_default(),
         }
     }
 }
@@ -484,6 +505,11 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
         EngineError::CandidateCursorWithoutIndex => Some(CANDIDATE_CURSOR_REMEDIATION.to_owned()),
+        EngineError::JobBusy { .. } => Some(JOB_BUSY_REMEDIATION.to_owned()),
+        EngineError::IdempotencyConflict { .. } => {
+            Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
+        }
+        EngineError::RetranscriptionSuperseded { .. } => Some(SUPERSEDED_REMEDIATION.to_owned()),
         _ => None,
     }
 }
@@ -631,11 +657,20 @@ where
     StandardOutput: Write,
     StandardError: Write,
 {
-    let Some(summary) = failure.remediation else {
+    let affected: Vec<&str> = failure.affected_ids.iter().map(String::as_str).collect();
+    if failure.remediation.is_none() && failure.retry_after_ms.is_none() && affected.is_empty() {
         return write_failure(writer, mode, command, failure.code, None);
-    };
-    let response =
-        OperationResponse::failure_with_remediation(command.identifier(), failure.code, summary);
+    }
+    let mut response = match failure.remediation {
+        Some(summary) => {
+            OperationResponse::failure_with_remediation(command.identifier(), failure.code, summary)
+        }
+        None => OperationResponse::failure(command.identifier(), failure.code),
+    }
+    .with_affected_ids(&affected);
+    if let Some(retry_after_ms) = failure.retry_after_ms {
+        response = response.with_retry_after(retry_after_ms);
+    }
     let result = match mode {
         OutputMode::Human => {
             writer.write_safe_diagnostic(response.error_message());
@@ -690,9 +725,52 @@ where
 
 #[cfg(test)]
 mod tests {
-    use vsift::EnginePorts;
+    use vsift::{EngineError, EnginePorts, JobId};
+    use vsift_contract::{CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION};
 
-    use super::{ProcessExit, execute_with};
+    use super::{
+        CommandFailure, OutputMode, OutputWriter, ProcessExit, execute_with, write_command_failure,
+    };
+
+    /// P10 PR 2: a busy job's failure names the job and a retry hint; an
+    /// idempotency conflict names the job, has no hint and exits 2.
+    #[test]
+    fn job_failures_carry_their_job_and_retry_hint() -> Result<(), Box<dyn std::error::Error>> {
+        let job = JobId::parse("job_0123456789abcdef0123456789abcdef")?;
+        for (error, exit, retry, remediation) in [
+            (
+                EngineError::JobBusy { job: job.clone() },
+                ProcessExit::Retryable,
+                serde_json::json!(2_000),
+                JOB_BUSY_REMEDIATION,
+            ),
+            (
+                EngineError::IdempotencyConflict { job: job.clone() },
+                ProcessExit::UsageOrCapability,
+                serde_json::Value::Null,
+                IDEMPOTENCY_CONFLICT_REMEDIATION,
+            ),
+        ] {
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+            let written = write_command_failure(
+                &mut writer,
+                OutputMode::Json,
+                CommandName::TranscriptRetranscribe,
+                CommandFailure::from(error),
+            );
+            assert_eq!(written, exit);
+            let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+            assert_eq!(value["error"]["retry_after_ms"], retry);
+            assert_eq!(
+                value["error"]["affected_ids"],
+                serde_json::json!([job.as_str()])
+            );
+            assert_eq!(value["error"]["remediation"][0]["summary"], remediation);
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn root_and_setup_without_subcommands_show_help_without_side_effects()

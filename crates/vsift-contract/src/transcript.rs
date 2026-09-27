@@ -18,8 +18,8 @@
 
 use serde::Serialize;
 use vsift_domain::{
-    AlignmentOrigin, AsrChunkOutcome, AsrRun, MAX_CUE_TEXT_BYTES, ProviderEndTrim, SegmentOrigin,
-    SessionId, SourceSegment, TimeRange, TranscriptImportError, TranscriptOffset,
+    AlignmentOrigin, AsrChunkOutcome, AsrRun, JobId, MAX_CUE_TEXT_BYTES, ProviderEndTrim,
+    SegmentOrigin, SessionId, SourceSegment, TimeRange, TranscriptImportError, TranscriptOffset,
     TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptSegment,
     TranscriptWarningKind,
 };
@@ -435,16 +435,41 @@ pub struct TranscriptRetranscribeData {
     requested_range: Option<RangeData>,
     revision: TranscriptRevisionData,
     recognised_segment_count: usize,
+    job: RetranscribeJobData,
+}
+
+/// What the recoverable job behind a retranscription did (P10, ADR 0020).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetranscribeJob {
+    /// The job, derived from the request, so a retry finds it.
+    pub job_id: JobId,
+    /// Whether an interrupted run of the job was continued.
+    pub resumed: bool,
+    /// Chunks taken from the interrupted run's checkpoints.
+    pub chunks_reused: u32,
+    /// Whether the revision is an earlier commit returned again, without a
+    /// new one (a retry with the same operation id).
+    pub replayed: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct RetranscribeJobData {
+    job_id: String,
+    resumed: bool,
+    chunks_reused: u32,
+    replayed: bool,
 }
 
 impl TranscriptRetranscribeData {
     /// Presents a committed retranscription. `requested` is the range the
-    /// caller asked for, or `None` for the whole source.
+    /// caller asked for, or `None` for the whole source; `job` is what the
+    /// job behind it did.
     #[must_use]
     pub fn new(
         session_id: &SessionId,
         requested: Option<TimeRange>,
         revision: &TranscriptRevision,
+        job: &RetranscribeJob,
     ) -> Self {
         Self {
             session_id: session_id.as_str().to_owned(),
@@ -455,6 +480,12 @@ impl TranscriptRetranscribeData {
                 .iter()
                 .filter(|segment| segment.carried_from().is_none())
                 .count(),
+            job: RetranscribeJobData {
+                job_id: job.job_id.as_str().to_owned(),
+                resumed: job.resumed,
+                chunks_reused: job.chunks_reused,
+                replayed: job.replayed,
+            },
         }
     }
 }

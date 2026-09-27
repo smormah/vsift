@@ -1,9 +1,14 @@
 //! The v1 operation envelope and its JSON Lines terminal record.
 
 use serde::Serialize;
-use vsift_domain::{FailureCode, OperationStatus};
+use vsift_domain::{FailureCode, OperationId, OperationStatus};
 
 use crate::EventKind;
+
+/// Most identifiers a failure names in `affected_ids`.
+pub const MAX_AFFECTED_IDS: usize = 100;
+/// Longest retry hint: one day, the published schema's bound.
+const MAX_RETRY_AFTER_MS: u64 = 86_400_000;
 
 /// Public major version carried by every v1 payload.
 ///
@@ -248,6 +253,38 @@ impl OperationResponse<serde_json::Value> {
         response
     }
 
+    /// Names the operation the result is recorded under, so a caller can
+    /// retry with it and receive the same result (P10, ADR 0020).
+    #[must_use]
+    pub fn with_operation_id(mut self, operation_id: &OperationId) -> Self {
+        self.operation_id = Some(operation_id.as_str().to_owned());
+        self
+    }
+
+    /// Tells the caller of a retryable failure how long to wait before
+    /// retrying; ignored on a success or a non-retryable failure.
+    #[must_use]
+    pub fn with_retry_after(mut self, retry_after_ms: u64) -> Self {
+        if let Some(error) = self.error.as_mut().filter(|error| error.retryable) {
+            error.retry_after_ms = Some(retry_after_ms.clamp(1, MAX_RETRY_AFTER_MS));
+        }
+        self
+    }
+
+    /// Names the identifiers a failure concerns, such as the job that is
+    /// busy; ignored on a success. At most [`MAX_AFFECTED_IDS`] are kept.
+    #[must_use]
+    pub fn with_affected_ids(mut self, ids: &[&str]) -> Self {
+        if let Some(error) = self.error.as_mut() {
+            error.affected_ids = ids
+                .iter()
+                .take(MAX_AFFECTED_IDS)
+                .map(|id| (*id).to_owned())
+                .collect();
+        }
+        self
+    }
+
     /// Returns the remediation summaries of a failure response.
     #[must_use]
     pub fn remediation_summaries(&self) -> Vec<&str> {
@@ -306,21 +343,19 @@ pub struct TerminalEventResponse {
 impl TerminalEventResponse {
     /// Wraps exactly one operation result as the only record of a stream.
     #[must_use]
-    pub const fn new(result: OperationResponse<serde_json::Value>) -> Self {
+    pub fn new(result: OperationResponse<serde_json::Value>) -> Self {
         Self::at_sequence(result, 0)
     }
 
-    /// Wraps the result that ends a stream after `sequence` earlier events.
-    pub(crate) const fn at_sequence(
-        result: OperationResponse<serde_json::Value>,
-        sequence: u64,
-    ) -> Self {
+    /// Wraps the result that ends a stream after `sequence` earlier events;
+    /// the event repeats the result's operation id.
+    pub(crate) fn at_sequence(result: OperationResponse<serde_json::Value>, sequence: u64) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
             event: EventKind::Terminal.identifier(),
             sequence,
             command: result.command,
-            operation_id: None,
+            operation_id: result.operation_id.clone(),
             result,
         }
     }
@@ -427,6 +462,38 @@ mod tests {
             value["error"]["message"],
             "The operation id was already used for a different request."
         );
+        Ok(())
+    }
+
+    /// P10: a busy job names itself and a retry hint; a non-retryable
+    /// failure never carries a hint; the terminal event repeats the
+    /// operation id of its result.
+    #[test]
+    fn retry_hints_affected_ids_and_operation_ids_are_carried()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let busy = OperationResponse::failure("transcript.retranscribe", FailureCode::Busy)
+            .with_retry_after(2_000)
+            .with_affected_ids(&["job_0123456789abcdef"]);
+        let value = serde_json::to_value(&busy)?;
+        assert_eq!(value["error"]["retry_after_ms"], 2_000);
+        assert_eq!(
+            value["error"]["affected_ids"],
+            serde_json::json!(["job_0123456789abcdef"])
+        );
+        let conflict =
+            OperationResponse::failure("transcript.retranscribe", FailureCode::IdempotencyConflict)
+                .with_retry_after(2_000);
+        assert_eq!(
+            serde_json::to_value(conflict)?["error"]["retry_after_ms"],
+            Value::Null
+        );
+        let operation = vsift_domain::OperationId::parse("op_0123456789abcdef")?;
+        let complete =
+            OperationResponse::complete("transcript.retranscribe", &serde_json::json!({}))?
+                .with_operation_id(&operation);
+        let event = serde_json::to_value(TerminalEventResponse::new(complete))?;
+        assert_eq!(event["operation_id"], "op_0123456789abcdef");
+        assert_eq!(event["result"]["operation_id"], "op_0123456789abcdef");
         Ok(())
     }
 
