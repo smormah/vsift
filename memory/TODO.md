@@ -45,15 +45,13 @@ test code is compiled only there). The packet is not complete.
 
 - **Known limits:** `docs/planning/known-limits.md` (50 entries to L-052, without L-012
   and L-048; review pending). Add every new limit in the same change.
-- PR 2 fixed two races found by the X-04 stress: a commit pairing a head without a
-  revision with a newer generation, and false `INTEGRITY_FAILURE` from readers meeting a
-  rename-replace (`open_replaced_file`, bounded 0.5 s retry; L-052).
+- PR 2 fixed two X-04 races: a head without a revision paired with a newer generation,
+  and false `INTEGRITY_FAILURE` from readers meeting a rename-replace (L-052).
 - Job retention: 64 jobs per session (oldest ended unpinned job pruned), 8 caller
   operation ids per job, 256 bindings, 16 attempts, 1,024 checkpoints of 256 KiB.
 - Evidence: bursts denser than one 1,200-frame listing are rejected (`outside_listing`);
   tiny text measured on synthetic glyphs only; neighbours list up to three windows.
-- Evidence records are read and decoded in full on every evidence call (now at most 384
-  of 256 KiB); fine for R0, an index would help later (L-013).
+- Every evidence call decodes all evidence records (at most 384); an index later (L-013).
 - Search: no accent folding or Unicode normalisation; phrases don't cross segments. A
   creator killed mid-provisioning leaves an unmarked root.
 
@@ -79,6 +77,8 @@ test code is compiled only there). The packet is not complete.
   until P10 PR 4's campaign passes (ADR 0010, ADR 0020).
 - Sessions written by this version may hold `jobs/` (older builds ignore it) and
   manifests over 64 KiB (older builds reject them; sessions are disposable).
+- macOS CI, once: 8 identical requests (X-03) ended in storage I/O; not seen on Windows.
+  Run lock-stress on macOS: the failing test now prints errno, descriptors, call site.
 
 ## Parked: managed installation (now P13)
 

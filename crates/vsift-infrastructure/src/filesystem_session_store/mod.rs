@@ -721,6 +721,8 @@ fn map_lock_error(error: fs::TryLockError) -> SessionStorageError {
     reason = "Result::map_err requires ownership of the source error"
 )]
 fn map_storage_io(error: io::Error) -> SessionStorageError {
+    #[cfg(test)]
+    report_erased_io_error(&error);
     match error.kind() {
         io::ErrorKind::PermissionDenied => SessionStorageError::AccessDenied,
         io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded => {
@@ -728,6 +730,52 @@ fn map_storage_io(error: io::Error) -> SessionStorageError {
         }
         _ => SessionStorageError::Io,
     }
+}
+
+/// Under test, writes the OS error that [`SessionStorageError::Io`] erases,
+/// with the descriptor load and the call site, to the test's captured output.
+///
+/// `Io` is deliberately a unit variant: the public contract never carries OS
+/// detail. A rare `Io` in a concurrent test on one platform is then
+/// undiagnosable from the failure alone, so the unit tests keep the errno,
+/// the open-descriptor count against the soft limit (a process near its
+/// descriptor limit fails any open with `EMFILE`) and a backtrace. The test
+/// harness shows captured output only for a failing test, and worker threads
+/// inherit the capture of the test that spawned them.
+#[cfg(test)]
+fn report_erased_io_error(error: &io::Error) {
+    let kind = error.kind();
+    if matches!(
+        kind,
+        io::ErrorKind::PermissionDenied | io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded
+    ) {
+        return;
+    }
+    eprintln!(
+        "session storage I/O failed: {kind:?}, OS error {:?}, {}\n{}",
+        error.raw_os_error(),
+        descriptor_load(),
+        std::backtrace::Backtrace::force_capture()
+    );
+}
+
+/// This process's open descriptors and its soft descriptor limit.
+#[cfg(all(test, unix))]
+fn descriptor_load() -> String {
+    let open = fs::read_dir("/dev/fd").map_or_else(
+        |error| format!("unknown ({error})"),
+        |entries| entries.count().to_string(),
+    );
+    let limit = rustix::process::getrlimit(rustix::process::Resource::Nofile)
+        .current
+        .map_or_else(|| "unlimited".to_owned(), |limit| limit.to_string());
+    format!("{open} descriptors open, soft limit {limit}")
+}
+
+/// Windows has no small per-process handle limit to report.
+#[cfg(all(test, not(unix)))]
+fn descriptor_load() -> String {
+    "no descriptor limit on this platform".to_owned()
 }
 
 fn initialization_attempt_name(session_id: &SessionId, operation_id: &OperationId) -> String {

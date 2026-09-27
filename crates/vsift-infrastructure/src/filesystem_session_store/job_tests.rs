@@ -889,7 +889,9 @@ fn identical_concurrent_requests_commit_once() -> TestResult {
                 Ok(outcome) => jobs.push(outcome.report.job_id),
                 Err(JobRunError::Busy { job }) => jobs.push(job),
                 Err(JobRunError::Storage(SessionStorageError::Busy)) => {}
-                Err(other) => return Err(format!("{count}: {other}").into()),
+                // The variant path tells a job-store failure from a session
+                // one; both display the same text.
+                Err(other) => return Err(format!("{count}: {other:?}").into()),
             }
         }
         assert_eq!(committed, 1, "{count} requests");
