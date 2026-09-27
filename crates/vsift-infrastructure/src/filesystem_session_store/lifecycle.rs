@@ -4,6 +4,7 @@ use cap_fs_ext::DirExt;
 use vsift_application::{PublishSessionGenerationRequest, SessionStorageError};
 use vsift_domain::{OperationId, SessionArtifactKind, SessionId, StorageGeneration};
 
+use super::map_committed_io;
 use super::{
     ATTEMPTS_DIRECTORY, FilesystemSessionStore, LifecycleUpdate, SESSIONS_DIRECTORY, SessionStatus,
     StoredArtifact, StoredArtifactKind,
@@ -95,11 +96,11 @@ impl FilesystemSessionStore {
             .open_dir_nofollow(SESSIONS_DIRECTORY)
             .map_err(map_storage_io)?
             .open_dir_nofollow(snapshot.session_id().as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let head = read_committed_manifest(&session, snapshot.session_id(), self.chain_check())?;
         let attempts = session
             .open_dir_nofollow(ATTEMPTS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let hooks = CommitHooks::new();
         // The initial generation lists no artifact yet.
         let installer = ArtifactInstaller {
@@ -158,7 +159,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let lifecycle = committed
             .manifest

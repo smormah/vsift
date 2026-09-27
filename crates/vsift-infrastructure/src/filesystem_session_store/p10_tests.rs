@@ -1139,3 +1139,52 @@ fn readers_never_report_damage_while_generations_are_published() -> TestResult {
     assert_eq!(head.manifest.generation, PUBLICATIONS + 1);
     Ok(())
 }
+
+/// A failure of the storage while committed state is read is `STORAGE_IO`,
+/// never an integrity failure: the P10 PR 4 write-error layer found an
+/// evidence call on a filesystem that had shut itself down after a write
+/// error answering `INTEGRITY_FAILURE`, as if the evidence were forged. A
+/// missing, mistyped or linked entry is still damage.
+#[test]
+fn storage_failures_reading_committed_state_are_not_damage() {
+    use std::io::{Error as IoError, ErrorKind};
+    for kind in [
+        ErrorKind::ReadOnlyFilesystem,
+        ErrorKind::StaleNetworkFileHandle,
+        ErrorKind::ResourceBusy,
+        ErrorKind::Interrupted,
+        ErrorKind::TimedOut,
+        ErrorKind::OutOfMemory,
+    ] {
+        assert_eq!(
+            super::map_committed_io(IoError::from(kind)),
+            SessionStorageError::Io,
+            "{kind:?}"
+        );
+    }
+    assert_eq!(
+        super::map_committed_io(IoError::from(ErrorKind::StorageFull)),
+        SessionStorageError::CapacityExhausted
+    );
+    #[cfg(unix)]
+    assert_eq!(
+        super::map_committed_io(IoError::from_raw_os_error(
+            rustix::io::Errno::IO.raw_os_error()
+        )),
+        SessionStorageError::Io
+    );
+    for kind in [
+        ErrorKind::NotFound,
+        ErrorKind::InvalidData,
+        ErrorKind::NotADirectory,
+        ErrorKind::IsADirectory,
+        ErrorKind::PermissionDenied,
+        ErrorKind::UnexpectedEof,
+    ] {
+        assert_eq!(
+            super::map_committed_io(IoError::from(kind)),
+            SessionStorageError::IntegrityFailure,
+            "{kind:?}"
+        );
+    }
+}

@@ -7,6 +7,7 @@ use cap_std::fs::Dir;
 use vsift_application::SessionStorageError;
 use vsift_domain::{SessionId, SessionPhase};
 
+use super::map_committed_io;
 use super::{
     FilesystemSessionStore, MAX_REMOVED_WORK_DIRECTORIES, SESSIONS_DIRECTORY, SessionWorkDirectory,
     WORK_DIRECTORY, WORK_LOCK_FILE, WORK_PREFIX, WORK_RANDOM_BYTES, chain::read_committed_manifest,
@@ -39,7 +40,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         let record = committed
             .manifest
@@ -56,7 +57,7 @@ impl FilesystemSessionStore {
         }
         let work = session
             .open_dir_nofollow(WORK_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         remove_leftover_work_directories(&work);
         let mut random = [0_u8; WORK_RANDOM_BYTES];
         getrandom::fill(&mut random).map_err(|_| SessionStorageError::Io)?;

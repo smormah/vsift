@@ -7,6 +7,7 @@ use vsift_domain::{
     OperationId, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
 };
 
+use super::map_committed_io;
 use super::{
     MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, MetadataVersion, STORAGE_SCHEMA_VERSION,
     SessionStatus, StoredArtifact, StoredLifecycle, StoredSessionPhase, is_canonical_sha256,
@@ -110,9 +111,8 @@ pub(super) fn read_versioned_json_file<T>(
 where
     T: for<'de> Deserialize<'de> + MetadataVersion,
 {
-    let file = open_replaced_file(directory, name, false)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
-    let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let file = open_replaced_file(directory, name, false).map_err(map_committed_io)?;
+    let bytes = read_bounded(file).map_err(map_committed_io)?;
     parse_versioned_json(&bytes)
 }
 
@@ -125,9 +125,8 @@ pub(super) fn read_versioned_manifest_file<T>(
 where
     T: for<'de> Deserialize<'de> + MetadataVersion,
 {
-    let file = open_regular_file(directory, name, false)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
-    let bytes = read_bounded_manifest(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let file = open_regular_file(directory, name, false).map_err(map_committed_io)?;
+    let bytes = read_bounded_manifest(file).map_err(map_committed_io)?;
     parse_versioned_json(&bytes)
 }
 

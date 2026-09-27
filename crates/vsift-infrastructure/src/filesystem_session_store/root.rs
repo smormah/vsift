@@ -19,6 +19,7 @@ use super::{
     map_lock_error, map_open_error, map_storage_io, open_regular_file, open_session_lock,
     read_bounded,
 };
+use super::{is_storage_failure, map_committed_io};
 use crate::{
     durable_profile::storage_capabilities, file_lock::HeldFileLock,
     private_user_root::restrict_new_directory,
@@ -244,7 +245,7 @@ impl FilesystemSessionStore {
             .map_err(map_storage_io)?;
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let committed = read_committed_manifest(&session, session_id, self.chain_check())?;
         Ok(SessionReadHold {
             _lifetime_lock: lifetime,
@@ -658,10 +659,23 @@ pub(super) fn acquire_admission(
     Err(SessionStorageError::Busy)
 }
 
+/// A failure to open or read the root's layout: `damage` for an unexpected
+/// entry, but [`SessionStoreOpenError::RootUnavailable`] (`STORAGE_IO`) when the
+/// storage itself failed (see [`super::map_committed_io`]), so a failing or
+/// shut-down filesystem is never reported as a tampered root.
+fn layout_error(error: &io::Error, damage: SessionStoreOpenError) -> SessionStoreOpenError {
+    if is_storage_failure(error) {
+        SessionStoreOpenError::RootUnavailable
+    } else {
+        damage
+    }
+}
+
 pub(super) fn validate_root_layout(root: &Dir) -> Result<OwnershipMarker, SessionStoreOpenError> {
     let ownership = open_regular_file(root, OWNERSHIP_FILE, false)
-        .map_err(|_| SessionStoreOpenError::InvalidOwnership)?;
-    let bytes = read_bounded(ownership).map_err(|_| SessionStoreOpenError::InvalidOwnership)?;
+        .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidOwnership))?;
+    let bytes = read_bounded(ownership)
+        .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidOwnership))?;
     let marker: OwnershipMarker =
         serde_json::from_slice(&bytes).map_err(|_| SessionStoreOpenError::InvalidOwnership)?;
     if marker.schema_version != STORAGE_SCHEMA_VERSION
@@ -673,15 +687,15 @@ pub(super) fn validate_root_layout(root: &Dir) -> Result<OwnershipMarker, Sessio
     }
 
     root.open_dir_nofollow(SESSIONS_DIRECTORY)
-        .map_err(|_| SessionStoreOpenError::InvalidLayout)?;
+        .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidLayout))?;
     let coordination = root
         .open_dir_nofollow(COORDINATION_DIRECTORY)
-        .map_err(|_| SessionStoreOpenError::InvalidLayout)?;
+        .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidLayout))?;
     open_regular_file(&coordination, INITIALIZATION_LOCK, true)
-        .map_err(|_| SessionStoreOpenError::InvalidLayout)?;
+        .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidLayout))?;
     for index in 0..marker.admission_capacity {
         open_regular_file(&coordination, &admission_slot_name(index), true)
-            .map_err(|_| SessionStoreOpenError::InvalidLayout)?;
+            .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidLayout))?;
     }
     Ok(marker)
 }

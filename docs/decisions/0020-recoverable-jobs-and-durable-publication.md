@@ -13,8 +13,9 @@
 - Scope of this record: the design of the whole P10 packet. PR 1 implements the
   commit path (sections 1-3); PR 2 the jobs, keys, checkpoints, retry policy and the
   engine-level job operations (sections 4-5, and D-2 and D-4); PR 3 the public job
-  surface and signal handling (sections 5-6); PR 4 the crash campaign (section 7).
-  Durable publication stays disabled on every profile until PR 4.
+  surface and signal handling (sections 5-6); PR 4 the crash campaign (section 7),
+  whose evidence enabled durable publication on Ubuntu 24.04 / local ext4 only
+  (2026-09-27); every other profile still fails durable requests closed.
 
 ## Context
 
@@ -353,6 +354,51 @@ PR 3 implements section 6 and the host half of section 5. Where it refines the d
   CLI's `signal` module; the engine and libraries install no handler, so an embedding
   host keeps control of its own signals.
 
+## Implementation notes: PR 4 (2026-09-27)
+
+PR 4 implements section 7: the owned crash campaign, and the enablement it gates. The
+method and every number are in the
+[P10 durable-publication record](../planning/p10-durable-publication.md). Where it
+refines the design:
+
+- **Campaign.** `tools/p10-crash-campaign/` (a workspace tool, never published) and
+  `.github/workflows/p10-durability-campaign.yml` (manual and weekly) on hosted
+  `ubuntu-24.04` runners (D-5): layer A replays a dm-log-writes log at every flush and
+  FUA write (our own reader of the kernel's version-1 format) and verifies every
+  acknowledgement made before each point; layer B kills an Ubuntu 24.04 QEMU guest
+  (the pinned cloud image, generic kernel, data disk `cache=none`) at random moments
+  in four parallel shards; layer C swaps in a dm-flakey `error_writes` table (dm-dust
+  is not available there). The acceptance numbers are those of section 7 (at least
+  2,000 replay points and 300 kills with nothing lost, every injected failure
+  `STORAGE_IO` and never acknowledged) plus a clean `e2fsck -fn` after every recovery
+  and a new commit accepted by every recently acknowledged session after every
+  replayed power loss.
+- **Negative control (a finding).** Section 7 proposed removing one directory
+  synchronisation. Removing the session directory's after the pointer rename lost
+  nothing: on ext4 every file flush commits the whole running journal transaction, and
+  the chain checkpoint's flush, still before the acknowledgement, made the pointer
+  rename durable. The control therefore removes every synchronisation after the
+  pointer rename (the session directory's and the checkpoint's flush); it then loses
+  acknowledged generations (and leaves a zero-length checkpoint that makes the session
+  unreadable), which the harness reports. The protocol itself is unchanged: the
+  directory synchronisation is what guarantees the rename, on every filesystem, and
+  the checkpoint's flush is an ext4 side effect the protocol does not rely on. The
+  control lives behind a development-only `durability-campaign` feature of the
+  infrastructure crate (refused without debug assertions and, by the governance check,
+  anywhere but a development dependency and the campaign tool's non-default
+  `campaign` feature) and the variable `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1`.
+- **Enablement.** `QUALIFIED_UBUNTU_EXT4` is set. `durable_profile` now also reads
+  `/etc/os-release` (or `/usr/lib/os-release`; at most 64 KiB, parsed strictly by the
+  public `classify_os_release`, fuzzed as `os_release`) and claims `os_crash_durable`
+  only for `ID=ubuntu` and `VERSION_ID=24.04` together with ext4 mounts that keep write
+  barriers; the decision is the public `qualifies` table, and anything unread or
+  unparsed fails closed.
+- **Engine request (D-3).** `IngestRequest` gained `durability`; the command line keeps
+  asking for ephemeral sessions until P11's durable workspace. An ingest now reports
+  its session's own guarantee: before, it reported the store's strongest, which would
+  have called an ephemeral session on a qualified root `os_crash_durable` once the
+  constant was set.
+
 ## Consequences
 
 - PR 1 changes no public contract. Warm reads no longer grow with the chain; every
@@ -373,6 +419,12 @@ PR 3 implements section 6 and the host half of section 5. Where it refines the d
   `jobs` of `session status`, `--operation-id` and trapped interruptions. A long
   command no longer ends at the first Ctrl-C but at its next boundary; a caller that
   needs it gone at once sends a second one.
+- PR 4 enables durable sessions on Ubuntu 24.04 / local ext4 through the engine API
+  (`IngestRequest::durability`); a host there gets `os_crash_durable` for a durable
+  request, and every other profile still answers `MISSING_CAPABILITY`. Losing the disk
+  or host stays the caller's responsibility (X-10). The campaign reruns weekly, so a
+  kernel, image or store change that breaks durability is found; its pinned cloud
+  image must be bumped when Ubuntu retires the dated release.
 
 ## Alternatives
 

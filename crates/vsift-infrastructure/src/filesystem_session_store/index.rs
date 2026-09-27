@@ -6,6 +6,7 @@ use cap_fs_ext::DirExt;
 use vsift_application::SessionStorageError;
 use vsift_domain::{OperationId, SessionId};
 
+use super::map_committed_io;
 use super::{
     FilesystemSessionStore, SESSION_INDEX_DIRECTORY, STORAGE_SCHEMA_VERSION, SessionIndexMarker,
     SessionIndexPage, SessionRegistration, create_private_child_directory, create_regular_file,
@@ -43,7 +44,7 @@ impl FilesystemSessionStore {
         let index = self
             .root
             .open_dir_nofollow(SESSION_INDEX_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let bucket_name = session_bucket(session_id);
         if !index.try_exists(&bucket_name).map_err(map_storage_io)? {
             create_private_child_directory(&index, Path::new(&bucket_name))
@@ -51,7 +52,7 @@ impl FilesystemSessionStore {
         }
         let bucket = index
             .open_dir_nofollow(&bucket_name)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let mut count = 0_u16;
         for entry in bucket.entries().map_err(map_storage_io)? {
             let entry = entry.map_err(map_storage_io)?;
@@ -128,7 +129,7 @@ impl FilesystemSessionStore {
         let index = self
             .root
             .open_dir_nofollow(SESSION_INDEX_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let name = format!("{bucket:02x}");
         if !index.try_exists(&name).map_err(map_storage_io)? {
             return Ok(SessionIndexPage {
@@ -136,9 +137,7 @@ impl FilesystemSessionStore {
                 next_bucket,
             });
         }
-        let directory = index
-            .open_dir_nofollow(&name)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let directory = index.open_dir_nofollow(&name).map_err(map_committed_io)?;
         let mut session_ids = Vec::new();
         for entry in directory.entries().map_err(map_storage_io)? {
             let entry = entry.map_err(map_storage_io)?;

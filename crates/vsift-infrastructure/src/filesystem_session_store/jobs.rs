@@ -45,6 +45,7 @@ use vsift_domain::{
     SessionId, SessionPhase, StorageGeneration, TranscriptRevision, TranscriptRevisionId,
 };
 
+use super::map_committed_io;
 use super::{
     COORDINATION_DIRECTORY, FilesystemAdmissionPermit, FilesystemSessionStore,
     GENERATIONS_DIRECTORY, GenerationManifest, SESSIONS_DIRECTORY, StoredDurability,
@@ -135,7 +136,7 @@ impl FilesystemSessionStore {
         }
         let session = sessions
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let exists = session.try_exists(JOBS_DIRECTORY).map_err(map_storage_io)?;
         if !exists && create {
             create_directory(&session, JOBS_DIRECTORY)?;
@@ -144,7 +145,7 @@ impl FilesystemSessionStore {
             Some(
                 session
                     .open_dir_nofollow(JOBS_DIRECTORY)
-                    .map_err(|_| SessionStorageError::IntegrityFailure)?,
+                    .map_err(map_committed_io)?,
             )
         } else {
             None
@@ -203,7 +204,7 @@ impl FilesystemSessionStore {
         }
         let job = jobs
             .open_dir_nofollow(job_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let owner_file = if spec.is_some() {
             create_or_open(&job, OWNER_LOCK_FILE)?
         } else {
@@ -245,7 +246,7 @@ impl FilesystemSessionStore {
         }
         let chunks = job
             .open_dir_nofollow(CHUNKS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         Ok((
             FilesystemJobOwner {
                 session_id: session_id.clone(),
@@ -321,7 +322,7 @@ impl FilesystemSessionStore {
         let index = self
             .root
             .open_dir_nofollow(JOB_INDEX_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let bucket_name = job_bucket(job_id);
         if !index.try_exists(&bucket_name).map_err(map_storage_io)? {
             create_directory(&index, &bucket_name)?;
@@ -329,7 +330,7 @@ impl FilesystemSessionStore {
         }
         let bucket = index
             .open_dir_nofollow(&bucket_name)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let name = format!("{}.json", job_id.as_str());
         if bucket.try_exists(&name).map_err(map_storage_io)?
             && read_versioned_json_file::<StoredJobIndex>(&bucket, &name)
@@ -404,7 +405,7 @@ impl FilesystemSessionStore {
         }
         let job = jobs
             .open_dir_nofollow(job_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         Ok(read_record(&job, job_id, session_id)?.map(|record| record.state))
     }
 
@@ -455,7 +456,7 @@ impl FilesystemSessionStore {
         }
         let job = jobs
             .open_dir_nofollow(job_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let Some(record) = read_record(&job, job_id, session_id)? else {
             return Ok(None);
         };
@@ -496,14 +497,14 @@ impl JobStore for FilesystemSessionStore {
         let index = self
             .root
             .open_dir_nofollow(JOB_INDEX_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let bucket_name = job_bucket(job_id);
         if !index.try_exists(&bucket_name).map_err(map_storage_io)? {
             return Ok(None);
         }
         let bucket = index
             .open_dir_nofollow(&bucket_name)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let name = format!("{}.json", job_id.as_str());
         if !bucket.try_exists(&name).map_err(map_storage_io)? {
             return Ok(None);
@@ -534,7 +535,7 @@ impl JobStore for FilesystemSessionStore {
         }
         let bindings = jobs
             .open_dir_nofollow(BY_OPERATION_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let name = binding_name(operation_id);
         if !bindings.try_exists(&name).map_err(map_storage_io)? {
             return Ok(None);
@@ -602,7 +603,7 @@ impl JobStore for FilesystemSessionStore {
         }
         let job = jobs
             .open_dir_nofollow(job_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let durability = self.open_session_durability(&opened.session, session_id, None)?;
         with_state_lock(&job, || {
             let record = read_record(&job, job_id, session_id)?.ok_or(JobStoreError::NotFound)?;
@@ -762,7 +763,7 @@ impl JobOwner for FilesystemJobOwner {
         let bindings = self
             .jobs
             .open_dir_nofollow(BY_OPERATION_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let name = binding_name(operation_id);
         if !bindings.try_exists(&name).map_err(map_storage_io)?
             && entry_names(&bindings)?.len() >= MAX_SESSION_BINDINGS
@@ -826,11 +827,11 @@ impl CommitLedger for FilesystemSessionStore {
             .open_dir_nofollow(SESSIONS_DIRECTORY)
             .map_err(map_storage_io)?
             .open_dir_nofollow(session_id.as_str())
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         let head = read_committed_manifest(&session, session_id, self.chain_check())?;
         let generations = session
             .open_dir_nofollow(GENERATIONS_DIRECTORY)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+            .map_err(map_committed_io)?;
         // Walk down from the verified head along the digest links, so every
         // generation looked at is one the head's chain fixes.
         let mut manifest = head.manifest;
@@ -847,9 +848,8 @@ impl CommitLedger for FilesystemSessionStore {
                 .checked_sub(1)
                 .ok_or(SessionStorageError::IntegrityFailure)?;
             let file = open_regular_file(&generations, &format!("{previous}.json"), false)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?;
-            let bytes =
-                read_bounded_manifest(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
+                .map_err(map_committed_io)?;
+            let bytes = read_bounded_manifest(file).map_err(map_committed_io)?;
             if sha256_hex(&bytes) != expected {
                 return Err(SessionStorageError::IntegrityFailure);
             }
@@ -927,7 +927,7 @@ fn read_record(
     let Some(file) = open_record(job)? else {
         return Ok(None);
     };
-    let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let bytes = read_bounded(file).map_err(map_committed_io)?;
     decode_job(&bytes, job_id, session_id)
         .map(Some)
         .map_err(Into::into)
@@ -947,7 +947,7 @@ fn read_record_unverified_session(
     let Some(file) = open_record(job)? else {
         return Ok(None);
     };
-    let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let bytes = read_bounded(file).map_err(map_committed_io)?;
     let probe: SessionProbe =
         serde_json::from_slice(&bytes).map_err(|_| SessionStorageError::IntegrityFailure)?;
     let session_id =
@@ -1035,8 +1035,7 @@ fn with_state_lock<T>(
 ) -> Result<T, JobStoreError> {
     let mut attempts = 0;
     let lock = loop {
-        let file = open_regular_file(job, STATE_LOCK_FILE, true)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        let file = open_regular_file(job, STATE_LOCK_FILE, true).map_err(map_committed_io)?;
         match HeldFileLock::try_exclusive(file.into_std()) {
             Ok(lock) => break lock,
             Err(fs::TryLockError::WouldBlock) if attempts < STATE_LOCK_ATTEMPTS => {
@@ -1058,8 +1057,7 @@ fn liveness(job: &Dir) -> Result<JobLiveness, SessionStorageError> {
     if !job.try_exists(OWNER_LOCK_FILE).map_err(map_storage_io)? {
         return Ok(JobLiveness::Unowned);
     }
-    let file = open_regular_file(job, OWNER_LOCK_FILE, true)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let file = open_regular_file(job, OWNER_LOCK_FILE, true).map_err(map_committed_io)?;
     match HeldFileLock::try_shared(file.into_std()) {
         Ok(probe) => {
             probe.release().map_err(map_storage_io)?;
@@ -1076,7 +1074,7 @@ fn count_checkpoints(job: &Dir) -> Result<usize, SessionStorageError> {
     }
     let chunks = job
         .open_dir_nofollow(CHUNKS_DIRECTORY)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+        .map_err(map_committed_io)?;
     Ok(entry_names(&chunks)?
         .iter()
         .filter(|name| {

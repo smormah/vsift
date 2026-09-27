@@ -91,3 +91,20 @@ Ubuntu 24.04 / ext4 crash campaign (P10 PR 4) passes, so every profile still fai
 durable requests closed with `MISSING_CAPABILITY` before mutation. The order is tested
 on every platform with a test-only recorder, and on Unix with real directory syncs
 and process kills at every fault point; none of that is OS-crash evidence.
+
+## 2026-09-27 enablement note: Ubuntu 24.04 / ext4 is qualified (P10 PR 4)
+
+The owned crash campaign this decision requires has run and passed (the
+[P10 durable-publication record](../planning/p10-durable-publication.md), ADR 0020
+section 7 and its PR 4 notes): power loss at every flush and FUA write of a
+dm-log-writes log, SIGKILLed Ubuntu 24.04 virtual machines with the data disk attached
+`cache=none`, and dm-flakey write and flush errors, with a negative control that
+proves the harness sees lost acknowledgements. No acknowledged durable generation was
+lost, every injected failure was `STORAGE_IO` and never acknowledged, and `e2fsck`
+stayed clean. `QUALIFIED_UBUNTU_EXT4` is set, and the profile check now also requires
+Ubuntu 24.04 by `os-release`: a durable session is honoured on Ubuntu 24.04 with its
+root on ext4 mounts that keep write barriers, and nowhere else. The rest of this
+decision stands: Windows/NTFS and macOS/APFS stay ephemeral desktop targets, durable
+requests elsewhere still fail with `MISSING_CAPABILITY` before mutation, retained
+bundles keep process-crash consistency, and losing the disk or host is the caller's
+responsibility (X-10). The strict worker profile still needs P11 and P14.
