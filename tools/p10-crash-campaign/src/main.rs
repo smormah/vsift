@@ -31,7 +31,7 @@ use crate::{
     error::CampaignError,
     protocol::parse_events,
     replay::ReplayConfig,
-    workload::{MAX_ACK_BYTES, WorkloadConfig, read_text, unix_seconds},
+    workload::{MAX_ACK_BYTES, Mix, WorkloadConfig, read_text, unix_seconds},
 };
 
 /// The P10 crash campaign harness.
@@ -91,6 +91,9 @@ enum Step {
         /// Largest source copy in KiB.
         #[arg(long, default_value_t = 128)]
         source_max_kib: u64,
+        /// Which operations to draw from.
+        #[arg(long, value_enum, default_value_t = Mix::All)]
+        mix: Mix,
     },
     /// Verifies a session root against acknowledgements.
     Verify {
@@ -171,6 +174,7 @@ fn run(arguments: Arguments) -> Result<bool, CampaignError> {
             rotate_after,
             source_min_kib,
             source_max_kib,
+            mix,
         } => {
             let config = WorkloadConfig {
                 root,
@@ -187,6 +191,7 @@ fn run(arguments: Arguments) -> Result<bool, CampaignError> {
                 recognizer_delay: Duration::from_millis(recognizer_delay_ms),
                 rotate_after,
                 source_kib: (source_min_kib, source_max_kib.max(source_min_kib)),
+                mix,
             };
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()

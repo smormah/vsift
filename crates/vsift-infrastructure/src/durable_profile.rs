@@ -11,11 +11,12 @@
 //! - the root's device appears in `/proc/self/mountinfo` only as ext4 mounts
 //!   that do not disable write barriers (`nobarrier` or `barrier=0`), read
 //!   with a bound and parsed strictly by [`classify_mountinfo`];
-//! - the campaign constant `QUALIFIED_UBUNTU_EXT4` is set. It is `false`
-//!   until P10's campaign evidence is recorded, so every profile still fails
-//!   durable requests closed with an unsupported-guarantee error.
+//! - the campaign constant `QUALIFIED_UBUNTU_EXT4` is set, which it is since
+//!   P10 PR 4's crash campaign passed (`docs/planning/p10-durable-publication.md`).
 //!
-//! Anything that cannot be read or parsed fails closed. Both parsers are
+//! Every other profile answers a durable request with an unsupported-guarantee
+//! error before anything is changed. Anything that cannot be read or parsed
+//! fails closed. Both parsers are
 //! public so the fuzz harness reaches them through the same surface as the
 //! store.
 
@@ -33,16 +34,11 @@ pub const MAX_MOUNTINFO_BYTES: usize = 1024 * 1024;
 /// distribution's file.
 pub const MAX_OS_RELEASE_BYTES: usize = 64 * 1024;
 
-/// Set only when the Ubuntu 24.04 / ext4 crash campaign has passed (P10 PR 4).
+/// Set: the Ubuntu 24.04 / ext4 crash campaign passed (P10 PR 4, ADR 0020
+/// section 7; evidence and run links in the P10 durable-publication record).
+/// Clearing it withdraws the durable profile everywhere.
 #[cfg(target_os = "linux")]
-const QUALIFIED_UBUNTU_EXT4: bool = false;
-
-/// Whether this build may claim the qualified profile. A
-/// `durability-campaign` build claims it before the campaign constant is set,
-/// so the campaign can exercise the durable protocol it qualifies; the
-/// feature cannot be compiled into a release build.
-#[cfg(target_os = "linux")]
-const CAMPAIGN_PASSED: bool = QUALIFIED_UBUNTU_EXT4 || cfg!(feature = "durability-campaign");
+const QUALIFIED_UBUNTU_EXT4: bool = true;
 
 /// A Linux device number split into its major and minor parts, as
 /// `/proc/self/mountinfo` prints it.
@@ -375,7 +371,7 @@ pub(crate) fn storage_capabilities(root: &Dir) -> StorageCapabilities {
 /// Whether the root sits on the qualified Ubuntu/ext4 profile.
 #[cfg(target_os = "linux")]
 fn os_crash_durable(root: &Dir) -> bool {
-    if !CAMPAIGN_PASSED {
+    if !QUALIFIED_UBUNTU_EXT4 {
         return false;
     }
     let os = read_bounded_file(
@@ -388,7 +384,7 @@ fn os_crash_durable(root: &Dir) -> bool {
         read_bounded_file(&["/proc/self/mountinfo"], MAX_MOUNTINFO_BYTES)
             .and_then(|table| classify_mountinfo(&table, device).ok())
     });
-    qualifies(CAMPAIGN_PASSED, os, mount)
+    qualifies(QUALIFIED_UBUNTU_EXT4, os, mount)
 }
 
 /// Reads the first of `paths` that opens: at most `limit` bytes and one more,

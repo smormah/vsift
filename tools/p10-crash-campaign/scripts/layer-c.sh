@@ -78,9 +78,13 @@ for round in $(seq 1 "$rounds"); do
   fi
   log=$out/round-$round.log
   : > "$log"
+  # Even rounds leave out retranscription jobs, whose many flushes otherwise
+  # make them the operation a randomly timed error almost always hits first.
+  mix=all
+  if [ $(( round % 2 )) = 0 ]; then mix=no-jobs; fi
   "$binary" workload --root "$mountpoint/root" --scratch "$work/scratch" \
     --ack-out "$log" --known-acks "$acks" --first-seq $(( round * 100000 )) \
-    --max-ops 400 --stop-after-failures 3 --seed $(( seed + round )) &
+    --max-ops 400 --stop-after-failures 3 --seed $(( seed + round )) --mix "$mix" &
   workload=$!
   # Inject 50-1550 ms into the round, while the workload is committing.
   delay=$(( 50 + RANDOM % 1500 ))
@@ -104,7 +108,7 @@ for round in $(seq 1 "$rounds"); do
   e2fsck -fn "/dev/mapper/$device" > "$out/fsck-$round.log" 2>&1 || fsck_status=$?
   assessment_status=0
   assessment=$("$binary" assess --log "$log") || assessment_status=$?
-  echo "round $round delay_ms=$delay workload_status=$workload_status fsck=$fsck_status $assessment" \
+  echo "round $round mix=$mix delay_ms=$delay workload_status=$workload_status fsck=$fsck_status $assessment" \
     | tee -a "$out/rounds.log"
   if [ "$fsck_status" != 0 ]; then fsck_nonzero=$(( fsck_nonzero + 1 )); fi
   grep -a '^ACK ' "$log" >> "$acks" || true
@@ -128,8 +132,11 @@ final_status=0
 umount "$mountpoint"
 e2fsck -fn "/dev/mapper/$device" > "$out/fsck-final.log" 2>&1 || final_status=$(( final_status + 10 ))
 
+# Which operation each round's first failure hit, as kind:count pairs.
+first_hits=$(for file in "$out"/round-*.log; do grep -a -m1 '^FAIL ' "$file" | cut -d' ' -f4; done \
+  | sort | uniq -c | awk '{printf "%s%s:%s", (NR > 1 ? "," : ""), $2, $1}')
 echo "RESULT rounds=$rounds passed=$passed injected_rounds=$injected_rounds \
 injected_failures=$injected_failures storage_io=$storage_io acks=$(wc -l < "$acks") \
-fsck_nonzero=$fsck_nonzero final_status=$final_status" | tee "$out/result.txt"
+fsck_nonzero=$fsck_nonzero final_status=$final_status first_failures=$first_hits" | tee "$out/result.txt"
 [ "$final_status" = 0 ] && [ "$fsck_nonzero" = 0 ] && [ "$injected_failures" -gt 0 ] \
   && [ "$injected_failures" = "$storage_io" ]

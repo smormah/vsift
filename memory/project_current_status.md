@@ -26,72 +26,65 @@ Today it can:
 - manage the session's lifetime and retention, and validate retained bundles;
 - stop a long command cleanly on Ctrl-C or `SIGTERM`, never leaving a helper process
   running;
+- for a host that embeds the engine on Ubuntu 24.04 with local ext4, keep a durable
+  session's every acknowledged result through an OS crash or power loss;
 - keep every folder it creates private to the user.
 
-**P00-P09 are complete. P10 (recovery integration) is in progress:** of its four pull
-requests, PR 1 (the commit path, `e2b14d9`) and PR 2 (jobs, keys and checkpointed
-retranscription, `2ae55be`) are merged, and PR 3 (the public job surface and
-interruption handling) is complete on branch `p10/job-surface`, not yet merged. PR 4
-(the crash campaign) has not started. ADR 0020 is accepted (2026-09-27, D-1..D-5 as
-recommended). Every known limit is in `docs/planning/known-limits.md`.
+**P00-P09 are complete. P10 (recovery integration) is implemented across all four of
+its pull requests:** PR 1 (the commit path, `e2b14d9`), PR 2 (jobs, keys and
+checkpointed retranscription, `2ae55be`) and PR 3 (the public job surface and
+interruption handling, `8af331b`) are merged; **PR 4 (the Ubuntu 24.04 / ext4 crash
+campaign and durable enablement) is complete on branch `p10/durability-campaign`**, not
+yet reviewed or merged. The packet is complete when PR 4 merges and the ledger
+completion record is written. Every known limit is in `docs/planning/known-limits.md`.
 
-## P10 PR 3: job surface and interruptions (on its branch)
+## P10 PR 4: crash campaign and durable enablement (on its branch)
 
-- **What a user sees:** `vsift job status <job>` (state, `live_owner`, `resumable` and
-  why not, the operation id to retry with, requested range, progress in chunks,
-  attempts, committed revision and generation, last failure code); `vsift job resume
-  <job>` (the job afterwards and the retranscription); `vsift job cancel <job>`
-  (interrupted: cancelled now and checkpoints removed; running: asked, the owner stops
-  whisper within 250 ms; committing or succeeded: too late, warning
-  `cancellation_too_late`; repeats change nothing). No session argument: the root's job
-  index finds the job. `session status` adds `jobs` (16 newest) and `jobs_truncated`.
-  `transcript retranscribe --operation-id op_...` (D-1): same id and request replays
-  without a new generation (even without tools); another request is
-  `IDEMPOTENCY_CONFLICT`. `job run/batch` stay `COMMAND_NOT_IMPLEMENTED` (P11).
-- **Interruptions:** the first SIGINT/SIGTERM (Unix) or Ctrl-C/Ctrl-Break (Windows) of a
-  long command (ingest, retranscribe, candidates, frame, crop, audio, job resume)
-  cancels its one `Cancellation`; the second escalates (providers killed without the
-  5 s graceful wait); the process exits only after its providers are reaped (SEC-04). A
-  retranscription answers `CANCELLED` (exit 6) with `[session, job]` in `affected_ids`
-  and a remediation command `vsift job resume <job>`; ingest stops its copy (64 KiB
-  blocks) and removes the partial file; candidates and evidence commit what they
-  finished. ADR 0017 decision 4 is superseded.
-- **Engine and storage:** `EngineError::JobInterrupted` and `JobSessionNotOpen`,
-  `affected_session()`; `JobStatusReport` gained resumability, planned chunks,
-  committed generation, operation id and last failure; `Engine::session_jobs`
-  (read-only, `observed_state`); `Engine::job_resume` returns `JobResumeReport` and
-  refuses closed/expired sessions and any live owner; `Cancellation::escalate`;
-  `IngestRequest.cancellation`; `EnginePorts::with_session_root_wait` (#144).
-  `FilesystemSessionStore::watch_for_job_cancel` and `recorded_job_state`; job records
-  gained optional `planned_chunks`. The supervisor reports a provider that failed after
-  cancellation as cancelled (a console interrupt reaches every process on the console),
-  and a retranscription records such a chunk failure as the cancellation.
-- **Dependency:** Tokio's `signal` feature; `Cargo.lock` unchanged; review in ADR 0020.
-- **Tests:** `job_cli_contract` (grammar, unknown job, succeeded/late cancel, live owner
-  admitting and running = BUSY with retry hint, committing = too late, interrupted
-  cancel removes checkpoints, closed session, IDEMPOTENCY_CONFLICT via the flag);
-  `interrupt_cli_contract` (Unix SIGINT/SIGTERM on an ingest copy in CI; Windows
-  Ctrl-Break opt-in through `tools/send-console-ctrl.ps1`); the watcher, escalation,
-  termination-rule, staging-cancel and error-mapping unit tests; the job examples in
-  `local_asr_contract`; opt-in `p10_recovery_e2e` (the recoverable mechanical run).
-- **Windows finding:** a process that inherited "ignore Ctrl-C" (as this agent host's
-  processes do) never sees Ctrl-C, only Ctrl-Break (L-053).
+- **What a host sees:** `IngestRequest::durability` (engine API only, ADR 0020 D-3).
+  On Ubuntu 24.04 with the session root on ext4 mounts that keep write barriers a
+  durable request is honoured and reported `os_crash_durable`; everywhere else it fails
+  with `MISSING_CAPABILITY` before anything changes. The CLI still opens ephemeral
+  sessions; an ingest now reports its session's own guarantee (it used to report the
+  store's strongest).
+- **Gate:** `QUALIFIED_UBUNTU_EXT4 = true`; `durable_profile` also reads `os-release`
+  (64 KiB bound, strict `classify_os_release`, fuzz target `os_release`) and decides by
+  the public `qualifies` table; anything unread or unparsed fails closed.
+- **Campaign:** `tools/p10-crash-campaign/` (workspace tool `vsift-crash-campaign`:
+  `workload`, `verify`, `replay`, `assess`; scripts; guest service) and
+  `.github/workflows/p10-durability-campaign.yml` (manual, weekly; hosted
+  `ubuntu-24.04` with KVM). Layer A: dm-log-writes replay at every flush and FUA write
+  with verification, a write probe and `e2fsck -fn` at each point. Layer B: SIGKILL of
+  the pinned Ubuntu 24.04 cloud image (release 20260911, SHA-256 pinned) with a
+  `cache=none` data disk, four shards. Layer C: dm-flakey `error_writes` swapped in at
+  random. The negative control (`durability-campaign` feature,
+  `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1`) removes every sync after the pointer rename and
+  must lose acknowledgements. Numbers and run links:
+  `docs/planning/p10-durable-publication.md`.
+- **Findings fixed:** (1) removing only the session-directory sync hid behind ext4's
+  journal (the checkpoint's flush commits the rename), so the control removes every
+  sync after the rename; (2) a storage failure reading committed state (ext4 shut down
+  after a write error: `EIO`) was `INTEGRITY_FAILURE`; now `STORAGE_IO`
+  (`map_committed_io`, also the root's layout check); (3) the ingest guarantee report.
+- **Governance:** the checker allows `durability-campaign` only in development
+  dependencies and the unpublished campaign tool's non-default `campaign` feature; the
+  feature refuses release builds. New action pin: `actions/download-artifact` v8.0.1.
+- **Residuals:** storage ignoring flushes (L-056), disk or host loss (L-057, X-10),
+  Ubuntu recognised by `os-release` (L-058), engine-only durable requests (L-059),
+  Windows/macOS unqualified (L-008).
 
-## P10 still to do
-
-- **PR 4:** Ubuntu 24.04 / ext4 campaign (dm-log-writes >= 2,000 points, >= 300 QEMU
-  kills, dm-flakey EIO, negative control), X-10, then flip `QUALIFIED_UBUNTU_EXT4`.
-
-## P10 PRs 1-2 (merged)
+## P10 PRs 1-3 (merged)
 
 - PR 1 (`e2b14d9`): store split into `filesystem_session_store/`; #164 resolved (reads
-  stop at the writer's `chain-verified.json`); durable protocol implemented and disabled
-  (`durable_profile`, `QUALIFIED_UBUNTU_EXT4 = false`); eleven commit fault points.
+  stop at the writer's `chain-verified.json`); durable protocol (then disabled); eleven
+  commit fault points.
 - PR 2 (`2ae55be`): `JobState` `Interrupted`/`Committing`, retry policy and poison rule;
   keys (request digest, recognition key, `opk_sha256_` operation key, `job_` id);
   checkpoints in `sessions/<ses>/jobs/<job>/chunks/`; exactly-once commit reconciled
-  from the chain; `IDEMPOTENCY_CONFLICT` (exit 2, D-4); caps 512 / 384 / 128 KiB (D-2);
-  readers retry a file being replaced (0.5 s) instead of reporting damage.
+  from the chain; `IDEMPOTENCY_CONFLICT` (exit 2, D-4); caps 512 / 384 / 128 KiB (D-2).
+- PR 3 (`8af331b`): `job status/resume/cancel <job>`, `session status` `jobs`,
+  `--operation-id` (D-1); first SIGINT/SIGTERM or Ctrl-C/Ctrl-Break cancels a long
+  command, the second escalates; `job cancel` reaches a running owner within 250 ms;
+  Tokio `signal` feature; Windows inherited "ignore Ctrl-C" is L-053.
 
 ## What works (public CLI)
 
@@ -125,8 +118,8 @@ recommended). Every known limit is in `docs/planning/known-limits.md`.
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
-| P10 | In progress (ledger `in_progress`): PRs 1-2 merged, PR 3 complete on its branch; PR 4 to do |
-| P11, P12, P14 | Not started |
+| P10 | Implemented (ledger `in_progress`): PRs 1-3 merged, PR 4 complete on its branch; completion record after merge |
+| P11, P12, P14 | Not started (P11 is next once P10 is recorded complete) |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
 ## Architecture snapshot
@@ -137,14 +130,15 @@ recommended). Every known limit is in `docs/planning/known-limits.md`.
 Storage: `filesystem_session_store/` (commit path in `commit.rs`/`publication.rs`, chain
 in `chain.rs`, jobs in `jobs.rs`/`job_records.rs`), `durable_profile.rs`,
 `fault_point.rs`, `retry_timer.rs`. Jobs: `vsift-application/src/job.rs` and
-`job/run.rs`, `vsift/src/jobs.rs`; CLI `job.rs` and `signal.rs`.
+`job/run.rs`, `vsift/src/jobs.rs`; CLI `job.rs` and `signal.rs`. Campaign:
+`tools/p10-crash-campaign/`.
 
 ## Quality evidence
 
-- P10 PR 3 branch, Windows 11: fmt, strict Clippy (with and without features, and
-  cross-target for Linux), workspace tests, warning-denied rustdoc, governance, fuzz
-  fmt/Clippy/replay; opt-in `p10_recovery_e2e` and the Windows console-interrupt test
-  with FFmpeg 9.0 and whisper.cpp v1.9.2. Results go in the PR description.
+- P10 PR 4 branch: fmt, strict Clippy (with and without features), workspace tests,
+  warning-denied rustdoc, governance, fuzz fmt/Clippy/replay and cargo deny on Windows
+  11; the Linux build, Clippy and tests plus the whole campaign on hosted
+  `ubuntu-24.04`. Results and run links go in the PR description and the record.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

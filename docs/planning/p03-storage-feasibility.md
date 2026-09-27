@@ -148,6 +148,14 @@ accepted narrower profile uses ephemeral NTFS/APFS qualification for P03 and def
 Ubuntu/ext4 durable enablement to P10/P11/P14. This is not a conclusion that Windows
 or macOS cannot implement safe durable storage in a later profile.
 
+2026-09-27 (P10 PR 4): FS-01 is closed for Ubuntu 24.04 on local ext4 only. The
+campaign does not need restart control over a hosted runner's own disk: it replays a
+dm-log-writes log at every flush (power loss), kills QEMU guests whose data disk is a
+file on the runner (OS crash) and swaps in dm-flakey error tables (write errors), all
+inside ordinary hosted `ubuntu-24.04` jobs with KVM. See the
+[P10 durable-publication record](p10-durable-publication.md). NTFS and APFS remain
+unqualified.
+
 ## Local validation and security review
 
 `cargo fmt --all --check`, strict workspace/all-target/all-feature clippy,

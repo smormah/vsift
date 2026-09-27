@@ -15,10 +15,10 @@ homepage.workspace = true
 publish = false
 
 [features]
-# Builds the store with the campaign's negative control (and, before the
-# campaign constant was set, the qualified profile). Never a default: the
-# infrastructure crate refuses it without debug assertions, and the
-# governance check allows it only here and in development dependencies.
+# Builds the store with the campaign's negative control
+# (VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1). Never a default: the infrastructure
+# crate refuses it without debug assertions, and the governance check allows
+# it only here and in development dependencies.
 campaign = ["vsift-infrastructure/durability-campaign"]
 
 [dependencies]

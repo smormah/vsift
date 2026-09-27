@@ -393,6 +393,15 @@ refines the design:
   only for `ID=ubuntu` and `VERSION_ID=24.04` together with ext4 mounts that keep write
   barriers; the decision is the public `qualifies` table, and anything unread or
   unparsed fails closed.
+- **Storage failures are not damage (a finding).** Layer C's first full run met an
+  evidence call answering `INTEGRITY_FAILURE` after the injected errors: once ext4
+  shuts itself down on a write error, reads and opens of committed state fail with
+  `EIO`, and the store turned every failure to open or read committed state into an
+  integrity failure. A failing disk would then look like tampered evidence. The store
+  now maps a storage failure there (`EIO`, a read-only or full filesystem, a stale
+  handle, a busy resource, an interrupted call) to `STORAGE_IO`, in session reads and
+  in the root's own layout check alike, and keeps an integrity failure for a missing,
+  mistyped, linked or malformed entry.
 - **Engine request (D-3).** `IngestRequest` gained `durability`; the command line keeps
   asking for ephemeral sessions until P11's durable workspace. An ingest now reports
   its session's own guarantee: before, it reported the store's strongest, which would

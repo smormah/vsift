@@ -80,6 +80,19 @@ pub struct WorkloadConfig {
     pub rotate_after: u64,
     /// Source copies are between these sizes in KiB.
     pub source_kib: (u64, u64),
+    /// Which operations the mix draws from.
+    pub mix: Mix,
+}
+
+/// The operations a workload draws from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+pub enum Mix {
+    /// Ingests, evidence, retranscription jobs and renewals.
+    All,
+    /// Everything but retranscription jobs, whose many flushes otherwise make
+    /// them the operation a randomly timed write error almost always hits
+    /// first (layer C alternates the two mixes).
+    NoJobs,
 }
 
 /// Why one operation did not acknowledge.
@@ -225,7 +238,7 @@ pub async fn run(config: &WorkloadConfig) -> Result<u64, CampaignError> {
     while config.max_ops.is_none_or(|max| done < max) {
         let seq = config.first_seq + done;
         done += 1;
-        let (kind, target) = choose(&mut rng, &active);
+        let (kind, target) = choose(&mut rng, &active, config.mix);
         channel.line(&format!("START {seq} {} {kind}", unix_nanos()?))?;
         let outcome = match (kind, active.get(target)) {
             (OperationKind::Ingest, _) | (_, None) => ingest(&engine, config, &mut rng, seq).await,
@@ -290,14 +303,14 @@ fn known_sessions(config: &WorkloadConfig) -> Result<Vec<ActiveSession>, Campaig
 /// The next operation and the active session it works on: mostly evidence
 /// and retranscriptions, some renewals, and a new session now and then
 /// (always while fewer than two sessions take work).
-fn choose(rng: &mut SplitMix64, active: &[ActiveSession]) -> (OperationKind, usize) {
+fn choose(rng: &mut SplitMix64, active: &[ActiveSession], mix: Mix) -> (OperationKind, usize) {
     let kind = if active.is_empty() || (active.len() < 2 && rng.below(4) == 0) {
         OperationKind::Ingest
     } else {
-        match rng.below(100) {
-            0..6 => OperationKind::Ingest,
-            6..56 => OperationKind::Evidence,
-            56..84 => OperationKind::Retranscribe,
+        match (rng.below(100), mix) {
+            (0..6, _) => OperationKind::Ingest,
+            (6..56, _) | (56..84, Mix::NoJobs) => OperationKind::Evidence,
+            (56..84, Mix::All) => OperationKind::Retranscribe,
             _ => OperationKind::Renew,
         }
     };

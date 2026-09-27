@@ -125,9 +125,12 @@ caller's expected generation, installs an immutable checksummed manifest, and re
 the commit pointer only after validation and file synchronization. Recovery verifies
 the bounded manifest chain, ignores unpublished attempts, and rejects corrupt, missing
 or future-version metadata. Fault and child-process tests cover every manifest/pointer
-write, flush and rename boundary. The adapter reports
-process-crash-consistent ephemeral publication only; explicit durable requests fail
-before admission or mutation until P10/P11/P14 qualify Ubuntu/ext4 under ADR 0010.
+write, flush and rename boundary. An ephemeral session is process-crash consistent.
+A durable session (ADR 0020, requested through the engine API) also synchronises the
+artifact, generation and session directories before it acknowledges; since P10 PR 4
+the adapter offers it only on the qualified Ubuntu 24.04 / local ext4 profile (ADR
+0010's crash campaign, `durable_profile`), and an explicit durable request anywhere
+else fails before admission or mutation.
 
 P05 registers each new session in a bounded root-local hash index before source
 staging. A held marker lock protects an opener across processes. Source binding,

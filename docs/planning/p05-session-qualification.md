@@ -97,7 +97,10 @@ pre-existing dependency-tree cases.
 
 - The P05 CLI creates no durable workspace or managed catalogue. Explicit
   durable requests still fail before mutation. P10/P11/P14 own strict
-  Ubuntu/ext4 OS/storage-crash qualification.
+  Ubuntu/ext4 OS/storage-crash qualification. (2026-09-27: P10 PR 4 qualified
+  Ubuntu 24.04 / local ext4 for durable sessions requested through the engine;
+  the CLI still opens ephemeral sessions until P11. See the
+  [P10 durable-publication record](p10-durable-publication.md).)
 - A selected export may remain incomplete after interruption. It is private,
   fails validation, and requires explicit caller inspection/removal. VSift
   never treats it as a completed bundle or deletes it automatically.

@@ -294,7 +294,16 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
-## 2026-09-27 P10 PR 3 evidence (job surface and interruptions, branch `p10/job-surface`)
+## 2026-09-27 P10 PR 4 evidence (crash campaign and durable enablement, branch `p10/durability-campaign`)
+
+The last of P10's four pull requests (ADR 0020 section 7 and "PR 4" notes). Method,
+numbers and run links: the [P10 durable-publication record](p10-durable-publication.md).
+
+| Gate | Evidence |
+| --- | --- |
+⟨VERIFICATION_ROWS⟩
+
+## 2026-09-27 P10 PR 3 evidence (job surface and interruptions, merged as `8af331b`)
 
 P10 is in progress; this records the third of its four pull requests (ADR 0020 "PR 3"
 notes). CLI tests are in `crates/vsift-cli/tests/job_cli_contract.rs` (jobs put in each

@@ -57,7 +57,11 @@ read/cleanup holds and process-crash recovery. S-03 at this packet proves stable
 storage snapshots and detects identity/integrity changes; P04 implements actual media
 source binding and staging under ADR 0012. P05 owns lifecycle deletion, while P10/P11/P14 retain
 durable stage acknowledgement, the Ubuntu/ext4 OS/storage campaign and strict-worker
-release proof. Explicit durable requests continue to fail before mutation.
+release proof. Explicit durable requests continue to fail before mutation. (2026-09-27:
+P10 PR 4's campaign qualified Ubuntu 24.04 / local ext4, where an engine-level durable
+request is now honoured; everywhere else it still fails before mutation. X-10 evidence
+is in the [P10 durable-publication record](p10-durable-publication.md); the worker
+workspace of R-10 remains P11's.)
 
 R0 owns local media input, disposable/retained workspaces, bounded single-host worker
 execution, evidence retrieval and native/npm distribution. It excludes OCR,

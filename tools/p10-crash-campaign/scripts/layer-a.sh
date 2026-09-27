@@ -77,7 +77,7 @@ umount "$mountpoint"
 dmsetup remove "$device"
 losetup -d "$data_device" "$log_device"
 trap - EXIT
-echo "log_bytes=$(du -b --apparent-size "$log" | cut -f1) log_allocated=$(du -b "$log" | cut -f1)" >> "$out/environment.txt"
+echo "log_allocated_bytes=$(du -B1 "$log" | cut -f1)" >> "$out/environment.txt"
 
 started=$(date +%s)
 status=0
