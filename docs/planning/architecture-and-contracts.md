@@ -101,7 +101,7 @@ are in the [v1 CLI contract](../contracts/cli-v1.md).
 | `crop <session> <evidence> --rect x,y,w,h`, `audio <session> --from ... --to ...` | Native-size crop by FFmpeg re-decode with source-pixel lineage; 16 kHz mono WAV clip of at most 30 s with its first sample's time (P09 PR 4); every evidence result delivers the committed file's absolute path, valid while the session exists |
 | `bundle validate <dir>` | Validate schema, contained paths, counts, sizes and hashes without executing embedded content |
 | `job run --request <file>`, `job batch --requests <file>` | Versioned noninteractive worker inputs; explicit workspace, finite concurrency and admission |
-| `job status/resume/cancel <id>` | Read-only status or explicit lifecycle transition; no implicit detached daemon |
+| `job status/resume/cancel <id>` | Read-only status or explicit lifecycle transition by job id (the root job index finds the session); no implicit detached daemon (implemented in P10 PR 3, [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)) |
 
 Defer `compose` until R1 accuracy gates pass. `setup` alone displays help and performs
 no installation. Unknown commands fail with documented usage errors. Default
@@ -317,7 +317,10 @@ with a deterministic operation id first; recovery reconciles one way only, from 
 manifest chain. A session holds at most 64 jobs (the oldest ended, unpinned one is
 pruned), 16 attempts per job and 1,024 checkpoints of 256 KiB. An unreferenced
 manifest that an ended publication left above the head is replaced by the next
-publication rather than refusing it.
+publication rather than refusing it. Since P10 PR 3 a record also keeps the job's
+planned chunk count, `job cancel` records `cancelling` under `state.lock` and the live
+owner polls `job.json` every 250 ms to stop its provider, and `session status` lists
+jobs read-only (as reconciliation would record them, without taking ownership).
 
 Do not build a general transaction engine. R0 has single-writer metadata publication,
 no cross-session transactions and no network filesystem guarantee. If the feasibility

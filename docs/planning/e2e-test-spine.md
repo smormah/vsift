@@ -251,6 +251,41 @@ all eleven stages on 2026-09-26 in 471 s (the journeys 10.6 s and 24.0 s); the r
 are in the [P09 qualification record](p09-evidence-navigation.md). The mechanical
 checkpoint is met by these two stages.
 
+P10 PR 3 adds the **recoverable mechanical run** (X-01..X-03, X-06, X-09 through the
+binary):
+
+```console
+VSIFT_TEST_WHISPER_CLI=<abs> VSIFT_TEST_WHISPER_MODEL=<abs> \
+  cargo test -p vsift-cli --locked --test p10_recovery_e2e -- --ignored --nocapture
+```
+
+It needs FFmpeg and FFprobe on `PATH` and whisper.cpp with its model, registers them in
+isolated per-user bases and runs the binary with an empty `PATH`. Clips are built at run
+time without re-encoding: F03's speech variant looped to 81 s (four 30 s chunks) and
+F02 looped to 492 s (nine 60 s windows). Expectations come from the frozen truth (F03's
+manifest entry and speech provenance) and from an uninterrupted control run. Stages:
+`p10_local_asr_journey` (the P09 local-ASR journey on the looped clip: retranscribe as
+the control run, `search`, `candidates`, `frame get --candidate`, `crop`, `audio`, then
+`session retain` and `bundle validate` with every citation checked against the truth);
+`p10_kill_and_resume` (a run killed once its first checkpoint exists is `interrupted`
+in `job status`; the same command resumes it to the control segments; a committed
+transcript artifact altered on disk is then `INTEGRITY_FAILURE`);
+`p10_interrupt_and_job_resume` (Ctrl-C after the first checkpoint: `SIGINT` on Unix, a
+console Ctrl-Break through `tools/send-console-ctrl.ps1` on Windows; `CANCELLED`, exit
+6, the session and job named and `vsift job resume <job>` suggested, nothing committed,
+no provider alive 10 s later; one checkpoint then altered, and `job resume` discards it
+and commits the control segments); `p10_job_cancel_twice` (`job cancel` twice while a
+run is live: the owner stops within the budget, the job ends `cancelled` without
+checkpoints); `p10_operation_replay` (a run with `--operation-id` killed as its commit's
+pointer moves is replayed by the same request without a new generation, and the same
+id with another range is `IDEMPOTENCY_CONFLICT`; the fault-injection kill at the
+pointer rename itself is in the storage kill test, because the release binary cannot
+carry the `fault-injection` feature); and `p10_interrupt_candidates` (an interruption
+halfway through a `candidates` call commits what it analysed and answers `partial`, and
+a rerun completes to the control call's candidates). It prints `p10_recovery: passed`
+and writes `.vsift/e2e-runs/p10-<run-id>/report.json`; results are recorded in the
+[verification plan](verification.md) "P10 PR 3 evidence".
+
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
 F01 tone audio. It is **not** the P06 stage, a P13 managed-install stage, a real-speech

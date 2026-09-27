@@ -41,6 +41,15 @@ These files are the machine-readable public v1 boundary:
   how many segments the run recognised (P07 increment 3b) and `job`, the recoverable
   job behind it (`job_id`, `resumed`, `chunks_reused`, `replayed`; P10 PR 2). Its
   envelope names the `operation_id` the result is recorded under;
+- `job-data.schema.json` — the `data` member of a complete `job.status` or `job.cancel`
+  result (P10 PR 3): one recoverable job's `job_id`, `session_id`, `kind`, `state`,
+  `live_owner`, `resumable` and `resumable_reason`, the `operation_id` a retry should
+  carry, `request.range`, `progress` (`chunks_total`, `chunks_checkpointed`),
+  `attempts`, `result` (`revision_id`, `generation`) and `failure` (`code`,
+  `retryable`). It never names a path, transcript text or provider output;
+- `job-resume-data.schema.json` — the `data` member of a complete `job.resume` result
+  (P10 PR 3): `job` (job data after the run) and `outcome` (exactly the
+  `transcript.retranscribe` data);
 - `transcript-get-stream-data.schema.json` — the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count` and the continuation cursor (P07);
@@ -156,6 +165,18 @@ output), and revision 2 retranscribed 5.5-6 s, where the clip is silent, so it
 carries revision 1's segment (`carried_from`) and records a silent chunk and
 `no_speech_recognised`. The first two are checked by `vsift-contract`'s
 `local_asr_contract`, the record by `vsift-infrastructure`'s `local_asr_store`.
+`job-status.json`, `job-cancel.json`, `job-resume.json` and
+`retranscribe-cancelled.json` (P10 PR 3) describe the job of the F01 retranscription of
+`transcript-retranscribe.json`: its status after a Ctrl-C stopped a run (interrupted,
+resumable, last failure `CANCELLED`), a `job cancel` that came too late (succeeded,
+warning `cancellation_too_late`), the `job resume` that committed revision 2 from its
+checkpoint (the job and the retranscription), and the interrupted run's failure
+(`CANCELLED`, the session and job in `affected_ids`, a remediation whose `command` is
+`vsift job resume <job>`). All four are checked by `vsift-contract`'s
+`local_asr_contract`. `session status` (whose data has no separate schema) adds, since
+P10 PR 3, `jobs` (at most 16 of `job_id`, `kind`, `state`, `live_owner`, `resumable`,
+`resumable_reason`, the members of `job-data.schema.json` with the same meaning) and
+`jobs_truncated`.
 `setup-check.local-asr.json` is a ready `setup check` whose local-ASR check ran now
 and passed with the pinned base model, and `setup-check.blocked.json` the check with
 nothing installed (local ASR `not_run`, `media_tools_unavailable`); both are checked
