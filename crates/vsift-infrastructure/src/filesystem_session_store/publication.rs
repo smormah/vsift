@@ -584,14 +584,26 @@ fn write_chain_checkpoint(
     };
     let bytes = serde_json::to_vec(&checkpoint).map_err(|_| SessionStorageError::Io)?;
     let staged = format!("{}.{generation}.chain.tmp", operation.as_str());
-    prepare_staged_file(
-        commit,
-        attempts,
-        &staged,
-        &bytes,
-        Some(FaultPoint::ChainCheckpointWrite),
-        None,
-    )?;
+    if commit.negative_control() {
+        // The crash campaign's negative control flushes nothing after the
+        // pointer rename (`Commit::negative_control`).
+        if attempts.try_exists(&staged).map_err(map_storage_io)? {
+            attempts.remove_file(&staged).map_err(map_storage_io)?;
+        }
+        create_new(attempts, &staged)
+            .and_then(|mut file| file.write_all(&bytes))
+            .map_err(map_storage_io)?;
+        commit.reach(FaultPoint::ChainCheckpointWrite)?;
+    } else {
+        prepare_staged_file(
+            commit,
+            attempts,
+            &staged,
+            &bytes,
+            Some(FaultPoint::ChainCheckpointWrite),
+            None,
+        )?;
+    }
     attempts
         .rename(&staged, session, CHAIN_CHECKPOINT_FILE)
         .map_err(map_storage_io)?;

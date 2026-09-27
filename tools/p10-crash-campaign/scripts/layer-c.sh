@@ -85,6 +85,9 @@ for round in $(seq 1 "$rounds"); do
   # Inject 50-1550 ms into the round, while the workload is committing.
   delay=$(( 50 + RANDOM % 1500 ))
   sleep "$(printf '%d.%03d' $(( delay / 1000 )) $(( delay % 1000 )))"
+  # The swap takes a moment: a failure after it began is injected, and only
+  # an operation that started once the failing table was live must fail.
+  echo "INJECT-BEGIN $(date +%s%N)" >> "$log"
   switch_table "0 $sectors flakey $loop 0 0 1 1 error_writes"
   echo "INJECT $(date +%s%N)" >> "$log"
   workload_status=0

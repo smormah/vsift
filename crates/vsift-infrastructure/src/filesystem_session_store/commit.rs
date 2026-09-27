@@ -211,22 +211,50 @@ impl Commit<'_> {
     /// Synchronises the session directory after the pointer rename: the
     /// commit point of a durable session.
     ///
-    /// In a `durability-campaign` build with the negative control selected
-    /// the synchronisation is left out, so the crash campaign can show that
-    /// it detects the acknowledged generations this loses (ADR 0020).
+    /// Under the crash campaign's negative control the synchronisation is
+    /// left out (see [`Self::negative_control`]).
     pub(super) fn sync_pointer_directory(self, session: &Dir) -> Result<(), SessionStorageError> {
-        #[cfg(feature = "durability-campaign")]
-        if self.hooks.negative_control && self.durable() {
-            self.record(|| FsOp::SyncDirectory(DirRole::Session));
+        if self.negative_control() {
             return Ok(());
         }
         self.sync_directory(session, DirRole::Session)
     }
+
+    /// Whether this durable commit runs the crash campaign's negative
+    /// control: a `durability-campaign` build with
+    /// `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1`, never any other build.
+    ///
+    /// The control leaves out every synchronisation after the pointer
+    /// rename: the session directory's and the flush of the chain
+    /// checkpoint. Both must go, because on ext4 any file flush commits the
+    /// whole running journal transaction, so the checkpoint's flush alone
+    /// would make the pointer rename durable before the acknowledgement and
+    /// hide the missing directory synchronisation (the campaign's first
+    /// negative-control run found exactly that). With both gone an
+    /// acknowledged generation is lost by a power loss before the next
+    /// commit, which the campaign must detect (ADR 0020).
+    #[cfg_attr(
+        not(feature = "durability-campaign"),
+        allow(
+            clippy::unused_self,
+            reason = "only a campaign build can select the control"
+        )
+    )]
+    pub(super) const fn negative_control(self) -> bool {
+        #[cfg(feature = "durability-campaign")]
+        {
+            self.hooks.negative_control && self.durable()
+        }
+        #[cfg(not(feature = "durability-campaign"))]
+        {
+            false
+        }
+    }
 }
 
 /// Environment variable that selects the crash campaign's negative control
-/// in a `durability-campaign` build: `1` removes the session directory
-/// synchronisation after every pointer rename.
+/// in a `durability-campaign` build: `1` removes every synchronisation after
+/// the pointer rename (see `Commit::negative_control`).
 #[cfg(feature = "durability-campaign")]
 pub(crate) const NEGATIVE_CONTROL_VARIABLE: &str = "VSIFT_CAMPAIGN_NEGATIVE_CONTROL";
 

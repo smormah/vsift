@@ -186,6 +186,49 @@ fn session(number: u64) -> Result<SessionId, Box<dyn Error>> {
     Ok(SessionId::parse(format!("ses_{number:032x}"))?)
 }
 
+/// A durable ingest (engine level only, ADR 0020 D-3) is honoured only on
+/// the qualified profile (Ubuntu 24.04, local ext4 with write barriers);
+/// anywhere else it fails with `MISSING_CAPABILITY` before any session is
+/// registered, and it is never downgraded to an ephemeral session.
+#[tokio::test]
+async fn a_durable_ingest_is_durable_or_fails_closed() -> TestResult {
+    let harness = Harness::new()?;
+    let opened = harness
+        .engine
+        .ingest(IngestRequest {
+            source: harness.root.source()?,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Durable,
+        })
+        .await;
+    let sessions = harness.root.path("sessions").join("sessions");
+    match opened {
+        Ok(outcome) => {
+            assert!(cfg!(target_os = "linux"), "only Linux can be qualified");
+            assert_eq!(
+                outcome.session.publication,
+                vsift::PublicationGuarantee::OsCrashDurable
+            );
+            let manifest = fs::read_to_string(
+                sessions
+                    .join(outcome.session.session_id.as_str())
+                    .join("generations")
+                    .join("0.json"),
+            )?;
+            assert!(manifest.contains(r#""durability":"durable""#), "{manifest}");
+        }
+        Err(error) => {
+            assert_eq!(error.failure_code(), FailureCode::MissingCapability);
+            assert!(
+                !sessions.exists() || fs::read_dir(&sessions)?.next().is_none(),
+                "a session was created"
+            );
+        }
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifiers() -> TestResult {
     let harness = Harness::new()?;

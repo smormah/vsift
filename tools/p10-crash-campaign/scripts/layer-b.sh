@@ -38,10 +38,11 @@ mkfs.ext4 -q -F -L vsift-tools -d "$tools_dir" "$work/tools.img"
 
 qemu() {
   # $1: OS overlay, $2: console log, $3: campaign log, $4: acknowledgement disk,
-  # further arguments are appended.
+  # further arguments are appended. Run in the background, the function's
+  # subshell becomes QEMU itself (exec), so its PID is the one to kill.
   local os=$1 console=$2 campaign=$3 acks=$4
   shift 4
-  qemu-system-x86_64 -enable-kvm -cpu host -smp 2 -m 2048 \
+  exec qemu-system-x86_64 -enable-kvm -cpu host -smp 2 -m 2048 \
     -display none -monitor none -no-reboot -nic none \
     -serial "file:$console" -serial "file:$campaign" \
     -drive "if=none,id=os,file=$os,format=qcow2,cache=unsafe" \

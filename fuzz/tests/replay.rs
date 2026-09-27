@@ -36,11 +36,12 @@ use vsift_fuzz::{
     png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
-    FrameListingWindow, MountDevice, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
-    classify_mountinfo, decode_evidence_record, decode_transcript_record,
-    decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
-    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_png_sequence, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    FrameListingWindow, MountDevice, OsReleaseProfile, SourceContainer, VisualSamplingWindow,
+    WhisperOutputLimits, classify_mountinfo, classify_os_release, decode_evidence_record,
+    decode_transcript_record, decode_visual_index_record, encode_transcript_record,
+    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
+    parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -100,7 +101,8 @@ const RECORDED_CROP_SIZE: u16 = 80;
 
 /// The domain file whose crop tests the `crop_rect` seeds quote.
 const CROP_TESTS: &str = "crates/vsift-domain/src/timeline.rs";
-/// The durable-profile tests whose mount tables the `mountinfo` seeds quote.
+/// The durable-profile tests whose mount tables and os-release files the
+/// `mountinfo` and `os_release` seeds quote.
 const MOUNTINFO_TESTS: &str = "crates/vsift-infrastructure/src/durable_profile.rs";
 
 const SEEDS: &[Seed] = &[
@@ -117,6 +119,16 @@ const SEEDS: &[Seed] = &[
     seed(
         Target::Mountinfo,
         "missing-separator.txt",
+        Origin::InlineIn(MOUNTINFO_TESTS),
+    ),
+    seed(
+        Target::OsRelease,
+        "noble.txt",
+        Origin::InlineIn(MOUNTINFO_TESTS),
+    ),
+    seed(
+        Target::OsRelease,
+        "unquoted-space.txt",
         Origin::InlineIn(MOUNTINFO_TESTS),
     ),
     seed(
@@ -448,6 +460,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::CropRect, "whole-frame-then-corner.txt"),
         (Target::Mountinfo, "ext4-and-proc.txt"),
         (Target::Mountinfo, "nobarrier-and-xfs.txt"),
+        (Target::OsRelease, "noble.txt"),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
@@ -524,6 +537,7 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
             decode_evidence_record(data, &SessionId::parse(EVIDENCE_FUZZ_SESSION)?).is_ok()
         }
         Target::Mountinfo => classify_mountinfo(data, MountDevice::new(8, 1)).is_ok(),
+        Target::OsRelease => classify_os_release(data) == Ok(OsReleaseProfile::Ubuntu2404),
         // The outer and the inner rectangle are both accepted.
         Target::CropRect => {
             let (outer, inner) = std::str::from_utf8(data)?
