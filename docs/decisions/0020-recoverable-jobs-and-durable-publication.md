@@ -387,7 +387,13 @@ refines the design:
   infrastructure crate (refused without debug assertions and, by the governance check,
   anywhere but a development dependency and the campaign tool's non-default
   `campaign` feature) and the variable `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1`.
-- **Enablement.** `QUALIFIED_UBUNTU_EXT4` is set. `durable_profile` now also reads
+- **Enablement.** `QUALIFIED_UBUNTU_EXT4` is set after the gating run
+  ([36340043451](https://github.com/smormah/vsift/actions/runs/36340043451): 11,037
+  replay points, 320 kills and 180 injected failures, nothing lost, the control
+  losing 54 of 80 acknowledgements) and confirmed by the same campaign on the
+  release build with the constant set
+  ([36347502530](https://github.com/smormah/vsift/actions/runs/36347502530)).
+  `durable_profile` now also reads
   `/etc/os-release` (or `/usr/lib/os-release`; at most 64 KiB, parsed strictly by the
   public `classify_os_release`, fuzzed as `os_release`) and claims `os_crash_durable`
   only for `ID=ubuntu` and `VERSION_ID=24.04` together with ext4 mounts that keep write

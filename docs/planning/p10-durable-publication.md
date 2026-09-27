@@ -10,33 +10,41 @@ S-07, SEC-24. Closes the P03 finding FS-01 for Ubuntu 24.04 on local ext4 only.
 
 A durable session on Ubuntu 24.04 with a local ext4 filesystem keeps every generation
 VSift acknowledged through a power loss at any flush, an OS crash at any moment and
-write or flush errors: across ⟨A_POINTS⟩ simulated power losses, ⟨B_KILLS⟩ killed
-virtual machines and ⟨C_FAILURES⟩ injected I/O failures no acknowledged operation was
-lost, no session was left unreadable or unwritable, `e2fsck` found nothing, and every
-injected failure was answered `STORAGE_IO` without an acknowledgement. The negative
-control, a build that leaves out the synchronisations after the pointer rename, lost
-⟨NEG_LOST⟩ acknowledged operations in the same harness, so the harness sees loss when
-there is loss. `QUALIFIED_UBUNTU_EXT4` is therefore set: a durable request (engine API
-only, D-3) is honoured on that profile and still fails with `MISSING_CAPABILITY`
-everywhere else.
+write or flush errors. In each of two complete runs, one before and one after the
+constant was set (together 22,078 simulated power losses, 640 killed virtual machines
+and 324 injected I/O failures), no acknowledged operation was lost, no session was
+left unreadable or unwritable, `e2fsck` found nothing, and every injected failure was
+answered `STORAGE_IO` without an acknowledgement. The negative control, a build that
+leaves out the synchronisations after the pointer rename, lost 54 of 80 acknowledged
+operations in the same harness every time, so the harness sees loss when there is
+loss. `QUALIFIED_UBUNTU_EXT4` is therefore set: a durable request (engine API only,
+D-3) is honoured on that profile and still fails with `MISSING_CAPABILITY` everywhere
+else. The campaign also found two defects, both fixed before the gating run: a storage
+failure reading committed state was reported as `INTEGRITY_FAILURE`, and an ingest
+reported the store's guarantee instead of its session's.
 
 ## What was qualified
 
 - **Profile:** Ubuntu 24.04 (`/etc/os-release` `ID=ubuntu`, `VERSION_ID=24.04`) with the
-  session root on an ext4 filesystem whose every mount keeps write barriers, the
-  default Ubuntu 24.04 `mke2fs` features and 4 KiB blocks, mounted with the defaults
-  (`rw,relatime`). Kernels exercised: ⟨KERNEL_HOST⟩ (the hosted runner, layers A and C)
-  and ⟨KERNEL_GUEST⟩ (the pinned cloud image's generic kernel, layer B).
+  session root on an ext4 filesystem whose every mount keeps write barriers. The
+  filesystems under test were made by Ubuntu 24.04's `mke2fs` 1.47 with its default
+  features (`has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg
+  sparse_super large_file huge_file dir_nlink extra_isize metadata_csum`), 4 KiB blocks
+  and 256-byte inodes, and mounted with the defaults (`rw,relatime`, `data=ordered`,
+  barriers on, superblock error behaviour `continue`). Kernels exercised:
+  6.17.0-1022-azure (the hosted runner, layers A and C) and 6.8.0-139-generic (the
+  pinned cloud image's generic kernel, layer B).
 - **Code:** the durable protocol of ADR 0020 section 2 (flushes, then synchronisation of
   `artifacts/`, `generations/` and the session directory; acknowledgement last;
   fsyncgate-safe retries) and the durable initialisation, through the public engine
   (`Engine::ingest` with `DurabilityRequirement::Durable`), the store's evidence and
   lifecycle commits, and checkpointed retranscription jobs.
-- **Builds:** the evidence runs before the constant was set used a `campaign` build
-  (release optimisation with debug assertions, `--features campaign`), whose only
-  differences are that it claims the profile without the constant and can run the
-  negative control; the confirmation run after the constant was set used the plain
-  release build.
+- **Builds:** Rust 1.98.1. The runs before the constant was set used a `campaign`
+  build (release optimisation with debug assertions, `--features campaign`), whose
+  only differences were that it claimed the profile without the constant and could
+  run the negative control; the confirmation run after the constant was set used the
+  plain release build for layers A, B and C (the negative control always needs the
+  `campaign` build).
 
 ## Method
 
@@ -114,7 +122,10 @@ random moment (50 to 1,550 ms into a round) for `flakey ... 0 0 1 1 error_writes
 every write and flush fails with `EIO`. The first failure is usually a flush (a data
 write-back or a journal commit), after which ext4 aborts its journal and later calls
 fail with `EIO` or `EROFS`. Each round verifies the acknowledgements so far, runs the
-workload until three operations in a row fail, and `assess`es the round: every failure
+workload until three operations in a row fail (from the confirmation run on, every
+second round leaves out retranscription jobs: their many flushes otherwise make them
+the operation a randomly timed error almost always hits first), and `assess`es the
+round: every failure
 must be `STORAGE_IO` (the engine's public mapping), none may happen before the swap
 began, and no operation that started after the failing table was live may be
 acknowledged. The table is then restored, the journal recovered and `e2fsck -fn`
@@ -122,7 +133,54 @@ must be clean.
 
 ## Results
 
-⟨RESULTS⟩
+All runs are on GitHub-hosted `ubuntu-24.04` runners (4 vCPUs, 15 GiB RAM), on
+2026-09-27. Acceptance (ADR 0020 section 7, checked by `scripts/acceptance.sh` in the
+workflow's last job): layer A at least 2,000 replay points with no lost
+acknowledgement, no damage and a clean `e2fsck`; the negative control at least one
+lost acknowledgement; layer B at least 300 kills with every cycle recovered, clean and
+verified; layer C every injected failure `STORAGE_IO` and none acknowledged.
+
+**Gating run (before the constant was set):**
+[36340043451](https://github.com/smormah/vsift/actions/runs/36340043451), commit
+`7e8b141`, `campaign` build. All acceptance criteria met.
+
+| Layer | Result | Time |
+| --- | --- | --- |
+| A, power loss | 400 operations, 400 acknowledgements; 51,290 log entries; **11,037 replay points**, each mounted, verified, probed with a new commit and checked: 0 lost acknowledgements, 0 damaged points, 0 `e2fsck` findings, 0 mount failures | workload 59 s, replay 2,261 s |
+| A, negative control | 80 operations; 2,200 replay points: **54 of 80 acknowledgements lost** at 596 points (head behind the acknowledged generation, or a session left unreadable by an unflushed checkpoint at 550 points); `e2fsck` clean | 233 s |
+| B, OS crash | **320 kills** in 4 shards of 80 (319 inside an operation; kill 0.3 to 12.0 s after the workload started, median 5.8 s); 324 boots each recovered, `e2fsck`-clean and verified; 10,653 acknowledgements, 0 lost, 0 damaged, 0 failed operations; each final boot verified 139 to 190 sessions (2,489 to 3,029 generations, 689 to 826 jobs) | 52 to 61 min a shard |
+| C, write errors | 60 rounds, all injected: **180 injected failures, 180 `STORAGE_IO`**, 0 before the swap, 0 acknowledged after it; 403 acknowledgements carried through every later round; `e2fsck` clean after every recovery and at the end | 24 min |
+
+**Confirmation run (after the constant was set, plain release build):**
+[36347502530](https://github.com/smormah/vsift/actions/runs/36347502530), commit
+`2b8455e` (the constant set; the code of this pull request), plain release build for
+layers A, B and C. All acceptance criteria met.
+
+| Layer | Result | Time |
+| --- | --- | --- |
+| A, power loss | 400 operations and acknowledgements; 51,020 log entries (213 MB of log); **11,041 replay points**: 0 lost, 0 damaged, 0 `e2fsck` findings, 0 mount failures | workload 60 s, replay 2,610 s |
+| A, negative control | 2,180 replay points: **54 of 80 acknowledgements lost** at 592 points (546 with an unreadable session) | 302 s |
+| B, OS crash | **320 kills** (317 inside an operation), 324 recovered, clean and verified boots; 10,599 acknowledgements, 0 lost, 0 damaged, 0 failed operations; each final boot verified 146 to 178 sessions (2,592 to 2,967 generations, 716 to 795 jobs) | 55 to 58 min a shard |
+| C, write errors | 60 rounds, alternating the full mix and a job-free mix: the failing table went live during operations in 48 rounds (in 12 job-free rounds the workload finished its 400 operations first); **144 injected failures, 144 `STORAGE_IO`**, 0 before the swap, 0 acknowledged after it; the first failure of a round hit a retranscription 30 times, evidence 15, an ingest 2 and a renewal once; 9,639 acknowledgements carried through; `e2fsck` clean throughout | 19 min |
+
+**Earlier runs and what they found.**
+
+- [36337576649](https://github.com/smormah/vsift/actions/runs/36337576649) (`c78d588`,
+  small sizes): the first negative control, which removed only the session
+  directory's synchronisation, lost nothing in 2,364 replay points: too weak for ext4
+  (see ADR 0020 PR 4 notes). It was widened to every synchronisation after the
+  pointer rename. The layer B script also left the killed
+  QEMU running (fixed).
+- [36338196373](https://github.com/smormah/vsift/actions/runs/36338196373) (`d0f5926`,
+  small sizes): the widened control lost 54 of 80 acknowledgements; every other layer
+  passed at small sizes.
+- [36338992442](https://github.com/smormah/vsift/actions/runs/36338992442) (`dd923f7`,
+  full sizes): layers A (11,037 points), B (320 kills, 10,561 acknowledgements) and the
+  negative control passed; layer C failed in round 14: after the injected errors an
+  evidence call answered `INTEGRITY_FAILURE`. ext4 had shut itself down, so reads of
+  committed state failed with `EIO`, and the store reported every failure to read
+  committed state as damage. Fixed in `7e8b141` (storage failures there are now
+  `STORAGE_IO`), which the gating run then qualified.
 
 ## What this does not cover (residuals)
 

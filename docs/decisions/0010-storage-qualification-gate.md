@@ -101,7 +101,9 @@ dm-log-writes log, SIGKILLed Ubuntu 24.04 virtual machines with the data disk at
 `cache=none`, and dm-flakey write and flush errors, with a negative control that
 proves the harness sees lost acknowledgements. No acknowledged durable generation was
 lost, every injected failure was `STORAGE_IO` and never acknowledged, and `e2fsck`
-stayed clean. `QUALIFIED_UBUNTU_EXT4` is set, and the profile check now also requires
+stayed clean (gating run
+[36340043451](https://github.com/smormah/vsift/actions/runs/36340043451), confirmation
+[36347502530](https://github.com/smormah/vsift/actions/runs/36347502530)). `QUALIFIED_UBUNTU_EXT4` is set, and the profile check now also requires
 Ubuntu 24.04 by `os-release`: a durable session is honoured on Ubuntu 24.04 with its
 root on ext4 mounts that keep write barriers, and nowhere else. The rest of this
 decision stands: Windows/NTFS and macOS/APFS stay ephemeral desktop targets, durable

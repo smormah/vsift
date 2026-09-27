@@ -29,9 +29,6 @@ on:
     # Weekly, Sunday 03:17 UTC: the campaign guards the qualified profile
     # against kernel, image and store changes.
     - cron: "17 3 * * 0"
-  # TEMPORARY while developing PR 4: remove before review.
-  push:
-    branches: [p10/durability-campaign]
 
 permissions:
   contents: read
@@ -49,21 +46,6 @@ env:
   UBUNTU_IMAGE_BYTES: "625256960"
 
 jobs:
-  # TEMPORARY while developing PR 4: the Linux-only code runs nowhere else
-  # before a pull request exists. Remove before review.
-  linux-checks:
-    name: Linux checks (temporary)
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Lint
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-      - name: Test
-        run: cargo test --workspace --locked
-
   build:
     name: Build campaign binaries
     runs-on: ubuntu-24.04

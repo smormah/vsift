@@ -16,15 +16,14 @@ and CI; no pull request is open yet.
 1. **PR 4 delivered:** `tools/p10-crash-campaign/` and the `P10 durability campaign`
    workflow (manual and weekly): layer A dm-log-writes power loss at every flush,
    layer B QEMU kills of the pinned Ubuntu 24.04 image, layer C dm-flakey write
-   errors, and the negative control (must lose acknowledgements). Evidence and run
-   links: `docs/planning/p10-durable-publication.md`. `QUALIFIED_UBUNTU_EXT4` is set;
-   the gate also checks Ubuntu 24.04 by `os-release`. `IngestRequest::durability`
-   (engine only, D-3). Two defects found and fixed: storage failures reading committed
-   state were `INTEGRITY_FAILURE` (now `STORAGE_IO`); an ingest reported the store's
-   guarantee instead of its session's.
+   errors, and the negative control (must lose acknowledgements). Gating run
+   36340043451, confirmation 36347502530: `docs/planning/p10-durable-publication.md`.
+   `QUALIFIED_UBUNTU_EXT4` is set; the gate also checks Ubuntu 24.04 (`os-release`).
+   `IngestRequest::durability` is engine-only (D-3; the CLI via P11). Fixed: storage
+   failures reading committed state were `INTEGRITY_FAILURE` (now `STORAGE_IO`); an
+   ingest reported the store's guarantee instead of its session's.
 2. **Next:** review and merge PR 4; the ledger completion record for P10; close #13
    and #164. Then P11 (worker and batch host) is the earliest eligible packet.
-3. D-3 stands: durable mode only through the engine API; the CLI via P11.
 
 ## Tracked issues
 
@@ -44,8 +43,9 @@ and CI; no pull request is open yet.
   24.04 / ext4) and L-010, and added L-056 (storage that ignores flushes), L-057 (disk
   or host loss, X-10), L-058 (Ubuntu recognised by `os-release`, not kernel) and L-059
   (durable only through the engine).
-- **Campaign upkeep:** when Ubuntu retires cloud-image release 20260911, bump the three
-  `UBUNTU_IMAGE_*` values in the workflow together (see `docs/development.md`).
+- **Campaign upkeep:** bump the three `UBUNTU_IMAGE_*` values together when Ubuntu
+  retires release 20260911; raise `--max-ops` for layer C's job-free rounds (12 of 60
+  finished before the injection in the confirmation run).
 - Job retention: 64 jobs per session, 8 operation ids per job, 256 bindings, 16
   attempts, 1,024 checkpoints of 256 KiB. Evidence calls decode every record (L-013).
 

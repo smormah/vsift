@@ -58,8 +58,10 @@ completion record is written. Every known limit is in `docs/planning/known-limit
   `cache=none` data disk, four shards. Layer C: dm-flakey `error_writes` swapped in at
   random. The negative control (`durability-campaign` feature,
   `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1`) removes every sync after the pointer rename and
-  must lose acknowledgements. Numbers and run links:
-  `docs/planning/p10-durable-publication.md`.
+  must lose acknowledgements. Gating run 36340043451 (before the flip) and
+  confirmation run 36347502530 (release build, flipped) each met every criterion:
+  ~11,040 replay points, 320 kills, 144-180 injected failures, nothing lost; the
+  control lost 54 of 80. Details: `docs/planning/p10-durable-publication.md`.
 - **Findings fixed:** (1) removing only the session-directory sync hid behind ext4's
   journal (the checkpoint's flush commits the rename), so the control removes every
   sync after the rename; (2) a storage failure reading committed state (ext4 shut down
