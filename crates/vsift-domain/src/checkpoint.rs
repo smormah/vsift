@@ -15,6 +15,13 @@ use std::fmt;
 
 use crate::{PlannedChunk, ProviderChunkOutput, Sha256Hex, TimeRange};
 
+/// Longest decoded audio a checkpoint may claim beyond its chunk's window.
+///
+/// A decoder may start a little before the window (at a frame boundary) and
+/// the speech decode is bounded to about 33 s for a 30 s window; five seconds
+/// of slack covers both without accepting audio that cannot be the chunk's.
+const MAX_AUDIO_SLACK_MICROS: u64 = 5_000_000;
+
 /// Digest of everything that decides what a recognition run hears and how
 /// it is recognised: session, source, audio stream, replaced range, chunk
 /// plan, decoding profile, recognizer identity and the local-ASR
@@ -145,11 +152,23 @@ impl ChunkCheckpoint {
     }
 
     /// Whether this checkpoint was written for exactly `chunk` of the run
-    /// `key` identifies: the same key, index and planned window. Anything
-    /// else is a checkpoint of another run, or a damaged or forged one.
+    /// `key` identifies (the same key, index and planned window) and claims
+    /// decoded audio that can be the chunk's: overlapping its window and no
+    /// longer than it plus a little decoder slack. Anything else is a
+    /// checkpoint of another run, or a damaged or forged one.
     #[must_use]
     pub fn belongs_to(&self, key: &RecognitionKey, chunk: &PlannedChunk) -> bool {
-        self.key == *key && self.index == chunk.index() && self.window == chunk.window()
+        let window = chunk.window();
+        let plausible = match &self.outcome {
+            CheckpointOutcome::NoAudio => true,
+            CheckpointOutcome::Silent { audio } | CheckpointOutcome::Recognised { audio, .. } => {
+                audio.start() < window.end()
+                    && audio.end() > window.start()
+                    && audio.duration_micros()
+                        <= window.duration_micros().saturating_add(MAX_AUDIO_SLACK_MICROS)
+            }
+        };
+        self.key == *key && self.index == chunk.index() && self.window == window && plausible
     }
 }
 
@@ -192,6 +211,29 @@ mod tests {
             audio: window(25, 55)?,
         };
         assert_eq!(silent.identifier(), "silent");
+        Ok(())
+    }
+
+    /// Decoded audio that cannot be the chunk's makes the checkpoint unusable.
+    #[test]
+    fn implausible_decoded_audio_is_not_the_chunks() -> TestResult {
+        let second = 1_000_000;
+        let chunk = PlannedChunk::new(
+            SourceSegmentId::parse("sgm_0123456789abcdef")?,
+            0,
+            window(0, 30 * second)?,
+        );
+        for (audio, usable) in [
+            (window(0, 30 * second)?, true),
+            (window(0, 35 * second)?, true),
+            (window(0, 35 * second + 1)?, false),
+            (window(30 * second, 31 * second)?, false),
+            (window(90 * second, 95 * second)?, false),
+        ] {
+            let checkpoint =
+                ChunkCheckpoint::new(key('a')?, &chunk, CheckpointOutcome::Silent { audio });
+            assert_eq!(checkpoint.belongs_to(&key('a')?, &chunk), usable, "{audio:?}");
+        }
         Ok(())
     }
 }

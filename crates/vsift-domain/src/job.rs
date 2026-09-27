@@ -162,6 +162,13 @@ pub struct JobTransitionError {
 }
 
 impl JobTransitionError {
+    /// Describes a change a caller refused itself, for a change the graph
+    /// has no edge for at all, such as restarting a job in a new epoch.
+    #[must_use]
+    pub const fn new(current: JobState, requested: JobState) -> Self {
+        Self { current, requested }
+    }
+
     /// Returns the state that rejected the transition.
     #[must_use]
     pub const fn current(self) -> JobState {
