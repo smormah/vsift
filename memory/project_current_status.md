@@ -68,6 +68,9 @@ recommended). Every known limit is in `docs/planning/known-limits.md`.
   conflicts and 2/4/8 identical concurrent requests; X-04 2/4/8 retranscriptions with
   renewals (found and fixed a head/generation race); X-05 suspended owner; X-09 retry
   tables; S-08 records and checkpoints; opt-in real FFmpeg and whisper.cpp resumes.
+- **Readers vs replacement (fixed after #179's CI):** a reader that opened a metadata
+  file just as a writer renamed over it (no link left, or on Windows no name for a
+  moment) reported `INTEGRITY_FAILURE`; such files now use a bounded retry.
 - **Not compiled on Windows:** the Unix-only `a_sigstopped_owner_keeps_its_job`
   (opt-in) and the durable variants of the job paths (directory syncs).
 

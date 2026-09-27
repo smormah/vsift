@@ -10,7 +10,7 @@ use vsift_domain::{
 use super::{
     MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, MetadataVersion, STORAGE_SCHEMA_VERSION,
     SessionStatus, StoredArtifact, StoredLifecycle, StoredSessionPhase, is_canonical_sha256,
-    open_regular_file, read_bounded, read_bounded_manifest,
+    open_regular_file, open_replaced_file, read_bounded, read_bounded_manifest,
 };
 
 pub(super) fn validate_artifact_record(
@@ -97,6 +97,12 @@ impl StoredLifecycle {
     }
 }
 
+/// Reads and strictly decodes one small metadata file.
+///
+/// Several of these files (the commit pointer, the chain checkpoint, job
+/// bindings and index entries) are replaced by rename while other processes
+/// read them, so the file is opened with [`open_replaced_file`]: meeting a
+/// replacement is retried, never reported as an integrity failure.
 pub(super) fn read_versioned_json_file<T>(
     directory: &Dir,
     name: &str,
@@ -104,7 +110,7 @@ pub(super) fn read_versioned_json_file<T>(
 where
     T: for<'de> Deserialize<'de> + MetadataVersion,
 {
-    let file = open_regular_file(directory, name, false)
+    let file = open_replaced_file(directory, name, false)
         .map_err(|_| SessionStorageError::IntegrityFailure)?;
     let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
     parse_versioned_json(&bytes)

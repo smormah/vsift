@@ -969,7 +969,13 @@ fn concurrent_retranscriptions_and_renewals_do_not_deadlock() -> TestResult {
 fn x04_worker(root: &Path, number: u64) -> Built<String> {
     let store = FilesystemSessionStore::open_existing(root)?;
     if number % 2 == 1 {
-        let status = store.session_status(&session_id()?)?;
+        let status = match store.session_status(&session_id()?) {
+            Ok(status) => status,
+            // A read can meet a concurrent publication and report BUSY, the
+            // documented X-04 outcome; it is not a deadlock.
+            Err(SessionStorageError::Busy) => return Ok("renewal busy".to_owned()),
+            Err(other) => return Err(other.into()),
+        };
         return Ok(
             match store.renew_session(
                 &session_id()?,
@@ -986,7 +992,18 @@ fn x04_worker(root: &Path, number: u64) -> Built<String> {
         );
     }
     let start = number * 12 * SECOND;
-    let resolved = resolve(&store, Some(range(start, start + 10 * SECOND)?))?;
+    let resolved = match resolve(&store, Some(range(start, start + 10 * SECOND)?)) {
+        Ok(resolved) => resolved,
+        Err(error)
+            if matches!(
+                error.downcast_ref::<SessionStorageError>(),
+                Some(SessionStorageError::Busy)
+            ) =>
+        {
+            return Ok("busy".to_owned());
+        }
+        Err(other) => return Err(other),
+    };
     let recognizer = Words {
         pause: Some(Duration::from_millis(10)),
         ..Words::default()

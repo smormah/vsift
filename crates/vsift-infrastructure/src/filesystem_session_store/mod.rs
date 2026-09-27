@@ -600,15 +600,91 @@ fn create_regular_file(directory: &Dir, name: &str, bytes: &[u8]) -> io::Result<
     file.sync_all()
 }
 
+/// Opens `name` without following a link and requires a regular file with
+/// exactly one link.
+///
+/// A file with more links is rejected as [`io::ErrorKind::InvalidData`]: it
+/// could be a hard link to data outside the root. A file with no link left
+/// was renamed over or removed between the open and the metadata read, so the
+/// name no longer names it; that is [`io::ErrorKind::NotFound`], never an
+/// integrity failure, and [`open_replaced_file`] tries the name again.
 fn open_regular_file(directory: &Dir, name: &str, write: bool) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.read(true).write(write).follow(FollowSymlinks::No);
-    let file = directory.open_with(name, &options)?;
+    checked_regular_file(directory.open_with(name, &options)?)
+}
+
+/// The single-link regular-file check of [`open_regular_file`] on an opened file.
+fn checked_regular_file(file: File) -> io::Result<File> {
     let metadata = file.metadata()?;
-    if !metadata.is_file() || !has_one_link(&metadata) {
+    if !metadata.is_file() {
         return Err(io::ErrorKind::InvalidData.into());
     }
-    Ok(file)
+    match metadata.nlink() {
+        1 => Ok(file),
+        0 => Err(io::ErrorKind::NotFound.into()),
+        _ => Err(io::ErrorKind::InvalidData.into()),
+    }
+}
+
+/// How long a reader keeps trying a file a writer is replacing by rename.
+///
+/// The window is a rename: microseconds when the machine is idle, a few
+/// milliseconds under heavy load. A file still missing after this is missing.
+const REPLACED_FILE_RETRY: std::time::Duration = std::time::Duration::from_millis(500);
+/// Attempts that only yield the thread before the retry starts sleeping.
+const REPLACED_FILE_SPINS: u32 = 8;
+
+/// Opens a metadata file that a correct writer replaces by staging it and
+/// renaming it over the old one: the commit pointer, the chain checkpoint,
+/// job records, bindings and index entries.
+///
+/// A reader can meet that replacement. On every platform it can open the old
+/// file just before the rename and read its metadata just after, when the
+/// old file has no link left; on Windows the name can also be absent for a
+/// moment during the rename, and a file being deleted can refuse to open.
+/// Those states are reported as `NotFound` (or, on Windows, `PermissionDenied`)
+/// and are retried, a few times at once and then a millisecond apart, for
+/// at most [`REPLACED_FILE_RETRY`]. Whatever the reader then opens is a file
+/// the writer committed, old or new; the old one is a consistent earlier
+/// snapshot. A hard link, a non-regular file and every other error are
+/// returned at once, and a file still absent after the budget is absent, so
+/// real damage or tampering is still reported.
+fn open_replaced_file(directory: &Dir, name: &str, write: bool) -> io::Result<File> {
+    open_replaced_file_with(|| open_regular_file(directory, name, write))
+}
+
+/// [`open_replaced_file`] over any opener; the retry policy on its own, so a
+/// test can drive the exact interleavings a concurrent writer causes.
+fn open_replaced_file_with(mut open: impl FnMut() -> io::Result<File>) -> io::Result<File> {
+    let started = std::time::Instant::now();
+    let mut attempts = 0_u32;
+    loop {
+        match open() {
+            Err(error)
+                if in_replacement_window(&error) && started.elapsed() < REPLACED_FILE_RETRY =>
+            {
+                attempts = attempts.saturating_add(1);
+                if attempts <= REPLACED_FILE_SPINS {
+                    std::thread::yield_now();
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            }
+            result => return result,
+        }
+    }
+}
+
+/// Whether an open failed in a way a concurrent rename-replace can cause.
+fn in_replacement_window(error: &io::Error) -> bool {
+    match error.kind() {
+        io::ErrorKind::NotFound => true,
+        // A file being deleted (the replaced one) refuses a new open with
+        // access denied on Windows only.
+        io::ErrorKind::PermissionDenied => cfg!(windows),
+        _ => false,
+    }
 }
 
 fn read_bounded(file: File) -> io::Result<Vec<u8>> {

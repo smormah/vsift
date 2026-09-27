@@ -432,6 +432,11 @@ retry never publishes twice (X-02); an operation id reused for another request i
 under the job's state lock. An unreferenced manifest an ended publication left above
 the head is replaced by the next publication under the writer lock (it cannot belong
 to a live one), which removes the blocked-session case of L-048.
+**SEC-08/SEC-10 (readers vs replacement).** A reader that meets a metadata file being
+replaced by rename (it opened the old file, which then has no link left, or on Windows
+the name was absent for a moment) retries for at most 500 ms instead of reporting
+`INTEGRITY_FAILURE` for a healthy session; a hard link or non-regular file is still
+refused at once and a file still missing is still an integrity failure.
 **SEC-24.** Job and checkpoint files follow the session's durability: a durable
 session synchronises their directories after each rename. Durable mode stays disabled
 on every profile until P10 PR 4's campaign, so SEC-24 stays open.

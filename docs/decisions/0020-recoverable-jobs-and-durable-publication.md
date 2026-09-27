@@ -243,6 +243,23 @@ design above:
   writer lock is always one an ended publication left. It is now replaced by the next
   publication (staged again, as a durable retry already did) instead of refusing every
   other operation, so a crash between the two renames no longer blocks the session.
+- **Readers meeting a replacement (found by the X-04 stress of PR #179).** Every
+  metadata file a writer replaces by staging and renaming (the commit pointer, the
+  chain checkpoint, job records, bindings and index entries) can be met mid-rename by
+  a reader in another process. On every platform the reader can open the old file
+  just before the rename and read its metadata just after, when it has no link left;
+  on Windows the name can also be absent for a moment (a probe of 200,000 opens during
+  continuous renames saw 701 of the first and 395 of the second). The single-link
+  check reported the first as a damaged file, and every reader turned both into
+  `INTEGRITY_FAILURE` for a healthy session: a latent P03 defect that PR 1's chain
+  checkpoint and PR 2's job records made far more frequent. A file with no link left
+  is now reported as no longer at its name (`NotFound`), and these files are opened
+  with a bounded retry (a few immediate attempts, then 1 ms apart, at most 500 ms,
+  also for access denied on Windows). What the reader then opens is a committed
+  file, old or new; the old one is a consistent earlier snapshot. A hard-linked or
+  non-regular file is still refused at once, and a file still missing after the
+  budget is still an integrity failure. Generations are never replaced while a
+  pointer names them, so manifest reads need no retry.
 
 ## Consequences
 

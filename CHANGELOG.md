@@ -328,6 +328,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A session could be reported as damaged (`INTEGRITY_FAILURE`) while another process was
+  committing to it: a reader that opened the commit pointer, the chain checkpoint or a
+  job record just as a writer replaced it by rename saw a file with no link left, or
+  on Windows briefly no file, and took either for damage. Readers now retry such a
+  file for at most half a second and read the committed version; linked, non-regular
+  and missing files are still refused (P10 PR 2, found by the concurrent
+  retranscription stress test).
+
 - **Security (SEC-17):** the media adapter could report a time taken from a video's
   own metadata instead of what FFmpeg decoded. FFmpeg repeats a file's metadata (for
   example its title) in the same diagnostic output VSift reads frame and audio times

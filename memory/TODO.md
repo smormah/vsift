@@ -43,19 +43,19 @@ test code is compiled only there). The packet is not complete.
 
 ## Other follow-ups
 
-- **Known limits register:** `docs/planning/known-limits.md` (49 entries, L-001..L-051
-  without the removed L-012 and L-048; review pending). Add every new limit in the same
-  change.
-- PR 2 found and fixed a race: a commit following a moved session could pair a head
-  without a revision with a newer generation (`read_transcript_head` reads both at once).
+- **Known limits:** `docs/planning/known-limits.md` (50 entries to L-052, without L-012
+  and L-048; review pending). Add every new limit in the same change.
+- PR 2 fixed two races found by the X-04 stress: a commit pairing a head without a
+  revision with a newer generation, and false `INTEGRITY_FAILURE` from readers meeting a
+  rename-replace (`open_replaced_file`, bounded 0.5 s retry; L-052).
 - Job retention: 64 jobs per session (oldest ended unpinned job pruned), 8 caller
   operation ids per job, 256 bindings, 16 attempts, 1,024 checkpoints of 256 KiB.
 - Evidence: bursts denser than one 1,200-frame listing are rejected (`outside_listing`);
   tiny text measured on synthetic glyphs only; neighbours list up to three windows.
 - Evidence records are read and decoded in full on every evidence call (now at most 384
   of 256 KiB); fine for R0, an index would help later (L-013).
-- Search: no accent folding or Unicode normalisation; phrases do not cross segments.
-- A creator killed mid-provisioning leaves an unmarked root.
+- Search: no accent folding or Unicode normalisation; phrases don't cross segments. A
+  creator killed mid-provisioning leaves an unmarked root.
 
 ## Open decisions (maintainer)
 

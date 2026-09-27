@@ -318,6 +318,7 @@ fake audio and a deterministic stand-in recognizer), use-case tests in
 | D-2 caps | `the_raised_evidence_cap_holds_and_its_manifest_reads_back` (384 evidence artifacts, a manifest over 64 KiB read back), `a_session_holds_at_most_512_artifacts_in_a_bounded_manifest`; the existing `evidence_store` and `engine_evidence` budget tests now fill 384 |
 | S-11 (recorded) | Opt-in `s11_warm_reuse_with_a_full_evidence_budget` (release, Windows 11): warm reused `frame get` p95 177 / 164 / 166 / 177 ms at 2 / 64 / 256 / 1,024 generations with 384 evidence artifacts, slope 0.000 ms per generation; 144 / 163 / 144 / 138 ms with one frame |
 | L-048 | `another_operation_publishes_over_an_abandoned_manifest` (both modes) |
+| Readers vs replacement (#179) | `a_reader_that_meets_a_rename_retries_instead_of_reporting_damage` drives, on the real filesystem, a pointer renamed over after the reader opened it and a name absent during the rename; `readers_never_report_damage_while_generations_are_published` reads through `read_committed_manifest` while another store instance publishes 300 generations (without the fix it reported false `INTEGRITY_FAILURE` in 9 of 10 runs; with it 0 of 200 runs across four parallel lanes); `a_linked_or_missing_pointer_is_still_damage`. The X-04 test then passed 240 of 240 runs across four parallel lanes and the whole store test module 32 of 32 under the same load |
 
 The S-07 kill test of PR 1 now iterates the commit points (`FaultPoint::COMMIT`); a
 registry test checks the commit and job points together are every point. None of this

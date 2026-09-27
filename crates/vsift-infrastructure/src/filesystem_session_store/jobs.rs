@@ -55,8 +55,8 @@ use super::{
         MAX_CHECKPOINT_BYTES, StoredBinding, StoredJobIndex, checkpoint_name, checkpoint_ordinal,
         decode_checkpoint, decode_job, encode_checkpoint, encode_job,
     },
-    map_lock_error, map_storage_io, open_regular_file, open_session_lock, read_bounded,
-    read_bounded_manifest, read_bounded_to, sha256_hex,
+    map_lock_error, map_storage_io, open_regular_file, open_replaced_file, open_session_lock,
+    read_bounded, read_bounded_manifest, read_bounded_to, sha256_hex,
     stored::{parse_versioned_json, read_versioned_json_file},
 };
 use crate::{
@@ -842,16 +842,20 @@ impl RevisionStore for FilesystemSessionStore {
 
 /// Reads a job record, or `None` when the job directory holds none yet (a
 /// creation that stopped before its record).
+///
+/// The record is replaced by rename under the state lock while other
+/// processes (status, cancel requests, the owner's cancellation check) read
+/// it without that lock, so it is opened with [`open_replaced_file`]: a
+/// reader that meets a replacement retries rather than reporting the job
+/// missing or damaged.
 fn read_record(
     job: &Dir,
     job_id: &JobId,
     session_id: &SessionId,
 ) -> Result<Option<JobRecord>, JobStoreError> {
-    if !job.try_exists(JOB_FILE).map_err(map_storage_io)? {
+    let Some(file) = open_record(job)? else {
         return Ok(None);
-    }
-    let file = open_regular_file(job, JOB_FILE, false)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    };
     let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
     decode_job(&bytes, job_id, session_id)
         .map(Some)
@@ -869,11 +873,9 @@ fn read_record_unverified_session(
         session_id: String,
     }
 
-    if !job.try_exists(JOB_FILE).map_err(map_storage_io)? {
+    let Some(file) = open_record(job)? else {
         return Ok(None);
-    }
-    let file = open_regular_file(job, JOB_FILE, false)
-        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    };
     let bytes = read_bounded(file).map_err(|_| SessionStorageError::IntegrityFailure)?;
     let probe: SessionProbe =
         serde_json::from_slice(&bytes).map_err(|_| SessionStorageError::IntegrityFailure)?;
@@ -882,6 +884,15 @@ fn read_record_unverified_session(
     decode_job(&bytes, job_id, &session_id)
         .map(Some)
         .map_err(Into::into)
+}
+
+/// Opens `job.json`, or `None` when it does not exist.
+fn open_record(job: &Dir) -> Result<Option<cap_std::fs::File>, JobStoreError> {
+    match open_replaced_file(job, JOB_FILE, false) {
+        Ok(file) => Ok(Some(file)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_) => Err(SessionStorageError::IntegrityFailure.into()),
+    }
 }
 
 /// Replaces `job.json` atomically.

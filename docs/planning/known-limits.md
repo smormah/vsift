@@ -96,8 +96,9 @@ Each entry has these fields:
 | [L-049](#l-049) | Checkpoints resist corruption, not a same-user forger | security | low | unscheduled | none | accepted residual |
 | [L-050](#l-050) | Jobs and operation ids are bounded per session | contract/UX | low | unscheduled | none | accepted residual |
 | [L-051](#l-051) | Some interrupted work is redone rather than resumed | performance | low | unscheduled | none | accepted residual |
+| [L-052](#l-052) | A read that meets a file being replaced waits for it, at most 0.5 s | performance | low | unscheduled | none | accepted residual |
 
-Counts: 6 high, 14 medium, 29 low (49 entries).
+Counts: 6 high, 14 medium, 30 low (50 entries).
 
 ## Security
 
@@ -461,6 +462,29 @@ and the OS-crash campaign are still to come.**
 - **Why:** reusing recognizer output across setups could mix outputs of two models or
   tools; storing is an optimisation that never fails the run.
 - **Mitigation:** the checkpoint budget fits normal speech output many times over.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-052
+
+**A read that meets a file being replaced waits for it, at most 0.5 s.**
+
+- **What:** the commit pointer, the chain checkpoint and job records are replaced by
+  rename while other processes read them. A reader that meets a replacement (the file
+  it opened has no link left, or on Windows the name is briefly absent) retries: a few
+  times at once, then a millisecond apart, for at most half a second, blocking its
+  thread meanwhile. A file still missing after that is reported as damage.
+- **Evidence:** [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  "Readers meeting a replacement"; tests
+  `a_reader_that_meets_a_rename_retries_instead_of_reporting_damage`,
+  `readers_never_report_damage_while_generations_are_published`,
+  `a_linked_or_missing_pointer_is_still_damage`.
+- **Impact:** normally microseconds; a truly missing pointer or job record is
+  reported half a second later than before.
+- **Why:** before, such a reader reported a healthy session as damaged.
+- **Mitigation:** the budget is bounded; hard links and non-regular files are still
+  refused at once.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.

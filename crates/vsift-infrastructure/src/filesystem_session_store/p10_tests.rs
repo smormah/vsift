@@ -973,3 +973,156 @@ fn another_operation_publishes_over_an_abandoned_manifest() -> TestResult {
     }
     Ok(())
 }
+
+/// Opens the session's commit pointer the way a reader does, without the
+/// single-link check, so a test can act between the open and the check.
+fn raw_pointer(session: &cap_std::fs::Dir) -> std::io::Result<cap_std::fs::File> {
+    use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    session.open_with(CURRENT_FILE, &options)
+}
+
+/// Replaces the commit pointer with the same bytes, staged and renamed as
+/// a correct writer does.
+fn reinstall_pointer(session: &cap_std::fs::Dir) -> std::io::Result<()> {
+    let bytes = session.read(CURRENT_FILE)?;
+    session.write("pointer.test.tmp", bytes)?;
+    session.rename("pointer.test.tmp", session, CURRENT_FILE)
+}
+
+/// Regression (PR #179 X-04 stress): a reader that opens a metadata file a
+/// writer is replacing by rename meets two states a correct writer causes:
+/// the file it opened has no link left by the time it reads its metadata
+/// (every platform), and the name is briefly absent (Windows). Before the
+/// fix the first was reported as a damaged file and both became
+/// `INTEGRITY_FAILURE`; now both are retried and the reader gets the
+/// committed pointer. The interleavings are driven on the real filesystem
+/// in a fixed order.
+#[test]
+fn a_reader_that_meets_a_rename_retries_instead_of_reporting_damage() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = chain_of(&fixture, 2)?;
+    let session = store
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    let mut step = 0;
+    let mut met = Vec::new();
+    let opened = super::open_replaced_file_with(|| {
+        step += 1;
+        match step {
+            // Opened, then renamed over before its metadata is read.
+            1 => {
+                let old = raw_pointer(&session)?;
+                reinstall_pointer(&session)?;
+                let checked = super::checked_regular_file(old);
+                met.push(checked.as_ref().err().map(std::io::Error::kind));
+                checked
+            }
+            // The name is absent for a moment during the rename.
+            2 => {
+                session.rename(CURRENT_FILE, &session, "current.moving")?;
+                let absent = super::open_regular_file(&session, CURRENT_FILE, false);
+                met.push(absent.as_ref().err().map(std::io::Error::kind));
+                session.rename("current.moving", &session, CURRENT_FILE)?;
+                absent
+            }
+            _ => super::open_regular_file(&session, CURRENT_FILE, false),
+        }
+    })?;
+    assert_eq!(
+        met,
+        vec![
+            Some(std::io::ErrorKind::NotFound),
+            Some(std::io::ErrorKind::NotFound)
+        ]
+    );
+    assert_eq!(step, 3);
+    let pointer: super::CommitPointer =
+        super::stored::parse_versioned_json(&super::read_bounded(opened)?)?;
+    assert_eq!(pointer.generation, 2);
+    // The real read path reads the same committed head.
+    let head = read_committed_manifest(&session, &session_id()?, ChainCheck::Full)?;
+    assert_eq!(head.manifest.generation, 2);
+    Ok(())
+}
+
+/// The retry never hides damage: a hard-linked pointer is refused at once,
+/// and a pointer that stays missing is still an integrity failure.
+#[test]
+fn a_linked_or_missing_pointer_is_still_damage() -> TestResult {
+    let fixture = Fixture::new()?;
+    chain_of(&fixture, 1)?;
+    let pointer = session_path(&fixture).join(CURRENT_FILE);
+    let linked = session_path(&fixture).join("linked.json");
+    fs::hard_link(&pointer, &linked)?;
+    let session = FilesystemSessionStore::open_existing(&fixture.path)?
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    let started = std::time::Instant::now();
+    let refused = super::open_replaced_file(&session, CURRENT_FILE, false);
+    assert_eq!(
+        refused.err().map(|error| error.kind()),
+        Some(std::io::ErrorKind::InvalidData)
+    );
+    assert!(started.elapsed() < super::REPLACED_FILE_RETRY);
+    assert_eq!(
+        read_error(&fixture)?,
+        Some(SessionStorageError::IntegrityFailure)
+    );
+    fs::remove_file(&linked)?;
+    assert_eq!(read_error(&fixture)?, None);
+    fs::remove_file(&pointer)?;
+    assert_eq!(
+        read_error(&fixture)?,
+        Some(SessionStorageError::IntegrityFailure)
+    );
+    Ok(())
+}
+
+/// Regression (PR #179): readers running through the real read path while
+/// another store instance publishes generation after generation (each
+/// replacing the pointer and the chain checkpoint by rename) always read a
+/// committed head and never report damage.
+#[test]
+fn readers_never_report_damage_while_generations_are_published() -> TestResult {
+    const PUBLICATIONS: u64 = 300;
+    let fixture = Fixture::new()?;
+    chain_of(&fixture, 1)?;
+    let root = fixture.path.clone();
+    let writer = std::thread::spawn(move || -> Result<(), String> {
+        let store =
+            FilesystemSessionStore::open_existing(&root).map_err(|error| error.to_string())?;
+        for expected in 1..=PUBLICATIONS {
+            publish_keep(&store, &format!("op_{:016x}", expected + 0x9000), expected)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    });
+    let session = FilesystemSessionStore::open_existing(&fixture.path)?
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    let (mut reads, mut failures) = (0_u64, Vec::new());
+    let mut last = 0;
+    while !writer.is_finished() {
+        match read_committed_manifest(&session, &session_id()?, ChainCheck::Incremental(None)) {
+            Ok(head) => {
+                assert!(head.manifest.generation >= last, "the head went back");
+                last = head.manifest.generation;
+            }
+            Err(error) => failures.push(error),
+        }
+        reads += 1;
+    }
+    writer.join().map_err(|_| "writer panicked")??;
+    assert!(reads > 0);
+    assert_eq!(
+        failures,
+        Vec::new(),
+        "{} of {reads} reads failed",
+        failures.len()
+    );
+    let head = read_committed_manifest(&session, &session_id()?, ChainCheck::Full)?;
+    assert_eq!(head.manifest.generation, PUBLICATIONS + 1);
+    Ok(())
+}
