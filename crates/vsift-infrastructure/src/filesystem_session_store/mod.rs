@@ -9,7 +9,8 @@
 //! reading and validating the committed chain (`chain`), stored-metadata
 //! validation (`stored`), lifecycle generations (`lifecycle`), verified record
 //! reads (`reads`), evidence (`evidence`), work directories (`work`), the
-//! session index (`index`), cleanup (`cleanup`) and retained bundles (`bundle`).
+//! session index (`index`), cleanup (`cleanup`), retained bundles (`bundle`)
+//! and recoverable jobs with their chunk checkpoints (`jobs`, `job_records`).
 
 mod bundle;
 mod chain;
@@ -18,6 +19,10 @@ mod commit;
 mod evidence;
 mod index;
 mod initialization;
+mod job_records;
+#[cfg(test)]
+mod job_tests;
+mod jobs;
 mod lifecycle;
 #[cfg(test)]
 mod p10_tests;
@@ -50,6 +55,7 @@ use vsift_domain::{
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
+pub use jobs::FilesystemJobOwner;
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;

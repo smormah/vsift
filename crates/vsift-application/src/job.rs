@@ -387,7 +387,8 @@ impl JobRecord {
     /// [`SessionStorageError::CapacityExhausted`] for a job out of attempts.
     pub fn changed(&self, change: &JobChange, now: u64) -> Result<Self, JobStoreError> {
         let mut next = self.clone();
-        next.updated_at_unix_seconds = now;
+        // Never backwards, even if the clock is: a record must stay valid.
+        next.updated_at_unix_seconds = now.max(self.updated_at_unix_seconds);
         match change {
             JobChange::Start => {
                 next.state = self.state.transition_to(JobState::Running)?;

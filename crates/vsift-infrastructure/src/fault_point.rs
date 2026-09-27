@@ -1,13 +1,18 @@
-//! Named points in the session store's commit path where a test or a fault
-//! campaign can make the process stop (P10, ADR 0020).
+//! Named points in the session store's commit path and in its jobs where a
+//! test or a fault campaign can make the process stop (P10, ADR 0020).
 //!
-//! Each [`FaultPoint`] marks one boundary of a commit: a content-addressed
-//! artifact installed, the artifact directory synchronised, a generation
-//! manifest written, flushed, renamed and its directory synchronised, the
-//! commit pointer likewise, and the chain checkpoint written. The points are
-//! reached in both publication modes; in ephemeral mode, where no directory is
-//! synchronised, a directory-sync point marks the place the synchronisation
-//! would be.
+//! Each commit point ([`FaultPoint::COMMIT`]) marks one boundary of a commit:
+//! a content-addressed artifact installed, the artifact directory
+//! synchronised, a generation manifest written, flushed, renamed and its
+//! directory synchronised, the commit pointer likewise, and the chain
+//! checkpoint written. The points are reached in both publication modes; in
+//! ephemeral mode, where no directory is synchronised, a directory-sync point
+//! marks the place the synchronisation would be.
+//!
+//! Each job point ([`FaultPoint::JOB`]) marks one boundary of a recoverable
+//! job: its record and index entry created, a chunk recognised, its
+//! checkpoint written, flushed and renamed, the record saying `committing`
+//! and `succeeded`, and its checkpoints being deleted.
 //!
 //! Stopping the process is compiled only into this crate's unit tests and
 //! into builds with the `fault-injection` feature, which must never be
@@ -59,12 +64,31 @@ pub enum FaultPoint {
     PointerDirectorySync,
     /// The staged chain checkpoint was written, before it replaces the old one.
     ChainCheckpointWrite,
+    /// A new job's record was written, before its index entry.
+    JobCreate,
+    /// The job's root index entry was written.
+    JobIndex,
+    /// A chunk was recognised (or found silent or empty), before its
+    /// checkpoint is written.
+    ChunkRecognised,
+    /// The staged chunk checkpoint was written.
+    CheckpointWrite,
+    /// The staged chunk checkpoint was flushed.
+    CheckpointFlush,
+    /// The chunk checkpoint was renamed into place.
+    CheckpointRename,
+    /// The job record says `committing`, before the generation is published.
+    JobCommitting,
+    /// The job record says `succeeded`, before its checkpoints are deleted.
+    JobSucceeded,
+    /// The first of the job's checkpoints was deleted.
+    CheckpointDeletion,
 }
 
 impl FaultPoint {
-    /// Every point, in commit order.
+    /// Every commit point, in commit order.
     #[cfg(any(test, feature = "fault-injection"))]
-    pub const ALL: [Self; 11] = [
+    pub const COMMIT: [Self; 11] = [
         Self::ArtifactInstall,
         Self::ArtifactDirectorySync,
         Self::ManifestWrite,
@@ -76,6 +100,45 @@ impl FaultPoint {
         Self::PointerRename,
         Self::PointerDirectorySync,
         Self::ChainCheckpointWrite,
+    ];
+
+    /// Every job point, in the order a job reaches them.
+    #[cfg(any(test, feature = "fault-injection"))]
+    pub const JOB: [Self; 9] = [
+        Self::JobCreate,
+        Self::JobIndex,
+        Self::ChunkRecognised,
+        Self::CheckpointWrite,
+        Self::CheckpointFlush,
+        Self::CheckpointRename,
+        Self::JobCommitting,
+        Self::JobSucceeded,
+        Self::CheckpointDeletion,
+    ];
+
+    /// Every point: the commit points, then the job points.
+    #[cfg(any(test, feature = "fault-injection"))]
+    pub const ALL: [Self; 20] = [
+        Self::ArtifactInstall,
+        Self::ArtifactDirectorySync,
+        Self::ManifestWrite,
+        Self::ManifestFlush,
+        Self::ManifestRename,
+        Self::ManifestDirectorySync,
+        Self::PointerWrite,
+        Self::PointerFlush,
+        Self::PointerRename,
+        Self::PointerDirectorySync,
+        Self::ChainCheckpointWrite,
+        Self::JobCreate,
+        Self::JobIndex,
+        Self::ChunkRecognised,
+        Self::CheckpointWrite,
+        Self::CheckpointFlush,
+        Self::CheckpointRename,
+        Self::JobCommitting,
+        Self::JobSucceeded,
+        Self::CheckpointDeletion,
     ];
 
     /// The point's stable name, as `VSIFT_FAULT_POINT` spells it.
@@ -93,6 +156,15 @@ impl FaultPoint {
             Self::PointerRename => "pointer-rename",
             Self::PointerDirectorySync => "pointer-directory-sync",
             Self::ChainCheckpointWrite => "chain-checkpoint-write",
+            Self::JobCreate => "job-create",
+            Self::JobIndex => "job-index",
+            Self::ChunkRecognised => "chunk-recognised",
+            Self::CheckpointWrite => "checkpoint-write",
+            Self::CheckpointFlush => "checkpoint-flush",
+            Self::CheckpointRename => "checkpoint-rename",
+            Self::JobCommitting => "job-committing",
+            Self::JobSucceeded => "job-succeeded",
+            Self::CheckpointDeletion => "checkpoint-deletion",
         }
     }
 
@@ -110,14 +182,17 @@ impl fmt::Display for FaultPoint {
     }
 }
 
-/// The point one commit stops at, read from the environment when the commit
-/// starts, and how often the commit has reached it.
+/// The point one commit (or one job owner) stops at, read from the
+/// environment when it starts, and how often it has reached it.
+///
+/// The count is atomic so a job owner, which the recognition run shares
+/// between tasks, can keep one plan for the whole run.
 #[derive(Debug, Default)]
 pub(crate) struct FaultPlan {
     #[cfg(any(test, feature = "fault-injection"))]
     selected: Option<(FaultPoint, u32)>,
     #[cfg(any(test, feature = "fault-injection"))]
-    reached: std::cell::Cell<u32>,
+    reached: std::sync::atomic::AtomicU32,
 }
 
 impl FaultPlan {
@@ -131,7 +206,7 @@ impl FaultPlan {
                     .ok()
                     .as_deref()
                     .and_then(parse_selection),
-                reached: std::cell::Cell::new(0),
+                reached: std::sync::atomic::AtomicU32::new(0),
             }
         }
         #[cfg(not(any(test, feature = "fault-injection")))]
@@ -150,8 +225,10 @@ impl FaultPlan {
         if let Some((selected, arrival)) = self.selected
             && selected == point
         {
-            let reached = self.reached.get().saturating_add(1);
-            self.reached.set(reached);
+            let reached = self
+                .reached
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                .saturating_add(1);
             if reached == arrival {
                 use std::io::Write as _;
                 let _ = writeln!(std::io::stderr(), "{FAULT_MARKER}={point}");
@@ -176,6 +253,15 @@ fn parse_selection(text: &str) -> Option<(FaultPoint, u32)> {
 #[cfg(test)]
 mod tests {
     use super::{FaultPoint, parse_selection};
+
+    #[test]
+    fn the_commit_and_job_points_together_are_every_point() {
+        let joined: Vec<FaultPoint> = FaultPoint::COMMIT
+            .into_iter()
+            .chain(FaultPoint::JOB)
+            .collect();
+        assert_eq!(joined, FaultPoint::ALL.to_vec());
+    }
 
     #[test]
     fn every_point_has_a_distinct_name_that_parses_back() {

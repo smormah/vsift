@@ -31,33 +31,33 @@ use super::{
 };
 use crate::fault_point::{FAULT_EXIT_CODE, FAULT_MARKER, FAULT_POINT_VARIABLE, FaultPoint};
 
-type Built<T> = Result<T, Box<dyn Error>>;
+pub(super) type Built<T> = Result<T, Box<dyn Error>>;
 
-const SESSION: &str = "ses_0123456789abcdef";
+pub(super) const SESSION: &str = "ses_0123456789abcdef";
 const INITIALIZE: &str = "op_0123456789abcdef";
 const ACTIVATE: &str = "op_2222222222222222";
 const FIRST_EVIDENCE: &str = "op_3333333333333333";
 const CRASHED_EVIDENCE: &str = "op_7777777777777777";
-const SOURCE_BYTES: &[u8] = b"stand-in source copy";
+pub(super) const SOURCE_BYTES: &[u8] = b"stand-in source copy";
 const CHILD_ROOT: &str = "VSIFT_TEST_COMMIT_ROOT";
 
-fn session_id() -> Built<SessionId> {
+pub(super) fn session_id() -> Built<SessionId> {
     Ok(SessionId::parse(SESSION)?)
 }
 
-fn operation(text: &str) -> Built<OperationId> {
+pub(super) fn operation(text: &str) -> Built<OperationId> {
     Ok(OperationId::parse(text)?)
 }
 
-fn now() -> Built<u64> {
+pub(super) fn now() -> Built<u64> {
     Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
 }
 
-fn session_path(fixture: &Fixture) -> PathBuf {
+pub(super) fn session_path(fixture: &Fixture) -> PathBuf {
     fixture.path.join(SESSIONS_DIRECTORY).join(SESSION)
 }
 
-fn initialize_as(
+pub(super) fn initialize_as(
     store: &FilesystemSessionStore,
     durability: StoredDurability,
     hooks: &CommitHooks<'_>,
@@ -74,7 +74,7 @@ fn initialize_as(
 }
 
 /// Generation 1: activation over a source copy as staging leaves it.
-fn activate(
+pub(super) fn activate(
     fixture: &Fixture,
     store: &FilesystemSessionStore,
     hooks: &CommitHooks<'_>,
@@ -142,7 +142,10 @@ fn commit_evidence(
 
 /// An open session at generation 2: initialized, activated and holding one
 /// evidence commit.
-fn open_session(fixture: &Fixture, durability: StoredDurability) -> Built<FilesystemSessionStore> {
+pub(super) fn open_session(
+    fixture: &Fixture,
+    durability: StoredDurability,
+) -> Built<FilesystemSessionStore> {
     let store = FilesystemSessionStore::open_existing(&fixture.path)?;
     let hooks = CommitHooks::new();
     initialize_as(&store, durability, &hooks)?;
@@ -710,7 +713,7 @@ fn commit_crash_child() -> TestResult {
 
 /// Hashes every artifact the committed head lists against its manifest
 /// entry, and walks the whole chain.
-fn assert_committed_state_is_whole(store: &FilesystemSessionStore) -> TestResult {
+pub(super) fn assert_committed_state_is_whole(store: &FilesystemSessionStore) -> TestResult {
     let session = store
         .root
         .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
@@ -726,7 +729,7 @@ fn assert_committed_state_is_whole(store: &FilesystemSessionStore) -> TestResult
 /// S-07 and the fault-point registry: a process killed at every fault point
 /// of an evidence commit leaves a session that reopens at its last
 /// acknowledged generation or the new one, with every listed file whole, and
-/// the same operation then completes. Every point in [`FaultPoint::ALL`] must
+/// the same operation then completes. Every point in [`FaultPoint::COMMIT`] must
 /// be reached, so a point no commit passes fails this test.
 #[test]
 fn every_fault_point_is_reached_and_a_kill_there_recovers() -> TestResult {
@@ -737,7 +740,7 @@ fn every_fault_point_is_reached_and_a_kill_there_recovers() -> TestResult {
         modes.push(StoredDurability::Durable);
     }
     for durability in modes {
-        for point in FaultPoint::ALL {
+        for point in FaultPoint::COMMIT {
             let fixture = Fixture::new()?;
             let store = open_session(&fixture, durability)?;
             let before = store.session_status(&session_id()?)?;
@@ -918,4 +921,51 @@ fn record_artifact(number: usize) -> super::StoredArtifact {
         sha256: digest,
         bytes: 20_000_000,
     }
+}
+
+/// L-048 (resolved in P10 PR 2): a publication that ended between its
+/// manifest and pointer renames leaves an unreferenced manifest; another
+/// operation then publishes that generation over it instead of being
+/// refused, in both publication modes.
+#[test]
+fn another_operation_publishes_over_an_abandoned_manifest() -> TestResult {
+    let mut modes = vec![StoredDurability::Ephemeral];
+    if cfg!(unix) {
+        modes.push(StoredDurability::Durable);
+    }
+    for durability in modes {
+        let fixture = Fixture::new()?;
+        let store = open_session(&fixture, durability)?;
+        let abandoned = commit_evidence(
+            &store,
+            CRASHED_EVIDENCE,
+            2,
+            &[image("abandoned")],
+            "abandoned",
+            &CommitHooks::failing_at(FaultPoint::ManifestRename),
+        );
+        assert!(abandoned.is_err(), "{durability:?}");
+        assert!(
+            session_path(&fixture)
+                .join(GENERATIONS_DIRECTORY)
+                .join("3.json")
+                .exists()
+        );
+        let published = commit_evidence(
+            &store,
+            "op_9999999999999999",
+            2,
+            &[image("replacement")],
+            "replacement",
+            &CommitHooks::new(),
+        )?;
+        assert_eq!(published, StorageGeneration::from_value(3), "{durability:?}");
+        let reopened = FilesystemSessionStore::open_existing(&fixture.path)?;
+        assert_committed_state_is_whole(&reopened)?;
+        assert_eq!(
+            reopened.session_status(&session_id()?)?.generation(),
+            StorageGeneration::from_value(3)
+        );
+    }
+    Ok(())
 }

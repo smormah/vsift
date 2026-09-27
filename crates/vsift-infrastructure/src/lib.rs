@@ -81,9 +81,9 @@ pub use ffmpeg_media::{
 };
 pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, EvidenceInventory, EvidenceMediaFile,
-    ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemSessionStore,
-    SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus, SessionStoreOpenError,
-    SessionWorkDirectory,
+    ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemJobOwner,
+    FilesystemSessionStore, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
+    SessionStoreOpenError, SessionWorkDirectory,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,

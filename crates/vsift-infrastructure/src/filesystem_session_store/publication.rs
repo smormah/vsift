@@ -608,10 +608,16 @@ fn write_chain_checkpoint(
 
 /// Installs a generation manifest from `attempts/` into `generations/`.
 ///
-/// An existing manifest with other bytes is a conflict. An identical one is a
-/// retried publication: an ephemeral commit keeps it, while a durable commit
-/// never trusts a file an earlier, possibly failed, attempt flushed and stages
-/// the bytes again over it.
+/// It is called under the session's writer lock for the generation just
+/// above the committed head, so an existing file there is never named by
+/// the pointer: it was left by a publication that ended (crashed or failed)
+/// between renaming its manifest and its pointer, and no other publication
+/// can be in progress. An identical one is a retried publication: an
+/// ephemeral commit keeps it, while a durable commit never trusts a file an
+/// earlier, possibly failed, attempt flushed and stages the bytes again over
+/// it. One with other bytes (another operation's) is replaced the same way,
+/// so a crashed operation that is never retried does not block the session
+/// (known limit L-048, resolved in P10 PR 2).
 pub(super) fn install_immutable_file(
     commit: Commit<'_>,
     staging_directory: &Dir,
@@ -626,12 +632,10 @@ pub(super) fn install_immutable_file(
     {
         let existing = open_regular_file(destination_directory, destination_name, false)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        if read_bounded_manifest(existing).map_err(|_| SessionStorageError::IntegrityFailure)?
-            != bytes
-        {
-            return Err(SessionStorageError::StateConflict);
-        }
-        if !commit.durable() {
+        let identical = read_bounded_manifest(existing)
+            .map_err(|_| SessionStorageError::IntegrityFailure)?
+            == bytes;
+        if identical && !commit.durable() {
             commit.record(|| FsOp::Accept(DirRole::Generations, destination_name.to_owned()));
             return Ok(());
         }
