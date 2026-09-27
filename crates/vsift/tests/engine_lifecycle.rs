@@ -205,7 +205,7 @@ async fn a_durable_ingest_is_durable_or_fails_closed() -> TestResult {
     let sessions = harness.root.path("sessions").join("sessions");
     match opened {
         Ok(outcome) => {
-            assert!(cfg!(target_os = "linux"), "only Linux can be qualified");
+            assert_eq!(std::env::consts::OS, "linux", "only Linux can be qualified");
             assert_eq!(
                 outcome.session.publication,
                 vsift::PublicationGuarantee::OsCrashDurable
@@ -226,6 +226,21 @@ async fn a_durable_ingest_is_durable_or_fails_closed() -> TestResult {
             );
         }
     }
+    // An ephemeral session reports its own guarantee, never the root's
+    // strongest one, on every host.
+    let opened = harness
+        .engine
+        .ingest(IngestRequest {
+            source: harness.root.source()?,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
+        })
+        .await?;
+    assert_eq!(
+        opened.session.publication,
+        vsift::PublicationGuarantee::ProcessCrashConsistent
+    );
     Ok(())
 }
 

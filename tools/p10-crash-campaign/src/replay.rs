@@ -19,7 +19,7 @@ use crate::{
     error::CampaignError,
     logwrites::{WriteLog, plan},
     protocol::{Ack, parse_events},
-    verify::verify,
+    verify::{probe_writes, verify},
     workload::{MAX_ACK_BYTES, read_text, unix_seconds},
 };
 
@@ -228,11 +228,12 @@ fn check_point(
         summary.mount_failures += 1;
         return Ok(Some(format!("mount-failed status={mounted}")));
     }
-    let findings = verify(
-        &config.mount_point.join(&config.root_in_filesystem),
-        required,
-        unix_seconds()?,
-    );
+    let root = config.mount_point.join(&config.root_in_filesystem);
+    let now = unix_seconds()?;
+    let mut findings = verify(&root, required, now);
+    if findings.clean() {
+        probe_writes(&root, required, now, &mut findings);
+    }
     require(
         "umount",
         "/usr/bin/umount",

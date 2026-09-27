@@ -30,7 +30,7 @@ use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use vsift::EngineError;
 use vsift_application::{JobStore, job_status};
-use vsift_domain::{FailureCode, JobId, SessionId};
+use vsift_domain::{FailureCode, JobId, OperationId, SessionId};
 use vsift_infrastructure::FilesystemSessionStore;
 
 use crate::protocol::{Ack, OperationKind};
@@ -99,6 +99,13 @@ pub enum Damage {
         /// The public code.
         code: FailureCode,
     },
+    /// An acknowledged session refused a new commit after the crash.
+    Probe {
+        /// The session.
+        session: String,
+        /// The public code.
+        code: FailureCode,
+    },
 }
 
 impl fmt::Display for Damage {
@@ -128,6 +135,43 @@ impl fmt::Display for Damage {
                 "job session={session} job={job} code={}",
                 code.identifier()
             ),
+            Self::Probe { session, code } => write!(
+                formatter,
+                "probe session={session} code={}",
+                code.identifier()
+            ),
+        }
+    }
+}
+
+/// Commits one renewal to each of the (at most four) most recently
+/// acknowledged sessions, so a crash can be seen to leave every session
+/// writable, not only readable: leftover staged files, an abandoned manifest
+/// or an interrupted job must not block the next commit. Only for a
+/// disposable copy of the filesystem.
+pub fn probe_writes(root: &Path, acks: &[Ack], now: u64, findings: &mut Findings) {
+    let Ok(store) = FilesystemSessionStore::open_existing(root) else {
+        return;
+    };
+    let mut probed: Vec<&SessionId> = Vec::new();
+    for ack in acks.iter().rev() {
+        if probed.len() == 4 {
+            break;
+        }
+        if probed.contains(&&ack.session) {
+            continue;
+        }
+        probed.push(&ack.session);
+        let outcome = store.session_status(&ack.session).and_then(|status| {
+            let operation = OperationId::parse(format!("op_{:032x}", ack.seq))
+                .map_err(|_| vsift_application::SessionStorageError::Io)?;
+            store.renew_session(&ack.session, &operation, status.generation(), now)
+        });
+        if let Err(error) = outcome {
+            findings.damage.push(Damage::Probe {
+                session: ack.session.as_str().to_owned(),
+                code: code(error),
+            });
         }
     }
 }

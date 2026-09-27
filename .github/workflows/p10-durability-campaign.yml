@@ -126,7 +126,7 @@ jobs:
         shell: bash
         env:
           MODE: ${{ matrix.mode }}
-          OPERATIONS: ${{ matrix.mode == 'negative' && '80' || github.event_name == 'push' && '60' || inputs.layer_a_operations || '400' }} # TEMPORARY push size
+          OPERATIONS: ${{ matrix.mode == 'negative' && '80' || inputs.layer_a_operations || '400' }}
         run: |
           set -euo pipefail
           chmod +x bin/*
@@ -186,7 +186,7 @@ jobs:
         shell: bash
         env:
           SHARD: ${{ matrix.shard }}
-          KILLS: ${{ github.event_name == 'push' && '3' || inputs.layer_b_kills_per_shard || '80' }} # TEMPORARY push size
+          KILLS: ${{ inputs.layer_b_kills_per_shard || '80' }}
         run: |
           set -euo pipefail
           chmod +x bin/*
@@ -220,7 +220,7 @@ jobs:
       - name: Fail writes and flushes at random moments
         shell: bash
         env:
-          ROUNDS: ${{ github.event_name == 'push' && '5' || inputs.layer_c_rounds || '60' }} # TEMPORARY push size
+          ROUNDS: ${{ inputs.layer_c_rounds || '60' }}
         run: |
           set -euo pipefail
           chmod +x bin/*
