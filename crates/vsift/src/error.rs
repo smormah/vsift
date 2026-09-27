@@ -139,8 +139,9 @@ pub enum EngineError {
     /// The session's visual index holds no candidate with the requested
     /// identity.
     CandidateNotFound,
-    /// The session has no room left for evidence: its 160 evidence
-    /// artifacts, 256 artifacts or 10 GiB are used (ADR 0019 D4). Retain the
+    /// The session has no room left for evidence: its 384 evidence
+    /// artifacts, 512 artifacts or 10 GiB are used (ADR 0019 D4, ADR 0020
+    /// D-2). Retain the
     /// session and open a new one to continue.
     EvidenceBudgetExhausted,
     /// A media provider run for evidence failed with nothing extracted.

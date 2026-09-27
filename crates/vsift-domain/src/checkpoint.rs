@@ -165,7 +165,9 @@ impl ChunkCheckpoint {
                 audio.start() < window.end()
                     && audio.end() > window.start()
                     && audio.duration_micros()
-                        <= window.duration_micros().saturating_add(MAX_AUDIO_SLACK_MICROS)
+                        <= window
+                            .duration_micros()
+                            .saturating_add(MAX_AUDIO_SLACK_MICROS)
             }
         };
         self.key == *key && self.index == chunk.index() && self.window == window && plausible
@@ -232,7 +234,11 @@ mod tests {
         ] {
             let checkpoint =
                 ChunkCheckpoint::new(key('a')?, &chunk, CheckpointOutcome::Silent { audio });
-            assert_eq!(checkpoint.belongs_to(&key('a')?, &chunk), usable, "{audio:?}");
+            assert_eq!(
+                checkpoint.belongs_to(&key('a')?, &chunk),
+                usable,
+                "{audio:?}"
+            );
         }
         Ok(())
     }

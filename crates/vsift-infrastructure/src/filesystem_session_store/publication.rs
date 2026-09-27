@@ -17,7 +17,7 @@ use super::{
     ARTIFACTS_DIRECTORY, ATTEMPTS_DIRECTORY, CHAIN_CHECKPOINT_FILE, COORDINATION_DIRECTORY,
     CURRENT_FILE, ChainCheck, ChainCheckpoint, CommitPointer, CommittedManifest,
     FilesystemSessionStore, GENERATIONS_DIRECTORY, GenerationManifest, LifecycleUpdate,
-    MAX_GENERATIONS_PER_SESSION, MAX_METADATA_BYTES, MAX_SESSION_ARTIFACT_BYTES,
+    MAX_GENERATIONS_PER_SESSION, MAX_MANIFEST_BYTES, MAX_SESSION_ARTIFACT_BYTES,
     MAX_SESSION_ARTIFACTS, SESSIONS_DIRECTORY, STORAGE_SCHEMA_VERSION, StoredArtifact,
     StoredArtifactKind, StoredLifecycle, StoredSessionPhase, VerifiedHeadCache,
     chain::read_committed_manifest,
@@ -25,7 +25,7 @@ use super::{
     hash_bounded,
     initialization::initialize_session,
     map_lock_error, map_open_error, map_storage_io, open_regular_file, open_session_lock,
-    read_bounded,
+    read_bounded_manifest,
     root::{acquire_admission, validate_platform_root_permissions},
     sha256_hex,
     stored::{validate_artifact_record, validate_source_record},
@@ -201,7 +201,7 @@ pub(super) fn update_lifecycle(
                 return Err(SessionStorageError::StateConflict);
             }
             validate_source_record(&source_id, &source_name, source_bytes)?;
-            if artifacts.len() > 256 {
+            if artifacts.len() > MAX_SESSION_ARTIFACTS {
                 return Err(SessionStorageError::CapacityExhausted);
             }
             for (index, artifact) in artifacts.iter().enumerate() {
@@ -255,7 +255,7 @@ pub(super) fn update_lifecycle(
                 return Err(SessionStorageError::StateConflict);
             }
             validate_artifact_record(&artifact)?;
-            if record.artifacts.len() >= 256
+            if record.artifacts.len() >= MAX_SESSION_ARTIFACTS
                 || record
                     .artifacts
                     .iter()
@@ -342,7 +342,7 @@ pub(super) fn add_evidence(
 /// Whether the sub-budget an artifact of `kind` counts against is full.
 ///
 /// Visual-index revisions and evidence (ADR 0019 D4) are bounded separately
-/// so a runaway caller cannot fill the session's 256 artifact slots with
+/// so a runaway caller cannot fill the session's 512 artifact slots with
 /// them.
 pub(super) fn sub_budget_full(artifacts: &[StoredArtifact], kind: StoredArtifactKind) -> bool {
     if kind == StoredArtifactKind::VisualIndexRecord {
@@ -504,7 +504,7 @@ fn next_manifest(
     };
     let bytes = serde_json::to_vec(&manifest).map_err(|_| SessionStorageError::Io)?;
     // A manifest that could not be read back would strand the session.
-    if u64::try_from(bytes.len()).map_or(true, |size| size > MAX_METADATA_BYTES) {
+    if u64::try_from(bytes.len()).map_or(true, |size| size > MAX_MANIFEST_BYTES) {
         return Err(SessionStorageError::CapacityExhausted);
     }
     Ok(bytes)
@@ -626,7 +626,9 @@ pub(super) fn install_immutable_file(
     {
         let existing = open_regular_file(destination_directory, destination_name, false)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        if read_bounded(existing).map_err(|_| SessionStorageError::IntegrityFailure)? != bytes {
+        if read_bounded_manifest(existing).map_err(|_| SessionStorageError::IntegrityFailure)?
+            != bytes
+        {
             return Err(SessionStorageError::StateConflict);
         }
         if !commit.durable() {
@@ -677,7 +679,7 @@ pub(super) fn prepare_staged_file(
                 .as_ref()
                 .ok()
                 .and_then(|file| file.try_clone().ok())
-                .and_then(|file| read_bounded(file).ok())
+                .and_then(|file| read_bounded_manifest(file).ok())
                 .unwrap_or_default();
             if existing == bytes {
                 existing_file

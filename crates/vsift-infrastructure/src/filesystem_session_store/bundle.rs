@@ -14,15 +14,15 @@ use vsift_domain::{EvidenceRecord, EvidenceSubject, PublicationGuarantee, Sessio
 
 use super::{
     ARTIFACTS_DIRECTORY, BundleManifest, BundleSourcePolicy, BundleStatus, ChainCheck,
-    FilesystemSessionStore, MAX_SESSION_ARTIFACT_BYTES, SESSIONS_DIRECTORY, StoredArtifact,
-    StoredArtifactKind,
+    FilesystemSessionStore, MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, SESSIONS_DIRECTORY,
+    StoredArtifact, StoredArtifactKind,
     chain::read_committed_manifest,
     copy_and_hash_bounded, create_private_child_directory, create_regular_file, hash_bounded,
     map_open_error, map_storage_io, open_regular_file,
     publication::evidence_artifact_count,
     reads::{read_evidence_artifact, read_transcript_artifact, read_visual_index_artifact},
     root::{validate_platform_root_permissions, validate_root_selection, validate_same_object},
-    stored::{read_versioned_json_file, validate_artifact_record},
+    stored::{read_versioned_manifest_file, validate_artifact_record},
 };
 use crate::private_user_root::restrict_new_directory;
 
@@ -196,7 +196,7 @@ impl FilesystemSessionStore {
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
         validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
         validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
-        let manifest = read_versioned_json_file::<BundleManifest>(&bundle, "bundle.json")?;
+        let manifest = read_versioned_manifest_file::<BundleManifest>(&bundle, "bundle.json")?;
         if manifest.format != "vsift.bundle"
             || manifest.publication != PublicationGuarantee::ProcessCrashConsistent.identifier()
             || manifest.source_bytes == 0
@@ -208,7 +208,7 @@ impl FilesystemSessionStore {
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
         let source_id = SourceId::parse(&manifest.source_id)
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        if manifest.artifacts.len() > 256 {
+        if manifest.artifacts.len() > MAX_SESSION_ARTIFACTS {
             return Err(SessionStorageError::CapacityExhausted);
         }
         let expected_entries = 1 + manifest.artifacts.len() + usize::from(manifest.source_included);

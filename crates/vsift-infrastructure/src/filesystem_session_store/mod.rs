@@ -53,6 +53,10 @@ use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
+/// Largest generation manifest (and retained bundle manifest), which lists
+/// every artifact: 512 entries of about 200 bytes need about 100 KiB (ADR
+/// 0020 D-2). Every other metadata file keeps [`MAX_METADATA_BYTES`].
+const MAX_MANIFEST_BYTES: u64 = 128 * 1024;
 const OWNERSHIP_FILE: &str = "ownership.json";
 const COORDINATION_DIRECTORY: &str = "coordination";
 const SESSIONS_DIRECTORY: &str = "sessions";
@@ -87,8 +91,8 @@ const STORAGE_LAYOUT_VERSION: u16 = 1;
 const MAX_ADMISSION_CAPACITY: u16 = 64;
 const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
 const MAX_GENERATIONS_PER_SESSION: u64 = 4_096;
-/// Most artifacts one session holds.
-const MAX_SESSION_ARTIFACTS: usize = 256;
+/// Most artifacts one session holds (ADR 0020 D-2; 256 before P10).
+const MAX_SESSION_ARTIFACTS: usize = 512;
 /// Most artifact bytes one session holds: 10 GiB.
 const MAX_SESSION_ARTIFACT_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -602,9 +606,18 @@ fn open_regular_file(directory: &Dir, name: &str, write: bool) -> io::Result<Fil
 }
 
 fn read_bounded(file: File) -> io::Result<Vec<u8>> {
+    read_bounded_to(file, MAX_METADATA_BYTES)
+}
+
+/// Reads a generation or bundle manifest, bounded by [`MAX_MANIFEST_BYTES`].
+fn read_bounded_manifest(file: File) -> io::Result<Vec<u8>> {
+    read_bounded_to(file, MAX_MANIFEST_BYTES)
+}
+
+fn read_bounded_to(file: File, limit: u64) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    file.take(MAX_METADATA_BYTES + 1).read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_METADATA_BYTES {
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
         return Err(io::ErrorKind::InvalidData.into());
     }
     Ok(bytes)

@@ -186,6 +186,6 @@
   "schema_version": "1",
   "status": "partial",
   "warnings": [
-    "The session's 160 evidence artifacts are used up; the items returned are committed evidence. Keep them with session retain, then open a new session to continue."
+    "The session's 384 evidence artifacts are used up; the items returned are committed evidence. Keep them with session retain, then open a new session to continue."
   ]
 }

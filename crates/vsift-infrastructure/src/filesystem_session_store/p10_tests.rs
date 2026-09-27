@@ -803,3 +803,119 @@ fn every_fault_point_is_reached_and_a_kill_there_recovers() -> TestResult {
     }
     Ok(())
 }
+
+/// ADR 0020 D-2: a session holds 384 evidence artifacts, and its manifest,
+/// larger than any other metadata file may be, is written and read back by
+/// a new store instance; the next evidence artifact does not fit.
+#[test]
+fn the_raised_evidence_cap_holds_and_its_manifest_reads_back() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    // Generation 2 holds one image and one record; this call adds the rest
+    // and its own record.
+    let images: Vec<Vec<u8>> = (0..crate::MAX_EVIDENCE_ARTIFACTS - 3)
+        .map(|number| image(&format!("filler {number}")))
+        .collect();
+    commit_evidence(
+        &store,
+        CRASHED_EVIDENCE,
+        2,
+        &images,
+        "fill",
+        &CommitHooks::new(),
+    )?;
+    let manifest = session_path(&fixture)
+        .join(GENERATIONS_DIRECTORY)
+        .join("3.json");
+    let size = fs::metadata(manifest)?.len();
+    assert!(
+        size > super::MAX_METADATA_BYTES && size <= super::MAX_MANIFEST_BYTES,
+        "{size}"
+    );
+    let reopened = FilesystemSessionStore::open_existing(&fixture.path)?;
+    let status = reopened.session_status(&session_id()?)?;
+    assert_eq!(status.artifact_count(), crate::MAX_EVIDENCE_ARTIFACTS);
+    let session = reopened
+        .root
+        .open_dir(PathBuf::from(SESSIONS_DIRECTORY).join(SESSION))?;
+    read_committed_manifest(&session, &session_id()?, ChainCheck::Full)?;
+    let one_more = [image("one too many")];
+    let media = [EvidenceMediaFile {
+        kind: EvidenceMediaKind::FramePng,
+        bytes: &one_more[0],
+    }];
+    assert_eq!(
+        reopened
+            .commit_evidence(
+                &session_id()?,
+                &operation("op_8888888888888888")?,
+                StorageGeneration::from_value(3),
+                &EvidenceFiles {
+                    media: &media,
+                    record: b"{\"marker\":\"more\"}",
+                    verified_identity: None,
+                    now_unix_seconds: now()?,
+                },
+                &CommitHooks::new(),
+            )
+            .err(),
+        Some(SessionStorageError::CapacityExhausted)
+    );
+    Ok(())
+}
+
+/// ADR 0020 D-2: 512 artifacts fit (a 512-entry manifest stays within the
+/// manifest bound even with the largest sizes); the 513th does not.
+#[test]
+fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
+    let lifetime = vsift_domain::SessionLifetime::open(now()?)?;
+    let lifecycle = |count: usize| super::StoredLifecycle {
+        phase: super::StoredSessionPhase::Open,
+        opened_at_unix_seconds: lifetime.opened_at_unix_seconds(),
+        expires_at_unix_seconds: lifetime.expires_at_unix_seconds(),
+        source_id: format!("src_sha256_{}", sha256_hex(SOURCE_BYTES)),
+        source_name: format!("source-{ACTIVATE}.media"),
+        source_bytes: u64::try_from(SOURCE_BYTES.len()).unwrap_or(1),
+        artifacts: (0..count).map(record_artifact).collect(),
+        verified_source_identity: None,
+    };
+    let add = |count: usize| {
+        super::publication::update_lifecycle(
+            Some(lifecycle(count)),
+            LifecycleUpdate::AddArtifact {
+                artifact: record_artifact(count),
+                now: lifetime.opened_at_unix_seconds(),
+            },
+        )
+    };
+    let full = add(super::MAX_SESSION_ARTIFACTS - 1)?.ok_or("no lifecycle")?;
+    assert_eq!(full.artifacts.len(), super::MAX_SESSION_ARTIFACTS);
+    assert_eq!(
+        add(super::MAX_SESSION_ARTIFACTS).err(),
+        Some(SessionStorageError::CapacityExhausted)
+    );
+    let manifest = super::GenerationManifest {
+        schema_version: super::STORAGE_SCHEMA_VERSION,
+        session_id: SESSION.to_owned(),
+        operation_id: FIRST_EVIDENCE.to_owned(),
+        generation: super::MAX_GENERATIONS_PER_SESSION - 1,
+        previous_manifest_sha256: Some("f".repeat(64)),
+        durability: StoredDurability::Durable,
+        lifecycle: Some(full),
+    };
+    let size = serde_json::to_vec(&manifest)?.len();
+    assert!(u64::try_from(size)? <= super::MAX_MANIFEST_BYTES, "{size}");
+    Ok(())
+}
+
+/// A transcript-record entry with a distinct digest and an eight-digit size
+/// (512 of them stay within the session's 10 GiB).
+fn record_artifact(number: usize) -> super::StoredArtifact {
+    let digest = sha256_hex(number.to_string().as_bytes());
+    super::StoredArtifact {
+        kind: super::StoredArtifactKind::TranscriptRecord,
+        name: format!("artifact-{digest}.json"),
+        sha256: digest,
+        bytes: 20_000_000,
+    }
+}
