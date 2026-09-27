@@ -175,6 +175,7 @@ impl Harness {
                 source: self.root.source()?,
                 transcript: None,
                 cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
             })
             .await?;
         Ok(opened.session.session_id)
@@ -195,6 +196,7 @@ async fn open_status_renew_close_and_clean_use_the_injected_clock_and_identifier
             source: harness.root.source()?,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?;
     // One session identity, then initialize, stage and activate operations.
@@ -371,6 +373,7 @@ async fn requests_the_engine_cannot_honour_fail_before_any_work() -> TestResult 
                 offset_micros: 0,
             }),
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await;
     assert_eq!(
@@ -428,6 +431,7 @@ async fn relative_session_roots_and_unreadable_clocks_are_typed_failures() -> Te
             source: root.source()?,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await;
     assert_eq!(opened, Err(EngineError::Clock(ClockError::BeforeUnixEpoch)));

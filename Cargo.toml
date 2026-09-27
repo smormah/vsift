@@ -6,6 +6,7 @@ members = [
   "crates/vsift-contract",
   "crates/vsift-domain",
   "crates/vsift-infrastructure",
+  "tools/p10-crash-campaign",
   "tools/vsift-governance",
 ]
 default-members = ["crates/vsift-cli"]
@@ -68,3 +69,11 @@ unwrap_used = "deny"
 codegen-units = 1
 lto = "thin"
 strip = "symbols"
+
+# The crash campaign's negative-control build (tools/p10-crash-campaign): release
+# speed, but with debug assertions, without which the durability-campaign feature
+# refuses to compile. Never used for anything shipped.
+[profile.campaign]
+inherits = "release"
+debug-assertions = true
+overflow-checks = true

@@ -304,6 +304,7 @@ impl Harness {
                 source: stand_in,
                 transcript: None,
                 cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
             })
             .await?;
         Ok(Self {
@@ -825,6 +826,7 @@ async fn real_session(root: &OwnedRoot, source: &Path) -> Built<(Engine, Session
             source: source.to_path_buf(),
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?;
     Ok((engine, opened.session.session_id))

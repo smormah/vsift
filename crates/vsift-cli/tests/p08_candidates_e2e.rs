@@ -824,6 +824,7 @@ async fn budget_stage(root: &OwnedRoot, tools: &MediaTools) -> StageResult {
             source: clip,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await
         .map_err(|error| failed(&error.to_string()))?

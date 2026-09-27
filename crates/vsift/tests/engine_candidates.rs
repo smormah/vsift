@@ -173,6 +173,7 @@ impl Harness {
                 source,
                 transcript: None,
                 cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
             })
             .await?;
         Ok(Self {
@@ -462,6 +463,7 @@ async fn concurrent_calls_over_one_window_commit_it_once() -> TestResult {
             source: fixture("F05.mp4"),
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?
         .session

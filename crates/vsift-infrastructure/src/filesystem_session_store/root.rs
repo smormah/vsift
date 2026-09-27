@@ -177,6 +177,17 @@ impl FilesystemSessionStore {
         })
     }
 
+    /// This store as a host that cannot claim OS-crash durability would open
+    /// it, so the fail-closed tests hold on every host, including a qualified
+    /// Ubuntu 24.04 / ext4 one.
+    #[cfg(test)]
+    pub(super) fn without_durable_profile(mut self) -> Self {
+        self.capabilities = vsift_application::StorageCapabilities::new(
+            vsift_domain::PublicationGuarantee::ProcessCrashConsistent,
+        );
+        self
+    }
+
     /// Returns the immutable, root-wide weighted admission capacity.
     #[must_use]
     pub const fn admission_capacity(&self) -> u16 {

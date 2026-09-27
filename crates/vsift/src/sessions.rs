@@ -30,6 +30,18 @@ pub struct IngestRequest {
     /// Signal that stops the copy of the source between 64 KiB blocks and
     /// the transcript's duration probe; a cancelled ingest opens no session.
     pub cancellation: Cancellation,
+    /// How the session publishes, fixed for its whole life (ADR 0020).
+    ///
+    /// [`DurabilityRequirement::Ephemeral`] is the desktop default:
+    /// consistent across a process crash. [`DurabilityRequirement::Durable`]
+    /// asks that every acknowledged generation survive an OS crash or power
+    /// loss; only a root on the qualified profile (Ubuntu 24.04, local ext4
+    /// with write barriers, ADR 0010) can honour it, and anywhere else the
+    /// ingest fails with `MISSING_CAPABILITY` before any session is
+    /// registered, never downgrading the request.
+    /// Engine-level only in this release; the command line gains it with
+    /// the worker host (ADR 0020 D-3).
+    pub durability: DurabilityRequirement,
 }
 
 /// A supplied transcript file and the explicit offset that aligns it.
@@ -414,7 +426,7 @@ impl Engine {
             initialize_operation_id: self.new_operation_id()?,
             stage_operation_id: self.new_operation_id()?,
             activate_operation_id: self.new_operation_id()?,
-            durability: DurabilityRequirement::Ephemeral,
+            durability: request.durability,
             now_unix_seconds: now,
         };
         let Some((import, tools)) = import else {

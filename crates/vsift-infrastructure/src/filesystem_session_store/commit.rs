@@ -88,6 +88,10 @@ pub(super) struct CommitHooks<'a> {
     failing_at: Option<FaultPoint>,
     #[cfg(test)]
     trace: Option<&'a std::cell::RefCell<Vec<FsOp>>>,
+    /// The crash campaign's negative control: skip the session directory
+    /// synchronisation after the pointer rename.
+    #[cfg(feature = "durability-campaign")]
+    negative_control: bool,
     lifetime: PhantomData<&'a ()>,
 }
 
@@ -100,6 +104,9 @@ impl CommitHooks<'_> {
             failing_at: None,
             #[cfg(test)]
             trace: None,
+            #[cfg(feature = "durability-campaign")]
+            negative_control: std::env::var_os(NEGATIVE_CONTROL_VARIABLE)
+                .is_some_and(|value| value == "1"),
             lifetime: PhantomData,
         }
     }
@@ -200,7 +207,28 @@ impl Commit<'_> {
         }
         sync_directory(directory).map_err(map_storage_io)
     }
+
+    /// Synchronises the session directory after the pointer rename: the
+    /// commit point of a durable session.
+    ///
+    /// In a `durability-campaign` build with the negative control selected
+    /// the synchronisation is left out, so the crash campaign can show that
+    /// it detects the acknowledged generations this loses (ADR 0020).
+    pub(super) fn sync_pointer_directory(self, session: &Dir) -> Result<(), SessionStorageError> {
+        #[cfg(feature = "durability-campaign")]
+        if self.hooks.negative_control && self.durable() {
+            self.record(|| FsOp::SyncDirectory(DirRole::Session));
+            return Ok(());
+        }
+        self.sync_directory(session, DirRole::Session)
+    }
 }
+
+/// Environment variable that selects the crash campaign's negative control
+/// in a `durability-campaign` build: `1` removes the session directory
+/// synchronisation after every pointer rename.
+#[cfg(feature = "durability-campaign")]
+pub(crate) const NEGATIVE_CONTROL_VARIABLE: &str = "VSIFT_CAMPAIGN_NEGATIVE_CONTROL";
 
 /// Synchronises a directory's entries.
 ///

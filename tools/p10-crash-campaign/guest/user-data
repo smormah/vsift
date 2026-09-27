@@ -1,0 +1,19 @@
+#cloud-config
+# One-time preparation of the layer-B guest image (the host powers it on once
+# with this seed, then boots copy-on-write overlays of the result). No
+# network, no packages, no users: only the campaign service is installed and
+# boot-time noise is switched off.
+runcmd:
+  - [mkdir, -p, /opt/campaign]
+  - [sh, -c, "echo 'LABEL=vsift-tools /opt/campaign ext4 ro,nofail 0 0' >> /etc/fstab"]
+  - [mount, /opt/campaign]
+  - [cp, /opt/campaign/vsift-campaign.service, /etc/systemd/system/vsift-campaign.service]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, vsift-campaign.service]
+  - [systemctl, mask, snapd.service, snapd.socket, snapd.seeded.service, unattended-upgrades.service, apt-daily.timer, apt-daily-upgrade.timer, man-db.timer, motd-news.timer, fstrim.timer, e2scrub_all.timer, systemd-networkd-wait-online.service]
+  - [touch, /etc/cloud/cloud-init.disabled]
+  - [sh, -c, "echo VSIFT-PREP-DONE > /dev/ttyS0"]
+power_state:
+  mode: poweroff
+  timeout: 60
+  condition: true

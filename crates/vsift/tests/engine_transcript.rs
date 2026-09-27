@@ -179,6 +179,7 @@ impl Harness {
                     offset_micros,
                 }),
                 cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
             })
             .await
     }
@@ -328,6 +329,7 @@ async fn transcript_reads_are_typed_for_bad_ranges_and_sessions_without_one() ->
             source: harness.placeholder_source()?,
             transcript: None,
             cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
         })
         .await?;
     assert!(opened.transcript.is_none());

@@ -2135,6 +2135,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "vsift-crash-campaign"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "rustix",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "vsift",
+ "vsift-application",
+ "vsift-domain",
+ "vsift-infrastructure",
+]
+
+[[package]]
 name = "vsift-domain"
 version = "0.1.0"
 dependencies = [

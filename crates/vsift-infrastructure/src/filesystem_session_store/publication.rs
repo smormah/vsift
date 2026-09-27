@@ -559,7 +559,7 @@ fn install_pointer(
         )
     });
     commit.reach(FaultPoint::PointerRename)?;
-    commit.sync_directory(session, DirRole::Session)?;
+    commit.sync_pointer_directory(session)?;
     commit.reach(FaultPoint::PointerDirectorySync)
 }
 

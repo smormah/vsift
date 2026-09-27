@@ -438,16 +438,29 @@ fn an_ephemeral_session_cannot_be_published_durably() -> TestResult {
     Ok(())
 }
 
-/// No profile is qualified yet (ADR 0010): durable requests keep failing
-/// closed with an unsupported guarantee.
+/// Only the qualified profile (ADR 0010) offers OS-crash durability: every
+/// other target offers process-crash consistency, and a Linux root that
+/// claims durability runs on Ubuntu 24.04 (the mount side of the decision is
+/// covered by the parser and decision-table tests).
 #[test]
-fn every_root_still_offers_only_process_crash_consistency() -> TestResult {
+fn a_root_claims_durability_only_on_the_qualified_profile() -> TestResult {
     let fixture = Fixture::new()?;
     let store = FilesystemSessionStore::open_existing(&fixture.path)?;
-    assert_eq!(
-        store.capabilities,
-        StorageCapabilities::new(PublicationGuarantee::ProcessCrashConsistent)
-    );
+    if cfg!(target_os = "linux")
+        && store.capabilities == StorageCapabilities::new(PublicationGuarantee::OsCrashDurable)
+    {
+        let os_release =
+            fs::read("/etc/os-release").or_else(|_| fs::read("/usr/lib/os-release"))?;
+        assert_eq!(
+            crate::classify_os_release(&os_release),
+            Ok(crate::OsReleaseProfile::Ubuntu2404)
+        );
+    } else {
+        assert_eq!(
+            store.capabilities,
+            StorageCapabilities::new(PublicationGuarantee::ProcessCrashConsistent)
+        );
+    }
     Ok(())
 }
 
