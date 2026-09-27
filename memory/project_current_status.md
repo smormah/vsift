@@ -30,15 +30,12 @@ Today it can:
   session's every acknowledged result through an OS crash or power loss;
 - keep every folder it creates private to the user.
 
-**P00-P09 are complete. P10 (recovery integration) is implemented across all four of
-its pull requests:** PR 1 (the commit path, `e2b14d9`), PR 2 (jobs, keys and
-checkpointed retranscription, `2ae55be`) and PR 3 (the public job surface and
-interruption handling, `8af331b`) are merged; **PR 4 (the Ubuntu 24.04 / ext4 crash
-campaign and durable enablement) is complete on branch `p10/durability-campaign`**, not
-yet reviewed or merged. The packet is complete when PR 4 merges and the ledger
-completion record is written. Every known limit is in `docs/planning/known-limits.md`.
+**P00-P10 are complete.** P10 (recovery integration) closed on 2026-09-28 with merge
+`3f27ce3` (PRs #169, #179, #181, #182; ADR 0020 accepted). Durable publication is
+qualified and enabled for Ubuntu 24.04 / ext4 only (engine API; CLI via P11). P11
+(worker and batch host) is next. Every known limit is in `docs/planning/known-limits.md`.
 
-## P10 PR 4: crash campaign and durable enablement (on its branch)
+## P10 PR 4: crash campaign and durable enablement (merged, #182)
 
 - **What a host sees:** `IngestRequest::durability` (engine API only, ADR 0020 D-3).
   On Ubuntu 24.04 with the session root on ext4 mounts that keep write barriers a
@@ -120,8 +117,8 @@ completion record is written. Every known limit is in `docs/planning/known-limit
 | P07 | Complete (2026-09-25, `9ea3180`): engine, transcripts, local ASR, fuzzing |
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
-| P10 | Implemented (ledger `in_progress`): PRs 1-3 merged, PR 4 complete on its branch; completion record after merge |
-| P11, P12, P14 | Not started (P11 is next once P10 is recorded complete) |
+| P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
+| P11, P12, P14 | Not started; P11 (worker and batch host) is next |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
 ## Architecture snapshot

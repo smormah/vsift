@@ -6,28 +6,19 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P09 are complete. P10 (recovery integration) is implemented across its four
-pull requests; the packet is complete once PR 4 merges and the ledger completion
-record is written** (the supervisor writes it). PR 1 (`e2b14d9`), PR 2 (`2ae55be`) and
-PR 3 (`8af331b`) are merged. **PR 4 (the Ubuntu 24.04 / ext4 crash campaign and
-durable enablement) is complete on branch `p10/durability-campaign`**, awaiting review
-and CI; no pull request is open yet.
+**P00-P10 are complete.** P10 (recovery integration) closed on 2026-09-28 with merge
+`3f27ce3` (PRs #169, #179, #181, #182; ADR 0020 accepted with D-1..D-5): recoverable
+retranscribe jobs, exactly-once commit, `job status/resume/cancel`, Ctrl-C/SIGTERM,
+and durable publication qualified on Ubuntu 24.04 / ext4 (weekly crash campaign;
+`docs/planning/p10-durable-publication.md`). Durable mode is engine-only until P11.
 
-1. **PR 4 delivered:** `tools/p10-crash-campaign/` and the `P10 durability campaign`
-   workflow (manual and weekly): layer A dm-log-writes power loss at every flush,
-   layer B QEMU kills of the pinned Ubuntu 24.04 image, layer C dm-flakey write
-   errors, and the negative control (must lose acknowledgements). Gating run
-   36340043451, confirmation 36347502530: `docs/planning/p10-durable-publication.md`.
-   `QUALIFIED_UBUNTU_EXT4` is set; the gate also checks Ubuntu 24.04 (`os-release`).
-   `IngestRequest::durability` is engine-only (D-3; the CLI via P11). Fixed: storage
-   failures reading committed state were `INTEGRITY_FAILURE` (now `STORAGE_IO`); an
-   ingest reported the store's guarantee instead of its session's.
-2. **Next:** review and merge PR 4; the ledger completion record for P10; close #13
-   and #164. Then P11 (worker and batch host) is the earliest eligible packet.
+1. **Next: P11 (worker and batch host)**, started by the maintainer on 2026-09-28.
+   Read the P11 row of `docs/planning/implementation-work-packets.md` and X-07..X-11,
+   O-01..O-04, SEC-T01 first. P11 owns the CLI durable workspace (D-3), JobRequest /
+   JobResult, `job run` / `job batch`, admission, graceful shutdown and progress events.
 
 ## Tracked issues
 
-- #13: the P10 packet (close with the completion record). #164 resolved by PR 1.
 - #144: stabilised in PR 3; close after a clean CI run on main.
 - #170-#178: tracking issues for L-011, L-013, L-015, L-018, L-024, L-028, L-043,
   L-045 and L-042 (review pending).
