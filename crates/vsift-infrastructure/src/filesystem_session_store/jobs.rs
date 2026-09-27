@@ -1080,6 +1080,15 @@ fn create_directory(parent: &Dir, name: &str) -> Result<(), SessionStorageError>
 }
 
 /// Opens a lock anchor, creating it empty if it does not exist yet.
+///
+/// Several identical requests create the same anchor at the same moment. On
+/// macOS a create-if-missing open that races a peer's creation of the same
+/// name can report `NotFound` although the directory exists and the peer's
+/// file is about to appear (observed in CI: X-03 with eight identical
+/// requests, raw OS error 2 from this open). That is a peer's legitimate
+/// action, not damage, so the open is retried within the same bounded budget
+/// as a file met mid-replacement; a directory that really vanished still fails
+/// once the budget is spent.
 fn create_or_open(directory: &Dir, name: &str) -> Result<cap_std::fs::File, SessionStorageError> {
     let mut options = OpenOptions::new();
     options
@@ -1087,8 +1096,7 @@ fn create_or_open(directory: &Dir, name: &str) -> Result<cap_std::fs::File, Sess
         .write(true)
         .create(true)
         .follow(FollowSymlinks::No);
-    let file = directory
-        .open_with(name, &options)
+    let file = super::open_replaced_file_with(|| directory.open_with(name, &options))
         .map_err(map_storage_io)?;
     let metadata = file.metadata().map_err(map_storage_io)?;
     if !metadata.is_file() || !super::has_one_link(&metadata) {

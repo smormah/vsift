@@ -328,6 +328,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Several identical `transcript retranscribe` requests started at the same moment could
+  make one of them fail with `STORAGE_IO` on macOS while creating the shared job's lock
+  files; that open now retries briefly, as a file met mid-replacement does.
 - A session could be reported as damaged (`INTEGRITY_FAILURE`) while another process was
   committing to it: a reader that opened the commit pointer, the chain checkpoint or a
   job record just as a writer replaced it by rename saw a file with no link left, or

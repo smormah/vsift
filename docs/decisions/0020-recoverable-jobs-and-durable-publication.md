@@ -260,6 +260,14 @@ design above:
   non-regular file is still refused at once, and a file still missing after the
   budget is still an integrity failure. Generations are never replaced while a
   pointer names them, so manifest reads need no retry.
+- **Racing creators of a lock anchor (found by the X-03 stress on macOS).** Eight
+  identical requests create a job's `owner.lock` and `state.lock` at the same moment.
+  On macOS one create-if-missing open occasionally reported `NotFound` (raw OS error
+  2, from `jobs.rs` `create_or_open`, with 29 descriptors open of 10,240) although
+  the job directory existed: a peer's concurrent creation of the same name, not
+  damage. That open now uses the same bounded retry (at most 0.5 s), so the peer's
+  file is opened once it appears; a directory that really vanished still fails
+  after the budget.
 
 ## Consequences
 

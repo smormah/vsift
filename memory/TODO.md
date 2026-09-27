@@ -77,8 +77,6 @@ test code is compiled only there). The packet is not complete.
   until P10 PR 4's campaign passes (ADR 0010, ADR 0020).
 - Sessions written by this version may hold `jobs/` (older builds ignore it) and
   manifests over 64 KiB (older builds reject them; sessions are disposable).
-- macOS CI, once: 8 identical requests (X-03) ended in storage I/O; not seen on Windows.
-  Run lock-stress on macOS: the failing test now prints errno, descriptors, call site.
 
 ## Parked: managed installation (now P13)
 

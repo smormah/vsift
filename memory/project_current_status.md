@@ -71,11 +71,10 @@ recommended). Every known limit is in `docs/planning/known-limits.md`.
 - **Readers vs replacement (fixed after #179's CI):** a reader that opened a metadata
   file just as a writer renamed over it (no link left, or on Windows no name for a
   moment) reported `INTEGRITY_FAILURE`; such files now use a bounded retry.
-- **Open (macOS CI only):** one run of the 8-request X-03 test ended in a storage
-  I/O failure. An audit found no concurrent step that maps to I/O and it does not
-  reproduce on Windows. Suspects: descriptor limit (`EMFILE`), `F_FULLFSYNC`, or
-  a directory read error. The unit tests now print the errno, open descriptors
-  and call site behind any erased I/O error, so the next failure names it.
+- **Fixed (macOS X-03):** 8 identical requests creating a job's lock files at once
+  made one create-if-missing open report `NotFound` on macOS (diagnosed in CI: OS
+  error 2, 29 of 10,240 descriptors). It now retries within the 0.5 s budget. Unit
+  tests print the errno, descriptors and call site behind any erased I/O error.
 - **Not compiled on Windows:** the Unix-only `a_sigstopped_owner_keeps_its_job`
   (opt-in) and the durable variants of the job paths (directory syncs).
 
