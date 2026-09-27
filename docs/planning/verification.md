@@ -294,7 +294,37 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
-## 2026-09-26 P10 PR 1 evidence (commit path, branch `p10/commit-path`)
+## 2026-09-27 P10 PR 2 evidence (jobs and checkpointed retranscription, branch `p10/jobs-checkpoints`)
+
+P10 is in progress; this records the second of its four pull requests
+([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md), accepted
+2026-09-27). Storage tests are in
+`crates/vsift-infrastructure/src/filesystem_session_store/job_tests.rs` (a real root,
+fake audio and a deterministic stand-in recognizer), use-case tests in
+`crates/vsift-application/src/job/tests.rs` (an in-memory store), engine tests in
+`crates/vsift/tests/engine_jobs.rs`.
+
+| Gate | Mechanical evidence |
+| --- | --- |
+| X-01 | `a_job_killed_at_every_job_point_resumes_or_replays_exactly_once`: a child process runs a five-chunk retranscription and exits at each of the nine job fault points (`FaultPoint::JOB`, every one must be covered; chunk points at the third chunk) and at the manifest and pointer renames of its commit; the same request then resumes from exactly the checkpoints it finds (every one valid, the rest recognised again) or replays the landed commit, and the session holds one revision byte-identical (encoded record) to an uninterrupted run's. The property `an_interrupted_run_resumes_to_the_same_revision` interrupts at any of five chunks by failure or cancellation and resumes to the same revision; `a_resumed_job_commits_the_byte_identical_revision`; opt-in engine tests with real FFmpeg decoding (`an_interrupted_retranscription_resumes_to_the_same_revision`) and with whisper.cpp v1.9.2 interrupted after its first checkpoint (`a_real_whisper_run_interrupted_after_its_first_checkpoint_resumes`: same segments and revision identity as a control run) |
+| X-02 | `a_lost_acknowledgement_replays_without_a_new_generation`, `a_crash_after_the_pointer_is_reconciled_from_the_chain` (a record left `committing` is reconciled from the manifest chain), the kill test at `pointer-rename`, `job-succeeded` and `checkpoint-deletion`, and the engine's `a_committed_operation_is_replayed_before_any_check_or_hash` (no preflight, hash or recognition; generation unchanged) |
+| X-03 | `an_operation_id_reused_for_another_request_conflicts` / `an_operation_id_reused_for_another_range_conflicts` (`IDEMPOTENCY_CONFLICT`, nothing changed) and `identical_concurrent_requests_commit_once`: 2, 4 and 8 identical concurrent requests with one operation id commit once, the rest are `BUSY` with the job or replay it |
+| X-04 | `concurrent_retranscriptions_and_renewals_do_not_deadlock` (2, 4 and 8 workers; retranscriptions of different ranges commit by re-splicing onto each other or report busy; the chain stays whole with consecutive revision numbers; it found, and the change fixes, a race that could commit a second revision 1), `a_renewal_after_resolution_is_followed_by_the_commit`, `a_superseded_base_is_respliced_or_the_job_fails` |
+| X-05 | `a_suspended_owner_keeps_its_job`: a child process owns the job and stops making progress; the same request is `BUSY` with the job, status reports it live, a cancel is only requested, and its lock is never taken over; after the child ends the requested cancel completes. `a_stale_owner_cannot_change_the_job` (epoch and attempt fence); opt-in Unix `a_sigstopped_owner_keeps_its_job` (`SIGSTOP`) |
+| X-06 (ordering, engine level) | `a_cancel_request_reaches_the_owner_and_wins_before_the_commit`, `a_cancel_requested_during_the_run_wins_before_the_commit`, `cancellation_is_serialised_with_the_commit` (too late while committing, idempotent repeats); the public cancel and signals are P10 PR 3 |
+| X-09 | Domain table tests of every failure code's class, the full-jitter backoff with injected jitter, the deadline skip and the poison rule; `busy_contention_is_retried_twice_then_left_resumable`, `three_identical_failures_at_one_chunk_poison_the_job` |
+| S-08 | `damaged_forged_or_future_job_records_fail_closed` (truncated, another job's key, unknown field, commit on a queued job, empty: `INTEGRITY_FAILURE`; newer: `UNSUPPORTED_SCHEMA`), `checkpoints_read_back_and_damaged_ones_are_removed` and `damaged_forged_or_future_checkpoints_are_unusable` (truncated, forged payload, future, another ordinal: removed and redone), `foreign_or_invalid_checkpoints_are_discarded_and_redone`, `a_checkpoint_damaged_between_attempts_is_redone` |
+| C-09 | `exactly_the_documented_transitions_are_legal` over the whole state graph |
+| D-2 caps | `the_raised_evidence_cap_holds_and_its_manifest_reads_back` (384 evidence artifacts, a manifest over 64 KiB read back), `a_session_holds_at_most_512_artifacts_in_a_bounded_manifest`; the existing `evidence_store` and `engine_evidence` budget tests now fill 384 |
+| S-11 (recorded) | Opt-in `s11_warm_reuse_with_a_full_evidence_budget` (release, Windows 11): warm reused `frame get` p95 177 / 164 / 166 / 177 ms at 2 / 64 / 256 / 1,024 generations with 384 evidence artifacts, slope 0.000 ms per generation; 144 / 163 / 144 / 138 ms with one frame |
+| L-048 | `another_operation_publishes_over_an_abandoned_manifest` (both modes) |
+
+The S-07 kill test of PR 1 now iterates the commit points (`FaultPoint::COMMIT`); a
+registry test checks the commit and job points together are every point. None of this
+is OS-crash evidence: P10 PR 4's campaign is still required before durable mode can be
+enabled.
+
+## 2026-09-26 P10 PR 1 evidence (commit path, merged as `e2b14d9`)
 
 P10 is in progress; this records the first of its four pull requests
 ([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)). Unit tests

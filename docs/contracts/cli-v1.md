@@ -29,13 +29,13 @@ being created. An existing directory that VSift did not create is never adopted.
 | `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
-| `transcript retranscribe` | New local-ASR transcript revision, whole source or one range | Implemented in P07 increment 3b |
+| `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
-| `job run/batch/status/resume/cancel` | Recoverable worker operations | P10/P11 |
+| `job run/batch/status/resume/cancel` | Recoverable worker operations | `status/resume/cancel` in P10 PR 3 (engine operations since PR 2); `run/batch` in P11 |
 
 ### P05 disposable sessions and bundles
 
@@ -386,8 +386,8 @@ citation always resolves. A run that recognises no speech still commits a revisi
 `data`
 ([`transcript-retranscribe-data.schema.json`](../../schemas/v1/transcript-retranscribe-data.schema.json),
 example [`transcript-retranscribe.json`](../../schemas/v1/examples/transcript-retranscribe.json))
-holds `session_id`, `requested_range` (null for the whole video), the new `revision`
-and `recognised_segment_count`. A local-ASR revision summary has `alignment.origin`
+holds `session_id`, `requested_range` (null for the whole video), the new `revision`,
+`recognised_segment_count` and, since P10 PR 2, `job` (below). A local-ASR revision summary has `alignment.origin`
 `local_asr`, `sidecar: null`, `local_asr` (provider and model by SHA-256, the pinned
 profile, decoding profile `r0-v1`, chunk plan, threads, audio stream, covered range and
 chunk counts), `supersedes`, `replaced_range` and `carried_segment_count`. A local-ASR
@@ -400,10 +400,43 @@ codes `first_cue` is the first affected chunk. Segments are read with `transcrip
 (the new revision is the default). With `--events jsonl`, `transcript retranscribe`
 writes its terminal event only; stream the records with `transcript get --revision
 <revision_id> --events jsonl`, page by page. The command-line host does not trap
-Ctrl-C: interrupting it commits nothing, and the work directory is removed by the
-session's next run or cleanup.
+Ctrl-C yet (P10 PR 3 will): interrupting it commits nothing, the work directory is
+removed by the session's next run or cleanup, and the chunks it finished are kept for a
+resume (below).
 
-**Failures** use existing codes. A failed run carries one fixed-prose remediation
+**Recoverable runs (P10 PR 2, [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)).**
+Every run is a *job* whose identity (`job_...`) derives from the session and the
+request's operation key: the source, audio stream, replaced range, chunk plan,
+recognizer and model identity, local-ASR verification and the revision it supersedes.
+Each chunk's raw recognizer output is kept as a private checkpoint inside the session
+(never evidence, never in a bundle). Running the same command again after an
+interruption (a crash, a failure, Ctrl-C) finds the same job and continues from its
+finished chunks; a checkpoint that cannot be used (damaged, or not this run's) is
+removed and its chunk recognised again. The committed revision is exactly the one an
+uninterrupted run gives; nothing about the resume is written into it. `data.job`
+reports `job_id`, `resumed`, `chunks_reused` and `replayed`, the envelope's
+`operation_id` names the operation the result is recorded under, and the warnings
+`resumed_from_checkpoint` and `checkpoint_discarded` (fixed prose, starting with the
+identifier) say when checkpoints were used or discarded. A session that moved during
+the run (a renewal, another revision) is followed instead of failing after all the
+work: the commit is retried against the new head, or, if another revision replaced the
+base, the range is widened over it again and the result spliced onto it when the range
+is unchanged. A run that another process is running is `BUSY` with its job in
+`error.affected_ids` and `error.retry_after_ms` 2000; a retry continues the job or
+returns its result. Contention (a busy processing slot or writer, a moved generation)
+is retried automatically at most twice with jittered backoff.
+
+An operation id makes a retry safe (maintainer decision D-1): repeating a request with
+the id its first attempt used returns the committed revision again (`replayed: true`,
+no new generation), and the same id with a different request fails
+`IDEMPOTENCY_CONFLICT` (exit 2, not retryable) without changing anything. Operation ids
+are session-scoped and expire with the session. The engine API takes one today; the
+`--operation-id op_...` flag on `transcript retranscribe` arrives with the public job
+commands in P10 PR 3. Without one, every successful run is new work: after a success
+the newest revision is the new base, so the same command commits another revision.
+
+**Failures** use the existing codes, and `IDEMPOTENCY_CONFLICT` (new in P10 PR 2) for a
+reused operation id. A failed run carries one fixed-prose remediation
 starting `Local speech recognition failed at the <stage> step (<reason>).`, a failed
 preflight one starting `VSift's local speech-recognition check ... failed (<kind>)`;
 neither contains a path, provider output or transcript text.
@@ -415,9 +448,15 @@ neither contains a path, provider output or transcript text.
 | Audio stream present but undecodable | `INVALID_SOURCE` |
 | Output over its bounds, more than 1,024 chunks, a record over 24 MiB, or whisper-cli ended abnormally (usually out of memory) | `RESOURCE_LIMIT` |
 | A chunk exceeded its 120 s deadline | `DEADLINE_EXCEEDED` |
-| Cancelled (library hosts) | `CANCELLED` |
+| Cancelled (library hosts); the job stays resumable, or is cancelled if cancellation was requested through the job | `CANCELLED` |
 | Work directory or the session's copy of the video unusable | `STORAGE_IO` |
-| The session changed during the run (a renewal or another revision), is held by cleanup, or every processing slot of the session root is in use; retry | `BUSY` |
+| The same job is running in another process (`affected_ids` names it, `retry_after_ms` 2000); the session is held by cleanup; every processing slot or the writer stayed busy after two automatic retries; another revision changed the transcript around the range during the run so the recognised range no longer matches (rerun: it is widened again) | `BUSY` |
+| The operation id was used earlier in the session for a different request (engine API in P10 PR 2; the CLI flag in PR 3) | `IDEMPOTENCY_CONFLICT` |
+
+A failed attempt leaves the job resumable: the next run of the same command continues
+it. It fails for good only when one chunk failed three times with the same code, after
+16 attempts, or when its range was superseded; the same command then starts it again
+from nothing.
 
 ### P08 transcript search
 
@@ -717,8 +756,8 @@ whichever request named it.
 
 **Storage.** Each extracting call commits its new images and one `evidence_record`
 ([`bundle-evidence-record.schema.json`](../../schemas/v1/bundle-evidence-record.schema.json))
-in one generation. A session holds at most 160 evidence artifacts (images, clips and
-records) within its 256 artifacts and 10 GiB (D4); a call that would not fit a record
+in one generation. A session holds at most 384 evidence artifacts (images, clips and
+records) within its 512 artifacts and 10 GiB (D4, raised by ADR 0020 D-2); a call that would not fit a record
 and one image fails before any process.
 
 **Failures** use existing codes, each with a fixed remediation:
@@ -1062,7 +1101,7 @@ against `operation-response.schema.json`; evidence events validate against
 | ---: | --- | --- |
 | 0 | complete or supported partial/degraded result | none |
 | 1 | unexpected internal failure | `INTERNAL` |
-| 2 | usage, unsupported schema, missing capability, or unavailable isolation | `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED` |
+| 2 | usage, unsupported schema, missing capability, unavailable isolation, or an operation id reused for another request | `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED`, `IDEMPOTENCY_CONFLICT` |
 | 3 | invalid or unsupported source | `INVALID_SOURCE` |
 | 4 | retryable condition | `BUSY` |
 | 5 | deadline or resource limit | `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT` |
@@ -1148,7 +1187,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-06 | strict bounded JSON decoding and schema/identifier rejection |
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) |
-| C-09 | legal job and cancellation terminal transitions |
+| C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 
 These tests establish the public boundary only. Provider execution, filesystem

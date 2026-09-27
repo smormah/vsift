@@ -117,3 +117,12 @@ strictly, as for the other records:
 
 A non-conforming record fails with `INTEGRITY_FAILURE`, a newer record version with
 `UNSUPPORTED_SCHEMA`.
+
+## 2026-09-27 note: raised caps and job files (P10 PR 2)
+
+ADR 0020's D-2 raises a session to 512 artifacts with an evidence sub-budget of 384,
+and lets a generation manifest, and the retained bundle manifest that repeats its
+artifact list, be 128 KiB; `bundle validate` accepts bundles within the new bounds, and
+every other rule of this record is unchanged. Recoverable jobs keep private files under
+`sessions/<ses>/jobs/` (records, locks and chunk checkpoints); they are never listed in
+a manifest, so `session retain` never exports them.

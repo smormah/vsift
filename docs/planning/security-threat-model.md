@@ -342,7 +342,8 @@ P09 evidence core (PR 2, ADR 0019 accepted 2026-09-26; engine only, the commands
 follow): every call runs the media-tool preflight and binds the source copy before
 any provider runs, and evidence is committed only after a last identity comparison of
 the copy (SEC-17/SEC-18). Per call at most 100 frames, 200 megapixels, 256 MiB of
-images, 120 s and the session's remaining evidence slots (160 of 256 artifacts), with
+images, 120 s and the session's remaining evidence slots (384 of 512 artifacts since
+P10 PR 2, ADR 0020 D-2; 160 of 256 before), with
 typed partial results (SEC-05). Records are strict versioned JSON of at most 256 KiB
 that never hold an operation id, a path or media bytes; decoding re-derives the
 request key and every item identity, and `bundle validate` checks every item against
@@ -400,6 +401,40 @@ at most 1 MiB, refuses a damaged table whole and is fuzzed (`mountinfo`). Fault 
 can stop the process only in unit tests and `fault-injection` builds, which cannot be
 compiled without debug assertions and which the governance check refuses outside
 development dependencies.
+
+P10 PR 2 (2026-09-27, ADR 0020 accepted): recoverable jobs and checkpointed
+retranscription.
+**SEC-09.** A live job holds a shared hold on its session's lifetime (through its
+source binding, work directory and job owner), so `session close` and `session clean`
+stay `BUSY` while it runs; an interrupted job holds nothing and never blocks cleanup.
+Cleanup removes a session's jobs with it (they live under the session directory, inside
+the bounded owned-tree validation) and prunes their root job-index entries; jobs never
+renew a session, and after close or expiry a resume fails like any request.
+**SEC-10.** A chunk checkpoint is a private, uncommitted stage file, never evidence,
+never named by a manifest and never exported by `session retain`. It holds the raw
+provider output, stored only after that output passed validation, and a resumed chunk
+passes the same validation and merge again, so a checkpoint cannot introduce a segment
+the rules would reject. Every checkpoint and job record is strict versioned JSON (256
+KiB and 64 KiB bounds, unknown fields rejected, payload digest, ordinal bound to its
+file name, recognition key bound to the run, the job id re-derived from the record's
+own keys); a damaged, forged or newer one is removed and redone (checkpoints) or fails
+closed (records), never repaired (S-08). Resume still binds the source copy with a full
+hash and verifies it again before each commit. Residual (known limit L-049): the
+payload digest detects corruption, not a same-user forger who recomputes it; such a
+forger could already rewrite committed evidence (accepted residual of this model).
+**SEC-11.** Duplicate requests find one job (its id derives from the request's
+operation key) and the job's OS lock admits one owner: a second is `BUSY` naming the
+job; a suspended owner keeps its lock; a stale attempt cannot change the job (epoch and
+attempt fence under the state lock). Each commit uses a deterministic operation id,
+records `committing` first and is reconciled one way only from the manifest chain, so a
+retry never publishes twice (X-02); an operation id reused for another request is
+`IDEMPOTENCY_CONFLICT` (X-03). A cancellation and the commit transition are serialized
+under the job's state lock. An unreferenced manifest an ended publication left above
+the head is replaced by the next publication under the writer lock (it cannot belong
+to a live one), which removes the blocked-session case of L-048.
+**SEC-24.** Job and checkpoint files follow the session's durability: a durable
+session synchronises their directories after each rename. Durable mode stays disabled
+on every profile until P10 PR 4's campaign, so SEC-24 stays open.
 
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain

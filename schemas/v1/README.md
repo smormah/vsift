@@ -37,8 +37,10 @@ These files are the machine-readable public v1 boundary:
   adds `local_asr` (the run), `supersedes`, `replaced_range` and
   `carried_segment_count`; an import never has those members;
 - `transcript-retranscribe-data.schema.json` — the `data` member of a complete
-  `transcript.retranscribe` result: the new local-ASR revision, the requested range and
-  how many segments the run recognised (P07 increment 3b);
+  `transcript.retranscribe` result: the new local-ASR revision, the requested range,
+  how many segments the run recognised (P07 increment 3b) and `job`, the recoverable
+  job behind it (`job_id`, `resumed`, `chunks_reused`, `replayed`; P10 PR 2). Its
+  envelope names the `operation_id` the result is recorded under;
 - `transcript-get-stream-data.schema.json` — the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count` and the continuation cursor (P07);

@@ -23,4 +23,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0017: Local speech recognition through whisper.cpp](0017-local-asr-through-whisper-cpp.md) (Accepted)
 - [0018: Visual-candidate index and transcript search](0018-visual-candidate-index-and-transcript-search.md) (Accepted)
 - [0019: Evidence navigation](0019-evidence-navigation.md) (Accepted)
-- [0020: Recoverable jobs and durable publication](0020-recoverable-jobs-and-durable-publication.md) (Proposed)
+- [0020: Recoverable jobs and durable publication](0020-recoverable-jobs-and-durable-publication.md) (Accepted 2026-09-27)
