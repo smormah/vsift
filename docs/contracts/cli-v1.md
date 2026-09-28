@@ -8,6 +8,9 @@ and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cance
 recoverable jobs) and `bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
+The P11 worker contracts (job request, job result, batch summary, workspace data and
+the `progress`, `lifecycle` and `result` events) are published ahead of `job run` and
+`job batch`; see "P11 worker contracts and events".
 
 ## Command namespace
 
@@ -53,7 +56,7 @@ told about a Ctrl-C (only Ctrl-Break); see L-053.
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job status/resume/cancel` | Report, continue or cancel one recoverable job by its id | Implemented in P10 PR 3 |
-| `job run/batch` | Versioned worker requests and finite batches | P11 |
+| `job run/batch` | Versioned worker requests and finite batches; the request, result, batch and event contracts are published (P11 PR 1), the commands land in P11 PR 3 (`job run`) and PR 4 (`job batch`) | P11 |
 
 ### P05 disposable sessions and bundles
 
@@ -335,8 +338,9 @@ How a consumer reads it:
   no transcript) writes only one terminal failure event with `sequence: 0`, exactly as
   before. A valid range that no segment intersects writes one complete terminal event
   with `record_count: 0`.
-- **Unknown events.** Within v1 new event kinds (such as progress) may appear before
-  the terminal event. Dispatch on `event`, skip a kind you do not know and still count
+- **Unknown events.** Within v1 new event kinds may appear before the terminal event
+  (P11 added `progress`, `lifecycle` and `result`; see "P11 worker contracts and
+  events" below). Dispatch on `event`, skip a kind you do not know and still count
   its `sequence`. `transcript get` emits no progress events: the read is bounded and
   local.
 
@@ -416,8 +420,12 @@ and confidence is the mean token probability, `provider_uncalibrated` (example
 Warnings use the envelope's fixed prose and the revision's typed codes; for local-ASR
 codes `first_cue` is the first affected chunk. Segments are read with `transcript get`
 (the new revision is the default). With `--events jsonl`, `transcript retranscribe`
-writes its terminal event only; stream the records with `transcript get --revision
-<revision_id> --events jsonl`, page by page. A first Ctrl-C or `SIGTERM` (see
+writes its chunk progress (since P11 PR 1: `progress` events, stage
+`recognising_speech` in `chunks`, 0 of the planned chunks once the plan is made, then
+every chunk, reused ones included; at most one per second; example
+[`transcript-retranscribe.events.jsonl`](../../schemas/v1/examples/transcript-retranscribe.events.jsonl))
+and then its one terminal event, whose result is the `--json` result; stream the
+records with `transcript get --revision <revision_id> --events jsonl`, page by page. A first Ctrl-C or `SIGTERM` (see
 Interruption above) stops the run before its commit: nothing is committed, whisper.cpp
 is stopped and reaped, the chunks it finished are kept for a resume (below), and the
 failure is `CANCELLED` (exit 6) with the session and job in `error.affected_ids` and a
@@ -498,7 +506,8 @@ in the result's `data.job.job_id`, in `error.affected_ids` of an interrupted or 
 run, and in `session status`. The job commands take the job id only: the job's session
 is found through the session root's job index. They are grammar-checked first (one
 `job_...` identity; a malformed one is a `parse` failure). `--events jsonl` writes the
-one terminal event, like every command without evidence records.
+one terminal event, like every command without evidence records; `job resume` first
+writes the resumed run's chunk progress, as `transcript retranscribe` does (P11 PR 1).
 
 - `job status <job>` reports one job
   ([`job-data.schema.json`](../../schemas/v1/job-data.schema.json), example
@@ -550,6 +559,123 @@ member of the status is unchanged; `session list`, `renew` and `close` do not li
 | `job resume` interrupted by Ctrl-C/`SIGTERM` | `CANCELLED` (exit 6; the session and job named, `job resume` suggested again) |
 | `job cancel` while an owner appeared meanwhile, or the state lock stayed busy | `BUSY` |
 | Every failure of `transcript retranscribe` (the resumed run) | as listed above |
+
+### P11 worker contracts and events
+
+```console
+vsift job run --request request.json --json                 # P11 PR 3
+vsift job batch --requests requests.jsonl --events jsonl    # P11 PR 4
+```
+
+P11 PR 1 publishes the worker contracts
+([ADR 0021](../decisions/0021-worker-and-batch-host.md), maintainer decisions D1-D5
+accepted 2026-09-28) before the commands that use them: `job run` and `job batch`
+still answer `COMMAND_NOT_IMPLEMENTED` (exit 2). What follows is the contract they
+will implement; the schemas and frozen examples are authoritative.
+
+**Job request** ([`job-request.schema.json`](../../schemas/v1/job-request.schema.json),
+example [`job-request.json`](../../schemas/v1/examples/job-request.json)). One JSON
+object, at most 64 KiB and 16 levels deep; every member is required except
+`deadline_ms`; unknown members are refused.
+
+- `schema_version` `"1"` (a newer one is `UNSUPPORTED_SCHEMA`, whatever else it holds);
+- `operation_id` (`op_` and 16-64 lowercase letters or digits): the idempotency key;
+- `durability`: `durable` (only in a workspace initialised as durable) or `ephemeral`;
+- `deadline_ms`: 1 to 86,400,000, or omitted or `null` for the host's limit;
+- `target`: `{"ingest": {"source": <path>, "transcript": {"path": <path>, "offset_us":
+  <signed us>} | null}}` or `{"session_id": "ses_..."}`;
+- `steps` (at most 8, run in order after the target): `{"retranscribe": {"range":
+  {"from_us", "to_us"} | null}}`, `{"candidates": {"range": ... | null}}`,
+  `{"retain": {"bundle_name": "[a-z0-9][a-z0-9_-]{0,63}", "include_source": bool}}`
+  and `{"close": {}}`. `retain` at most once and followed only by `close`; `close` at
+  most once and last; a session target needs a step.
+
+A path is relative to the operator's `--input-root`, with `/` between names: at most
+1,024 bytes and 32 names, and no empty, `.` or `..` name, `\`, `:`, control
+character, `<>"|?*`, name ending in a dot or a space, or Windows device name (`CON`,
+`NUL`, `COM1`, ...). The request digest is SHA-256 over `vsift.job-request.v1`, a line
+feed and the canonical form of the decoded request without its operation id: spacing,
+member order and an omitted or `null` deadline do not change it. The same operation id
+with another digest is `IDEMPOTENCY_CONFLICT` (exit 2).
+
+A refused request is `INVALID_ARGUMENT` (or `UNSUPPORTED_SCHEMA`) with a fixed
+rejection and fixed remediation, never an echo of the input: `request_too_large`,
+`request_too_deep`, `malformed_request`, `unsupported_schema_version`,
+`invalid_operation_id`, `invalid_session_id`, `invalid_path`,
+`invalid_transcript_offset`, `invalid_deadline`, `invalid_range`, `invalid_bundle_name`,
+`too_many_steps`, `step_order`, `no_work`, and, decided by the host,
+`path_outside_input_root`, `duplicate_operation_id` (another line of the same batch)
+and `workspace_not_durable`.
+
+**Job result** ([`job-result.schema.json`](../../schemas/v1/job-result.schema.json);
+examples [`job-run.json`](../../schemas/v1/examples/job-run.json),
+[`job-run.replayed.json`](../../schemas/v1/examples/job-run.replayed.json),
+[`job-run.partial.json`](../../schemas/v1/examples/job-run.partial.json), each the
+`data` of a `job.run` result). At most 64 KiB; no path and no evidence text.
+`operation_id`, `request_digest`, `status` (derived: `cancelled`, then `failed`, then
+`partial` when a step left a stated gap, else `complete`), `replayed` (the recorded
+result of an earlier call, without new work), `attempt`, `session_id`, `source_id`,
+`publication`, `lifecycle`, `steps` (the ingest of an ingest target, then each
+requested step: `kind`, `status` (`complete`, `partial`, `failed`, `cancelled`,
+`not_started`), `elapsed_ms`, `admission_wait_ms`, `job_id`, typed `outputs`,
+`coverage` and `failure`), `failure` (`code`, `retryable`, `retry_after_ms`, the
+`step` that ended the request or the `rejection` that refused it) and `controls`
+(`isolation` `process_only` or `strict_linux`, `admission_capacity`, `concurrency`).
+The outputs are: ingest `generation`, `revision_id` (an imported transcript or
+`null`); retranscribe `revision_id`, `generation`, `chunks_reused`; candidates
+`visual_index_id`, `generation`, `candidate_count` (the step analyses until no window
+of its range is left unanalysed; what stays uncovered is its `coverage` and makes it
+`partial`); retain `bundle_name`, `bundle_sha256`, `artifact_count`; close
+`generation`. A `partial` `job.run` result carries the warning "The request completed
+with a stated gap; see the coverage of each partial step."
+
+**Batch summary** ([`job-batch-data.schema.json`](../../schemas/v1/job-batch-data.schema.json),
+example [`job-batch.json`](../../schemas/v1/examples/job-batch.json) for the requests
+of [`job-batch.requests.jsonl`](../../schemas/v1/examples/job-batch.requests.jsonl)).
+The batch reads at most 1,000 lines of at most 64 KiB, one at a time, and isolates
+every line. Its `data`: `counts` (`complete`, `partial`, `failed`, `cancelled`,
+`rejected`), `items` (per processed line, in the order they finished: `line`,
+`operation_id`, `status`, `code`, `rejection`), `not_started_from_line` and
+`termination_reason` (`end_of_input`, `shutdown`, `line_limit`, `input_error`). Exit
+status (D5): 0 when every request is complete or partial; 6 when a shutdown stopped
+the batch; otherwise the most severe failure class in the order 7 > 1 > 5 > 3 > 2 >
+4 (a request cancelled without a shutdown ranks between 2 and 4; an input error is 7,
+a line limit 5). `--json` returns the summary only; the full per-request results are
+the `result` events of `--events jsonl`.
+
+**Workspace** ([`workspace-data.schema.json`](../../schemas/v1/workspace-data.schema.json),
+example [`workspace-init.json`](../../schemas/v1/examples/workspace-init.json)): the
+data of `session init-workspace` (P11 PR 2): `profile` `durable_workspace`,
+`durability`, `publication` (`os_crash_durable` exactly when durable),
+`admission_capacity` (1-64), `session_retention_seconds` (default 604,800, one hour to
+2,592,000) and `outcome` (`created` or `already_initialized`). It never names the path.
+
+**Events.** Three event kinds join `evidence` and `terminal`, with the same identity
+members (`schema_version`, `event`, `sequence`, `command`, `operation_id`, which is
+`null` for these kinds). Every string member is an enum or a bounded identifier; no
+event names a path or carries text. Each line is at most 64 KiB.
+
+- `progress` ([`progress-event.schema.json`](../../schemas/v1/progress-event.schema.json)):
+  `request_operation_id` (the worker request, else `null`), `job_id`, `stage`
+  (`copying_source` in `bytes`, `recognising_speech` in `chunks`, `analysing_video` in
+  `windows`, `running_request` in `steps`), `completed`, `total` and
+  `progress_dropped` (updates of this request dropped before this event). Advisory: at
+  most one per second and 4,096 per request; an update inside the second replaces the
+  held one, which is written with the next update or just before the terminal event;
+  when stdout is slow, progress is dropped and counted rather than slowing the work.
+- `lifecycle` ([`lifecycle-event.schema.json`](../../schemas/v1/lifecycle-event.schema.json)):
+  `kind` `started` (with `readiness`: `publication`, `isolation`,
+  `admission_capacity`, `concurrency`), `request_admitted`, `admission_waiting`
+  (`reason` `admission_capacity`), `request_finished` (`status`, `code`, `rejection`,
+  `progress_dropped`), `draining` (`reason` `shutdown` or `drain_timeout`) and
+  `stopped` (`reason` `end_of_input`, `shutdown`, `line_limit` or `input_error`), with
+  the request's `line` and `request_operation_id` where it concerns one.
+- `result` ([`result-event.schema.json`](../../schemas/v1/result-event.schema.json)):
+  one request's `job-result` and its `line`, written as soon as it ends.
+
+Lifecycle, result and terminal events are never dropped. Example:
+[`job-batch.events.jsonl`](../../schemas/v1/examples/job-batch.events.jsonl) (two
+requests, one with chunk progress; its terminal result is `job-batch.json`).
 
 ### P08 transcript search
 
@@ -1070,13 +1196,17 @@ exactly one complete v1 result plus a newline. In `--events jsonl` mode each std
 line is one bounded v1 event and exactly one terminal event ends the stream; for
 `transcript get`, `search`, `candidates`, the frame commands, `crop` and `audio` evidence
 events precede it (see "Evidence stream", "P08 transcript search", "P08 visual
-candidates", "P09 frames" and "P09 crops and audio clips" above), and every other
-command, including `transcript retranscribe`, writes the terminal event alone. stderr is
+candidates", "P09 frames" and "P09 crops and audio clips" above);
+`transcript retranscribe` and `job resume` write `progress` events before it, each as
+it happens (P11 PR 1); every other command writes the terminal event alone. The
+terminal event's `sequence` is always the number of events before it. stderr is
 reserved for bounded, sanitized diagnostics and is never required to parse a result.
 
 Output limits apply before writing:
 
 - result: 1,048,576 bytes including the trailing newline;
+- a `progress`, `lifecycle` or `result` event line: 65,536 bytes including the
+  trailing newline (P11);
 - diagnostic: 4,096 bytes including the trailing newline;
 - provider detail shown by `setup check`: 240 bytes.
 
@@ -1186,7 +1316,9 @@ The authoritative field definitions and complete examples are in
 [`schemas/v1`](../../schemas/v1/README.md). Consumers of a terminal event validate
 the event wrapper against `terminal-event.schema.json` and its `result` member
 against `operation-response.schema.json`; evidence events validate against
-`evidence-event.schema.json`.
+`evidence-event.schema.json`, and the P11 kinds against `progress-event.schema.json`,
+`lifecycle-event.schema.json` and `result-event.schema.json` (whose `result` is
+`job-result.schema.json`).
 
 ## Exit and error taxonomy
 
@@ -1266,7 +1398,8 @@ configuration loading under this frozen precedence and strict
 
 Unknown schema majors are rejected. Request/config documents are strict and reject
 unknown or missing fields, invalid enums, more than 1,048,576 input bytes, and nesting
-deeper than 64 containers. Within major v1, readers must ignore additive response
+deeper than 64 containers (a P11 job request or batch line: 65,536 bytes and 16 levels).
+Within major v1, readers must ignore additive response
 fields; producers must not reinterpret or remove existing fields without a new major.
 
 ## Contract-test traceability
@@ -1278,9 +1411,9 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages, search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) and candidate pages (`candidates_cli_contract`, `engine_candidates`, the application's `visual` tests with the property `any_range_and_limit_page_without_gaps_or_duplicates`) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
-| C-06 | strict bounded JSON decoding and schema/identifier rejection |
+| C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 

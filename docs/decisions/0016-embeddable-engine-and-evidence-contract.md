@@ -313,3 +313,23 @@ This note fixes the CLI surface decision 5 left to P07.
   for `libfuzzer-sys` alone, and the `Dependency policy` job now also checks the fuzz
   lockfile; advisories, sources, bans and licences pass, and it adds no duplicate
   version.
+
+## 2026-09-28 note: the public request decoder and four more fuzz targets (P11 PR 1)
+
+- The strict bounded JSON decoder this record listed as "crate-private and unused
+  until P11 admits request files" is now public in `vsift-contract`
+  (`decode_strict_json`, `JsonLimits`), and the worker request it was frozen for is a
+  published contract with its own decoders, `decode_work_request` and
+  `decode_batch_line` ([ADR 0021](0021-worker-and-batch-host.md) section 1). Both are
+  fuzzed as `job_request` and `job_batch_line`: an accepted request keeps its bounds
+  and step order and decodes to itself again, also with whitespace appended.
+- The P10 job record and chunk checkpoint decoders (`job.json`,
+  `chunks/<ordinal>.json`; issue #180) are fuzzed as `job_record` and
+  `chunk_checkpoint` (round trips). Their codecs became public in
+  `vsift-infrastructure` for that reason only, like `parse_ffprobe_metadata` before;
+  their seeds copy example records committed under
+  `crates/vsift-infrastructure/tests/data/jobs/` and pinned to the encoder, so the
+  seed-provenance rule holds. The worker's request record gets its target
+  (`request_record`) when it exists (P11 PR 3).
+- The harness now depends on `vsift-contract` too; its lockfile adds only that crate.
+  The Fuzz workflow runs 20 targets.

@@ -25,6 +25,27 @@ These files are the machine-readable public v1 boundary:
   `visual-candidate.schema.json`; P09: `frame_evidence` and `audio_evidence`, keyed by
   `evidence_id`, whose records are `frame-evidence.schema.json` and
   `audio-evidence.schema.json`);
+- `progress-event.schema.json`, `lifecycle-event.schema.json` and
+  `result-event.schema.json` — the P11 event kinds (ADR 0021): how far a long
+  operation has come (`transcript.retranscribe` and `job.resume` since P11 PR 1; the
+  worker commands later), a worker host's own state (started with its readiness,
+  request admitted, waiting or finished, draining, stopped), and one worker request's
+  `job-result`. Every string member is an enum or a bounded pattern and every line is
+  at most 64 KiB;
+- `job-request.schema.json` — one strict worker request (`job run --request`, one line
+  of `job batch --requests`): operation id, durability, optional deadline, an ingest
+  or session target and at most 8 steps; paths relative to the operator's input root.
+  The decoder (`vsift_contract::decode_work_request`) is authoritative and refuses
+  more than the schema can say (`.`/`..` names, trailing dots or spaces, device names,
+  the step order);
+- `job-result.schema.json` — the answer to one request: derived status, replay flag,
+  attempt, session, source, publication, lifecycle, the steps with typed outputs,
+  coverage and failures, the request's failure and the controls it ran under; at most
+  64 KiB, no path and no evidence text;
+- `job-batch-data.schema.json` — the `data` of a `job.batch` result: counts per status,
+  one item per processed line, the first line not started and why the batch stopped;
+- `workspace-data.schema.json` — the `data` of `session.init-workspace` (P11 PR 2):
+  the immutable policy of a worker workspace;
 - `config.schema.json` — strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` — the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
@@ -134,8 +155,9 @@ from 0: for `transcript.get`, one `evidence` event per segment and then one
 order) and then one `terminal` event; for `frame.get`, `frame.neighbours`,
 `frame.burst` and `crop`, one `evidence` event per item (`frame_evidence` records, in the
 result's item order) and then one `terminal` event; for `audio`, one `audio_evidence`
-event and then one `terminal` event; for every other command, the terminal event
-alone. Dispatch on `event`; the terminal event's `sequence` and, for `transcript.get`,
+event and then one `terminal` event; for `transcript.retranscribe` and `job.resume`,
+`progress` events (P11) and then one `terminal` event; for every other command, the
+terminal event alone. Dispatch on `event`; the terminal event's `sequence` and, for `transcript.get`,
 `search`, `candidates` and the frame commands, its `record_count` equal the number of evidence events
 before it. The exact consumer
 rules (upsert keys, end of stream, paging) are in the CLI contract.
@@ -229,9 +251,27 @@ compare them with the examples. They also prove that every `FailureCode` identif
 is in the envelope's `error.code` enum, and that every `CommandName` identifier
 (`setup.configure-model`, `transcript.get`, ...) satisfies the `command` pattern of
 both envelope schemas; the CLI's tests prove `CommandName` matches its commands.
-Likewise every `EventKind` (`evidence`, `terminal`) is the `event` constant of
-exactly one event schema, and every `EvidenceRecordType` is in the evidence event's
-`record_type` enum with a branch that fixes its record schema, and nothing else is.
+Likewise every `EventKind` (`evidence`, `terminal`, `progress`, `lifecycle`, `result`)
+is the `event` constant of exactly one event schema, and every `EvidenceRecordType` is
+in the evidence event's `record_type` enum with a branch that fixes its record schema,
+and nothing else is.
+
+The P11 worker examples (checked by `vsift-contract`'s `worker_contract` and
+`worker_events_contract`): `job-request.json` ingests F01 into a durable workspace
+and retranscribes it, pages its candidates and retains it as `f01-review`;
+`job-run.json` is its complete `job.run` result and `job-run.replayed.json` the same
+result replayed by operation id; `job-run.partial.json` is a candidates request over
+a 150 s range with an undecodable minute, so it is `partial`.
+`job-batch.requests.jsonl` holds two requests (an F10 ingest with its supplied
+transcript, then candidates and close; a 5.5-6 s retranscription of an existing F01
+session and close); `job-batch.events.jsonl` is their `--events jsonl` batch (started,
+two admissions, the retranscription's chunk progress, a result and a
+`request_finished` per request, stopped, then the terminal event, byte for byte) and
+`job-batch.json` its `--json` summary. `workspace-init.json` initialises a durable
+workspace with capacity 8 and the default 168-hour retention.
+`transcript-retranscribe.events.jsonl` is the `--events jsonl` form of
+`transcript-retranscribe.json`: the job's chunk progress (0 of 1, 1 of 1), then that
+result as the terminal event (checked by `local_asr_contract`).
 
 Every file under `examples/` is a frozen valid instance checked by the Rust contract
 suites in `vsift-contract` (`schema_conformance`, `transcript_contract`) and `vsift-cli`. Response readers must tolerate additive fields within major v1. Strict request

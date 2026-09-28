@@ -294,6 +294,26 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
+## 2026-09-28 P11 PR 1 evidence (worker contracts, events, progress and fuzzing, branch `p11/contracts-events`)
+
+P11 is in progress; this records the first of its four pull requests
+([ADR 0021](../decisions/0021-worker-and-batch-host.md), maintainer decisions D1-D5
+accepted 2026-09-28). `job run` and `job batch` still answer
+`COMMAND_NOT_IMPLEMENTED`; nothing here is X-07..X-11 or SEC-T01 evidence yet. Contract
+tests are in `crates/vsift-contract/tests/worker_contract.rs`,
+`worker_events_contract.rs` and `local_asr_contract.rs`, unit tests in the contract's
+`request`, `batch`, `workspace` and `input` modules and the CLI's `output` and
+`progress` modules.
+
+| Gate | Mechanical evidence |
+| --- | --- |
+| C-06 (strict request decoding) | `strict_shape_violations_are_malformed` (missing, unknown, extra-variant and wrongly typed members, trailing documents), `every_value_is_validated`, `the_step_order_is_enforced`, `budgets_hold_before_anything_is_parsed` (64 KiB and 16 levels, and the exact edge), `a_newer_major_is_unsupported_even_with_new_members`, `every_escape_and_alias_is_refused` (absolute, `..`, drive, `\`, ADS, control and escape characters, trailing dot or space, `CON`/`nul.txt`/`COM¹`); `the_request_schema_is_strict` (the schema and the decoder refuse the same variants); `the_digest_is_canonical` (spacing, member order, operation id and omitted/`null` deadline do not change it; every requested value does) |
+| Result, batch and workspace contracts | `a_complete_run_matches_its_frozen_example`, `a_replayed_run_matches_its_frozen_example`, `a_partial_run_matches_its_frozen_example`, `a_failed_step_ends_the_request` (a step after a failure is refused), `cancellation_and_rejection_are_reported_as_such`, `the_largest_result_is_bounded` (9 steps with 100 coverage gaps each stay within 64 KiB and schema-valid), `published_enums_match_the_contract`, `a_batch_summary_matches_its_frozen_example`, `a_workspace_initialisation_matches_its_frozen_example`, `ingest_data_admits_a_durable_publication`; D5 by `the_most_severe_class_decides` and `a_shutdown_wins_over_every_failure` |
+| O-02 (bounded events and labels) | Every string member of the `progress`, `lifecycle` and `result` schemas is an enum, a constant or a pattern with `maxLength` (`every_string_member_of_the_new_events_is_bounded`); no event carries a path or text. Progress is at most one per second and 4,096 per request and dropped, never queued without bound, for a slow reader (`at_most_one_observation_per_second_passes_and_the_newest_is_held`, `a_full_queue_and_the_cap_drop_and_count`: a 16-slot queue); every non-terminal line is at most 64 KiB and an over-budget line writes nothing (`an_event_over_its_line_budget_writes_nothing_and_keeps_its_number`); only progress is droppable (`only_progress_is_droppable`) |
+| Events and old readers (C-08) | `the_batch_stream_matches_its_frozen_example_byte_for_byte` (`job-batch.events.jsonl`: every line schema-valid, contiguous sequence, terminal result equal to `job-batch.json`), `an_older_reader_skips_the_new_kinds_and_still_counts_them`, `every_lifecycle_kind_and_reason_is_schema_valid`, `every_progress_stage_is_schema_valid_with_its_unit`, `event_kinds_and_published_event_schemas_match` (five kinds, five schemas) |
+| Progress on existing commands (L-025) | Application: `a_run_over_its_own_checkpoints_decodes_and_recognises_nothing` reports 0..3 of 3 for a fresh run and for a run over its checkpoints. Engine: a replay reports nothing (`a_committed_operation_is_replayed_before_any_check_or_hash`); opt-in `a_job_is_resumed_and_cancelled_by_its_id` checks the resumed run's progress names its job. CLI: `progress_precedes_the_terminal_event`, `a_failure_after_progress_is_the_terminal_event` (sequence 1, exit 6), `events_are_numbered_flushed_and_ended_by_the_terminal_event`; contract: `a_retranscription_stream_matches_the_frozen_example` (`transcript-retranscribe.events.jsonl`, terminal result equal to `transcript-retranscribe.json`) |
+| Fuzzing (ADR 0016 decision 6, #180) | New targets `job_request`, `job_batch_line`, `job_record`, `chunk_checkpoint` replayed over their committed seeds on stable (`every_seed_replays_without_a_violation`, `well_formed_seeds_are_accepted`, `seeds_are_listed_and_match_their_fixtures`); the job record and checkpoint seeds copy `crates/vsift-infrastructure/tests/data/jobs/`, pinned to the encoder by `the_example_job_records_are_what_the_store_writes` and `the_example_checkpoints_are_what_a_run_stores`; the Fuzz workflow matrix lists all 20 targets |
+
 ## 2026-09-27 P10 PR 4 evidence (crash campaign and durable enablement, branch `p10/durability-campaign`)
 
 The last of P10's four pull requests (ADR 0020 section 7 and "PR 4" notes). Method,
