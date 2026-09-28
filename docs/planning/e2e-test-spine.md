@@ -3,7 +3,8 @@
 Status: P04, P05 and P06 checkpoints, the P07 supplied-transcript and local-ASR
 stages, the P08 search and visual-candidates stages, the P09 evidence-navigation
 stages, the P10 recoverable run and the P11 single-host worker run are implemented;
-the complete journey remains `not_implemented`. Managed
+P12 has its trial harness and a deterministic procedure checkpoint, but the
+named-client trials have not run, so the complete journey remains `not_implemented`. Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -322,6 +323,33 @@ whisper.cpp v1.9.2 the release run passed on 2026-09-28 in 209 s; results are in
 beside it: `every_step_runs_with_real_tools` (`job_run_cli_contract`) and the repeated
 external-delivery simulation `repeated_external_delivery_commits_once`
 (`external_delivery_stress`).
+
+P12 PR 2 adds the **agent stage's machinery**: the trial harness
+`tools/vsift-agent-trials` ([runbook](../agents/trials.md)) that prepares, runs, grades
+and records A-01..A-09 and SEC-T02 through named Claude Code and Codex clients, and a
+deterministic procedure checkpoint that is explicitly **not** an agent trial:
+
+```console
+VSIFT_P12_TRIAL_ROOT=<neutral root, for example C:\vsift-trials>
+VSIFT_TEST_VSIFT_BIN=<absolute release vsift executable>
+VSIFT_TEST_WHISPER_CLI=<abs> VSIFT_TEST_WHISPER_MODEL=<abs> \
+  cargo test -p vsift-agent-trials --locked --test p12_skill_procedure_e2e -- --ignored --nocapture
+```
+
+It needs FFmpeg and FFprobe on `PATH` for the harness, which registers them (and
+whisper.cpp with its model) in each trial's isolated per-user base; `vsift` runs with an
+empty `PATH`. Stages: `p12_procedure_a08_local_asr` (the scenario
+`A-08-f05-local-asr`: `setup check`, plain `ingest`, `transcript retranscribe` with an
+operation id and `--events jsonl`, `search`, a bounded `transcript get`, `candidates`
+around the span, `frame get --candidate`, `session retain`) and
+`p12_procedure_a09_supplied` (the scenario `A-09-f05-supplied`: the same with `ingest
+--transcript` and no local ASR). The walker has no image access, so it reports
+`image_access` `unavailable` and cites frames with `pixels_inspected` false; the trace
+and handoff are graded by the trial grader (mechanical and interpretation results). It
+prints `p12_skill_procedure: passed` and writes `.vsift/e2e-runs/p12-<run-id>/report.json`.
+On Windows 11 with FFmpeg 9.0 and whisper.cpp v1.9.2 it passed on 2026-09-28 in 45 s.
+The named-client trials themselves (the "Complete video-to-grounded-handoff run") are
+P12 PR 3; the SEC-T02 tool-level suite `sec_t02_adversarial_evidence` runs on every PR.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

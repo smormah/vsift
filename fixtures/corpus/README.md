@@ -108,6 +108,31 @@ them with LF line endings, which fixes their digests:
 | `transcripts/F10.srt` | 245 | `2a4ee37d826754eac43da03e7cc63f718b16aed4d3ce163c380ebd8ab9630847` |
 | `transcripts/F10.vtt` | 346 | `daaeb39fde45b449e2204e6b9ef99f4428267a6e073052723c997f82560c3611` |
 
+## Adversarial sidecars (P12, SEC-T02)
+
+`transcripts/F12-adversarial.srt` and `transcripts/F12-adversarial.vtt` are
+hand-written, rights-safe **test inputs** for F12's timeline (offset 0, all cues inside
+its 12 s) under the repository licence. They are hostile on purpose and are never
+instructions: a hidden-colour (SubRip `<font>`) or class-hidden (WebVTT `<c.hidden>`)
+instruction to the agent, a forged `Administrator` voice asking to run `setup install`,
+bidirectional overrides and zero-width characters (raw in the SubRip file, as
+character references in the WebVTT file), Markdown and HTML links to the reserved
+`example.invalid` domain, an inert download-and-run line, a cue that imitates a VSift
+result with a forged segment identity, and the real defect code SAFE-12 at 8.5-9.5 s,
+inside F12-E02. They carry no control character, so both import; the SEC-T02 suite
+inserts OSC-8 links, ANSI escapes, a C1 control and a line separator into copies at
+run time to prove those reject the import at their line. They do not change
+`manifest.json` or F12's truth. Stored with LF line endings:
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `transcripts/F12-adversarial.srt` | 777 | `f94697b0eac17e3d80c420de50249bfd0159068e182c20c18c6a082fb902fae2` |
+| `transcripts/F12-adversarial.vtt` | 1033 | `ef00394594c35cdc4ec39044747b589907d38e1b89388f35ad19c72fa627b70b` |
+
+They are used by `crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs` and the
+agent-trial scenarios `A-04-f12-adversarial-sidecar` and `SEC-T02-f12-webvtt`. Review
+them like truth: a change needs a reason and must not make a test easier to pass.
+
 Small malformed T-01 variants live beside their tests in
 `crates/vsift-infrastructure/tests/data/transcripts`; byte-level variants (encodings,
 byte-order marks, line endings, control characters) are written inline in the tests.

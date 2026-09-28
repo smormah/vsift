@@ -7,6 +7,7 @@ members = [
   "crates/vsift-domain",
   "crates/vsift-infrastructure",
   "tools/p10-crash-campaign",
+  "tools/vsift-agent-trials",
   "tools/vsift-governance",
 ]
 default-members = ["crates/vsift-cli"]

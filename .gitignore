@@ -4,6 +4,9 @@
 
 # VSift runtime and evidence artifacts
 /.vsift/
+# Raw agent-trial client logs and trial workspaces kept inside a checkout
+# (tools/vsift-agent-trials); only bounded records are ever committed.
+/.vsift/agent-trials/
 /artifacts/
 /coverage/
 *.profraw

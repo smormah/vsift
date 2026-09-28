@@ -1,7 +1,8 @@
 # ADR 0022: Agent skill and named-client qualification
 
 - Status: Proposed (2026-09-28). PR 1 of P12 implements decisions 1-6; decision 7 is
-  the plan for the later qualification PR and needs maintainer acceptance first.
+  the plan for the later qualification PR and needs maintainer acceptance first. PR 2
+  builds decision 7's harness and grader without running a model (notes below).
 - Date: 2026-09-28
 - Tracking: [P12 / issue #15](https://github.com/smormah/vsift/issues/15)
 - Refines: [ADR 0016](0016-embeddable-engine-and-evidence-contract.md) (decision 7:
@@ -140,6 +141,45 @@ contract and this schema.
   action the skill forbids.
 - **Records.** Bounded trial records (commands, exit codes, handoffs, timings, token
   and tool usage) are retained without source media or conversations.
+
+## Implementation notes: PR 2 (2026-09-28)
+
+Status stays **Proposed**. PR 2 builds the machinery for decision 7 and runs no model.
+
+- **Harness.** `tools/vsift-agent-trials` (unpublished) prepares a scenario's workspace
+  under a neutral root (refused inside the user's home, profile or temporary
+  directories, or when the path holds the user name, because `data.files[].path`
+  reaches the provider), runs Claude Code or Codex through an explicit executable and
+  argument list with a cleared environment and a timeout, grades the stream and writes
+  bounded records (at most 64 KiB). Runbook: [trials.md](../agents/trials.md).
+- **Policy from the skill.** The grader parses the class table of `commands.md` and the
+  budget table of `budgets.md`; it keeps no copy. Attempted calls count whether the
+  client ran or denied them. The harness adds reading allowances the table does not
+  cover (skill text through a plain reader for Codex, which has no file tool; a line
+  filter in a command's own pipeline); everything else outside `vsift` fails. These are
+  for the maintainer to accept with this ADR.
+- **Permission asymmetry.** Claude Code runs with committed settings
+  (`tools/vsift-agent-trials/claude-trial-settings.json`: `Bash(vsift:*)`, reads below
+  the workspace, the `vsift` skill; `dontAsk`). Codex runs with `workspace-write`,
+  network off, approvals `never` and the session root writable; its policy is graded,
+  not configured (known limit L-072).
+- **Truth by reference.** Scenarios name manifest event identifiers; windows, scripts
+  and key facts (the fixture's expected terms each truth sentence states) come from the
+  manifest and speech provenance. A supported claim that states a key fact must cite
+  evidence that shows it inside the event window (pixels inspected) or says it (a
+  segment whose text states it, on the speech span with the P09 tolerances). Where the
+  plan and the truth differ the truth is used: F05's error code is spoken at about 6.5 s
+  but shown from 9 s, so transcript support binds by text and speech span, not by the
+  visual window; F12's defect code is drawn from the first frame (a corpus limitation)
+  but only frames inside F12-E02 bind it.
+- **Expired session.** Prepared through the engine with a clock 25 hours in the past
+  (`EnginePorts::new(clock, ids)`), the closest published equivalent to an expired
+  session; the CLI has no clock option.
+- **SEC-T02 tool level** runs on every PR (`sec_t02_adversarial_evidence`) over the new
+  synthetic `F12-adversarial` sidecars; human-readable output is P13's (L-073).
+- **Procedure checkpoint.** `p12_skill_procedure_e2e` walks the documented A-08 and
+  A-09 sequences deterministically and grades them with the same grader. It is not an
+  agent trial and qualifies nothing.
 
 ## Consequences
 

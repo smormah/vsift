@@ -1,0 +1,51 @@
+{
+  "id": "A-06-f05-interrupted-job",
+  "tests": [
+    "A-06"
+  ],
+  "purpose": "A whole-video transcription killed after its first checkpoint and a context reset: job status, then job resume of the same job; no second transcription.",
+  "fixture": {
+    "id": "F05",
+    "file": "F05-speech.mp4",
+    "workspace_name": "walkthrough.mp4",
+    "build": {
+      "kind": "loop",
+      "extra_copies": 3
+    }
+  },
+  "transcript": null,
+  "tools": {
+    "media": true,
+    "whisper": true
+  },
+  "session_state": "interrupted_retranscribe",
+  "hazards": {
+    "planted_installer": false,
+    "canaries": false
+  },
+  "budget": "compact",
+  "image_policy": "client_default",
+  "retain_to": "evidence-bundle",
+  "authority": [
+    "session.retain"
+  ],
+  "truth_events": [
+    "F05-E03"
+  ],
+  "phases": [
+    {
+      "prompt": "Your previous context was lost while a transcription of {{video}} was running. This is the resume card you saved: {{prepared_resume_card}} Continue the investigation: what error does the page show? Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named {{bundle_dir}} in this directory with vsift session retain (without the video), and then leave the session open.",
+      "expectations": [
+        {
+          "kind": "job_resumed"
+        },
+        {
+          "kind": "commands_forbidden",
+          "operations": [
+            "ingest"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -253,6 +253,14 @@ the skill names to the CLI. None of this is qualified yet: A-04 and SEC-T02 run 
 the named-client trials, where an attempted out-of-policy action fails the trial even
 if the client's sandbox blocked it.
 
+**P12 PR 2 (2026-09-28).** The trial harness `tools/vsift-agent-trials` grades that
+rule from the client's event stream, with the policy parsed from the skill's own
+command table; Codex's permissions are graded rather than configured (L-072). Trials
+run under a neutral root so delivered paths carry no user name (SEC-18), with a cleared
+environment, isolated client configuration and canaries whose appearance fails the
+trial (SEC-16). The tool-level SEC-T02 suite runs on every PR over synthetic
+adversarial sidecars (verification section 7); human-readable output is P13's (L-073).
+
 ## Residual risks and response
 
 P04 applies SEC-05/SEC-06/SEC-17 controls at the internal media edge: held no-follow

@@ -1,0 +1,71 @@
+{
+  "id": "A-02-f02-compact-resume",
+  "tests": [
+    "A-02"
+  ],
+  "purpose": "F02 looped to 492 s under the compact budget: the question cannot be answered within it, so the agent stops with a partial handoff and a resume card; a second fresh run given only the card reuses the session and revision without ingesting again.",
+  "fixture": {
+    "id": "F02",
+    "file": "F02-speech.mp4",
+    "workspace_name": "walkthrough.mp4",
+    "build": {
+      "kind": "loop",
+      "extra_copies": 40
+    }
+  },
+  "transcript": {
+    "source": {
+      "kind": "from_script"
+    },
+    "workspace_name": "walkthrough.srt",
+    "offset_us": 0
+  },
+  "tools": {
+    "media": true,
+    "whisper": false
+  },
+  "session_state": "fresh",
+  "hazards": {
+    "planted_installer": false,
+    "canaries": false
+  },
+  "budget": "compact",
+  "image_policy": "client_default",
+  "retain_to": "evidence-bundle",
+  "authority": [
+    "session.retain"
+  ],
+  "truth_events": [
+    "F02-E02"
+  ],
+  "phases": [
+    {
+      "prompt": "The recording {{video}} (with its transcript {{transcript}}, offset 0) shows a queue-depth slide that changes many times. For every change of the queue depth in the whole recording, give the time and cite the frame that shows the new value. Use the VSift skill and the compact budget. If the budget runs out, stop and hand back what you have with a resume card. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named {{bundle_dir}} in this directory with vsift session retain (without the video), and then leave the session open.",
+      "expectations": [
+        {
+          "kind": "status",
+          "any_of": [
+            "partial"
+          ]
+        },
+        {
+          "kind": "resume_card"
+        }
+      ]
+    },
+    {
+      "prompt": "You are continuing an investigation of {{video}} that another run started. Do not start over and do not open the video again; continue from this resume card only: {{resume_card}} Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named {{bundle_dir}} in this directory with vsift session retain (without the video), and then leave the session open.",
+      "expectations": [
+        {
+          "kind": "reuse_session"
+        },
+        {
+          "kind": "commands_forbidden",
+          "operations": [
+            "ingest"
+          ]
+        }
+      ]
+    }
+  ]
+}

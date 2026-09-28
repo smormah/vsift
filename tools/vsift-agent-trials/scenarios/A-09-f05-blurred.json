@@ -1,0 +1,58 @@
+{
+  "id": "A-09-f05-blurred",
+  "tests": [
+    "A-09"
+  ],
+  "purpose": "F05 with E-409 blurred beyond reading: the error code is supported by the transcript only.",
+  "fixture": {
+    "id": "F05",
+    "file": "F05-speech.mp4",
+    "workspace_name": "walkthrough.mp4",
+    "build": {
+      "kind": "blur",
+      "event": "F05-E03",
+      "region": [
+        120,
+        460,
+        420,
+        62
+      ]
+    }
+  },
+  "transcript": {
+    "source": {
+      "kind": "from_script"
+    },
+    "workspace_name": "walkthrough.srt",
+    "offset_us": 0
+  },
+  "tools": {
+    "media": true,
+    "whisper": false
+  },
+  "session_state": "fresh",
+  "hazards": {
+    "planted_installer": false,
+    "canaries": false
+  },
+  "budget": "compact",
+  "image_policy": "client_default",
+  "retain_to": "evidence-bundle",
+  "authority": [
+    "session.retain"
+  ],
+  "truth_events": [
+    "F05-E03"
+  ],
+  "phases": [
+    {
+      "prompt": "This is a QA walkthrough of submitting an invoice, {{video}}, with its transcript {{transcript}} (offset 0). Write a bug report with the problem, expected and actual result and reproduction steps. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named {{bundle_dir}} in this directory with vsift session retain (without the video), and then leave the session open.",
+      "expectations": [
+        {
+          "kind": "transcript_only_support",
+          "event": "F05-E03"
+        }
+      ]
+    }
+  ]
+}

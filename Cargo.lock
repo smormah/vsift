@@ -2093,6 +2093,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "vsift-agent-trials"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "getrandom 0.4.3",
+ "jsonschema",
+ "process-wrap",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "vsift",
+]
+
+[[package]]
 name = "vsift-application"
 version = "0.1.0"
 dependencies = [

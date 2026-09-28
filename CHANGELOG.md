@@ -8,6 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Agent-trial harness `tools/vsift-agent-trials` (P12 PR 2, unpublished;
+  [runbook](docs/agents/trials.md), ADR 0022 note of 2026-09-28): `prepare` builds a
+  scenario's workspace under a neutral root (refused inside the user's profile or when
+  the path holds the user name), with the skill in both clients' project folders, an
+  isolated per-user base, clips built at run time, an expired session or an
+  interrupted transcription, planted installer and canaries; `run` starts Claude Code
+  or Codex through an explicit executable and argument list with a cleared
+  environment and a timeout; `grade` parses both clients' streams and writes a
+  mechanical result (handoff, citations resolved in the retained bundle, truth windows,
+  command policy parsed from the skill's `commands.md`, budgets from `budgets.md`, image
+  check, canaries, report text) and a separate interpretation result (key facts from
+  the manifest, scenario expectations, a human-review slot); `record` writes a bounded
+  record of at most 64 KiB. 21 scenario files cover A-01..A-09 and SEC-T02. No model is
+  run: the tests use a stand-in client.
+- SEC-T02 tool-level suite `crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs` and
+  the synthetic test inputs `fixtures/corpus/transcripts/F12-adversarial.srt` and `.vtt`
+  (F12's truth unchanged).
+- Opt-in procedure checkpoint `p12_skill_procedure_e2e`: the skill's A-08 and A-09
+  command sequences walked deterministically against real tools and graded by the trial
+  grader (not an agent trial).
+- Known limits L-072 (Codex permissions graded, not configured), L-073 (human-output
+  SEC-T02 deferred to P13), L-074 (SubRip markup removal broader than the contract
+  lists) and L-075 (the harness's reading of real client streams is unproven until the
+  first trials).
+
 - Agent skill `skills/vsift/` (P12 PR 1, [ADR 0022](docs/decisions/0022-agent-skill-and-named-client-qualification.md),
   Proposed): a `SKILL.md` for Claude Code and Codex with the eight-state
   investigation procedure, the command policy (`free`, `explicit`, `never` for every

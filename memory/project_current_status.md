@@ -30,19 +30,20 @@ Today it can:
 - keep every folder it creates private to the user.
 
 There is now also an **agent skill** (`skills/vsift/`) that teaches Claude Code or
-Codex to run an investigation with the CLI and write a cited report. It has not yet
-been tried with real agents, so it is a candidate, not a qualified integration.
+Codex to run an investigation with the CLI and write a cited report, and a trial
+harness that runs and grades those clients on synthetic recordings. No real agent has
+been tried yet, so the skill is a candidate, not a qualified integration.
 
 **P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
 adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
-progress.** PR 1 is an increment, not the packet.
+progress.** PR 1 and PR 2 are increments, not the packet.
 
 ## P12 in one view
 
 [ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md) is
 **Proposed** (for maintainer review).
 
-- **PR 1 (branch `p12-pr1-skill`, this change): skill and contract guard.**
+- **PR 1 (#196, `7990fdf`, merged): skill and contract guard.**
   - `skills/vsift/SKILL.md`: trigger description and eight states
     (CHECK_CAPABILITIES, PREPARE, FIND_SPOKEN_SPANS, INSPECT_CARDS, VERIFY_SOURCE,
     REFINE_OR_STOP, REPORT, CLOSE_OR_RETAIN), each with allowed commands and a
@@ -69,22 +70,30 @@ progress.** PR 1 is an increment, not the packet.
     guard), README status, ADR 0016 note, threat-model P12 note, known limits
     L-007/L-009/L-039 rewritten and L-071 added (L-070 added then fixed), CHANGELOG, ledger P12
     `in_progress` with the skill files as source documents.
-- **Next increment:** named-client trials (ADR 0022 decision 7): A-01..A-09 and SEC-T02
-  in named Claude Code and Codex, compact and review models, five trials per scenario,
-  mechanical and interpretation results separate, attempted out-of-policy actions fail.
-  The packet completes only when those pass.
+- **PR 2 (branch `p12-pr2-harness`, this change): trial machinery, no model run.**
+  `tools/vsift-agent-trials` (unpublished): `prepare` (neutral root enforced, skill in
+  both clients' project folders, isolated per-user base, clips, expired session through
+  the engine's past clock, interrupted job, installer and canaries), `run` (explicit
+  executable and arguments, cleared environment, timeout, raw logs), `grade`
+  (mechanical and interpretation results; policy parsed from `commands.md`, budgets
+  from `budgets.md`, truth from the manifest), `record` (at most 64 KiB). 21 scenarios
+  for A-01..A-09 and SEC-T02; runbook `docs/agents/trials.md`. SEC-T02 tool suite
+  `sec_t02_adversarial_evidence` over new `F12-adversarial.srt/.vtt`. Opt-in procedure
+  checkpoint `p12_skill_procedure_e2e` (deterministic walk, not an agent trial) passed
+  locally. Known limits L-072..L-075.
+- **Next increment (PR 3):** the named-client trials themselves, which need the
+  maintainer's sign-ins and allowances. The packet completes only when those pass.
 
-## Found while writing the skill
+## Found in P12
 
-- **L-070 (fixed):** the `job resume` remediation for a closed or expired session now
-  says to open a new session with `ingest`; it no longer advises a renewal the CLI
-  refuses.
-- **#197 (fix in review, PR #200):** a real defect, not a flake. A process killed while
-  it registered a session could leave an empty index marker, after which every session
-  listing and that registration's cleanup failed with `INTEGRITY_FAILURE` for good; the
-  P11 batch kill test hit it on macOS and it reproduces on Windows. The marker is now
-  staged in `session-index/.registering.tmp` and renamed into its bucket (store test
-  `a_kill_while_registering_leaves_the_index_readable`). Complete once PR #200 merges.
+- **L-074 (open):** SubRip markup removal drops any `<letter...>` tag, broader than the
+  contract's list; `original_text` keeps the payload (found by the SEC-T02 suite).
+- **L-070 (fixed, #199):** the `job resume` remediation for a closed or expired session
+  now says to open a new session with `ingest`.
+- **#197 (fixed, #200 `98525dc`):** a process killed while registering a session could
+  leave an empty index marker that failed every later listing with `INTEGRITY_FAILURE`;
+  the marker is now staged and renamed into its bucket. The P10 durability campaign
+  passed on the fix (run 36447992132).
 - **L-071:** parse failures in JSON modes carry no remediation; the skill tells agents
   to quote `--rect` on PowerShell and check commands against its reference.
 
@@ -110,7 +119,7 @@ progress.** PR 1 is an increment, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PR 1 (skill and guard) in review; named-client trials next |
+| P12 | In progress: PR 1 merged (skill and guard); PR 2 (trial harness) in review; named-client trials next |
 | P13 | Not started; also delivers managed installation and human-readable output |
 | P14 | Not started |
 
@@ -122,13 +131,14 @@ progress.** PR 1 is an increment, not the packet.
 owns the wire types. The worker lives in the engine (`worker.rs`, `batch.rs`); the CLI
 only presents. The agent skill (`skills/vsift/`) sits outside the crates and only
 calls the `vsift` binary; its guard is a test module of `vsift-cli` because the parser
-is crate-private.
+is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `vsift`
+(and runs the `vsift` binary for everything else).
 
 ## Quality evidence
 
-- P12 PR 1 gates on Windows 11 (fmt, strict Clippy with and without features,
-  workspace tests, warning-denied rustdoc, governance) go in the pull request
-  description.
+- P12 PR 2 gates on Windows 11 (fmt, strict Clippy with and without features,
+  workspace tests, warning-denied rustdoc, governance) and the local procedure
+  checkpoint go in the pull request description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.
