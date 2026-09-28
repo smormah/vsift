@@ -25,3 +25,14 @@ provenance, SBOM/notices, target selection tests and an explicit release approva
 P13 rechecks the registry and verifies account/namespace ownership before publication.
 No placeholder package is published during implementation. Installation without Rust
 is a release qualification requirement.
+
+## 2026-09-28 note: launcher pattern and name checklist
+
+The maintainer set the shape of the thin launcher and the list of names to hold before
+release; both live in P13 of
+[`implementation-work-packets.md`](../planning/implementation-work-packets.md)
+("P13 launcher boundary" and "P13 name checklist"). The launcher is the `vsift` npm
+package over per-platform packages declared as `optionalDependencies`, with no install
+scripts in any package, so installation works the same under npm, pnpm, Yarn and Bun
+and downloads nothing else. This refines the decision above and changes nothing in it:
+no placeholder package, and a name counts as held only once the release publishes it.
