@@ -10,7 +10,8 @@
 //! validation (`stored`), lifecycle generations (`lifecycle`), verified record
 //! reads (`reads`), evidence (`evidence`), work directories (`work`), the
 //! session index (`index`), cleanup (`cleanup`), retained bundles (`bundle`)
-//! and recoverable jobs with their chunk checkpoints (`jobs`, `job_records`).
+//! recoverable jobs with their chunk checkpoints (`jobs`, `job_records`) and
+//! worker request records (`worker_requests`).
 
 mod bundle;
 mod chain;
@@ -33,6 +34,9 @@ mod stored;
 #[cfg(test)]
 mod tests;
 mod work;
+#[cfg(test)]
+mod worker_request_tests;
+mod worker_requests;
 #[cfg(test)]
 mod workspace_tests;
 
@@ -64,6 +68,11 @@ pub use job_records::{
 pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
 pub use root::{FREE_SPACE_RESERVE_BYTES, FreeSpaceCheck};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
+pub use worker_requests::{
+    MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS, MAX_REQUEST_RECORD_BYTES, MAX_REQUEST_RECORDS,
+    RecordedRequestResult, RequestRecordWrite, WorkerRequestClaim, WorkerRequestOwner,
+    WorkerRequestRecord, decode_request_record, encode_request_record,
+};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
 /// Largest generation manifest (and retained bundle manifest), which lists
@@ -353,6 +362,7 @@ pub struct BundleStatus {
     source_policy: BundleSourcePolicy,
     artifact_count: usize,
     artifact_bytes: u64,
+    manifest_sha256: String,
 }
 
 /// Result of examining one positively identified disposable session for cleanup.
@@ -445,6 +455,14 @@ impl BundleStatus {
     #[must_use]
     pub const fn artifact_bytes(&self) -> u64 {
         self.artifact_bytes
+    }
+
+    /// SHA-256 of the validated `bundle.json`, as 64 lowercase hexadecimal
+    /// digits: the manifest names every file and its digest, so this one
+    /// digest identifies the whole bundle (a worker records it, P11).
+    #[must_use]
+    pub fn manifest_sha256(&self) -> &str {
+        &self.manifest_sha256
     }
 }
 

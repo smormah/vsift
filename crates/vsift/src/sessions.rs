@@ -3,14 +3,18 @@
 
 use std::path::{Path, PathBuf};
 
-use vsift_application::{OpenSession, OpenSessionOutcome, OpenSessionRequest};
+use vsift_application::{
+    ForegroundSessionPort, OpenSession, OpenSessionOutcome, OpenSessionRequest,
+    TranscriptImportRequest,
+};
 use vsift_domain::{
     DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
     TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
-    BundleSourcePolicy, BundleStatus, CleanOutcome, FfprobeSourceDuration, FilesystemSessionStore,
-    FreeSpaceCheck, SessionIndexPage, SessionRootProvisioning, SessionStatus,
+    BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
+    FfprobeSourceDuration, FilesystemAdmissionPermit, FilesystemSessionStore, FreeSpaceCheck,
+    SessionIndexPage, SessionRootProvisioning, SessionStatus, SourceSnapshot,
 };
 
 use crate::{
@@ -47,6 +51,47 @@ pub struct IngestRequest {
     /// durable mode (ADR 0020 D-3), and a durable requirement in an
     /// ephemeral workspace fails with [`EngineError::WorkspaceNotDurable`].
     pub durability: DurabilityRequirement,
+}
+
+/// The source an ingest copies: a path the caller selected, or a file a
+/// worker request named inside the operator's input root, already opened
+/// there following no link (P11, ADR 0021 section 9).
+pub(crate) enum IngestSource {
+    /// An absolute path, opened by the staging itself.
+    Path(PathBuf),
+    /// A file opened inside the input root, and the copy's admission when
+    /// the caller already holds it.
+    Contained {
+        /// The opened source.
+        file: ContainedFile,
+        /// The copy's weight-1 admission, taken before the session is
+        /// registered.
+        admission: Option<FilesystemAdmissionPermit>,
+    },
+}
+
+/// The supplied transcript an ingest imports, as for [`IngestSource`].
+pub(crate) enum IngestTranscript {
+    /// A caller-selected sidecar.
+    Path(SuppliedTranscriptRequest),
+    /// A sidecar opened inside the input root, and its offset.
+    Contained {
+        /// The opened sidecar.
+        file: ContainedFile,
+        /// Signed microseconds from sidecar time to source time.
+        offset_micros: i64,
+    },
+}
+
+/// Everything one ingest needs, resolved: the public [`IngestRequest`], or
+/// a worker request's step, which also fixes the session id so the id is
+/// recorded before the copy starts (ADR 0021 section 2).
+pub(crate) struct PreparedIngest {
+    pub(crate) source: IngestSource,
+    pub(crate) transcript: Option<IngestTranscript>,
+    pub(crate) cancellation: Cancellation,
+    pub(crate) durability: DurabilityRequirement,
+    pub(crate) session_id: Option<SessionId>,
 }
 
 /// A supplied transcript file and the explicit offset that aligns it.
@@ -349,6 +394,7 @@ pub struct BundleSummary {
     source_retention: SourceRetention,
     artifact_count: usize,
     artifact_bytes: u64,
+    manifest_sha256: String,
 }
 
 impl BundleSummary {
@@ -363,6 +409,7 @@ impl BundleSummary {
             },
             artifact_count: bundle.artifact_count(),
             artifact_bytes: bundle.artifact_bytes(),
+            manifest_sha256: bundle.manifest_sha256().to_owned(),
         }
     }
 
@@ -401,6 +448,15 @@ impl BundleSummary {
     pub const fn artifact_bytes(&self) -> u64 {
         self.artifact_bytes
     }
+
+    /// SHA-256 of the bundle's validated manifest (`bundle.json`), 64
+    /// lowercase hexadecimal digits. The manifest lists every file with its
+    /// digest, so this identifies the whole bundle; a worker request records
+    /// it and checks it again when it meets the bundle later (P11).
+    #[must_use]
+    pub fn manifest_sha256(&self) -> &str {
+        &self.manifest_sha256
+    }
 }
 
 impl Engine {
@@ -424,8 +480,30 @@ impl Engine {
     /// failed verification happens before the session root is touched.
     pub async fn ingest(&self, request: IngestRequest) -> Result<IngestOutcome, EngineError> {
         let source = absolute_selection(&request.source)?;
-        let import = match &request.transcript {
-            Some(transcript) => Some(self.prepare_transcript_import(transcript)?),
+        self.ingest_prepared(PreparedIngest {
+            source: IngestSource::Path(source),
+            transcript: request.transcript.map(IngestTranscript::Path),
+            cancellation: request.cancellation,
+            durability: request.durability,
+            session_id: None,
+        })
+        .await
+    }
+
+    /// [`Self::ingest`] of a resolved request: a worker request's step
+    /// passes its contained source and its recorded session id here.
+    pub(crate) async fn ingest_prepared(
+        &self,
+        request: PreparedIngest,
+    ) -> Result<IngestOutcome, EngineError> {
+        let import = match request.transcript {
+            Some(IngestTranscript::Path(transcript)) => {
+                Some(self.prepare_transcript_import(&transcript)?)
+            }
+            Some(IngestTranscript::Contained {
+                file,
+                offset_micros,
+            }) => Some(self.prepare_contained_transcript_import(file, offset_micros)?),
             None => None,
         };
         // Only the transcript path runs FFprobe on the source, so only it
@@ -438,44 +516,65 @@ impl Engine {
             .open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let durability = session_durability(request.durability, store.workspace_policy())?;
-        let free_space = free_space_reserve(&store, &source)?;
+        let incoming = match &request.source {
+            IngestSource::Path(source) => {
+                std::fs::metadata(source).map_or(0, |metadata| metadata.len())
+            }
+            IngestSource::Contained { file, .. } => file.len(),
+        };
+        let free_space = free_space_reserve(&store, incoming)?;
         let now = self.now_unix_seconds()?;
+        let session_id = match request.session_id {
+            Some(session_id) => session_id,
+            None => self.new_session_id()?,
+        };
+        let (source_path, contained) = match request.source {
+            IngestSource::Path(path) => (path, None),
+            // The contained adapter stages the opened file; the use case's
+            // path is not read.
+            IngestSource::Contained { file, admission } => {
+                (PathBuf::new(), Some((file, admission)))
+            }
+        };
         let open = OpenSessionRequest {
-            source,
-            session_id: self.new_session_id()?,
+            source: source_path,
+            session_id,
             initialize_operation_id: self.new_operation_id()?,
             stage_operation_id: self.new_operation_id()?,
             activate_operation_id: self.new_operation_id()?,
             durability,
             now_unix_seconds: now,
         };
-        let Some((import, tools)) = import else {
-            let session = OpenSession::new(store)
-                .execute(open, &request.cancellation.0)
-                .await
-                .map_err(EngineError::OpenSession)?;
-            return Ok(IngestOutcome {
-                session,
-                transcript: None,
-                free_space,
-            });
+        let import = match import {
+            Some((import, tools)) => {
+                let probe_store = self
+                    .open_session_store(&root, SessionRootProvisioning::ExistingOnly)?
+                    .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+                let probe = FfprobeSourceDuration::new(
+                    tools,
+                    self.config().host_isolation.into_infrastructure(),
+                    probe_store,
+                    request.cancellation.0.clone(),
+                );
+                Some((import, probe))
+            }
+            None => None,
         };
-        let probe_store = self
-            .open_session_store(&root, SessionRootProvisioning::ExistingOnly)?
-            .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let probe = FfprobeSourceDuration::new(
-            tools,
-            self.config().host_isolation.into_infrastructure(),
-            probe_store,
-            request.cancellation.0.clone(),
-        );
-        let (session, revision) = OpenSession::new(store)
-            .execute_with_transcript(open, &import, &probe, &request.cancellation.0)
-            .await
-            .map_err(EngineError::OpenSession)?;
+        let (session, transcript) = match contained {
+            None => open_session(store, open, import.as_ref(), &request.cancellation).await?,
+            Some((file, admission)) => {
+                open_session(
+                    ContainedSourceStore::new(store, file, admission),
+                    open,
+                    import.as_ref(),
+                    &request.cancellation,
+                )
+                .await?
+            }
+        };
         Ok(IngestOutcome {
             session,
-            transcript: Some(revision),
+            transcript,
             free_space,
         })
     }
@@ -664,18 +763,43 @@ impl Engine {
     }
 }
 
+/// Registers, stages and activates one session through `port`, importing
+/// the supplied transcript in the same generation when there is one.
+async fn open_session<Port>(
+    port: Port,
+    open: OpenSessionRequest,
+    import: Option<&(TranscriptImportRequest, FfprobeSourceDuration)>,
+    cancellation: &Cancellation,
+) -> Result<(OpenSessionOutcome, Option<TranscriptRevision>), EngineError>
+where
+    Port: ForegroundSessionPort<Snapshot = SourceSnapshot>,
+{
+    let use_case = OpenSession::new(port);
+    match import {
+        None => use_case
+            .execute(open, &cancellation.0)
+            .await
+            .map(|session| (session, None))
+            .map_err(EngineError::OpenSession),
+        Some((import, probe)) => use_case
+            .execute_with_transcript(open, import, probe, &cancellation.0)
+            .await
+            .map(|(session, revision)| (session, Some(revision)))
+            .map_err(EngineError::OpenSession),
+    }
+}
+
 /// Checks a worker workspace's free-space reserve before the source is
-/// copied into it: the source's size (read from its metadata; the copy
-/// itself still refuses a file that grows) and the 1 GiB reserve must be
-/// available. A desktop root is not checked, as before P11.
+/// copied into it: the source's size (`incoming`, read from its metadata;
+/// the copy itself still refuses a file that grows) and the 1 GiB reserve
+/// must be available. A desktop root is not checked, as before P11.
 fn free_space_reserve(
     store: &FilesystemSessionStore,
-    source: &Path,
+    incoming: u64,
 ) -> Result<FreeSpaceReserveCheck, EngineError> {
     if store.workspace_policy().is_none() {
         return Ok(FreeSpaceReserveCheck::NotEnforced);
     }
-    let incoming = std::fs::metadata(source).map_or(0, |metadata| metadata.len());
     Ok(match store.ensure_free_space(incoming)? {
         FreeSpaceCheck::Enforced => FreeSpaceReserveCheck::Enforced,
         FreeSpaceCheck::NotEnforced => FreeSpaceReserveCheck::NotEnforced,

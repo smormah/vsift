@@ -20,6 +20,7 @@ compile_error!(
 
 mod archive_inventory;
 mod bounded_tar_inventory;
+mod contained_source_store;
 mod durable_profile;
 mod evidence_media;
 mod evidence_record;
@@ -41,6 +42,7 @@ mod process_dependency_probe;
 mod process_supervisor;
 mod publisher_artifact_transfer;
 mod random_identifiers;
+mod request_timing;
 mod retry_timer;
 mod session_root;
 mod source_binding;
@@ -67,6 +69,7 @@ pub use bounded_tar_inventory::{
     MAX_TAR_STREAM_BYTES, ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory,
     inspect_tar_selected_files, stage_tar_selected_files,
 };
+pub use contained_source_store::ContainedSourceStore;
 pub use durable_profile::{
     MAX_MOUNTINFO_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, MountInfoError, MountProfile,
     OsReleaseError, OsReleaseProfile, RootMountAccess, classify_mountinfo, classify_os_release,
@@ -96,9 +99,12 @@ pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, DEFAULT_ADMISSION_CAPACITY, EvidenceInventory,
     EvidenceMediaFile, ExclusiveSessionLifetimeHold, FREE_SPACE_RESERVE_BYTES,
     FilesystemAdmissionPermit, FilesystemJobOwner, FilesystemSessionStore, FreeSpaceCheck,
-    JOB_CANCEL_POLL, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
-    SessionStoreOpenError, SessionWorkDirectory, decode_chunk_checkpoint, decode_job_record,
-    encode_chunk_checkpoint, encode_job_record,
+    JOB_CANCEL_POLL, MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS, MAX_REQUEST_RECORD_BYTES,
+    MAX_REQUEST_RECORDS, RecordedRequestResult, RequestRecordWrite, SessionIndexPage,
+    SessionReadHold, SessionRegistration, SessionStatus, SessionStoreOpenError,
+    SessionWorkDirectory, WorkerRequestClaim, WorkerRequestOwner, WorkerRequestRecord,
+    decode_chunk_checkpoint, decode_job_record, decode_request_record, encode_chunk_checkpoint,
+    encode_job_record, encode_request_record,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
@@ -152,6 +158,7 @@ pub use publisher_artifact_transfer::{
     ReviewedPublisherArtifact, download_reviewed_publisher_artifact,
 };
 pub use random_identifiers::RandomIdentifierSource;
+pub use request_timing::{DeadlineOutcome, run_until_deadline, sleep_unless_cancelled};
 pub use retry_timer::TokioRetryTimer;
 pub use session_root::{
     PROVISIONING_WAIT, SessionRootError, SessionRootProvisioning, open_session_root,

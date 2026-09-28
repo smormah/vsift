@@ -390,6 +390,13 @@ impl ProcessCancellation {
         self.reached(CancellationState::Cancelled).await;
     }
 
+    /// Resolves once this signal or an ancestor is cancelled (at once if it
+    /// already is): a worker host waits on it between the units of work it
+    /// schedules itself, such as a backoff before a retry (P11).
+    pub async fn wait_cancelled(&self) {
+        self.cancelled().await;
+    }
+
     /// Resolves once the cancellation is escalated. A caller races it
     /// against the graceful wait only, so a dropped sender (impossible while
     /// `self` lives) could never end a wait early.

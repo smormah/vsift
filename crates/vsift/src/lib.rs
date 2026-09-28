@@ -100,6 +100,7 @@ mod sessions;
 mod setup;
 mod transcripts;
 mod verification;
+mod worker;
 mod workspace;
 
 pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
@@ -110,7 +111,7 @@ pub use engine::{
 };
 pub use error::{
     EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError,
-    UserConfigurationError,
+    UserConfigurationError, WorkerFailure,
 };
 pub use evidence::{
     AudioClipRequest, CropEvidenceRequest, CropRectangle, DEFAULT_BURST_FRAMES,
@@ -137,6 +138,7 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
 pub use vsift_application::{

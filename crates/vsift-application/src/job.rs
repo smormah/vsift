@@ -268,6 +268,29 @@ pub fn commit_operation_id(
     .map_err(|_| JobKeyError::NotCanonical)
 }
 
+/// The operation id step `index` (0-based, in the request's `steps`) of a
+/// worker request runs its P10 job under (P11, ADR 0021 section 2): `op_`
+/// and the first 32 hex digits of
+/// `sha256("vsift.job-step.v1\n" + request + "\n" + index)`. Fixed by the
+/// request's own operation id, so a redelivered request continues or
+/// replays the same job exactly once; neither part holds a line feed, so no
+/// two inputs share one material.
+///
+/// # Errors
+///
+/// [`JobKeyError::NotCanonical`] only through an internal fault.
+pub fn worker_step_operation_id(
+    request: &OperationId,
+    index: usize,
+) -> Result<OperationId, JobKeyError> {
+    OperationId::parse(derived_identity(
+        "op_",
+        "vsift.job-step.v1",
+        &[request.as_str(), &index.to_string()],
+    ))
+    .map_err(|_| JobKeyError::NotCanonical)
+}
+
 /// What a job was asked to do, as its record keeps it for a resume.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JobRequest {

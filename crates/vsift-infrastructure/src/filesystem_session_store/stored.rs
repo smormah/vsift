@@ -12,7 +12,7 @@ use super::map_committed_io;
 use super::{
     MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, MetadataVersion, STORAGE_SCHEMA_VERSION,
     SessionStatus, StoredArtifact, StoredLifecycle, StoredSessionPhase, is_canonical_sha256,
-    open_regular_file, open_replaced_file, read_bounded, read_bounded_manifest,
+    open_replaced_file, read_bounded,
 };
 
 pub(super) fn validate_artifact_record(
@@ -127,20 +127,6 @@ where
 {
     let file = open_replaced_file(directory, name, false).map_err(map_committed_io)?;
     let bytes = read_bounded(file).map_err(map_committed_io)?;
-    parse_versioned_json(&bytes)
-}
-
-/// [`read_versioned_json_file`] for a manifest, which may be larger than
-/// other metadata ([`super::MAX_MANIFEST_BYTES`]).
-pub(super) fn read_versioned_manifest_file<T>(
-    directory: &Dir,
-    name: &str,
-) -> Result<T, SessionStorageError>
-where
-    T: for<'de> Deserialize<'de> + MetadataVersion,
-{
-    let file = open_regular_file(directory, name, false).map_err(map_committed_io)?;
-    let bytes = read_bounded_manifest(file).map_err(map_committed_io)?;
     parse_versioned_json(&bytes)
 }
 

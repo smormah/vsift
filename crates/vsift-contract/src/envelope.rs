@@ -1,7 +1,9 @@
 //! The v1 operation envelope and its JSON Lines terminal record.
 
 use serde::Serialize;
-use vsift_domain::{FailureCode, OperationId, OperationStatus};
+use vsift_domain::{
+    FailureCode, OperationId, OperationStatus, SessionLifetime, SessionLifetimePolicy,
+};
 
 use crate::EventKind;
 
@@ -148,6 +150,55 @@ impl LifecycleResponse {
             expires_at: None,
         }
     }
+
+    /// The lifecycle of a session with `lifetime`: `ephemeral` for a
+    /// desktop session, `durable_worker` for a session of a worker
+    /// workspace, with its expiry in RFC 3339 UTC (`YYYY-MM-DDTHH:MM:SSZ`).
+    ///
+    /// A worker host records its results, so the contract formats the
+    /// expiry itself rather than each host (P11 PR 3). `None` for an expiry
+    /// after the year 9999, which no clock that passes the session rules
+    /// reaches.
+    #[must_use]
+    pub fn of_session(lifetime: SessionLifetime) -> Option<Self> {
+        let expires_at = utc_seconds_rfc3339(lifetime.expires_at_unix_seconds())?;
+        Some(match lifetime.policy() {
+            SessionLifetimePolicy::Desktop => Self::ephemeral(expires_at),
+            SessionLifetimePolicy::Workspace(_) => Self::durable_worker(expires_at),
+        })
+    }
+}
+
+/// Formats Unix seconds as RFC 3339 UTC with a `Z` offset, the form the
+/// command line's time formatter writes; `None` after 9999-12-31.
+fn utc_seconds_rfc3339(seconds: u64) -> Option<String> {
+    const SECONDS_PER_DAY: u64 = 86_400;
+    let days = seconds / SECONDS_PER_DAY;
+    let of_day = seconds % SECONDS_PER_DAY;
+    // Howard Hinnant's civil-from-days, for days since 1970-01-01.
+    let shifted = days.checked_add(719_468)?;
+    let era = shifted / 146_097;
+    let day_of_era = shifted % 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + u64::from(month <= 2);
+    if year > 9_999 {
+        return None;
+    }
+    Some(format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        of_day / 3_600,
+        of_day % 3_600 / 60,
+        of_day % 60
+    ))
 }
 
 /// Complete terminal result for R0 operations.
@@ -295,6 +346,22 @@ impl OperationResponse<serde_json::Value> {
         response
     }
 
+    /// Attaches `data` to a failed or cancelled result (P11 `job run`: the
+    /// job result of a request that ended with a failure), so a supervisor
+    /// sees what each step did and which one ended the request. The error
+    /// stays the result's authority; the data only reports.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serialization error when `data` cannot be represented as JSON.
+    pub fn with_failure_data<T>(mut self, data: &T) -> Result<Self, serde_json::Error>
+    where
+        T: Serialize,
+    {
+        self.data = Some(serde_json::to_value(data)?);
+        Ok(self)
+    }
+
     /// Names the operation the result is recorded under, so a caller can
     /// retry with it and receive the same result (P10, ADR 0020).
     #[must_use]
@@ -435,7 +502,28 @@ mod tests {
     use serde_json::Value;
     use vsift_domain::FailureCode;
 
-    use super::{LifecycleResponse, OperationResponse, TerminalEventResponse};
+    use super::{LifecycleResponse, OperationResponse, TerminalEventResponse, utc_seconds_rfc3339};
+
+    /// The contract's own expiry formatter writes what the command line's
+    /// RFC 3339 formatter writes, leap days and centuries included.
+    #[test]
+    fn utc_expiries_are_rfc3339() {
+        for (seconds, expected) in [
+            (0, Some("1970-01-01T00:00:00Z")),
+            (951_782_400, Some("2000-02-29T00:00:00Z")),
+            (1_791_201_600, Some("2026-10-05T12:00:00Z")),
+            (4_107_628_799, Some("2100-03-01T23:59:59Z")),
+            (253_402_300_799, Some("9999-12-31T23:59:59Z")),
+            (253_402_300_800, None),
+            (u64::MAX, None),
+        ] {
+            assert_eq!(
+                utc_seconds_rfc3339(seconds).as_deref(),
+                expected,
+                "{seconds}"
+            );
+        }
+    }
 
     #[test]
     fn failure_json_has_complete_semantic_fields() -> Result<(), Box<dyn std::error::Error>> {

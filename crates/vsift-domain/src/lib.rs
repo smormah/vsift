@@ -20,6 +20,7 @@ mod storage;
 mod timeline;
 mod transcript;
 mod visual;
+mod worker;
 
 pub use admission::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionDecision, AdmissionWait,
@@ -104,6 +105,10 @@ pub use visual::{
     VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexParts,
     VisualIndexProfile, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
     WindowAnalysis, analyse_window, visual_window_count,
+};
+pub use worker::{
+    MIN_STEP_BUDGET, RecordedRequest, RequestAdmission, StepRetry, admit_request, ends_request,
+    step_may_start, step_retry,
 };
 
 /// A specialist runtime dependency that provides one of `VSift`'s capabilities.

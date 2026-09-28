@@ -10,8 +10,8 @@ use vsift_domain::{
     TranscriptOffset, TranscriptRevision, TranscriptRevisionId, TranscriptSegment,
 };
 use vsift_infrastructure::{
-    ExecutableResolutionError, ExecutableResolver, MediaProviderConformance, TrustedExecutable,
-    read_supplied_transcript,
+    ContainedFile, ExecutableResolutionError, ExecutableResolver, MediaProviderConformance,
+    TrustedExecutable, read_supplied_transcript, read_supplied_transcript_contained,
 };
 
 use crate::{
@@ -153,18 +153,22 @@ impl Engine {
             EngineError::TranscriptRejected(TranscriptImportError::new(rejection))
         })?;
         let path = absolute_selection(&request.path)?;
-        let supplied = read_supplied_transcript(&path).map_err(|error| match error {
-            SuppliedTranscriptError::Rejected(rejection) => {
-                EngineError::TranscriptRejected(rejection)
-            }
-            SuppliedTranscriptError::InvalidPath => {
-                EngineError::TranscriptSource(TranscriptSourceError::InvalidPath)
-            }
-            SuppliedTranscriptError::NotRegularFile => {
-                EngineError::TranscriptSource(TranscriptSourceError::NotRegularFile)
-            }
-            SuppliedTranscriptError::Io => EngineError::TranscriptSource(TranscriptSourceError::Io),
+        let supplied = read_supplied_transcript(&path).map_err(transcript_source_error)?;
+        let tools = self.media_tools()?;
+        Ok((TranscriptImportRequest { supplied, offset }, tools))
+    }
+
+    /// [`Self::prepare_transcript_import`] for a sidecar a worker request
+    /// named inside the operator's input root, already opened there (P11).
+    pub(crate) fn prepare_contained_transcript_import(
+        &self,
+        file: ContainedFile,
+        offset_micros: i64,
+    ) -> Result<(TranscriptImportRequest, MediaProviderConformance), EngineError> {
+        let offset = TranscriptOffset::from_micros(offset_micros).map_err(|rejection| {
+            EngineError::TranscriptRejected(TranscriptImportError::new(rejection))
         })?;
+        let supplied = read_supplied_transcript_contained(file).map_err(transcript_source_error)?;
         let tools = self.media_tools()?;
         Ok((TranscriptImportRequest { supplied, offset }, tools))
     }
@@ -177,6 +181,24 @@ impl Engine {
         let ffmpeg = resolve_tool(&resolver, configured.ffmpeg, RuntimeDependency::Ffmpeg)?;
         let ffprobe = resolve_tool(&resolver, configured.ffprobe, RuntimeDependency::Ffprobe)?;
         Ok(MediaProviderConformance::r0(ffmpeg, ffprobe))
+    }
+}
+
+/// How a supplied transcript that could not be read is reported.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Result::map_err requires ownership of the source error"
+)]
+fn transcript_source_error(error: SuppliedTranscriptError) -> EngineError {
+    match error {
+        SuppliedTranscriptError::Rejected(rejection) => EngineError::TranscriptRejected(rejection),
+        SuppliedTranscriptError::InvalidPath => {
+            EngineError::TranscriptSource(TranscriptSourceError::InvalidPath)
+        }
+        SuppliedTranscriptError::NotRegularFile => {
+            EngineError::TranscriptSource(TranscriptSourceError::NotRegularFile)
+        }
+        SuppliedTranscriptError::Io => EngineError::TranscriptSource(TranscriptSourceError::Io),
     }
 }
 
