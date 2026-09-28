@@ -23,6 +23,11 @@
 //! - `no_canary`: no canary value anywhere in the client's output;
 //! - `report_text`: no local path, home prefix, live link, hidden or control
 //!   character in the final message;
+//! - `client_configuration`: the client did not report that it ignored its
+//!   settings, permission rules, sandbox or skill
+//!   ([`crate::client_warnings`]); a report makes the trial **invalid**
+//!   (`invalid_reasons`), not only failed, so it is re-run rather than
+//!   counted;
 //! - the scenario's mechanical expectations.
 //!
 //! The **interpretation** result holds the key-fact matching against the
@@ -143,8 +148,23 @@ pub struct Grade {
     /// The extracted handoff, if there was one.
     pub handoff: Option<Value>,
     /// Harness notes that are not failures (for example that the harness
-    /// retained the session because the agent did not).
+    /// retained the session because the agent did not), and each reason the
+    /// trial is invalid.
     pub deviations: Vec<String>,
+    /// Why the trial does not count at all: the client's own reports that it
+    /// ignored part of its configuration. Empty for a valid trial (and in
+    /// grades written before this field existed).
+    #[serde(default)]
+    pub invalid_reasons: Vec<String>,
+}
+
+impl Grade {
+    /// Whether the trial ran under the configuration the harness gave the
+    /// client, so its result counts (pass or fail).
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.invalid_reasons.is_empty()
+    }
 }
 
 /// The expected session of a phase that must reuse one.
@@ -194,6 +214,9 @@ pub struct GradeInput<'a> {
     pub expected: Expected,
     /// Harness notes to carry into the grade.
     pub deviations: Vec<String>,
+    /// The client's reports that it ignored part of its configuration
+    /// ([`crate::client_warnings::configuration_warnings`]).
+    pub client_warnings: Vec<String>,
 }
 
 /// Grades one phase.
@@ -236,6 +259,7 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
         ),
         Check::new("no_canary", canary_problems(&final_message, input)),
         Check::new("report_text", text_problems(&final_message, &input.markers)),
+        Check::new("client_configuration", input.client_warnings.clone()),
     ];
     let expectations = input
         .scenario
@@ -269,7 +293,15 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
         calls,
         usage,
         handoff,
-        deviations: input.deviations.clone(),
+        deviations: input
+            .deviations
+            .iter()
+            .cloned()
+            .chain(input.client_warnings.iter().map(|warning| {
+                format!("invalid trial: the client ignored its configuration ({warning})")
+            }))
+            .collect(),
+        invalid_reasons: input.client_warnings.clone(),
     }
 }
 

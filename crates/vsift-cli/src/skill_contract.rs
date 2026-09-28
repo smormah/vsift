@@ -552,6 +552,51 @@ fn skill_md_has_front_matter_states_and_a_size_bound() -> Result<(), String> {
     problems.into_result()
 }
 
+/// `FIND_SPOKEN_SPANS` starts with `vsift search`: its hits carry the segment
+/// identities and times a handoff cites, and A-08 requires search. In the
+/// first dry trial (2026-09-28) a strong model read a short transcript whole
+/// with `transcript get` and never searched, so the order is guarded here.
+#[test]
+fn find_spoken_spans_searches_before_it_reads_the_transcript() -> Result<(), String> {
+    let text = read_text(&skill_directory().join("SKILL.md"))?;
+    let start = text
+        .find("### 3. FIND_SPOKEN_SPANS")
+        .ok_or("SKILL.md lacks FIND_SPOKEN_SPANS")?;
+    let length = text[start..]
+        .find("### 4. INSPECT_CARDS")
+        .ok_or("SKILL.md lacks INSPECT_CARDS after FIND_SPOKEN_SPANS")?;
+    let section = parse_markdown("FIND_SPOKEN_SPANS".to_owned(), &text[start..start + length]);
+    let commands: Vec<String> = section
+        .fences
+        .iter()
+        .filter(|fence| fence.info == "console")
+        .flat_map(|fence| fence.lines.iter())
+        .map(|line| line.trim().to_owned())
+        .filter(|line| !line.is_empty())
+        .collect();
+    let mut problems = Problems::default();
+    match commands.first() {
+        Some(first) if first.starts_with("vsift search ") => {}
+        other => problems.add(format!(
+            "the first command of FIND_SPOKEN_SPANS must be `vsift search`, found {other:?}"
+        )),
+    }
+    if !commands
+        .iter()
+        .any(|line| line.starts_with("vsift transcript get "))
+    {
+        problems.add("FIND_SPOKEN_SPANS no longer reads bounded transcript windows".to_owned());
+    }
+    if !section
+        .prose
+        .iter()
+        .any(|line| line.contains("Always search first"))
+    {
+        problems.add("FIND_SPOKEN_SPANS must say to always search first".to_owned());
+    }
+    problems.into_result()
+}
+
 #[test]
 fn console_commands_parse_and_respect_their_class() -> Result<(), String> {
     let mut problems = Problems::default();

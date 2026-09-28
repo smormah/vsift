@@ -8,6 +8,7 @@ use serde_json::Value;
 use crate::{
     bundle::BundleIndex,
     calls::{ReadScope, normalise_path},
+    client_warnings::configuration_warnings,
     error::{TrialError, read_json, write_json},
     grade::{Expected, Grade, GradeInput, grade},
     handoff::{PrivateMarkers, extract},
@@ -126,6 +127,8 @@ fn bundle_for(
 }
 
 /// Grades a trace for one phase of a prepared trial and writes the grade.
+/// `client_warnings` are the client's reports that it ignored part of its
+/// configuration ([`configuration_warnings`]); any makes the trial invalid.
 ///
 /// # Errors
 ///
@@ -138,6 +141,7 @@ pub fn grade_trace(
     raw: &str,
     wall_time_s: Option<u64>,
     user_names: &[String],
+    client_warnings: Vec<String>,
 ) -> Result<Grade, TrialError> {
     let manifest = read_manifest(layout)?;
     let scenario = Scenario::load(&layout.scenario())?;
@@ -196,6 +200,7 @@ pub fn grade_trace(
         wall_time_s,
         expected,
         deviations,
+        client_warnings,
     });
     write_json(&layout.phase(phase).join("grade.json"), &graded)?;
     Ok(graded)
@@ -218,5 +223,6 @@ pub fn grade_phase(layout: &TrialLayout, phase: usize) -> Result<Grade, TrialErr
         &raw,
         Some(record.wall_ms / 1_000),
         &environment_user_names(),
+        configuration_warnings(record.client, &stdout, &stderr),
     )
 }

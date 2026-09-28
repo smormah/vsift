@@ -6,36 +6,39 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P11 are complete. P12 (agent skill) is in progress.** PR 1 (#196, `7990fdf`)
-merged the skill, guard and ADR 0022 (Proposed); PR 2 (#201) adds the trial harness,
-21 scenarios, the SEC-T02 suite and the procedure checkpoint. Increments; no trial run.
+**P00-P11 are complete. P12 (agent skill) is in progress.** Merged increments: PR 1
+(#196, skill, guard, ADR 0022 Proposed) and PR 2 (#201, `9d2f60e`, harness, 21
+scenarios, SEC-T02 suite). PR 3a (branch `p12-pr3a-dryrun-fixes`) fixes what the first
+dry trials showed. The maintainer approved the named-client trials (~80 counted runs:
+Claude Code `claude-opus-5-5`/`claude-haiku-4-5-20251001`, Codex
+`gpt-6-astra`/`gpt-6-luna`); no counted trial has run.
 
-1. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the PR 2 note), including
-   the harness's reading allowances, which scenarios get five trials (all 21 x 5 x 2
-   clients x 2 models is about 420 runs) and the F12-E02 window reading.
-2. **Next P12 increment (PR 3): run the named-client trials** with the runbook
-   `docs/agents/trials.md`. Maintainer: create `C:\vsift-trials`, sign each client in
-   once into a trial home under it (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`), name the compact
-   and review models. First one dry trial per client to confirm the stream formats and
-   flags (L-075), then the counted trials, graded, reviewed and recorded under
-   `docs/planning/p12-agent-trials/`.
-3. **Technical debt:** SEC-T01 adversarial containment evidence (#188, L-068,
-   `docs/planning/sec-t01-adversarial-handoff.md`), for maintainer discussion before P14.
+1. **Maintainer: decide how Codex trials run (L-076).** On Windows Codex's unelevated
+   sandbox cannot run VSift (its private session root refuses the sandbox SID:
+   `STORAGE_IO`/`INTEGRITY_FAILURE`) and does not enforce the network. Options: WSL or
+   Ubuntu; `danger-full-access` graded only; the elevated sandbox (admin setup, untested).
+2. **Maintainer: re-run the Claude Code dry trial on PR 3a** (runbook
+   `docs/agents/trials.md`): no trust warning, not `INVALID TRIAL`, `search` run.
+   Then the counted trials, graded and recorded under `docs/planning/p12-agent-trials/`.
+3. **Maintainer: review ADR 0022** (decisions 3, 4, 7, the PR 2 and dry-trial notes):
+   reading allowances, which scenarios get five trials, the F12-E02 window reading.
+4. **Technical debt:** SEC-T01 adversarial containment evidence (#188, L-068), for
+   maintainer discussion before P14.
 
 ## Found in P12 (for the maintainer)
 
-- **L-070 (fixed 2026-09-28):** the `job resume` remediation for a closed or expired
-  session now says to open a new session with `ingest`; the limit is removed.
-- **#197 (fixed, #200 `98525dc`):** a kill during session registration left an empty
-  index marker that failed every listing; the marker is now staged and renamed.
-- **L-071 (deferred to P13):** a command line that does not parse answers `parse`
-  with no remediation in JSON modes; on PowerShell an unquoted `--rect a,b,c,d` fails
-  that way. The skill tells agents to quote it.
-- **L-074 (P12 PR 2, open):** the SubRip importer removes any `<letter...>` tag, not
-  only the `<i>/<b>/<u>/<font>` the contract lists; `original_text` keeps everything.
-- **Plan vs code/truth:** `session renew` and `job cancel` are `explicit` as a whole
-  (PR 1); the F05 error code is spoken at 6.5 s but shown from 9 s, and F12's code is
-  drawn from the first frame, so the grader binds spoken facts by text (ADR 0022 note).
+- **Dry trials (PR 3a, fixed):** Claude Code ignored an untrusted workspace's allow
+  rules (the harness now trusts each workspace; one settings source; a client's own
+  "ignored" report makes the trial invalid); Codex rejected every command without a
+  Windows sandbox mode (now `unelevated`); Opus never ran `search` (skill says search
+  first, guarded). Claude Code runs read-only commands like `echo` under `dontAsk`;
+  the grader fails them.
+- **L-071 (P13):** an unparsable command line gets no remediation in JSON modes (the
+  skill tells agents to quote `--rect` on PowerShell). **L-074 (open):** the SubRip
+  importer removes any `<letter...>` tag; `original_text` keeps everything.
+- **Plan vs code/truth:** `session renew` and `job cancel` are `explicit` as a whole;
+  F05's code is spoken at 6.5 s but shown from 9 s, F12's is drawn from the first
+  frame, so the grader binds spoken facts by text (ADR 0022 note).
 
 ## Decided (maintainer, 2026-09-28)
 
@@ -46,7 +49,7 @@ merged the skill, guard and ADR 0022 (Proposed); PR 2 (#201) adds the trial harn
 
 ## Open decisions (maintainer)
 
-- **ADR 0022** (above).
+- **ADR 0022** and **L-076** (above).
 - **P11 PR 4b readings to confirm:** the runbook's systemd example uses
   `KillMode=mixed`; a host-caused permanent failure replays under its operation id, so
   supervisors resubmit under a new id (L-069).
@@ -60,17 +63,14 @@ merged the skill, guard and ADR 0022 (Proposed); PR 2 (#201) adds the trial harn
 
 ## Tracked issues
 
-- #15 (P12): the packet issue. #14 (P11): close with the ledger follow-up. #180:
-  close it. #144: close after a clean main.
-- #170-#178: tracking issues for L-011, L-013, L-015, L-018, L-024, L-028, L-043,
-  L-045 and L-042 (review pending).
-- #159 motion fixtures; #150 noisy-speech fixtures; #147 faster-whisper adapter; #128
-  supervisor tests flaky on Windows under load.
+- #15 (P12) packet issue; #14 (P11) close with the ledger follow-up; #180 close;
+  #144 close after a clean main. #170-#178 track L-011/013/015/018/024/028/043/045/042.
+- #159 motion fixtures; #150 noisy-speech fixtures; #147 faster-whisper; #128 flaky
+  Windows supervisor tests.
 
 ## Other follow-ups
 
-- **Known limits:** entries to L-075 (review pending); P12 added L-071..L-075 (L-070
-  added and fixed).
+- **Known limits:** entries to L-076, review pending (P12 added L-071..L-076).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   the `p11_durable_workspace` stage on Ubuntu 24.04 / ext4; a CI run of
   `--host-isolation strict-linux` succeeding end to end.

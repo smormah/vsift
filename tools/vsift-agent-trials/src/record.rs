@@ -199,6 +199,9 @@ pub fn build_record(
         "mechanical": redactions.apply_value(&serde_json::to_value(&graded.mechanical).unwrap_or(Value::Null)),
         "interpretation": redactions.apply_value(&serde_json::to_value(&graded.interpretation).unwrap_or(Value::Null)),
         "deviations": redactions.apply_value(&json!(graded.deviations)),
+        "valid": graded.is_valid(),
+        "invalid_reasons": redactions.apply_value(&json!(graded.invalid_reasons)),
+        "client_setup": run.client_setup,
     });
     let size =
         |value: &Value| serde_json::to_vec_pretty(value).map_or(usize::MAX, |bytes| bytes.len());

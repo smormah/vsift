@@ -2,7 +2,8 @@
 
 - Status: Proposed (2026-09-28). PR 1 of P12 implements decisions 1-6; decision 7 is
   the plan for the later qualification PR and needs maintainer acceptance first. PR 2
-  builds decision 7's harness and grader without running a model (notes below).
+  builds decision 7's harness and grader without running a model; PR 3a fixes what the
+  first dry trials showed (notes below).
 - Date: 2026-09-28
 - Tracking: [P12 / issue #15](https://github.com/smormah/vsift/issues/15)
 - Refines: [ADR 0016](0016-embeddable-engine-and-evidence-contract.md) (decision 7:
@@ -180,6 +181,46 @@ Status stays **Proposed**. PR 2 builds the machinery for decision 7 and runs no 
 - **Procedure checkpoint.** `p12_skill_procedure_e2e` walks the documented A-08 and
   A-09 sequences deterministically and grades them with the same grader. It is not an
   agent trial and qualifies nothing.
+
+## Implementation notes: dry trials and PR 3a (2026-09-28)
+
+Status stays **Proposed**. The maintainer approved the named-client trials (decision 7)
+for Claude Code (`claude-opus-5-5`, `claude-haiku-4-5-20251001`) and Codex
+(`gpt-6-astra`, `gpt-6-luna`), about 80 counted runs. One dry A-08 trial per client
+ran first; PR 3a fixes what they showed. No counted trial has run.
+
+- **Claude Code settings have one source.** The dry run passed the workspace's
+  `.claude/settings.json` both as the project source and with `--settings`. Claude Code
+  ignored the project's allow rules because the new workspace was untrusted, and the
+  `vsift` commands ran only because the `--settings` copy allowed them (confirmed: without
+  `--settings` in an untrusted workspace, `vsift --version` is denied). `run` now marks
+  that one workspace as trusted in the client home's `.claude.json` (a minimal, atomic
+  merge of `projects[<workspace>].hasTrustDialogAccepted`) and no longer passes
+  `--settings`. The project file is the only source; allow and deny rules were confirmed
+  on a real run (`vsift` allowed, `mkdir` and a denied `Read` refused, web tools
+  removed). Claude Code still runs commands it classes as read-only, such as `echo`,
+  under `dontAsk`; the grader fails them.
+- **A client that ignores its configuration makes the trial invalid.** The grader's
+  new `client_configuration` check fails, and the grade lists `invalid_reasons`, when a
+  client reports on stderr or in its own stream notices that it ignored settings,
+  permission rules, the sandbox or the skill. Such a trial is re-run, not counted.
+- **Codex on Windows.** codex-cli 0.155 takes the Windows sandbox mode from the user
+  configuration, which `--ignore-user-config` skips; without a mode `codex exec`
+  rejected every command as "blocked by policy". `run` now passes
+  `windows.sandbox="unelevated"` (and excludes `TEMP` and `/tmp` from the writable
+  roots): reads, `vsift` and workspace writes work, writes outside the workspace are
+  refused. Two gaps remain and need a maintainer decision (known limit L-076): the
+  unelevated sandbox turns the network off only through proxy variables (a direct
+  request succeeded), and VSift cannot use its session root inside it, because VSift's
+  private-directory rule (a protected DACL for the user, `SYSTEM` and Administrators
+  only) leaves the sandbox's capability SID without access (`ingest` fails with
+  `STORAGE_IO`; a root made outside fails with `INTEGRITY_FAILURE`). Codex trials are
+  therefore not runnable on Windows as configured. The options are in L-076; the harness
+  adopts none of them.
+- **Skill.** FIND_SPOKEN_SPANS now tells the agent to always search first, even on a
+  short video, because search hits carry the segment identities and times it cites (the
+  strong Claude model read a 20 s transcript whole and never searched, which A-08
+  forbids). The skill guard checks that the state's first command is `vsift search`.
 
 ## Consequences
 

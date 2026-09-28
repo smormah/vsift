@@ -18,12 +18,13 @@ use std::{
 use serde_json::{Value, json};
 use vsift_agent_trials::{
     TrialError,
+    claude_trust::{CLAUDE_STATE_FILE, project_key},
     error::write_json,
     evaluate::grade_phase,
     layout::{PreparedState, TrialLayout, TrialManifest},
     record::{MAX_RECORD_BYTES, write_record},
     roots::RootPolicy,
-    run::{RunRequest, client_arguments, phase_prompt, run},
+    run::{CODEX_WINDOWS_SANDBOX, RunRequest, client_arguments, phase_prompt, run},
     scenario::Scenario,
     trace::ClientKind,
 };
@@ -58,6 +59,7 @@ impl Trial {
             std::env::temp_dir().join(format!("vsift-trials-stub-{}-{stamp}", std::process::id()));
         let layout = TrialLayout::new(root.join("trial"));
         fs::create_dir_all(layout.workspace().join(".stub"))?;
+        fs::create_dir_all(root.join("client-home"))?;
         fs::create_dir_all(layout.harness())?;
         fs::copy(scenario_file(scenario), layout.scenario())?;
         let parsed = Scenario::load(&layout.scenario())?;
@@ -265,10 +267,7 @@ async fn run_passes_an_explicit_argument_list_and_a_cleared_environment() -> Tes
     let workspace = trial.layout.workspace().to_string_lossy().into_owned();
     assert!(!text.contains(&workspace) && !text.contains(&workspace.replace('\\', "\\\\")));
     assert!(!text.contains(CANARY));
-    assert!(
-        text.contains("<workspace>"),
-        "the settings path was not tokenised"
-    );
+    assert_eq!(written["valid"], true);
     assert_eq!(
         written["run"]["raw_stdout_sha256"].as_str().map(str::len),
         Some(64)
@@ -279,6 +278,58 @@ async fn run_passes_an_explicit_argument_list_and_a_cleared_environment() -> Tes
         write_record(&trial.layout, 1, &trial.root.join("record.txt"), None, &[]),
         Err(TrialError::Refused(_))
     ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn claude_code_gets_one_settings_source_in_a_trusted_workspace() -> TestResult {
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    let state_file = trial.root.join("client-home").join(CLAUDE_STATE_FILE);
+    fs::write(
+        &state_file,
+        "{\n  \"userID\": \"kept\",\n  \"projects\": {\n    \"elsewhere\": {\"hasTrustDialogAccepted\": false}\n  }\n}\n",
+    )?;
+    trial.behave(&json!({"exit_code": 0}), "")?;
+    let request = trial.request(ClientKind::ClaudeCode, Duration::from_secs(60));
+    let record = run(&request).await?;
+    // One source of permission rules: the trusted workspace's project
+    // settings, never a second copy through `--settings`.
+    let arguments: Vec<String> = serde_json::from_value(trial.invocation()?["arguments"].clone())?;
+    assert!(!arguments.iter().any(|argument| argument == "--settings"));
+    assert!(
+        arguments
+            .windows(2)
+            .any(|pair| pair[0] == "--setting-sources" && pair[1] == "project")
+    );
+    let state: Value = serde_json::from_str(&fs::read_to_string(&state_file)?)?;
+    assert_eq!(
+        state["projects"][project_key(&trial.layout.workspace())]["hasTrustDialogAccepted"],
+        true
+    );
+    assert_eq!(
+        state["projects"]["elsewhere"]["hasTrustDialogAccepted"],
+        false
+    );
+    assert_eq!(state["userID"], "kept");
+    assert_eq!(record.client_setup.len(), 1);
+    // A missing client home is refused before the client starts.
+    fs::remove_dir_all(trial.root.join("client-home"))?;
+    fs::remove_file(
+        trial
+            .layout
+            .workspace()
+            .join(".stub")
+            .join("invocation.json"),
+    )?;
+    assert!(matches!(run(&request).await, Err(TrialError::Refused(_))));
+    assert!(
+        !trial
+            .layout
+            .workspace()
+            .join(".stub")
+            .join("invocation.json")
+            .exists()
+    );
     Ok(())
 }
 
@@ -296,10 +347,29 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
         "--sandbox",
         "workspace-write",
         "sandbox_workspace_write.network_access=false",
+        "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+        "sandbox_workspace_write.exclude_slash_tmp=true",
         "tools.view_image=false",
     ] {
         assert!(arguments.iter().any(|argument| argument == flag), "{flag}");
     }
+    // Without a Windows sandbox mode codex-cli 0.155 rejects every command
+    // ("blocked by policy", the first dry trial).
+    assert_eq!(
+        arguments
+            .iter()
+            .any(|argument| argument == CODEX_WINDOWS_SANDBOX),
+        cfg!(windows)
+    );
+    assert!(record.client_setup.is_empty());
+    assert!(
+        !trial
+            .root
+            .join("client-home")
+            .join(CLAUDE_STATE_FILE)
+            .exists(),
+        "Codex runs never touch a Claude Code state file"
+    );
     let session_root = trial.layout.session_root().to_string_lossy().into_owned();
     assert!(arguments.iter().any(|argument| {
         argument.starts_with("sandbox_workspace_write.writable_roots=")
