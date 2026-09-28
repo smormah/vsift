@@ -456,8 +456,8 @@ fn assert_no_path(value: &Value, root: &Path) {
 
 /// The job commands take exactly one job id and no session; malformed ids
 /// and operation ids are parse failures before anything is read, as are a
-/// `job run` without its input root or with its bounds exceeded; `job
-/// batch` stays reserved for P11 PR 4.
+/// `job run` and `job batch` without their input root or with their bounds
+/// exceeded; a batch outside an existing workspace creates nothing.
 #[test]
 fn job_grammar_is_validated_before_any_io() -> TestResult {
     let root = OwnedRoot::new()?;
@@ -480,6 +480,42 @@ fn job_grammar_is_validated_before_any_io() -> TestResult {
             SESSION,
             "--operation-id",
             "op_SHOUTED0123456789AB",
+            "--json",
+        ],
+        // `job batch` (P11 PR 4) needs the operator's input root, and
+        // bounds its concurrency, drain and admission wait.
+        vec!["job", "batch", "--requests", "requests.jsonl", "--json"],
+        vec![
+            "job",
+            "batch",
+            "--requests",
+            "requests.jsonl",
+            "--input-root",
+            "inputs",
+            "--concurrency",
+            "0",
+            "--json",
+        ],
+        vec![
+            "job",
+            "batch",
+            "--requests",
+            "requests.jsonl",
+            "--input-root",
+            "inputs",
+            "--concurrency",
+            "17",
+            "--json",
+        ],
+        vec![
+            "job",
+            "batch",
+            "--requests",
+            "requests.jsonl",
+            "--input-root",
+            "inputs",
+            "--drain-timeout-ms",
+            "300001",
             "--json",
         ],
         // `job run` (P11 PR 3) needs the operator's input root, and bounds
@@ -515,11 +551,29 @@ fn job_grammar_is_validated_before_any_io() -> TestResult {
     }
     // Nothing was created by a rejected command.
     assert!(!root.sessions().exists());
+    Ok(())
+}
+
+/// `job batch` (P11 PR 4) runs only in an existing worker workspace: a
+/// missing root is refused before the request file is opened, and nothing
+/// is created.
+#[test]
+fn a_batch_outside_a_workspace_creates_nothing() -> TestResult {
+    let root = OwnedRoot::new()?;
     let output = vsift(
         &root,
-        &["job", "batch", "--requests", "requests.jsonl", "--json"],
+        &[
+            "job",
+            "batch",
+            "--requests",
+            "requests.jsonl",
+            "--input-root",
+            "inputs",
+            "--json",
+        ],
     )?;
-    assert_failure(&output, "job.batch", "COMMAND_NOT_IMPLEMENTED", 2)?;
+    assert_failure(&output, "job.batch", "STORAGE_IO", 7)?;
+    assert!(!root.sessions().exists());
     Ok(())
 }
 

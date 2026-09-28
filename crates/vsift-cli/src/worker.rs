@@ -43,14 +43,15 @@ use vsift::{
     OperationStatus, ProgressObserver, WorkOutcome, WorkRequestRun, WorkerFailure,
 };
 use vsift_contract::{
-    BUNDLE_MISMATCH_REMEDIATION, BUNDLE_ROOT_REQUIRED_REMEDIATION, BatchItemStatus, CommandName,
-    INPUT_NOT_FOUND_REMEDIATION, INPUT_NOT_REGULAR_FILE_REMEDIATION, INPUT_ROOT_REMEDIATION,
-    INPUT_UNREADABLE_REMEDIATION, LifecycleEventResponse, LifecycleReason, OperationResponse,
-    PARTIAL_REQUEST_WARNING, ProgressEventResponse, ProgressReport, REQUEST_BUSY_REMEDIATION,
-    REQUEST_CONFLICT_REMEDIATION, REQUEST_DEADLINE_REMEDIATION, REQUEST_FILE_REMEDIATION,
-    REQUEST_SESSION_REMEDIATION, REQUEST_STOPPED_REMEDIATION, REQUEST_UNRECORDED_REMEDIATION,
-    Readiness, RequestEnd, RequestRef, ResultEventResponse, WORK_REQUEST_LIMITS,
-    WORKER_WORKSPACE_REQUIRED_REMEDIATION, WorkRequest, WorkResult, decode_work_request,
+    BATCH_CONCURRENCY_REMEDIATION, BUNDLE_MISMATCH_REMEDIATION, BUNDLE_ROOT_REQUIRED_REMEDIATION,
+    BatchItemStatus, CommandName, INPUT_NOT_FOUND_REMEDIATION, INPUT_NOT_REGULAR_FILE_REMEDIATION,
+    INPUT_ROOT_REMEDIATION, INPUT_UNREADABLE_REMEDIATION, LifecycleEventResponse, LifecycleReason,
+    OperationResponse, PARTIAL_REQUEST_WARNING, ProgressEventResponse, ProgressReport,
+    REQUEST_BUSY_REMEDIATION, REQUEST_CONFLICT_REMEDIATION, REQUEST_DEADLINE_REMEDIATION,
+    REQUEST_FILE_REMEDIATION, REQUEST_SESSION_REMEDIATION, REQUEST_STOPPED_REMEDIATION,
+    REQUEST_UNRECORDED_REMEDIATION, Readiness, RequestEnd, RequestRef, ResultEventResponse,
+    WORK_REQUEST_LIMITS, WORKER_WORKSPACE_REQUIRED_REMEDIATION, WorkRequest, WorkResult,
+    decode_work_request,
 };
 
 type Response = OperationResponse<serde_json::Value>;
@@ -256,6 +257,7 @@ pub(crate) const fn worker_failure_remediation(failure: WorkerFailure) -> &'stat
         WorkerFailure::Conflict => REQUEST_CONFLICT_REMEDIATION,
         WorkerFailure::DeadlineExceeded => REQUEST_DEADLINE_REMEDIATION,
         WorkerFailure::Stopped => REQUEST_STOPPED_REMEDIATION,
+        WorkerFailure::ConcurrencyExceedsCapacity => BATCH_CONCURRENCY_REMEDIATION,
     }
 }
 
@@ -438,7 +440,7 @@ fn gated_observer(
 }
 
 /// The batch item status a request's result gives its `request_finished`.
-fn item_status(result: &WorkResult) -> BatchItemStatus {
+pub(crate) fn item_status(result: &WorkResult) -> BatchItemStatus {
     if result.rejection().is_some() {
         return BatchItemStatus::Rejected;
     }
@@ -453,7 +455,7 @@ fn item_status(result: &WorkResult) -> BatchItemStatus {
 /// One event of the stream.
 #[derive(serde::Serialize)]
 #[serde(untagged)]
-enum Event {
+pub(crate) enum Event {
     Lifecycle(LifecycleEventResponse),
     Progress(ProgressEventResponse),
     Result(ResultEventResponse),
@@ -461,7 +463,7 @@ enum Event {
 
 /// Writes one event unless an earlier write failed; a failed write ends
 /// the stream with exit 7 once the request has ended.
-fn write<StandardOutput, StandardError>(
+pub(crate) fn write<StandardOutput, StandardError>(
     stream: &mut JsonLinesWriter<'_, StandardOutput, StandardError>,
     failure: &mut Option<OutputError>,
     build: impl FnOnce(u64) -> Event,

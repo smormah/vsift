@@ -475,6 +475,66 @@ still answers `COMMAND_NOT_IMPLEMENTED` (PR 4).
   images grew to 3 GiB for the workspace's free-space reserve. Results are in
   [p10-durable-publication.md](../planning/p10-durable-publication.md) (P11 rerun).
 
+## Implementation notes: PR 4, first part (2026-09-28)
+
+PR 4 implements section 5 (`job batch`) with its tests. SEC-T01, the `p11_*` E2E
+checkpoint, the operator runbook and the qualification record (section 10) are not
+in this part (known limit L-038).
+
+- **Command.** `vsift --session-root <workspace> job batch --requests <file>
+  --input-root <dir> [--bundle-root <dir>] [--concurrency 1..16] [--admission-wait-ms
+  0..60000] [--drain-timeout-ms 0..300000] --json|--events jsonl` (defaults:
+  concurrency 1, admission wait 60000, drain 0). `--concurrency` above the workspace's
+  capacity is `INVALID_ARGUMENT` before any work (`WorkerFailure::
+  ConcurrencyExceedsCapacity`, `Engine::batch_readiness`).
+- **Engine, not host.** The batch runs in the engine (`Engine::run_work_batch`,
+  `batch.rs`), so every later host gets the same reader, isolation and summary; the CLI
+  only presents. The engine reports `BatchEvent::Admitted` and `Finished` through a
+  bounded Tokio channel the host supplies, sent with `send().await`, and builds each
+  request's progress observer through a host factory (`BatchProgress`), where the CLI
+  installs one `ProgressGate` per request.
+- **Runtime check.** The future of `Engine::run_work_request` is `Send`, so each
+  request runs as its own Tokio task (`JoinSet`) over `Arc<Engine>`; no thread per
+  request is needed. The engine crate now depends on `tokio` directly (already a
+  dependency of every layer below it).
+- **Reader (infrastructure `batch_file.rs`).** The file is opened once and must be a
+  regular file; its lines are counted through the same handle with a fixed buffer, the
+  handle is rewound, and lines are then read one at a time, each held to 64 KiB plus
+  one byte. **Refinement of section 5:** a file of more than 1,000 lines is refused
+  whole before any work (`line_limit`, `not_started_from_line` 1, `RESOURCE_LIMIT`),
+  rather than running its first 1,000 lines; a file that grows past the limit after
+  the count still stops at line 1,001. A line over 64 KiB is refused alone
+  (`request_too_large`), as section 5's isolation says; the whole batch is not failed
+  for it (a deviation from the PR 4 brief, which suggested failing the batch). A file
+  that cannot be opened or read is `input_error` (`STORAGE_IO`, exit 7).
+- **Backpressure (X-08).** The next line is read only when fewer than `--concurrency`
+  requests run; a shutdown while every slot is busy stops the reading at once. A host
+  that stops reading events holds the batch back: the event channel fills and the
+  batch stops reading. The CLI writes on the command's own task, so a paused stdout
+  reader pauses the batch; progress is dropped and counted, never queued without bound.
+- **Isolation.** Each line is decoded by `decode_batch_line`; a refused line (not
+  decodable, over 64 KiB, or reusing an operation id an earlier line of the batch
+  used: `duplicate_operation_id`) has no result: only its `request_finished`
+  (`rejected`, its code and rejection) and its summary item. Every admitted request
+  gets its own child cancellation, deadline, record and result. Blank lines are skipped
+  but counted. Items are in the order lines ended.
+- **Shutdown (D4).** The batch's `stop` stops the reading and each running request
+  before its next step; `--drain-timeout-ms` later its cancellation stops their running
+  steps. The stream says `draining` (`shutdown`), and `draining` (`drain_timeout`) when
+  requests still run at the end of the drain. The summary is `shutdown` when the signal
+  stopped the reading or a running request, with the first line not started; D5 makes
+  that exit 6 (`CANCELLED`, fixed remediation). A stream that cannot be written stops
+  the reading too (exit 7).
+- **Outcome.** `complete` when every item completed, `partial` (with a batch warning)
+  when some completed with a gap, else D5's failure with fixed remediation: the file's
+  for `input_error`, the line limit's for `line_limit`, otherwise "at least one line
+  failed". A request cancelled by `job cancel` that is the most severe line exits with
+  its class's status, 6, like a shutdown; the termination reason tells them apart
+  (L-067, for the maintainer to confirm).
+- **Contention.** The requests of one batch share the workspace's admission and
+  root-level locks, so with `--admission-wait-ms 0` one may answer `BUSY` because a
+  sibling holds a unit for a moment (L-067); the default wait retries with jitter.
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

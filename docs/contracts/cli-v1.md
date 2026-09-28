@@ -63,7 +63,7 @@ told about a Ctrl-C (only Ctrl-Break); see L-053.
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job status/resume/cancel` | Report, continue or cancel one recoverable job by its id | Implemented in P10 PR 3 |
 | `job run` | One versioned worker request in a worker workspace, recorded under its operation id: replay, conflict, busy and continuation; two-stage shutdown | Implemented in P11 PR 3 |
-| `job batch` | A finite JSONL stream of worker requests; the batch summary and event contracts are published (P11 PR 1) | P11 PR 4 |
+| `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
 
 ### P05 disposable sessions and bundles
 
@@ -676,6 +676,66 @@ step waits, `draining` (`reason` `shutdown`) when a shutdown begins, the `result
 is the `--json` response. A failure before the request is read or the workspace is
 opened is the one terminal event.
 
+### P11 `job batch`
+
+```console
+vsift --session-root /srv/vsift/workspace job batch --requests requests.jsonl   --input-root /srv/vsift/inputs --bundle-root /srv/vsift/bundles   --concurrency 4 --drain-timeout-ms 30000 --events jsonl
+```
+
+`job batch` (P11 PR 4, [ADR 0021](../decisions/0021-worker-and-batch-host.md) section 5)
+runs the job requests of one file in the worker workspace `--session-root` names, each
+exactly as `job run` runs one (steps, records, replay, conflict, busy, continuation,
+retries and deadline). Flags:
+
+- `--requests <file>` (required): a regular file of at most 1,000 lines, each one
+  job-request v1 object of at most 64 KiB, or blank.
+- `--input-root`, `--bundle-root`, `--admission-wait-ms 0..60000` (default 60000) and
+  `--drain-timeout-ms 0..300000` (default 0): as for `job run`, for every request.
+- `--concurrency 1..16` (default 1): requests run at once; above the workspace's
+  admission capacity it is `INVALID_ARGUMENT` before any work.
+
+**Reading.** The file is opened once and its lines counted through the same handle
+before anything starts: more than 1,000 lines refuse the whole batch (`RESOURCE_LIMIT`,
+exit 5, `termination_reason` `line_limit`, `not_started_from_line` 1, nothing run;
+L-066), and a file that cannot be opened or read to its end, or is not a regular file,
+is `STORAGE_IO` (exit 7, `input_error`). Then one line is read at a time, and the next
+only when fewer than `--concurrency` requests run: the queue is never held in memory. A
+reader that stops reading the stream holds the batch back.
+
+**Isolation.** Each line is its own request with its own cancellation, deadline, record
+and result. A blank line is skipped but counted. A line that is not a valid request, is
+longer than 64 KiB (`request_too_large`) or reuses the operation id of an earlier line
+of the same batch (`duplicate_operation_id`) is refused alone: it has a
+`request_finished` (`rejected`, its code and rejection) and a summary item, but no
+`result` event. A request the engine refuses against the workspace
+(`workspace_not_durable`, `path_outside_input_root`) has its result, with the
+rejection. With `--admission-wait-ms 0` a request may answer `BUSY` because another
+request of the same batch holds an admission unit for a moment (L-067).
+
+**Events.** With `--events jsonl`: `lifecycle` `started` (readiness, with the batch's
+concurrency); for each line `request_admitted`, its `progress` and `admission_waiting`
+events, its `result` event (with `line`) and `request_finished`, in the order lines
+end; `draining` (`shutdown`) when a shutdown begins and `draining` (`drain_timeout`)
+if requests still run when the drain time ends; `stopped` with the termination reason;
+then the terminal event, whose result is the `--json` response. Progress of a request
+always precedes its result. A failure before the workspace is opened, or a concurrency
+above the capacity, is the one terminal event. `--json` prints the summary alone.
+
+**Result and exit (D5).** The `data` of every outcome is the batch summary (below).
+Every request complete: `complete`, exit 0; some partial: `partial` with the warning
+"At least one request completed with a stated gap; see the coverage of its partial
+steps.", exit 0. A shutdown that stopped the reading or a running request: `CANCELLED`,
+exit 6, with `termination_reason` `shutdown` and the first line not started. Otherwise
+the most severe failure among the lines and the file, in the order 7 > 1 > 5 > 3 > 2 >
+(a request cancelled by `job cancel`, exit 6) > 4, with fixed remediation. A supervisor
+tells a shutdown from a cancelled line by `termination_reason` (L-067).
+
+**Shutdown (O-04, D4).** The first `SIGINT`/`SIGTERM` (console Ctrl-C/Ctrl-Break on
+Windows) stops the reading and every running request before its next step; after
+`--drain-timeout-ms` their running steps are cancelled at the next boundary. Every
+started request stays resumable: delivering the file again continues the stopped
+requests and replays the finished ones. A second signal escalates.
+
 ### P11 worker contracts and events
 
 ```console
@@ -686,7 +746,7 @@ vsift job batch --requests requests.jsonl --events jsonl                    # P1
 P11 PR 1 publishes the worker contracts
 ([ADR 0021](../decisions/0021-worker-and-batch-host.md), maintainer decisions D1-D5
 accepted 2026-09-28) before the commands that use them: `job run` implements them
-since PR 3 (above); `job batch` still answers `COMMAND_NOT_IMPLEMENTED` (exit 2). The
+since PR 3 and `job batch` since PR 4 (above). The
 schemas and frozen examples are authoritative.
 
 **Job request** ([`job-request.schema.json`](../../schemas/v1/job-request.schema.json),
@@ -1603,7 +1663,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`) and the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) |
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
-| C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`) |
+| C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 
 These tests establish the public boundary only. Provider execution, filesystem

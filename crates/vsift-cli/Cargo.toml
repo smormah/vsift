@@ -31,6 +31,9 @@ assert_cmd.workspace = true
 getrandom.workspace = true
 jsonschema.workspace = true
 predicates.workspace = true
+# Already a workspace development dependency; the O-02 property test of
+# `job batch` generates batch files with it.
+proptest.workspace = true
 # The opt-in P06 checkpoint drives tool verification, and the transcript and
 # search contract tests seed session records, through the engine's internal
 # crates directly; the CLI itself depends only on `vsift` and `vsift-contract`.

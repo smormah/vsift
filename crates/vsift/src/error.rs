@@ -266,6 +266,9 @@ pub enum WorkerFailure {
     /// A shutdown stopped the request before its next step; it is
     /// resumable.
     Stopped,
+    /// A batch asked for more concurrent requests than the workspace's
+    /// admission capacity (ADR 0021 section 5a: at most min(16, capacity)).
+    ConcurrencyExceedsCapacity,
 }
 
 impl WorkerFailure {
@@ -278,7 +281,8 @@ impl WorkerFailure {
             | Self::InputRootUnavailable
             | Self::InputNotFound
             | Self::SessionNotFound
-            | Self::BundleMismatch => FailureCode::InvalidArgument,
+            | Self::BundleMismatch
+            | Self::ConcurrencyExceedsCapacity => FailureCode::InvalidArgument,
             Self::InputNotRegularFile => FailureCode::InvalidSource,
             Self::InputUnreadable => FailureCode::StorageIo,
             Self::Busy => FailureCode::Busy,
@@ -306,6 +310,9 @@ impl fmt::Display for WorkerFailure {
             Self::Conflict => "the operation id is bound to a different request",
             Self::DeadlineExceeded => "the request's deadline passed",
             Self::Stopped => "a shutdown stopped the request before its next step",
+            Self::ConcurrencyExceedsCapacity => {
+                "the batch concurrency exceeds the workspace's admission capacity"
+            }
         })
     }
 }

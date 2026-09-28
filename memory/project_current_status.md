@@ -24,17 +24,21 @@ Today it can:
 - create a worker workspace with a fixed operator policy (`session init-workspace`);
   on Ubuntu 24.04 with local ext4 a durable workspace keeps every acknowledged result
   through an OS crash or power loss;
-- run one versioned worker request in a workspace (`job run`): ingest from an operator
-  input root, retranscribe, candidates, retain and close, each at most once per
-  operation id, however often the request is delivered or its worker killed;
+- run one versioned worker request in a workspace (`job run`), each step at most once
+  per operation id, however often the request is delivered or its worker killed;
+- run a file of up to 1,000 such requests (`job batch`), a bounded number at a time,
+  each line independently, reading the next line only when a request ends, with one
+  summary and one exit status a supervisor can act on, and a shutdown that leaves
+  every started request resumable;
 - limit the work it runs at once by what that work weighs, across processes;
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
 - keep every folder it creates private to the user.
 
-**P00-P10 are complete.** **P11 (worker and batch host) is in progress: PRs 1 and 2
-are merged (`0bcfac5`, `6e89bdb`) and PR 3 is complete on its branch (`p11/job-run`),
-not yet merged; the packet is not complete.** `job batch` still answers
-`COMMAND_NOT_IMPLEMENTED`. Every known limit is in `docs/planning/known-limits.md`.
+**P00-P10 are complete.** **P11 (worker and batch host) is in progress: PRs 1-3 are
+merged; PR 4 is done only in part, on its branch `p11/job-batch`, not yet merged.
+The packet is not complete:** SEC-T01, the `p11_*` E2E checkpoint, the operator
+runbook and the qualification record remain (L-038). Every known limit is in
+`docs/planning/known-limits.md`.
 
 ## P11 plan and decisions
 
@@ -49,49 +53,49 @@ worst failure class 7 > 1 > 5 > 3 > 2 > 4 (D5).
 - **PR 1 (merged):** worker request/result, batch and workspace contracts, events.
 - **PR 2 (merged):** workspace, weighted admission, strict attestation, contained
   inputs, free-space reserve.
-- **PR 3 (done on its branch):** `job run` (below).
-- **PR 4:** `job batch`, SEC-T01 container job, `p11_*` E2E checkpoint, operator
-  runbook, qualification record.
+- **PR 3 (merged, `d64dfa1`):** `job run`, request records, two-stage shutdown.
+- **PR 4, first part (branch):** `job batch` (below).
+- **PR 4, rest (not started or stopped):** SEC-T01 container job (stopped pending a
+  maintainer decision on its hostile fixture), `p11_*` E2E checkpoint, operator
+  runbook, qualification record, batch-reader fuzz target, final docs.
 
-## P11 PR 3: `job run` (branch)
+## P11 PR 4, first part: `job batch` (branch)
 
-- **Command.** `vsift --session-root <workspace> job run --request <file>
-  --input-root <dir> [--bundle-root <dir>] [--drain-timeout-ms 0..300000]
-  [--admission-wait-ms 0..60000] --json|--events jsonl`. Only in a worker workspace.
-  The job result is the data of every outcome; a failed or cancelled request carries
-  its error and exits with the failing step's class; every `BUSY` has a 2 s hint.
-- **Engine.** `Engine::run_work_request` (`worker.rs`) and `worker_readiness`; the
-  refusals that need no write run first (a recorded result is replayed before any
-  input is opened). Steps map onto `ingest` (contained files through
-  `ContainedSourceStore`, session id recorded before the copy, admission taken before
-  registration), `retranscribe` (application `worker_step_operation_id`),
-  `candidates` (at most 16 calls), a staged `retain` with its manifest digest, and
-  `close`. `WorkerFailure` names the host's own failures.
-- **Request records.** `worker-requests/<bucket>/<op>.json` with `<op>.lock`
-  (infrastructure `worker_requests.rs`): staged, flushed, renamed, bucket-synced in a
-  durable workspace; running records keep the finished steps' canonical documents,
-  ended ones the result and its SHA-256 (contract `recorded_bytes`/`decode_recorded`,
-  exact round trip). Domain `admit_request` (replay, conflict, busy, continue),
-  `ends_request`, `step_retry` (X-09). At most 4,096 records; only those of gone
-  sessions are pruned (L-063). An unrecorded result is `STORAGE_IO`.
-- **Shutdown.** `signal::Shutdown`: first signal stops the next step, cancels the
-  running one after the drain; second escalates; exit 6, resumable.
-- **Evidence.** Engine, store and binary tests (replay/conflict/busy/continue, kill at
-  each request fault point, X-09, O-01 sentinels, O-04 with `SIGTERM` and opt-in
-  Ctrl-Break, contained inputs, schemas), opt-in real tools and external-delivery
-  simulation, 300 of 300 stress runs, `request_record` fuzz target, crash campaign
-  rerun (`docs/planning/verification.md` "P11 PR 3 evidence").
+- **Command.** `vsift --session-root <workspace> job batch --requests <file>
+  --input-root <dir> [--bundle-root <dir>] [--concurrency 1..16]
+  [--admission-wait-ms 0..60000] [--drain-timeout-ms 0..300000] --json|--events jsonl`.
+  Concurrency above the workspace's capacity is refused before any work.
+- **Engine.** `Engine::run_work_batch` (`batch.rs`) and `Engine::batch_readiness`.
+  Each request runs as its own Tokio task over `Arc<Engine>` (its future is `Send`);
+  events go to the host through a bounded channel (`BatchEvent`), and each request's
+  progress observer comes from a host factory (`BatchProgress`). The engine now depends
+  on `tokio` directly.
+- **Reader.** Infrastructure `batch_file.rs` (`BatchLines`, `BatchFile`): a regular
+  file, counted through the same handle before any work (over 1,000 lines: refused
+  whole, `line_limit`), then read one bounded line at a time, only when a slot frees.
+  A line over 64 KiB is refused alone; so are malformed and duplicate-id lines.
+- **CLI.** `crates/vsift-cli/src/batch.rs`: `started`, per line admitted / progress /
+  result / finished in the order lines end, `draining` (`shutdown`, `drain_timeout`),
+  `stopped`, terminal summary; D5 exit with fixed remediations. A paused stdout reader
+  pauses the batch; progress is dropped and counted.
+- **Evidence.** `verification.md` "P11 PR 4 evidence, first part": engine
+  `engine_batch` (isolation, X-08 read-ahead, a host that stops reading, shutdown,
+  two batches in one workspace, kill mid-batch at each request fault point), binary
+  `job_batch_cli_contract` (events, limits, O-02 property test, O-03, X-08 paused
+  stdout, O-04 by `SIGTERM` and opt-in Ctrl-Break), opt-in `engine_batch_tools`
+  (X-11 with FFmpeg and a stand-in recognizer); 100 of 100 stress runs of
+  `engine_batch` in four lanes on Windows 11.
 
 ## What works (public CLI)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`.
 - `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`.
-- `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run`,
+- `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run|batch`,
   `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
 - `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`.
-- Still `COMMAND_NOT_IMPLEMENTED`: `job batch` and setup
-  install/repair/list/rollback/remove. Human-readable terminal output is P13's.
+- Still `COMMAND_NOT_IMPLEMENTED`: setup install/repair/list/rollback/remove.
+  Human-readable terminal output is P13's.
 
 ## Packet status
 
@@ -103,7 +107,7 @@ worst failure class 7 > 1 > 5 > 3 > 2 > 4 (D5).
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
-| P11 | In progress: PRs 1-2 merged, PR 3 complete on its branch; PR 4 to come |
+| P11 | In progress: PRs 1-3 merged; PR 4 in part on its branch; SEC-T01, E2E, runbook, qualification remain |
 | P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
@@ -112,18 +116,16 @@ worst failure class 7 > 1 > 5 > 3 > 2 > 4 (D5).
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <-
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
 <- `vsift-cli` (parse, present, signals). `vsift-contract` sits beside the engine and
-owns the wire types. New in PR 3: domain `worker.rs`; application
-`worker_step_operation_id`; contract `work/recorded.rs`, worker remediations and
-`LifecycleResponse::of_session`; infrastructure `worker_requests.rs`,
-`contained_source_store.rs`, `request_timing.rs`; engine `worker.rs`; CLI `worker.rs`
-and `signal::Shutdown`. Storage: `filesystem_session_store/` (jobs in `jobs.rs`,
-requests in `worker_requests.rs`).
+owns the wire types. New in PR 4: engine `batch.rs`, infrastructure `batch_file.rs`,
+CLI `batch.rs`; contract batch remediations and `JobBatchData` accessors. Storage:
+`filesystem_session_store/` (jobs in `jobs.rs`, requests in `worker_requests.rs`).
 
 ## Quality evidence
 
-- P11 PR 3 branch: fmt, strict Clippy (with and without features, on Windows and for
-  `x86_64-unknown-linux-gnu`), workspace tests, warning-denied rustdoc, governance,
-  fuzz fmt/Clippy/replay on Windows 11; results go in the PR description.
+- P11 PR 4 branch (first part): fmt, strict Clippy (with and without features, on
+  Windows and for `x86_64-unknown-linux-gnu`), 994 workspace tests, warning-denied
+  rustdoc, governance, fuzz fmt/Clippy/replay on Windows 11; results go in the PR
+  description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

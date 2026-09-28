@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod batch;
 mod candidates;
 mod command;
 mod config;
@@ -91,7 +92,7 @@ const fn is_long_running(command: &Command) -> bool {
         Command::Job(arguments) => {
             matches!(
                 arguments.command,
-                JobCommand::Resume(_) | JobCommand::Run(_)
+                JobCommand::Resume(_) | JobCommand::Run(_) | JobCommand::Batch(_)
             )
         }
         Command::Setup(_) | Command::Session(_) | Command::Search(_) | Command::Bundle(_) => false,
@@ -226,11 +227,16 @@ where
     // starts, so an early interruption is not missed. A handler the system
     // refuses leaves the default behaviour, which commits nothing partial.
     let cancellation = Cancellation::new();
-    // `job run` is a worker host: its shutdown stops admission first and
-    // drains for the operator's time (ADR 0021 D4).
+    // `job run` and `job batch` are worker hosts: their shutdown stops
+    // admission first and drains for the operator's time (ADR 0021 D4).
     let shutdown = match &command {
         Command::Job(JobArguments {
             command: JobCommand::Run(arguments),
+        }) => Some(signal::Shutdown::new(Duration::from_millis(
+            arguments.drain_timeout_ms,
+        ))),
+        Command::Job(JobArguments {
+            command: JobCommand::Batch(arguments),
         }) => Some(signal::Shutdown::new(Duration::from_millis(
             arguments.drain_timeout_ms,
         ))),
@@ -511,9 +517,11 @@ where
                     });
                     return worker::execute(&engine, arguments, &shutdown, mode, &mut writer).await;
                 }
-                // The batch host is P11 PR 4.
-                JobCommand::Batch(_) => {
-                    return not_implemented(&mut writer, mode, operation);
+                JobCommand::Batch(arguments) => {
+                    let shutdown = shutdown.unwrap_or_else(|| {
+                        signal::Shutdown::new(Duration::from_millis(arguments.drain_timeout_ms))
+                    });
+                    return batch::execute(engine, arguments, &shutdown, mode, &mut writer).await;
                 }
             };
             write_session_result(&mut writer, mode, operation, result)
