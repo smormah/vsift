@@ -7,20 +7,16 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 **P00-P11 are complete. P12 (agent skill) is in progress.** Merged increments: PR 1
-(#196), PR 2 (#201, `9d2f60e`) and PR 3a (#203, `67d56c3`, first dry-trial fixes).
-PR 3c (branch `p12-pr3c-dryrun2-fixes`) fixes the second Claude Code dry trial; PR 3b
-(a Linux container for Codex, L-076) is separate work. The maintainer approved the
-named-client trials (~80 counted runs: Claude Code `claude-opus-5-5`/
-`claude-haiku-4-5-20251001`, Codex `gpt-6-astra`/`gpt-6-luna`); none has run.
+(#196), PR 2 (#201), PR 3a (#203) and PR 3c (#207, `9791f70`); PR 3d fixes the grader's
+reading of skill-folder listings. The maintainer approved ~80 counted runs (Claude Code
+`claude-opus-5-5`/`claude-haiku-4-5-20251001`; Codex `gpt-6-astra`/`gpt-6-luna`).
 
-1. **Maintainer: decide how Codex trials run (L-076).** On Windows Codex's unelevated
-   sandbox cannot run VSift (`STORAGE_IO`/`INTEGRITY_FAILURE`) and does not enforce
-   the network. Options: WSL/Ubuntu (PR 3b's container); `danger-full-access` graded
-   only; the elevated sandbox (admin setup, untested).
-2. **Maintainer: re-run the Claude Code dry trial on PR 3c** (runbook
-   `docs/agents/trials.md`): no `date` or other non-`vsift` call, a valid operation id
-   first time, `wall_time_s` `null`, `citation_times_in_truth_windows` passing. Then
-   the counted trials, graded and recorded under `docs/planning/p12-agent-trials/`.
+1. **Claude Code counted trials (39 runs):** the third dry trial passed cleanly on
+   `9791f70`; the first counted run then listed the skill's `examples/` with `Glob`
+   and the campaign was stopped. It restarts from zero after PR 3d, from a frozen
+   checkout, with records under `docs/planning/p12-agent-trials/`.
+2. **Codex trials run in a Linux container (maintainer decision 2026-09-28, L-076,
+   #204):** PR 3b builds it (Rust, crates and Ubuntu packages approved 2026-09-29).
 3. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes) and the corpus
    truth amendment (persistent events F04-E05, F05-E04, F12-E03; corpus README).
 4. **Technical debt:** SEC-T01 adversarial containment evidence (#188, L-068), for

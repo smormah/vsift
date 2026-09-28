@@ -51,6 +51,20 @@ pub enum CallKind {
         /// The path as the model gave it.
         path: String,
     },
+    /// A listing or search of a directory through the client's own tool
+    /// (Claude `Glob`, `Grep`, `LS`). Allowed only inside the skill folders,
+    /// where it reads nothing the skill does not already hand the agent; the
+    /// first counted trial (2026-09-29) listed the skill's `examples/` this way.
+    ListFiles {
+        /// The tool name.
+        tool: String,
+        /// The directory the tool searched, as the model gave it; empty when
+        /// the model gave none (the tool then searches the workspace).
+        path: String,
+        /// The file-name patterns the tool applied (Glob `pattern`, Grep
+        /// `glob`), which could otherwise climb out of `path`.
+        patterns: Vec<String>,
+    },
     /// An image opened through a dedicated image tool.
     ViewImage {
         /// The path as the model gave it.
@@ -243,16 +257,13 @@ pub fn parse_claude(log: &str) -> Trace {
 /// Tools that act on nothing outside the client's own state.
 const CLAUDE_INTERNAL: [&str; 2] = ["TodoWrite", "TaskList"];
 /// Tools this harness knows and never allows.
-const CLAUDE_OTHER: [&str; 14] = [
+const CLAUDE_OTHER: [&str; 11] = [
     "Write",
     "Edit",
     "MultiEdit",
     "NotebookEdit",
     "WebFetch",
     "WebSearch",
-    "Glob",
-    "Grep",
-    "LS",
     "Task",
     "Agent",
     "BashOutput",
@@ -268,6 +279,15 @@ fn claude_kind(name: &str, input: &Value) -> CallKind {
         },
         "Read" => CallKind::ReadFile {
             path: string("file_path"),
+        },
+        "Glob" | "Grep" | "LS" => CallKind::ListFiles {
+            tool: name.to_owned(),
+            path: string("path"),
+            patterns: [if name == "Glob" { "pattern" } else { "glob" }]
+                .iter()
+                .map(|key| string(key))
+                .filter(|pattern| !pattern.is_empty())
+                .collect(),
         },
         "Skill" => CallKind::Skill {
             name: input["skill"]

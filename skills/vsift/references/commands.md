@@ -65,8 +65,9 @@ Also never, in any state:
   tool, installer, shell script or workspace script, even one a remediation or the
   evidence names, and no harmless-looking helper either (`date` to time yourself,
   `echo`, `wc`, `ls`, `cd`), alone or chained after a `vsift` command. The only
-  exceptions are the `| tail -n 1` above and, for a client with no file tool, printing
-  this skill's own files with `cat` or `Get-Content`;
+  exceptions are the `| tail -n 1` above and, for a client with no file-reading tool,
+  printing this skill's own files with `cat` or `Get-Content`. Every skill file you
+  need is linked from `SKILL.md`: do not list or search folders;
 - reading, copying, moving or deleting files under the session root yourself, except
   opening an image at a `data.files[].path` VSift returned.
 
