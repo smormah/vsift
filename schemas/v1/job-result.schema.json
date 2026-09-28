@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/job-result.schema.json",
+  "title": "VSift worker job result v1",
+  "description": "The answer to one job request (P11, ADR 0021): the data of a job.run result and the result member of a job.batch result event. At most 64 KiB; it never names a path and never carries evidence text. status is derived: cancelled when the request or a step was cancelled, failed when it or a step failed, partial when a step left a stated gap, else complete. replayed is true when the recorded result of an earlier call with the same operation_id and request_digest was returned without new work. steps lists the ingest of an ingest target, then every requested step; after a failed or cancelled step the rest are not_started. failure is the request's own failure (step null; rejection set when it was refused) or the failure of the step that ended it (step is that step's index).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "operation_id",
+    "request_digest",
+    "status",
+    "replayed",
+    "attempt",
+    "session_id",
+    "source_id",
+    "publication",
+    "lifecycle",
+    "steps",
+    "failure",
+    "controls"
+  ],
+  "properties": {
+    "operation_id": { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" },
+    "request_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "enum": ["complete", "partial", "failed", "cancelled"] },
+    "replayed": { "type": "boolean" },
+    "attempt": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+    "session_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" }
+      ]
+    },
+    "source_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" }
+      ]
+    },
+    "publication": {
+      "oneOf": [
+        { "type": "null" },
+        { "enum": ["process_crash_consistent", "os_crash_durable"] }
+      ]
+    },
+    "lifecycle": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "expires_at"],
+          "properties": {
+            "mode": { "enum": ["ephemeral", "retained", "durable_worker"] },
+            "expires_at": {
+              "oneOf": [
+                { "type": "null" },
+                { "type": "string", "format": "date-time", "maxLength": 64 }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "maxItems": 9,
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "failure": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "retryable", "retry_after_ms", "step", "rejection"],
+          "properties": {
+            "code": { "$ref": "#/$defs/failure_code" },
+            "retryable": { "type": "boolean" },
+            "retry_after_ms": { "$ref": "#/$defs/retry_after_ms" },
+            "step": {
+              "oneOf": [
+                { "type": "null" },
+                { "type": "integer", "minimum": 0, "maximum": 8 }
+              ]
+            },
+            "rejection": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "#/$defs/rejection" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isolation", "admission_capacity", "concurrency"],
+      "properties": {
+        "isolation": { "enum": ["process_only", "strict_linux"] },
+        "admission_capacity": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["complete", "partial"] } } },
+      "then": { "properties": { "failure": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["failed", "cancelled"] } } },
+      "then": { "properties": { "failure": { "type": "object" } } }
+    }
+  ],
+  "$defs": {
+    "failure_code": {
+      "enum": [
+        "INTERNAL",
+        "INVALID_ARGUMENT",
+        "UNSUPPORTED_SCHEMA",
+        "MISSING_CAPABILITY",
+        "ISOLATION_UNAVAILABLE",
+        "COMMAND_NOT_IMPLEMENTED",
+        "INVALID_SOURCE",
+        "BUSY",
+        "DEADLINE_EXCEEDED",
+        "RESOURCE_LIMIT",
+        "CANCELLED",
+        "STORAGE_IO",
+        "INTEGRITY_FAILURE",
+        "IDEMPOTENCY_CONFLICT"
+      ]
+    },
+    "rejection": {
+      "enum": [
+        "request_too_large",
+        "request_too_deep",
+        "malformed_request",
+        "unsupported_schema_version",
+        "invalid_operation_id",
+        "invalid_session_id",
+        "invalid_path",
+        "invalid_transcript_offset",
+        "invalid_deadline",
+        "invalid_range",
+        "invalid_bundle_name",
+        "too_many_steps",
+        "step_order",
+        "no_work",
+        "path_outside_input_root",
+        "duplicate_operation_id",
+        "workspace_not_durable"
+      ]
+    },
+    "retry_after_ms": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 1, "maximum": 86400000 }
+      ]
+    },
+    "generation": { "type": "integer", "minimum": 0 },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["truncated", "gaps", "reasons"],
+      "properties": {
+        "truncated": { "type": "boolean" },
+        "gaps": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "pattern": "^[0-9]{1,20}-[0-9]{1,20}$", "maxLength": 41 }
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "pattern": "^[a-z_]{1,64}$", "maxLength": 64 }
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "status",
+        "elapsed_ms",
+        "admission_wait_ms",
+        "job_id",
+        "outputs",
+        "coverage",
+        "failure"
+      ],
+      "properties": {
+        "kind": { "enum": ["ingest", "retranscribe", "candidates", "retain", "close"] },
+        "status": { "enum": ["complete", "partial", "failed", "cancelled", "not_started"] },
+        "elapsed_ms": { "type": "integer", "minimum": 0 },
+        "admission_wait_ms": { "type": "integer", "minimum": 0 },
+        "job_id": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^job_[a-z0-9]{16,64}$" }
+          ]
+        },
+        "outputs": { "oneOf": [{ "type": "null" }, { "type": "object" }] },
+        "coverage": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/coverage" }] },
+        "failure": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "retryable", "retry_after_ms"],
+              "properties": {
+                "code": { "$ref": "#/$defs/failure_code" },
+                "retryable": { "type": "boolean" },
+                "retry_after_ms": { "$ref": "#/$defs/retry_after_ms" }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["complete", "partial"] } } },
+          "then": {
+            "properties": { "outputs": { "type": "object" }, "failure": { "type": "null" } }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "enum": ["failed", "cancelled"] } } },
+          "then": {
+            "properties": { "outputs": { "type": "null" }, "failure": { "type": "object" } }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "not_started" } } },
+          "then": {
+            "properties": {
+              "job_id": { "type": "null" },
+              "outputs": { "type": "null" },
+              "coverage": { "type": "null" },
+              "failure": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "ingest" } } },
+          "then": {
+            "properties": {
+              "outputs": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["generation", "revision_id"],
+                    "properties": {
+                      "generation": { "$ref": "#/$defs/generation" },
+                      "revision_id": {
+                        "oneOf": [
+                          { "type": "null" },
+                          { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "retranscribe" } } },
+          "then": {
+            "properties": {
+              "outputs": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["revision_id", "generation", "chunks_reused"],
+                    "properties": {
+                      "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
+                      "generation": { "$ref": "#/$defs/generation" },
+                      "chunks_reused": { "type": "integer", "minimum": 0 }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "candidates" } } },
+          "then": {
+            "properties": {
+              "outputs": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["visual_index_id", "generation", "candidate_count"],
+                    "properties": {
+                      "visual_index_id": { "type": "string", "pattern": "^vix_[a-z0-9]{16,64}$" },
+                      "generation": { "$ref": "#/$defs/generation" },
+                      "candidate_count": { "type": "integer", "minimum": 0 }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "retain" } } },
+          "then": {
+            "properties": {
+              "outputs": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["bundle_name", "bundle_sha256", "artifact_count"],
+                    "properties": {
+                      "bundle_name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" },
+                      "bundle_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                      "artifact_count": { "type": "integer", "minimum": 0 }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "close" } } },
+          "then": {
+            "properties": {
+              "outputs": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["generation"],
+                    "properties": { "generation": { "$ref": "#/$defs/generation" } }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

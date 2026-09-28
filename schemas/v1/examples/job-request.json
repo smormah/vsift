@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "operation_id": "op_5b1e0c7a9d2f4e6b8a3c1d0e9f7a6b5c",
+  "durability": "durable",
+  "deadline_ms": 1800000,
+  "target": {
+    "ingest": {
+      "source": "incoming/F01-speech.mp4",
+      "transcript": null
+    }
+  },
+  "steps": [
+    { "retranscribe": { "range": null } },
+    { "candidates": { "range": null } },
+    { "retain": { "bundle_name": "f01-review", "include_source": false } }
+  ]
+}

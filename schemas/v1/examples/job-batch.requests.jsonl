@@ -1,0 +1,2 @@
+{"schema_version":"1","operation_id":"op_7c2d4e6f8a0b1c3d5e7f9a1b3c5d7e9f","durability":"ephemeral","target":{"ingest":{"source":"incoming/F10.mp4","transcript":{"path":"incoming/F10.srt","offset_us":500000}}},"steps":[{"candidates":{"range":null}},{"close":{}}]}
+{"schema_version":"1","operation_id":"op_9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b","durability":"ephemeral","deadline_ms":600000,"target":{"session_id":"ses_0123456789abcdef0123456789abcdef"},"steps":[{"retranscribe":{"range":{"from_us":5500000,"to_us":6000000}}},{"close":{}}]}

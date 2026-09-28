@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/job-batch-data.schema.json",
+  "title": "VSift job.batch data v1",
+  "description": "The data member of the terminal job.batch result (P11, ADR 0021): per-status counts, one item per line processed (at most 1,000; blank lines have none), the first line not started (after a shutdown, a line limit or an input error; null when every line was read) and why the batch stopped. Every request's full result was streamed before it as a result event (result-event.schema.json). The batch's exit status follows maintainer decision D5: 0 when every item is complete or partial, 6 when a shutdown stopped the batch, else the most severe failure class in the order 7 > 1 > 5 > 3 > 2 > 4.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["counts", "items", "not_started_from_line", "termination_reason"],
+  "properties": {
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "partial", "failed", "cancelled", "rejected"],
+      "properties": {
+        "complete": { "$ref": "#/$defs/count" },
+        "partial": { "$ref": "#/$defs/count" },
+        "failed": { "$ref": "#/$defs/count" },
+        "cancelled": { "$ref": "#/$defs/count" },
+        "rejected": { "$ref": "#/$defs/count" }
+      }
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["line", "operation_id", "status", "code", "rejection"],
+        "properties": {
+          "line": { "type": "integer", "minimum": 1, "maximum": 1000 },
+          "operation_id": {
+            "oneOf": [
+              { "type": "null" },
+              { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" }
+            ]
+          },
+          "status": { "enum": ["complete", "partial", "failed", "cancelled", "rejected"] },
+          "code": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "job-result.schema.json#/$defs/failure_code" }
+            ]
+          },
+          "rejection": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "job-result.schema.json#/$defs/rejection" }
+            ]
+          }
+        }
+      }
+    },
+    "not_started_from_line": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 1, "maximum": 1001 }
+      ]
+    },
+    "termination_reason": { "enum": ["end_of_input", "shutdown", "line_limit", "input_error"] }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0, "maximum": 1000 }
+  }
+}

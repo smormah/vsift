@@ -130,6 +130,16 @@ impl LifecycleResponse {
         }
     }
 
+    /// A session of an explicitly initialised worker workspace (P11): it
+    /// lives as long as the workspace policy says, with an RFC 3339 expiry.
+    #[must_use]
+    pub const fn durable_worker(expires_at: String) -> Self {
+        Self {
+            mode: "durable_worker",
+            expires_at: Some(expires_at),
+        }
+    }
+
     /// Explicitly retained bundle outside automatic session cleanup.
     #[must_use]
     pub const fn retained() -> Self {

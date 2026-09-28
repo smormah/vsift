@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/workspace-data.schema.json",
+  "title": "VSift session.init-workspace data v1",
+  "description": "The data member of a complete session.init-workspace result (P11, ADR 0021, maintainer decisions D1 and D2): the policy of an explicitly initialised worker workspace, immutable once created. durability durable is accepted only where OS-crash durability is qualified (publication os_crash_durable); a session of the workspace lives session_retention_seconds (default 604800, one hour to 2592000) and may be renewed within it. outcome is created, or already_initialized when the workspace existed with exactly this policy. It never names the workspace's path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "durability",
+    "publication",
+    "admission_capacity",
+    "session_retention_seconds",
+    "outcome"
+  ],
+  "properties": {
+    "profile": { "const": "durable_workspace" },
+    "durability": { "enum": ["durable", "ephemeral"] },
+    "publication": { "enum": ["process_crash_consistent", "os_crash_durable"] },
+    "admission_capacity": { "type": "integer", "minimum": 1, "maximum": 64 },
+    "session_retention_seconds": { "type": "integer", "minimum": 3600, "maximum": 2592000 },
+    "outcome": { "enum": ["created", "already_initialized"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "durability": { "const": "durable" } } },
+      "then": { "properties": { "publication": { "const": "os_crash_durable" } } },
+      "else": { "properties": { "publication": { "const": "process_crash_consistent" } } }
+    }
+  ]
+}
