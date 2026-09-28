@@ -70,7 +70,7 @@ progress.** PR 1 and PR 2 are increments, not the packet.
     guard), README status, ADR 0016 note, threat-model P12 note, known limits
     L-007/L-009/L-039 rewritten and L-071 added (L-070 added then fixed), CHANGELOG, ledger P12
     `in_progress` with the skill files as source documents.
-- **PR 2 (branch `p12-pr2-harness`, this change): trial machinery, no model run.**
+- **PR 2 (#201, `9d2f60e`, merged): trial machinery, no model run.**
   `tools/vsift-agent-trials` (unpublished): `prepare` (neutral root enforced, skill in
   both clients' project folders, isolated per-user base, clips, expired session through
   the engine's past clock, interrupted job, installer and canaries), `run` (explicit
@@ -119,8 +119,8 @@ progress.** PR 1 and PR 2 are increments, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PR 1 merged (skill and guard); PR 2 (trial harness) in review; named-client trials next |
-| P13 | Not started; also delivers managed installation and human-readable output |
+| P12 | In progress: PR 1 (skill and guard) and PR 2 (trial harness, `9d2f60e`) merged; named-client trials next |
+| P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
 ## Architecture snapshot

@@ -41,8 +41,9 @@ merged the skill, guard and ADR 0022 (Proposed); PR 2 (#201) adds the trial harn
 
 - **P11 D1-D5** (ADR 0021): explicit workspaces, workspace-set retention, request
   steps, stop-then-cancel shutdown with opt-in drain, the D5 batch exit.
-- **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial evidence is
-  technical debt (above).
+- **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial as debt (above).
+- **P13 plan:** npm launcher over per-platform packages, no install scripts, npm/pnpm/
+  Yarn/Bun; all names held, no announcement before P14 (open items: P13 name checklist).
 
 ## Open decisions (maintainer)
 
@@ -69,8 +70,7 @@ merged the skill, guard and ADR 0022 (Proposed); PR 2 (#201) adds the trial harn
 
 ## Other follow-ups
 
-- **Known limits:** entries to L-075 (review pending); P12 added L-071..L-075 (L-070
-  added and fixed).
+- **Known limits:** to L-075 (review pending); P12 added L-071..L-075 (L-070 fixed).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   the `p11_durable_workspace` stage on Ubuntu 24.04 / ext4; a CI run of
   `--host-isolation strict-linux` succeeding end to end.

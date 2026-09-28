@@ -455,6 +455,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Documentation
 
+- P13's plan names the npm launcher pattern (per-platform `optionalDependencies`, no
+  install scripts, qualified under npm, pnpm, Yarn and Bun) and a checklist of names to
+  hold before release; ADR 0009 gains a note and L-036 points to both.
 - The known limits register removes L-012 (fixed by P10 PR 1, merged) and L-048, raises
   L-014 to the new caps, updates L-010 and L-025, links L-011, L-013, L-015, L-018,
   L-024, L-028, L-042, L-043 and L-045 to their tracking issues (#170-#178), and adds
