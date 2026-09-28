@@ -469,7 +469,11 @@ fn score(entry: &Value, items: &[Value]) -> Result<Value, StageStop> {
         .map(|events| {
             events
                 .iter()
-                .filter(|event| event["kind"] != "speech" && event["kind"] != "malformed")
+                .filter(|event| {
+                    event["kind"] != "speech"
+                        && event["kind"] != "malformed"
+                        && event["kind"] != "persistent"
+                })
                 .collect()
         })
         .unwrap_or_default();

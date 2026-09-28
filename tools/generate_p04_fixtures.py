@@ -177,8 +177,12 @@ def scene(fixture: dict, event: dict | None) -> Canvas:
 
 
 def event_at(fixture: dict, frame: int) -> dict | None:
+    # A persistent event only records how long an element drawn by the other
+    # events stays visible (2026-09-28 truth amendment); it never selects a scene,
+    # so adding one leaves every generated frame unchanged.
     micros = frame * 1_000_000 // FPS
-    return next((event for event in fixture["events"] if event["start_us"] <= micros < event["end_us"]), None)
+    return next((event for event in fixture["events"]
+                 if event["kind"] != "persistent" and event["start_us"] <= micros < event["end_us"]), None)
 
 
 def run(command: list[str]) -> None:

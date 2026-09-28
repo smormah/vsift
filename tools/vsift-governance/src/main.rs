@@ -123,6 +123,9 @@ enum EventKind {
     Speech,
     Malformed,
     Adversarial,
+    /// How long an element drawn by the other events stays visible; it marks
+    /// no change, so it is never critical (2026-09-28 truth amendment).
+    Persistent,
 }
 
 #[derive(Debug, Deserialize)]
@@ -466,24 +469,7 @@ fn validate_corpus(messages: &mut Vec<String>, corpus: &CorpusManifest) {
             messages.push(format!("{} has no critical ground-truth event", fixture.id));
         }
         for event in &fixture.events {
-            if !event.id.starts_with(&format!("{}-E", fixture.id)) {
-                messages.push(format!("{} event ID is outside its fixture", event.id));
-            }
-            if event.start_us >= event.end_us || event.end_us > fixture.duration_us {
-                messages.push(format!("{} has an invalid time range", event.id));
-            }
-            if event.truth.trim().is_empty() {
-                messages.push(format!("{} has empty ground truth", event.id));
-            }
-            match event.kind {
-                EventKind::Stable
-                | EventKind::Change
-                | EventKind::Transient
-                | EventKind::Scroll
-                | EventKind::Speech
-                | EventKind::Malformed
-                | EventKind::Adversarial => {}
-            }
+            validate_event(messages, fixture, event);
         }
         if fixture
             .expected_terms
@@ -499,6 +485,36 @@ fn validate_corpus(messages: &mut Vec<String>, corpus: &CorpusManifest) {
         {
             messages.push(format!("{} contains an empty variant", fixture.id));
         }
+    }
+}
+
+fn validate_event(messages: &mut Vec<String>, fixture: &CorpusFixture, event: &FixtureEvent) {
+    if !event.id.starts_with(&format!("{}-E", fixture.id)) {
+        messages.push(format!("{} event ID is outside its fixture", event.id));
+    }
+    if event.start_us >= event.end_us || event.end_us > fixture.duration_us {
+        messages.push(format!("{} has an invalid time range", event.id));
+    }
+    if event.truth.trim().is_empty() {
+        messages.push(format!("{} has empty ground truth", event.id));
+    }
+    match event.kind {
+        // A persistent event only records how long a drawn element stays
+        // visible; it marks no change, so it can never be a critical event.
+        EventKind::Persistent if event.critical => {
+            messages.push(format!(
+                "{} is persistent and must not be critical",
+                event.id
+            ));
+        }
+        EventKind::Stable
+        | EventKind::Change
+        | EventKind::Transient
+        | EventKind::Scroll
+        | EventKind::Speech
+        | EventKind::Malformed
+        | EventKind::Adversarial
+        | EventKind::Persistent => {}
     }
 }
 
@@ -844,7 +860,7 @@ fn require_count(messages: &mut Vec<String>, field: &str, actual: usize, expecte
 #[cfg(test)]
 mod tests {
     use super::{
-        CORPUS_MANIFEST, CorpusManifest, DEFAULT_LEDGER, DeliveryLedger, PacketStatus,
+        CORPUS_MANIFEST, CorpusManifest, DEFAULT_LEDGER, DeliveryLedger, EventKind, PacketStatus,
         check_fault_injection_manifest, check_handoff_length, validate,
     };
     use std::{error::Error, fs, io, path::PathBuf};
@@ -973,6 +989,28 @@ mod tests {
         let messages = validate(&ledger, &corpus, &root);
 
         assert!(messages.is_empty(), "{messages:#?}");
+        Ok(())
+    }
+
+    #[test]
+    fn persistent_event_must_not_be_critical() -> Result<(), Box<dyn Error>> {
+        let (ledger, mut corpus, root) = load_records()?;
+        let event = corpus
+            .fixtures
+            .iter_mut()
+            .flat_map(|fixture| fixture.events.iter_mut())
+            .find(|event| event.kind == EventKind::Persistent)
+            .ok_or_else(|| io::Error::other("checked-in corpus has no persistent event"))?;
+        event.critical = true;
+
+        let messages = validate(&ledger, &corpus, &root);
+
+        assert!(
+            messages
+                .iter()
+                .any(|message| message.contains("is persistent and must not be critical")),
+            "{messages:#?}"
+        );
         Ok(())
     }
 

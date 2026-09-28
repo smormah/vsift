@@ -1,8 +1,17 @@
 {
   "generator": "tools/generate_p07_speech.py v1",
   "purpose": "Test fixtures only. Kokoro is never a VSift runtime dependency.",
-  "manifest_sha256": "dfae6419dba8b8bbbf00e18185c7580e1a9b935a61e9abbb82c9c549481e8187",
-  "base_provenance_sha256": "8ad7b718900917e205c1c29d928ecc81367158d373d09cc218001675a3ad00af",
+  "manifest_sha256": "ade0bccaa4b719f3b5e3502e9236479547f0432700cfd405196a6fe3395c9383",
+  "base_provenance_sha256": "e3503f61d26d472f12f6e8a241b6b12b623d8b94ea62f7fb2429fda1dc52690b",
+  "truth_amendments": [
+    {
+      "date": "2026-09-28",
+      "change": "manifest.json gained the non-critical persistent events F04-E05, F05-E04 and F12-E03; no script, audio mode, offset, duration or speech event changed",
+      "previous_manifest_sha256": "dfae6419dba8b8bbbf00e18185c7580e1a9b935a61e9abbb82c9c549481e8187",
+      "previous_base_provenance_sha256": "8ad7b718900917e205c1c29d928ecc81367158d373d09cc218001675a3ad00af",
+      "evidence": "speech_plans() is equal for both manifests, so this synthesis and assembly stand unchanged; the P04 generator re-run with the recorded FFmpeg build reproduced every P04 file byte for byte and changed only the manifest digest of provenance.json; verify_p07_speech.py passed against the amended truth"
+    }
+  ],
   "synthesis": {
     "engine": "Kokoro text-to-speech (test fixture generation only)",
     "model": {

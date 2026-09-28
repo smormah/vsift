@@ -31,14 +31,15 @@ Today it can:
 
 There is now also an **agent skill** (`skills/vsift/`) that teaches Claude Code or
 Codex to run an investigation with the CLI and write a cited report, and a trial
-harness that runs and grades those clients on synthetic recordings. One dry trial per
-client has run; they exposed three problems that PR 3a fixes, and a fourth (Codex's
-Windows sandbox cannot run VSift, L-076) that waits for a maintainer decision. No
-counted trial has run, so the skill is a candidate, not a qualified integration.
+harness that runs and grades those clients on synthetic recordings. Three dry trials
+have run (two Claude Code, one Codex); PR 3a fixed what the first pair showed, PR 3c
+what the second Claude run showed, and Codex's Windows sandbox cannot run VSift
+(L-076, maintainer decision; PR 3b builds a Linux container). No counted trial has
+run, so the skill is a candidate, not a qualified integration.
 
 **P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
 adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
-progress.** PR 1, PR 2 and PR 3a are increments, not the packet.
+progress.** PR 1, PR 2, PR 3a and PR 3c are increments, not the packet.
 
 ## P12 in one view
 
@@ -51,7 +52,7 @@ progress.** PR 1, PR 2 and PR 3a are increments, not the packet.
   `never`; `budgets.md` `compact` default and `standard`; `handoff.md`; `safety.md`;
   `resume.md`; `lifecycle.md`), `handoff.schema.json` (handoff v1, owned by the
   skill), two example handoffs, the image-check picture and Codex metadata. Guard
-  `crates/vsift-cli/src/skill_contract.rs` (now 12 tests): commands parse with the real
+  `crates/vsift-cli/src/skill_contract.rs`: commands parse with the real
   parser and respect their class, names resolve in the schemas, examples validate,
   the image code is in no text, `SKILL.md` within 300 lines, FIND_SPOKEN_SPANS
   searches first. Install guide `docs/agents/skill.md`.
@@ -61,30 +62,31 @@ progress.** PR 1, PR 2 and PR 3a are increments, not the packet.
   `run` (explicit executable and arguments, cleared environment, timeout, raw logs),
   `grade` (mechanical and interpretation results; policy and budgets parsed from the
   skill, truth from the manifest), `record` (at most 64 KiB); 21 scenarios; runbook
-  `docs/agents/trials.md`; SEC-T02 tool suite; procedure checkpoint. L-072..L-075.
-- **Dry trials (2026-09-28, maintainer):** one A-08 run per client, kept locally.
-  Claude Code (`claude-opus-5-5`) produced a correct report but ran without the
-  workspace's allow rules (untrusted workspace; the rules came from a duplicate
-  `--settings` copy) and never ran `search`. Codex (`gpt-6-astra`) had every command
-  rejected ("blocked by policy") and stopped after 27 s.
-- **PR 3a (branch `p12-pr3a-dryrun-fixes`, this change): dry-trial fixes.**
-  - `run` trusts each Claude Code workspace in the client home's `.claude.json`
-    (`claude_trust.rs`: one key, other members copied byte for byte, atomic rename,
-    never logged) and drops `--settings`: the project file is the one source. A real
-    run then showed no warning, `vsift` allowed, `mkdir` and a `.env` read denied.
-  - Grader check `client_configuration` (`client_warnings.rs`): a client's own
-    report that it ignored settings, permissions, sandbox or skill makes the trial
-    invalid (`invalid_reasons`, record `"valid": false`). Re-grading the Claude dry
-    run gives `INVALID TRIAL` with only that check and `commands_required` failing.
-  - Codex on Windows gets `windows.sandbox="unelevated"` and no `TEMP` or `/tmp`
-    writable root: commands run, writes stay in the workspace. But VSift cannot use its
-    private session root inside that sandbox and the network is not enforced (L-076):
-    **Codex trials on Windows need a maintainer decision** (WSL/Ubuntu,
-    `danger-full-access` graded only, or the elevated sandbox with admin setup).
-  - Skill: FIND_SPOKEN_SPANS always starts with `vsift search`; new guard test.
-  - Budget used: 3 Codex `exec` and 3 Claude Code `-p` calls, small models.
-- **Next:** the maintainer re-runs the Claude dry trial, decides L-076, then the
-  counted trials. The packet completes only when the named-client trials pass.
+  `docs/agent- **First dry trials (2026-09-28):** Claude Code (`claude-opus-5-5`) ran without the
+  workspace's allow rules and never ran `search`; Codex had every command rejected.
+- **PR 3a (#203, `67d56c3`, merged):** `run` trusts each Claude Code workspace in the
+  client home's `.claude.json` (`claude_trust.rs`) and drops `--settings`; grader check
+  `client_configuration` makes a trial invalid when a client says it ignored its
+  configuration; Codex on Windows gets `windows.sandbox="unelevated"` (still unusable
+  for VSift, L-076); FIND_SPOKEN_SPANS always starts with `vsift search`.
+- **Second Claude dry trial (2026-09-28):** valid, correct report; mechanical fail on
+  `command_policy` (it chained `date +%s` to time itself) and
+  `citation_times_in_truth_windows` (frames at 9 s and 19 s show `INVOICE 4407`, but
+  the manifest placed it only in F05-E01, 0-5 s). It also first sent the invalid
+  `--operation-id op-asr-walkthrough-1`.
+- **PR 3c (branch `p12-pr3c-dryrun2-fixes`, this change):**
+  - Skill: nothing but `vsift`, one command per call, never chained or piped except
+    `| tail -n 1` after `--events jsonl`; the host keeps the wall time and handoff v1
+    takes `null` for unmeasured `wall_time_s` (L-077); the operation-id grammar and a
+    valid example where `SKILL.md` first uses one. Guard now 15 tests.
+  - Corpus truth amended (reviewed in the corpus README): event kind `persistent`
+    (never critical, never a generated scene, not scored by recall, in no scenario's
+    `truth_events`): F04-E05 header, F05-E04 invoice 4407, F12-E03 SAFE-12. The P04
+    generator reproduced every file byte for byte; the four generation records name
+    the new manifest digest; both verifiers passed. Grader unchanged; regression tests
+    pin the dry trial's citations and a term cited only where it is absent.
+- **Next:** the maintainer re-runs the Claude dry trial on PR 3c, decides L-076, then
+  the counted trials. The packet completes only when the named-client trials pass.
 
 ## Found in P12
 
@@ -92,12 +94,10 @@ progress.** PR 1, PR 2 and PR 3a are increments, not the packet.
   session root are incompatible; the network is off only through proxy variables.
 - **L-074 (open):** SubRip markup removal drops any `<letter...>` tag, broader than the
   contract's list; `original_text` keeps the payload (found by the SEC-T02 suite).
-- **L-070 (fixed, #199):** the `job resume` remediation for a closed or expired session
-  now says to open a new session with `ingest`.
-- **#197 (fixed, #200 `98525dc`):** a process killed while registering a session could
-  leave an empty index marker that failed every later listing with `INTEGRITY_FAILURE`;
-  the marker is now staged and renamed into its bucket. The P10 durability campaign
-  passed on the fix (run 36447992132).
+- **Open grader readings (PR 3c):** `untrusted_listed` takes only F12-E01 (0-8 s)
+  though the on-screen instructions last to 12 s; a frame before 8 s binds `install`.
+- **#197 (fixed, #200 `98525dc`):** a torn session-index marker no longer fails later
+  listings; the P10 durability campaign passed on the fix (run 36447992132).
 - **L-071:** parse failures in JSON modes carry no remediation; the skill tells agents
   to quote `--rect` on PowerShell and check commands against its reference.
 
@@ -123,7 +123,7 @@ progress.** PR 1, PR 2 and PR 3a are increments, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PR 1 (skill, guard) and PR 2 (harness) merged; PR 3a (dry-trial fixes) in review; L-076 decision, then the counted trials |
+| P12 | In progress: PR 1 (skill, guard), PR 2 (harness) and PR 3a (dry-trial fixes) merged; PR 3c (second dry-trial fixes, truth amendment) in review; L-076 decision, then the counted trials |
 | P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
@@ -140,9 +140,9 @@ is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `
 
 ## Quality evidence
 
-- P12 PR 3a gates on Windows 11 (fmt, strict Clippy with and without features,
-  workspace tests, warning-denied rustdoc, governance) and the real-client evidence
-  for each fix go in the pull request description.
+- P12 PR 3c gates on Windows 11 (fmt, strict Clippy with and without features,
+  workspace tests, warning-denied rustdoc, governance), both corpus verifiers and the
+  dry-trial evidence go in the pull request description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

@@ -19,14 +19,22 @@ never process media yourself and never run anything except `vsift`.
    [references/commands.md](references/commands.md), in their class: `free` commands
    as needed, `explicit` commands only when the user has told you to, `never`
    commands never. Always add `--json` (or `--events jsonl` where that file says so).
-3. **Stay inside the budget.** Use the profile the user names, otherwise `compact`
+3. **Nothing but `vsift`, one command per call.** Run no other program, not even a
+   harmless one to read the clock, count, list or print something (`date`, `echo`,
+   `wc`, `ls`), and never join commands with `&&`, `||` or `;`, pipes or
+   redirections. The one exception: a command with `--events jsonl` may end in
+   `| tail -n 1` (in PowerShell `| Select-Object -Last 1`) so you read only its last
+   line. Read this skill's own files with your file tool; only a client without one
+   may print them with `cat` or `Get-Content`.
+4. **Stay inside the budget.** Use the profile the user names, otherwise `compact`
    ([references/budgets.md](references/budgets.md)). Count every tool call and image.
-4. **Cite or say you cannot.** Every observed claim cites a transcript segment, frame,
+   The host measures and enforces the wall time; you cannot and do not time yourself.
+5. **Cite or say you cannot.** Every observed claim cites a transcript segment, frame,
    crop or audio clip by its identity and time. A gap is never proof that something
    did not happen. The report format is in [references/handoff.md](references/handoff.md).
-5. **Never assume you can see an image.** You may cite a frame's pixels only after
+6. **Never assume you can see an image.** You may cite a frame's pixels only after
    the image check below has passed and you have opened that frame yourself.
-6. **Keep the user's objective.** You do not edit code, install software, change
+7. **Keep the user's objective.** You do not edit code, install software, change
    settings or contact anything on the user's behalf during an investigation.
 
 Times are microseconds of source time everywhere (1 s = 1000000). Ranges are
@@ -80,13 +88,17 @@ vsift ingest <video> --transcript <transcript> --transcript-offset <offset-us> -
   `lifecycle.expires_at` and, with a transcript, `revision_id` and the video length
   from `data.transcript.source_segments` (the last `end_us`).
 - No transcript and `local_asr.verification.status` is `verified`: transcribe once,
-  with an operation id you choose and save (see resume.md for the format):
+  with an operation id you choose and save. **An operation id is `op_` followed by 16
+  to 64 lowercase letters or digits, and nothing else**: no hyphen, underscore or
+  capital after `op_`. Build it as resume.md says: for the session
+  `ses_0123456789abcdef0123456789abcdef` the whole-video transcription is
+  `op_retx0123456789abcdef0123456701`. Anything else is refused as a parse error.
 
 ```console
-vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl
+vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
 ```
 
-  Read only the last line (the terminal event); its `result` is the answer. This can
+  The one line you read is the terminal event; its `result` is the answer. This can
   take minutes. If your tool call times out or is interrupted, follow resume.md
   (`job status`, then `job resume`); never start a second transcription.
 - No transcript and no working speech recognition: continue visually and record a

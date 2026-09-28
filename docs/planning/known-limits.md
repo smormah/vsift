@@ -120,8 +120,9 @@ Each entry has these fields:
 | [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
 | [L-075](#l-075) | The trial harness's reading of the clients' streams and flags is only partly proven against real runs | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 | [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
+| [L-077](#l-077) | An agent cannot measure its own wall time; only the host enforces that budget | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 
-Counts: 4 high, 22 medium, 47 low (73 entries).
+Counts: 4 high, 22 medium, 48 low (74 entries).
 
 ## Security
 
@@ -1632,6 +1633,29 @@ Counts: 4 high, 22 medium, 47 low (73 entries).
   change to admit a named sandbox SID in private folders, which needs its own ADR.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** open. **Review:** pending.
+
+### L-077
+
+**An agent cannot measure its own wall time; only the host enforces that budget.**
+
+- **What:** the skill's budgets include a wall time (15 minutes `compact`, 30
+  `standard`), but VSift's results carry no current time: the only clock time,
+  `lifecycle.expires_at`, is fixed when a session opens and moves only on renewal. The
+  skill runs nothing but `vsift`, so an agent cannot read a clock either. In the second
+  Claude Code dry trial (2026-09-28) the agent chained `date +%s` to its first and last
+  commands to time itself, which the grader rightly failed as a non-`vsift` program.
+- **Evidence:** ADR 0022's PR 3c note; the dry trial's `grade.json` (calls 7 and 24).
+- **Impact:** the handoff reports `budget.used.wall_time_s` and
+  `resume.remaining.wall_time_s` as `null` unless the client shows elapsed time, and an
+  agent cannot stop itself on time; the host (the client's own limits, the trial
+  harness's timeout and the grader's measured wall time) stops it instead.
+- **Why:** exposing a clock only for self-timing would add a command or a result field
+  to the public contract for a budget the host already enforces.
+- **Mitigation:** the skill says who keeps the wall time; the handoff schema accepts
+  `null`; the grader measures wall time from the client's run.
+- **Next step:** none planned; revisit if a host cannot enforce time limits.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual. **Review:** pending.
 
 ### L-040
 

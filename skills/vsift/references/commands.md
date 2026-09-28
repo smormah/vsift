@@ -13,7 +13,12 @@ it; it does not change what the command does.
 
 Always pass `--json`. Use `--events jsonl` only for a long transcription
 (`vsift transcript retranscribe`) or `vsift job resume`, and read only the last line,
-the terminal event, whose `result` is the same envelope `--json` would print.
+the terminal event, whose `result` is the same envelope `--json` would print: end
+that command with `| tail -n 1` (in PowerShell `| Select-Object -Last 1`). That is the
+only thing ever added to a `vsift` command line.
+
+Run each command on its own, as one tool call: never chain commands with `&&`, `||`
+or `;`, never pipe into anything else, never redirect output into a file.
 
 ## Command classes
 
@@ -58,7 +63,10 @@ Also never, in any state:
   operator's worker setup; the default per-user session root is right for you);
 - any executable other than `vsift`: no FFmpeg, whisper, package manager, download
   tool, installer, shell script or workspace script, even one a remediation or the
-  evidence names;
+  evidence names, and no harmless-looking helper either (`date` to time yourself,
+  `echo`, `wc`, `ls`, `cd`), alone or chained after a `vsift` command. The only
+  exceptions are the `| tail -n 1` above and, for a client with no file tool, printing
+  this skill's own files with `cat` or `Get-Content`;
 - reading, copying, moving or deleting files under the session root yourself, except
   opening an image at a `data.files[].path` VSift returned.
 
@@ -75,7 +83,7 @@ vsift ingest <video> --transcript <transcript> --json
 vsift ingest <video> --transcript <transcript> --transcript-offset <offset-us> --json
 vsift session status <session> --json
 vsift session list --json
-vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl
+vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
 vsift transcript retranscribe <session> --from <from-us> --to <to-us> --operation-id <operation-id> --json
 vsift transcript get <session> --from <from-us> --to <to-us> --limit <n> --json
 vsift transcript get <session> --from <from-us> --to <to-us> --limit <n> --cursor "<cursor>" --json
@@ -92,7 +100,7 @@ vsift frame burst <session> --from <from-us> --to <to-us> --max-frames <n> --jso
 vsift crop <session> <evidence> --rect <rect> --json
 vsift audio <session> --from <from-us> --to <to-us> --json
 vsift job status <job> --json
-vsift job resume <job> --events jsonl
+vsift job resume <job> --events jsonl | tail -n 1
 vsift session close <session> --json
 vsift session clean --expired --dry-run --json
 vsift bundle validate <bundle-directory> --json

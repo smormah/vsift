@@ -19,7 +19,7 @@ use std::{
 
 use clap::{CommandFactory, Parser};
 use serde_json::Value;
-use vsift::FailureCode;
+use vsift::{FailureCode, OperationId};
 use vsift_contract::CommandName;
 
 use crate::command::{Cli, HostIsolationArgument};
@@ -105,6 +105,17 @@ const EXPLICIT: [&str; 6] = [
 /// Read-only forms of `explicit` commands that the skill may run freely: the
 /// operation and the flag that makes the form read-only.
 const FREE_FORMS: [(&str, &str); 1] = [("session.clean", "--dry-run")];
+
+/// The one thing a console example may add after a `vsift` command: keep only
+/// the terminal event of `--events jsonl`. The trial grader accepts it as a
+/// line filter in the command's own pipeline; everything else chained, piped
+/// or redirected is a non-`vsift` command there. In the second dry trial
+/// (2026-09-28) a strong model chained `date` before and after its commands
+/// to time itself, so the examples never show any other combination.
+const LINE_FILTER_SUFFIX: &str = " | tail -n 1";
+
+/// Shell syntax that joins, pipes, redirects or substitutes commands.
+const SHELL_OPERATORS: [&str; 8] = ["&&", "||", ";", "|", ">", "<", "$(", "`"];
 
 /// The sections of the handoff template, in order.
 const HANDOFF_SECTIONS: [&str; 8] = [
@@ -466,7 +477,11 @@ fn check_console_command(
     line: &str,
     problems: &mut Problems,
 ) -> Result<Option<String>, String> {
-    let arguments = split_arguments(&substitute(line)?)?;
+    let (command, filtered) = match line.strip_suffix(LINE_FILTER_SUFFIX) {
+        Some(command) => (command, true),
+        None => (line, false),
+    };
+    let arguments = split_arguments(&substitute(command)?)?;
     let cli = match Cli::try_parse_from(&arguments) {
         Ok(cli) => cli,
         Err(error) => {
@@ -483,6 +498,11 @@ fn check_console_command(
     if !cli.json && cli.events.is_none() {
         problems.add(format!(
             "{source}: {line:?} has neither --json nor --events"
+        ));
+    }
+    if filtered && cli.events.is_none() {
+        problems.add(format!(
+            "{source}: {line:?} keeps only the last line of output without --events jsonl"
         ));
     }
     if cli.session_root.is_some() || cli.host_isolation != HostIsolationArgument::ProcessOnly {
@@ -656,6 +676,153 @@ fn console_commands_parse_and_respect_their_class() -> Result<(), String> {
                     _ => {}
                 }
             }
+        }
+    }
+    problems.into_result()
+}
+
+/// Every console example is one `vsift` command: nothing chained, piped,
+/// redirected or substituted, except the documented `| tail -n 1` after
+/// `--events jsonl` (checked with the parser in `check_console_command`).
+#[test]
+fn console_examples_are_one_vsift_command_each() -> Result<(), String> {
+    let mut problems = Problems::default();
+    for document in markdown_files()? {
+        for fence in document
+            .fences
+            .iter()
+            .filter(|fence| fence.info == "console")
+        {
+            for line in fence.lines.iter().map(|line| line.trim()) {
+                if !line.starts_with("vsift ") {
+                    continue;
+                }
+                let command = substitute(line.strip_suffix(LINE_FILTER_SUFFIX).unwrap_or(line))?;
+                for operator in SHELL_OPERATORS {
+                    if command.contains(operator) {
+                        problems.add(format!(
+                            "{}: {line:?} uses {operator:?}; run each vsift command alone",
+                            document.name
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    problems.into_result()
+}
+
+/// The words of `text` that start with `op_` or `op-`, cut at the first
+/// character that is neither alphanumeric nor `_` or `-`, so a malformed id
+/// such as the dry trial's `op-asr-walkthrough-1` is seen whole.
+fn operation_id_tokens(text: &str) -> Vec<String> {
+    let characters: Vec<char> = text.chars().collect();
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-';
+    let mut tokens = Vec::new();
+    let mut index = 0;
+    while index + 3 <= characters.len() {
+        let starts = characters[index] == 'o'
+            && characters[index + 1] == 'p'
+            && matches!(characters[index + 2], '_' | '-')
+            && (index == 0 || !is_word(characters[index - 1]));
+        if starts {
+            let token: String = characters[index..]
+                .iter()
+                .take_while(|c| is_word(**c))
+                .collect();
+            index += token.len();
+            tokens.push(token);
+        } else {
+            index += 1;
+        }
+    }
+    tokens
+}
+
+/// Every operation id the skill shows follows the published grammar (cli-v1
+/// D-1: `op_` and 16 to 64 lowercase letters or digits), checked with the
+/// parser's own type, and `SKILL.md` shows a valid example before its first
+/// command that takes one. In the second dry trial (2026-09-28) a strong model
+/// first sent `--operation-id op-asr-walkthrough-1`, a parse failure.
+#[test]
+fn operation_ids_follow_the_published_grammar() -> Result<(), String> {
+    let mut problems = Problems::default();
+    for path in skill_text_files()? {
+        for token in operation_id_tokens(&read_text(&path)?) {
+            // The bare prefix is how the prose names the grammar.
+            if token != "op_" && OperationId::parse(token.clone()).is_err() {
+                problems.add(format!(
+                    "{}: {token:?} is not a valid operation id",
+                    path.display()
+                ));
+            }
+        }
+    }
+    let text = read_text(&skill_directory().join("SKILL.md"))?;
+    let first_use = parse_markdown("SKILL.md".to_owned(), &text)
+        .fences
+        .iter()
+        .filter(|fence| fence.info == "console")
+        .flat_map(|fence| fence.lines.iter())
+        .find(|line| line.contains("--operation-id"))
+        .and_then(|line| text.find(line.as_str()))
+        .ok_or("SKILL.md shows no command with --operation-id")?;
+    let state_start = text[..first_use].rfind("\n### ").unwrap_or_default();
+    let examples = operation_id_tokens(&text[state_start..first_use]);
+    if !examples
+        .iter()
+        .any(|token| OperationId::parse(token.clone()).is_ok())
+    {
+        problems.add(
+            "SKILL.md shows no valid example operation id before its first --operation-id command"
+                .to_owned(),
+        );
+    }
+    for (valid, token) in [
+        (false, "op-asr-walkthrough-1"),
+        (false, "op_asr-walkthrough-1"),
+        (true, "op_retx0123456789abcdef0123456701"),
+    ] {
+        let found = operation_id_tokens(&format!("--operation-id {token} --json"));
+        let parsed = found
+            .first()
+            .is_some_and(|found| OperationId::parse(found.clone()).is_ok());
+        if parsed != valid {
+            problems.add(format!(
+                "the operation id scan reads {token:?} as {found:?}"
+            ));
+        }
+    }
+    problems.into_result()
+}
+
+/// The rules that always apply forbid every other program, including the
+/// "harmless" clock read of the second dry trial, and the budget says who
+/// keeps the wall time.
+#[test]
+fn the_skill_forbids_other_programs_and_self_timing() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let skill = read_text(&skill_directory().join("SKILL.md"))?;
+    let rules_start = skill
+        .find("## Rules that always apply")
+        .ok_or("SKILL.md lacks its rules")?;
+    let rules_end = skill[rules_start..]
+        .find("## The procedure")
+        .map_or(skill.len(), |end| rules_start + end);
+    let rules = &skill[rules_start..rules_end];
+    for needle in ["Nothing but `vsift`", "`date`", "`&&`", "`| tail -n 1`"] {
+        if !rules.contains(needle) {
+            problems.add(format!("SKILL.md's rules do not mention {needle}"));
+        }
+    }
+    let budgets = read_text(&skill_directory().join("references").join("budgets.md"))?;
+    for needle in [
+        "measured and enforced by the host",
+        "`date`",
+        "`budget.used.wall_time_s`",
+    ] {
+        if !budgets.contains(needle) {
+            problems.add(format!("budgets.md does not say {needle}"));
         }
     }
     problems.into_result()

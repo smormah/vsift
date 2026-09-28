@@ -1,8 +1,8 @@
 {
   "verifier": "tools/verify_p07_speech.py v1",
   "status": "passed",
-  "manifest_sha256": "dfae6419dba8b8bbbf00e18185c7580e1a9b935a61e9abbb82c9c549481e8187",
-  "provenance_sha256": "e1efd0525af7ce1da3d625a5b05e72caf62360ab661b9a4ef1e4f345b72a7d13",
+  "manifest_sha256": "ade0bccaa4b719f3b5e3502e9236479547f0432700cfd405196a6fe3395c9383",
+  "provenance_sha256": "69bf36e89dfbed8900b8ecc1bcbc46a2b4fca79947fc2ae40364b4f394c4db04",
   "utterances": [
     {
       "fixture": "F01",

@@ -72,9 +72,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "kind", "start_us", "end_us", "critical", "truth"],
+      "$comment": "A persistent event records how long an on-screen element stays visible across the other events' windows (2026-09-28 truth amendment); it marks no change and is never critical.",
+      "if": { "properties": { "kind": { "const": "persistent" } } },
+      "then": { "properties": { "critical": { "const": false } } },
       "properties": {
         "id": { "type": "string", "pattern": "^F(0[1-9]|1[0-2])-E[0-9]{2}$" },
-        "kind": { "enum": ["stable", "change", "transient", "scroll", "speech", "malformed", "adversarial"] },
+        "kind": { "enum": ["stable", "change", "transient", "scroll", "speech", "malformed", "adversarial", "persistent"] },
         "start_us": { "type": "integer", "minimum": 0 },
         "end_us": { "type": "integer", "minimum": 1 },
         "critical": { "type": "boolean" },

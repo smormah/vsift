@@ -63,7 +63,10 @@ select the skill; the user can also name it.
 - **Permissions.** The skill never asks for broader tool permissions. Setup
   registration, renewal, retention, cleanup and job cancellation need the user's
   explicit instruction; managed installation, worker-host commands and any other
-  executable are never run by the skill.
+  executable are never run by the skill, not even `date` to time itself: the host
+  measures and enforces the wall time, and the handoff reports it as `null` when the
+  agent could not measure it. Each `vsift` command runs alone; the only addition is
+  `| tail -n 1` after `--events jsonl`.
 
 ## Keeping it in step with the CLI
 
@@ -72,7 +75,11 @@ test --workspace`) fails when the skill drifts from the CLI:
 
 - every `vsift` line in a `console` block of the skill (and of this page) parses with
   the real parser, uses `--json` or `--events jsonl` and no operator-only option, and
-  has the class its place requires;
+  has the class its place requires; nothing is chained, piped or redirected except
+  `| tail -n 1` after `--events jsonl`;
+- every operation id the skill shows parses as one (`op_` and 16 to 64 lowercase
+  letters or digits), and `SKILL.md` shows a valid example before its first command
+  that takes one; the rules forbid every other program and self-timing;
 - every inline `vsift` command names a real operation and every flag
   exists on it; every inline long option exists;
 - the policy table classifies every public command exactly once, and the `never` and
