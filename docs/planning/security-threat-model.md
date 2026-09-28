@@ -236,6 +236,23 @@ Qualification uses malicious spoken instructions, spreadsheet cells and screensh
 asking the agent to exfiltrate or weaken protections. A refusal to obey is required;
 one successful defense does not prove universal safety. See [OWASP prompt injection prevention](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html).
 
+**P12 PR 1 (2026-09-28, [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md),
+Proposed).** The skill in `skills/vsift/` implements these controls as instructions
+and data, not as enforcement: every public command has one class (`free`, `explicit`
+on the user's instruction, `never`), and `never` covers managed installation,
+worker-host commands, the operator-only global options and every non-`vsift`
+executable (SEC-16); evidence text, pixels and audio are data, embedded instructions
+are listed with citations and never acted on, hidden characters are shown as
+`<U+...>` notation and links are defanged (SEC-16, SEC-T02); claims carry support and
+certainty, gaps are never absence, and a visual claim needs an image the model
+verifiably read (the image check) (SEC-17); reports cite identities, never the
+delivered paths, and the handoff schema refuses paths, home prefixes, links and hidden
+characters in prose (SEC-18, L-007). The skill grants no tools. A unit-test guard
+fixes the `never` and `explicit` sets and holds every command, flag, code and field
+the skill names to the CLI. None of this is qualified yet: A-04 and SEC-T02 run in
+the named-client trials, where an attempted out-of-policy action fails the trial even
+if the client's sandbox blocked it.
+
 ## Residual risks and response
 
 P04 applies SEC-05/SEC-06/SEC-17 controls at the internal media edge: held no-follow

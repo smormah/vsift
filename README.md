@@ -17,9 +17,12 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > worker requests one at a time (`job run`) or from a finite file (`job batch`) in a
 > worker workspace, with weighted admission, exactly-once replay by operation id and a
 > resumable shutdown; see the [worker-host runbook](docs/operations/worker-host.md)
-> (P11, implemented and pending merge; a qualification target, not yet a supported
-> platform). Managed dependency installation, the agent skill and the complete agent
-> handoff remain future R0 work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
+> (P11; a qualification target, not yet a supported platform). An agent skill for
+> Claude Code and Codex exists ([`skills/vsift`](skills/vsift/SKILL.md); see
+> [installing and using it](docs/agents/skill.md)), but its named-client qualification
+> (P12) has not run, so the complete agent handoff is not yet proven. Managed
+> dependency installation (P13) remains future R0 work. See the
+> [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.

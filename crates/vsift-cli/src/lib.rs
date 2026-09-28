@@ -15,6 +15,8 @@ mod search;
 mod session;
 mod setup;
 mod signal;
+#[cfg(test)]
+mod skill_contract;
 mod worker;
 
 use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::Duration};

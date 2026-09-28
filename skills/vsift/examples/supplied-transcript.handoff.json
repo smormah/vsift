@@ -1,0 +1,116 @@
+{
+  "handoff_version": "1",
+  "status": "complete",
+  "question": "Does the recording show dialog R-17 at the moment the speaker announces it?",
+  "capabilities": {
+    "image_access": "verified",
+    "image_check_code": "XXXXX 0000",
+    "media_tools": "available",
+    "local_asr": "not_run",
+    "transcript_basis": "supplied_transcript"
+  },
+  "session": {
+    "session_id": "ses_42afd79e89a4b2c074411ce03a2abe63",
+    "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+    "revision_id": "trv_e42a249a2f7814967510d95ef4a4af6d",
+    "duration_us": 12000000
+  },
+  "claims": [
+    {
+      "id": "c1",
+      "section": "expected",
+      "kind": "reported",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "The user expects dialog R-17 to be on screen while the speaker announces it; the recording agrees.",
+      "citations": ["e1", "e2"]
+    },
+    {
+      "id": "c2",
+      "section": "actual",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "The supplied transcript has the speaker announce that dialog R-17 is displayed from 00:05.000 to 00:09.000.",
+      "citations": ["e1"]
+    },
+    {
+      "id": "c3",
+      "section": "actual",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "The frame at 00:05.000 shows the dialog label R-17 below the page title; the crop of the label reads it at native size.",
+      "citations": ["e2", "e3"]
+    },
+    {
+      "id": "c4",
+      "section": "context",
+      "kind": "inferred",
+      "support": "supported",
+      "certainty": "medium",
+      "statement": "The dialog was already visible when the announcement began, so the transcript and the picture are aligned at this moment.",
+      "citations": ["e1", "e2"]
+    }
+  ],
+  "citations": [
+    {
+      "id": "e1",
+      "type": "transcript_segment",
+      "revision_id": "trv_e42a249a2f7814967510d95ef4a4af6d",
+      "segment_id": "tsg_ea38be1e31e4b4356f8f46e0b7776617",
+      "start_us": 5000000,
+      "end_us": 9000000
+    },
+    {
+      "id": "e2",
+      "type": "frame",
+      "evidence_id": "evd_c064eaf3856a03c1fa4a2549b4412ca6",
+      "candidate_id": "vcd_b3d5ff1a215665bedf79ad5a31c80078",
+      "requested_us": 5000000,
+      "actual_us": 5000000,
+      "delta_us": 0,
+      "pixels_inspected": true
+    },
+    {
+      "id": "e3",
+      "type": "crop",
+      "evidence_id": "evd_0a15120ec234936df337630f7db169c1",
+      "parent_evidence_id": "evd_c064eaf3856a03c1fa4a2549b4412ca6",
+      "actual_us": 5000000,
+      "rect": { "x": 100, "y": 270, "width": 460, "height": 100 },
+      "pixels_inspected": true
+    }
+  ],
+  "gaps": [],
+  "untrusted_instructions": [],
+  "budget": {
+    "profile": "compact",
+    "overrides": false,
+    "limits": {
+      "images_per_step": 1,
+      "images_total": 6,
+      "image_bytes": 12582912,
+      "page_limit": 20,
+      "tool_calls": 30,
+      "refinement_depth": 2,
+      "wall_time_s": 900,
+      "burst_frames": 4
+    },
+    "used": {
+      "images_total": 3,
+      "image_bytes": 24280,
+      "tool_calls": 10,
+      "refinement_depth": 1,
+      "wall_time_s": 95
+    },
+    "exhausted": []
+  },
+  "lifecycle": {
+    "policy": "default",
+    "action": "left_open",
+    "mode": "ephemeral",
+    "expires_at": "2026-09-29T13:23:38Z"
+  },
+  "resume": null
+}

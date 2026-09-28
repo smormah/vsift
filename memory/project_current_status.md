@@ -21,66 +21,66 @@ Today it can:
   screen changed, and return exact frames, neighbours, bursts, crops and WAV clips;
 - manage the session's lifetime and retention, and validate retained bundles;
 - stop a long command cleanly on Ctrl-C or `SIGTERM`, never leaving a helper running;
-- run as a worker under an external supervisor: create a worker workspace with a fixed
-  operator policy (`session init-workspace`), run one versioned request (`job run`) or
-  a file of up to 1,000 (`job batch`), each step at most once per operation id however
-  often it is delivered or its worker killed, a bounded number at a time, weighted by
-  what the work occupies, with a shutdown that leaves every started request resumable;
+- run as a worker under an external supervisor (`session init-workspace`, `job run`,
+  `job batch`), each step at most once per operation id, with weighted admission and a
+  shutdown that leaves every started request resumable;
 - on Ubuntu 24.04 with local ext4, keep every acknowledged result of a durable
   workspace through an OS crash or power loss;
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
 - keep every folder it creates private to the user.
 
-**P00-P11 are complete.** P11 (worker and batch host) closed on 2026-09-28 with merge
-`40c4038` (PRs #184-#187, #189; ADR 0021 accepted with D1-D5). SEC-T01 is met for P11
-by non-adversarial evidence (maintainer decision, 2026-09-28): the real strict-Linux
-attestation passes inside the hardened CI container. Its adversarial containment
-evidence is technical debt required before the R0 release (#188, L-068,
-`docs/planning/sec-t01-adversarial-handoff.md`). P12 (agent skill) is next.
+There is now also an **agent skill** (`skills/vsift/`) that teaches Claude Code or
+Codex to run an investigation with the CLI and write a cited report. It has not yet
+been tried with real agents, so it is a candidate, not a qualified integration.
 
-## P11 in one view
+**P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
+adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
+progress.** PR 1 is an increment, not the packet.
 
-[ADR 0021](../docs/decisions/0021-worker-and-batch-host.md) is accepted with maintainer
-decisions D1-D5 (workspace by explicit init; workspace-set retention; steps ingest,
-retranscribe, candidates, retain, close; stop-then-cancel shutdown with opt-in drain;
-the D5 batch exit).
+## P12 in one view
 
-- **PR 1 (merged, `0bcfac5`):** request/result, batch and workspace contracts, events,
-  progress, fuzz targets.
-- **PR 2 (merged, `6e89bdb`):** workspace, weighted admission, strict attestation,
-  contained inputs, free-space reserve.
-- **PR 3 (merged, `d64dfa1`):** `job run`, request records, two-stage shutdown, crash
-  campaign rerun with requests (run 36379513017).
-- **PR 4a (merged, `45c25d1`):** `job batch` (engine `batch.rs`, reader
-  `batch_file.rs`, CLI `batch.rs`).
-- **PR 4b (branch, local):** fuzz target `job_batch_file` (23 targets); the opt-in
-  single-host checkpoint `crates/vsift-cli/tests/p11_worker_e2e.rs`; the operator
-  runbook `docs/operations/worker-host.md`; the qualification record
-  `docs/planning/p11-worker-host.md`; SEC-T01 status, known limits L-068/L-069 and the
-  final docs. No production code changed.
+[ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md) is
+**Proposed** (for maintainer review).
 
-## The single-host checkpoint (`p11_*`)
+- **PR 1 (branch `p12-pr1-skill`, this change): skill and contract guard.**
+  - `skills/vsift/SKILL.md`: trigger description and eight states
+    (CHECK_CAPABILITIES, PREPARE, FIND_SPOKEN_SPANS, INSPECT_CARDS, VERIFY_SOURCE,
+    REFINE_OR_STOP, REPORT, CLOSE_OR_RETAIN), each with allowed commands and a
+    stopping condition; error handling by code.
+  - `references/`: `commands.md` (every public command `free`, `explicit` or
+    `never`; the allowed command forms), `budgets.md` (`compact` default: 1 image per
+    step, 6 in total, 12 MiB, pages of 20, 30 tool calls, depth 2, 15 min, bursts of 4;
+    `standard`: 4/24/48 MiB/50/80/4/30 min/12), `handoff.md` (eight sections plus a
+    `vsift-handoff` JSON block), `safety.md`, `resume.md`, `lifecycle.md` (includes
+    the cleanup routine, closing L-009's P12 step).
+  - `handoff.schema.json` (handoff v1, owned by the skill), two example handoffs built
+    from real CLI output on F10 (supplied transcript, images) and F03-speech (no
+    whisper, no image access), `assets/image-check.png` (code word only in pixels),
+    `agents/openai.yaml` (Codex metadata, no tool dependencies).
+  - Guard `crates/vsift-cli/src/skill_contract.rs` (11 unit tests): console command
+    lines parse with the real parser and respect their class; inline commands and
+    flags exist; the class table covers `CommandName::ALL` once and fixes the `never`
+    and `explicit` sets; upper-case codes are `FailureCode::ALL` or states; field and
+    reason names resolve in `schemas/v1`, `cli-v1.md` or the handoff schema; examples
+    validate; the schema refuses paths, links and hidden characters; the image code is
+    in no text; `SKILL.md` within 300 lines with only `name` and `description`. A
+    15-mutation check showed each rule catches its breakage.
+  - Docs: `docs/agents/skill.md` (install for Claude Code and Codex, requirements,
+    guard), README status, ADR 0016 note, threat-model P12 note, known limits
+    L-007/L-009/L-039 rewritten and L-070/L-071 added, CHANGELOG, ledger P12
+    `in_progress` with the skill files as source documents.
+- **Next increment:** named-client trials (ADR 0022 decision 7): A-01..A-09 and SEC-T02
+  in named Claude Code and Codex, compact and review models, five trials per scenario,
+  mechanical and interpretation results separate, attempted out-of-policy actions fail.
+  The packet completes only when those pass.
 
-Opt-in, real FFmpeg 9.0 and whisper.cpp v1.9.2 (ggml base), Windows 11:
-`p11_batch_mechanical` (a mixed F03/F10/F01 batch plus two refused lines, then
-`search`, `candidates`, `frame get --candidate` and `bundle validate` on its outputs,
-cited against the frozen truth), `p11_admission_ladder` (concurrency 1, 2, 4 in a
-four-unit workspace; the sampled provider weight never above 4, two windows at most
-with four requests in flight), `p11_shutdown_and_redelivery` (Ctrl-Break mid-batch,
-exit 6 in about 1 s; `job resume` and redelivery; results equal to an uninterrupted
-control; a third delivery replays unchanged) all passed; `p11_durable_workspace`
-reports `blocked` off Ubuntu 24.04 / ext4 (the refusal is checked) and is required
-only there. Timings are in the qualification record.
+## Found while writing the skill
 
-## Runbook decisions worth knowing
-
-- Acknowledge a message only after its result is recorded; redeliver on `BUSY`,
-  `CANCELLED`, `DEADLINE_EXCEEDED`, `STORAGE_IO` or no result; dead-letter permanent
-  failures. Derive the operation id from the message's key; route redeliveries to the
-  same workspace; one workspace per trust domain.
-- The systemd example uses `KillMode=mixed` and `TimeoutStopSec` of at least the drain
-  plus 10 s (for the maintainer to confirm, TODO). A host-caused permanent failure
-  replays under its id; resubmit under a new one (L-069).
+- **L-070:** the `job resume` remediation for an expired session advises a renewal the
+  CLI refuses (renewal extends only open sessions). Not fixed here (CLI text change);
+  the skill states the real rule.
+- **L-071:** parse failures in JSON modes carry no remediation; the skill tells agents
+  to quote `--rect` on PowerShell and check commands against its reference.
 
 ## What works (public CLI)
 
@@ -104,8 +104,9 @@ only there. Timings are in the qualification record.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12, P14 | Not started |
+| P12 | In progress: PR 1 (skill and guard) in review; named-client trials next |
 | P13 | Not started; also delivers managed installation and human-readable output |
+| P14 | Not started |
 
 ## Architecture snapshot
 
@@ -113,14 +114,15 @@ only there. Timings are in the qualification record.
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
 <- `vsift-cli` (parse, present, signals). `vsift-contract` sits beside the engine and
 owns the wire types. The worker lives in the engine (`worker.rs`, `batch.rs`); the CLI
-only presents (`worker.rs`, `batch.rs`). Storage: `filesystem_session_store/` (jobs in
-`jobs.rs`, requests in `worker_requests.rs`), batch reader `batch_file.rs`.
+only presents. The agent skill (`skills/vsift/`) sits outside the crates and only
+calls the `vsift` binary; its guard is a test module of `vsift-cli` because the parser
+is crate-private.
 
 ## Quality evidence
 
-- PR 4b gates on Windows 11 (fmt, strict Clippy with and without features and for
-  `x86_64-unknown-linux-gnu`, workspace tests, warning-denied rustdoc, governance,
-  fuzz fmt/Clippy/replay) go in the pull request description.
+- P12 PR 1 gates on Windows 11 (fmt, strict Clippy with and without features,
+  workspace tests, warning-denied rustdoc, governance) go in the pull request
+  description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

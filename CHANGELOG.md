@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Agent skill `skills/vsift/` (P12 PR 1, [ADR 0022](docs/decisions/0022-agent-skill-and-named-client-qualification.md),
+  Proposed): a `SKILL.md` for Claude Code and Codex with the eight-state
+  investigation procedure, the command policy (`free`, `explicit`, `never` for every
+  public command), `compact` and `standard` budgets, the grounded handoff template and
+  its handoff v1 JSON schema (owned by the skill), safety, resume and lifecycle rules
+  (including the cleanup routine, L-009), an image-access check image, two example
+  handoffs from real CLI output and Codex metadata. Installation from a source
+  checkout: [docs/agents/skill.md](docs/agents/skill.md). Not yet qualified with named
+  clients (L-039).
+- Skill contract guard `crates/vsift-cli/src/skill_contract.rs` (unit tests): every
+  command line in the skill parses with the real parser, every inline command and
+  flag exists, every public command has exactly one class and the `never`/`explicit`
+  sets are fixed, every failure code and field name is published, the examples
+  validate against the handoff schema, and the image check's code appears only in its
+  pixels.
+- Known limits L-070 (a job remediation suggests renewing an expired session, which
+  the CLI refuses) and L-071 (a command line that does not parse gets no remediation
+  in JSON modes), both found while writing the skill.
+
 - P11 single-host worker checkpoint `p11_worker_e2e` (opt-in, the P11 stage of the E2E
   spine): a mixed batch whose outputs are searched, cited and validated against the
   frozen truth; an admission ladder at concurrency 1, 2 and 4 whose sampled provider
