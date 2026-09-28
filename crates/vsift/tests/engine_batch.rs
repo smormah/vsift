@@ -701,19 +701,35 @@ fn shape(value: &Value) -> Value {
     value
 }
 
+/// Names the stage of the kill test and the operation that failed, so a
+/// failure says which fault point it followed and what reported it.
+fn failed_at<E: std::fmt::Debug>(
+    stage: &'static str,
+    operation: &'static str,
+) -> impl FnOnce(E) -> Box<dyn Error> {
+    move |error| format!("{stage}: {operation} failed: {error:?}").into()
+}
+
 /// S-07 for batches: a process killed at each request fault point in the
 /// middle of a batch leaves a workspace in which a rerun of the same file
 /// completes every line with the result of an uninterrupted control, one
 /// session per operation id.
+///
+/// The other request of the batch is wherever the kill finds it; issue #197
+/// was that request killed while it registered its session, which left a
+/// torn index marker that failed every later listing.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_kill_mid_batch_then_a_rerun_matches_the_control() -> TestResult {
     let lines: Vec<String> = (1..=4).map(retain_and_close).collect();
     let control_layout = Layout::new()?;
-    let control_engine = control_layout.init(2)?;
+    let control_engine = control_layout
+        .init(2)
+        .map_err(failed_at("control", "workspace init"))?;
     control_layout.write_batch(&lines)?;
     let (control, control_events) =
         run_collecting(&control_engine, &control_layout, 2, bounded(30_000)?).await?;
-    assert_eq!(control?.outcome(), BatchOutcome::Success);
+    let control = control.map_err(failed_at("control", "batch"))?;
+    assert_eq!(control.outcome(), BatchOutcome::Success);
 
     for point in [
         "request-accept",
@@ -723,7 +739,7 @@ async fn a_kill_mid_batch_then_a_rerun_matches_the_control() -> TestResult {
         "request-complete",
     ] {
         let layout = Layout::new()?;
-        let engine = layout.init(2)?;
+        let engine = layout.init(2).map_err(failed_at(point, "workspace init"))?;
         layout.write_batch(&lines)?;
         let output = Command::new(env::current_exe()?)
             .args(["--exact", "worker_batch_child", "--ignored", "--nocapture"])
@@ -741,14 +757,16 @@ async fn a_kill_mid_batch_then_a_rerun_matches_the_control() -> TestResult {
         );
 
         let (rerun, events) = run_collecting(&engine, &layout, 2, bounded(30_000)?).await?;
-        let rerun = rerun?;
+        let rerun = rerun.map_err(failed_at(point, "rerun batch"))?;
         assert_eq!(rerun.outcome(), BatchOutcome::Success, "{point}");
         for line in 1..=4 {
             let expected = result_of(&control_events, line)?.ok_or("no control result")?;
             let continued = result_of(&events, line)?.ok_or("no rerun result")?;
             assert_eq!(shape(&continued), shape(&expected), "{point} line {line}");
         }
-        assert_eq!(Layout::opened_sessions(&engine)?, 4, "{point}");
+        let opened =
+            Layout::opened_sessions(&engine).map_err(failed_at(point, "session listing"))?;
+        assert_eq!(opened, 4, "{point}");
     }
     Ok(())
 }
