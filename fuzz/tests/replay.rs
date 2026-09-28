@@ -34,12 +34,12 @@ use vsift_domain::{
 };
 use vsift_fuzz::{
     CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, JOB_FUZZ_JOB, JOB_FUZZ_SESSION,
-    Target, VISUAL_FUZZ_SESSION, png_sequence_input, visual_samples_input,
+    REQUEST_FUZZ_OPERATION, Target, VISUAL_FUZZ_SESSION, png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
     FrameListingWindow, MountDevice, OsReleaseProfile, SourceContainer, VisualSamplingWindow,
     WhisperOutputLimits, classify_mountinfo, classify_os_release, decode_chunk_checkpoint,
-    decode_evidence_record, decode_job_record, decode_transcript_record,
+    decode_evidence_record, decode_job_record, decode_request_record, decode_transcript_record,
     decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
     parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata,
     parse_frame_listing, parse_frame_showinfo, parse_net_dev, parse_png_sequence,
@@ -113,6 +113,10 @@ const ATTESTATION_TESTS: &str = "crates/vsift-infrastructure/src/host_attestatio
 /// The committed example job records and checkpoints (P11 PR 1, issue #180),
 /// pinned to the encoder by `vsift-infrastructure`'s `job_record_examples`.
 const JOB_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/jobs";
+/// The committed example worker request records (P11 PR 3), pinned to the
+/// store's encoder and the contract's recorded form by `vsift`'s
+/// `request_record_examples`.
+const REQUEST_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/worker-requests";
 /// The frozen worker batch whose lines the request seeds quote.
 const BATCH_EXAMPLE: &str = "schemas/v1/examples/job-batch.requests.jsonl";
 
@@ -146,6 +150,16 @@ const SEEDS: &[Seed] = &[
         Target::JobRecord,
         "job-record.succeeded.json",
         Origin::Copy(JOB_EXAMPLES),
+    ),
+    seed(
+        Target::RequestRecord,
+        "request-record.running.json",
+        Origin::Copy(REQUEST_EXAMPLES),
+    ),
+    seed(
+        Target::RequestRecord,
+        "request-record.ended.json",
+        Origin::Copy(REQUEST_EXAMPLES),
     ),
     seed(
         Target::JobRecord,
@@ -548,6 +562,8 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::JobBatchLine, "f01-session-line.jsonl"),
         (Target::JobRecord, "job-record.succeeded.json"),
         (Target::JobRecord, "job-record.interrupted.json"),
+        (Target::RequestRecord, "request-record.running.json"),
+        (Target::RequestRecord, "request-record.ended.json"),
         (Target::ChunkCheckpoint, "checkpoint.recognised.json"),
         (Target::ChunkCheckpoint, "checkpoint.silent.json"),
     ];
@@ -636,6 +652,11 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         )
         .is_ok(),
         Target::ChunkCheckpoint => decode_chunk_checkpoint(data, 1).is_some(),
+        Target::RequestRecord => decode_request_record(
+            data,
+            &vsift_domain::OperationId::parse(REQUEST_FUZZ_OPERATION)?,
+        )
+        .is_ok(),
         // Each seed is one kernel file that its own parser accepts.
         Target::HostAttestation => {
             parse_proc_cgroup(data).is_ok()

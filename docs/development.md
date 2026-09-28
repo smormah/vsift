@@ -75,8 +75,13 @@ examples in `schemas/v1/examples/` and the example records in
 accepted limit reads back from its canonical form and adding an interface line decides
 the network verdict as documented; seeds quote the attestation tests) and made
 `mountinfo` also check that `classify_root_mount` accepts exactly the tables
-`classify_mountinfo` does. A `request_record` target follows with the worker's
-request records in P11 PR 3. The two
+`classify_mountinfo` does. P11 PR 3 added `request_record` (a stored worker request
+record through `decode_request_record` for a fixed operation id, round-tripped, and
+each recorded step and result through the contract's `decode_recorded`, which must
+read back to exactly its bytes); its seeds are the example records in
+`crates/vsift-infrastructure/tests/data/worker-requests/`, which the engine's
+`request_record_examples` test pins to the store's encoder and the contract's
+recorded form (regenerate with `VSIFT_REGENERATE_REQUEST_EXAMPLES=1`). The two
 diagnostics targets also require that indented copies of every line, as FFmpeg echoes
 source metadata, never change a result; their seeds are the real FFmpeg 9.0 output in
 `crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/`. It is a separate package with its

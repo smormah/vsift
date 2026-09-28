@@ -15,14 +15,14 @@
 use std::{collections::BTreeSet, error::Error, fmt};
 
 use vsift_contract::{
-    BatchLine, MAX_REQUEST_STEPS, RelativeInputPath, WORK_REQUEST_LIMITS, WorkTarget,
-    decode_batch_line, decode_work_request, validate_steps,
+    BatchLine, MAX_REQUEST_STEPS, RelativeInputPath, StepResult, WORK_REQUEST_LIMITS, WorkResult,
+    WorkTarget, decode_batch_line, decode_work_request, validate_steps,
 };
 use vsift_domain::{
     CropRect, CursorToken, FrameDimensions, JobId, ListingTail, MAX_CUE_TEXT_BYTES,
     MAX_LISTED_FRAMES, MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SEARCH_QUERY_BYTES,
     MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, MediaStreamKind, MediaTime,
-    PlannedChunk, SearchMatch, SearchQuery, SessionId, SourceSegmentId, TimeRange,
+    OperationId, PlannedChunk, SearchMatch, SearchQuery, SessionId, SourceSegmentId, TimeRange,
     TranscriptFormat, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId, VisualChangePolicy,
     VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome, analyse_window,
     normalise_search_text, validate_chunk_output,
@@ -32,12 +32,12 @@ use vsift_infrastructure::{
     MAX_LISTING_DIAGNOSTIC_BYTES, MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES, MountDevice,
     NetworkInterfaces, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, classify_root_mount, decode_chunk_checkpoint,
-    decode_evidence_record, decode_job_record, decode_transcript_record,
+    decode_evidence_record, decode_job_record, decode_request_record, decode_transcript_record,
     decode_visual_index_record, encode_chunk_checkpoint, encode_evidence_record, encode_job_record,
-    encode_transcript_record, encode_visual_index_record, parse_ashowinfo_start,
-    parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing,
-    parse_frame_showinfo, parse_net_dev, parse_png_sequence, parse_proc_cgroup,
-    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    encode_request_record, encode_transcript_record, encode_visual_index_record,
+    parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata,
+    parse_frame_listing, parse_frame_showinfo, parse_net_dev, parse_png_sequence,
+    parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -143,11 +143,17 @@ pub enum Target {
     /// section 8): the same bytes through `parse_proc_cgroup`, `parse_cpu_max`,
     /// `parse_cgroup_limit` and `parse_net_dev`. The input is the file.
     HostAttestation,
+    /// A stored worker request record (`worker-requests/<bucket>/<op>.json`
+    /// v1, P11 PR 3) through `decode_request_record` for a fixed operation
+    /// id, then each recorded step and result through the contract's
+    /// `StepResult::decode_recorded` and `WorkResult::decode_recorded`, as
+    /// a continuation and a replay read them. The input is the record.
+    RequestRecord,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -169,6 +175,7 @@ impl Target {
         Self::JobRecord,
         Self::ChunkCheckpoint,
         Self::HostAttestation,
+        Self::RequestRecord,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -196,6 +203,7 @@ impl Target {
             Self::JobRecord => "job_record",
             Self::ChunkCheckpoint => "chunk_checkpoint",
             Self::HostAttestation => "host_attestation",
+            Self::RequestRecord => "request_record",
         }
     }
 
@@ -227,6 +235,7 @@ impl Target {
             Self::JobRecord => check_job_record(data),
             Self::ChunkCheckpoint => check_chunk_checkpoint(data),
             Self::HostAttestation => check_host_attestation(data),
+            Self::RequestRecord => check_request_record(data),
         }
     }
 }
@@ -326,6 +335,10 @@ pub enum Violation {
     /// read back from its canonical form, or changed its verdict when a line
     /// was added.
     HostAttestationInconsistent,
+    /// An accepted request record could not be encoded again, changed in a
+    /// round trip, or holds a recorded step or result that reads back but is
+    /// not its own canonical form.
+    RequestRecordInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -380,6 +393,7 @@ impl fmt::Display for Violation {
             Self::HostAttestationInconsistent => {
                 "an accepted kernel file broke its bounds or its canonical form"
             }
+            Self::RequestRecordInconsistent => "an accepted request record is inconsistent",
         })
     }
 }
@@ -1097,6 +1111,42 @@ fn check_job_record(data: &[u8]) -> Result<(), Violation> {
         Ok(decoded) if decoded == record => Ok(()),
         _ => Err(Violation::JobRecordRoundTripChanged),
     }
+}
+
+/// The operation id every fuzzed request record is decoded for: the frozen
+/// request's, which the seeds were written for.
+pub const REQUEST_FUZZ_OPERATION: &str = "op_5b1e0c7a9d2f4e6b8a3c1d0e9f7a6b5c";
+
+fn check_request_record(data: &[u8]) -> Result<(), Violation> {
+    let operation =
+        OperationId::parse(REQUEST_FUZZ_OPERATION).map_err(|_| Violation::HarnessSetup)?;
+    let Ok(record) = decode_request_record(data, &operation) else {
+        return Ok(());
+    };
+    let consistent = record.operation_id == operation
+        && (record.result.is_none() || record.steps.is_empty())
+        && encode_request_record(&record)
+            .ok()
+            .and_then(|encoded| decode_request_record(&encoded, &operation).ok())
+            .is_some_and(|decoded| decoded == record);
+    if !consistent {
+        return Err(Violation::RequestRecordInconsistent);
+    }
+    // A recorded document that reads back is exactly its canonical bytes.
+    for step in &record.steps {
+        if let Ok(decoded) = StepResult::decode_recorded(step.as_bytes())
+            && decoded.recorded_bytes().ok().as_deref() != Some(step.as_bytes())
+        {
+            return Err(Violation::RequestRecordInconsistent);
+        }
+    }
+    if let Some(result) = &record.result
+        && let Ok(decoded) = WorkResult::decode_recorded(result.document().as_bytes())
+        && decoded.recorded_bytes().ok().as_deref() != Some(result.document().as_bytes())
+    {
+        return Err(Violation::RequestRecordInconsistent);
+    }
+    Ok(())
 }
 
 fn check_chunk_checkpoint(data: &[u8]) -> Result<(), Violation> {
