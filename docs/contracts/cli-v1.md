@@ -561,7 +561,7 @@ member of the status is unchanged; `session list`, `renew` and `close` do not li
 | --- | --- |
 | No session of the root holds the job (also a missing root) | `INVALID_ARGUMENT` (fixed remediation) |
 | `job resume` of a succeeded, failed or cancelled job | `INVALID_ARGUMENT` (the job in `affected_ids`) |
-| `job resume` of a job whose session is closed or expired | `INVALID_ARGUMENT` (the session and job in `affected_ids`; renew an expired session within its seven days, or open a new session with `ingest` and run the request there) |
+| `job resume` of a job whose session is closed or expired | `INVALID_ARGUMENT` (the session and job in `affected_ids`; a closed or expired session cannot be renewed, so open a new session with `ingest` and run the request there) |
 | `job resume` of a job a process owns now | `BUSY` (the job in `affected_ids`, `retry_after_ms` 2000) |
 | `job resume` interrupted by Ctrl-C/`SIGTERM` | `CANCELLED` (exit 6; the session and job named, `job resume` suggested again) |
 | `job cancel` while an owner appeared meanwhile, or the state lock stayed busy | `BUSY` |

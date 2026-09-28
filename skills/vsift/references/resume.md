@@ -69,6 +69,5 @@ stated ([lifecycle.md](lifecycle.md)):
 
 An expired or closed session cannot be renewed: `vsift session renew` only extends an
 open session, and only when the user asked for it. A job whose session is closed or
-expired cannot be resumed (`INVALID_ARGUMENT`). That error's remediation currently
-also suggests renewing an expired session; the CLI refuses such a renewal, so do not
-try it (known limit L-070).
+expired cannot be resumed (`INVALID_ARGUMENT`); its remediation says the same, and the
+way on is a new `ingest` under the user's lifecycle policy.

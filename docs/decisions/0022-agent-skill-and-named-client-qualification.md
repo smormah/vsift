@@ -66,8 +66,9 @@ Every public command (`CommandName::ALL` except `parse`) has exactly one class:
 Every command uses `--json`; `--events jsonl` only for a long `transcript
 retranscribe` or `job resume`, reading the terminal event. The initial P12 plan
 put "renew of an expired session" in the explicit class; the CLI refuses to
-renew an expired session at all, so `session renew` is explicit as a whole (and see
-L-070 for a remediation that says otherwise). Re-opening an expired video is an
+renew an expired session at all, so `session renew` is explicit as a whole (the
+`job resume` remediation that advised such a renewal, L-070, was corrected on
+2026-09-28). Re-opening an expired video is an
 explicit decision about `ingest`, stated in the skill's resume rules, rather than a
 second class for the same command.
 

@@ -6,10 +6,9 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P11 are complete. P12 (agent skill) is in progress.** PR 1 ("skill and contract
-guard", branch `p12-pr1-skill`) is an increment, not the packet: it adds the skill
-`skills/vsift/`, its guard `crates/vsift-cli/src/skill_contract.rs`,
-`docs/agents/skill.md` and ADR 0022 (Proposed).
+**P00-P11 are complete. P12 (agent skill) is in progress.** PR 1 (#196, `7990fdf`)
+merged the skill `skills/vsift/`, its guard `skill_contract.rs`, `docs/agents/skill.md`
+and ADR 0022 (Proposed); an increment, not the packet.
 
 1. **Maintainer: review ADR 0022**, especially the command classes (decision 3), the
    budgets (decision 4, with the added image-bytes limit) and the trial protocol
@@ -25,10 +24,10 @@ guard", branch `p12-pr1-skill`) is an increment, not the packet: it adds the ski
 
 ## Found while writing the skill (for the maintainer)
 
-- **L-070 (open):** `job resume` of a job whose session expired carries a remediation
-  (`JOB_SESSION_NOT_OPEN_REMEDIATION`, also the `cli-v1.md` failure row) telling the
-  user to renew the expired session; `session renew` refuses expired sessions. The
-  skill tells agents the truth; the CLI text (or the renewal rule) needs a decision.
+- **L-070 (fixed 2026-09-28):** the `job resume` remediation for a closed or expired
+  session now says to open a new session with `ingest`; the limit is removed.
+- **#197 (open):** macOS once reported `IntegrityFailure` in the P11 kill mid-batch
+  test (a re-run passed); treated as a possible crash-consistency defect until diagnosed.
 - **L-071 (deferred to P13):** a command line that does not parse answers `parse`
   with no remediation in JSON modes; on PowerShell an unquoted `--rect a,b,c,d` fails
   that way. The skill tells agents to quote it.

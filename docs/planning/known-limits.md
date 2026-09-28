@@ -114,10 +114,9 @@ Each entry has these fields:
 | [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
 | [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
-| [L-070](#l-070) | A job remediation suggests renewing an expired session, which the CLI refuses | contract/UX | low | unscheduled | none | open |
 | [L-071](#l-071) | A command line that does not parse gets no remediation in JSON modes | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 
-Counts: 4 high, 18 medium, 47 low (69 entries).
+Counts: 4 high, 18 medium, 46 low (68 entries).
 
 ## Security
 
@@ -866,28 +865,6 @@ Counts: 4 high, 18 medium, 47 low (69 entries).
 - **Next step:** none planned; revisit if operators need a host-side retry class.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
-
-### L-070
-
-**A job remediation suggests renewing an expired session, which the CLI refuses.**
-
-- **What:** `job resume` of a job whose session is closed or expired fails
-  `INVALID_ARGUMENT` with a fixed remediation (`JOB_SESSION_NOT_OPEN_REMEDIATION`) that
-  says to renew an expired session within its seven-day limit and resume the job. A
-  renewal only extends an open session: `session renew` of an expired session is
-  refused (domain `SessionLifetime::renew`, the P05 record). The contract's `job
-  resume` failure table repeats the same advice.
-- **Evidence:** `crates/vsift-contract/src/job.rs`, `crates/vsift-domain/src/session.rs`,
-  `docs/contracts/cli-v1.md` "P10 recoverable jobs"; found while writing the P12 skill
-  (2026-09-28).
-- **Impact:** an agent or user who follows the remediation gets a second refusal; no
-  data is at risk.
-- **Why:** the remediation was written for a renewal rule the domain does not have.
-- **Mitigation:** the P12 skill tells agents that an expired session cannot be renewed
-  and that re-opening the video needs the user's lifecycle decision.
-- **Next step:** correct the remediation text and the contract row (a CLI text change
-  with its contract test), or decide that renewal after expiry should be allowed.
-- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
 
 ### L-071
 

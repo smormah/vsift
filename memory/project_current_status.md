@@ -67,7 +67,7 @@ progress.** PR 1 is an increment, not the packet.
     15-mutation check showed each rule catches its breakage.
   - Docs: `docs/agents/skill.md` (install for Claude Code and Codex, requirements,
     guard), README status, ADR 0016 note, threat-model P12 note, known limits
-    L-007/L-009/L-039 rewritten and L-070/L-071 added, CHANGELOG, ledger P12
+    L-007/L-009/L-039 rewritten and L-071 added (L-070 added then fixed), CHANGELOG, ledger P12
     `in_progress` with the skill files as source documents.
 - **Next increment:** named-client trials (ADR 0022 decision 7): A-01..A-09 and SEC-T02
   in named Claude Code and Codex, compact and review models, five trials per scenario,
@@ -76,9 +76,12 @@ progress.** PR 1 is an increment, not the packet.
 
 ## Found while writing the skill
 
-- **L-070:** the `job resume` remediation for an expired session advises a renewal the
-  CLI refuses (renewal extends only open sessions). Not fixed here (CLI text change);
-  the skill states the real rule.
+- **L-070 (fixed):** the `job resume` remediation for a closed or expired session now
+  says to open a new session with `ingest`; it no longer advises a renewal the CLI
+  refuses.
+- **#197 (open):** a macOS CI run once reported `IntegrityFailure` in the P11 kill
+  mid-batch test; a re-run passed. Under investigation as a possible crash-consistency
+  defect, not dismissed as a flake.
 - **L-071:** parse failures in JSON modes carry no remediation; the skill tells agents
   to quote `--rect` on PowerShell and check commands against its reference.
 

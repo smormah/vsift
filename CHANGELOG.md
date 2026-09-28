@@ -23,9 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   sets are fixed, every failure code and field name is published, the examples
   validate against the handoff schema, and the image check's code appears only in its
   pixels.
-- Known limits L-070 (a job remediation suggests renewing an expired session, which
-  the CLI refuses) and L-071 (a command line that does not parse gets no remediation
-  in JSON modes), both found while writing the skill.
+- Known limit L-071 (a command line that does not parse gets no remediation in JSON
+  modes), found while writing the skill.
 
 - P11 single-host worker checkpoint `p11_worker_e2e` (opt-in, the P11 stage of the E2E
   spine): a mixed batch whose outputs are searched, cited and validated against the
@@ -517,6 +516,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `job resume` of a job whose session is closed or expired advised renewing the
+  session, which the CLI refuses for an expired session; its remediation
+  (`JOB_SESSION_NOT_OPEN_REMEDIATION`) and the contract's failure row now say to open
+  a new session with `ingest`. Found while writing the P12 skill; known limit L-070
+  is removed.
 - A storage failure while committed state was read (for example `EIO` from a disk,
   or from ext4 after it shut itself down on a write error) was reported as
   `INTEGRITY_FAILURE`, as if the evidence had been altered; it is now `STORAGE_IO`,
