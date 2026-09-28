@@ -701,6 +701,61 @@ fn shape(value: &Value) -> Value {
     value
 }
 
+/// DIAGNOSTIC ONLY (#197): every file under `root` with its size, and the
+/// content of small metadata files.
+fn diagnostic_listing(root: &std::path::Path) -> String {
+    fn walk(root: &std::path::Path, directory: &std::path::Path, out: &mut String, depth: u8) {
+        if depth > 8 {
+            return;
+        }
+        let Ok(entries) = fs::read_dir(directory) else {
+            out.push_str(&format!("  <unreadable {}>\n", directory.display()));
+            return;
+        };
+        let mut entries: Vec<_> = entries.filter_map(Result::ok).collect();
+        entries.sort_by_key(fs::DirEntry::file_name);
+        for entry in entries {
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
+            match entry.metadata() {
+                Ok(metadata) if metadata.is_dir() => {
+                    out.push_str(&format!("  {relative}/\n"));
+                    walk(root, &path, out, depth + 1);
+                }
+                Ok(metadata) => {
+                    out.push_str(&format!("  {relative} ({} bytes)", metadata.len()));
+                    let small = metadata.len() < 400;
+                    let interesting = relative.contains("session-index")
+                        || relative.contains("worker-requests")
+                        || relative.ends_with("current.json");
+                    if small && interesting {
+                        let content = fs::read(&path).unwrap_or_default();
+                        out.push_str(&format!(" {:?}", String::from_utf8_lossy(&content)));
+                    }
+                    out.push('\n');
+                }
+                Err(error) => out.push_str(&format!("  {relative} <{error}>\n")),
+            }
+        }
+    }
+    let mut out = String::new();
+    walk(root, root, &mut out, 0);
+    out
+}
+
+/// Names the stage of the kill test and the operation that failed, so a
+/// failure says which fault point it followed and what reported it.
+fn failed_at<E: std::fmt::Debug>(
+    stage: &'static str,
+    operation: &'static str,
+) -> impl FnOnce(E) -> Box<dyn Error> {
+    move |error| format!("{stage}: {operation} failed: {error:?}").into()
+}
+
 /// S-07 for batches: a process killed at each request fault point in the
 /// middle of a batch leaves a workspace in which a rerun of the same file
 /// completes every line with the result of an uninterrupted control, one
@@ -709,11 +764,14 @@ fn shape(value: &Value) -> Value {
 async fn a_kill_mid_batch_then_a_rerun_matches_the_control() -> TestResult {
     let lines: Vec<String> = (1..=4).map(retain_and_close).collect();
     let control_layout = Layout::new()?;
-    let control_engine = control_layout.init(2)?;
+    let control_engine = control_layout
+        .init(2)
+        .map_err(failed_at("control", "workspace init"))?;
     control_layout.write_batch(&lines)?;
     let (control, control_events) =
         run_collecting(&control_engine, &control_layout, 2, bounded(30_000)?).await?;
-    assert_eq!(control?.outcome(), BatchOutcome::Success);
+    let control = control.map_err(failed_at("control", "batch"))?;
+    assert_eq!(control.outcome(), BatchOutcome::Success);
 
     for point in [
         "request-accept",
@@ -723,7 +781,7 @@ async fn a_kill_mid_batch_then_a_rerun_matches_the_control() -> TestResult {
         "request-complete",
     ] {
         let layout = Layout::new()?;
-        let engine = layout.init(2)?;
+        let engine = layout.init(2).map_err(failed_at(point, "workspace init"))?;
         layout.write_batch(&lines)?;
         let output = Command::new(env::current_exe()?)
             .args(["--exact", "worker_batch_child", "--ignored", "--nocapture"])
@@ -740,15 +798,26 @@ async fn a_kill_mid_batch_then_a_rerun_matches_the_control() -> TestResult {
             "{point}: {stderr}"
         );
 
+        eprintln!(
+            "DIAGNOSTIC {point}: child stderr: {stderr}\nafter the kill:\n{}",
+            diagnostic_listing(&layout.0)
+        );
         let (rerun, events) = run_collecting(&engine, &layout, 2, bounded(30_000)?).await?;
-        let rerun = rerun?;
+        eprintln!(
+            "DIAGNOSTIC {point}: after the rerun ({:?}):\n{}",
+            rerun.as_ref().map(JobBatchData::outcome),
+            diagnostic_listing(&layout.0)
+        );
+        let rerun = rerun.map_err(failed_at(point, "rerun batch"))?;
         assert_eq!(rerun.outcome(), BatchOutcome::Success, "{point}");
         for line in 1..=4 {
             let expected = result_of(&control_events, line)?.ok_or("no control result")?;
             let continued = result_of(&events, line)?.ok_or("no rerun result")?;
             assert_eq!(shape(&continued), shape(&expected), "{point} line {line}");
         }
-        assert_eq!(Layout::opened_sessions(&engine)?, 4, "{point}");
+        let opened =
+            Layout::opened_sessions(&engine).map_err(failed_at(point, "session listing"))?;
+        assert_eq!(opened, 4, "{point}");
     }
     Ok(())
 }

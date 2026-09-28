@@ -26,6 +26,35 @@ jobs:
       - name: Validate delivery ledger and fixture corpus
         run: cargo run --locked -p vsift-governance -- check
 
+  stress-197:
+    name: DIAGNOSTIC stress 197 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the batch test binary
+        run: cargo test --locked -p vsift --test engine_batch --no-run
+
+      - name: Repeat the batch tests (whole binary, parallel)
+        shell: bash
+        run: |
+          set -uo pipefail
+          for run in $(seq 1 120); do
+            if ! cargo test --locked --quiet -p vsift --test engine_batch > "run.log" 2>&1; then
+              echo "FAILED on run $run"
+              cat run.log
+              exit 1
+            fi
+          done
+          echo "120 repetitions passed"
+
   quality:
     name: Quality (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
