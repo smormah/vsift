@@ -14,20 +14,25 @@
 
 use std::{collections::BTreeSet, error::Error, fmt};
 
+use vsift_contract::{
+    BatchLine, MAX_REQUEST_STEPS, RelativeInputPath, WORK_REQUEST_LIMITS, WorkTarget,
+    decode_batch_line, decode_work_request, validate_steps,
+};
 use vsift_domain::{
-    CropRect, CursorToken, FrameDimensions, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES,
-    MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS,
-    MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, MediaStreamKind, MediaTime, PlannedChunk,
-    SearchMatch, SearchQuery, SessionId, SourceSegmentId, TimeRange, TranscriptFormat,
-    VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId, VisualChangePolicy, VisualIndexWindow,
-    VisualSample, VisualWindow, VisualWindowOutcome, analyse_window, normalise_search_text,
-    validate_chunk_output,
+    CropRect, CursorToken, FrameDimensions, JobId, ListingTail, MAX_CUE_TEXT_BYTES,
+    MAX_LISTED_FRAMES, MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SEARCH_QUERY_BYTES,
+    MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, MediaStreamKind, MediaTime,
+    PlannedChunk, SearchMatch, SearchQuery, SessionId, SourceSegmentId, TimeRange,
+    TranscriptFormat, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId, VisualChangePolicy,
+    VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome, analyse_window,
+    normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
     FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, MAX_OS_RELEASE_BYTES,
     MountDevice, SourceContainer, VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo,
-    classify_os_release, decode_evidence_record, decode_transcript_record,
-    decode_visual_index_record, encode_evidence_record, encode_transcript_record,
+    classify_os_release, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
+    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
+    encode_evidence_record, encode_job_record, encode_transcript_record,
     encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
     parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
     parse_whisper_full_json,
@@ -120,11 +125,23 @@ pub enum Target {
     /// whether the host is the qualified Ubuntu 24.04 (P10 PR 4). The input
     /// is the file.
     OsRelease,
+    /// A worker request (`job run --request`, P11) through
+    /// `vsift_contract::decode_work_request`. The input is the document.
+    JobRequest,
+    /// One line of a `job batch` file (P11) through
+    /// `vsift_contract::decode_batch_line`. The input is the line.
+    JobBatchLine,
+    /// A stored job record (`job.json` v1, P10) through `decode_job_record`,
+    /// as the store reads it for a fixed job and session (issue #180).
+    JobRecord,
+    /// A stored chunk checkpoint (`chunks/<ordinal>.json` v1, P10) through
+    /// `decode_chunk_checkpoint`, as a resumed run reads ordinal 1 (issue #180).
+    ChunkCheckpoint,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 20] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -141,6 +158,10 @@ impl Target {
         Self::CropRect,
         Self::Mountinfo,
         Self::OsRelease,
+        Self::JobRequest,
+        Self::JobBatchLine,
+        Self::JobRecord,
+        Self::ChunkCheckpoint,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -163,6 +184,10 @@ impl Target {
             Self::CropRect => "crop_rect",
             Self::Mountinfo => "mountinfo",
             Self::OsRelease => "os_release",
+            Self::JobRequest => "job_request",
+            Self::JobBatchLine => "job_batch_line",
+            Self::JobRecord => "job_record",
+            Self::ChunkCheckpoint => "chunk_checkpoint",
         }
     }
 
@@ -189,6 +214,10 @@ impl Target {
             Self::CropRect => check_crop_rect(data),
             Self::Mountinfo => check_mountinfo(data),
             Self::OsRelease => check_os_release(data),
+            Self::JobRequest => check_job_request(data),
+            Self::JobBatchLine => check_job_batch_line(data),
+            Self::JobRecord => check_job_record(data),
+            Self::ChunkCheckpoint => check_chunk_checkpoint(data),
         }
     }
 }
@@ -270,6 +299,20 @@ pub enum Violation {
     /// The os-release verdict changed when a comment was appended or the
     /// file was repeated.
     OsReleaseInconsistent,
+    /// An accepted job request broke its own bounds or step order, or
+    /// decoded differently when decoded again or with whitespace appended.
+    WorkRequestInconsistent,
+    /// An accepted batch line was not the request its bytes decode to, or a
+    /// blank line held more than whitespace.
+    BatchLineInconsistent,
+    /// An accepted job record could not be encoded again.
+    JobRecordNotReencodable,
+    /// An accepted job record changed in a round trip or names another job.
+    JobRecordRoundTripChanged,
+    /// An accepted checkpoint could not be encoded again.
+    CheckpointNotReencodable,
+    /// An accepted checkpoint changed in a round trip or is of another chunk.
+    CheckpointRoundTripChanged,
 }
 
 impl fmt::Display for Violation {
@@ -315,6 +358,12 @@ impl fmt::Display for Violation {
             Self::CropRectInvalid => "an accepted crop is outside its frame or not canonical",
             Self::MountinfoInconsistent => "the mount-table verdict is inconsistent",
             Self::OsReleaseInconsistent => "the os-release verdict is inconsistent",
+            Self::WorkRequestInconsistent => "an accepted job request is inconsistent",
+            Self::BatchLineInconsistent => "an accepted batch line is inconsistent",
+            Self::JobRecordNotReencodable => "an accepted job record could not be encoded again",
+            Self::JobRecordRoundTripChanged => "an accepted job record changed in a round trip",
+            Self::CheckpointNotReencodable => "an accepted checkpoint could not be encoded again",
+            Self::CheckpointRoundTripChanged => "an accepted checkpoint changed in a round trip",
         })
     }
 }
@@ -882,4 +931,107 @@ fn check_png_sequence(data: &[u8]) -> Result<(), Violation> {
         return Err(Violation::PngSequenceMismatch);
     }
     Ok(())
+}
+
+/// The session every fuzzed job record and checkpoint belongs to: that of
+/// the committed example records the seeds copy.
+pub const JOB_FUZZ_SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
+/// The job every fuzzed job record is decoded for: the example records' job.
+pub const JOB_FUZZ_JOB: &str = "job_82001d205f5092aaaf15197d26ba34fd";
+
+/// An accepted request keeps its own bounds and step order, decodes to the
+/// same request again, and to the same request with trailing whitespace
+/// (the digest is whitespace-insensitive) while that stays within the bound.
+fn check_job_request(data: &[u8]) -> Result<(), Violation> {
+    let Ok(request) = decode_work_request(data) else {
+        return Ok(());
+    };
+    let consistent = data.len() <= WORK_REQUEST_LIMITS.max_bytes
+        && request.steps().len() <= MAX_REQUEST_STEPS
+        && validate_steps(request.target(), request.steps()).is_ok()
+        && request.digest().as_str().len() == 64
+        && request
+            .digest()
+            .as_str()
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        && paths_reparse(request.target())
+        && decode_work_request(data).as_ref() == Ok(&request);
+    if !consistent {
+        return Err(Violation::WorkRequestInconsistent);
+    }
+    let mut padded = data.to_vec();
+    padded.extend_from_slice(b" \n\t");
+    if padded.len() <= WORK_REQUEST_LIMITS.max_bytes
+        && decode_work_request(&padded).as_ref() != Ok(&request)
+    {
+        return Err(Violation::WorkRequestInconsistent);
+    }
+    Ok(())
+}
+
+/// Every path of an accepted target is itself a valid relative input path.
+fn paths_reparse(target: &WorkTarget) -> bool {
+    let reparses =
+        |path: &RelativeInputPath| RelativeInputPath::parse(path.as_str()).as_ref() == Ok(path);
+    match target {
+        WorkTarget::Ingest { source, transcript } => {
+            reparses(source)
+                && transcript
+                    .as_ref()
+                    .is_none_or(|transcript| reparses(transcript.path()))
+        }
+        WorkTarget::Session(_) => true,
+    }
+}
+
+/// An accepted line is the request its bytes (without one trailing carriage
+/// return) decode to; a blank line is only whitespace.
+fn check_job_batch_line(data: &[u8]) -> Result<(), Violation> {
+    let Ok(line) = decode_batch_line(data) else {
+        return Ok(());
+    };
+    let body = data.strip_suffix(b"\r").unwrap_or(data);
+    let consistent = !body.contains(&b'\n')
+        && match line {
+            BatchLine::Blank => body.iter().all(u8::is_ascii_whitespace),
+            BatchLine::Request(request) => decode_work_request(body).as_ref() == Ok(&*request),
+        };
+    if consistent {
+        Ok(())
+    } else {
+        Err(Violation::BatchLineInconsistent)
+    }
+}
+
+fn check_job_record(data: &[u8]) -> Result<(), Violation> {
+    let session = SessionId::parse(JOB_FUZZ_SESSION).map_err(|_| Violation::HarnessSetup)?;
+    let job = JobId::parse(JOB_FUZZ_JOB).map_err(|_| Violation::HarnessSetup)?;
+    let Ok(record) = decode_job_record(data, &job, &session) else {
+        return Ok(());
+    };
+    if record.job_id != job || record.session_id != session {
+        return Err(Violation::JobRecordRoundTripChanged);
+    }
+    let encoded = encode_job_record(&record).map_err(|_| Violation::JobRecordNotReencodable)?;
+    match decode_job_record(&encoded, &job, &session) {
+        Ok(decoded) if decoded == record => Ok(()),
+        _ => Err(Violation::JobRecordRoundTripChanged),
+    }
+}
+
+fn check_chunk_checkpoint(data: &[u8]) -> Result<(), Violation> {
+    let Some(checkpoint) = decode_chunk_checkpoint(data, 1) else {
+        return Ok(());
+    };
+    if checkpoint.index() != 0 || decode_chunk_checkpoint(data, 2).is_some() {
+        return Err(Violation::CheckpointRoundTripChanged);
+    }
+    let encoded =
+        encode_chunk_checkpoint(&checkpoint).ok_or(Violation::CheckpointNotReencodable)?;
+    if decode_chunk_checkpoint(&encoded, 1) == Some(checkpoint) {
+        Ok(())
+    } else {
+        Err(Violation::CheckpointRoundTripChanged)
+    }
 }

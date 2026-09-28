@@ -1358,6 +1358,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "vsift-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "vsift-application",
+ "vsift-domain",
+]
+
+[[package]]
 name = "vsift-domain"
 version = "0.1.0"
 
@@ -1368,6 +1379,7 @@ dependencies = [
  "libfuzzer-sys",
  "serde_json",
  "vsift-application",
+ "vsift-contract",
  "vsift-domain",
  "vsift-infrastructure",
 ]

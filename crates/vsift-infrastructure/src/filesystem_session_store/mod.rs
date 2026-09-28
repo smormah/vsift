@@ -55,6 +55,9 @@ use vsift_domain::{
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
+pub use job_records::{
+    decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
+};
 pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 
