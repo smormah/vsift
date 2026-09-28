@@ -94,6 +94,7 @@ pub(super) fn activate(
             source_bytes: u64::try_from(SOURCE_BYTES.len())?,
             now: now()?,
             artifacts: Vec::new(),
+            lifetime: vsift_domain::SessionLifetimePolicy::Desktop,
         },
         LifetimeHold::Shared,
         hooks,
@@ -894,6 +895,7 @@ fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
         source_bytes: u64::try_from(SOURCE_BYTES.len()).unwrap_or(1),
         artifacts: (0..count).map(record_artifact).collect(),
         verified_source_identity: None,
+        workspace_retention_seconds: None,
     };
     let add = |count: usize| {
         super::publication::update_lifecycle(

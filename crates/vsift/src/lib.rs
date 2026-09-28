@@ -91,6 +91,7 @@ mod candidates;
 mod engine;
 mod error;
 mod evidence;
+mod isolation;
 mod jobs;
 mod local_asr_check;
 mod progress;
@@ -99,6 +100,7 @@ mod sessions;
 mod setup;
 mod transcripts;
 mod verification;
+mod workspace;
 
 pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
@@ -115,6 +117,7 @@ pub use evidence::{
     DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
     FrameNeighboursRequest, FrameTarget,
 };
+pub use isolation::{IsolationGap, IsolationGaps, IsolationProfile, attest_host_isolation};
 pub use jobs::{
     JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,
     MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
@@ -134,6 +137,7 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
 pub use vsift_application::{
     AsrFailure, AsrFailureReason, AsrStage, Clock, ClockError, IdentifierGenerationError,
@@ -178,8 +182,9 @@ pub use vsift_domain::{
     AttemptFailure, DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId,
     FailureClass, FailureCode, IdentifierError, JobId, JobKind, JobState, OperationId,
     ProgressStage, ProgressUnit, ProgressUpdate, PublicationGuarantee, RuntimeCapability,
-    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionPhase, SourceId,
-    StorageGeneration,
+    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy,
+    SessionPhase, SourceId, StorageGeneration, WorkspacePolicy, WorkspacePolicyError,
+    WorkspaceRetention,
 };
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_domain::{

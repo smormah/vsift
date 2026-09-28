@@ -23,6 +23,30 @@ pub const MIN_SESSION_RETENTION_SECONDS: u64 = 3_600;
 /// Largest admission capacity a workspace policy may set, in weight units.
 pub const MAX_ADMISSION_CAPACITY: u16 = 64;
 
+/// Remediation when a workspace is initialised over a root that exists with
+/// another policy, or over an ordinary desktop root.
+pub const WORKSPACE_POLICY_MISMATCH_REMEDIATION: &str = "The session root already exists with another policy, or is an ordinary desktop root. Nothing was changed: a workspace's policy is fixed when it is created. Repeat session init-workspace with the workspace's recorded policy, or choose a new --session-root.";
+
+/// Remediation when a durable workspace, or a durable session, is requested
+/// where OS-crash durability is not qualified.
+pub const DURABILITY_UNAVAILABLE_REMEDIATION: &str = "Durable publication is qualified only on Ubuntu 24.04 with a local ext4 filesystem, and this root is not on one. Nothing was created. Use --durability ephemeral here, or create the workspace on a qualified host.";
+
+/// Remediation when a workspace is initialised without an explicit root, or
+/// at the per-user session cache.
+pub const WORKSPACE_ROOT_REMEDIATION: &str = "A worker workspace needs an explicit absolute --session-root that is not the per-user session cache. Nothing was created. Choose a directory for the workspace whose parent exists.";
+
+/// Remediation when a durable session is required in an ephemeral workspace.
+pub const WORKSPACE_NOT_DURABLE_REMEDIATION: &str = "The workspace's policy is ephemeral, so it cannot open a durable session; a request never changes a workspace's policy. Nothing was created. Use a workspace initialised with --durability durable.";
+
+/// Remediation when work needs more admission weight than the whole root.
+pub const ADMISSION_CAPACITY_REMEDIATION: &str = "This work needs more admission capacity than the session root has in total, so it could never start here. Nothing was run. Use a root with a larger capacity: a workspace created with more --admission-slots.";
+
+/// Remediation when admission stayed busy for the whole wait.
+pub const ADMISSION_BUSY_REMEDIATION: &str = "The session root's admission capacity stayed in use by other work for the whole wait. Nothing was run. Retry after retry_after_ms.";
+
+/// Remediation when strict worker isolation cannot be attested.
+pub const ISOLATION_UNAVAILABLE_REMEDIATION: &str = "Strict worker isolation needs a Linux cgroup v2 with finite CPU, memory and process limits, a read-only root filesystem and no network interface but loopback, and this host does not attest them all. Nothing was run. Run the worker in such a container, or without strict isolation.";
+
 /// Whether `session init-workspace` created the workspace.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkspaceInitOutcome {

@@ -8,16 +8,18 @@ use std::{
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::fs::{Dir, OpenOptions};
 use vsift_application::SessionStorageError;
-use vsift_domain::{SessionId, StorageGeneration};
+use vsift_domain::{
+    DurabilityRequirement, SessionId, SessionLifetimePolicy, StorageGeneration, WorkspacePolicy,
+};
 
 use super::{
     COORDINATION_DIRECTORY, ChainCheck, DEFAULT_ADMISSION_CAPACITY, ExclusiveSessionLifetimeHold,
     FilesystemAdmissionPermit, FilesystemSessionStore, INITIALIZATION_LOCK, MAX_ADMISSION_CAPACITY,
     OWNERSHIP_FILE, OwnershipMarker, PROVISIONING_LOCK, SESSIONS_DIRECTORY, STORAGE_LAYOUT_VERSION,
-    STORAGE_SCHEMA_VERSION, SessionReadHold, SessionStoreOpenError, VerifiedHeadCache,
-    chain::read_committed_manifest, create_private_child_directory, create_regular_file,
-    map_lock_error, map_open_error, map_storage_io, open_regular_file, open_session_lock,
-    read_bounded,
+    STORAGE_SCHEMA_VERSION, SessionReadHold, SessionStoreOpenError, StoredWorkspacePolicy,
+    VerifiedHeadCache, chain::read_committed_manifest, create_private_child_directory,
+    create_regular_file, map_lock_error, map_open_error, map_storage_io, open_regular_file,
+    open_session_lock, read_bounded,
 };
 use super::{is_storage_failure, map_committed_io};
 use crate::{
@@ -66,7 +68,45 @@ impl FilesystemSessionStore {
         root_path: impl AsRef<Path>,
         admission_capacity: u16,
     ) -> Result<Self, SessionStoreOpenError> {
-        let root_path = root_path.as_ref();
+        Self::provision_root(root_path.as_ref(), admission_capacity, None)
+    }
+
+    /// Provisions a new worker workspace (P11, ADR 0021 D1): a root like
+    /// [`Self::provision`] whose marker also records the operator's
+    /// immutable `policy`, so its sessions publish with the policy's
+    /// durability and live its retention, and its admission capacity is the
+    /// policy's.
+    ///
+    /// A durable policy is accepted only where OS-crash durability is
+    /// qualified (Ubuntu 24.04 on local ext4, ADR 0010): the parent
+    /// directory's filesystem is checked before anything is created, and
+    /// the new root's again before its marker is written, so an unqualified
+    /// host gets [`SessionStoreOpenError::DurabilityUnavailable`] and no
+    /// directory.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::provision`], and [`SessionStoreOpenError::DurabilityUnavailable`].
+    pub fn provision_workspace(
+        root_path: impl AsRef<Path>,
+        policy: WorkspacePolicy,
+    ) -> Result<Self, SessionStoreOpenError> {
+        Self::provision_root(
+            root_path.as_ref(),
+            policy.admission_capacity().get(),
+            Some(policy),
+        )
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "The creation, privacy, qualification and rollback order is the contract"
+    )]
+    fn provision_root(
+        root_path: &Path,
+        admission_capacity: u16,
+        workspace: Option<WorkspacePolicy>,
+    ) -> Result<Self, SessionStoreOpenError> {
         validate_root_selection(root_path)?;
         if !(1..=MAX_ADMISSION_CAPACITY).contains(&admission_capacity) {
             return Err(SessionStoreOpenError::InvalidAdmissionCapacity);
@@ -74,6 +114,8 @@ impl FilesystemSessionStore {
         if fs::symlink_metadata(root_path).is_ok() {
             return Err(SessionStoreOpenError::RootAlreadyExists);
         }
+        let durable =
+            workspace.is_some_and(|policy| policy.durability() == DurabilityRequirement::Durable);
 
         let parent_path = root_path
             .parent()
@@ -85,11 +127,23 @@ impl FilesystemSessionStore {
             fs::canonicalize(parent_path).map_err(|_| SessionStoreOpenError::RootUnavailable)?;
         let parent = Dir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
             .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+        // Checked before anything exists: the new root is a directory on
+        // the parent's filesystem.
+        if durable && !dir_offers_os_crash_durability(&parent) {
+            return Err(SessionStoreOpenError::DurabilityUnavailable);
+        }
         create_private_child_directory(&parent, Path::new(name))
             .map_err(map_provision_create_error)?;
         let root = parent
             .open_dir_nofollow(Path::new(name))
             .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
+        // And again on the root itself, which could only differ if the
+        // parent's filesystem changed underneath; the empty root is removed.
+        if durable && !dir_offers_os_crash_durability(&root) {
+            drop(root);
+            let _ = parent.remove_dir(Path::new(name));
+            return Err(SessionStoreOpenError::DurabilityUnavailable);
+        }
         // Made private before anything is written into it, whatever the
         // parent's permissions would have passed on. The held handle pins it.
         if restrict_new_directory(&canonical_parent.join(name)).is_err() {
@@ -102,7 +156,7 @@ impl FilesystemSessionStore {
         // creator. Everything else it writes is covered by the provisioning lock,
         // so a concurrent opener can tell this root from an abandoned one.
         let provision_result = begin_provisioning(&root).and_then(|provisioning| {
-            let layout = provision_layout(&root, admission_capacity).and_then(|()| {
+            let layout = provision_layout(&root, admission_capacity, workspace).and_then(|()| {
                 let canonical = fs::canonicalize(root_path)
                     .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
                 validate_platform_root_permissions(&canonical, &root)?;
@@ -131,6 +185,7 @@ impl FilesystemSessionStore {
             root,
             root_path: canonical,
             admission_capacity,
+            workspace,
             verified_heads: VerifiedHeadCache::default(),
         })
     }
@@ -174,6 +229,7 @@ impl FilesystemSessionStore {
             root,
             root_path: canonical,
             admission_capacity: marker.admission_capacity,
+            workspace: marker_workspace(&marker)?,
             verified_heads: VerifiedHeadCache::default(),
         })
     }
@@ -195,10 +251,40 @@ impl FilesystemSessionStore {
         self.admission_capacity
     }
 
+    /// The worker workspace policy of this root, or `None` for an ordinary
+    /// desktop root.
+    #[must_use]
+    pub const fn workspace_policy(&self) -> Option<WorkspacePolicy> {
+        self.workspace
+    }
+
+    /// Whether this root may acknowledge OS-crash-durable publication on
+    /// this host (the qualified profile of ADR 0010), decided when it was
+    /// opened.
+    #[must_use]
+    pub const fn offers_os_crash_durability(&self) -> bool {
+        self.capabilities.supports(DurabilityRequirement::Durable)
+    }
+
+    /// The lifetime rules of sessions opened in this root.
+    #[must_use]
+    pub const fn lifetime_policy(&self) -> SessionLifetimePolicy {
+        match self.workspace {
+            Some(policy) => policy.lifetime_policy(),
+            None => SessionLifetimePolicy::Desktop,
+        }
+    }
+
+    /// Requires the root's marker to still hold the policy this store was
+    /// opened with: the capacity and any workspace policy are immutable, so
+    /// a marker changed underneath (raised, lowered or converted) is
+    /// damage, never a new policy to adopt.
     pub(super) fn revalidate_root(&self) -> Result<(), SessionStorageError> {
         validate_platform_root_permissions(&self.root_path, &self.root).map_err(map_open_error)?;
         let marker = validate_root_layout(&self.root).map_err(map_open_error)?;
-        if marker.admission_capacity != self.admission_capacity {
+        if marker.admission_capacity != self.admission_capacity
+            || marker_workspace(&marker).map_err(map_open_error)? != self.workspace
+        {
             return Err(SessionStorageError::IntegrityFailure);
         }
         Ok(())
@@ -489,6 +575,7 @@ pub(super) fn provisioning_lock_is_held(root: &Dir) -> bool {
 pub(super) fn provision_layout(
     root: &Dir,
     admission_capacity: u16,
+    workspace: Option<WorkspacePolicy>,
 ) -> Result<(), SessionStoreOpenError> {
     create_private_child_directory(root, Path::new(SESSIONS_DIRECTORY))
         .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
@@ -514,6 +601,7 @@ pub(super) fn provision_layout(
         application: String::from("vsift"),
         layout_version: STORAGE_LAYOUT_VERSION,
         admission_capacity,
+        workspace: workspace.map(StoredWorkspacePolicy::from_policy),
     };
     let marker_bytes =
         serde_json::to_vec(&marker).map_err(|_| SessionStoreOpenError::RootUnavailable)?;
@@ -533,6 +621,26 @@ pub(super) fn rollback_unpublished_root(root: &Dir, parent: &Dir, name: &Path, c
     let _ = root.remove_dir(SESSIONS_DIRECTORY);
     let _ = root.remove_dir(COORDINATION_DIRECTORY);
     let _ = parent.remove_dir(name);
+}
+
+/// The validated workspace policy a marker records, if any. A recorded
+/// policy that is out of range is damage: the marker is refused whole.
+fn marker_workspace(
+    marker: &OwnershipMarker,
+) -> Result<Option<WorkspacePolicy>, SessionStoreOpenError> {
+    marker
+        .workspace
+        .map(|stored| {
+            stored
+                .policy(marker.admission_capacity)
+                .ok_or(SessionStoreOpenError::InvalidOwnership)
+        })
+        .transpose()
+}
+
+/// Whether a directory's filesystem offers OS-crash durability on this host.
+fn dir_offers_os_crash_durability(directory: &Dir) -> bool {
+    storage_capabilities(directory).supports(DurabilityRequirement::Durable)
 }
 
 pub(super) fn admission_slot_name(index: u16) -> String {
@@ -685,6 +793,7 @@ pub(super) fn validate_root_layout(root: &Dir) -> Result<OwnershipMarker, Sessio
     {
         return Err(SessionStoreOpenError::InvalidOwnership);
     }
+    marker_workspace(&marker)?;
 
     root.open_dir_nofollow(SESSIONS_DIRECTORY)
         .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidLayout))?;

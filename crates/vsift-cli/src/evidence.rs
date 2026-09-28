@@ -24,7 +24,7 @@ use vsift_contract::{
 use crate::{
     CommandFailure,
     command::{AudioArguments, CropArguments, FrameCommand},
-    session::rfc3339,
+    session::session_lifecycle,
 };
 
 /// Which kind of evidence a command extracts; some failures mean different
@@ -175,9 +175,7 @@ async fn run_audio(
 }
 
 fn lifecycle(results: &EvidenceResults) -> Result<LifecycleResponse, CommandFailure> {
-    Ok(LifecycleResponse::ephemeral(rfc3339(
-        results.session().lifetime().expires_at_unix_seconds(),
-    )?))
+    Ok(session_lifecycle(results.session().lifetime())?)
 }
 
 fn delivered(results: &EvidenceResults) -> Vec<DeliveredEvidenceFile<'_>> {

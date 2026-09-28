@@ -404,6 +404,10 @@ impl ForegroundSessionPort for FilesystemSessionStore {
             .map_err(OpenSessionError::Storage)
     }
 
+    fn lifetime_policy(&self) -> vsift_domain::SessionLifetimePolicy {
+        Self::lifetime_policy(self)
+    }
+
     fn stage_source(
         &self,
         session_id: &SessionId,

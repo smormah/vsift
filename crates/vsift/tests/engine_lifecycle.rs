@@ -637,3 +637,139 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
         .map(|directory| directory.join(&file_name))
         .find(|candidate| Path::is_file(candidate))
 }
+
+/// A worker workspace's policy (ADR 0021 D1, D2) for the harness root.
+fn workspace_policy(
+    durability: vsift::DurabilityRequirement,
+    hours: u64,
+) -> Result<vsift::WorkspacePolicy, Box<dyn Error>> {
+    Ok(vsift::WorkspacePolicy::new(
+        durability,
+        std::num::NonZeroU16::new(2).ok_or("zero")?,
+        vsift::WorkspaceRetention::from_hours(hours)?,
+    )?)
+}
+
+/// ADR 0021 D2: a session of a worker workspace lives the workspace's
+/// retention after it opens or is renewed, never beyond 720 hours, and
+/// `session clean --expired` removes it once that has passed.
+#[tokio::test]
+async fn a_workspace_session_lives_the_workspace_retention() -> TestResult {
+    let harness = Harness::new()?;
+    let policy = workspace_policy(vsift::DurabilityRequirement::Ephemeral, 48)?;
+    let created = harness
+        .engine
+        .init_workspace(vsift::WorkspaceInitRequest { policy })?;
+    assert_eq!(created.outcome(), vsift::WorkspaceInitOutcome::Created);
+    assert_eq!(
+        created.publication(),
+        vsift::PublicationGuarantee::ProcessCrashConsistent
+    );
+    let retention = 48 * 3_600;
+
+    let session_id = harness.open().await?;
+    let opened = harness.engine.session_status(&session_id)?.lifetime();
+    assert_eq!(
+        opened.policy(),
+        vsift::SessionLifetimePolicy::Workspace(policy.retention())
+    );
+    assert_eq!(opened.expires_at_unix_seconds(), T0 + retention);
+
+    harness.clock.set(T0 + retention - 1);
+    let renewed = harness.engine.renew_session(&session_id)?.lifetime();
+    assert_eq!(renewed.expires_at_unix_seconds(), T0 + 2 * retention - 1);
+    for _ in 0..40 {
+        let expires = harness
+            .engine
+            .session_status(&session_id)?
+            .lifetime()
+            .expires_at_unix_seconds();
+        harness.clock.set(expires - 1);
+        harness.engine.renew_session(&session_id)?;
+    }
+    let capped = harness.engine.session_status(&session_id)?.lifetime();
+    assert_eq!(capped.expires_at_unix_seconds(), T0 + 720 * 3_600);
+
+    let request = CleanRequest {
+        scope: CleanScope::Expired,
+        mode: CleanMode::Remove,
+        cursor: None,
+    };
+    harness.clock.set(T0 + 720 * 3_600 - 1);
+    assert_eq!(
+        harness.engine.clean_sessions(request)?.entries(),
+        [CleanEntry::Examined {
+            session_id: session_id.clone(),
+            decision: CleanDecision::Ineligible,
+        }]
+    );
+    harness.clock.set(T0 + 720 * 3_600);
+    assert_eq!(
+        harness.engine.clean_sessions(request)?.entries(),
+        [CleanEntry::Examined {
+            session_id,
+            decision: CleanDecision::Removed,
+        }]
+    );
+    Ok(())
+}
+
+/// A request never raises a workspace's policy: a durable session in an
+/// ephemeral workspace is refused before any session is registered, and a
+/// durable workspace makes every session durable (ADR 0020 D-3).
+#[tokio::test]
+async fn a_workspace_decides_the_durability_of_its_sessions() -> TestResult {
+    let harness = Harness::new()?;
+    harness.engine.init_workspace(vsift::WorkspaceInitRequest {
+        policy: workspace_policy(vsift::DurabilityRequirement::Ephemeral, 168)?,
+    })?;
+    let refused = harness
+        .engine
+        .ingest(IngestRequest {
+            source: harness.root.source()?,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Durable,
+        })
+        .await;
+    match refused {
+        Err(EngineError::WorkspaceNotDurable) => {}
+        other => return Err(format!("expected WorkspaceNotDurable, got {other:?}").into()),
+    }
+    assert!(harness.engine.list_sessions(None)?.entries().is_empty());
+
+    let durable = Harness::new()?;
+    let initialised = durable.engine.init_workspace(vsift::WorkspaceInitRequest {
+        policy: workspace_policy(vsift::DurabilityRequirement::Durable, 168)?,
+    });
+    let qualified =
+        vsift_infrastructure::directory_offers_os_crash_durability(&durable.root.path(""));
+    match initialised {
+        Ok(created) => {
+            assert!(qualified, "a durable workspace on an unqualified host");
+            assert_eq!(
+                created.publication(),
+                vsift::PublicationGuarantee::OsCrashDurable
+            );
+            let opened = durable
+                .engine
+                .ingest(IngestRequest {
+                    source: durable.root.source()?,
+                    transcript: None,
+                    cancellation: Cancellation::new(),
+                    durability: vsift::DurabilityRequirement::Ephemeral,
+                })
+                .await?;
+            assert_eq!(
+                opened.session.publication,
+                vsift::PublicationGuarantee::OsCrashDurable
+            );
+        }
+        Err(EngineError::SessionRoot(SessionRootError::DurabilityUnavailable)) => {
+            assert!(!qualified, "a qualified host refused a durable workspace");
+            assert!(!durable.root.path("sessions").exists());
+        }
+        Err(other) => return Err(format!("unexpected failure: {other}").into()),
+    }
+    Ok(())
+}

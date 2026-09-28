@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use vsift_application::{OpenSession, OpenSessionOutcome, OpenSessionRequest};
 use vsift_domain::{
     DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
-    TranscriptRevision,
+    TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, FfprobeSourceDuration, FilesystemSessionStore,
@@ -419,6 +419,7 @@ impl Engine {
         let store = self
             .open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        let durability = session_durability(request.durability, store.workspace_policy())?;
         let now = self.now_unix_seconds()?;
         let open = OpenSessionRequest {
             source,
@@ -426,7 +427,7 @@ impl Engine {
             initialize_operation_id: self.new_operation_id()?,
             stage_operation_id: self.new_operation_id()?,
             activate_operation_id: self.new_operation_id()?,
-            durability: request.durability,
+            durability,
             now_unix_seconds: now,
         };
         let Some((import, tools)) = import else {
@@ -639,6 +640,30 @@ impl Engine {
         let now = self.now_unix_seconds()?;
         let store = self.open_session_store(&root, SessionRootProvisioning::ExistingOnly)?;
         Ok((store, now))
+    }
+}
+
+/// The durability a new session publishes with: at least what the caller
+/// requires, and in a worker workspace exactly the workspace's policy, which
+/// the caller cannot lower (ADR 0020 D-3, ADR 0021 section 3).
+///
+/// A durable workspace makes every session durable, so the command line's
+/// plain `ingest --session-root <workspace>` is its durable mode. A durable
+/// requirement in an ephemeral workspace is refused rather than silently
+/// weakened.
+fn session_durability(
+    required: DurabilityRequirement,
+    workspace: Option<WorkspacePolicy>,
+) -> Result<DurabilityRequirement, EngineError> {
+    match (workspace.map(WorkspacePolicy::durability), required) {
+        (None, required) => Ok(required),
+        (Some(DurabilityRequirement::Durable), _) => Ok(DurabilityRequirement::Durable),
+        (Some(DurabilityRequirement::Ephemeral), DurabilityRequirement::Ephemeral) => {
+            Ok(DurabilityRequirement::Ephemeral)
+        }
+        (Some(DurabilityRequirement::Ephemeral), DurabilityRequirement::Durable) => {
+            Err(EngineError::WorkspaceNotDurable)
+        }
     }
 }
 

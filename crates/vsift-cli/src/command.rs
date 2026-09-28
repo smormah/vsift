@@ -4,8 +4,9 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
-    CropRectangle, EvidenceId, FrameSelection, JobId, OperationId, RuntimeDependency, SessionId,
-    SetupProfile, TranscriptRevisionId, VisualCandidateId,
+    CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection, IsolationProfile, JobId,
+    OperationId, RuntimeDependency, SessionId, SetupProfile, TranscriptRevisionId,
+    VisualCandidateId,
 };
 use vsift_contract::CommandName;
 
@@ -29,6 +30,10 @@ pub(crate) struct Cli {
     /// Explicit private disposable-session root; defaults to the per-user cache.
     #[arg(long, global = true)]
     pub session_root: Option<PathBuf>,
+
+    /// Isolation to run under; strict-linux is attested before any work.
+    #[arg(long, global = true, value_enum, default_value_t)]
+    pub host_isolation: HostIsolationArgument,
 
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -292,6 +297,9 @@ pub(crate) enum SessionCommand {
     Retain(SessionRetainArguments),
     /// Find or remove expired owned sessions.
     Clean(SessionCleanArguments),
+    /// Create a worker workspace at an explicit --session-root with an
+    /// immutable operator policy.
+    InitWorkspace(SessionInitWorkspaceArguments),
 }
 
 impl SessionCommand {
@@ -304,6 +312,66 @@ impl SessionCommand {
             Self::Renew(_) => CommandName::SessionRenew,
             Self::Retain(_) => CommandName::SessionRetain,
             Self::Clean(_) => CommandName::SessionClean,
+            Self::InitWorkspace(_) => CommandName::SessionInitWorkspace,
+        }
+    }
+}
+
+/// How a worker workspace's sessions publish.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum DurabilityArgument {
+    /// Every acknowledged result survives an OS crash or power loss; only
+    /// on Ubuntu 24.04 with local ext4.
+    Durable,
+    /// Consistent across a process crash, on every platform (development
+    /// and CI).
+    Ephemeral,
+}
+
+impl From<DurabilityArgument> for DurabilityRequirement {
+    fn from(value: DurabilityArgument) -> Self {
+        match value {
+            DurabilityArgument::Durable => Self::Durable,
+            DurabilityArgument::Ephemeral => Self::Ephemeral,
+        }
+    }
+}
+
+/// A worker workspace's operator policy (ADR 0021 D1, D2).
+#[derive(Args, Debug)]
+pub(crate) struct SessionInitWorkspaceArguments {
+    /// How the workspace's sessions publish.
+    #[arg(long, value_enum)]
+    pub durability: DurabilityArgument,
+    /// Admission capacity in weight units, 1 through 64: the most work the
+    /// workspace runs at once (a whisper.cpp run weighs its threads, a
+    /// visual window 2, a copy or an evidence extraction 1).
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=64))]
+    pub admission_slots: u16,
+    /// How long a session lives after it opens or is renewed, 1 through 720
+    /// hours; defaults to 168.
+    #[arg(long, value_parser = clap::value_parser!(u64).range(1..=720))]
+    pub retention_hours: Option<u64>,
+}
+
+/// The isolation a host asks for.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+pub(crate) enum HostIsolationArgument {
+    /// Per-process containment only; no strict boundary is claimed.
+    #[default]
+    ProcessOnly,
+    /// The strict Linux worker boundary: accepted only when the kernel
+    /// attests a cgroup v2 with CPU, memory and process limits, a read-only
+    /// root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE`
+    /// before any work.
+    StrictLinux,
+}
+
+impl From<HostIsolationArgument> for IsolationProfile {
+    fn from(value: HostIsolationArgument) -> Self {
+        match value {
+            HostIsolationArgument::ProcessOnly => Self::ProcessOnly,
+            HostIsolationArgument::StrictLinux => Self::StrictLinux,
         }
     }
 }

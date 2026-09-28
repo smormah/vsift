@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod admission;
 mod asr;
 mod checkpoint;
 mod evidence;
@@ -20,6 +21,11 @@ mod timeline;
 mod transcript;
 mod visual;
 
+pub use admission::{
+    ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionDecision, AdmissionWait,
+    MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, SINGLE_STAGE_WEIGHT, VISUAL_WINDOW_WEIGHT,
+    recognizer_threads,
+};
 pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, AsrSegmentDraft, ChunkPlan, ChunkPlanError,
@@ -68,7 +74,10 @@ pub use search::{
     SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection, SearchSlice,
     normalise_search_text, search_revision,
 };
-pub use session::{SessionArtifactKind, SessionLifetime, SessionPhase, SessionTransitionError};
+pub use session::{
+    SessionArtifactKind, SessionLifetime, SessionLifetimePolicy, SessionPhase,
+    SessionTransitionError, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+};
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
 };

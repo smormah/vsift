@@ -11,7 +11,9 @@ use vsift_application::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
     PublishSessionGenerationRequest, SessionStorageError, SessionStore, StorageCapabilities,
 };
-use vsift_domain::{DurabilityRequirement, OperationId, SessionLifetime, StorageGeneration};
+use vsift_domain::{
+    DurabilityRequirement, OperationId, SessionLifetime, SessionLifetimePolicy, StorageGeneration,
+};
 
 use super::map_committed_io;
 use super::{
@@ -185,6 +187,21 @@ pub(super) fn publish_generation_with_update(
     result
 }
 
+/// A new session's lifetime under the root's `policy`, and the workspace
+/// retention its record keeps (none for a desktop session).
+fn opened_lifetime(
+    policy: SessionLifetimePolicy,
+    now: u64,
+) -> Result<(SessionLifetime, Option<u64>), SessionStorageError> {
+    let retention = match policy {
+        SessionLifetimePolicy::Desktop => None,
+        SessionLifetimePolicy::Workspace(retention) => Some(retention.seconds()),
+    };
+    let lifetime =
+        SessionLifetime::open_under(policy, now).map_err(|_| SessionStorageError::StateConflict)?;
+    Ok((lifetime, retention))
+}
+
 pub(super) fn update_lifecycle(
     current: Option<StoredLifecycle>,
     update: LifecycleUpdate,
@@ -197,6 +214,7 @@ pub(super) fn update_lifecycle(
             source_bytes,
             now,
             artifacts,
+            lifetime,
         } => {
             if current.is_some() || source_bytes == 0 || source_bytes > crate::MAX_SOURCE_BYTES {
                 return Err(SessionStorageError::StateConflict);
@@ -215,9 +233,9 @@ pub(super) fn update_lifecycle(
                     return Err(SessionStorageError::CapacityExhausted);
                 }
             }
-            let lifetime =
-                SessionLifetime::open(now).map_err(|_| SessionStorageError::StateConflict)?;
+            let (lifetime, workspace_retention_seconds) = opened_lifetime(lifetime, now)?;
             Ok(Some(StoredLifecycle {
+                workspace_retention_seconds,
                 phase: StoredSessionPhase::Open,
                 opened_at_unix_seconds: lifetime.opened_at_unix_seconds(),
                 expires_at_unix_seconds: lifetime.expires_at_unix_seconds(),
