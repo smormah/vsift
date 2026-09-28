@@ -25,3 +25,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0019: Evidence navigation](0019-evidence-navigation.md) (Accepted)
 - [0020: Recoverable jobs and durable publication](0020-recoverable-jobs-and-durable-publication.md) (Accepted 2026-09-27)
 - [0021: Worker and batch host](0021-worker-and-batch-host.md) (Accepted 2026-09-28)
+- [0022: Agent skill and named-client qualification](0022-agent-skill-and-named-client-qualification.md) (Proposed 2026-09-28)

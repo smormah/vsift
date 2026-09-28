@@ -1,0 +1,124 @@
+{
+  "handoff_version": "1",
+  "status": "insufficient_evidence",
+  "question": "What service status does the presenter report in this recording?",
+  "capabilities": {
+    "image_access": "unavailable",
+    "image_check_code": null,
+    "media_tools": "available",
+    "local_asr": "not_run",
+    "transcript_basis": "none"
+  },
+  "session": {
+    "session_id": "ses_338565afe20c5236577a28169e75b3f3",
+    "source_id": "src_sha256_179eb2931444a48d0238a1547a72c5f6b969a1c7196246e39a3703d74b885be2",
+    "revision_id": null,
+    "duration_us": 9000000
+  },
+  "claims": [
+    {
+      "id": "c1",
+      "section": "actual",
+      "kind": "inferred",
+      "support": "unsupported",
+      "certainty": "low",
+      "statement": "The screen changes once, at 00:04.000, but what it shows could not be viewed, so the reported status is unknown.",
+      "citations": ["e1"]
+    },
+    {
+      "id": "c2",
+      "section": "context",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "The video has an audio stream; a clip of 00:03.000 to 00:09.000 is available for a person to listen to.",
+      "citations": ["e2"]
+    }
+  ],
+  "citations": [
+    {
+      "id": "e1",
+      "type": "frame",
+      "evidence_id": "evd_0709743af0b31de3502dbb0630fad362",
+      "candidate_id": "vcd_75290bd86dbfb7335309254d0b5f95d8",
+      "requested_us": 4000000,
+      "actual_us": 4000000,
+      "delta_us": 0,
+      "pixels_inspected": false
+    },
+    {
+      "id": "e2",
+      "type": "audio",
+      "evidence_id": "evd_51712e9345c7b70c4a395a7dd6ccbd7f",
+      "range": { "start_us": 3000000, "end_us": 9000000 },
+      "actual_start_us": 3000000
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "transcript",
+      "range": { "from_us": 0, "to_us": 9000000 },
+      "reason": "transcript_unavailable",
+      "code": "MISSING_CAPABILITY",
+      "note": "No transcript was supplied and local speech recognition is not set up (the whisper.cpp CLI is missing)."
+    },
+    {
+      "kind": "image_access",
+      "range": null,
+      "reason": "image_access_unavailable",
+      "code": null,
+      "note": "This client could not open the check image, so no frame was viewed."
+    },
+    {
+      "kind": "audio",
+      "range": { "from_us": 3000000, "to_us": 9000000 },
+      "reason": "not_audible_to_agent",
+      "code": null,
+      "note": "The clip was extracted for a person to hear; the agent cannot listen to it."
+    }
+  ],
+  "untrusted_instructions": [],
+  "budget": {
+    "profile": "compact",
+    "overrides": false,
+    "limits": {
+      "images_per_step": 1,
+      "images_total": 6,
+      "image_bytes": 12582912,
+      "page_limit": 20,
+      "tool_calls": 30,
+      "refinement_depth": 2,
+      "wall_time_s": 900,
+      "burst_frames": 4
+    },
+    "used": {
+      "images_total": 1,
+      "image_bytes": 0,
+      "tool_calls": 8,
+      "refinement_depth": 0,
+      "wall_time_s": 70
+    },
+    "exhausted": []
+  },
+  "lifecycle": {
+    "policy": "default",
+    "action": "left_open",
+    "mode": "ephemeral",
+    "expires_at": "2026-09-29T13:24:04Z"
+  },
+  "resume": {
+    "state": "PREPARE",
+    "session_id": "ses_338565afe20c5236577a28169e75b3f3",
+    "revision_id": null,
+    "job_id": null,
+    "operation_ids": ["op_retx338565afe20c5236577a281601"],
+    "evidence": [
+      { "kind": "visual_candidate", "id": "vcd_75290bd86dbfb7335309254d0b5f95d8", "at_us": 4000000 },
+      { "kind": "frame", "id": "evd_0709743af0b31de3502dbb0630fad362", "at_us": 4000000 },
+      { "kind": "audio", "id": "evd_51712e9345c7b70c4a395a7dd6ccbd7f", "at_us": 3000000 }
+    ],
+    "summary": "No transcript and no image access. One screen change at 00:04.000 is extracted but unviewed. Continue after the user supplies an SRT or WebVTT file, sets up whisper.cpp, or switches to an image-capable client.",
+    "remaining": { "images_total": 5, "tool_calls": 22, "wall_time_s": 830 },
+    "next_command": "vsift setup check --json"
+  }
+}

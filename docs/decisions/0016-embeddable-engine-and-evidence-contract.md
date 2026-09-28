@@ -344,3 +344,13 @@ stays within its depth, a limit reads back from its canonical form, an added int
 line decides the network verdict as documented), and the `mountinfo` target also
 checks `classify_root_mount` against `classify_mountinfo`. Seeds quote the attestation
 tests' kernel files verbatim. The Fuzz workflow runs 21 targets.
+
+## 2026-09-28 note: the agent skill of decision 7 is in progress (P12 PR 1)
+
+Decision 7's primary agent integration, the CLI plus an agent skill, now has its skill:
+`skills/vsift/` in the `SKILL.md` directory format that Claude Code and Codex both
+read, orchestrating only the published CLI and its v1 JSON contract
+([ADR 0022](0022-agent-skill-and-named-client-qualification.md), Proposed). Its
+handoff v1 schema is owned by the skill, not added to `schemas/v1`. The skill is not
+yet qualified: the named-client trials are a later P12 increment, and the optional
+MCP adapter still waits until after P12.

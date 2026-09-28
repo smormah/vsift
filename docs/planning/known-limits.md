@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-28 (P00-P10 complete; P11 implemented, pending merge; SEC-T01's adversarial evidence deferred as technical debt, L-068).
+Date: 2026-09-28 (P00-P11 complete; P12 in progress: the agent skill exists, named-client qualification pending; SEC-T01's adversarial evidence deferred as technical debt, L-068).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -84,7 +84,7 @@ Each entry has these fields:
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
-| [L-039](#l-039) | No agent skill; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
+| [L-039](#l-039) | The agent skill is not qualified; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
 | [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
@@ -114,8 +114,10 @@ Each entry has these fields:
 | [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
 | [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
+| [L-070](#l-070) | A job remediation suggests renewing an expired session, which the CLI refuses | contract/UX | low | unscheduled | none | open |
+| [L-071](#l-071) | A command line that does not parse gets no remediation in JSON modes | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 
-Counts: 4 high, 18 medium, 45 low (67 entries).
+Counts: 4 high, 18 medium, 47 low (69 entries).
 
 ## Security
 
@@ -284,9 +286,13 @@ Counts: 4 high, 18 medium, 45 low (67 entries).
 - **Impact:** a hostile recording could influence an agent's reasoning or actions.
 - **Why:** prompt injection is an open problem; paths are delivered by decision D2.
 - **Mitigation:** fixed-prose remediation that never echoes evidence text; typed
-  fields; no evidence-driven installs or policy.
-- **Next step:** P12 skill limits authority and qualifies A-04 and SEC-T02 with
-  malicious spoken, cell and screenshot instructions.
+  fields; no evidence-driven installs or policy. Since P12 PR 1 (2026-09-28) the agent
+  skill limits authority by command class (`skills/vsift/references/commands.md`),
+  treats evidence as data and reports embedded instructions with citations
+  (`references/safety.md`), cites `evidence_id`s instead of paths, and its handoff
+  schema refuses paths, links and hidden characters in prose.
+- **Next step:** the P12 named-client trials qualify A-04 and SEC-T02 with malicious
+  spoken, cell and screenshot instructions (ADR 0022 decision 7).
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** deferred. **Review:** pending.
 
@@ -526,7 +532,8 @@ Counts: 4 high, 18 medium, 45 low (67 entries).
   no background service.
 - **Mitigation:** typed errors with fixed remediation; `session clean --expired
   --dry-run`.
-- **Next step:** document the cleanup routine in P12 skill and P13 user docs.
+- **Next step:** the P12 skill documents the cleanup routine for agents
+  (`skills/vsift/references/lifecycle.md`, 2026-09-28); P13 user docs remain.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
@@ -859,6 +866,49 @@ Counts: 4 high, 18 medium, 45 low (67 entries).
 - **Next step:** none planned; revisit if operators need a host-side retry class.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
+
+### L-070
+
+**A job remediation suggests renewing an expired session, which the CLI refuses.**
+
+- **What:** `job resume` of a job whose session is closed or expired fails
+  `INVALID_ARGUMENT` with a fixed remediation (`JOB_SESSION_NOT_OPEN_REMEDIATION`) that
+  says to renew an expired session within its seven-day limit and resume the job. A
+  renewal only extends an open session: `session renew` of an expired session is
+  refused (domain `SessionLifetime::renew`, the P05 record). The contract's `job
+  resume` failure table repeats the same advice.
+- **Evidence:** `crates/vsift-contract/src/job.rs`, `crates/vsift-domain/src/session.rs`,
+  `docs/contracts/cli-v1.md` "P10 recoverable jobs"; found while writing the P12 skill
+  (2026-09-28).
+- **Impact:** an agent or user who follows the remediation gets a second refusal; no
+  data is at risk.
+- **Why:** the remediation was written for a renewal rule the domain does not have.
+- **Mitigation:** the P12 skill tells agents that an expired session cannot be renewed
+  and that re-opening the video needs the user's lifecycle decision.
+- **Next step:** correct the remediation text and the contract row (a CLI text change
+  with its contract test), or decide that renewal after expiry should be allowed.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-071
+
+**A command line that does not parse gets no remediation in JSON modes.**
+
+- **What:** with `--json` or `--events jsonl`, a command line the parser rejects (an
+  unknown flag, a missing value, a malformed identity) answers `INVALID_ARGUMENT` with
+  `command` `parse`, the generic message and an empty `remediation`; the parser's own
+  explanation is not carried. On PowerShell an unquoted `--rect 10,20,300,80` becomes
+  several arguments and fails this way.
+- **Evidence:** observed with `crop` while writing the P12 skill (2026-09-28); the
+  envelope in `docs/contracts/cli-v1.md` "Output protocol".
+- **Impact:** an agent must find the mistake itself; the skill points it at its
+  command reference and tells it to quote the rectangle on PowerShell.
+- **Why:** parse errors are presented as fixed prose so that no argument text is
+  echoed into a machine result.
+- **Mitigation:** the skill's command forms are all tested against the parser.
+- **Next step:** consider a typed, non-echoing parse reason (for example the argument
+  name) with P13's presentation work.
+- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
+  **Status:** deferred. **Review:** pending.
 
 ### L-014
 
@@ -1403,18 +1453,23 @@ Counts: 4 high, 18 medium, 45 low (67 entries).
 
 ### L-039
 
-**No agent skill; the named-agent journeys have not run.**
+**The agent skill is not qualified; the named-agent journeys have not run.**
 
-- **What:** there is no agent skill, and A-01..A-09 (including A-08/A-09 through named
-  Codex and Claude Code clients) have not run. The mechanical journey passes without an
-  agent.
-- **Evidence:** [verification](verification.md) section 6; ledger P12 `planned`;
-  [test spine](e2e-test-spine.md).
+- **What:** the agent skill exists since P12 PR 1 (`skills/vsift/`, 2026-09-28) and its
+  command, flag, code and field references are tested against the CLI, but no agent has
+  run it under trial: A-01..A-09 (including A-08/A-09 through named Codex and Claude
+  Code clients) and SEC-T02 have not run. The mechanical journey passes without an
+  agent. The image check proves only that the client can read an image; whether a
+  model really inspected each frame it cites is judged in the trials.
+- **Evidence:** [verification](verification.md) section 6; ledger P12 `in_progress`;
+  [test spine](e2e-test-spine.md); [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md)
+  (Proposed).
 - **Impact:** R0's defining gate (a coding agent from a local video to a grounded
   handoff) is unproven.
-- **Why:** scheduled after P10/P11.
-- **Mitigation:** the CLI contract is complete for the journey.
-- **Next step:** P12.
+- **Why:** the trials are the next P12 increment, after the skill and its guard.
+- **Mitigation:** the CLI contract is complete for the journey; the skill's
+  `crates/vsift-cli/src/skill_contract.rs` guard keeps it in step with the CLI.
+- **Next step:** accept ADR 0022 and run its trial protocol (decision 7).
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** deferred. **Review:** pending.
 
