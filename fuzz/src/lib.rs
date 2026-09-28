@@ -28,14 +28,16 @@ use vsift_domain::{
     normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
-    FrameListingWindow, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES, MAX_OS_RELEASE_BYTES,
-    MountDevice, SourceContainer, VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo,
-    classify_os_release, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
-    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
-    encode_evidence_record, encode_job_record, encode_transcript_record,
-    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
-    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
-    parse_whisper_full_json,
+    CgroupLimit, CgroupMembership, FrameListingWindow, MAX_CGROUP_DEPTH, MAX_DIAGNOSTIC_BYTES,
+    MAX_LISTING_DIAGNOSTIC_BYTES, MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES, MountDevice,
+    NetworkInterfaces, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
+    classify_mountinfo, classify_os_release, classify_root_mount, decode_chunk_checkpoint,
+    decode_evidence_record, decode_job_record, decode_transcript_record,
+    decode_visual_index_record, encode_chunk_checkpoint, encode_evidence_record, encode_job_record,
+    encode_transcript_record, encode_visual_index_record, parse_ashowinfo_start,
+    parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_net_dev, parse_png_sequence, parse_proc_cgroup,
+    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -137,11 +139,15 @@ pub enum Target {
     /// A stored chunk checkpoint (`chunks/<ordinal>.json` v1, P10) through
     /// `decode_chunk_checkpoint`, as a resumed run reads ordinal 1 (issue #180).
     ChunkCheckpoint,
+    /// The strict worker attestation's kernel files (P11 PR 2, ADR 0021
+    /// section 8): the same bytes through `parse_proc_cgroup`, `parse_cpu_max`,
+    /// `parse_cgroup_limit` and `parse_net_dev`. The input is the file.
+    HostAttestation,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -162,6 +168,7 @@ impl Target {
         Self::JobBatchLine,
         Self::JobRecord,
         Self::ChunkCheckpoint,
+        Self::HostAttestation,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -188,6 +195,7 @@ impl Target {
             Self::JobBatchLine => "job_batch_line",
             Self::JobRecord => "job_record",
             Self::ChunkCheckpoint => "chunk_checkpoint",
+            Self::HostAttestation => "host_attestation",
         }
     }
 
@@ -218,6 +226,7 @@ impl Target {
             Self::JobBatchLine => check_job_batch_line(data),
             Self::JobRecord => check_job_record(data),
             Self::ChunkCheckpoint => check_chunk_checkpoint(data),
+            Self::HostAttestation => check_host_attestation(data),
         }
     }
 }
@@ -313,6 +322,10 @@ pub enum Violation {
     CheckpointNotReencodable,
     /// An accepted checkpoint changed in a round trip or is of another chunk.
     CheckpointRoundTripChanged,
+    /// An accepted cgroup, limit or network file broke its bounds, did not
+    /// read back from its canonical form, or changed its verdict when a line
+    /// was added.
+    HostAttestationInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -364,6 +377,9 @@ impl fmt::Display for Violation {
             Self::JobRecordRoundTripChanged => "an accepted job record changed in a round trip",
             Self::CheckpointNotReencodable => "an accepted checkpoint could not be encoded again",
             Self::CheckpointRoundTripChanged => "an accepted checkpoint changed in a round trip",
+            Self::HostAttestationInconsistent => {
+                "an accepted kernel file broke its bounds or its canonical form"
+            }
         })
     }
 }
@@ -849,6 +865,11 @@ fn check_mountinfo(data: &[u8]) -> Result<(), Violation> {
     if first.is_ok() != second.is_ok() || (first.is_err() && first != second) {
         return Err(Violation::MountinfoInconsistent);
     }
+    // The strict worker's root-mount reading (P11) parses the same table
+    // with the same parser: it accepts and refuses exactly alike.
+    if classify_root_mount(data).map(|_| ()) != first.map(|_| ()) {
+        return Err(Violation::MountinfoInconsistent);
+    }
     let Ok(first) = first else {
         return Ok(());
     };
@@ -861,6 +882,64 @@ fn check_mountinfo(data: &[u8]) -> Result<(), Violation> {
             Ok(repeated) if repeated == first => {}
             Err(_) if twice.len() > vsift_infrastructure::MAX_MOUNTINFO_BYTES => {}
             _ => return Err(Violation::MountinfoInconsistent),
+        }
+    }
+    Ok(())
+}
+
+/// One `lo` line of `/proc/<pid>/net/dev`, with its sixteen counters.
+const NET_DEV_LOOPBACK_LINE: &[u8] = b"    lo: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n";
+/// One line of another interface.
+const NET_DEV_OTHER_LINE: &[u8] = b"  eth9: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n";
+
+fn check_host_attestation(data: &[u8]) -> Result<(), Violation> {
+    let inconsistent = Err(Violation::HostAttestationInconsistent);
+    if let Ok(CgroupMembership::Unified(components)) = parse_proc_cgroup(data)
+        && (components.len() > MAX_CGROUP_DEPTH
+            || components
+                .iter()
+                .any(|component| component.is_empty() || component == "." || component == ".."))
+    {
+        return inconsistent;
+    }
+    // An accepted limit reads back from its canonical form.
+    let canonical_limit = |limit: CgroupLimit| match limit {
+        CgroupLimit::Unlimited => b"max\n".to_vec(),
+        CgroupLimit::Finite(value) => format!("{value}\n").into_bytes(),
+    };
+    if let Ok(limit) = parse_cgroup_limit(data)
+        && parse_cgroup_limit(&canonical_limit(limit)) != Ok(limit)
+    {
+        return inconsistent;
+    }
+    if let Ok(limit) = parse_cpu_max(data) {
+        let mut canonical = canonical_limit(limit);
+        canonical.pop();
+        canonical.extend_from_slice(b" 100000\n");
+        if parse_cpu_max(&canonical) != Ok(limit) {
+            return inconsistent;
+        }
+    }
+    // Adding an interface line decides the verdict as documented.
+    if let Ok(verdict) = parse_net_dev(data)
+        && data.last() == Some(&b'\n')
+        && data.len() + NET_DEV_OTHER_LINE.len() <= MAX_NET_DEV_BYTES
+    {
+        let with = |line: &[u8]| {
+            let mut extended = data.to_vec();
+            extended.extend_from_slice(line);
+            parse_net_dev(&extended)
+        };
+        let loopback = match verdict {
+            NetworkInterfaces::None | NetworkInterfaces::LoopbackOnly => {
+                NetworkInterfaces::LoopbackOnly
+            }
+            NetworkInterfaces::Other => NetworkInterfaces::Other,
+        };
+        if with(NET_DEV_LOOPBACK_LINE) != Ok(loopback)
+            || with(NET_DEV_OTHER_LINE) != Ok(NetworkInterfaces::Other)
+        {
+            return inconsistent;
         }
     }
     Ok(())

@@ -538,6 +538,33 @@ Inter-|   Receive                                                |  Transmit
     lo:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
 ";
 
+    /// `/proc/self/cgroup` of a systemd service on a cgroup v2 host (the
+    /// `host_attestation` fuzz seeds quote these files verbatim).
+    const UNIFIED: &str = "0::/system.slice/worker.service
+";
+    /// `cpu.max` of a two-CPU container.
+    const CPU_MAX: &str = "200000 100000
+";
+    /// `memory.max` of a 512 MiB container.
+    const MEMORY_MAX: &str = "536870912
+";
+
+    #[test]
+    fn the_fuzz_seed_files_parse_as_their_kernel_files() {
+        assert!(matches!(
+            parse_proc_cgroup(UNIFIED.as_bytes()),
+            Ok(CgroupMembership::Unified(_))
+        ));
+        assert_eq!(
+            parse_cpu_max(CPU_MAX.as_bytes()),
+            Ok(CgroupLimit::Finite(200_000))
+        );
+        assert_eq!(
+            parse_cgroup_limit(MEMORY_MAX.as_bytes()),
+            Ok(CgroupLimit::Finite(536_870_912))
+        );
+    }
+
     #[test]
     fn a_cgroup_v2_membership_is_one_unified_line() {
         assert_eq!(
