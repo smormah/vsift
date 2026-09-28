@@ -840,16 +840,39 @@ impl Engine {
     /// there when it validates as this session's bundle with the requested
     /// source inclusion and the session's artifacts (a try that stopped
     /// after retaining but before its record said so).
+    ///
+    /// The bundle is written to a staging directory beside `output` (a
+    /// hidden name with a fresh operation id, `.<bundle>.<op>.retaining`)
+    /// and renamed to `output` once it validates, so a process killed while
+    /// it copies never leaves an incomplete directory under the bundle's own
+    /// name for the next delivery to refuse. The staging directory of a
+    /// killed try stays behind; it is never removed automatically, because
+    /// nothing in the operator's bundle root is deleted (known limit).
     fn retain_step(
         &self,
         session: &SessionId,
         output: &Path,
         retention: SourceRetention,
     ) -> Result<crate::BundleSummary, EngineError> {
-        if !output.exists() {
-            return self.retain_session(session, output, retention);
-        }
         let mismatch = EngineError::Worker(WorkerFailure::BundleMismatch);
+        if !output.exists() {
+            let parent = output.parent().ok_or(mismatch.clone())?;
+            let name = output
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .ok_or(mismatch.clone())?;
+            let staged = parent.join(format!(
+                ".{name}.{}.retaining",
+                self.new_operation_id()?.as_str()
+            ));
+            self.retain_session(session, &staged, retention)?;
+            // A rename onto a name that appeared meanwhile fails (or, onto
+            // an empty directory on Unix, replaces nothing of value); the
+            // bundle there is then checked like any other.
+            if !output.exists() && std::fs::rename(&staged, output).is_ok() {
+                return self.validate_bundle(output);
+            }
+        }
         let bundle = self.validate_bundle(output).map_err(|_| mismatch.clone())?;
         let current = self.session_status(session)?;
         if bundle.session_id() != session

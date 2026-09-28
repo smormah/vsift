@@ -47,7 +47,8 @@ fn examples() -> PathBuf {
 /// The frozen request of the contract's examples.
 fn frozen_request() -> Built<WorkRequest> {
     let text = fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/v1/examples/job-request.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas/v1/examples/job-request.json"),
     )?;
     Ok(decode_work_request(&text)?)
 }
