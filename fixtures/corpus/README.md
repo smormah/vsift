@@ -93,6 +93,53 @@ instead of changing the truth. F12-E02 is still hit by periodic coverage. Regene
 the motion fixtures with rendered scrolling and a loading state is a separate,
 reviewed truth change.
 
+## Truth amendment: persistent on-screen terms (P12, 2026-09-28)
+
+**Reason.** The agent-trial grader binds a key fact (a fixture's expected term that a
+truth sentence states) to a frame only inside that event's window. Three terms are
+drawn for the whole clip but were annotated only for part of it, so a correct frame
+citation failed. The second Claude Code dry trial (A-08) hit the first: its local
+speech recognition heard "Invoice407", it cited frames at 9 s and 19 s that plainly
+show `INVOICE 4407`, and the grader refused them because F05-E01 ends at 5 s. The
+answer key was incomplete, not contradicted.
+
+**Evidence.** `scene()` in `tools/generate_p04_fixtures.py` draws these elements for
+every frame of the fixture, whatever the event; frames extracted from the committed
+media with the recorded FFmpeg 9.0 build at 0.5, 6, 9 and 19.95 s (F05), 1, 5, 8 and
+13.95 s (F04) and 0, 4 and 11.95 s (F12) show them:
+
+| Event | Window | Term | Drawn by `scene()` | Was annotated only in |
+| --- | --- | --- | --- | --- |
+| F05-E04 | 0-20 s | invoice 4407 | `INVOICE 4407` form header | F05-E01 (0-5 s) |
+| F04-E05 | 0-14 s | header | the `ORDER STATUS` header bar | F04-E01, F04-E02 (0-7 s) |
+| F12-E03 | 0-12 s | SAFE-12 | `DEFECT CODE SAFE-12` | F12-E02 (8-12 s) |
+
+**Change.** The three rows above are new events of the new kind `persistent`: how long
+an element drawn by the other events stays visible. A persistent event marks no
+change, is never critical (the schema and the governance checker enforce it), never
+selects a generated scene (`event_at` skips it) and is not a visual event the candidate
+recall scores (it is skipped there, so the P08 gate and reports are unchanged). Its
+truth sentence states only its own term, and no scenario lists one in
+`truth_events`, so it adds no key fact a trial must state: it only lets a truthful
+frame citation bind. Every other key fact keeps its window; a term cited only from a
+frame where the truth says it is absent still fails (the grader's regression tests).
+Checked and left unchanged: F01, F02, F03, F06, F07, F09 and F10 draw each term only
+inside the events that state it, and F08's terms are spoken only. F04 also draws the
+word `QUEUED` from 0 to 7 s, but for row 1001, not order 1017; widening "queued" would
+let a frame of the wrong row support "order 1017 is queued", so it stays in F04-E03.
+
+**Digests.** The manifest's SHA-256 changed from
+`dfae6419dba8b8bbbf00e18185c7580e1a9b935a61e9abbb82c9c549481e8187` to
+`ade0bccaa4b719f3b5e3502e9236479547f0432700cfd405196a6fe3395c9383`. Re-running the P04
+generator on the amended manifest with the recorded FFmpeg build (same SHA-256)
+reproduced every generated file byte for byte; its new `generated/provenance.json`
+differs only in `manifest_sha256`. `verify_p04_fixtures.py` then passed and rewrote
+`verification.json` (only the digest changed). The speech plans of both manifests are
+equal, so `generated/speech-provenance.json` keeps its synthesis and assembly; its two
+digests now point at the amended manifest and P04 record, with the previous values in
+its `truth_amendments` member, and `verify_p07_speech.py` passed against them (only
+`speech-verification.json`'s digests changed). No media file changed.
+
 ## Supplied-transcript sidecars (P07)
 
 `transcripts/F10.srt` and `transcripts/F10.vtt` are hand-written, rights-safe synthetic

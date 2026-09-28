@@ -115,6 +115,8 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
   ([safety.md](safety.md)); the JSON schema refuses most of them.
 - Evidence text appears only in quotes or code blocks, with hidden characters shown
   as `<U+202E>`-style notation.
-- `budget.used`, `lifecycle` and, for a partial report, `resume` are filled.
+- `budget.used`, `lifecycle` and, for a partial report, `resume` are filled;
+  `wall_time_s` there is `null` unless your client showed you the elapsed time
+  ([budgets.md](budgets.md)).
 
 Examples: [../examples/](../examples/).

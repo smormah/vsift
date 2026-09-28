@@ -385,7 +385,10 @@
             "image_bytes": { "type": "integer", "minimum": 0 },
             "tool_calls": { "type": "integer", "minimum": 0 },
             "refinement_depth": { "type": "integer", "minimum": 0 },
-            "wall_time_s": { "type": "integer", "minimum": 0 }
+            "wall_time_s": {
+              "description": "Seconds since your first command, or null when you could not measure it: VSift returns no clock and the skill runs no other command, so the host measures and enforces the wall time.",
+              "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }]
+            }
           }
         },
         "exhausted": {
@@ -473,7 +476,10 @@
           "properties": {
             "images_total": { "type": "integer", "minimum": 0 },
             "tool_calls": { "type": "integer", "minimum": 0 },
-            "wall_time_s": { "type": "integer", "minimum": 0 }
+            "wall_time_s": {
+              "description": "Seconds left, or null when the time used was not measured.",
+              "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }]
+            }
           }
         },
         "next_command": {

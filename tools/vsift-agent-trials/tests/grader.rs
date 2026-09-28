@@ -553,6 +553,231 @@ fn citations_that_do_not_match_the_record_or_the_truth_fail() -> TestResult {
     Ok(())
 }
 
+/// Frames of the second Claude Code dry trial (A-08, 2026-09-28): the form
+/// before submitting, the first frame with the error, and one near the end.
+const FRAME_BEFORE: &str = "evd_000000000000000000000000000a0800";
+const FRAME_ERROR: &str = "evd_000000000000000000000000000a0809";
+const FRAME_LATE: &str = "evd_000000000000000000000000000a0819";
+const FRAME_LOADING: &str = "evd_000000000000000000000000000a0805";
+const SEGMENT_SUBMIT: &str = "tsg_000000000000000000000000000a0801";
+const SEGMENT_ERROR: &str = "tsg_000000000000000000000000000a0802";
+
+/// A-08's bench with the dry trial's local speech recognition, which heard
+/// "Invoice407", and frames at 0, 5, 9 and 19 s.
+fn local_asr_bench() -> Result<Bench, Box<dyn Error>> {
+    let mut bench = Bench::new("A-08-f05-local-asr")?;
+    bench.bundle.segments.clear();
+    for (segment, start_us, end_us, text) in [
+        (SEGMENT_SUBMIT, 0, 3_000_000, "I submit Invoice407."),
+        (
+            SEGMENT_ERROR,
+            3_000_000,
+            10_000_000,
+            "We expect a success banner, but the page shows error e409 and leaves submit enabled.",
+        ),
+    ] {
+        bench.bundle.segments.insert(
+            (REVISION.to_owned(), segment.to_owned()),
+            Segment {
+                start_us,
+                end_us,
+                text: text.to_owned(),
+            },
+        );
+    }
+    bench.bundle.selections.clear();
+    bench.bundle.frames.clear();
+    for (frame, at_us) in [
+        (FRAME_BEFORE, 0),
+        (FRAME_LOADING, 5_000_000),
+        (FRAME_ERROR, 9_000_000),
+        (FRAME_LATE, 19_000_000),
+    ] {
+        bench.bundle.selections.insert(
+            frame.to_owned(),
+            vec![Selection {
+                requested_us: at_us,
+                actual_us: at_us,
+                delta_us: 0,
+                candidate_id: None,
+            }],
+        );
+        bench.bundle.frames.insert(frame.to_owned(), at_us);
+    }
+    Ok(bench)
+}
+
+fn frame_citation(id: &str, frame: &str, at_us: u64) -> Value {
+    json!({"id": id, "type": "frame", "evidence_id": frame, "candidate_id": null,
+           "requested_us": at_us, "actual_us": at_us, "delta_us": 0, "pixels_inspected": true})
+}
+
+fn segment_citation(id: &str, segment: &str, start_us: u64, end_us: u64) -> Value {
+    json!({"id": id, "type": "transcript_segment", "revision_id": REVISION, "segment_id": segment,
+           "start_us": start_us, "end_us": end_us})
+}
+
+/// The dry trial's handoff with the given claims, citing its two segments
+/// and the frames at 0, 9 and 19 s (and 5 s when a claim uses `e6`).
+fn local_asr_handoff(claims: &Value) -> Value {
+    let mut handoff = handoff();
+    handoff["capabilities"]["local_asr"] = json!("verified");
+    handoff["capabilities"]["transcript_basis"] = json!("local_asr");
+    handoff["claims"] = claims.clone();
+    let mut citations = vec![
+        segment_citation("e1", SEGMENT_SUBMIT, 0, 3_000_000),
+        segment_citation("e2", SEGMENT_ERROR, 3_000_000, 10_000_000),
+        frame_citation("e3", FRAME_BEFORE, 0),
+        frame_citation("e4", FRAME_ERROR, 9_000_000),
+        frame_citation("e5", FRAME_LATE, 19_000_000),
+        frame_citation("e6", FRAME_LOADING, 5_000_000),
+    ];
+    let used: Vec<String> = claims
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|claim| claim["citations"].as_array().cloned().unwrap_or_default())
+        .filter_map(|reference| reference.as_str().map(str::to_owned))
+        .collect();
+    citations.retain(|citation| used.iter().any(|id| citation["id"] == id.as_str()));
+    handoff["citations"] = Value::Array(citations);
+    handoff
+}
+
+fn local_asr_uses(bench: &Bench) -> Vec<Use> {
+    let image = |name: &str| {
+        Use::Read(
+            bench
+                .session_root()
+                .join(SESSION)
+                .join(name)
+                .to_string_lossy()
+                .into_owned(),
+        )
+    };
+    vec![
+        Use::Skill,
+        Use::Read(bench.skill(".claude", "assets/image-check.png")),
+        Use::Bash("vsift setup check --json".to_owned()),
+        Use::Bash("vsift ingest walkthrough.mp4 --json".to_owned()),
+        Use::Bash(format!(
+            "vsift transcript retranscribe {SESSION} --operation-id op_retx0000000000000000000000a001 --events jsonl | tail -n 1"
+        )),
+        Use::Bash(format!(
+            "vsift search {SESSION} --query \"invoice\" --limit 20 --json"
+        )),
+        Use::Bash(format!("vsift frame get {SESSION} --at 0 --json")),
+        image("before.png"),
+        Use::Bash(format!("vsift frame get {SESSION} --at 9000000 --json")),
+        image("error.png"),
+        Use::Bash(format!("vsift frame get {SESSION} --at 19000000 --json")),
+        image("late.png"),
+        Use::Bash(format!(
+            "vsift session retain {SESSION} --output evidence-bundle-phase-1 --json"
+        )),
+    ]
+}
+
+#[test]
+fn a_persistent_header_cited_after_its_first_window_binds_its_term() -> TestResult {
+    // The second Claude Code dry trial (A-08, 2026-09-28): the speech was
+    // heard as "Invoice407", so only the frames at 9 s and 19 s show
+    // "INVOICE 4407". The generator draws that header for the whole clip; the
+    // manifest now records it as the persistent event F05-E04, so this exact
+    // citation pattern must pass.
+    let bench = local_asr_bench()?;
+    let claims = json!([
+        {"id": "c1", "section": "problem", "kind": "observed", "support": "supported", "certainty": "high",
+         "statement": "Submitting invoice 4407 results in an error message E-409 instead of a success banner.",
+         "citations": ["e1", "e2", "e4", "e5"]},
+        {"id": "c2", "section": "actual", "kind": "observed", "support": "supported", "certainty": "high",
+         "statement": "Before submission the page shows the invoice 4407 heading and a Submit button.",
+         "citations": ["e3"]}
+    ]);
+    let log = claude(
+        &local_asr_uses(&bench),
+        &[],
+        &report(&local_asr_handoff(&claims)),
+    );
+    let graded = bench.grade(&parse_claude(&log), &log);
+    assert!(graded.mechanical.passed, "{:?}", failed_checks(&graded));
+    let facts: Vec<(&str, &str)> = graded
+        .interpretation
+        .key_facts
+        .iter()
+        .map(|fact| (fact.event.as_str(), fact.term.as_str()))
+        .collect();
+    assert_eq!(
+        facts,
+        vec![
+            ("F05-E03", "success banner"),
+            ("F05-E03", "E-409"),
+            ("F05-E03", "Submit")
+        ],
+        "a persistent event adds no key fact the scenario must state"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_term_cited_only_where_the_truth_says_it_is_absent_still_fails() -> TestResult {
+    let bench = local_asr_bench()?;
+    for (statement, citations, term) in [
+        // The error is drawn from 9 s: a frame at 5 s cannot show it, even
+        // though the invoice header is on screen there.
+        (
+            "At 5 s the invoice 4407 page shows error E-409.",
+            json!(["e6"]),
+            "E-409",
+        ),
+        // Speech recognition heard "Invoice407": that segment does not say
+        // "invoice 4407", and no frame is cited.
+        ("I submit invoice 4407.", json!(["e1"]), "invoice 4407"),
+    ] {
+        let claims = json!([
+            {"id": "c1", "section": "actual", "kind": "observed", "support": "supported", "certainty": "high",
+             "statement": statement, "citations": citations}
+        ]);
+        let log = claude(
+            &local_asr_uses(&bench),
+            &[],
+            &report(&local_asr_handoff(&claims)),
+        );
+        let failures = failed_checks(&bench.grade(&parse_claude(&log), &log));
+        let window = failures
+            .get("citation_times_in_truth_windows")
+            .ok_or_else(|| format!("{statement}: the truth-window check passed"))?;
+        assert!(
+            window
+                .iter()
+                .any(|detail| detail.contains(&format!("states {term:?}"))),
+            "{statement}: {window:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn persistent_events_state_only_their_on_screen_term() -> TestResult {
+    let truth = CorpusTruth::load(&repository().join("fixtures").join("corpus"))?;
+    for (event, term) in [
+        ("F04-E05", "header"),
+        ("F05-E04", "invoice 4407"),
+        ("F12-E03", "SAFE-12"),
+    ] {
+        let (_, found) = truth.event(event)?;
+        assert_eq!(found.kind, "persistent", "{event}");
+        assert!(!found.critical, "{event}");
+        let terms: Vec<String> = truth
+            .key_facts(event)?
+            .into_iter()
+            .map(|fact| fact.term)
+            .collect();
+        assert_eq!(terms, vec![term.to_owned()], "{event}");
+    }
+    Ok(())
+}
+
 #[test]
 fn budget_overruns_fail() -> TestResult {
     let bench = Bench::new("A-09-f05-supplied")?;

@@ -96,7 +96,7 @@
       "image_bytes": 0,
       "tool_calls": 8,
       "refinement_depth": 0,
-      "wall_time_s": 70
+      "wall_time_s": null
     },
     "exhausted": []
   },
@@ -118,7 +118,7 @@
       { "kind": "audio", "id": "evd_51712e9345c7b70c4a395a7dd6ccbd7f", "at_us": 3000000 }
     ],
     "summary": "No transcript and no image access. One screen change at 00:04.000 is extracted but unviewed. Continue after the user supplies an SRT or WebVTT file, sets up whisper.cpp, or switches to an image-capable client.",
-    "remaining": { "images_total": 5, "tool_calls": 22, "wall_time_s": 830 },
+    "remaining": { "images_total": 5, "tool_calls": 22, "wall_time_s": null },
     "next_command": "vsift setup check --json"
   }
 }

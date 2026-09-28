@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Fixes from the second Claude Code dry trial (P12 PR 3c, ADR 0022 note of
+  2026-09-28). Skill: the rules now say that nothing but `vsift` runs, one command per
+  call, never chained, piped or redirected, not even `date` to time the budget; the one
+  addition is `| tail -n 1` after `--events jsonl`. The host measures and enforces the
+  wall time, and handoff v1 accepts `null` for `budget.used.wall_time_s` and
+  `resume.remaining.wall_time_s` when unmeasured (known limit L-077). `SKILL.md` gives
+  the operation-id grammar with a valid example where it first uses one. New guard
+  tests: console examples are one `vsift` command each, every operation id in the
+  skill parses, the rules forbid self-timing. Corpus truth amendment (reviewed in the
+  corpus README): the new event kind `persistent` records how long a drawn element
+  stays visible, with F04-E05 (header), F05-E04 (invoice 4407) and F12-E03 (SAFE-12),
+  so a frame that shows one of them binds it outside its first window (the dry trial's
+  frames at 9 s and 19 s showing `INVOICE 4407` were refused before). Persistent
+  events are never critical (schema and governance check), never select a generated
+  scene and are not scored by candidate recall. The manifest digest changed; the P04
+  generator reproduced every file byte for byte, `provenance.json`,
+  `verification.json`, `speech-provenance.json` (with a `truth_amendments` record) and
+  `speech-verification.json` now name it, and both verifiers passed. Grader regression
+  tests pin the dry trial's citation pattern and keep rejecting a term cited only
+  where the truth says it is absent.
 - Agent-trial fixes from the first dry trials (P12 PR 3a, ADR 0022 note of
   2026-09-28): `run` marks each Claude Code trial workspace as trusted in the client
   home's `.claude.json` (a minimal, atomic merge of one key) and no longer passes the

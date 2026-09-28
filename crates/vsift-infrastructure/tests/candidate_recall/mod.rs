@@ -9,7 +9,7 @@
 //! a fresh decode with them.
 //!
 //! Scoring, for every visual event of the recorded fixtures (all kinds except
-//! `speech` and `malformed`):
+//! `speech`, `malformed` and `persistent`):
 //!
 //! - **hit**: some candidate's representative time lies inside the event's
 //!   `[start, end)` window;
@@ -312,7 +312,9 @@ pub fn visual_events(manifest: &Value, fixture: &str) -> Built<Vec<VisualEvent>>
     let mut events = Vec::new();
     for event in entry["events"].as_array().ok_or("events missing")? {
         let kind = event["kind"].as_str().ok_or("kind missing")?;
-        if kind == "speech" || kind == "malformed" {
+        // A persistent event marks how long an element stays visible, not a
+        // visual change to find (2026-09-28 truth amendment).
+        if kind == "speech" || kind == "malformed" || kind == "persistent" {
             continue;
         }
         events.push(VisualEvent {

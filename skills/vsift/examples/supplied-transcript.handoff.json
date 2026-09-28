@@ -102,7 +102,7 @@
       "image_bytes": 24280,
       "tool_calls": 10,
       "refinement_depth": 1,
-      "wall_time_s": 95
+      "wall_time_s": null
     },
     "exhausted": []
   },

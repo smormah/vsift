@@ -9,12 +9,20 @@ you keep a small resume card that says where you were.
 
 Every transcription you start carries an operation id you choose, so that repeating
 the request continues or returns the same work instead of starting another one. The
-grammar is `op_` followed by 16 to 64 lowercase letters or digits. Build it from your
-session: `op_retx`, the first 24 characters after `ses_` in the session id, and a
-two-digit counter (`01` for the whole-video transcription, `02`, `03` for later range
-checks). Record every id you use in the resume card. Reusing an id for a different
-request fails with `IDEMPOTENCY_CONFLICT`; that means "choose the next counter", not
-"retry".
+grammar is `op_` followed by 16 to 64 lowercase letters or digits, nothing else: a
+hyphen, an underscore or a capital letter after `op_` is refused before anything runs
+(`INVALID_ARGUMENT`, `command` `parse`). Build it from your session: the letters
+`retx`, then the first 24 characters after `ses_` in the session id, then a two-digit
+counter (`01` for the whole-video transcription, `02`, `03` for later range checks),
+all after `op_`. For the session `ses_0123456789abcdef0123456789abcdef`:
+
+| Request | Operation id |
+| --- | --- |
+| The whole-video transcription | `op_retx0123456789abcdef0123456701` |
+| The first range check | `op_retx0123456789abcdef0123456702` |
+
+Record every id you use in the resume card. Reusing an id for a different request
+fails with `IDEMPOTENCY_CONFLICT`; that means "choose the next counter", not "retry".
 
 ## The resume card
 
@@ -47,7 +55,7 @@ loses at most one step.
 
 ```console
 vsift job status <job> --json
-vsift job resume <job> --events jsonl
+vsift job resume <job> --events jsonl | tail -n 1
 ```
 
    A job that another process is running answers `BUSY`: wait `retry_after_ms` and

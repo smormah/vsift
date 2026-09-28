@@ -7,38 +7,37 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 **P00-P11 are complete. P12 (agent skill) is in progress.** Merged increments: PR 1
-(#196, skill, guard, ADR 0022 Proposed) and PR 2 (#201, `9d2f60e`, harness, 21
-scenarios, SEC-T02 suite). PR 3a (branch `p12-pr3a-dryrun-fixes`) fixes what the first
-dry trials showed. The maintainer approved the named-client trials (~80 counted runs:
-Claude Code `claude-opus-5-5`/`claude-haiku-4-5-20251001`, Codex
-`gpt-6-astra`/`gpt-6-luna`); no counted trial has run.
+(#196), PR 2 (#201, `9d2f60e`) and PR 3a (#203, `67d56c3`, first dry-trial fixes).
+PR 3c (branch `p12-pr3c-dryrun2-fixes`) fixes the second Claude Code dry trial; PR 3b
+(a Linux container for Codex, L-076) is separate work. The maintainer approved the
+named-client trials (~80 counted runs: Claude Code `claude-opus-5-5`/
+`claude-haiku-4-5-20251001`, Codex `gpt-6-astra`/`gpt-6-luna`); none has run.
 
 1. **Maintainer: decide how Codex trials run (L-076).** On Windows Codex's unelevated
-   sandbox cannot run VSift (its private session root refuses the sandbox SID:
-   `STORAGE_IO`/`INTEGRITY_FAILURE`) and does not enforce the network. Options: WSL or
-   Ubuntu; `danger-full-access` graded only; the elevated sandbox (admin setup, untested).
-2. **Maintainer: re-run the Claude Code dry trial on PR 3a** (runbook
-   `docs/agents/trials.md`): no trust warning, not `INVALID TRIAL`, `search` run.
-   Then the counted trials, graded and recorded under `docs/planning/p12-agent-trials/`.
-3. **Maintainer: review ADR 0022** (decisions 3, 4, 7, the PR 2 and dry-trial notes):
-   reading allowances, which scenarios get five trials, the F12-E02 window reading.
+   sandbox cannot run VSift (`STORAGE_IO`/`INTEGRITY_FAILURE`) and does not enforce
+   the network. Options: WSL/Ubuntu (PR 3b's container); `danger-full-access` graded
+   only; the elevated sandbox (admin setup, untested).
+2. **Maintainer: re-run the Claude Code dry trial on PR 3c** (runbook
+   `docs/agents/trials.md`): no `date` or other non-`vsift` call, a valid operation id
+   first time, `wall_time_s` `null`, `citation_times_in_truth_windows` passing. Then
+   the counted trials, graded and recorded under `docs/planning/p12-agent-trials/`.
+3. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes) and the corpus
+   truth amendment (persistent events F04-E05, F05-E04, F12-E03; corpus README).
 4. **Technical debt:** SEC-T01 adversarial containment evidence (#188, L-068), for
    maintainer discussion before P14.
 
 ## Found in P12 (for the maintainer)
 
-- **Dry trials (PR 3a, fixed):** Claude Code ignored an untrusted workspace's allow
-  rules (the harness now trusts each workspace; one settings source; a client's own
-  "ignored" report makes the trial invalid); Codex rejected every command without a
-  Windows sandbox mode (now `unelevated`); Opus never ran `search` (skill says search
-  first, guarded). Claude Code runs read-only commands like `echo` under `dontAsk`;
-  the grader fails them.
+- **Second Claude dry trial (PR 3c, fixed):** it chained `date` to time its budget
+  (now forbidden; the host keeps the wall time, L-077), first sent an invalid
+  `--operation-id`, and a correct frame citation of `INVOICE 4407` at 9 s failed
+  because the key placed it only in 0-5 s (truth amended, grader unchanged).
+- **Still open (grader):** `untrusted_listed` takes only F12-E01 (0-8 s) though the
+  on-screen instructions last to 12 s; a frame before 8 s binds `install` (speech only).
 - **L-071 (P13):** no remediation for an unparsable line in JSON modes (quote `--rect`
   on PowerShell). **L-074 (open):** SubRip import removes any `<letter...>` tag.
 - **Plan vs code/truth:** `session renew` and `job cancel` are `explicit` as a whole;
-  F05's code is spoken at 6.5 s but shown from 9 s, F12's is drawn from the first
-  frame, so the grader binds spoken facts by text (ADR 0022 note).
-
+  F05's code is spoken at 6.5 s, shown from 9 s: spoken facts bind by text.
 ## Decided (maintainer, 2026-09-28)
 
 - **P11 D1-D5** (ADR 0021): explicit workspaces, workspace-set retention, request
@@ -70,7 +69,7 @@ Claude Code `claude-opus-5-5`/`claude-haiku-4-5-20251001`, Codex
 
 ## Other follow-ups
 
-- **Known limits:** entries to L-076, review pending (P12 added L-071..L-076).
+- **Known limits:** entries to L-077, review pending (P12 added L-071..L-077).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   the `p11_durable_workspace` stage on Ubuntu 24.04 / ext4; a CI run of
   `--host-isolation strict-linux` succeeding end to end.
