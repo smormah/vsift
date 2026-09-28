@@ -19,6 +19,9 @@
 //! The opt-in `provider_output_never_reaches_output` also needs `FFmpeg`
 //! and `FFprobe` on `PATH`: a candidates step over a source that is not a
 //! video makes the provider fail, and its output must not reach the caller.
+//! The opt-in `every_step_runs_with_real_tools` runs every step kind over
+//! the F01 speech fixture; it needs `FFmpeg` and `FFprobe` on `PATH`,
+//! `VSIFT_TEST_WHISPER_CLI` and `VSIFT_TEST_WHISPER_MODEL`.
 
 use std::{
     env,
@@ -689,4 +692,92 @@ fn send_ctrl_break(child: &Child) -> TestResult {
 #[ignore = "opt-in: sends console control events through tools/send-console-ctrl.ps1"]
 fn ctrl_break_stops_a_request_resumably() -> TestResult {
     shutdown_stops_a_request(send_ctrl_break, true)
+}
+
+/// Opt-in real-tool run of every step kind: ingest, a whisper.cpp
+/// retranscription (its P10 job under the derived operation id), visual
+/// candidates until nothing is unanalysed, a retained bundle and a close,
+/// then a replay. The recognition's chunk progress names its job.
+#[test]
+#[ignore = "opt-in: needs FFmpeg and FFprobe on PATH, VSIFT_TEST_WHISPER_CLI and VSIFT_TEST_WHISPER_MODEL"]
+fn every_step_runs_with_real_tools() -> TestResult {
+    let whisper =
+        PathBuf::from(env::var_os("VSIFT_TEST_WHISPER_CLI").ok_or("VSIFT_TEST_WHISPER_CLI")?);
+    let model =
+        PathBuf::from(env::var_os("VSIFT_TEST_WHISPER_MODEL").ok_or("VSIFT_TEST_WHISPER_MODEL")?);
+    let layout = Layout::new()?;
+    layout.init(8)?;
+    let configured = layout
+        .command()
+        .args(["setup", "configure", "whisper", "--executable"])
+        .arg(&whisper)
+        .arg("--json")
+        .output()?;
+    assert_eq!(configured.status.code(), Some(0), "{configured:?}");
+    let configured = layout
+        .command()
+        .args(["setup", "configure-model", "--file"])
+        .arg(&model)
+        .arg("--json")
+        .output()?;
+    assert_eq!(configured.status.code(), Some(0), "{configured:?}");
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/corpus/generated/F01-speech.mp4"),
+        layout.inputs().join(PATH_SENTINEL).join("talk.mp4"),
+    )?;
+    let file = layout.request_file(
+        "request.json",
+        &request(
+            OPERATION,
+            r#"{"retranscribe":{"range":null}},{"candidates":{"range":null}},{"retain":{"bundle_name":"f01-review","include_source":false}},{"close":{}}"#,
+        ),
+    )?;
+    let output = layout.job_run(&file, &["--events", "jsonl"]).output()?;
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    layout.assert_nothing_sensitive(&output);
+    let events = events(&output.stdout)?;
+    let terminal = events.last().ok_or("no terminal")?;
+    let data = &terminal["result"]["data"];
+    assert_eq!(data["status"], "complete", "{data}");
+    assert_eq!(
+        statuses_of(data),
+        ["ingest", "retranscribe", "candidates", "retain", "close"]
+    );
+    let job = data["steps"][1]["job_id"].as_str().ok_or("no job")?;
+    assert!(events.iter().any(|event| event["event"] == "progress"
+        && event["stage"] == "recognising_speech"
+        && event["job_id"] == job));
+    assert!(data["steps"][2]["outputs"]["visual_index_id"].is_string());
+
+    // The recognition is a P10 job the job commands know.
+    let status = layout
+        .command()
+        .arg("--session-root")
+        .arg(layout.workspace())
+        .args(["job", "status", job, "--json"])
+        .output()?;
+    assert_eq!(status.status.code(), Some(0), "{status:?}");
+    let status: Value = serde_json::from_slice(&status.stdout)?;
+    assert_eq!(status["data"]["state"], "succeeded");
+
+    let output = layout.job_run(&file, &["--json"]).output()?;
+    assert_eq!(output.status.code(), Some(0));
+    let replayed = json_result(&output)?;
+    assert_eq!(replayed["data"]["replayed"], true);
+    assert_eq!(replayed["data"]["steps"], data["steps"]);
+    Ok(())
+}
+
+fn statuses_of(data: &Value) -> Vec<String> {
+    data["steps"]
+        .as_array()
+        .map(|steps| {
+            steps
+                .iter()
+                .filter(|step| step["status"] == "complete" || step["status"] == "partial")
+                .filter_map(|step| step["kind"].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
 }
