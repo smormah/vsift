@@ -103,6 +103,10 @@ enum Step {
         /// Harness environment variables to pass through by name.
         #[arg(long = "pass-env")]
         pass_environment: Vec<String>,
+        /// Replaces the scenario's prompt for a debug run, which is never a
+        /// trial: grade marks it invalid and record refuses it.
+        #[arg(long)]
+        debug_prompt: Option<String>,
     },
     /// Grades a phase that run finished.
     Grade {
@@ -199,6 +203,7 @@ async fn execute(step: Step) -> Result<String, TrialError> {
             max_turns,
             path_directories,
             pass_environment,
+            debug_prompt,
         } => {
             let record = run(&RunRequest {
                 trial,
@@ -216,6 +221,7 @@ async fn execute(step: Step) -> Result<String, TrialError> {
                 pass_environment,
                 system_path: system_path_directories(),
                 root_policy: RootPolicy::from_environment(),
+                debug_prompt,
             })
             .await?;
             Ok(format!(
@@ -237,7 +243,7 @@ async fn execute(step: Step) -> Result<String, TrialError> {
                 if graded.is_valid() {
                     ""
                 } else {
-                    "INVALID TRIAL (the client ignored its configuration; re-run, do not count); "
+                    "INVALID TRIAL (see invalid_reasons in grade.json; re-run, do not count); "
                 },
                 if graded.mechanical.passed {
                     "passed"

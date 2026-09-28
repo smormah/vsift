@@ -33,6 +33,7 @@ pub mod record;
 pub mod roots;
 pub mod run;
 pub mod scenario;
+pub mod secret_scan;
 pub mod shell;
 pub mod skill;
 pub mod trace;

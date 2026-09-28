@@ -1,0 +1,14 @@
+# Build context for the Codex trial image (the repository root). Only the
+# source at the commit under test goes in: no build output, no local trial
+# data, no git metadata and nothing that could hold a credential.
+.git
+target
+fuzz/target
+.vsift
+.claude
+.agents
+.codex
+.env
+.env.*
+**/*.log
+**/*.tmp

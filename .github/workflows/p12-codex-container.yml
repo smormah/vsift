@@ -1,0 +1,58 @@
+name: P12 Codex trial container
+
+# Builds both images of the Codex trial container
+# (tools/vsift-agent-trials/containers/codex): every pinned download is
+# checked by the Dockerfile itself, and the build runs the tools' version
+# checks and check-scenarios. No client runs, no model is called and no
+# secret is used; the images are discarded with the runner.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - tools/vsift-agent-trials/**
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .github/workflows/p12-codex-container.yml
+
+permissions: {}
+
+concurrency:
+  group: p12-codex-container-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the Codex trial images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the agent image
+        run: >-
+          docker build
+          --file tools/vsift-agent-trials/containers/codex/Dockerfile
+          --build-arg "VSIFT_COMMIT=${GITHUB_SHA}"
+          --target agent
+          --tag vsift-codex-trials-agent:ci
+          .
+
+      - name: Build the harness image
+        run: >-
+          docker build
+          --file tools/vsift-agent-trials/containers/codex/Dockerfile
+          --build-arg "VSIFT_COMMIT=${GITHUB_SHA}"
+          --target harness
+          --tag vsift-codex-trials-harness:ci
+          .
+
+      - name: Check that the agent image holds none of the repository
+        run: |
+          docker run --rm --entrypoint /bin/sh vsift-codex-trials-agent:ci -c \
+            'test ! -e /opt/vsift/src && test -z "$(find / -xdev -name manifest.json -path "*corpus*" 2>/dev/null)"'
+          docker image inspect --format '{{.Id}}' vsift-codex-trials-agent:ci vsift-codex-trials-harness:ci

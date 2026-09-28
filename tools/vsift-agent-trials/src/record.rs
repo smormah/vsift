@@ -249,6 +249,12 @@ pub fn write_record(
     let manifest = read_manifest(layout)?;
     let scenario = Scenario::load(&layout.scenario())?;
     let run = read_run(layout, phase)?;
+    if run.debug_prompt {
+        return Err(TrialError::Refused(
+            "this phase was a debug run (run --debug-prompt); debug runs are never recorded"
+                .to_owned(),
+        ));
+    }
     let graded: Grade = serde_json::from_value(read_json(&layout.phase(phase).join("grade.json"))?)
         .map_err(|error| TrialError::json("grade.json", error))?;
     let extra: Vec<(PathBuf, &str)> = client_home

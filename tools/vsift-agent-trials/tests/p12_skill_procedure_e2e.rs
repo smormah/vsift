@@ -40,7 +40,7 @@ use std::{
 
 use serde_json::{Value, json};
 use vsift_agent_trials::{
-    evaluate::{environment_user_names, grade_trace},
+    evaluate::{RunFindings, environment_user_names, grade_trace},
     layout::TrialLayout,
     prepare::{PrepareRequest, prepare},
     roots::RootPolicy,
@@ -392,7 +392,7 @@ fn walk(layout: &TrialLayout, local_asr: bool) -> Result<Value, Box<dyn Error>> 
         "",
         Some(elapsed),
         &environment_user_names(),
-        Vec::new(),
+        RunFindings::default(),
     )?;
     let failed: Vec<Value> = graded
         .mechanical

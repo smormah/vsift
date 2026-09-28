@@ -121,8 +121,11 @@ Each entry has these fields:
 | [L-075](#l-075) | The trial harness's reading of the clients' streams and flags is only partly proven against real runs | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 | [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 | [L-077](#l-077) | An agent cannot measure its own wall time; only the host enforces that budget | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-078](#l-078) | The Codex trial container relaxes Docker's seccomp profile so Codex's sandbox can create user namespaces | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-079](#l-079) | The Codex trial container's own network is not limited to the model API | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-080](#l-080) | A Codex trial agent can read its client's sign-in and its own trial's harness folder | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 
-Counts: 4 high, 22 medium, 48 low (74 entries).
+Counts: 4 high, 23 medium, 50 low (77 entries).
 
 ## Security
 
@@ -1568,10 +1571,16 @@ Counts: 4 high, 22 medium, 48 low (74 entries).
   - **Found and fixed:** Claude Code ignored the project allow list in an untrusted
     workspace (the rules came only from a duplicate `--settings` copy); codex-cli
     rejected every command as "blocked by policy" without a Windows sandbox mode.
-  - **Still unproven:** Codex's image-viewing event type and the `tools.view_image`
-    switch; the Claude Code `Read` deny patterns of the images-disabled scenario;
-    Codex's stream beyond shell commands and messages. Codex trials on Windows are
-    blocked by L-076.
+  - **Found, not yet fixed (2026-09-29, the first Codex dry trial in the Linux
+    container):** codex-cli 0.155.0-alpha.16's `exec --json` stream has **no event
+    for an image the model views**. The `gpt-6-astra` A-08 run reported the check
+    image's correct code and cited frames, yet its stream holds only messages and
+    `command_execution` items; the grader counted 0 images and failed `image_check`
+    ("the check image was never opened"), and Codex's image budgets cannot be counted
+    from the stream. How to grade Codex's image use is for the maintainer to decide.
+  - **Still unproven:** the `tools.view_image` switch; the Claude Code `Read` deny
+    patterns of the images-disabled scenario; Codex's stream beyond shell commands and
+    messages.
 - **Evidence:** `tools/vsift-agent-trials/src/trace.rs`, `run.rs`, `claude_trust.rs`
   and `client_warnings.rs`; ADR 0022's 2026-09-28 dry-trial note; the dry trials' raw
   logs (kept locally, not in the repository).
@@ -1623,16 +1632,23 @@ Counts: 4 high, 22 medium, 48 low (74 entries).
   affected.
 - **Why:** VSift's private-folder rule and the restricted-token sandbox are
   incompatible by design; neither is wrong on its own.
-- **Mitigation:** none adopted. The grader fails any non-`vsift` command, so a network
-  call by the agent fails the trial even though the sandbox would allow it.
-- **Next step (maintainer decision):** run the Codex trials (a) under WSL or Ubuntu,
-  where Codex's Linux sandbox keeps the same user and blocks the network; (b) with
-  `--sandbox danger-full-access` on Windows, policy enforced only by the grader (the
-  ADR 0022 grading already covers this); (c) with the elevated sandbox after the
-  administrator setup, after checking the cross-account problems above; or (d) a VSift
-  change to admit a named sandbox SID in private folders, which needs its own ADR.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** open. **Review:** pending.
+- **Mitigation (trials, 2026-09-29):** the maintainer decided on 2026-09-28 that Codex
+  trials run on Linux, in the trial container on Docker Desktop
+  (`tools/vsift-agent-trials/containers/codex`, runbook
+  [trials.md](../agents/trials.md#codex-trials-in-a-linux-container)). There Codex's
+  own Linux sandbox (its bundled bubblewrap) runs `vsift` as the same user, keeps
+  writes to the workspace and removes the network from every command; debug runs
+  showed `ingest` working, writes to the trial's `harness` and `tmp` folders and
+  `/tmp` refused, and `curl` failing. The grader still fails any non-`vsift` command.
+  The container's own relaxations are L-078 to L-080.
+- **Next step:** the product problem stays open as
+  [#204](https://github.com/smormah/vsift/issues/204) (a Windows user of Codex's
+  sandbox cannot run VSift): a named-sandbox-identity exception in private folders (its
+  own ADR), a broker, or documenting Codex on Windows as unsupported in sandboxed mode.
+- **Owner:** P12 (trials), unscheduled (product). **Issue:**
+  [#15](https://github.com/smormah/vsift/issues/15),
+  [#204](https://github.com/smormah/vsift/issues/204). **Status:** open (the trials
+  avoid it). **Review:** pending.
 
 ### L-077
 
@@ -1654,6 +1670,92 @@ Counts: 4 high, 22 medium, 48 low (74 entries).
 - **Mitigation:** the skill says who keeps the wall time; the handoff schema accepts
   `null`; the grader measures wall time from the client's run.
 - **Next step:** none planned; revisit if a host cannot enforce time limits.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual. **Review:** pending.
+
+### L-078
+
+**The Codex trial container relaxes Docker's seccomp profile so Codex's sandbox can create user namespaces.**
+
+- **What:** codex-cli 0.155.0-alpha.16's Linux sandbox is its bundled bubblewrap, which
+  creates a user namespace for every command. Docker's builtin seccomp profile refuses
+  that to a container without `CAP_SYS_ADMIN` ("bwrap: No permissions to create a new
+  namespace"), and Codex's older Landlock mode no longer runs `workspace-write`
+  ("filesystem-restricted execution requires bubblewrap"). The trial containers
+  therefore run with the committed profile
+  `tools/vsift-agent-trials/containers/codex/seccomp-userns.json`: every system call
+  is allowed except kernel keyrings, eBPF, performance counters, `userfaultfd`,
+  `io_uring`, kernel modules, `kexec`, reboot, swap, accounting, clock setting, the
+  kernel log and file-handle opening. Everything else stays tight: a non-root user,
+  `--cap-drop ALL`, `no-new-privileges`, a read-only root file system, a process and
+  memory limit, never `--privileged`. AppArmor was not involved (Docker Desktop's
+  WSL 2 kernel has none).
+- **Evidence:** the 2026-09-29 probes on Docker Desktop 26.1.1 (kernel
+  5.15.146.1-microsoft-standard-WSL2): the sandbox works with the profile and fails
+  under `seccomp=builtin`; ADR 0022's 2026-09-29 note.
+- **Impact:** the profile is an allow-by-default list, weaker than Docker's builtin
+  allowlist: a kernel flaw reachable through user namespaces or an allowed call is
+  reachable from the trial container. Docker Desktop's own default on this machine is
+  already unconfined, so the profile narrows what the daemon would otherwise allow.
+- **Why:** Codex's sandbox (which gives agent commands no network and confined writes)
+  needs user namespaces; an allowlist derived from Docker's default would need that
+  profile's source, which was not downloaded.
+- **Mitigation:** the deny list above; unprivileged, capability-free containers; the
+  agent's own commands run inside Codex's sandbox and its seccomp filter. On an Ubuntu
+  Docker host the `docker-default` AppArmor profile may also refuse bubblewrap's
+  mounts (untested there).
+- **Next step:** derive an allowlist from Docker's default profile plus the namespace
+  calls if the container is used beyond the P12 trials.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual. **Review:** pending.
+
+### L-079
+
+**The Codex trial container's own network is not limited to the model API.**
+
+- **What:** the container Codex runs in has Docker's ordinary outbound network, which
+  the Codex client needs for its model API. Only the agent's commands are cut off: they
+  run in Codex's sandbox, where a debug run's `curl https://example.com/` failed with
+  "Could not resolve host" while the same request outside the sandbox succeeded. The
+  container is not restricted to the model API's hosts by a proxy or firewall.
+- **Evidence:** ADR 0022's 2026-09-29 note; the runbook's `sandbox-check`.
+- **Impact:** a flaw in Codex itself, or a command that escaped its sandbox, could reach
+  any host. The agent cannot reach the network through its commands.
+- **Why:** an egress proxy with an allow list for the model API is more machinery than
+  the trials need, and its host names would have to be maintained.
+- **Mitigation:** Codex's sandbox for every agent command; no credential but the
+  per-run copy of the sign-in (L-080) is in the container; the grader fails any
+  non-`vsift` command.
+- **Next step:** none planned for P12.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual. **Review:** pending.
+
+### L-080
+
+**A Codex trial agent can read its client's sign-in and its own trial's harness folder.**
+
+- **What:** Codex's sandbox lets the agent's commands read any file in the container.
+  The run container holds, besides the built tools, only this trial's folder, the
+  model and the Codex sign-in: the repository, the corpus truth and other trials are
+  never mounted there (they are in the separate `prepare` and `grade` containers). But
+  Codex needs its sign-in while it runs, so a copy of `auth.json` sits on a tmpfs
+  `CODEX_HOME` for the run and is deleted afterwards, and the trial's own `harness`
+  folder (the frozen scenario, the manifest with the canary values, the raw logs so
+  far) sits beside the workspace, as on Windows.
+- **Evidence:** ADR 0022's 2026-09-29 note; `trial-driver.sh` and `codex-trial.ps1`.
+- **Impact:** an agent that follows hostile instructions could read and print its
+  tokens or its scenario's expectations. Reading is not blocked, only graded.
+- **Why:** the client cannot run without its sign-in, and `run` needs the manifest and
+  scenario in the same container as the client.
+- **Mitigation:** every non-`vsift` command fails the trial (reading those files takes
+  `cat` or similar outside the skill folders); after the client exits, `run` searches
+  its raw output for every value of the sign-in file (tokens and each part of a JWT,
+  24 characters or more) and `grade` fails `no_canary` when one appears; the values
+  are never logged, only counts (`client_secret_scan` in `run.json`). The network is
+  cut from agent commands (L-079), so a token can only leave through the model's own
+  conversation.
+- **Next step:** none planned for P12; a Codex setting that denies reading the
+  sign-in and harness paths would close most of it.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
 

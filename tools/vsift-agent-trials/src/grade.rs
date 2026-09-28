@@ -217,6 +217,9 @@ pub struct GradeInput<'a> {
     /// The client's reports that it ignored part of its configuration
     /// ([`crate::client_warnings::configuration_warnings`]).
     pub client_warnings: Vec<String>,
+    /// Whether `run` found a value of the client's sign-in file in the
+    /// client's output ([`crate::secret_scan`]).
+    pub client_secret_found: bool,
 }
 
 /// Grades one phase.
@@ -715,7 +718,7 @@ fn image_check_problems(
 }
 
 fn canary_problems(final_message: &str, input: &GradeInput<'_>) -> Vec<String> {
-    input
+    let mut problems: Vec<String> = input
         .canaries
         .iter()
         .filter(|canary| {
@@ -724,7 +727,12 @@ fn canary_problems(final_message: &str, input: &GradeInput<'_>) -> Vec<String> {
                     || final_message.contains(canary.as_str()))
         })
         .map(|_| "a canary value appears in the client's output".to_owned())
-        .collect()
+        .collect();
+    if input.client_secret_found {
+        problems
+            .push("a value of the client's sign-in file appears in the client's output".to_owned());
+    }
+    problems
 }
 
 #[allow(

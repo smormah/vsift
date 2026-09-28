@@ -283,6 +283,56 @@ counted run is graded by the same rules:
 
 The runs made before the restart (one complete, one interrupted) are not counted.
 
+## Implementation notes: Codex trials in a Linux container, PR 3b (2026-09-29)
+
+Status stays **Proposed**. On 2026-09-28 the maintainer decided that the **Codex**
+trials run on Linux, in a container on this machine's Docker Desktop, while the
+**Claude Code** trials stay on Windows. Why: codex-cli 0.155.0-alpha.16's Windows
+sandbox cannot run VSift (the private session root refuses the sandbox identity) and
+does not really turn the network off (L-076, #204, which stays open as a product
+issue); Codex's Linux sandbox runs commands as the same user, confines writes and
+removes the network, which the prompt-injection scenarios (A-04, SEC-T02) need.
+
+- **Images** (`tools/vsift-agent-trials/containers/codex/Dockerfile`, one multi-stage
+  build, every input pinned and verified): Ubuntu 24.04 by digest; `vsift` and the
+  harness built from the commit under test with Rust 1.98.1 (rustup-init 1.29.1 by its
+  published SHA-256) and `--locked` crates; whisper.cpp v1.9.2 built from its tag
+  commit; the reviewed BtbN FFmpeg 9.0.1 CI uses; the official codex-cli Linux package
+  by the SHA-256 GitHub publishes. The `agent` image holds only the built tools; the
+  `harness` image adds the repository. Nothing in either holds a credential.
+- **Trial integrity: three containers per trial.** `prepare` runs in the `harness`
+  image; `run`, where the agent is live, runs in the `agent` image with only this
+  trial's folder (a volume subpath), the model and the sign-in mounted, so the agent
+  cannot read the repository, the corpus truth, the scenario files or other trials;
+  `grade` and `record` run in the `harness` image after the agent has exited. The
+  sign-in (`auth.json` only) is copied into a tmpfs `CODEX_HOME` for the run and
+  deleted afterwards; the agent can still read it through the sandbox (Codex needs it),
+  an accepted residual (L-080): `run` scans the raw output for every sign-in value and
+  `grade` fails `no_canary` if one appears, without logging the values.
+- **Container options, least privilege that works:** a non-root user,
+  `--cap-drop ALL`, `no-new-privileges`, a read-only root, process and memory limits,
+  never `--privileged`, and one relaxation: a committed seccomp profile that allows
+  the user namespaces Codex's bubblewrap creates (Docker's builtin profile refuses them;
+  Codex's older Landlock mode no longer runs `workspace-write`), with a deny list for
+  keyrings, eBPF, `io_uring`, modules, `kexec` and similar (L-078). No AppArmor
+  relaxation was needed on Docker Desktop.
+- **Network:** agent commands have none (a sandboxed `curl` failed to resolve its host
+  while the same request outside the sandbox succeeded). The container itself has
+  ordinary outbound access for the model API and is **not** restricted to it (L-079).
+- **Harness changes:** on Linux Codex's extra writable root is the per-user base (which
+  holds the session root), created before the start, because bubblewrap refuses a
+  writable root that does not exist and `VSift` must create its session root itself;
+  a sandbox that fails a command (output starting `bwrap: `) or cannot start makes the
+  trial invalid; `run --debug-prompt` gives debug runs that `grade` marks invalid and
+  `record` refuses.
+- **Evidence** (2026-09-29; five `gpt-6-luna` debug runs and one `gpt-6-astra` dry
+  trial): Codex read the skill; `vsift setup check` (local ASR verified) and `ingest`
+  succeeded inside the sandbox; writes to the trial's `harness` and `tmp` folders and
+  `/tmp` were refused and a workspace write allowed; `curl` failed. The dry A-08 trial
+  passed every mechanical check but `image_check` and passed interpretation: Codex's
+  `exec --json` stream has no event for viewed images, so the grader counts none (L-075,
+  for the maintainer).
+
 ## Consequences
 
 - Agents have one procedure for both clients, and its references cannot drift from

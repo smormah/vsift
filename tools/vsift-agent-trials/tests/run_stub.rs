@@ -25,7 +25,9 @@ use vsift_agent_trials::{
     layout::{PreparedState, TrialLayout, TrialManifest},
     record::{MAX_RECORD_BYTES, write_record},
     roots::RootPolicy,
-    run::{CODEX_WINDOWS_SANDBOX, RunRequest, client_arguments, phase_prompt, run},
+    run::{
+        CODEX_WINDOWS_SANDBOX, RunRequest, client_arguments, codex_writable_root, phase_prompt, run,
+    },
     scenario::Scenario,
     trace::ClientKind,
 };
@@ -150,6 +152,7 @@ impl Trial {
             pass_environment: Vec::new(),
             system_path: Vec::new(),
             root_policy: RootPolicy::new(Vec::new(), Vec::new()),
+            debug_prompt: None,
         }
     }
 
@@ -439,6 +442,15 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
             .any(|argument| argument == CODEX_WINDOWS_SANDBOX),
         cfg!(windows)
     );
+    // On Unix the per-user base exists before the client starts (Codex's
+    // Linux sandbox binds every writable root), private as VSift makes it.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let base = trial.layout.user_base();
+        assert_eq!(fs::metadata(&base)?.permissions().mode() & 0o777, 0o700);
+    }
+    #[cfg(not(unix))]
     assert!(record.client_setup.is_empty());
     assert!(
         !trial
@@ -448,14 +460,100 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
             .exists(),
         "Codex runs never touch a Claude Code state file"
     );
-    let session_root = trial.layout.session_root().to_string_lossy().into_owned();
+    // The extra writable root holds the session root: the root itself on
+    // Windows, the per-user base on Unix (which must exist before Codex's
+    // Linux sandbox can bind it; the session root is VSift's to create).
+    let writable = codex_writable_root(&trial.layout);
+    assert!(trial.layout.session_root().starts_with(&writable));
+    let writable_text = writable.to_string_lossy().into_owned();
     assert!(arguments.iter().any(|argument| {
-        argument.starts_with("sandbox_workspace_write.writable_roots=")
-            && argument.contains(&session_root)
+        argument == &format!("sandbox_workspace_write.writable_roots=['{writable_text}']")
     }));
+    assert!(!trial.layout.session_root().exists());
     let names: Vec<String> = serde_json::from_value(invocation["environment_names"].clone())?;
     assert!(names.iter().any(|name| name == "CODEX_HOME"));
     assert!(!names.iter().any(|name| name == "CLAUDE_CONFIG_DIR"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_debug_run_uses_the_operators_prompt_and_is_never_a_trial() -> TestResult {
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    let replay = a01_stream();
+    trial.behave(&json!({"replay": "replay.jsonl", "exit_code": 0}), &replay)?;
+    let mut request = trial.request(ClientKind::Codex, Duration::from_secs(60));
+    request.debug_prompt = Some("Run vsift --version and report the result.".to_owned());
+    let record = run(&request).await?;
+    assert!(record.debug_prompt);
+    let arguments: Vec<String> = serde_json::from_value(trial.invocation()?["arguments"].clone())?;
+    assert_eq!(
+        arguments.last().map(String::as_str),
+        Some("Run vsift --version and report the result.")
+    );
+    // The scenario's own prompt is not passed.
+    let scenario_prompt = phase_prompt(
+        &trial.layout,
+        &serde_json::from_value(serde_json::from_str::<Value>(&read_text(
+            &trial.layout.manifest(),
+        )?)?)?,
+        1,
+    )?;
+    assert!(!arguments.contains(&scenario_prompt));
+    // grade marks it invalid; record refuses it.
+    let graded = grade_phase(&trial.layout, 1)?;
+    assert!(!graded.is_valid());
+    assert!(
+        graded
+            .invalid_reasons
+            .iter()
+            .any(|reason| reason.contains("debug run"))
+    );
+    let output = trial.root.join("debug-record.json");
+    assert!(matches!(
+        write_record(&trial.layout, 1, &output, None, &[]),
+        Err(TrialError::Refused(_))
+    ));
+    assert!(!output.exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_sign_in_value_in_the_output_fails_no_canary_and_is_never_logged() -> TestResult {
+    const TOKEN_PART: &str = "c2lnbi1pbi12YWx1ZS1mb3ItdGhlLXNjYW4tdGVzdA";
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    let client_home = trial.root.join("client-home");
+    let auth = client_home.join("auth.json");
+    at(
+        "writing",
+        &auth,
+        fs::write(
+            &auth,
+            json!({"tokens": {"access_token": format!("eyJhbGciOiJub25lIn0x.{TOKEN_PART}.sig")}})
+                .to_string(),
+        ),
+    )?;
+    // The agent printed one part of the token.
+    let replay = format!(
+        "{}\n{}",
+        a01_stream(),
+        json!({"type": "system", "subtype": "note", "text": TOKEN_PART})
+    );
+    trial.behave(&json!({"replay": "replay.jsonl", "exit_code": 0}), &replay)?;
+    let record = run(&trial.request(ClientKind::ClaudeCode, Duration::from_secs(60))).await?;
+    let scan = record.client_secret_scan.ok_or("no scan")?;
+    assert_eq!(scan.files_checked, 1);
+    assert!(scan.found);
+    let run_json = read_text(&trial.layout.phase(1).join("run.json"))?;
+    assert!(!run_json.contains(TOKEN_PART), "the value is never logged");
+    let graded = grade_phase(&trial.layout, 1)?;
+    let no_canary = graded
+        .mechanical
+        .checks
+        .iter()
+        .find(|check| check.name == "no_canary")
+        .ok_or("no no_canary check")?;
+    assert!(!no_canary.passed);
+    assert!(!serde_json::to_string(&graded)?.contains(TOKEN_PART));
     Ok(())
 }
 
