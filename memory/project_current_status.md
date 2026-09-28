@@ -31,61 +31,65 @@ Today it can:
 
 There is now also an **agent skill** (`skills/vsift/`) that teaches Claude Code or
 Codex to run an investigation with the CLI and write a cited report, and a trial
-harness that runs and grades those clients on synthetic recordings. No real agent has
-been tried yet, so the skill is a candidate, not a qualified integration.
+harness that runs and grades those clients on synthetic recordings. One dry trial per
+client has run; they exposed three problems that PR 3a fixes, and a fourth (Codex's
+Windows sandbox cannot run VSift, L-076) that waits for a maintainer decision. No
+counted trial has run, so the skill is a candidate, not a qualified integration.
 
 **P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
 adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
-progress.** PR 1 and PR 2 are increments, not the packet.
+progress.** PR 1, PR 2 and PR 3a are increments, not the packet.
 
 ## P12 in one view
 
 [ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md) is
 **Proposed** (for maintainer review).
 
-- **PR 1 (#196, `7990fdf`, merged): skill and contract guard.**
-  - `skills/vsift/SKILL.md`: trigger description and eight states
-    (CHECK_CAPABILITIES, PREPARE, FIND_SPOKEN_SPANS, INSPECT_CARDS, VERIFY_SOURCE,
-    REFINE_OR_STOP, REPORT, CLOSE_OR_RETAIN), each with allowed commands and a
-    stopping condition; error handling by code.
-  - `references/`: `commands.md` (every public command `free`, `explicit` or
-    `never`; the allowed command forms), `budgets.md` (`compact` default: 1 image per
-    step, 6 in total, 12 MiB, pages of 20, 30 tool calls, depth 2, 15 min, bursts of 4;
-    `standard`: 4/24/48 MiB/50/80/4/30 min/12), `handoff.md` (eight sections plus a
-    `vsift-handoff` JSON block), `safety.md`, `resume.md`, `lifecycle.md` (includes
-    the cleanup routine, closing L-009's P12 step).
-  - `handoff.schema.json` (handoff v1, owned by the skill), two example handoffs built
-    from real CLI output on F10 (supplied transcript, images) and F03-speech (no
-    whisper, no image access), `assets/image-check.png` (code word only in pixels),
-    `agents/openai.yaml` (Codex metadata, no tool dependencies).
-  - Guard `crates/vsift-cli/src/skill_contract.rs` (11 unit tests): console command
-    lines parse with the real parser and respect their class; inline commands and
-    flags exist; the class table covers `CommandName::ALL` once and fixes the `never`
-    and `explicit` sets; upper-case codes are `FailureCode::ALL` or states; field and
-    reason names resolve in `schemas/v1`, `cli-v1.md` or the handoff schema; examples
-    validate; the schema refuses paths, links and hidden characters; the image code is
-    in no text; `SKILL.md` within 300 lines with only `name` and `description`. A
-    15-mutation check showed each rule catches its breakage.
-  - Docs: `docs/agents/skill.md` (install for Claude Code and Codex, requirements,
-    guard), README status, ADR 0016 note, threat-model P12 note, known limits
-    L-007/L-009/L-039 rewritten and L-071 added (L-070 added then fixed), CHANGELOG, ledger P12
-    `in_progress` with the skill files as source documents.
-- **PR 2 (#201, `9d2f60e`, merged): trial machinery, no model run.**
-  `tools/vsift-agent-trials` (unpublished): `prepare` (neutral root enforced, skill in
-  both clients' project folders, isolated per-user base, clips, expired session through
-  the engine's past clock, interrupted job, installer and canaries), `run` (explicit
-  executable and arguments, cleared environment, timeout, raw logs), `grade`
-  (mechanical and interpretation results; policy parsed from `commands.md`, budgets
-  from `budgets.md`, truth from the manifest), `record` (at most 64 KiB). 21 scenarios
-  for A-01..A-09 and SEC-T02; runbook `docs/agents/trials.md`. SEC-T02 tool suite
-  `sec_t02_adversarial_evidence` over new `F12-adversarial.srt/.vtt`. Opt-in procedure
-  checkpoint `p12_skill_procedure_e2e` (deterministic walk, not an agent trial) passed
-  locally. Known limits L-072..L-075.
-- **Next increment (PR 3):** the named-client trials themselves, which need the
-  maintainer's sign-ins and allowances. The packet completes only when those pass.
+- **PR 1 (#196, `7990fdf`, merged): skill and contract guard.** `skills/vsift/`:
+  `SKILL.md` (eight states, each with allowed commands and a stopping condition),
+  `references/` (`commands.md` classes every public command `free`, `explicit` or
+  `never`; `budgets.md` `compact` default and `standard`; `handoff.md`; `safety.md`;
+  `resume.md`; `lifecycle.md`), `handoff.schema.json` (handoff v1, owned by the
+  skill), two example handoffs, the image-check picture and Codex metadata. Guard
+  `crates/vsift-cli/src/skill_contract.rs` (now 12 tests): commands parse with the real
+  parser and respect their class, names resolve in the schemas, examples validate,
+  the image code is in no text, `SKILL.md` within 300 lines, FIND_SPOKEN_SPANS
+  searches first. Install guide `docs/agents/skill.md`.
+- **PR 2 (#201, `9d2f60e`, merged): trial machinery.** `tools/vsift-agent-trials`
+  (unpublished): `prepare` (neutral root, skill in both clients' folders, isolated
+  per-user base, clips, expired session, interrupted job, installer and canaries),
+  `run` (explicit executable and arguments, cleared environment, timeout, raw logs),
+  `grade` (mechanical and interpretation results; policy and budgets parsed from the
+  skill, truth from the manifest), `record` (at most 64 KiB); 21 scenarios; runbook
+  `docs/agents/trials.md`; SEC-T02 tool suite; procedure checkpoint. L-072..L-075.
+- **Dry trials (2026-09-28, maintainer):** one A-08 run per client, kept locally.
+  Claude Code (`claude-opus-5-5`) produced a correct report but ran without the
+  workspace's allow rules (untrusted workspace; the rules came from a duplicate
+  `--settings` copy) and never ran `search`. Codex (`gpt-6-astra`) had every command
+  rejected ("blocked by policy") and stopped after 27 s.
+- **PR 3a (branch `p12-pr3a-dryrun-fixes`, this change): dry-trial fixes.**
+  - `run` trusts each Claude Code workspace in the client home's `.claude.json`
+    (`claude_trust.rs`: one key, other members copied byte for byte, atomic rename,
+    never logged) and drops `--settings`: the project file is the one source. A real
+    run then showed no warning, `vsift` allowed, `mkdir` and a `.env` read denied.
+  - Grader check `client_configuration` (`client_warnings.rs`): a client's own
+    report that it ignored settings, permissions, sandbox or skill makes the trial
+    invalid (`invalid_reasons`, record `"valid": false`). Re-grading the Claude dry
+    run gives `INVALID TRIAL` with only that check and `commands_required` failing.
+  - Codex on Windows gets `windows.sandbox="unelevated"` and no `TEMP` or `/tmp`
+    writable root: commands run, writes stay in the workspace. But VSift cannot use its
+    private session root inside that sandbox and the network is not enforced (L-076):
+    **Codex trials on Windows need a maintainer decision** (WSL/Ubuntu,
+    `danger-full-access` graded only, or the elevated sandbox with admin setup).
+  - Skill: FIND_SPOKEN_SPANS always starts with `vsift search`; new guard test.
+  - Budget used: 3 Codex `exec` and 3 Claude Code `-p` calls, small models.
+- **Next:** the maintainer re-runs the Claude dry trial, decides L-076, then the
+  counted trials. The packet completes only when the named-client trials pass.
 
 ## Found in P12
 
+- **L-076 (open, decision):** Codex's unelevated Windows sandbox and VSift's private
+  session root are incompatible; the network is off only through proxy variables.
 - **L-074 (open):** SubRip markup removal drops any `<letter...>` tag, broader than the
   contract's list; `original_text` keeps the payload (found by the SEC-T02 suite).
 - **L-070 (fixed, #199):** the `job resume` remediation for a closed or expired session
@@ -119,7 +123,7 @@ progress.** PR 1 and PR 2 are increments, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PR 1 (skill and guard) and PR 2 (trial harness, `9d2f60e`) merged; named-client trials next |
+| P12 | In progress: PR 1 (skill, guard) and PR 2 (harness) merged; PR 3a (dry-trial fixes) in review; L-076 decision, then the counted trials |
 | P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
@@ -136,9 +140,9 @@ is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `
 
 ## Quality evidence
 
-- P12 PR 2 gates on Windows 11 (fmt, strict Clippy with and without features,
-  workspace tests, warning-denied rustdoc, governance) and the local procedure
-  checkpoint go in the pull request description.
+- P12 PR 3a gates on Windows 11 (fmt, strict Clippy with and without features,
+  workspace tests, warning-denied rustdoc, governance) and the real-client evidence
+  for each fix go in the pull request description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

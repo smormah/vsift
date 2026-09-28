@@ -9,21 +9,39 @@
 //! own process group, so a timeout stops everything it started.
 //!
 //! Claude Code: `claude -p <prompt> --output-format stream-json --verbose
-//! --model <m> --max-turns <n> --settings <workspace>/.claude/settings.json
-//! --setting-sources project --permission-mode dontAsk
-//! --no-session-persistence --strict-mcp-config`. The committed settings
-//! allow `Bash(vsift:*)`, `Read` below the workspace and the `vsift` skill,
-//! and deny web, write and edit tools; `dontAsk` denies anything else
-//! without prompting. `CLAUDE_CONFIG_DIR` is the operator's signed-in trial
+//! --model <m> --max-turns <n> --setting-sources project --permission-mode
+//! dontAsk --no-session-persistence --strict-mcp-config`. The trial's
+//! permission rules have **one** source: the workspace's
+//! `.claude/settings.json` (the committed settings `prepare` copied), read
+//! as the project source. Claude Code applies a project's *allow* rules only
+//! in a trusted workspace, so `run` first marks this one workspace as
+//! trusted in the client home ([`crate::claude_trust`]). The harness no
+//! longer also passes the file with `--settings`: in the first dry trial
+//! that second copy was the only source of the allow rules (the project's
+//! were ignored as untrusted), so it was unclear which rules applied. The
+//! settings allow `Bash(vsift:*)`, `Read` below the workspace and the
+//! `vsift` skill, and deny web, write and edit tools; `dontAsk` denies
+//! anything else without prompting, except commands Claude Code itself
+//! classes as read-only (such as `echo`), which it runs and the grader
+//! fails. `CLAUDE_CONFIG_DIR` is the operator's signed-in trial
 //! configuration, so no personal settings or memory file is loaded.
 //!
 //! Codex: `codex exec --json --ephemeral --ignore-user-config --ignore-rules
 //! --skip-git-repo-check -m <m> --sandbox workspace-write -C <workspace>
 //! -c approval_policy="never" -c sandbox_workspace_write.network_access=false
-//! -c sandbox_workspace_write.writable_roots=['<session root>'] <prompt>`,
-//! with `CODEX_HOME` the operator's signed-in trial home. Codex's permission
-//! model differs from Claude Code's; the grader enforces the same policy on
-//! both from the event stream (ADR 0022 decision 7), so a permissive
+//! -c sandbox_workspace_write.writable_roots=['<session root>']
+//! -c sandbox_workspace_write.exclude_tmpdir_env_var=true
+//! -c sandbox_workspace_write.exclude_slash_tmp=true <prompt>`, with
+//! `CODEX_HOME` the operator's signed-in trial home. On Windows it adds
+//! `-c windows.sandbox="unelevated"`: codex-cli 0.155 reads the Windows
+//! sandbox mode from the user configuration, which `--ignore-user-config`
+//! skips, and without a mode it rejects every command as "blocked by
+//! policy" (the first dry trial). The unelevated sandbox needs no
+//! administrator setup and confines writes to the workspace (the session
+//! root is inside it), but it turns the network off only through proxy
+//! environment variables (known limit L-076). Codex's permission model
+//! differs from Claude Code's; the grader enforces the same policy on both
+//! from the event stream (ADR 0022 decision 7), so a permissive
 //! configuration cannot pass a forbidden action.
 
 use std::{
@@ -39,6 +57,7 @@ use process_wrap::tokio::{CommandWrap, KillOnDrop};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    claude_trust::{TrustOutcome, trust_workspace},
     error::{TrialError, read_json, write_json},
     layout::{TrialLayout, TrialManifest},
     roots::RootPolicy,
@@ -60,6 +79,10 @@ const WINDOWS_PASSTHROUGH: [&str; 9] = [
     "NUMBER_OF_PROCESSORS",
     "ProgramData",
 ];
+
+/// The Windows sandbox mode Codex runs with: the restricted-token sandbox,
+/// which needs no administrator setup (see the module documentation).
+pub const CODEX_WINDOWS_SANDBOX: &str = "windows.sandbox=\"unelevated\"";
 
 /// Executables that must not be reachable on the client's `PATH`: the
 /// dependency picture must come from registrations alone.
@@ -113,6 +136,11 @@ pub struct RunRecord {
     pub arguments: Vec<String>,
     /// The names of the environment variables the client received.
     pub environment_names: Vec<String>,
+    /// What the harness changed in the client home before the start (for
+    /// Claude Code, the workspace's trust entry). Empty in run records
+    /// written before this field existed.
+    #[serde(default)]
+    pub client_setup: Vec<String>,
     /// Start time, Unix seconds.
     pub started_unix_s: u64,
     /// Wall time.
@@ -192,13 +220,6 @@ pub fn client_arguments(
             request.model.clone(),
             "--max-turns".to_owned(),
             request.max_turns.to_string(),
-            "--settings".to_owned(),
-            layout
-                .workspace()
-                .join(".claude")
-                .join("settings.json")
-                .to_string_lossy()
-                .into_owned(),
             "--setting-sources".to_owned(),
             "project".to_owned(),
             "--permission-mode".to_owned(),
@@ -229,7 +250,14 @@ pub fn client_arguments(
                     "sandbox_workspace_write.writable_roots=['{}']",
                     layout.session_root().to_string_lossy()
                 ),
+                "-c".to_owned(),
+                "sandbox_workspace_write.exclude_tmpdir_env_var=true".to_owned(),
+                "-c".to_owned(),
+                "sandbox_workspace_write.exclude_slash_tmp=true".to_owned(),
             ];
+            if cfg!(windows) {
+                arguments.extend(["-c".to_owned(), CODEX_WINDOWS_SANDBOX.to_owned()]);
+            }
             if scenario.image_policy == ImagePolicy::Disabled {
                 arguments.extend(["-c".to_owned(), "tools.view_image=false".to_owned()]);
             }
@@ -371,16 +399,18 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         layout.raw(request.phase),
         layout.phase(request.phase),
     ] {
-        fs::create_dir_all(&directory).map_err(|error| TrialError::io_at(&directory, error))?;
+        fs::create_dir_all(&directory)
+            .map_err(|error| TrialError::io_step("creating", &directory, error))?;
     }
+    let client_setup = prepare_client(request, &layout)?;
     let client_version = client_version(&request.executable, &environment, &layout).await;
     let raw = layout.raw(request.phase);
     let stdout_path = raw.join("stdout.jsonl");
     let stderr_path = raw.join("stderr.txt");
-    let stdout =
-        File::create(&stdout_path).map_err(|error| TrialError::io_at(&stdout_path, error))?;
-    let stderr =
-        File::create(&stderr_path).map_err(|error| TrialError::io_at(&stderr_path, error))?;
+    let stdout = File::create(&stdout_path)
+        .map_err(|error| TrialError::io_step("creating the raw stdout log", &stdout_path, error))?;
+    let stderr = File::create(&stderr_path)
+        .map_err(|error| TrialError::io_step("creating the raw stderr log", &stderr_path, error))?;
 
     let mut command = tokio::process::Command::new(&request.executable);
     command
@@ -422,6 +452,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         phase: request.phase,
         arguments,
         environment_names: environment.iter().map(|(name, _)| name.clone()).collect(),
+        client_setup,
         started_unix_s,
         wall_ms,
         exit_code,
@@ -433,6 +464,32 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     };
     write_json(&layout.phase(request.phase).join("run.json"), &record)?;
     Ok(record)
+}
+
+/// Changes the client home needs before this trial starts, described for
+/// the run record (never with the home's contents).
+///
+/// # Errors
+///
+/// As [`trust_workspace`].
+fn prepare_client(request: &RunRequest, layout: &TrialLayout) -> Result<Vec<String>, TrialError> {
+    match request.client {
+        ClientKind::ClaudeCode | ClientKind::ProcedureWalker => {
+            let outcome = trust_workspace(&request.client_home, &layout.workspace())?;
+            Ok(vec![
+                match outcome {
+                    TrustOutcome::Marked => {
+                        "marked the trial workspace as trusted in the client home"
+                    }
+                    TrustOutcome::AlreadyTrusted => {
+                        "the trial workspace was already trusted in the client home"
+                    }
+                }
+                .to_owned(),
+            ])
+        }
+        ClientKind::Codex => Ok(Vec::new()),
+    }
 }
 
 #[cfg(windows)]
@@ -491,7 +548,7 @@ pub fn raw_output(record: &RunRecord) -> Result<(String, String), TrialError> {
     let read = |path: &Path| {
         fs::read(path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .map_err(|error| TrialError::io_at(path, error))
+            .map_err(|error| TrialError::io_step("reading the raw log", path, error))
     };
     Ok((read(&record.stdout)?, read(&record.stderr)?))
 }

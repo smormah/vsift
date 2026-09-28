@@ -20,6 +20,8 @@
 
 pub mod bundle;
 pub mod calls;
+pub mod claude_trust;
+pub mod client_warnings;
 pub mod error;
 pub mod evaluate;
 pub mod grade;

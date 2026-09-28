@@ -118,9 +118,10 @@ Each entry has these fields:
 | [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-073](#l-073) | SEC-T02 for human-readable terminal output is deferred to P13 | security | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
-| [L-075](#l-075) | The trial harness's reading of the clients' streams and flags is unproven against real runs | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
+| [L-075](#l-075) | The trial harness's reading of the clients' streams and flags is only partly proven against real runs | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
+| [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 
-Counts: 4 high, 21 medium, 47 low (72 entries).
+Counts: 4 high, 22 medium, 47 low (73 entries).
 
 ## Security
 
@@ -308,7 +309,9 @@ Counts: 4 high, 21 medium, 47 low (72 entries).
   `Bash(vsift:*)`, reads below the workspace and the `vsift` skill, and deny everything
   else without prompting. Codex has no equivalent command allow list: its trials run
   with `--sandbox workspace-write`, network off, approvals `never` and the session root
-  writable, so Codex can *run* a command the skill forbids (inside its sandbox). The
+  writable (on Windows the unelevated sandbox, which cannot yet run VSift and does not
+  enforce the network: L-076), so Codex can *run* a command the skill forbids (inside
+  its sandbox). The
   same policy is enforced on both clients by the grader, which reads every requested
   command from the stream and fails the trial for any attempt, run or denied.
 - **Evidence:** [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md)
@@ -1548,27 +1551,85 @@ Counts: 4 high, 21 medium, 47 low (72 entries).
 
 ### L-075
 
-**The trial harness's reading of the clients' streams and flags is unproven against real runs.**
+**The trial harness's reading of the clients' streams and flags is only partly proven against real runs.**
 
 - **What:** `tools/vsift-agent-trials` parses Claude Code `stream-json` and Codex
-  `exec --json` streams and passes flags checked only with `--help` on Claude Code
-  2.1.281 and codex-cli 0.155.0-alpha.16: Claude Code's `--max-turns` is not listed in
-  its help, Codex's image-viewing event type and the `tools.view_image` switch are
-  assumed, the Claude Code `Read` deny patterns for the images-disabled scenario are
-  untested, and whether Codex discovers the project-scope skill in a trial workspace
-  that is not a git repository is unconfirmed. No prompt was sent in P12 PR 2, by
-  design.
-- **Evidence:** `tools/vsift-agent-trials/src/trace.rs` and `run.rs`; the grader's
-  tests use hand-written streams in the documented shapes.
-- **Impact:** the first real trials may meet an event or flag the harness reads
-  wrongly. The parser fails closed: an unrecognised event is an unauthorized call and
-  a stream line that is not JSON fails `stream_recognised`, so a mistake shows up as a
-  failed trial, never as a false pass.
-- **Why:** proving the formats needs a real run, which spends the maintainer's client
+  `exec --json` streams and passes flags first checked only with `--help` on Claude
+  Code 2.1.281 and codex-cli 0.155.0-alpha.16. The dry A-08 trials of 2026-09-28 (one
+  per client) and PR 3a's debugging runs proved part of it:
+  - **Proven:** every line of both streams parsed; Claude Code's `--max-turns`,
+    `--setting-sources project` and `dontAsk` behave as intended; its `Skill`, `Read`
+    and `Bash` calls and denials are read correctly; the project settings' allow and
+    deny rules apply once the workspace is trusted (the dry run showed they are
+    ignored otherwise, now fixed and graded as an invalid trial); Codex's
+    `command_execution` items parse, and Codex found the skill in `.agents/skills` of a
+    workspace that is not a git repository.
+  - **Found and fixed:** Claude Code ignored the project allow list in an untrusted
+    workspace (the rules came only from a duplicate `--settings` copy); codex-cli
+    rejected every command as "blocked by policy" without a Windows sandbox mode.
+  - **Still unproven:** Codex's image-viewing event type and the `tools.view_image`
+    switch; the Claude Code `Read` deny patterns of the images-disabled scenario;
+    Codex's stream beyond shell commands and messages. Codex trials on Windows are
+    blocked by L-076.
+- **Evidence:** `tools/vsift-agent-trials/src/trace.rs`, `run.rs`, `claude_trust.rs`
+  and `client_warnings.rs`; ADR 0022's 2026-09-28 dry-trial note; the dry trials' raw
+  logs (kept locally, not in the repository).
+- **Impact:** a later scenario may meet an event or flag the harness reads wrongly.
+  The parser fails closed: an unrecognised event is an unauthorized call and a stream
+  line that is not JSON fails `stream_recognised`; a client's own report that it
+  ignored its configuration makes the trial invalid.
+- **Why:** proving the formats needs real runs, which spend the maintainer's client
   allowances.
-- **Mitigation:** fail-closed parsing; raw logs kept locally for re-grading.
-- **Next step:** PR 3 runs one dry trial per client, fixes any format difference and
-  re-grades from the raw logs before the counted trials.
+- **Mitigation:** fail-closed parsing; the `client_configuration` check; raw logs kept
+  locally for re-grading.
+- **Next step:** the maintainer re-runs the dry trials on PR 3a; the first
+  images-disabled and image-viewing Codex trials confirm the remaining events.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** open. **Review:** pending.
+
+### L-076
+
+**Codex's Windows sandbox cannot run VSift trials as configured.**
+
+- **What:** codex-cli 0.155.0-alpha.16 on Windows has two sandboxes. The trial harness
+  uses the *unelevated* one (`-c windows.sandbox="unelevated"`), which needs no
+  administrator setup and runs commands with a restricted token whose capability SIDs
+  Codex grants write access on the workspace. Checked on Windows 11 with no model call
+  (`codex sandbox`) and with two small-model `codex exec` runs:
+  - reads anywhere, `vsift --version` and writes inside the workspace work; writes to
+    the trial's `tmp` and `harness` folders are refused;
+  - **the network is not enforced off**: network off only sets proxy variables to a
+    dead port, and `curl --noproxy "*"` fetched a public connectivity-check page
+    (HTTP 200) inside the sandbox;
+  - **VSift cannot use its session root**: VSift makes every folder it creates private
+    with a protected DACL for the user, `SYSTEM` and Administrators only, and refuses a
+    root that grants anyone else. The restricted token needs its capability SID in that
+    DACL, so `ingest` inside the sandbox fails with `STORAGE_IO`, and a root created
+    outside the sandbox fails every command with `INTEGRITY_FAILURE`.
+  The *elevated* sandbox (separate local sandbox accounts, firewall rules) needs a
+  one-time administrator setup (`codex sandbox setup --elevated --current-user` with
+  `CODEX_HOME` set, which raises a UAC prompt). It was not tried. It would run VSift
+  as a different account, so sessions the harness prepares (A-06) and bundles the
+  harness validates as the operator would probably not be readable across the two
+  accounts. Upstream reports that the setup's machine-wide secret can invalidate other
+  Codex homes' setup markers (openai/codex#40627), which could affect the operator's
+  own Codex installation.
+- **Evidence:** ADR 0022's 2026-09-28 dry-trial note; the Codex dry trial's stderr
+  ("rejected: blocked by policy"); `crates/vsift-infrastructure/src/private_user_root.rs`
+  (`restrict_new_directory`, `validate_private_root`).
+- **Impact:** Codex trials on Windows cannot pass A-08 or any scenario that opens a
+  session, and do not have an enforced network boundary. Claude Code trials are not
+  affected.
+- **Why:** VSift's private-folder rule and the restricted-token sandbox are
+  incompatible by design; neither is wrong on its own.
+- **Mitigation:** none adopted. The grader fails any non-`vsift` command, so a network
+  call by the agent fails the trial even though the sandbox would allow it.
+- **Next step (maintainer decision):** run the Codex trials (a) under WSL or Ubuntu,
+  where Codex's Linux sandbox keeps the same user and blocks the network; (b) with
+  `--sandbox danger-full-access` on Windows, policy enforced only by the grader (the
+  ADR 0022 grading already covers this); (c) with the elevated sandbox after the
+  administrator setup, after checking the cross-account problems above; or (d) a VSift
+  change to admit a named sandbox SID in private folders, which needs its own ADR.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** open. **Review:** pending.
 

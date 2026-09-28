@@ -32,7 +32,10 @@ getrandom.workspace = true
 jsonschema.workspace = true
 process-wrap.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# `raw_value` lets the harness rewrite one member of Claude Code's
+# `.claude.json` while copying every other member back byte for byte
+# (`claude_trust`); it adds a type, not a dependency.
+serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 tokio.workspace = true
 vsift.workspace = true

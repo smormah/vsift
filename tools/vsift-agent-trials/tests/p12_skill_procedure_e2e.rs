@@ -392,6 +392,7 @@ fn walk(layout: &TrialLayout, local_asr: bool) -> Result<Value, Box<dyn Error>> 
         "",
         Some(elapsed),
         &environment_user_names(),
+        Vec::new(),
     )?;
     let failed: Vec<Value> = graded
         .mechanical

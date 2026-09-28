@@ -1,5 +1,5 @@
 {
-  "$comment": "Claude Code settings for VSift agent trials (P12, ADR 0022 decision 7). The harness copies this file into each trial workspace as .claude/settings.json and passes it with --settings, --setting-sources project and --permission-mode dontAsk, which denies every tool use outside the allow list without prompting. Relative patterns resolve against the trial workspace, which holds the skill and VSift's session root. The grader enforces the command policy independently of these rules.",
+  "$comment": "Claude Code settings for VSift agent trials (P12, ADR 0022 decision 7). The harness copies this file into each trial workspace as .claude/settings.json, the only source of the trial's rules: run marks that workspace as trusted in the client home (Claude Code ignores a project's allow rules in an untrusted workspace) and starts Claude Code with --setting-sources project and --permission-mode dontAsk, which denies every tool use outside the allow list without prompting (commands Claude Code classes as read-only still run). Relative patterns resolve against the trial workspace, which holds the skill and VSift's session root. The grader enforces the command policy independently of these rules.",
   "permissions": {
     "defaultMode": "dontAsk",
     "allow": [

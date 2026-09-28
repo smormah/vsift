@@ -233,7 +233,12 @@ async fn execute(step: Step) -> Result<String, TrialError> {
                 .map(|check| check.name.as_str())
                 .collect();
             Ok(format!(
-                "mechanical: {} {:?}; interpretation: {}; tool calls {}; images {}",
+                "{}mechanical: {} {:?}; interpretation: {}; tool calls {}; images {}",
+                if graded.is_valid() {
+                    ""
+                } else {
+                    "INVALID TRIAL (the client ignored its configuration; re-run, do not count); "
+                },
                 if graded.mechanical.passed {
                     "passed"
                 } else {

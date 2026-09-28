@@ -17,11 +17,12 @@ use serde_json::{Value, json};
 use vsift_agent_trials::{
     bundle::{BundleIndex, Segment, Selection},
     calls::ReadScope,
+    client_warnings::configuration_warnings,
     grade::{Expected, Grade, GradeInput, grade},
     handoff::PrivateMarkers,
     scenario::Scenario,
     skill::{SkillReferences, image_code},
-    trace::{Trace, parse_claude, parse_codex},
+    trace::{ClientKind, Trace, parse_claude, parse_codex},
     truth::CorpusTruth,
 };
 
@@ -105,6 +106,10 @@ impl Bench {
     }
 
     fn grade(&self, trace: &Trace, raw: &str) -> Grade {
+        self.grade_with_warnings(trace, raw, Vec::new())
+    }
+
+    fn grade_with_warnings(&self, trace: &Trace, raw: &str, client_warnings: Vec<String>) -> Grade {
         grade(&GradeInput {
             scenario: &self.scenario,
             phase: 0,
@@ -131,6 +136,7 @@ impl Bench {
             wall_time_s: Some(120),
             expected: Expected::default(),
             deviations: Vec::new(),
+            client_warnings,
         })
     }
 }
@@ -323,6 +329,37 @@ fn a_well_behaved_claude_code_trace_passes_both_results() -> TestResult {
         .map(|check| check.name.as_str())
         .collect();
     assert!(checks.contains(&"commands_required") && checks.contains(&"commands_forbidden"));
+    Ok(())
+}
+
+#[test]
+fn a_client_that_ignored_its_permission_rules_makes_the_trial_invalid() -> TestResult {
+    // The first dry trial's stderr: every other check passed, so without
+    // this rule the run would have counted although Claude Code had dropped
+    // the workspace's allow list.
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let log = claude(&good_uses(&bench), &[], &report(&handoff()));
+    let stderr = "Ignoring 3 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog.\n";
+    let warnings = configuration_warnings(ClientKind::ClaudeCode, &log, stderr);
+    let graded =
+        bench.grade_with_warnings(&parse_claude(&log), &format!("{log}\n{stderr}"), warnings);
+    assert!(!graded.is_valid());
+    assert!(!graded.mechanical.passed);
+    let failed = failed_checks(&graded);
+    assert_eq!(
+        failed.keys().collect::<Vec<_>>(),
+        vec!["client_configuration"]
+    );
+    assert!(
+        graded
+            .deviations
+            .iter()
+            .any(|deviation| deviation.starts_with("invalid trial:")),
+        "{:?}",
+        graded.deviations
+    );
+    let clean = bench.grade(&parse_claude(&log), &log);
+    assert!(clean.is_valid() && clean.mechanical.passed);
     Ok(())
 }
 

@@ -95,14 +95,17 @@ vsift transcript retranscribe <session> --operation-id <operation-id> --events j
 
 ### 3. FIND_SPOKEN_SPANS
 
-- Search for the few most specific words of the question (identifiers, error words,
-  numbers), one query at a time, within your page limit:
+- **Always search first**, even when the video is short enough to read whole: search
+  hits carry the segment ids and times you cite. Search for the few most specific words
+  of the question (identifiers, error words, numbers), one query at a time, within your
+  page limit:
 
 ```console
 vsift search <session> --query "<text>" --limit <n> --json
 ```
 
-- Read the context of each hit with a bounded window, about 15 s either side:
+- Only then read around the hits with a bounded window, about 15 s either side (on a
+  short video one window may hold the whole transcript as context):
 
 ```console
 vsift transcript get <session> --from <from-us> --to <to-us> --limit <n> --json

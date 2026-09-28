@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Agent-trial fixes from the first dry trials (P12 PR 3a, ADR 0022 note of
+  2026-09-28): `run` marks each Claude Code trial workspace as trusted in the client
+  home's `.claude.json` (a minimal, atomic merge of one key) and no longer passes the
+  settings a second time with `--settings`, so the workspace's project settings are the
+  one source of the trial's permission rules; Codex runs on Windows get
+  `windows.sandbox="unelevated"` (without it codex-cli 0.155 rejected every command) and
+  never `TEMP` or `/tmp` as writable roots; the grader's new `client_configuration`
+  check makes a trial **invalid** (`invalid_reasons`, `"valid": false` in the record)
+  when a client reports that it ignored its settings, permissions, sandbox or skill.
+  The skill's FIND_SPOKEN_SPANS now always starts with `vsift search`, guarded by a new
+  skill-contract test. Known limit L-076 (Codex's Windows sandbox cannot run VSift and
+  does not enforce the network; maintainer decision) added and L-075 rewritten.
 - Agent-trial harness `tools/vsift-agent-trials` (P12 PR 2, unpublished;
   [runbook](docs/agents/trials.md), ADR 0022 note of 2026-09-28): `prepare` builds a
   scenario's workspace under a neutral root (refused inside the user's profile or when
