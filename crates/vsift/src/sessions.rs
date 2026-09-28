@@ -10,7 +10,7 @@ use vsift_domain::{
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, FfprobeSourceDuration, FilesystemSessionStore,
-    SessionIndexPage, SessionRootProvisioning, SessionStatus,
+    FreeSpaceCheck, SessionIndexPage, SessionRootProvisioning, SessionStatus,
 };
 
 use crate::{
@@ -62,6 +62,19 @@ pub struct IngestOutcome {
     pub session: OpenSessionOutcome,
     /// The imported revision, committed in the same generation as the source.
     pub transcript: Option<TranscriptRevision>,
+    /// Whether the workspace's free-space reserve was checked before the
+    /// copy: only a worker workspace on Unix checks it (P11 PR 2).
+    pub free_space: FreeSpaceReserveCheck,
+}
+
+/// Whether an ingest checked the free-space reserve before its copy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FreeSpaceReserveCheck {
+    /// A workspace on Unix: the filesystem had the source's size and the
+    /// 1 GiB reserve free before the copy.
+    Enforced,
+    /// A desktop root, or a workspace on Windows: nothing was checked.
+    NotEnforced,
 }
 
 /// Committed facts about one session, observed at a known time.
@@ -420,6 +433,7 @@ impl Engine {
             .open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
         let durability = session_durability(request.durability, store.workspace_policy())?;
+        let free_space = free_space_reserve(&store, &source)?;
         let now = self.now_unix_seconds()?;
         let open = OpenSessionRequest {
             source,
@@ -438,6 +452,7 @@ impl Engine {
             return Ok(IngestOutcome {
                 session,
                 transcript: None,
+                free_space,
             });
         };
         let probe_store = self
@@ -456,6 +471,7 @@ impl Engine {
         Ok(IngestOutcome {
             session,
             transcript: Some(revision),
+            free_space,
         })
     }
 
@@ -641,6 +657,24 @@ impl Engine {
         let store = self.open_session_store(&root, SessionRootProvisioning::ExistingOnly)?;
         Ok((store, now))
     }
+}
+
+/// Checks a worker workspace's free-space reserve before the source is
+/// copied into it: the source's size (read from its metadata; the copy
+/// itself still refuses a file that grows) and the 1 GiB reserve must be
+/// available. A desktop root is not checked, as before P11.
+fn free_space_reserve(
+    store: &FilesystemSessionStore,
+    source: &Path,
+) -> Result<FreeSpaceReserveCheck, EngineError> {
+    if store.workspace_policy().is_none() {
+        return Ok(FreeSpaceReserveCheck::NotEnforced);
+    }
+    let incoming = std::fs::metadata(source).map_or(0, |metadata| metadata.len());
+    Ok(match store.ensure_free_space(incoming)? {
+        FreeSpaceCheck::Enforced => FreeSpaceReserveCheck::Enforced,
+        FreeSpaceCheck::NotEnforced => FreeSpaceReserveCheck::NotEnforced,
+    })
 }
 
 /// The durability a new session publishes with: at least what the caller

@@ -127,8 +127,8 @@ pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    IngestOutcome, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
-    SuppliedTranscriptRequest,
+    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SessionListEntry, SessionPage,
+    SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
 };
 pub use setup::{
     EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport, SetupCheckRequest, SetupPlanRequest,

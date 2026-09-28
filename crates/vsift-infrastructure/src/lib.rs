@@ -94,10 +94,11 @@ pub use ffmpeg_media::{
 };
 pub use filesystem_session_store::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, DEFAULT_ADMISSION_CAPACITY, EvidenceInventory,
-    EvidenceMediaFile, ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemJobOwner,
-    FilesystemSessionStore, JOB_CANCEL_POLL, SessionIndexPage, SessionReadHold,
-    SessionRegistration, SessionStatus, SessionStoreOpenError, SessionWorkDirectory,
-    decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
+    EvidenceMediaFile, ExclusiveSessionLifetimeHold, FREE_SPACE_RESERVE_BYTES,
+    FilesystemAdmissionPermit, FilesystemJobOwner, FilesystemSessionStore, FreeSpaceCheck,
+    JOB_CANCEL_POLL, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
+    SessionStoreOpenError, SessionWorkDirectory, decode_chunk_checkpoint, decode_job_record,
+    encode_chunk_checkpoint, encode_job_record,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,

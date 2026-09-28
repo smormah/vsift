@@ -678,7 +678,9 @@ async fn a_workspace_session_lives_the_workspace_retention() -> TestResult {
     harness.clock.set(T0 + retention - 1);
     let renewed = harness.engine.renew_session(&session_id)?.lifetime();
     assert_eq!(renewed.expires_at_unix_seconds(), T0 + 2 * retention - 1);
-    for _ in 0..40 {
+    // Fifteen renewals of 48 hours reach the 720-hour limit; one more
+    // cannot pass it.
+    for _ in 0..16 {
         let expires = harness
             .engine
             .session_status(&session_id)?
@@ -737,6 +739,24 @@ async fn a_workspace_decides_the_durability_of_its_sessions() -> TestResult {
         other => return Err(format!("expected WorkspaceNotDurable, got {other:?}").into()),
     }
     assert!(harness.engine.list_sessions(None)?.entries().is_empty());
+    // The workspace's free-space reserve is checked before the copy on Unix.
+    let opened = harness
+        .engine
+        .ingest(IngestRequest {
+            source: harness.root.source()?,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
+        })
+        .await?;
+    assert_eq!(
+        opened.free_space,
+        if cfg!(unix) {
+            vsift::FreeSpaceReserveCheck::Enforced
+        } else {
+            vsift::FreeSpaceReserveCheck::NotEnforced
+        }
+    );
 
     let durable = Harness::new()?;
     let initialised = durable.engine.init_workspace(vsift::WorkspaceInitRequest {

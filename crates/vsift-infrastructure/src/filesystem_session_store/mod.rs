@@ -62,6 +62,7 @@ pub use job_records::{
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
 };
 pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
+pub use root::{FREE_SPACE_RESERVE_BYTES, FreeSpaceCheck};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;

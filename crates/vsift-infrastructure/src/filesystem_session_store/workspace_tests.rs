@@ -9,7 +9,8 @@ use vsift_domain::{
 };
 
 use super::{
-    FilesystemSessionStore, OWNERSHIP_FILE, SessionStoreOpenError,
+    FREE_SPACE_RESERVE_BYTES, FilesystemSessionStore, FreeSpaceCheck, OWNERSHIP_FILE,
+    SessionStoreOpenError,
     tests::{Fixture, TestResult},
 };
 use crate::durable_profile::directory_offers_os_crash_durability;
@@ -129,6 +130,31 @@ fn a_durable_workspace_fails_closed_off_the_qualified_profile() -> TestResult {
             assert!(!root.exists(), "nothing may be created");
         }
         Err(other) => return Err(format!("unexpected failure: {other}").into()),
+    }
+    Ok(())
+}
+
+/// The free-space reserve (P11 PR 2): on Unix a copy that would leave less
+/// than the reserve free is refused as a capacity error before anything is
+/// written; Windows reports that it did not check.
+#[test]
+fn the_free_space_reserve_is_checked_on_unix_only() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+    let impossible = u64::MAX - FREE_SPACE_RESERVE_BYTES;
+    if cfg!(unix) {
+        assert_eq!(store.ensure_free_space(0), Ok(FreeSpaceCheck::Enforced));
+        assert_eq!(
+            store.ensure_free_space(impossible),
+            Err(SessionStorageError::CapacityExhausted)
+        );
+    } else {
+        for incoming in [0, impossible] {
+            assert_eq!(
+                store.ensure_free_space(incoming),
+                Ok(FreeSpaceCheck::NotEnforced)
+            );
+        }
     }
     Ok(())
 }

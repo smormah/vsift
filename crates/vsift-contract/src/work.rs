@@ -100,6 +100,56 @@ impl WorkerIsolation {
     }
 }
 
+/// Where the memory and process limits a request ran under come from (P11
+/// PR 2). `VSift` never sets or claims to enforce them itself: they are the
+/// host's cgroup limits, attested with the strict Linux profile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResourceLimits {
+    /// The attested host cgroup's finite CPU, memory and PID limits.
+    HostCgroup,
+    /// No host limit was attested.
+    NotEnforced,
+}
+
+impl ResourceLimits {
+    /// Every value, in declaration order.
+    pub const ALL: [Self; 2] = [Self::HostCgroup, Self::NotEnforced];
+
+    /// The stable identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::HostCgroup => "host_cgroup",
+            Self::NotEnforced => "not_enforced",
+        }
+    }
+}
+
+/// Whether the workspace's free-space reserve was checked before a source
+/// was copied into it (P11 PR 2): on Unix the filesystem's available space
+/// is compared with the source and the reserve; on Windows it is not.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FreeSpaceReserve {
+    /// Checked before the copy.
+    Enforced,
+    /// Not checked on this platform.
+    NotEnforced,
+}
+
+impl FreeSpaceReserve {
+    /// Every value, in declaration order.
+    pub const ALL: [Self; 2] = [Self::Enforced, Self::NotEnforced];
+
+    /// The stable identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Enforced => "enforced",
+            Self::NotEnforced => "not_enforced",
+        }
+    }
+}
+
 /// Whether a result was computed now or returned from an earlier commit of
 /// the same operation id and request digest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -119,6 +169,10 @@ pub struct WorkControls {
     pub admission_capacity: NonZeroU16,
     /// The host's request concurrency.
     pub concurrency: NonZeroU16,
+    /// Where its memory and process limits come from.
+    pub resource_limits: ResourceLimits,
+    /// Whether the free-space reserve was checked before its copy.
+    pub free_space_reserve: FreeSpaceReserve,
 }
 
 /// How long a step took.
@@ -519,6 +573,8 @@ struct ControlsData {
     isolation: &'static str,
     admission_capacity: u16,
     concurrency: u16,
+    resource_limits: &'static str,
+    free_space_reserve: &'static str,
 }
 
 impl WorkResult {
@@ -604,6 +660,8 @@ impl WorkResult {
                 isolation: parts.controls.isolation.identifier(),
                 admission_capacity: parts.controls.admission_capacity.get(),
                 concurrency: parts.controls.concurrency.get(),
+                resource_limits: parts.controls.resource_limits.identifier(),
+                free_space_reserve: parts.controls.free_space_reserve.identifier(),
             },
             outcome,
             failure_code,

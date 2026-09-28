@@ -266,6 +266,26 @@ impl FilesystemSessionStore {
         self.capabilities.supports(DurabilityRequirement::Durable)
     }
 
+    /// Requires the root's filesystem to keep [`FREE_SPACE_RESERVE_BYTES`]
+    /// free after `incoming_bytes` are written to it (a worker workspace's
+    /// source copy, P11 PR 2), so a copy never fills the disk a durable
+    /// commit needs. On Unix the available space is read with `fstatvfs`
+    /// on the held root; Windows has no equivalent here and reports
+    /// [`FreeSpaceCheck::NotEnforced`] without checking. The check is a
+    /// reservation made before the copy, not a quota: a concurrent writer
+    /// can still use the space (known limit).
+    ///
+    /// # Errors
+    ///
+    /// [`SessionStorageError::CapacityExhausted`] when the space is short,
+    /// and [`SessionStorageError::Io`] when it cannot be read.
+    pub fn ensure_free_space(
+        &self,
+        incoming_bytes: u64,
+    ) -> Result<FreeSpaceCheck, SessionStorageError> {
+        free_space_check(&self.root, incoming_bytes)
+    }
+
     /// The lifetime rules of sessions opened in this root.
     #[must_use]
     pub const fn lifetime_policy(&self) -> SessionLifetimePolicy {
@@ -621,6 +641,46 @@ pub(super) fn rollback_unpublished_root(root: &Dir, parent: &Dir, name: &Path, c
     let _ = root.remove_dir(SESSIONS_DIRECTORY);
     let _ = root.remove_dir(COORDINATION_DIRECTORY);
     let _ = parent.remove_dir(name);
+}
+
+/// The free space a workspace keeps after a source copy: 1 GiB, room for
+/// the session's metadata generations, records and evidence of a request
+/// without filling the disk its commits are made on.
+pub const FREE_SPACE_RESERVE_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// Whether [`FilesystemSessionStore::ensure_free_space`] checked anything.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FreeSpaceCheck {
+    /// The available space was read and was enough.
+    Enforced,
+    /// This platform has no check here (Windows).
+    NotEnforced,
+}
+
+#[cfg(unix)]
+fn free_space_check(
+    root: &Dir,
+    incoming_bytes: u64,
+) -> Result<FreeSpaceCheck, SessionStorageError> {
+    let statistics = rustix::fs::fstatvfs(root).map_err(|_| SessionStorageError::Io)?;
+    let available = statistics.f_bavail.saturating_mul(statistics.f_frsize);
+    let needed = incoming_bytes.saturating_add(FREE_SPACE_RESERVE_BYTES);
+    if available < needed {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    Ok(FreeSpaceCheck::Enforced)
+}
+
+#[cfg(not(unix))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the Unix check can fail; every platform shares one signature"
+)]
+const fn free_space_check(
+    _root: &Dir,
+    _incoming_bytes: u64,
+) -> Result<FreeSpaceCheck, SessionStorageError> {
+    Ok(FreeSpaceCheck::NotEnforced)
 }
 
 /// The validated workspace policy a marker records, if any. A recorded
