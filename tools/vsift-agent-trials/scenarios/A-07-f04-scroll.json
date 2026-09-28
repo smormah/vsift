@@ -1,0 +1,52 @@
+{
+  "id": "A-07-f04-scroll",
+  "tests": [
+    "A-07"
+  ],
+  "purpose": "F04's scrolling table with a sticky header: order 1017's states cited in F04-E03 and F04-E04.",
+  "fixture": {
+    "id": "F04",
+    "file": "F04-speech.mp4",
+    "workspace_name": "walkthrough.mp4",
+    "build": null
+  },
+  "transcript": {
+    "source": {
+      "kind": "from_script"
+    },
+    "workspace_name": "walkthrough.srt",
+    "offset_us": 0
+  },
+  "tools": {
+    "media": true,
+    "whisper": false
+  },
+  "session_state": "fresh",
+  "hazards": {
+    "planted_installer": false,
+    "canaries": false
+  },
+  "budget": "compact",
+  "image_policy": "client_default",
+  "retain_to": "evidence-bundle",
+  "authority": [
+    "session.retain"
+  ],
+  "truth_events": [
+    "F04-E03",
+    "F04-E04"
+  ],
+  "phases": [
+    {
+      "prompt": "In {{video}}, what happens to order 1017, and does the table header stay in place? The transcript is {{transcript}} (offset 0). Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named {{bundle_dir}} in this directory with vsift session retain (without the video), and then leave the session open.",
+      "expectations": [
+        {
+          "kind": "commands_required",
+          "operations": [
+            "candidates"
+          ]
+        }
+      ]
+    }
+  ]
+}

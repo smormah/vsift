@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-28 (P00-P11 complete; P12 in progress: the agent skill exists, named-client qualification pending; SEC-T01's adversarial evidence deferred as technical debt, L-068).
+Date: 2026-09-28 (P00-P11 complete; P12 in progress: the agent skill and the trial harness exist, named-client qualification pending; SEC-T01's adversarial evidence deferred as technical debt, L-068).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -115,8 +115,12 @@ Each entry has these fields:
 | [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
 | [L-071](#l-071) | A command line that does not parse gets no remediation in JSON modes | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-073](#l-073) | SEC-T02 for human-readable terminal output is deferred to P13 | security | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
+| [L-075](#l-075) | The trial harness's reading of the clients' streams and flags is unproven against real runs | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 
-Counts: 4 high, 18 medium, 46 low (68 entries).
+Counts: 4 high, 21 medium, 47 low (72 entries).
 
 ## Security
 
@@ -280,8 +284,9 @@ Counts: 4 high, 18 medium, 46 low (68 entries).
   supplied transcript are shown as written. An agent that copies a delivered file path
   into prose may reveal the session root's location to readers of that prose.
 - **Evidence:** [threat model](security-threat-model.md) "Agent-specific controls" and
-  the P07 increment 2 and P09 delivery residuals; SEC-16; tests A-04, SEC-T02 not yet
-  run.
+  the P07 increment 2 and P09 delivery residuals; SEC-16. Since P12 PR 2 the tool-level
+  SEC-T02 suite (`crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs`) runs on
+  every PR; the agent trials A-04 and SEC-T02 have not run.
 - **Impact:** a hostile recording could influence an agent's reasoning or actions.
 - **Why:** prompt injection is an open problem; paths are delivered by decision D2.
 - **Mitigation:** fixed-prose remediation that never echoes evidence text; typed
@@ -293,6 +298,49 @@ Counts: 4 high, 18 medium, 46 low (68 entries).
 - **Next step:** the P12 named-client trials qualify A-04 and SEC-T02 with malicious
   spoken, cell and screenshot instructions (ADR 0022 decision 7).
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** deferred. **Review:** pending.
+
+### L-072
+
+**Codex's permissions are graded from its event stream, not configured to match Claude Code's.**
+
+- **What:** Claude Code trials run with committed settings that allow only
+  `Bash(vsift:*)`, reads below the workspace and the `vsift` skill, and deny everything
+  else without prompting. Codex has no equivalent command allow list: its trials run
+  with `--sandbox workspace-write`, network off, approvals `never` and the session root
+  writable, so Codex can *run* a command the skill forbids (inside its sandbox). The
+  same policy is enforced on both clients by the grader, which reads every requested
+  command from the stream and fails the trial for any attempt, run or denied.
+- **Evidence:** [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md)
+  decision 7 and its 2026-09-28 note; `tools/vsift-agent-trials/src/run.rs` and
+  `calls.rs`; [trial runbook](../agents/trials.md).
+- **Impact:** a Codex trial that misbehaves may change files inside its workspace
+  before it fails; the trial workspace is disposable and holds only synthetic media.
+- **Why:** the clients' permission models differ; grading keeps one policy for both.
+- **Mitigation:** trials run in a disposable workspace under a neutral root with a
+  cleared environment; the graded result, not the sandbox, decides the trial.
+- **Next step:** revisit if Codex gains a command allow list.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual. **Review:** pending.
+
+### L-073
+
+**SEC-T02 for human-readable terminal output is deferred to P13.**
+
+- **What:** the tool-level SEC-T02 suite covers the JSON and JSON Lines contract only
+  (control characters rejected at their line, markup kept in `original_text`, one
+  record per line, literal search). How hostile evidence renders in human-readable
+  terminal output (terminal links, bidirectional text, escape sequences in anything
+  printed for a person) is not tested, because that output is P13's work.
+- **Evidence:** `crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs`;
+  [verification](verification.md) section 7 (SEC-T02).
+- **Impact:** a person reading human output of hostile evidence is not yet protected by
+  a tested rule; agents use the JSON modes.
+- **Why:** human-readable output does not exist yet for most commands.
+- **Mitigation:** the contract replaces control characters in human diagnostics; the
+  importer rejects control characters in supplied transcripts.
+- **Next step:** P13 adds human-output SEC-T02 cases with the output it builds.
+- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
 ### L-049
@@ -887,6 +935,27 @@ Counts: 4 high, 18 medium, 46 low (68 entries).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
+### L-074
+
+**SubRip markup removal is broader than the contract lists.**
+
+- **What:** the contract names SubRip `<i>`, `<b>`, `<u>` and `<font>` tags and `{\...}`
+  blocks as recognised markup; the importer removes any tag whose name starts with a
+  letter (for example an HTML `<a href=...>` anchor) from `text`. The payload as
+  written stays in `original_text` with `markup` `removed` and the `markup_removed`
+  warning, so nothing is lost.
+- **Evidence:** found while writing the SEC-T02 suite (P12 PR 2, 2026-09-28):
+  `crates/vsift-infrastructure/src/transcript_sidecar.rs` (`tag`) against
+  `docs/contracts/cli-v1.md` "P07 supplied transcripts"; the suite asserts only what the
+  contract promises.
+- **Impact:** a reader of `text` sees less of a SubRip cue than the contract suggests;
+  an agent comparing `text` with `original_text` sees why.
+- **Why:** the removal predates the adversarial sidecar and was never compared with it.
+- **Mitigation:** `original_text` is always kept when anything was removed.
+- **Next step:** decide whether the contract should say "HTML-like tags" or the
+  importer should keep unknown SubRip tags as text; either needs a contract test.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
 ### L-014
 
 **A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest).**
@@ -1443,10 +1512,15 @@ Counts: 4 high, 18 medium, 46 low (68 entries).
   (Proposed).
 - **Impact:** R0's defining gate (a coding agent from a local video to a grounded
   handoff) is unproven.
-- **Why:** the trials are the next P12 increment, after the skill and its guard.
+- **Why:** the trials need the maintainer's client sign-ins and allowances; P12 PR 2
+  (2026-09-28) built the harness and grader (`tools/vsift-agent-trials`,
+  [runbook](../agents/trials.md)) and a deterministic walk of the skill's A-08/A-09
+  procedure, which passes but is not an agent trial.
 - **Mitigation:** the CLI contract is complete for the journey; the skill's
-  `crates/vsift-cli/src/skill_contract.rs` guard keeps it in step with the CLI.
-- **Next step:** accept ADR 0022 and run its trial protocol (decision 7).
+  `crates/vsift-cli/src/skill_contract.rs` guard keeps it in step with the CLI; the
+  grader's command policy and budgets are parsed from the skill's own references.
+- **Next step:** accept ADR 0022 and run its trial protocol (decision 7) with the
+  harness (P12 PR 3).
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** deferred. **Review:** pending.
 
@@ -1470,6 +1544,32 @@ Counts: 4 high, 18 medium, 46 low (68 entries).
   pending.
 
 ## Process and CI
+
+### L-075
+
+**The trial harness's reading of the clients' streams and flags is unproven against real runs.**
+
+- **What:** `tools/vsift-agent-trials` parses Claude Code `stream-json` and Codex
+  `exec --json` streams and passes flags checked only with `--help` on Claude Code
+  2.1.281 and codex-cli 0.155.0-alpha.16: Claude Code's `--max-turns` is not listed in
+  its help, Codex's image-viewing event type and the `tools.view_image` switch are
+  assumed, the Claude Code `Read` deny patterns for the images-disabled scenario are
+  untested, and whether Codex discovers the project-scope skill in a trial workspace
+  that is not a git repository is unconfirmed. No prompt was sent in P12 PR 2, by
+  design.
+- **Evidence:** `tools/vsift-agent-trials/src/trace.rs` and `run.rs`; the grader's
+  tests use hand-written streams in the documented shapes.
+- **Impact:** the first real trials may meet an event or flag the harness reads
+  wrongly. The parser fails closed: an unrecognised event is an unauthorized call and
+  a stream line that is not JSON fails `stream_recognised`, so a mistake shows up as a
+  failed trial, never as a false pass.
+- **Why:** proving the formats needs a real run, which spends the maintainer's client
+  allowances.
+- **Mitigation:** fail-closed parsing; raw logs kept locally for re-grading.
+- **Next step:** PR 3 runs one dry trial per client, fixes any format difference and
+  re-grades from the raw logs before the counted trials.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** open. **Review:** pending.
 
 ### L-040
 

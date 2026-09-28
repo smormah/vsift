@@ -1,8 +1,9 @@
 # The VSift agent skill
 
-Status: P12 increment (2026-09-28). The skill exists and its command and schema
-references are held to the CLI by tests; it has **not** yet been qualified with named
-agent clients (A-01..A-09, SEC-T02). Design: [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Proposed).
+Status: P12 increments (2026-09-28). The skill exists and its command and schema
+references are held to the CLI by tests; the trial harness is built
+([runbook](trials.md)); it has **not** yet been qualified with named agent clients
+(A-01..A-09, SEC-T02). Design: [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Proposed).
 
 The skill teaches a coding agent (Claude Code, OpenAI Codex or another client that
 reads the `SKILL.md` directory format) to investigate a local video with the `vsift`
@@ -93,6 +94,8 @@ never write the code into any skill or documentation file.
 
 ## Not yet done
 
-Named-client trials (A-08/A-09 through Claude Code and Codex, the compact-model
+Named-client trials (A-01..A-09 through Claude Code and Codex, the compact-model
 gates, SEC-T02 adversarial evidence) are later P12 work; see ADR 0022 for the planned
-protocol. Until they pass, the skill is a candidate, not a qualified integration.
+protocol. The trial harness, its grader and the scenarios exist since P12 PR 2; how to
+run them is in the [trial runbook](trials.md). Until the trials pass, the skill is a
+candidate, not a qualified integration.

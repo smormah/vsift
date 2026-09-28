@@ -7,34 +7,35 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 **P00-P11 are complete. P12 (agent skill) is in progress.** PR 1 (#196, `7990fdf`)
-merged the skill `skills/vsift/`, its guard `skill_contract.rs`, `docs/agents/skill.md`
-and ADR 0022 (Proposed); an increment, not the packet.
+merged the skill, guard and ADR 0022 (Proposed); PR 2 (#201) adds the trial harness,
+21 scenarios, the SEC-T02 suite and the procedure checkpoint. Increments; no trial run.
 
-1. **Maintainer: review ADR 0022**, especially the command classes (decision 3), the
-   budgets (decision 4, with the added image-bytes limit) and the trial protocol
-   (decision 7), then accept or amend it before the trials start.
-2. **Next P12 increment: named-client trials.** A-01..A-09 and SEC-T02 through named
-   Claude Code and Codex versions, compact and review models, five trials per
-   scenario, mechanical and interpretation results graded separately, attempted
-   out-of-policy actions counted as failures. Needs: a trial harness and grader over
-   the command log and handoff, the hostile-evidence fixtures, retained bounded
-   records.
+1. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the PR 2 note), including
+   the harness's reading allowances, which scenarios get five trials (all 21 x 5 x 2
+   clients x 2 models is about 420 runs) and the F12-E02 window reading.
+2. **Next P12 increment (PR 3): run the named-client trials** with the runbook
+   `docs/agents/trials.md`. Maintainer: create `C:\vsift-trials`, sign each client in
+   once into a trial home under it (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`), name the compact
+   and review models. First one dry trial per client to confirm the stream formats and
+   flags (L-075), then the counted trials, graded, reviewed and recorded under
+   `docs/planning/p12-agent-trials/`.
 3. **Technical debt:** SEC-T01 adversarial containment evidence (#188, L-068,
    `docs/planning/sec-t01-adversarial-handoff.md`), for maintainer discussion before P14.
 
-## Found while writing the skill (for the maintainer)
+## Found in P12 (for the maintainer)
 
 - **L-070 (fixed 2026-09-28):** the `job resume` remediation for a closed or expired
   session now says to open a new session with `ingest`; the limit is removed.
-- **#197 (fix in review, PR #200):** a kill during a session registration left an empty
+- **#197 (fixed, #200 `98525dc`):** a kill during session registration left an empty
   index marker that failed every listing; the marker is now staged and renamed.
 - **L-071 (deferred to P13):** a command line that does not parse answers `parse`
   with no remediation in JSON modes; on PowerShell an unquoted `--rect a,b,c,d` fails
   that way. The skill tells agents to quote it.
-- **Plan vs code:** renewal of an expired session is impossible, so `session renew` is
-  `explicit` as a whole; `job cancel` is `explicit` (it discards checkpoints);
-  envelope coverage reasons such as `untranscribed_range` are published only in
-  `cli-v1.md`, so the guard resolves names against `schemas/v1` and that document.
+- **L-074 (P12 PR 2, open):** the SubRip importer removes any `<letter...>` tag, not
+  only the `<i>/<b>/<u>/<font>` the contract lists; `original_text` keeps everything.
+- **Plan vs code/truth:** `session renew` and `job cancel` are `explicit` as a whole
+  (PR 1); the F05 error code is spoken at 6.5 s but shown from 9 s, and F12's code is
+  drawn from the first frame, so the grader binds spoken facts by text (ADR 0022 note).
 
 ## Decided (maintainer, 2026-09-28)
 
@@ -59,7 +60,6 @@ and ADR 0022 (Proposed); an increment, not the packet.
 
 ## Tracked issues
 
-- #197: closes with PR #200; maintainer decides whether to dispatch the P10 campaign.
 - #15 (P12): the packet issue. #14 (P11): close with the ledger follow-up. #180:
   close it. #144: close after a clean main.
 - #170-#178: tracking issues for L-011, L-013, L-015, L-018, L-024, L-028, L-043,
@@ -69,8 +69,8 @@ and ADR 0022 (Proposed); an increment, not the packet.
 
 ## Other follow-ups
 
-- **Known limits:** 69 entries to L-071 (review pending). P12 PR 1 rewrote L-007,
-  L-009 and L-039 and added L-070 and L-071.
+- **Known limits:** entries to L-075 (review pending); P12 added L-071..L-075 (L-070
+  added and fixed).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   the `p11_durable_workspace` stage on Ubuntu 24.04 / ext4; a CI run of
   `--host-isolation strict-linux` succeeding end to end.

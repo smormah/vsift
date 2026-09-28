@@ -1,0 +1,41 @@
+[package]
+name = "vsift-agent-trials"
+description = "Named-client agent trial harness and grader for the VSift skill (P12, ADR 0022 decision 7)"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# A qualification harness, like the governance checker and the crash
+# campaign: never published and never shipped. It prepares trial
+# workspaces, runs a named coding-agent client with an explicit executable
+# and argument list, and grades the client's event stream against the frozen
+# corpus truth and the skill's own command policy.
+publish = false
+
+[[bin]]
+name = "vsift-agent-trials"
+path = "src/main.rs"
+
+# A stand-in for Claude Code and Codex that replays a recorded event stream.
+# The harness's `run` tests drive it instead of a real client, so no test
+# ever sends a prompt to a model provider.
+[[bin]]
+name = "vsift-trials-stub-client"
+path = "src/bin/stub_client.rs"
+
+[dependencies]
+clap.workspace = true
+getrandom.workspace = true
+jsonschema.workspace = true
+process-wrap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+vsift.workspace = true
+
+[lints]
+workspace = true
