@@ -100,7 +100,53 @@ impl SourceSnapshot {
         source_path: &Path,
         cancellation: &dyn StageCancellation,
     ) -> Result<Self, SourceError> {
-        let (mut source, initial) = open_source(source_path)?;
+        let (source, initial) = open_source(source_path)?;
+        Self::stage_opened(
+            store,
+            session_id,
+            operation_id,
+            source,
+            &initial,
+            cancellation,
+        )
+    }
+
+    /// Stages a source a worker request named inside the operator's input
+    /// root (P11, ADR 0021 section 9): the file was opened by
+    /// [`crate::InputRoot::open_file`], component by component and following
+    /// no link, so nothing outside the root is ever read. The copy, its
+    /// identity and its cancellation are those of [`Self::stage_cancellable`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::stage_cancellable`].
+    pub fn stage_contained(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        source: crate::ContainedFile,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        let crate::ContainedFile { file, metadata } = source;
+        Self::stage_opened(
+            store,
+            session_id,
+            operation_id,
+            file,
+            &metadata,
+            cancellation,
+        )
+    }
+
+    /// Copies an opened source whose metadata is `initial` into the session.
+    fn stage_opened(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        mut source: File,
+        initial: &cap_std::fs::Metadata,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
         if initial.len() > MAX_SOURCE_BYTES {
             return Err(SourceError::TooLarge);
         }
@@ -474,7 +520,7 @@ impl ForegroundSessionPort for FilesystemSessionStore {
 /// Shared by source staging and supplied-transcript import so every
 /// caller-selected input passes the same path policy.
 pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), SourceError> {
-    if !path.is_absolute() || !local_path(path) {
+    if !path.is_absolute() || !is_local_path(path) {
         return Err(SourceError::InvalidPath);
     }
     let name = path.file_name().ok_or(SourceError::InvalidPath)?;
@@ -483,7 +529,7 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
     }
     let parent = path.parent().ok_or(SourceError::InvalidPath)?;
     let canonical_parent = std::fs::canonicalize(parent).map_err(SourceError::Io)?;
-    if !local_path(&canonical_parent) {
+    if !is_local_path(&canonical_parent) {
         return Err(SourceError::InvalidPath);
     }
     let directory = Dir::open_ambient_dir(canonical_parent, cap_std::ambient_authority())
@@ -500,53 +546,52 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
     Ok((file, metadata))
 }
 
+/// Whether a path is on a local drive (Windows) or not a network path
+/// (`//host`, elsewhere).
 #[cfg(windows)]
-fn local_path(path: &Path) -> bool {
+pub(crate) fn is_local_path(path: &Path) -> bool {
     use std::path::{Component, Prefix};
     matches!(path.components().next(), Some(Component::Prefix(prefix))
         if matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_)))
 }
 
+/// Whether a path is on a local drive (Windows) or not a network path
+/// (`//host`, elsewhere).
 #[cfg(not(windows))]
-fn local_path(path: &Path) -> bool {
+pub(crate) fn is_local_path(path: &Path) -> bool {
     !path.as_os_str().as_encoded_bytes().starts_with(b"//")
+}
+
+/// Whether a file name is a Windows device name (`CON`, `nul.txt`, `COM1`,
+/// `LPT¹`, `CONIN$`, ...), whatever its case and extension. Checked on
+/// every platform for request paths, so one request means the same file
+/// everywhere.
+pub(crate) fn is_reserved_device_name(name: &str) -> bool {
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(' ')
+        .to_uppercase();
+    let numbered = |prefix: &str| {
+        stem.strip_prefix(prefix).is_some_and(|number| {
+            matches!(
+                number,
+                "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+            )
+        })
+    };
+    matches!(
+        stem.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) || numbered("COM")
+        || numbered("LPT")
 }
 
 #[cfg(windows)]
 fn invalid_source_name(name: &std::ffi::OsStr) -> bool {
     let text = name.to_string_lossy();
-    let stem = text
-        .split('.')
-        .next()
-        .unwrap_or_default()
-        .to_ascii_uppercase();
-    text.contains(':')
-        || text.ends_with([' ', '.'])
-        || matches!(
-            stem.as_str(),
-            "CON"
-                | "PRN"
-                | "AUX"
-                | "NUL"
-                | "COM1"
-                | "COM2"
-                | "COM3"
-                | "COM4"
-                | "COM5"
-                | "COM6"
-                | "COM7"
-                | "COM8"
-                | "COM9"
-                | "LPT1"
-                | "LPT2"
-                | "LPT3"
-                | "LPT4"
-                | "LPT5"
-                | "LPT6"
-                | "LPT7"
-                | "LPT8"
-                | "LPT9"
-        )
+    text.contains(':') || text.ends_with([' ', '.']) || is_reserved_device_name(&text)
 }
 
 #[cfg(not(windows))]

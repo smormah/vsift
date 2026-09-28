@@ -30,6 +30,7 @@ mod file_lock;
 mod filesystem_session_store;
 mod gzip_tar_inventory;
 mod host_attestation;
+mod input_root;
 mod local_asr_verification;
 mod managed_artifact_store;
 mod managed_catalogue;
@@ -108,6 +109,10 @@ pub use host_attestation::{
     NetworkInterfaces, StrictLinuxAttestation, attest_strict_linux_host, decide_strict_linux,
     parse_cgroup_limit, parse_cpu_max, parse_net_dev, parse_proc_cgroup,
 };
+pub use input_root::{
+    ContainedFile, ContainedPathError, InputRoot, InputRootError, MAX_INPUT_PATH_BYTES,
+    MAX_INPUT_PATH_COMPONENTS,
+};
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
     local_asr_fixture_sha256, run_within_budget,
@@ -161,7 +166,10 @@ pub use system_clock::SystemClock;
 pub use transcript_record::{
     MAX_TRANSCRIPT_RECORD_BYTES, decode_transcript_record, encode_transcript_record,
 };
-pub use transcript_sidecar::{MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript};
+pub use transcript_sidecar::{
+    MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript,
+    read_supplied_transcript_contained,
+};
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use visual_index_record::{
