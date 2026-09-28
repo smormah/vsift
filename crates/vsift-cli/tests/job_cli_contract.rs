@@ -551,8 +551,15 @@ fn job_grammar_is_validated_before_any_io() -> TestResult {
     }
     // Nothing was created by a rejected command.
     assert!(!root.sessions().exists());
-    // `job batch` (P11 PR 4) runs only in an existing worker workspace:
-    // a missing root is refused before the request file is opened.
+    Ok(())
+}
+
+/// `job batch` (P11 PR 4) runs only in an existing worker workspace: a
+/// missing root is refused before the request file is opened, and nothing
+/// is created.
+#[test]
+fn a_batch_outside_a_workspace_creates_nothing() -> TestResult {
+    let root = OwnedRoot::new()?;
     let output = vsift(
         &root,
         &[

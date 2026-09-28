@@ -596,7 +596,7 @@ async fn two_batches_share_one_workspace() -> TestResult {
     let first_lines: Vec<String> = (1..=5).map(close_only).chain([shared.clone()]).collect();
     let second_lines: Vec<String> = (11..=15).map(close_only).chain([shared]).collect();
     layout.write_batch(&first_lines)?;
-    fs::write(&other.0.join("requests.jsonl"), second_lines.join("\n"))?;
+    fs::write(other.0.join("requests.jsonl"), second_lines.join("\n"))?;
 
     let (first_sender, first_events) = mpsc::channel(4);
     let (second_sender, second_events) = mpsc::channel(4);

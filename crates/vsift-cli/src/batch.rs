@@ -562,3 +562,76 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    use tokio::sync::mpsc;
+    use vsift::{JobProgress, OperationId, ProgressStage, ProgressUpdate};
+
+    use super::{Observed, PROGRESS_QUEUE, gated_observer};
+    use crate::progress::ProgressGate;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    fn step() -> JobProgress {
+        JobProgress {
+            job: None,
+            update: ProgressUpdate {
+                stage: ProgressStage::RunningRequest,
+                completed: 0,
+                total: Some(2),
+            },
+        }
+    }
+
+    /// X-08 / O-02: the requests of a batch share one bounded progress
+    /// queue. When nobody drains it, progress beyond it is dropped at once
+    /// and counted in the gate of the request it belonged to (reported as
+    /// that request's `progress_dropped`), never buffered, and the
+    /// admission notices, which are never dropped, still arrive.
+    #[test]
+    fn progress_is_dropped_and_counted_not_buffered() -> TestResult {
+        let (sender, mut progress) = mpsc::channel::<Observed>(PROGRESS_QUEUE);
+        let (waiting_sender, mut waiting) = mpsc::unbounded_channel::<Observed>();
+        let mut gates = HashMap::new();
+        let requests = PROGRESS_QUEUE + 8;
+        for line in 1..=u32::try_from(requests)? {
+            let operation_id = OperationId::parse(format!("op_{line:032}"))?;
+            let gate = Arc::new(Mutex::new(ProgressGate::new()));
+            gates.insert(line, Arc::clone(&gate));
+            let observer = gated_observer(
+                line,
+                &operation_id,
+                gate,
+                sender.clone(),
+                waiting_sender.clone(),
+            );
+            observer.report(&step());
+            observer.admission_waiting(&vsift::AdmissionWaiting {
+                job: None,
+                weight: std::num::NonZeroU16::MIN,
+            });
+        }
+        let mut queued = 0;
+        while progress.try_recv().is_ok() {
+            queued += 1;
+        }
+        assert_eq!(queued, PROGRESS_QUEUE);
+        let mut dropped = 0;
+        for gate in gates.values() {
+            dropped += gate.lock().map_err(|_| "poisoned")?.dropped();
+        }
+        assert_eq!(dropped, u64::try_from(requests - PROGRESS_QUEUE)?);
+        let mut notices = 0;
+        while waiting.try_recv().is_ok() {
+            notices += 1;
+        }
+        assert_eq!(notices, requests);
+        Ok(())
+    }
+}
