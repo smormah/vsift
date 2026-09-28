@@ -18,11 +18,12 @@ use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile,
     AsrProviderBuild, AsrRun, AsrRunParts, CarriedFrom, CheckpointOutcome, ChunkCheckpoint,
     ChunkPlan, ChunkPlanError, InheritedRevision, LanguageTag, MediaTime, MergedSegment,
-    PlannedChunk, ProviderChunkOutput, ProviderOutputError, RecognitionKey, SegmentOrigin,
-    SessionId, SourceId, SourceSegment, TimeRange, TranscriptProvenance, TranscriptRevision,
-    TranscriptRevisionError, TranscriptRevisionId, TranscriptRevisionParts, TranscriptSegment,
-    TranscriptSegmentParts, TranscriptWarningKind, TranscriptWarnings, ValidatedChunk,
-    decoded_audio_range, is_silent_pcm, merge_chunks, plan_chunks, validate_chunk_output,
+    PlannedChunk, ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderOutputError,
+    RecognitionKey, SegmentOrigin, SessionId, SourceId, SourceSegment, TimeRange,
+    TranscriptProvenance, TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId,
+    TranscriptRevisionParts, TranscriptSegment, TranscriptSegmentParts, TranscriptWarningKind,
+    TranscriptWarnings, ValidatedChunk, decoded_audio_range, is_silent_pcm, merge_chunks,
+    plan_chunks, validate_chunk_output,
 };
 
 use crate::{
@@ -396,12 +397,34 @@ where
     .map_err(|failure| failure.failure)
 }
 
-/// The chunk checkpoints a run reads and writes, and the run they belong to.
+/// Where a long run reports how far it has come (P11, ADR 0021).
+///
+/// A report is advisory: a host may coalesce or drop it to keep its output
+/// bounded, and it must return at once, because the run calls it between
+/// chunks. `Send + Sync` so a run holding it stays a `Send` future.
+pub trait ProgressSink: Send + Sync {
+    /// Receives one observation.
+    fn report(&self, update: ProgressUpdate);
+}
+
+/// A sink that reports nowhere, for runs nobody watches.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoProgress;
+
+impl ProgressSink for NoProgress {
+    fn report(&self, _update: ProgressUpdate) {}
+}
+
+/// The chunk checkpoints a run reads and writes, the run they belong to,
+/// and where the job reports its progress.
 pub struct CheckpointScope<'a, K> {
     /// Where the job keeps its checkpoints.
     pub checkpoints: &'a K,
     /// The recognition every usable checkpoint must belong to.
     pub key: &'a RecognitionKey,
+    /// Receives `recognising_speech` progress: 0 of the planned chunks once
+    /// the plan is made, then one more after every chunk, reused or fresh.
+    pub progress: &'a dyn ProgressSink,
 }
 
 // Two references: copyable whatever `K` is, which a derive would not allow.
@@ -514,6 +537,18 @@ where
     let bounds = request.source_segment.range();
     let chunks = plan_run(&request)?;
     ensure_identity(recognizer, request.expected).await?;
+    let total = u64::try_from(chunks.len()).ok();
+    let report = |completed: u64| {
+        if let Some(scope) = &scope {
+            scope.progress.report(ProgressUpdate {
+                stage: ProgressStage::RecognisingSpeech,
+                completed,
+                total,
+            });
+        }
+    };
+    report(0);
+    let mut completed = 0_u64;
 
     let mut usage = CheckpointUse::default();
     let mut records = Vec::with_capacity(chunks.len());
@@ -566,6 +601,8 @@ where
                 merge_input.push(segments);
             }
         }
+        completed = completed.saturating_add(1);
+        report(completed);
     }
     if let Some(first) = first_gap {
         warnings.add(TranscriptWarningKind::SilentChunksSkipped, gaps, first);

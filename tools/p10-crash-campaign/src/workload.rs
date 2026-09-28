@@ -585,6 +585,7 @@ async fn retranscribe(
             cancellation: &NeverStop,
             timer: &NoBackoff,
             classify: job_failure,
+            progress: &vsift_application::NoProgress,
         },
         &mut SourceUnchanged,
     )

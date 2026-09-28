@@ -34,8 +34,8 @@ use vsift::{
     AsrProviderBuild, AsrStage, Cancellation, ChunkTime, CueText, Engine, EngineConfig,
     EngineError, EnginePorts, FailureCode, HostIsolation, IngestRequest, LanguageTag,
     LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier, MediaToolVerification,
-    MediaToolVerifier, PlannedChunk, ProviderChunkOutput, ProviderSegment, ProviderToken,
-    ProviderTokenKind, RecognizerIdentity, RetranscribeRange, RetranscribeRequest,
+    MediaToolVerifier, PlannedChunk, ProgressObserver, ProviderChunkOutput, ProviderSegment,
+    ProviderToken, ProviderTokenKind, RecognizerIdentity, RetranscribeRange, RetranscribeRequest,
     RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptQuery, TranscriptWarningKind,
     UserConfigurationLocation,
@@ -288,6 +288,7 @@ fn request(session: &SessionId, range: Option<(u64, u64)>) -> RetranscribeReques
         }),
         operation_id: None,
         cancellation: Cancellation::new(),
+        progress: ProgressObserver::none(),
     }
 }
 

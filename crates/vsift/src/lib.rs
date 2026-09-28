@@ -93,6 +93,7 @@ mod error;
 mod evidence;
 mod jobs;
 mod local_asr_check;
+mod progress;
 mod search;
 mod sessions;
 mod setup;
@@ -119,6 +120,7 @@ pub use jobs::{
     MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
 };
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
+pub use progress::{JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
@@ -175,8 +177,9 @@ pub use vsift_domain::{
 pub use vsift_domain::{
     AttemptFailure, DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId,
     FailureClass, FailureCode, IdentifierError, JobId, JobKind, JobState, OperationId,
-    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
-    SessionLifetime, SessionPhase, SourceId, StorageGeneration,
+    ProgressStage, ProgressUnit, ProgressUpdate, PublicationGuarantee, RuntimeCapability,
+    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionPhase, SourceId,
+    StorageGeneration,
 };
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_domain::{

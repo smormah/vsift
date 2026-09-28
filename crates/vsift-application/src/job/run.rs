@@ -159,6 +159,9 @@ pub struct RetranscriptionPorts<'a, S, A, R, C, T> {
     /// The single public mapping from a failure to its code, owned by the
     /// engine; the retry policy and the poison rule decide by it.
     pub classify: fn(&JobRunError) -> FailureCode,
+    /// Receives the run's chunk progress (P11); [`crate::NoProgress`] when
+    /// nobody watches.
+    pub progress: &'a dyn crate::ProgressSink,
 }
 
 /// What a run tells its caller about the job behind it.
@@ -583,6 +586,7 @@ where
             CheckpointScope {
                 checkpoints: shared,
                 key: &run.spec.recognition_key,
+                progress: ports.progress,
             },
             ports.audio,
             ports.recognizer,

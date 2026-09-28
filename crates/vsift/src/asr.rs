@@ -54,6 +54,7 @@ use vsift_infrastructure::{
 use crate::{
     engine::Engine,
     error::{EngineError, ExecutableRejection, SessionRootError, job_failure_code},
+    progress::ProgressObserver,
     sessions::SessionSnapshot,
     verification::Cancellation,
 };
@@ -78,6 +79,10 @@ pub struct RetranscribeRequest {
     /// Signal that stops the run at its next provider boundary; nothing is
     /// committed after it fires, and the job stays resumable.
     pub cancellation: Cancellation,
+    /// Receives `recognising_speech` progress in chunks (P11): 0 of the
+    /// plan once it is made, then each chunk, reused ones included. A replay
+    /// reports nothing.
+    pub progress: ProgressObserver,
 }
 
 /// A half-open source range to retranscribe, in microseconds.
@@ -429,6 +434,7 @@ impl Engine {
                 RunRecognizer::Host(HostRecognizerRef(host.recognizer.as_ref()))
             }
         };
+        let progress = request.progress.for_job(&spec.job_id);
         let running = run_retranscription(
             run,
             RetranscriptionPorts {
@@ -438,6 +444,7 @@ impl Engine {
                 cancellation: &cancellation,
                 timer: &TokioRetryTimer,
                 classify: job_failure_code,
+                progress: &progress,
             },
             &mut guard,
         );

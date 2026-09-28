@@ -21,11 +21,12 @@ use vsift_application::{
     build_asr_revision, page_transcript, whole_file_source_segment,
 };
 use vsift_contract::{
-    CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
-    JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION,
-    JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION, JobData, JobPresentation,
-    JobResumeData, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse,
-    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, OperationResponse,
+    CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, CommandName,
+    IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION,
+    JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
+    JobData, JobPresentation, JobResumeData, LOCAL_ASR_MODEL_REMEDIATION,
+    LOCAL_ASR_TOOLS_REMEDIATION, LifecycleResponse, NO_AUDIO_STREAM_REMEDIATION,
+    NO_TRANSCRIPT_REMEDIATION, OperationResponse, ProgressEventResponse, ProgressReport,
     RESUMED_FROM_CHECKPOINT_WARNING, RetranscribeJob, SUPERSEDED_REMEDIATION, SessionJobData,
     SessionState, SessionStatusData, StatusData, TerminalEventResponse, TranscriptEvidenceStream,
     TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,
@@ -37,10 +38,11 @@ use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, AttemptFailure, ChunkPlan, ChunkTime, CueText,
     FailureCode, JobId, JobKind, JobState, LanguageTag, MediaTime, OperationId, PageLimit,
-    ProviderChunkOutput, ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind,
-    SessionId, Sha256Hex, SourceId, SourceSegment, StorageGeneration, TimeRange,
-    TranscriptRevision, TranscriptRevisionError, TranscriptRevisionId, TranscriptWarningKind,
-    TranscriptWarnings, merge_chunks, plan_chunks, validate_chunk_output,
+    ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderOutputError, ProviderSegment,
+    ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId, SourceSegment,
+    StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionError,
+    TranscriptRevisionId, TranscriptWarningKind, TranscriptWarnings, merge_chunks, plan_chunks,
+    validate_chunk_output,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -382,6 +384,62 @@ fn a_bounded_retranscription_matches_the_frozen_example() -> TestResult {
         "transcript-retranscribe-data.schema.json",
         &event["result"]["data"],
     )?;
+    Ok(())
+}
+
+/// P11: `transcript retranscribe --events jsonl` writes the job's chunk
+/// progress (0 of 1 once planned, 1 of 1 after the chunk), then the terminal
+/// event at the count of events before it, whose result is exactly the
+/// `--json` result `transcript-retranscribe.json`.
+#[test]
+fn a_retranscription_stream_matches_the_frozen_example() -> TestResult {
+    let (_, second) = f01_revisions()?;
+    let job = JobId::parse(JOB)?;
+    let command = CommandName::TranscriptRetranscribe;
+    let mut lines = Vec::new();
+    for completed in [0, 1] {
+        let event = ProgressEventResponse::new(
+            u64::try_from(lines.len())?,
+            command,
+            &ProgressReport {
+                update: ProgressUpdate {
+                    stage: ProgressStage::RecognisingSpeech,
+                    completed,
+                    total: Some(1),
+                },
+                job: Some(&job),
+                request: None,
+                dropped: 0,
+            },
+        );
+        lines.push(serde_json::to_string(&event)?);
+    }
+    let terminal = TerminalEventResponse::at_sequence(
+        retranscribe_response(&second, Some(range(5_500_000, 6 * SECOND)?))?,
+        u64::try_from(lines.len())?,
+    );
+    lines.push(serde_json::to_string(&terminal)?);
+    let mut produced = lines.join("\n");
+    produced.push('\n');
+    assert_eq!(
+        produced,
+        fs::read_to_string(repository(
+            "schemas/v1/examples/transcript-retranscribe.events.jsonl"
+        ))?
+    );
+
+    for (index, line) in produced.lines().enumerate() {
+        let event: Value = serde_json::from_str(line)?;
+        assert_eq!(event["sequence"], u64::try_from(index)?);
+        let kind = event["event"].as_str().ok_or("event")?;
+        validate(&format!("{kind}-event.schema.json"), &event)?;
+        if kind == "terminal" {
+            assert_eq!(
+                event["result"],
+                load("examples/transcript-retranscribe.json")?
+            );
+        }
+    }
     Ok(())
 }
 

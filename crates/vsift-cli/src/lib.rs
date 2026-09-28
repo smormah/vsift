@@ -9,6 +9,7 @@ mod evidence;
 mod job;
 mod json_input;
 mod output;
+mod progress;
 mod search;
 mod session;
 mod setup;
@@ -25,8 +26,8 @@ use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{JsonLines, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
     Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
-    EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, SessionRootLocation,
-    SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
+    EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, ProgressObserver,
+    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
 };
 use vsift_contract::{
     CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
@@ -348,8 +349,20 @@ where
                     let result = session::transcript_get(&engine, arguments);
                     write_session_result(&mut writer, mode, operation, result)
                 }
+                TranscriptCommand::Retranscribe(arguments) if mode == OutputMode::JsonLines => {
+                    progress::stream_with_progress(&mut writer, operation, |observer| {
+                        session::retranscribe(&engine, arguments, &cancellation, observer)
+                    })
+                    .await
+                }
                 TranscriptCommand::Retranscribe(arguments) => {
-                    let result = session::retranscribe(&engine, arguments, &cancellation).await;
+                    let result = session::retranscribe(
+                        &engine,
+                        arguments,
+                        &cancellation,
+                        ProgressObserver::none(),
+                    )
+                    .await;
                     write_session_result(&mut writer, mode, operation, result)
                 }
             }
@@ -415,8 +428,14 @@ where
             let result = match &arguments.command {
                 JobCommand::Status(arguments) => job::status(&engine, arguments),
                 JobCommand::Cancel(arguments) => job::cancel(&engine, arguments),
+                JobCommand::Resume(arguments) if mode == OutputMode::JsonLines => {
+                    return progress::stream_with_progress(&mut writer, operation, |observer| {
+                        job::resume(&engine, arguments, &cancellation, observer)
+                    })
+                    .await;
+                }
                 JobCommand::Resume(arguments) => {
-                    job::resume(&engine, arguments, &cancellation).await
+                    job::resume(&engine, arguments, &cancellation, ProgressObserver::none()).await
                 }
                 // The worker and batch host is P11.
                 JobCommand::Run(_) | JobCommand::Batch(_) => {
@@ -741,10 +760,40 @@ where
     StandardOutput: Write,
     StandardError: Write,
 {
-    let affected: Vec<&str> = failure.affected_ids.iter().map(String::as_str).collect();
-    if failure.remediation.is_none() && failure.retry_after_ms.is_none() && affected.is_empty() {
+    if failure.remediation.is_none()
+        && failure.retry_after_ms.is_none()
+        && failure.affected_ids.is_empty()
+    {
         return write_failure(writer, mode, command, failure.code, None);
     }
+    let code = failure.code;
+    let response = failure_response(command, failure);
+    let result = match mode {
+        OutputMode::Human => {
+            writer.write_safe_diagnostic(response.error_message());
+            for summary in response.remediation_summaries() {
+                writer.write_safe_diagnostic(summary);
+            }
+            Ok(())
+        }
+        OutputMode::Json => writer.write_json(&response),
+        OutputMode::JsonLines => writer.write_json(&TerminalEventResponse::new(response)),
+    };
+    if let Err(error) = result {
+        writer.write_safe_diagnostic(&error.to_string());
+        ProcessExit::StorageOrIo
+    } else {
+        ProcessExit::from(code.class())
+    }
+}
+
+/// The failure result of `command`: its code with the typed remediation,
+/// suggested command, affected identifiers and retry hint it carries.
+fn failure_response(
+    command: CommandName,
+    failure: CommandFailure,
+) -> OperationResponse<serde_json::Value> {
+    let affected: Vec<&str> = failure.affected_ids.iter().map(String::as_str).collect();
     let suggested: Vec<&str> = failure
         .suggested_command
         .iter()
@@ -768,23 +817,7 @@ where
     if let Some(retry_after_ms) = failure.retry_after_ms {
         response = response.with_retry_after(retry_after_ms);
     }
-    let result = match mode {
-        OutputMode::Human => {
-            writer.write_safe_diagnostic(response.error_message());
-            for summary in response.remediation_summaries() {
-                writer.write_safe_diagnostic(summary);
-            }
-            Ok(())
-        }
-        OutputMode::Json => writer.write_json(&response),
-        OutputMode::JsonLines => writer.write_json(&TerminalEventResponse::new(response)),
-    };
-    if let Err(error) = result {
-        writer.write_safe_diagnostic(&error.to_string());
-        ProcessExit::StorageOrIo
-    } else {
-        ProcessExit::from(failure.code.class())
-    }
+    response
 }
 
 fn write_failure<StandardOutput, StandardError>(

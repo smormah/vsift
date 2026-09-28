@@ -24,7 +24,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, AtomicUsize, Ordering},
     },
     thread,
@@ -35,11 +35,12 @@ use vsift::{
     AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, Cancellation,
     ChunkTime, Clock, ClockError, CueText, Engine, EngineConfig, EngineError, EnginePorts,
     FailureCode, HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
-    JobCancelOutcome, JobId, JobResumeRequest, JobState, LanguageTag, LocalAsrVerification,
-    LocalAsrVerifier, MediaToolVerification, MediaToolVerifier, OperationId, PlannedChunk,
-    ProviderChunkOutput, ProviderSegment, ProviderToken, ProviderTokenKind, RecognizerIdentity,
-    RetranscribeRange, RetranscribeRequest, RuntimeDependency, SessionId, SessionRootLocation,
-    Sha256Hex, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation,
+    JobCancelOutcome, JobId, JobProgress, JobResumeRequest, JobState, LanguageTag,
+    LocalAsrVerification, LocalAsrVerifier, MediaToolVerification, MediaToolVerifier, OperationId,
+    PlannedChunk, ProgressObserver, ProgressStage, ProviderChunkOutput, ProviderSegment,
+    ProviderToken, ProviderTokenKind, RecognizerIdentity, RetranscribeRange, RetranscribeRequest,
+    RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
+    SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation,
 };
 use vsift_application::{
     AsrCancellation, CommitGuard, JobRequest, JobSpec, RecognitionScope, RetranscriptionPorts,
@@ -306,7 +307,20 @@ fn request(
         }),
         operation_id: operation_id.cloned(),
         cancellation: Cancellation::new(),
+        progress: ProgressObserver::none(),
     }
+}
+
+/// An observer that records every progress observation (P11).
+fn recording_observer() -> (ProgressObserver, Arc<Mutex<Vec<JobProgress>>>) {
+    let seen: Arc<Mutex<Vec<JobProgress>>> = Arc::default();
+    let recorder = Arc::clone(&seen);
+    let observer = ProgressObserver::new(move |progress| {
+        if let Ok(mut seen) = recorder.lock() {
+            seen.push(progress.clone());
+        }
+    });
+    (observer, seen)
 }
 
 // ------------------------------------------------ everywhere, before decoding
@@ -323,6 +337,7 @@ async fn unknown_jobs_are_not_found() -> TestResult {
             .job_resume(JobResumeRequest {
                 job: job.clone(),
                 cancellation: Cancellation::new(),
+                progress: ProgressObserver::none(),
             })
             .await
             .err(),
@@ -438,6 +453,7 @@ async fn committed_through_the_use_case(
             cancellation: &Never,
             timer: &Instant0,
             classify: |_| FailureCode::Internal,
+            progress: &vsift_application::NoProgress,
         },
         &mut Unchanged,
     )
@@ -467,10 +483,16 @@ async fn a_committed_operation_is_replayed_before_any_check_or_hash() -> TestRes
         committed_through_the_use_case(&harness.store()?, &session, range, &operation).await?;
     let before = engine.session_status(&session)?.generation();
 
+    let (observer, seen) = recording_observer();
     let replayed = engine
-        .retranscribe(request(&session, Some((0, 20 * SECOND)), Some(&operation)))
+        .retranscribe(RetranscribeRequest {
+            progress: observer,
+            ..request(&session, Some((0, 20 * SECOND)), Some(&operation))
+        })
         .await?;
     assert!(replayed.job().replayed());
+    // A replay does no work, so it reports no progress.
+    assert!(seen.lock().map_err(|_| "poisoned")?.is_empty());
     assert_eq!(replayed.job().job_id(), &job);
     assert_eq!(replayed.job().operation_id(), &operation);
     assert_eq!(replayed.revision(), &revision);
@@ -508,6 +530,7 @@ async fn a_committed_operation_is_replayed_before_any_check_or_hash() -> TestRes
             .job_resume(JobResumeRequest {
                 job: job.clone(),
                 cancellation: Cancellation::new(),
+                progress: ProgressObserver::none(),
             })
             .await,
         Err(EngineError::JobNotResumable {
@@ -618,12 +641,29 @@ async fn a_job_is_resumed_and_cancelled_by_its_id() -> TestResult {
     let status = engine.job_status(&job)?;
     assert_eq!(status.state(), JobState::Interrupted);
     assert_eq!(status.checkpoints(), 1);
+    let (observer, seen) = recording_observer();
     let resumed = engine
         .job_resume(JobResumeRequest {
             job: job.clone(),
             cancellation: Cancellation::new(),
+            progress: observer,
         })
         .await?;
+    // P11: the resumed run reports every chunk of its job, the reused one
+    // included, from 0 to the whole plan.
+    let seen = seen.lock().map_err(|_| "poisoned")?.clone();
+    let counts: Vec<u64> = seen
+        .iter()
+        .map(|progress| progress.update.completed)
+        .collect();
+    let total = seen.first().and_then(|progress| progress.update.total);
+    assert!(total.is_some_and(|total| counts == (0..=total).collect::<Vec<_>>()));
+    assert!(
+        seen.iter()
+            .all(|progress| progress.job.as_ref() == Some(&job)
+                && progress.update.stage == ProgressStage::RecognisingSpeech
+                && progress.update.total == total)
+    );
     assert_eq!(resumed.outcome().job().job_id(), &job);
     assert_eq!(resumed.outcome().job().operation_id(), &operation);
     assert_eq!(resumed.outcome().job().chunks_reused(), 1);
