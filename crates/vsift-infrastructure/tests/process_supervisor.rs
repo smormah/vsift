@@ -430,6 +430,26 @@ async fn p08_process_only_host_cannot_claim_strict_worker_isolation() -> Result<
     Ok(())
 }
 
+/// SEC-T01 (non-adversarial evidence, accepted for P11 on 2026-09-28): inside
+/// the hardened CI container, VSift's own strict-Linux attestation must
+/// succeed, so `--host-isolation strict-linux` is proven to run on a real
+/// strict host rather than only on parsed fixtures. Outside that container
+/// the test does nothing.
+#[cfg(target_os = "linux")]
+#[test]
+fn p11_strict_linux_attestation_holds_inside_the_hardened_container() -> Result<(), Box<dyn Error>>
+{
+    if env::var_os("VSIFT_STRICT_WORKER_TEST").is_none() {
+        return Ok(());
+    }
+    match vsift_infrastructure::attest_strict_linux_host() {
+        Ok(_) => Ok(()),
+        Err(gaps) => {
+            Err(format!("strict-linux attestation refused the hardened container: {gaps:?}").into())
+        }
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn p08_qualified_linux_host_reports_inherited_kernel_controls() -> Result<(), Box<dyn Error>>

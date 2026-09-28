@@ -112,7 +112,7 @@ Each entry has these fields:
 | [L-065](#l-065) | A request's deadline, admission wait and attempt count per delivery | contract/UX | low | unscheduled | none | accepted residual |
 | [L-066](#l-066) | A batch file holds at most 1,000 lines; a longer file runs nothing | contract/UX | low | unscheduled | none | accepted residual |
 | [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
-| [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | issue to be linked | deferred (technical debt) |
+| [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
 
 Counts: 4 high, 18 medium, 45 low (67 entries).
@@ -831,7 +831,7 @@ Counts: 4 high, 18 medium, 45 low (67 entries).
   controls as the CI container job; desktop profiles claim no isolation
   ([L-004](#l-004)).
 - **Next step:** maintainer discussion (see the handoff document); resolved before P14.
-- **Owner:** maintainer discussion, before P14. **Issue:** issue to be linked.
+- **Owner:** maintainer discussion, before P14. **Issue:** [#188](https://github.com/smormah/vsift/issues/188).
   **Status:** deferred (technical debt). **Review:** pending.
 
 ### L-069

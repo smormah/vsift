@@ -550,10 +550,11 @@ The second part of PR 4 completes section 10 and the packet's operator deliverab
   for maintainer discussion and required before the R0 release (known limit L-068);
   this record's section 10 is amended accordingly, and nothing else in it changes.
   The PR 2 note that "the real attestation runs in PR 4's SEC-T01 container job" no
-  longer holds: no container job was added, so `--host-isolation strict-linux`
-  succeeding end to end on a real strict host is not yet exercised in CI (a residual
-  of the qualification record; the attestation's positive path is covered on fixture
-  files).
+  longer holds as written: the adversarial job was not added. Instead the existing
+  `strict-worker-boundary` job now also runs
+  `p11_strict_linux_attestation_holds_inside_the_hardened_container`, so the real
+  attestation succeeds on a real strict host in CI; a full `job run --host-isolation
+  strict-linux` there remains a residual of the qualification record.
 - **Fuzzing.** Target `job_batch_file` (23 targets): a whole batch file through the
   reader (`BatchLines`) under the production limits and under small ones, held to an
   independent split of the file at its line feeds, each line then decoded as `job

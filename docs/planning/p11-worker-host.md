@@ -122,9 +122,10 @@ step took 20.5 s for a 9 s clip in the release build). Reports are written to
 - **SEC-T01 adversarial evidence** is technical debt (L-068); the strict profile is
   attested and its controls shown present, not shown to contain a hostile provider.
 - **Not run as written:** the runbook's systemd unit and container example (L-038);
-  `p11_durable_workspace` on the qualified profile; `--host-isolation strict-linux`
-  succeeding end to end in CI (the attestation's positive path is covered on fixture
-  files).
+  `p11_durable_workspace` on the qualified profile. The strict-Linux attestation itself
+  now runs inside the hardened `strict-worker-boundary` container in CI
+  (`p11_strict_linux_attestation_holds_inside_the_hardened_container`), but a full
+  `job run --host-isolation strict-linux` there is not yet exercised.
 - **One machine for the checkpoint:** the `p11_*` stages ran on Windows 11; Linux and
   macOS run the contract, engine and binary tests in CI (L-035).
 - **Sampling is a lower bound:** the ladder's sampler sees provider processes about
