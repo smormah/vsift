@@ -391,7 +391,8 @@ impl TerminalEventResponse {
 
     /// Wraps the result that ends a stream after `sequence` earlier events;
     /// the event repeats the result's operation id.
-    pub(crate) fn at_sequence(result: OperationResponse<serde_json::Value>, sequence: u64) -> Self {
+    #[must_use]
+    pub fn at_sequence(result: OperationResponse<serde_json::Value>, sequence: u64) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
             event: EventKind::Terminal.identifier(),

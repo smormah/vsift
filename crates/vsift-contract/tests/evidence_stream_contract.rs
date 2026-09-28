@@ -39,7 +39,13 @@ const NOW_US: u64 = 1_790_208_000_000_000;
 const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
 const STREAM_EXAMPLE: &str = "examples/transcript-get.events.jsonl";
 /// The published schemas that define a JSON Lines event, one per event kind.
-const EVENT_SCHEMAS: [&str; 2] = ["evidence-event.schema.json", "terminal-event.schema.json"];
+const EVENT_SCHEMAS: [&str; 5] = [
+    "evidence-event.schema.json",
+    "terminal-event.schema.json",
+    "progress-event.schema.json",
+    "lifecycle-event.schema.json",
+    "result-event.schema.json",
+];
 
 fn schema_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/v1")

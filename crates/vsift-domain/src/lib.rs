@@ -10,6 +10,7 @@ mod identity;
 mod job;
 mod media;
 mod pagination;
+mod progress;
 mod provisioning;
 mod retry;
 mod search;
@@ -53,6 +54,7 @@ pub use media::{
     MediaStream, MediaStreamKind, VisualStreamError,
 };
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
+pub use progress::{ProgressStage, ProgressUnit, ProgressUpdate};
 pub use provisioning::{
     ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES, ManagedArtifactFormat,
     ManagedComponent, ManagedTarget,

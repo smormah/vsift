@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/lifecycle-event.schema.json",
+  "title": "VSift JSONL lifecycle event v1",
+  "description": "A worker host's own state in a job.run or job.batch --events jsonl stream (P11, ADR 0021; O-03): started (with its readiness: the sessions' publication guarantee, isolation, admission capacity and request concurrency), request_admitted, admission_waiting (reason admission_capacity), request_finished (the request's status, failure code, rejection and dropped progress), draining (reason shutdown or drain_timeout) and stopped (reason end_of_input, shutdown, line_limit or input_error). Members that do not apply to a kind are null. Never dropped; at most 64 KiB per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event",
+    "sequence",
+    "command",
+    "operation_id",
+    "kind",
+    "line",
+    "request_operation_id",
+    "status",
+    "code",
+    "rejection",
+    "progress_dropped",
+    "readiness",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "event": { "const": "lifecycle" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "command": {
+      "type": "string",
+      "pattern": "^[a-z]+(?:-[a-z]+)*(?:[.][a-z]+(?:-[a-z]+)*)?$",
+      "maxLength": 64
+    },
+    "operation_id": { "type": "null" },
+    "kind": {
+      "enum": [
+        "started",
+        "request_admitted",
+        "admission_waiting",
+        "request_finished",
+        "draining",
+        "stopped"
+      ]
+    },
+    "line": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 1, "maximum": 1000 }] },
+    "request_operation_id": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$", "maxLength": 67 }
+      ]
+    },
+    "status": {
+      "oneOf": [
+        { "type": "null" },
+        { "enum": ["complete", "partial", "failed", "cancelled", "rejected"] }
+      ]
+    },
+    "code": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "job-result.schema.json#/$defs/failure_code" }
+      ]
+    },
+    "rejection": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "job-result.schema.json#/$defs/rejection" }
+      ]
+    },
+    "progress_dropped": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
+    "readiness": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["publication", "isolation", "admission_capacity", "concurrency"],
+          "properties": {
+            "publication": { "enum": ["process_crash_consistent", "os_crash_durable"] },
+            "isolation": { "enum": ["process_only", "strict_linux"] },
+            "admission_capacity": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "concurrency": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        }
+      ]
+    },
+    "reason": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "enum": [
+            "end_of_input",
+            "shutdown",
+            "drain_timeout",
+            "line_limit",
+            "input_error",
+            "admission_capacity"
+          ]
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "started" } } },
+      "then": { "properties": { "readiness": { "type": "object" } } },
+      "else": { "properties": { "readiness": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "request_finished" } } },
+      "then": {
+        "properties": {
+          "status": { "not": { "type": "null" } },
+          "progress_dropped": { "type": "integer" }
+        }
+      },
+      "else": {
+        "properties": {
+          "status": { "type": "null" },
+          "code": { "type": "null" },
+          "rejection": { "type": "null" },
+          "progress_dropped": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "enum": ["draining", "stopped", "admission_waiting"] } } },
+      "then": { "properties": { "reason": { "not": { "type": "null" } } } },
+      "else": { "properties": { "reason": { "type": "null" } } }
+    }
+  ]
+}

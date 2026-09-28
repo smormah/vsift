@@ -87,6 +87,7 @@ mod batch;
 mod candidates;
 mod command;
 mod envelope;
+mod events;
 mod evidence;
 mod input;
 mod job;
@@ -105,6 +106,11 @@ mod work;
 mod workspace;
 
 pub use batch::{BatchDataError, BatchItemStatus, BatchOutcome, BatchTermination, JobBatchData};
+pub use events::{
+    LifecycleEventResponse, LifecycleKind, LifecycleReason, MAX_EVENT_LINE_BYTES,
+    MAX_PROGRESS_EVENTS, PROGRESS_INTERVAL_MS, ProgressEventResponse, ProgressReport, Readiness,
+    RequestEnd, RequestRef, ResultEventResponse,
+};
 pub use input::{JsonLimits, StrictJsonError, decode_strict_json};
 pub use request::{
     BatchLine, BundleName, InputPathError, MAX_BATCH_LINES, MAX_BUNDLE_NAME_BYTES,
