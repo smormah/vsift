@@ -24,7 +24,8 @@ use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_contract::{
     ADMISSION_CAPACITY_REMEDIATION, DURABILITY_UNAVAILABLE_REMEDIATION,
-    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION,
+    ISOLATION_UNAVAILABLE_REMEDIATION, WORKSPACE_POLICY_MISMATCH_REMEDIATION,
+    WORKSPACE_ROOT_REMEDIATION,
 };
 use vsift_infrastructure::directory_offers_os_crash_durability;
 
@@ -444,6 +445,46 @@ fn rfc3339(seconds: u64) -> Result<String, Box<dyn Error>> {
         time::OffsetDateTime::from_unix_timestamp(i64::try_from(seconds)?)?
             .format(&time::format_description::well_known::Rfc3339)?,
     )
+}
+
+/// ADR 0021 section 8: `--host-isolation strict-linux` is accepted only
+/// where the kernel attests the strict worker controls; anywhere else the
+/// command answers `ISOLATION_UNAVAILABLE` (exit 2) before any work, so the
+/// session root is never created. The expected outcome is the engine's own
+/// attestation of this host.
+#[test]
+fn strict_isolation_is_attested_before_any_work() -> TestResult {
+    let owned = OwnedRoot::new()?;
+    let workspace = owned.workspace();
+    let mut arguments = vec![
+        "--host-isolation",
+        "strict-linux",
+        "session",
+        "init-workspace",
+    ];
+    arguments.extend_from_slice(&EPHEMERAL);
+    let output = vsift(&owned, Some(&workspace), &arguments)?;
+    if vsift::attest_host_isolation(vsift::IsolationProfile::StrictLinux).is_ok() {
+        assert!(output.status.success(), "{output:?}");
+        assert!(workspace.exists());
+    } else {
+        assert_failure(
+            &output,
+            "ISOLATION_UNAVAILABLE",
+            Some(ISOLATION_UNAVAILABLE_REMEDIATION),
+        )?;
+        assert!(!workspace.exists(), "work ran before the attestation");
+    }
+    // Process-only isolation (the default) is never attested.
+    let mut default = vec![
+        "--host-isolation",
+        "process-only",
+        "session",
+        "init-workspace",
+    ];
+    default.extend_from_slice(&EPHEMERAL);
+    assert!(vsift(&owned, Some(&workspace), &default)?.status.success());
+    Ok(())
 }
 
 /// X-07: work heavier than the whole root fails with `RESOURCE_LIMIT`
