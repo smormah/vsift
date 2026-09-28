@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-28 (P00-P10 complete; P11 in progress: PRs 1 and 2 merged, PR 3 on its branch).
+Date: 2026-09-28 (P00-P10 complete; P11 in progress: PRs 1-3 merged, PR 4 in part on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -83,7 +83,7 @@ Each entry has these fields:
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-038](#l-038) | No batch host; `job batch` is reserved | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-038](#l-038) | The worker host is not yet qualified: SEC-T01, the P11 checkpoint and the runbook remain | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
 | [L-039](#l-039) | No agent skill; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -110,6 +110,8 @@ Each entry has these fields:
 | [L-063](#l-063) | A workspace keeps at most 4,096 request records, pruned only when their session is gone | contract/UX | low | unscheduled | none | accepted residual |
 | [L-064](#l-064) | A retain killed mid-copy leaves a staging directory in the bundle root | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-065](#l-065) | A request's deadline, admission wait and attempt count per delivery | contract/UX | low | unscheduled | none | accepted residual |
+| [L-066](#l-066) | A batch file holds at most 1,000 lines; a longer file runs nothing | contract/UX | low | unscheduled | none | accepted residual |
+| [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
 
 Counts: 4 high, 18 medium, 41 low (63 entries).
 
@@ -755,6 +757,48 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
+### L-066
+
+**A batch file holds at most 1,000 lines; a longer file runs nothing.**
+
+- **What:** `job batch` counts the lines of its file through the same handle before
+  anything starts. A file of more than 1,000 lines is refused whole: `RESOURCE_LIMIT`
+  (exit 5), `termination_reason` `line_limit`, `not_started_from_line` 1, no request
+  run. A file that grows past the limit between the count and the read stops at line
+  1,001 (`line_limit`, `not_started_from_line` 1001). A line of more than 64 KiB is
+  refused alone (`request_too_large`) and the others run. Only a regular file is read.
+- **Evidence:** ADR 0021 PR 4 notes; `limits_are_checked_before_any_work`,
+  `limits_are_refused_before_any_work`, the `batch_file` unit tests.
+- **Impact:** a supervisor splits a longer queue into files of at most 1,000 lines; a
+  pipe or device cannot be the request file.
+- **Why:** a finite, re-readable file lets the whole batch be refused before any work,
+  so no operator has to find out which lines of an over-long file ran.
+- **Mitigation:** the refusal is typed, fixed-prose and before any write.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-067
+
+**Requests of one batch contend with each other; a job-cancelled line exits 6.**
+
+- **What:** the requests of a batch share the workspace's admission units and its
+  root-level locks, so with `--admission-wait-ms 0` a request can answer `BUSY` because
+  another request of the same batch holds a unit or lock for a moment. And D5 ranks a
+  request cancelled by `job cancel` between usage (2) and retryable (4); when it is the
+  most severe line, the batch exits with its class's status, 6, the same as a shutdown.
+- **Evidence:** ADR 0021 PR 4 notes; `every_line_is_isolated_and_reported` (run with a
+  bounded wait), `a_mixed_batch_reports_independent_outcomes` (opt-in).
+- **Impact:** a supervisor tells a shutdown from a cancelled line by
+  `termination_reason` (`shutdown` or `end_of_input`), not by the exit status alone.
+- **Why:** admission is per workspace (ADR 0021 section 5a); the exit status is the
+  failure class's (ADR 0008).
+- **Mitigation:** the default admission wait (60 s) retries contention with jitter; the
+  summary and error code say which case it was.
+- **Next step:** maintainer to confirm the exit reading of a cancelled line.
+- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
+  **Status:** open. **Review:** pending.
+
 ### L-014
 
 **A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest).**
@@ -1271,23 +1315,23 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
 
 ### L-038
 
-**No batch host; `job batch` is reserved.**
+**The worker host is not yet qualified: SEC-T01, the P11 checkpoint and the runbook remain.**
 
-- **What:** `job batch` returns `COMMAND_NOT_IMPLEMENTED`: there is no finite batch
-  reader, no request concurrency above one and no batch-level shutdown yet. One request
-  at a time runs since P11 PR 3 (`job run`, with request records, replay, conflict,
-  `BUSY`, continuation and the two-stage shutdown of D4), in a worker workspace (PR 2);
-  a supervisor can loop over requests itself. The batch contracts (summary, `result`
-  and `lifecycle` events) are published and fuzzed since PR 1.
-- **Evidence:** [CLI contract](../contracts/cli-v1.md) "P11 `job run`" and "P11 worker
-  contracts and events"; P11 row of the
-  [work packets](implementation-work-packets.md) (X-07..X-11, O-01..O-04, SEC-T01).
-- **Impact:** no line-streaming batch with backpressure and one D5 exit code; SEC-T01
-  (the strict profile in a container against a hostile fixture) and the P11
-  qualification record are still to come.
-- **Why:** P11 is in progress: PR 4 (`job batch`, SEC-T01, qualification) remains.
-- **Mitigation:** `job run` per request; the engine library can be embedded.
-- **Next step:** P11 PR 4.
+- **What:** `job batch` runs since P11 PR 4 (a finite streaming reader, concurrency up
+  to 16 and the capacity, backpressure, line isolation, the batch shutdown and the D5
+  exit). Still missing: SEC-T01 (the strict profile in a hardened container against a
+  hostile provider fixture), the `p11_*` single-host checkpoint of the E2E spine, the
+  operator runbook (packet "P11 operator deliverables") and the P11 qualification
+  record.
+- **Evidence:** [CLI contract](../contracts/cli-v1.md) "P11 `job batch`"; ADR 0021 PR 4
+  notes; P11 row of the [work packets](implementation-work-packets.md).
+- **Impact:** strict worker isolation is attested but not yet demonstrated against a
+  hostile provider; no reviewed supervisor example or deployment guidance yet.
+- **Why:** P11 PR 4 stopped at a green subset; the rest needs a maintainer decision on
+  how SEC-T01's hostile fixture is built and reviewed.
+- **Mitigation:** `job run` and `job batch` are fully tested without it; strict mode
+  fails closed off an attested host.
+- **Next step:** the remainder of P11 PR 4.
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** deferred. **Review:** pending.
 

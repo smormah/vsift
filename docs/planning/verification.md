@@ -294,6 +294,24 @@ independent coding-agent clients. A release containing only scaffolding, transcr
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
 
+## 2026-09-28 P11 PR 4 evidence, first part (`job batch`, branch `p11/job-batch`)
+
+P11 is in progress; this records the first part of its last pull request
+([ADR 0021](../decisions/0021-worker-and-batch-host.md) PR 4 notes). SEC-T01, the
+`p11_*` E2E checkpoint, the operator runbook and the P11 qualification record are not
+in it (L-038). Engine tests are in `crates/vsift/tests/engine_batch.rs` and the opt-in
+`engine_batch_tools.rs`, binary tests in `crates/vsift-cli/tests/job_batch_cli_contract.rs`.
+
+| Gate | Mechanical evidence |
+| --- | --- |
+| X-08 (backpressure, slow reader) | `batch_reads_ahead_at_most_concurrency_lines` (with every admission unit held, at concurrency 1, 2 and 3 exactly that many requests start and nothing else happens for 750 ms, although the next line is malformed and would be reported at once if read; it is reported only after a running request ended), `a_host_that_stops_reading_holds_the_batch_back` (a one-event channel nobody reads: at most two of twelve requests start; read again, all complete), `a_paused_stdout_reader_bounds_memory_and_admission` (binary: with stdout unread, the started requests stop growing well below half of 120, the process stays alive, and on Linux its resident memory stays under 256 MiB; read again, every line completes), `progress_is_dropped_and_counted_not_buffered` (the shared 16-slot progress queue drops and counts, per request, what does not fit; admission notices all arrive); the reader's `batch_file` unit tests (counted before reading, refused over the limit, a long line consumed without being kept) |
+| X-11 (mixed batch) | `every_line_is_isolated_and_reported` (a request that runs, a blank, a malformed and a duplicate-id line, a durable request in an ephemeral workspace and a missing source, each reported alone; D5 `INVALID_ARGUMENT`; the file again replays), `a_mixed_batch_streams_the_contract` (binary, exit 2); opt-in `a_mixed_batch_reports_independent_outcomes` with FFmpeg 9.0 on Windows 11: an F10 import with its sidecar at +500 ms completes, a malformed line is rejected, a recognition of a 70 s run-time clip is cancelled mid-run with `job cancel` (`cancelled`), a stand-in recognizer failing the second chunk of a 50 s clip fails its step (`failed`), candidates over F05 truncated to 60 % end `partial` with a stated gap, and the batch outcome is the most severe failure by an independent D5 ordering |
+| O-02 (bounded events) | `events_are_bounded_by_the_lines` (property test, 12 random batches of up to 9 lines of every kind, over-long lines included: every event line but the terminal one under 64 KiB and schema-valid, no sentinel or path in the output, one summary item per non-blank line, at most a fixed number of events per line) |
+| O-03 (ready, busy, unhealthy, missing) | `lifecycle_events_distinguish_ready_busy_unhealthy_missing`: `started` with readiness; busy is `admission_waiting` then `BUSY` (retryable, exit 4); a missing tool is `MISSING_CAPABILITY` on the request; a gone workspace is one terminal `STORAGE_IO` (exit 7) with no `started`; strict isolation off a strict host is `ISOLATION_UNAVAILABLE` before any work |
+| O-04 for a batch | `a_shutdown_stops_the_batch_and_leaves_it_resumable` (engine: the reading stops, `not_started_from_line` 3, both running requests `cancelled`; the file again completes all five), `sigterm_stops_a_batch_resumably` (Unix, CI) and `ctrl_break_stops_a_batch_resumably` (Windows, opt-in, run here): with and without a drain time, `draining` then `stopped: shutdown`, no further line admitted, exit 6 within 15 s with the batch's stopped remediation, and the redelivered file completes |
+| Shared workspace, S-07 | `two_batches_share_one_workspace` (two engines, one shared request: exactly one fresh completion, the other delivery replayed or `BUSY` as documented, 11 sessions); `a_kill_mid_batch_then_a_rerun_matches_the_control` (a child killed at `request-accept`, `request-step:1..3` and `request-complete` in the middle of a two-wide batch; the rerun's result of every line equals an uninterrupted control's, one session per operation id) |
+| Limits | `limits_are_checked_before_any_work`, `limits_are_refused_before_any_work` (1,001 lines: exit 5, `line_limit`, nothing run; missing file: exit 7, `input_error`; concurrency above capacity: exit 2 before `started`; no workspace: nothing created), `a_batch_outside_a_workspace_creates_nothing` |
+
 ## 2026-09-28 P11 PR 3 evidence (`job run`, request records, shutdown, branch `p11/job-run`)
 
 P11 is in progress; this records the third of its four pull requests

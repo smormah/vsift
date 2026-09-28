@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `job batch` (P11 PR 4, first part; [ADR 0021](docs/decisions/0021-worker-and-batch-host.md)
+  PR 4 notes). `vsift --session-root <workspace> job batch --requests <file>
+  --input-root <dir> [--bundle-root <dir>] [--concurrency 1..16] [--admission-wait-ms N]
+  [--drain-timeout-ms N]` runs the job requests of a file of at most 1,000 lines, each
+  as `job run` would, at most `--concurrency` (and the workspace's capacity) at once.
+  The file is counted before anything runs (more than 1,000 lines: `RESOURCE_LIMIT`,
+  nothing run) and then read one line at a time, the next only when a request ends; a
+  stream reader that stops reading holds the batch back. Each line is independent: a
+  malformed, over-long or duplicate-id line is refused alone. `--events jsonl` streams
+  the lifecycle, progress and result events of every request; the summary
+  (`job-batch-data`) is the data of every outcome, and the exit follows maintainer
+  decision D5. A shutdown stops the reading and the running requests before their next
+  step, leaving them resumable (exit 6). The engine gains `Engine::run_work_batch` and
+  `Engine::batch_readiness`. New known limits L-066 (the 1,000-line file) and L-067
+  (contention between a batch's requests; the exit of a job-cancelled line); L-038 now
+  covers what remains of P11: SEC-T01, the P11 checkpoint, the runbook and the
+  qualification record.
+
 - `job run` (P11 PR 3, [ADR 0021](docs/decisions/0021-worker-and-batch-host.md) PR 3
   notes). `vsift --session-root <workspace> job run --request <file> --input-root <dir>
   [--bundle-root <dir>] [--drain-timeout-ms N] [--admission-wait-ms N]` runs one job
