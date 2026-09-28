@@ -105,8 +105,8 @@ impl SourceSnapshot {
             store,
             session_id,
             operation_id,
-            source,
-            &initial,
+            (source, &initial),
+            None,
             cancellation,
         )
     }
@@ -132,25 +132,57 @@ impl SourceSnapshot {
             store,
             session_id,
             operation_id,
-            file,
-            &metadata,
+            (file, &metadata),
+            None,
             cancellation,
         )
     }
 
-    /// Copies an opened source whose metadata is `initial` into the session.
+    /// [`Self::stage_contained`] under the copy's admission (weight 1) the
+    /// caller already holds. A worker takes the admission before it
+    /// registers a session, so a busy root makes it wait without leaving a
+    /// registration behind for each try (P11 PR 3).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::stage_contained`].
+    pub fn stage_contained_admitted(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        source: crate::ContainedFile,
+        admission: crate::FilesystemAdmissionPermit,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        let crate::ContainedFile { file, metadata } = source;
+        Self::stage_opened(
+            store,
+            session_id,
+            operation_id,
+            (file, &metadata),
+            Some(admission),
+            cancellation,
+        )
+    }
+
+    /// Copies an opened source whose metadata is `initial` into the session,
+    /// under `admission` when the caller holds it, else under a weight-1
+    /// admission taken here.
     fn stage_opened(
         store: &FilesystemSessionStore,
         session_id: &SessionId,
         operation_id: &OperationId,
-        mut source: File,
-        initial: &cap_std::fs::Metadata,
+        (mut source, initial): (File, &cap_std::fs::Metadata),
+        admission: Option<crate::FilesystemAdmissionPermit>,
         cancellation: &dyn StageCancellation,
     ) -> Result<Self, SourceError> {
         if initial.len() > MAX_SOURCE_BYTES {
             return Err(SourceError::TooLarge);
         }
-        let _admission = store.try_admit(1).map_err(SourceError::Storage)?;
+        let _admission = match admission {
+            Some(held) => held,
+            None => store.try_admit(1).map_err(SourceError::Storage)?,
+        };
         let (directory, directory_path, hold) = store
             .source_artifact_directory(session_id)
             .map_err(SourceError::Storage)?;
@@ -462,19 +494,7 @@ impl ForegroundSessionPort for FilesystemSessionStore {
         cancellation: &dyn StageCancellation,
     ) -> Result<Self::Snapshot, OpenSessionError> {
         SourceSnapshot::stage_cancellable(self, session_id, operation_id, source, cancellation)
-            .map_err(|error| match error {
-                SourceError::Storage(storage) => OpenSessionError::Storage(storage),
-                SourceError::Cancelled => OpenSessionError::Cancelled,
-                SourceError::Io(_) => OpenSessionError::SourceIo,
-                SourceError::InvalidPath
-                | SourceError::NotRegularFile
-                | SourceError::TooLarge
-                | SourceError::Deadline
-                | SourceError::UnsupportedContainer
-                | SourceError::ChangedDuringStage
-                | SourceError::SnapshotChanged
-                | SourceError::IdentityFailure => OpenSessionError::InvalidSource,
-            })
+            .map_err(open_session_error)
     }
 
     fn activate(
@@ -512,6 +532,27 @@ impl ForegroundSessionPort for FilesystemSessionStore {
             &record,
         )
         .map_err(OpenSessionError::Storage)
+    }
+}
+
+/// How a failed staging is reported to the open-session use case.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Result::map_err requires ownership of the source error"
+)]
+pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
+    match error {
+        SourceError::Storage(storage) => OpenSessionError::Storage(storage),
+        SourceError::Cancelled => OpenSessionError::Cancelled,
+        SourceError::Io(_) => OpenSessionError::SourceIo,
+        SourceError::InvalidPath
+        | SourceError::NotRegularFile
+        | SourceError::TooLarge
+        | SourceError::Deadline
+        | SourceError::UnsupportedContainer
+        | SourceError::ChangedDuringStage
+        | SourceError::SnapshotChanged
+        | SourceError::IdentityFailure => OpenSessionError::InvalidSource,
     }
 }
 

@@ -28,6 +28,7 @@ sha2.workspace = true
 tokio.workspace = true
 vsift.workspace = true
 vsift-application.workspace = true
+vsift-contract.workspace = true
 vsift-domain.workspace = true
 vsift-infrastructure.workspace = true
 

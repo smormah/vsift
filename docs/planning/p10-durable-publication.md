@@ -182,6 +182,38 @@ layers A, B and C. All acceptance criteria met.
   committed state as damage. Fixed in `7e8b141` (storage failures there are now
   `STORAGE_IO`), which the gating run then qualified.
 
+## P11 rerun with worker requests (2026-09-28)
+
+P11 PR 3 adds writes the campaign had not exercised: worker request records
+(`worker-requests/<bucket>/<op>.json`, staged, flushed, renamed and, in a durable
+workspace, synchronised into their bucket), written before, between and after a
+request's steps ([ADR 0021](../decisions/0021-worker-and-batch-host.md) PR 3 notes). The
+campaign was therefore rerun with them in the workload:
+
+- the workload now creates its root as a **durable worker workspace** (every session
+  durable, as before) and draws **worker requests** (about 6 in 100 operations): an
+  ingest through `Engine::run_work_request`, acknowledged only when it completed and
+  its result is recorded, with the request's operation id and the recorded result's
+  SHA-256 in the `ACK` line;
+- the verifier holds every acknowledged request's record to that result (a missing,
+  unended or different record is a lost acknowledgement) and reads every record on
+  disk through the store (one that does not read is damage);
+- the data images grew from 1 to 3 GiB, because a workspace keeps a 1 GiB free-space
+  reserve before each copy.
+
+**Run:** [36379513017](https://github.com/smormah/vsift/actions/runs/36379513017),
+branch `p11/job-run`, commit `73ea03b`, plain release build for the positive layers
+(the campaign constant is set since P10), `campaign` build for the negative control;
+GitHub-hosted `ubuntu-24.04` runners. **All acceptance criteria met** (the workflow's
+acceptance job passed).
+
+| Layer | Result |
+| --- | --- |
+| A, power loss | 400 operations and acknowledgements, **20 of them worker requests**; 52,600 log entries; **11,043 replay points**: 0 lost acknowledgements, 0 damaged points, 0 `e2fsck` findings, 0 mount failures (workload 69 s, replay 2,188 s) |
+| A, negative control | 80 operations (3 requests); 2,292 replay points: **53 of 80 acknowledgements lost** at 838 points; `e2fsck` clean (232 s) |
+| B, OS crash | **320 kills** in 4 shards of 80 (317 inside an operation), 324 recovered, `e2fsck`-clean and verified boots; **8,557 acknowledgements, 517 of them worker requests**: 0 lost, 0 damaged, 0 failed operations; each final boot verified 219 to 279 sessions and 119 to 139 request records (47 to 52 min a shard) |
+| C, write errors | 60 rounds, all injected: **180 injected failures, 180 `STORAGE_IO`**, 0 acknowledged after the swap; the first failure of a round hit a worker request 34 times, a retranscription 22, evidence 2, an ingest and a renewal once each; 1,370 acknowledgements (38 requests) carried through every later round; `e2fsck` clean throughout |
+
 ## What this does not cover (residuals)
 
 - **Storage that ignores flushes.** The campaign proves VSift issues the right flushes

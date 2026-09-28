@@ -44,6 +44,48 @@ pub const ADMISSION_CAPACITY_REMEDIATION: &str = "This work needs more admission
 /// Remediation when admission stayed busy for the whole wait.
 pub const ADMISSION_BUSY_REMEDIATION: &str = "The session root's admission capacity stayed in use by other work for the whole wait. Nothing was run. Retry after retry_after_ms.";
 
+/// Remediation when a worker request runs outside a worker workspace (P11 PR 3).
+pub const WORKER_WORKSPACE_REQUIRED_REMEDIATION: &str = "Worker requests run only in a worker workspace. Nothing was run. Create one with session init-workspace and pass it as --session-root.";
+
+/// Remediation when a retain step has no usable bundle root (P11 PR 3).
+pub const BUNDLE_ROOT_REQUIRED_REMEDIATION: &str = "A retain step writes its bundle below --bundle-root, which must be an absolute, existing directory. Nothing was run.";
+
+/// Remediation when the input root cannot be used (P11 PR 3).
+pub const INPUT_ROOT_REMEDIATION: &str = "--input-root must be an absolute, existing, local directory; the request names its files relative to it. Nothing was run.";
+
+/// Remediation when a path the request names does not exist (P11 PR 3).
+pub const INPUT_NOT_FOUND_REMEDIATION: &str = "A file the request names does not exist inside --input-root. Nothing was run. Name an existing file relative to the input root.";
+
+/// Remediation when a path the request names is not a single regular file (P11 PR 3).
+pub const INPUT_NOT_REGULAR_FILE_REMEDIATION: &str = "A path the request names inside --input-root is a directory, a special file or a file with more than one hard link, and is refused. Name a single regular file.";
+
+/// Remediation when a file the request names cannot be read (P11 PR 3).
+pub const INPUT_UNREADABLE_REMEDIATION: &str = "A file the request names inside --input-root could not be opened or read. Nothing was changed. Check its permissions and deliver the request again.";
+
+/// Remediation when a request's session is not in the workspace (P11 PR 3).
+pub const REQUEST_SESSION_REMEDIATION: &str = "The request's session_id is not a session of this workspace. Nothing was run. Name a session the workspace holds, or ingest a source instead.";
+
+/// Remediation when a retain step's bundle directory is taken (P11 PR 3).
+pub const BUNDLE_MISMATCH_REMEDIATION: &str = "The bundle directory the retain step names already exists and is not this request's bundle. Nothing was retained. Choose another bundle_name, or remove the directory yourself if it is an incomplete bundle you do not need.";
+
+/// Remediation when the same request runs in another process (P11 PR 3).
+pub const REQUEST_BUSY_REMEDIATION: &str = "The same operation_id is running in another process. Nothing was changed. Retry after retry_after_ms: the retry continues the request or returns its result.";
+
+/// Remediation when an operation id is bound to another request (P11 PR 3).
+pub const REQUEST_CONFLICT_REMEDIATION: &str = "This operation_id was used for a different request (another request digest), whose record is kept. Nothing was changed. Use a new operation_id for a new request.";
+
+/// Remediation when a request's deadline ends it (P11 PR 3).
+pub const REQUEST_DEADLINE_REMEDIATION: &str = "The request's deadline passed, or too little of it was left to start the next step. Finished steps are kept. Deliver the same request again, with a longer deadline_ms if needed: it continues from its first unfinished step.";
+
+/// Remediation when a shutdown stops a request (P11 PR 3).
+pub const REQUEST_STOPPED_REMEDIATION: &str = "A shutdown stopped the request before it finished. Finished steps are kept. Deliver the same request again: it continues from its first unfinished step.";
+
+/// Remediation when the job request file cannot be read (P11 PR 3).
+pub const REQUEST_FILE_REMEDIATION: &str = "Name a readable job request file with --request; it holds one job-request v1 object of at most 64 KiB.";
+
+/// Remediation when an ended request's result could not be recorded (P11 PR 3).
+pub const REQUEST_UNRECORDED_REMEDIATION: &str = "The request's work is done and every step is recorded, but its result could not be recorded, so it is not acknowledged. Deliver the same request again: it records and returns the result without running anything again.";
+
 /// Remediation when strict worker isolation cannot be attested.
 pub const ISOLATION_UNAVAILABLE_REMEDIATION: &str = "Strict worker isolation needs a Linux cgroup v2 with finite CPU, memory and process limits, a read-only root filesystem and no network interface but loopback, and this host does not attest them all. Nothing was run. Run the worker in such a container, or without strict isolation.";
 

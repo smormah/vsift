@@ -31,7 +31,8 @@ exact OS updates, Rust target, FFmpeg/whisper.cpp build, filesystem and host con
 | Probe structured output | 4 MiB | Same hard cap |
 | Session/root temporary storage | 10 GiB / 20 GiB with reserve | Explicit reservation plus host quota |
 | Session expiry | 24-hour idle, seven-day absolute | The workspace's retention (default 168 hours, 1 to 720) after opening or renewal, at most 720 hours in all |
-| Shutdown target | Five-second graceful then five-second forced cleanup | Host-configured deadline at least as strict |
+| Shutdown target | Five-second graceful then five-second forced cleanup | `job run`: the first signal stops the next step and, after `--drain-timeout-ms` (default 0, at most 300 s), cancels the running one at its next boundary; the same five-second provider budgets; a second signal escalates |
+| Worker request | Not applicable | One request of at most 64 KiB and 8 steps per `job run`; `deadline_ms` up to one day (per delivery); a step waits at most `--admission-wait-ms` (default and maximum 60 s) for admission; at most 16 `candidates` calls per step; at most 4,096 request records of at most 192 KiB per workspace |
 | Durability | Ephemeral unless explicitly retained | A workspace created with `--durability durable` (Ubuntu 24.04 / ext4 only); its every session is `os_crash_durable` |
 | Network/filesystem isolation | Report effective controls | `--host-isolation strict-linux`: attested cgroup v2 CPU, memory and PID limits, read-only root, loopback only, else `ISOLATION_UNAVAILABLE` before any work; limits reported as the host cgroup's |
 | Free-space reserve | Not checked | 1 GiB beyond each source copy, checked on Unix; not checked on Windows |

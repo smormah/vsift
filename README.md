@@ -62,10 +62,10 @@ vsift session clean --expired --dry-run --json
 ```
 
 The full R0 command namespace is visible through `vsift --help` so integrations can
-target a stable grammar. `session status/renew/close/retain/clean` and
-`bundle validate` are also operational. Frame and audio retrieval
-and setup installation still return `COMMAND_NOT_IMPLEMENTED` until their owning
-packets ship.
+target a stable grammar. `session status/renew/close/retain/clean/init-workspace`,
+`frame`, `crop`, `audio`, `job status/resume/cancel/run` and `bundle validate` are
+also operational. `job batch` and setup installation still return
+`COMMAND_NOT_IMPLEMENTED` until their owning packets ship.
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.
 R0 setup will first detect user-installed tools, then offer an explicitly approved,

@@ -57,6 +57,11 @@
 //!   checkpoints, and a retry with the same operation id returns its commit.
 //!   [`Engine::job_status`], [`Engine::job_resume`] and [`Engine::job_cancel`]
 //!   act on a job by its id.
+//! - **Worker requests (P11):** [`Engine::run_work_request`] runs one
+//!   versioned job request in a worker workspace, each step at most once per
+//!   operation id (replay, conflict, busy and continuation from its request
+//!   record), with a deadline and a two-stage shutdown;
+//!   [`Engine::worker_readiness`] states what a worker host runs under.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that
@@ -100,6 +105,7 @@ mod sessions;
 mod setup;
 mod transcripts;
 mod verification;
+mod worker;
 mod workspace;
 
 pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
@@ -110,7 +116,7 @@ pub use engine::{
 };
 pub use error::{
     EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError,
-    UserConfigurationError,
+    UserConfigurationError, WorkerFailure,
 };
 pub use evidence::{
     AudioClipRequest, CropEvidenceRequest, CropRectangle, DEFAULT_BURST_FRAMES,
@@ -137,6 +143,7 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
 pub use vsift_application::{
@@ -164,9 +171,9 @@ pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
     FailureCode, IdentifierError, JobId, JobKind, JobState, MAX_ADMISSION_WAIT,
-    MAX_RECOGNIZER_THREADS, OperationId, ProgressStage, ProgressUnit, ProgressUpdate,
-    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
-    SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
+    MAX_RECOGNIZER_THREADS, OperationId, OperationStatus, ProgressStage, ProgressUnit,
+    ProgressUpdate, PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness,
+    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
     WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
 };
 /// Transcript evidence values that appear in this API.

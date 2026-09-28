@@ -21,9 +21,11 @@ use super::{
     copy_and_hash_bounded, create_private_child_directory, create_regular_file, hash_bounded,
     map_open_error, map_storage_io, open_regular_file,
     publication::evidence_artifact_count,
+    read_bounded_manifest,
     reads::{read_evidence_artifact, read_transcript_artifact, read_visual_index_artifact},
     root::{validate_platform_root_permissions, validate_root_selection, validate_same_object},
-    stored::{read_versioned_manifest_file, validate_artifact_record},
+    sha256_hex,
+    stored::{parse_versioned_json, validate_artifact_record},
 };
 use crate::private_user_root::restrict_new_directory;
 
@@ -197,7 +199,10 @@ impl FilesystemSessionStore {
             .map_err(map_committed_io)?;
         validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
         validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
-        let manifest = read_versioned_manifest_file::<BundleManifest>(&bundle, "bundle.json")?;
+        let manifest_bytes = open_regular_file(&bundle, "bundle.json", false)
+            .and_then(read_bounded_manifest)
+            .map_err(map_committed_io)?;
+        let manifest: BundleManifest = parse_versioned_json(&manifest_bytes)?;
         if manifest.format != "vsift.bundle"
             || manifest.publication != PublicationGuarantee::ProcessCrashConsistent.identifier()
             || manifest.source_bytes == 0
@@ -302,6 +307,7 @@ impl FilesystemSessionStore {
             },
             artifact_count: manifest.artifacts.len(),
             artifact_bytes,
+            manifest_sha256: sha256_hex(&manifest_bytes),
         })
     }
 }

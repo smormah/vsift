@@ -286,6 +286,19 @@ a rerun completes to the control call's candidates). It prints `p10_recovery: pa
 and writes `.vsift/e2e-runs/p10-<run-id>/report.json`; results are recorded in the
 [verification plan](verification.md) "P10 PR 3 evidence".
 
+P11's **single-host worker run** is P11 PR 4's checkpoint (`p11_*`, with `job batch`
+and the SEC-T01 container job). Until then P11 PR 3 has two opt-in pieces of it:
+`every_step_runs_with_real_tools` (in `job_run_cli_contract`: one `job run` of every
+step kind over F01 with real FFmpeg and whisper.cpp, the recognition's job visible to
+`job status`, then a replay) and `repeated_external_delivery_commits_once` (in
+`external_delivery_stress`: twenty requests delivered at least once through the
+binary, workers killed at random, duplicates racing, until each commits once):
+
+```console
+cargo test -p vsift-cli --locked --test job_run_cli_contract -- --ignored
+cargo test -p vsift-cli --locked --test external_delivery_stress -- --ignored --nocapture
+```
+
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
 F01 tone audio. It is **not** the P06 stage, a P13 managed-install stage, a real-speech

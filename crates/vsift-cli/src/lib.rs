@@ -14,13 +14,14 @@ mod search;
 mod session;
 mod setup;
 mod signal;
+mod worker;
 
-use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode};
+use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::Duration};
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{
-    BundleCommand, Cli, Command, EventFormat, ExecutionProfile, JobCommand, SetupCommand,
-    TranscriptCommand,
+    BundleCommand, Cli, Command, EventFormat, ExecutionProfile, JobArguments, JobCommand,
+    SetupCommand, TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{JsonLines, OutputMode, OutputWriter, ProcessExit};
@@ -87,7 +88,12 @@ const fn is_long_running(command: &Command) -> bool {
         Command::Transcript(arguments) => {
             matches!(arguments.command, TranscriptCommand::Retranscribe(_))
         }
-        Command::Job(arguments) => matches!(arguments.command, JobCommand::Resume(_)),
+        Command::Job(arguments) => {
+            matches!(
+                arguments.command,
+                JobCommand::Resume(_) | JobCommand::Run(_)
+            )
+        }
         Command::Setup(_) | Command::Session(_) | Command::Search(_) | Command::Bundle(_) => false,
     }
 }
@@ -220,8 +226,21 @@ where
     // starts, so an early interruption is not missed. A handler the system
     // refuses leaves the default behaviour, which commits nothing partial.
     let cancellation = Cancellation::new();
+    // `job run` is a worker host: its shutdown stops admission first and
+    // drains for the operator's time (ADR 0021 D4).
+    let shutdown = match &command {
+        Command::Job(JobArguments {
+            command: JobCommand::Run(arguments),
+        }) => Some(signal::Shutdown::new(Duration::from_millis(
+            arguments.drain_timeout_ms,
+        ))),
+        _ => None,
+    };
     let _interrupts = (interruption == Interruption::Trapped && is_long_running(&command))
-        .then(|| signal::listen(cancellation.clone()).ok())
+        .then(|| match &shutdown {
+            Some(shutdown) => signal::listen_for_shutdown(shutdown.clone()).ok(),
+            None => signal::listen(cancellation.clone()).ok(),
+        })
         .flatten();
     match command {
         Command::Setup(arguments) => match arguments.command {
@@ -486,8 +505,14 @@ where
                 JobCommand::Resume(arguments) => {
                     job::resume(&engine, arguments, &cancellation, ProgressObserver::none()).await
                 }
-                // The worker and batch host is P11.
-                JobCommand::Run(_) | JobCommand::Batch(_) => {
+                JobCommand::Run(arguments) => {
+                    let shutdown = shutdown.unwrap_or_else(|| {
+                        signal::Shutdown::new(Duration::from_millis(arguments.drain_timeout_ms))
+                    });
+                    return worker::execute(&engine, arguments, &shutdown, mode, &mut writer).await;
+                }
+                // The batch host is P11 PR 4.
+                JobCommand::Batch(_) => {
                     return not_implemented(&mut writer, mode, operation);
                 }
             };
@@ -683,6 +708,7 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         EngineError::AdmissionExceedsCapacity { .. } => ADMISSION_CAPACITY_REMEDIATION,
         EngineError::AdmissionBusy { .. } => ADMISSION_BUSY_REMEDIATION,
         EngineError::IsolationUnavailable(_) => ISOLATION_UNAVAILABLE_REMEDIATION,
+        EngineError::Worker(failure) => worker::worker_failure_remediation(*failure),
         _ => return None,
     };
     Some(summary.to_owned())

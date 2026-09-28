@@ -14,6 +14,10 @@
 //! checkpoint written, flushed and renamed, the record saying `committing`
 //! and `succeeded`, and its checkpoints being deleted.
 //!
+//! Each request point ([`FaultPoint::REQUEST`], P11) marks one write of a
+//! worker request's record: an attempt accepted, a step finished, the
+//! request ended.
+//!
 //! Stopping the process is compiled only into this crate's unit tests and
 //! into builds with the `fault-injection` feature, which must never be
 //! enabled in a release build (the crate refuses to compile it without debug
@@ -83,6 +87,13 @@ pub enum FaultPoint {
     JobSucceeded,
     /// The first of the job's checkpoints was deleted.
     CheckpointDeletion,
+    /// A worker request's record says an attempt accepted it (P11): its
+    /// session id is recorded and no step of this attempt has run.
+    RequestAccept,
+    /// A worker request's record lists one more finished step.
+    RequestStep,
+    /// A worker request's record holds its result: the request has ended.
+    RequestComplete,
 }
 
 impl FaultPoint {
@@ -116,9 +127,18 @@ impl FaultPoint {
         Self::CheckpointDeletion,
     ];
 
-    /// Every point: the commit points, then the job points.
+    /// Every worker request point, in the order a request reaches them.
     #[cfg(any(test, feature = "fault-injection"))]
-    pub const ALL: [Self; 20] = [
+    pub const REQUEST: [Self; 3] = [
+        Self::RequestAccept,
+        Self::RequestStep,
+        Self::RequestComplete,
+    ];
+
+    /// Every point: the commit points, the job points, then the request
+    /// points.
+    #[cfg(any(test, feature = "fault-injection"))]
+    pub const ALL: [Self; 23] = [
         Self::ArtifactInstall,
         Self::ArtifactDirectorySync,
         Self::ManifestWrite,
@@ -139,6 +159,9 @@ impl FaultPoint {
         Self::JobCommitting,
         Self::JobSucceeded,
         Self::CheckpointDeletion,
+        Self::RequestAccept,
+        Self::RequestStep,
+        Self::RequestComplete,
     ];
 
     /// The point's stable name, as `VSIFT_FAULT_POINT` spells it.
@@ -165,6 +188,9 @@ impl FaultPoint {
             Self::JobCommitting => "job-committing",
             Self::JobSucceeded => "job-succeeded",
             Self::CheckpointDeletion => "checkpoint-deletion",
+            Self::RequestAccept => "request-accept",
+            Self::RequestStep => "request-step",
+            Self::RequestComplete => "request-complete",
         }
     }
 
@@ -255,10 +281,11 @@ mod tests {
     use super::{FaultPoint, parse_selection};
 
     #[test]
-    fn the_commit_and_job_points_together_are_every_point() {
+    fn the_commit_job_and_request_points_together_are_every_point() {
         let joined: Vec<FaultPoint> = FaultPoint::COMMIT
             .into_iter()
             .chain(FaultPoint::JOB)
+            .chain(FaultPoint::REQUEST)
             .collect();
         assert_eq!(joined, FaultPoint::ALL.to_vec());
     }

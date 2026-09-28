@@ -455,8 +455,9 @@ fn assert_no_path(value: &Value, root: &Path) {
 // ------------------------------------------------------------ grammar
 
 /// The job commands take exactly one job id and no session; malformed ids
-/// and operation ids are parse failures before anything is read; `job run`
-/// and `job batch` stay reserved for the worker host (P11).
+/// and operation ids are parse failures before anything is read, as are a
+/// `job run` without its input root or with its bounds exceeded; `job
+/// batch` stays reserved for P11 PR 4.
 #[test]
 fn job_grammar_is_validated_before_any_io() -> TestResult {
     let root = OwnedRoot::new()?;
@@ -481,6 +482,31 @@ fn job_grammar_is_validated_before_any_io() -> TestResult {
             "op_SHOUTED0123456789AB",
             "--json",
         ],
+        // `job run` (P11 PR 3) needs the operator's input root, and bounds
+        // its drain and admission wait.
+        vec!["job", "run", "--request", "request.json", "--json"],
+        vec![
+            "job",
+            "run",
+            "--request",
+            "request.json",
+            "--input-root",
+            "inputs",
+            "--drain-timeout-ms",
+            "300001",
+            "--json",
+        ],
+        vec![
+            "job",
+            "run",
+            "--request",
+            "request.json",
+            "--input-root",
+            "inputs",
+            "--admission-wait-ms",
+            "60001",
+            "--json",
+        ],
     ] {
         let output = vsift(&root, &arguments)?;
         let value = assert_failure(&output, "parse", "INVALID_ARGUMENT", 2)?;
@@ -489,19 +515,11 @@ fn job_grammar_is_validated_before_any_io() -> TestResult {
     }
     // Nothing was created by a rejected command.
     assert!(!root.sessions().exists());
-    for (arguments, command) in [
-        (
-            vec!["job", "run", "--request", "request.json", "--json"],
-            "job.run",
-        ),
-        (
-            vec!["job", "batch", "--requests", "requests.jsonl", "--json"],
-            "job.batch",
-        ),
-    ] {
-        let output = vsift(&root, &arguments)?;
-        assert_failure(&output, command, "COMMAND_NOT_IMPLEMENTED", 2)?;
-    }
+    let output = vsift(
+        &root,
+        &["job", "batch", "--requests", "requests.jsonl", "--json"],
+    )?;
+    assert_failure(&output, "job.batch", "COMMAND_NOT_IMPLEMENTED", 2)?;
     Ok(())
 }
 

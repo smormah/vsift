@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-28 (P00-P10 complete; P11 in progress: PR 1 merged, PR 2 on its branch).
+Date: 2026-09-28 (P00-P10 complete; P11 in progress: PRs 1 and 2 merged, PR 3 on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -56,7 +56,7 @@ Each entry has these fields:
 | [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-008](#l-008) | OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01) | integrity/durability | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
-| [L-010](#l-010) | Recovery covers retranscription only; the worker host's jobs are still to come | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-010](#l-010) | Recovery covers retranscription and worker requests; batches are still to come | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
 | [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | [#170](https://github.com/smormah/vsift/issues/170) | monitoring |
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
 | [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
@@ -83,7 +83,7 @@ Each entry has these fields:
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-038](#l-038) | No worker or batch host; `job run` and `job batch` are reserved | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-038](#l-038) | No batch host; `job batch` is reserved | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
 | [L-039](#l-039) | No agent skill; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -103,12 +103,15 @@ Each entry has these fields:
 | [L-056](#l-056) | Durability rests on storage that honours flushes | integrity/durability | medium | unscheduled | none | accepted residual |
 | [L-057](#l-057) | Losing the disk or the host loses the evidence (X-10) | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
 | [L-058](#l-058) | The durable profile recognises Ubuntu 24.04 by `os-release`, not by its kernel | integrity/durability | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
-| [L-059](#l-059) | Durable sessions need an explicit durable worker workspace | integrity/durability | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-059](#l-059) | Durable sessions need an explicit durable worker workspace | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-060](#l-060) | Admission is not fair between processes sharing a root | performance | low | unscheduled | none | accepted residual |
 | [L-061](#l-061) | The free-space reserve is a pre-copy check on Unix only, not a quota | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-062](#l-062) | A worker request's input path may not go through any link | security | low | unscheduled | none | accepted residual |
+| [L-063](#l-063) | A workspace keeps at most 4,096 request records, pruned only when their session is gone | contract/UX | low | unscheduled | none | accepted residual |
+| [L-064](#l-064) | A retain killed mid-copy leaves a staging directory in the bundle root | integrity/durability | low | unscheduled | none | accepted residual |
+| [L-065](#l-065) | A request's deadline, admission wait and attempt count per delivery | contract/UX | low | unscheduled | none | accepted residual |
 
-Counts: 4 high, 18 medium, 38 low (60 entries).
+Counts: 4 high, 18 medium, 41 low (63 entries).
 
 ## Security
 
@@ -454,8 +457,8 @@ Counts: 4 high, 18 medium, 38 low (60 entries).
   worker workspace with `session init-workspace --durability durable` (only on Ubuntu
   24.04 with local ext4; anywhere else it is `MISSING_CAPABILITY` and nothing is
   created), and `ingest --session-root <workspace>` then opens durable sessions
-  (`publication` `os_crash_durable`, ADR 0020 D-3). A desktop root never gives
-  durability, and worker requests (`job run`) reach the workspace only with P11 PR 3.
+  (`publication` `os_crash_durable`, ADR 0020 D-3), as do worker requests (`job run`,
+  P11 PR 3), which run only in a workspace. A desktop root never gives durability.
 - **Evidence:** ADR 0021 PR 2 notes;
   `a_durable_workspace_is_created_only_where_durability_is_qualified`,
   `ingest_in_a_workspace_inherits_its_durability_and_retention`,
@@ -465,9 +468,9 @@ Counts: 4 high, 18 medium, 38 low (60 entries).
   on one profile (L-008).
 - **Mitigation:** typed `MISSING_CAPABILITY` with remediation; desktop sessions stay
   ephemeral by design (ADR 0002).
-- **Next step:** P11 PR 3 (`job run` requests in a workspace).
-- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
-  **Status:** deferred. **Review:** pending.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-061
 
@@ -520,7 +523,7 @@ Counts: 4 high, 18 medium, 38 low (60 entries).
 
 ### L-010
 
-**Recovery covers retranscription only; the worker host's jobs are still to come.**
+**Recovery covers retranscription and worker requests; batches are still to come.**
 
 - **What:** a retranscription is a recoverable job: an interrupted run (a crash, a
   failure, Ctrl-C or `SIGTERM`, a library cancellation) is found by the same request, or
@@ -529,24 +532,47 @@ Counts: 4 high, 18 medium, 38 low (60 entries).
   return the committed result without a new generation, and the same id with another
   request is `IDEMPOTENCY_CONFLICT`; `job status` and `session status` report jobs;
   `job cancel` is serialized with the commit and reaches a running owner within 250 ms;
-  `BUSY` contention is retried with jitter. On the qualified profile a durable
-  session's jobs and generations also survive an OS crash and power loss (P10 PR 4,
-  [L-008](#l-008)). What is still missing: jobs for anything but retranscription
-  (candidates and evidence calls are short and commit their partial results instead)
-  and the worker host's job requests and batches (P11 PRs 3 and 4; its durable
-  workspace exists since PR 2).
-- **Evidence:** [verification](verification.md) "P10 PR 2 evidence", "P10 PR 3
-  evidence" and "P10 PR 4 evidence" (X-01..X-06, X-09, X-10; the opt-in
-  `p10_recovery_e2e` recoverable mechanical run with real FFmpeg and whisper.cpp; the
-  crash campaign); [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
-  "Implementation notes" for PRs 2 to 4.
-- **Impact:** R-09 and R-10 still need P11's worker host.
-- **Why:** P10 delivers the recoverable core; the worker host is P11.
+  `BUSY` contention is retried with jitter. Since P11 PR 3 a worker request (`job
+  run`) is recoverable as a whole: its record keeps its finished steps, a redelivery
+  continues from the first unfinished one (a recognition resumes its P10 job under a
+  derived operation id), and an ended request is replayed. On the qualified profile a
+  durable workspace's generations, jobs and request records also survive an OS crash
+  and power loss (P10 PR 4, rerun with requests in P11 PR 3, [L-008](#l-008)). What is
+  still missing: jobs for candidates and evidence calls (short; they commit partial
+  results instead) and the batch host (P11 PR 4).
+- **Evidence:** [verification](verification.md) "P10 PR 2 evidence" to "P10 PR 4
+  evidence" and "P11 PR 3 evidence"; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  and [ADR 0021](../decisions/0021-worker-and-batch-host.md) implementation notes;
+  [p10-durable-publication.md](p10-durable-publication.md) (P11 rerun).
+- **Impact:** R-09 and R-10 still need the batch host.
+- **Why:** P11 PR 4 delivers `job batch`.
 - **Mitigation:** process crashes, kills and interruptions are qualified everywhere,
-  OS crashes on the durable profile.
-- **Next step:** P11.
+  OS crashes on the durable profile; a supervisor redelivers a request until it ends.
+- **Next step:** P11 PR 4.
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** deferred. **Review:** pending.
+
+### L-064
+
+**A retain killed mid-copy leaves a staging directory in the bundle root.**
+
+- **What:** a `retain` step writes its bundle to a hidden staging directory beside its
+  name (`.<bundle_name>.<op>.retaining` under `--bundle-root`) and renames it once it
+  validates, so a killed worker never leaves an incomplete bundle under the bundle's
+  own name. The staging directory of a killed try stays: VSift deletes nothing in the
+  operator's bundle root. A bundle directory that already exists and is not this
+  request's bundle (another session, other artifacts, or not a valid bundle) is
+  refused with `INVALID_ARGUMENT`, and that request ends.
+- **Evidence:** ADR 0021 PR 3 notes; `an_existing_bundle_is_accepted_only_when_it_is_the_requests`,
+  `repeated_external_delivery_commits_once`.
+- **Impact:** after crashes an operator may find hidden staging directories to remove.
+- **Why:** automatic cleanup is restricted to VSift-owned temporary directories inside
+  its own roots (`AGENTS.md`).
+- **Mitigation:** staging names are hidden and say what they are; the bundle under its
+  own name is always whole.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-047
 
@@ -682,6 +708,52 @@ Counts: 4 high, 18 medium, 38 low (60 entries).
   **Review:** pending.
 
 ## Evidence contract and user experience
+
+### L-063
+
+**A workspace keeps at most 4,096 request records, pruned only when their session is gone.**
+
+- **What:** every worker request's record (`worker-requests/<bucket>/<op>.json`, at
+  most 192 KiB: an ended request's result of at most 64 KiB, escaped as JSON text, and
+  its identities) stays until the session it names is gone. At 4,096 records a new
+  operation id first prunes the records of removed sessions that no process holds; if
+  none can be pruned it fails `RESOURCE_LIMIT` and nothing runs. An ended record whose
+  session still exists is never pruned, because pruning it would let a redelivery run
+  the work again (ADR 0021 section 4 said "oldest ended first"; the implementation
+  keeps exactly-once instead).
+- **Evidence:** ADR 0021 PR 3 notes; `a_full_workspace_prunes_only_records_whose_session_is_gone`.
+- **Impact:** a workspace that keeps more than 4,096 live sessions' requests must clean
+  sessions (`session clean --expired`, or their retention) before new requests run.
+- **Why:** a bounded store, and replay must stay exact while its session exists.
+- **Mitigation:** records expire with their sessions (at most 720 hours); `RESOURCE_LIMIT`
+  is typed and names no path.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-065
+
+**A request's deadline, admission wait and attempt count per delivery.**
+
+- **What:** a request's `deadline_ms` (or the one-day host limit), its admission wait
+  (`--admission-wait-ms`) and its retries of `BUSY` steps are measured from the start
+  of each delivery (`job run`), not across redeliveries; a redelivery of an unfinished
+  request starts a new attempt with a fresh deadline. The result of an ended request is
+  fixed once it is recorded: every later delivery replays it byte for byte. A
+  redelivery that finds every step recorded but not yet the result (a crash between
+  the two writes) records the result then, with its own attempt number and timings.
+  An ingest interrupted before its session opened leaves a registration that normal
+  cleanup removes; the next attempt opens a new session.
+- **Evidence:** ADR 0021 PR 3 notes; `deadlines_and_permanent_failures_are_not_retried`,
+  `a_kill_at_every_request_fault_point_recovers`.
+- **Impact:** a supervisor that wants a deadline across redeliveries must enforce it
+  itself; `attempt` counts deliveries that found the request unfinished.
+- **Why:** the record keeps what was done, not a clock; a persistent deadline would
+  need clock agreement between workers.
+- **Mitigation:** `DEADLINE_EXCEEDED` is resumable and typed; replays are exact.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-014
 
@@ -1199,24 +1271,23 @@ Counts: 4 high, 18 medium, 38 low (60 entries).
 
 ### L-038
 
-**No worker or batch host; `job run` and `job batch` are reserved.**
+**No batch host; `job batch` is reserved.**
 
-- **What:** `job run` and `job batch` return `COMMAND_NOT_IMPLEMENTED` (`job status`,
-  `resume` and `cancel` work since P10 PR 3); there is no finite batch reader, request
-  records or worker-level graceful shutdown yet. P11 PR 2 added the durable workspace
-  (`session init-workspace`), weighted admission, the strict Linux attestation
-  (`--host-isolation strict-linux`) and contained inputs, which the job commands will
-  use. Since P11 PR 1 their contracts are published and fuzzed (the job request and
-  result, batch summary, workspace data and the `progress`, `lifecycle` and `result`
-  events; ADR 0021), so hosts can build against them; nothing runs them yet.
-- **Evidence:** [CLI contract](../contracts/cli-v1.md) command table and "P11 worker
+- **What:** `job batch` returns `COMMAND_NOT_IMPLEMENTED`: there is no finite batch
+  reader, no request concurrency above one and no batch-level shutdown yet. One request
+  at a time runs since P11 PR 3 (`job run`, with request records, replay, conflict,
+  `BUSY`, continuation and the two-stage shutdown of D4), in a worker workspace (PR 2);
+  a supervisor can loop over requests itself. The batch contracts (summary, `result`
+  and `lifecycle` events) are published and fuzzed since PR 1.
+- **Evidence:** [CLI contract](../contracts/cli-v1.md) "P11 `job run`" and "P11 worker
   contracts and events"; P11 row of the
   [work packets](implementation-work-packets.md) (X-07..X-11, O-01..O-04, SEC-T01).
-- **Impact:** no server use; R-10..R-12 are R0 release gates.
-- **Why:** P11 is in progress: PR 3 (`job run`, request records, shutdown) and PR 4
-  (`job batch`, SEC-T01, qualification) remain.
-- **Mitigation:** the engine library can be embedded.
-- **Next step:** P11 PRs 3 and 4.
+- **Impact:** no line-streaming batch with backpressure and one D5 exit code; SEC-T01
+  (the strict profile in a container against a hostile fixture) and the P11
+  qualification record are still to come.
+- **Why:** P11 is in progress: PR 4 (`job batch`, SEC-T01, qualification) remains.
+- **Mitigation:** `job run` per request; the engine library can be embedded.
+- **Next step:** P11 PR 4.
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** deferred. **Review:** pending.
 

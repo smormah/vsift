@@ -12,7 +12,11 @@
 //! members are identities, counts, digests and enums, so it stays within
 //! [`MAX_WORK_RESULT_BYTES`] by construction.
 
+mod recorded;
+
 use std::{error::Error, fmt, num::NonZeroU16, num::NonZeroU32};
+
+pub use recorded::RecordedResultError;
 
 use serde::Serialize;
 use vsift_domain::{
@@ -283,6 +287,8 @@ pub struct StepResult {
     coverage: Option<CoverageResponse>,
     failure: Option<StepFailureData>,
     #[serde(skip)]
+    step_kind: WorkStepKind,
+    #[serde(skip)]
     state: StepStatus,
     #[serde(skip)]
     cause: Option<WorkFailure>,
@@ -303,6 +309,7 @@ impl StepResult {
         };
         Self {
             kind: outputs.kind().identifier(),
+            step_kind: outputs.kind(),
             status: state.identifier(),
             elapsed_ms: timing.elapsed_ms,
             admission_wait_ms: timing.admission_wait_ms,
@@ -330,6 +337,7 @@ impl StepResult {
         };
         Self {
             kind: kind.identifier(),
+            step_kind: kind,
             status: state.identifier(),
             elapsed_ms: timing.elapsed_ms,
             admission_wait_ms: timing.admission_wait_ms,
@@ -347,6 +355,7 @@ impl StepResult {
     pub fn not_started(kind: WorkStepKind) -> Self {
         Self {
             kind: kind.identifier(),
+            step_kind: kind,
             status: StepStatus::NotStarted.identifier(),
             elapsed_ms: 0,
             admission_wait_ms: 0,
@@ -566,6 +575,8 @@ pub struct WorkResult {
     outcome: OperationStatus,
     #[serde(skip)]
     failure_code: Option<FailureCode>,
+    #[serde(skip)]
+    rejection: Option<RequestRejection>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -630,6 +641,7 @@ impl WorkResult {
             (None, None) => (None, None),
         };
         let failure_code = failure.map(|(failure, _)| failure.code);
+        let rejection = failure.and_then(|(_, rejection)| rejection);
         let failure =
             failure.map(|(failure, rejection)| RequestFailureData::of(failure, step, rejection));
         let outcome = match failure_code {
@@ -665,7 +677,55 @@ impl WorkResult {
             },
             outcome,
             failure_code,
+            rejection,
         })
+    }
+
+    /// A request that ran no step because `failure` refused or stopped it
+    /// first: its first attempt, no session, no step. Unlike
+    /// [`Self::new`] it cannot be inconsistent, so it cannot fail.
+    #[must_use]
+    pub fn refused(
+        operation_id: &OperationId,
+        request_digest: &WorkRequestDigest,
+        failure: RequestFailure,
+        controls: WorkControls,
+    ) -> Self {
+        let (cause, rejection) = match failure {
+            RequestFailure::Rejected(rejection) => (
+                WorkFailure::new(rejection.failure_code(), None),
+                Some(rejection),
+            ),
+            RequestFailure::NotStarted(failure) => (failure, None),
+        };
+        let outcome = if cause.code == FailureCode::Cancelled {
+            OperationStatus::Cancelled
+        } else {
+            OperationStatus::Failed
+        };
+        Self {
+            operation_id: operation_id.as_str().to_owned(),
+            request_digest: request_digest.as_str().to_owned(),
+            status: outcome.identifier(),
+            replayed: false,
+            attempt: 1,
+            session_id: None,
+            source_id: None,
+            publication: None,
+            lifecycle: None,
+            steps: Vec::new(),
+            failure: Some(RequestFailureData::of(cause, None, rejection)),
+            controls: ControlsData {
+                isolation: controls.isolation.identifier(),
+                admission_capacity: controls.admission_capacity.get(),
+                concurrency: controls.concurrency.get(),
+                resource_limits: controls.resource_limits.identifier(),
+                free_space_reserve: controls.free_space_reserve.identifier(),
+            },
+            outcome,
+            failure_code: Some(cause.code),
+            rejection,
+        }
     }
 
     /// The derived status.

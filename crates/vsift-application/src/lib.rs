@@ -47,7 +47,7 @@ pub use job::{
     RetranscriptionOutcome, RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore,
     SessionHead, cancel_job, commit_operation_id, job_id, job_status, lookup_operation,
     observed_state, recognition_key, reconcile, resumable_request, retranscribe_operation_key,
-    retranscribe_request_digest, run_retranscription,
+    retranscribe_request_digest, run_retranscription, worker_step_operation_id,
 };
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{

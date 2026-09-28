@@ -67,6 +67,13 @@ impl Cancellation {
         self.0.is_escalated()
     }
 
+    /// Resolves once this signal (or the one it is a child of) is
+    /// cancelled; at once if it already is. A host awaits it to announce a
+    /// shutdown while the work it stopped winds down.
+    pub async fn cancelled(&self) {
+        self.0.wait_cancelled().await;
+    }
+
     /// A new signal for one part of the work, such as one request of a
     /// worker's batch: it is cancelled (or escalated) whenever this one is,
     /// while cancelling it leaves this one and every sibling running.

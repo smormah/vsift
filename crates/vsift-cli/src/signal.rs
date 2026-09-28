@@ -15,8 +15,14 @@
 //! Handlers are registered before the command starts, so no early signal is
 //! missed, and only for long commands: every other command keeps the
 //! operating system's default and ends at once.
+//!
+//! `job run` (P11 PR 3, ADR 0021 D4) is a worker host and shuts down in two
+//! stages instead ([`listen_for_shutdown`]): the first signal stops the
+//! request before its next step and, after the operator's drain time
+//! (`--drain-timeout-ms`, default 0), cancels the step still running at its
+//! next boundary; a second signal escalates as above.
 
-use std::io;
+use std::{future::Future, io, time::Duration};
 
 use vsift::Cancellation;
 
@@ -48,6 +54,66 @@ pub(crate) fn listen(cancellation: Cancellation) -> io::Result<InterruptListener
         cancellation.cancel();
         interrupts.next().await;
         cancellation.escalate();
+    });
+    Ok(InterruptListener { task })
+}
+
+/// The two signals a worker host's shutdown drives (ADR 0021 D4).
+#[derive(Clone, Debug)]
+pub(crate) struct Shutdown {
+    /// Fired by the first signal: no further step starts.
+    pub(crate) stop: Cancellation,
+    /// Fired when the drain time is over: the running step stops at its
+    /// next boundary. A second signal escalates it.
+    pub(crate) work: Cancellation,
+    /// How long the running step may go on after the first signal.
+    pub(crate) drain: Duration,
+}
+
+impl Shutdown {
+    /// A shutdown that has not begun, draining for `drain`.
+    pub(crate) fn new(drain: Duration) -> Self {
+        Self {
+            stop: Cancellation::new(),
+            work: Cancellation::new(),
+            drain,
+        }
+    }
+
+    /// Runs one shutdown once its first signal arrived: stops admission,
+    /// lets the running step drain until the drain time is over or `second`
+    /// arrives (which escalates), then cancels it.
+    pub(crate) async fn begin(&self, second: impl Future<Output = ()>) {
+        self.stop.cancel();
+        if self.drain.is_zero() {
+            self.work.cancel();
+            second.await;
+            self.work.escalate();
+            return;
+        }
+        let mut second = std::pin::pin!(second);
+        tokio::select! {
+            () = tokio::time::sleep(self.drain) => {
+                self.work.cancel();
+                second.await;
+            }
+            () = &mut second => {}
+        }
+        self.work.escalate();
+    }
+}
+
+/// Starts turning interruptions into a worker host's shutdown (see
+/// [`Shutdown::begin`]).
+///
+/// # Errors
+///
+/// As [`listen`].
+pub(crate) fn listen_for_shutdown(shutdown: Shutdown) -> io::Result<InterruptListener> {
+    let mut interrupts = Interrupts::register()?;
+    let task = tokio::spawn(async move {
+        interrupts.next().await;
+        shutdown.begin(interrupts.next()).await;
     });
     Ok(InterruptListener { task })
 }

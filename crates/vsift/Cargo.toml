@@ -19,6 +19,9 @@ vsift-infrastructure.workspace = true
 jsonschema.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+# The worker request kill test (engine_worker) stops its child at the
+# request fault points; development builds only, never a release.
+vsift-infrastructure = { workspace = true, features = ["fault-injection"] }
 
 [lints]
 workspace = true

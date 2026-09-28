@@ -60,6 +60,10 @@ pub enum Loss {
     StoreRefused(FailureCode),
     /// The acknowledged transcript revision is not found.
     RevisionMissing,
+    /// The acknowledged worker request's record is gone or has not ended.
+    RequestRecordMissing,
+    /// The acknowledged worker request's record holds another result.
+    RequestResultChanged,
 }
 
 /// Something half committed or damaged, whether acknowledged or not.
@@ -96,6 +100,13 @@ pub enum Damage {
         session: String,
         /// The job directory's name.
         job: String,
+        /// The public code.
+        code: FailureCode,
+    },
+    /// A worker request record cannot be read.
+    Request {
+        /// The request's operation id.
+        operation: String,
         /// The public code.
         code: FailureCode,
     },
@@ -138,6 +149,11 @@ impl fmt::Display for Damage {
             Self::Probe { session, code } => write!(
                 formatter,
                 "probe session={session} code={}",
+                code.identifier()
+            ),
+            Self::Request { operation, code } => write!(
+                formatter,
+                "request operation={operation} code={}",
                 code.identifier()
             ),
         }
@@ -186,6 +202,8 @@ impl fmt::Display for Loss {
             Self::NotDurable => formatter.write_str("not-durable"),
             Self::StoreRefused(code) => write!(formatter, "store-refused {}", code.identifier()),
             Self::RevisionMissing => formatter.write_str("revision-missing"),
+            Self::RequestRecordMissing => formatter.write_str("request-record-missing"),
+            Self::RequestResultChanged => formatter.write_str("request-result-changed"),
         }
     }
 }
@@ -207,6 +225,8 @@ pub struct Findings {
     pub artifacts: usize,
     /// Jobs read through the store.
     pub jobs: usize,
+    /// Worker request records read through the store.
+    pub requests: usize,
 }
 
 impl Findings {
@@ -230,13 +250,14 @@ impl Findings {
             )
             .collect();
         lines.push(format!(
-            "{prefix} {} acks={} sessions={} generations={} artifacts={} jobs={} lost={} damaged={}",
+            "{prefix} {} acks={} sessions={} generations={} artifacts={} jobs={} requests={} lost={} damaged={}",
             if self.clean() { "OK" } else { "FAIL" },
             self.acks,
             self.sessions,
             self.generations,
             self.artifacts,
             self.jobs,
+            self.requests,
             self.lost.len(),
             self.damage.len()
         ));
@@ -290,6 +311,7 @@ pub fn verify(root: &Path, acks: &[Ack], now: u64) -> Findings {
         }
     }
     if let Some(store) = &store {
+        check_request_records(root, store, &mut findings);
         let acked: BTreeSet<&str> = acks.iter().map(|ack| ack.session.as_str()).collect();
         for (name, walked) in &on_disk {
             let Ok(session) = SessionId::parse(name.as_str()) else {
@@ -422,7 +444,52 @@ fn check_ack(
             Err(error) => return Some(Loss::StoreRefused(code(error))),
         }
     }
+    if let Some(request) = &ack.request {
+        match store.read_worker_request(&request.operation_id) {
+            Ok(Some(record)) => match &record.result {
+                Some(result) if result.sha256().as_str() == request.result_sha256 => {}
+                Some(_) => return Some(Loss::RequestResultChanged),
+                None => return Some(Loss::RequestRecordMissing),
+            },
+            Ok(None) => return Some(Loss::RequestRecordMissing),
+            Err(error) => return Some(Loss::StoreRefused(code(error))),
+        }
+    }
     None
+}
+
+/// Reads every worker request record on disk through the store (P11 PR 3):
+/// a crash may leave a record's old or new version, never a torn one, so
+/// any record that does not read is damage.
+fn check_request_records(root: &Path, store: &FilesystemSessionStore, findings: &mut Findings) {
+    let Ok(buckets) = std::fs::read_dir(root.join("worker-requests")) else {
+        return;
+    };
+    for bucket in buckets.filter_map(Result::ok) {
+        let Ok(entries) = std::fs::read_dir(bucket.path()) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let Some(operation) = entry
+                .file_name()
+                .into_string()
+                .ok()
+                .and_then(|name| name.strip_suffix(".json").map(str::to_owned))
+            else {
+                continue;
+            };
+            let Ok(operation_id) = OperationId::parse(operation) else {
+                continue;
+            };
+            findings.requests += 1;
+            if let Err(error) = store.read_worker_request(&operation_id) {
+                findings.damage.push(Damage::Request {
+                    operation: operation_id.as_str().to_owned(),
+                    code: code(error),
+                });
+            }
+        }
+    }
 }
 
 /// Lowercase hex SHA-256 of `bytes`.
@@ -635,7 +702,7 @@ mod tests {
             findings.lines("VERIFY"),
             vec![
                 "VERIFY-LOST seq=3 head-behind head=1".to_owned(),
-                "VERIFY FAIL acks=4 sessions=0 generations=0 artifacts=0 jobs=0 lost=1 damaged=0"
+                "VERIFY FAIL acks=4 sessions=0 generations=0 artifacts=0 jobs=0 requests=0 lost=1 damaged=0"
                     .to_owned()
             ]
         );

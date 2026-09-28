@@ -225,6 +225,89 @@ pub enum EngineError {
     /// Strict worker isolation was required and the host could not attest
     /// it; nothing ran (ADR 0021 section 8).
     IsolationUnavailable(IsolationGaps),
+    /// A worker request could not run, or a step of it failed, for a reason
+    /// of the worker host itself (P11, ADR 0021).
+    Worker(WorkerFailure),
+}
+
+/// Why a worker request (`job run`) could not run, or a step of it failed,
+/// for a reason of the worker host rather than of the operation it maps to
+/// (P11 PR 3, ADR 0021 sections 2, 4 and 6).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorkerFailure {
+    /// The session root is not a worker workspace: requests run only in a
+    /// root created by `session init-workspace` (ADR 0021 D1).
+    WorkspaceRequired,
+    /// A `retain` step needs an absolute, existing `--bundle-root`.
+    BundleRootRequired,
+    /// The input root is not an absolute, existing, local directory.
+    InputRootUnavailable,
+    /// Nothing exists at a path the request names in the input root.
+    InputNotFound,
+    /// A path the request names is a directory, special file or a file with
+    /// several hard links.
+    InputNotRegularFile,
+    /// A file the request names could not be opened or read.
+    InputUnreadable,
+    /// The session a request targets is not in the workspace.
+    SessionNotFound,
+    /// The bundle directory a `retain` step would create exists and is not
+    /// the bundle this request retained (or no longer validates as it).
+    BundleMismatch,
+    /// Another process runs the same operation id now; retry after
+    /// [`EngineError::retry_after_ms`].
+    Busy,
+    /// The operation id is bound to a different request (a different
+    /// digest); nothing was changed.
+    Conflict,
+    /// The request's deadline passed, or too little of it was left to
+    /// start the next step; the request is resumable.
+    DeadlineExceeded,
+    /// A shutdown stopped the request before its next step; it is
+    /// resumable.
+    Stopped,
+}
+
+impl WorkerFailure {
+    /// The stable public code.
+    #[must_use]
+    pub const fn failure_code(self) -> FailureCode {
+        match self {
+            Self::WorkspaceRequired
+            | Self::BundleRootRequired
+            | Self::InputRootUnavailable
+            | Self::InputNotFound
+            | Self::SessionNotFound
+            | Self::BundleMismatch => FailureCode::InvalidArgument,
+            Self::InputNotRegularFile => FailureCode::InvalidSource,
+            Self::InputUnreadable => FailureCode::StorageIo,
+            Self::Busy => FailureCode::Busy,
+            Self::Conflict => FailureCode::IdempotencyConflict,
+            Self::DeadlineExceeded => FailureCode::DeadlineExceeded,
+            Self::Stopped => FailureCode::Cancelled,
+        }
+    }
+}
+
+impl fmt::Display for WorkerFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::WorkspaceRequired => "worker requests run only in a worker workspace",
+            Self::BundleRootRequired => "a retain step needs an absolute, existing bundle root",
+            Self::InputRootUnavailable => {
+                "the input root is not an absolute, existing, local directory"
+            }
+            Self::InputNotFound => "nothing exists at a path the request names",
+            Self::InputNotRegularFile => "a path the request names is not a single-link file",
+            Self::InputUnreadable => "a file the request names could not be read",
+            Self::SessionNotFound => "the request's session is not in the workspace",
+            Self::BundleMismatch => "the bundle directory exists and is not this request's bundle",
+            Self::Busy => "the same request is running in another process",
+            Self::Conflict => "the operation id is bound to a different request",
+            Self::DeadlineExceeded => "the request's deadline passed",
+            Self::Stopped => "a shutdown stopped the request before its next step",
+        })
+    }
 }
 
 impl EngineError {
@@ -306,6 +389,7 @@ impl EngineError {
             | Self::EvidenceAssembly
             | Self::JobInvariant => FailureCode::Internal,
             Self::IsolationUnavailable(_) => FailureCode::IsolationUnavailable,
+            Self::Worker(failure) => failure.failure_code(),
             Self::JobBusy { .. }
             | Self::RetranscriptionSuperseded { .. }
             | Self::AdmissionBusy { .. } => FailureCode::Busy,
@@ -699,6 +783,7 @@ impl fmt::Display for EngineError {
                 formatter,
                 "strict worker isolation is unavailable here ({gaps})"
             ),
+            Self::Worker(failure) => failure.fmt(formatter),
         }
     }
 }
@@ -769,7 +854,8 @@ impl Error for EngineError {
             | Self::WorkspaceNotDurable
             | Self::AdmissionExceedsCapacity { .. }
             | Self::AdmissionBusy { .. }
-            | Self::IsolationUnavailable(_) => None,
+            | Self::IsolationUnavailable(_)
+            | Self::Worker(_) => None,
         }
     }
 }
@@ -826,6 +912,9 @@ impl EngineError {
         match self {
             Self::JobBusy { .. } => u64::try_from(LIVE_JOB_RETRY_AFTER.as_millis()).ok(),
             Self::AdmissionBusy { retry_after_ms } => Some(*retry_after_ms),
+            Self::Worker(WorkerFailure::Busy) => {
+                u64::try_from(LIVE_JOB_RETRY_AFTER.as_millis()).ok()
+            }
             _ => None,
         }
     }

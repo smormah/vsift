@@ -20,10 +20,11 @@ use serde_json::Value;
 use vsift_contract::{
     BatchLine, BatchTermination, BundleName, CommandName, FreeSpaceReserve, JobBatchData,
     LifecycleResponse, MAX_RESULT_STEPS, MAX_WORK_RESULT_BYTES, OperationResponse,
-    PARTIAL_REQUEST_WARNING, RequestDurability, RequestFailure, RequestRejection, ResourceLimits,
-    ResultOrigin, StepOutputs, StepResult, StepStatus, StepTiming, WorkControls, WorkFailure,
-    WorkRequest, WorkResult, WorkResultError, WorkResultParts, WorkStepKind, WorkerIsolation,
-    WorkspaceData, WorkspaceInitOutcome, decode_batch_line, decode_work_request,
+    PARTIAL_REQUEST_WARNING, RecordedResultError, RequestDurability, RequestFailure,
+    RequestRejection, ResourceLimits, ResultOrigin, StepOutputs, StepResult, StepStatus,
+    StepTiming, WorkControls, WorkFailure, WorkRequest, WorkResult, WorkResultError,
+    WorkResultParts, WorkStepKind, WorkerIsolation, WorkspaceData, WorkspaceInitOutcome,
+    decode_batch_line, decode_work_request,
 };
 use vsift_domain::{
     CoverageGapReason, FailureCode, JobId, MediaTime, OperationId, PublicationGuarantee, SessionId,
@@ -700,6 +701,119 @@ fn ingest_data_admits_a_durable_publication() -> TestResult {
             PublicationGuarantee::ProcessCrashConsistent.identifier(),
             PublicationGuarantee::OsCrashDurable.identifier()
         ])
+    );
+    Ok(())
+}
+
+/// P11 PR 3: a request record keeps finished steps and an ended result as
+/// their canonical bytes; each reads back to exactly what was recorded,
+/// a replay changes only `replayed`, and a changed or foreign document is
+/// refused.
+#[test]
+fn recorded_steps_and_results_read_back_exactly() -> TestResult {
+    let fresh = f01_result(ResultOrigin::Fresh)?;
+    let bytes = fresh.recorded_bytes()?;
+    let decoded = WorkResult::decode_recorded(&bytes)?;
+    assert_eq!(decoded, fresh);
+    assert_eq!(
+        serde_json::to_value(decoded.into_replayed())?,
+        serde_json::to_value(f01_result(ResultOrigin::Replayed)?)?
+    );
+    // A replayed result records as the fresh one did.
+    assert_eq!(f01_result(ResultOrigin::Replayed)?.recorded_bytes()?, bytes);
+    for step in fresh.steps() {
+        let recorded = step.recorded_bytes()?;
+        assert_eq!(&StepResult::decode_recorded(&recorded)?, step);
+    }
+
+    // Failed and rejected results round-trip too.
+    let request = frozen_request()?;
+    let mut steps = f01_steps()?;
+    steps.truncate(1);
+    steps.push(StepResult::failed(
+        WorkStepKind::Retranscribe,
+        timing(12, 3),
+        Some(&JobId::parse(JOB)?),
+        WorkFailure::new(FailureCode::Busy, Some(2_000)),
+    ));
+    steps.push(StepResult::not_started(WorkStepKind::Candidates));
+    let failed = WorkResult::new(WorkResultParts {
+        operation_id: request.operation_id(),
+        request_digest: request.digest(),
+        origin: ResultOrigin::Fresh,
+        attempt: NonZeroU32::new(3).ok_or("zero")?,
+        session_id: Some(&SessionId::parse(SESSION)?),
+        source_id: None,
+        publication: None,
+        lifecycle: Some(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())),
+        steps,
+        failure: None,
+        controls: controls()?,
+    })?;
+    assert_eq!(
+        WorkResult::decode_recorded(&failed.recorded_bytes()?)?,
+        failed
+    );
+    let rejected = WorkResult::new(WorkResultParts {
+        operation_id: request.operation_id(),
+        request_digest: request.digest(),
+        origin: ResultOrigin::Fresh,
+        attempt: NonZeroU32::MIN,
+        session_id: None,
+        source_id: None,
+        publication: None,
+        lifecycle: None,
+        steps: Vec::new(),
+        failure: Some(RequestFailure::Rejected(
+            RequestRejection::PathOutsideInputRoot,
+        )),
+        controls: controls()?,
+    })?;
+    assert_eq!(
+        WorkResult::decode_recorded(&rejected.recorded_bytes()?)?,
+        rejected
+    );
+
+    let text = String::from_utf8(bytes)?;
+    for (from, to) in [
+        ("\"replayed\":false", "\"replayed\":true"),
+        ("\"status\":\"complete\"", "\"status\":\"partial\""),
+        ("\"attempt\":1", "\"attempt\":0"),
+        ("\"kind\":\"ingest\"", "\"kind\":\"search\""),
+        ("\"isolation\":\"strict_linux\"", "\"isolation\":\"none\""),
+        (
+            "\"admission_wait_ms\":180,",
+            "\"admission_wait_ms\":180,\"extra\":1,",
+        ),
+        ("{\"operation_id\"", " {\"operation_id\""),
+        ("\"generation\":1,", "\"generation\":01,"),
+    ] {
+        let changed = text.replacen(from, to, 1);
+        assert_ne!(changed, text, "{from}");
+        assert!(
+            WorkResult::decode_recorded(changed.as_bytes()).is_err(),
+            "{from} -> {to} was accepted"
+        );
+    }
+    // Member order is part of the canonical form.
+    let moved = text
+        .replacen(
+            "\"operation_id\":\"op_5b1e0c7a9d2f4e6b8a3c1d0e9f7a6b5c\",",
+            "",
+            1,
+        )
+        .replacen(
+            "\"status\":\"complete\",",
+            "\"status\":\"complete\",\"operation_id\":\"op_5b1e0c7a9d2f4e6b8a3c1d0e9f7a6b5c\",",
+            1,
+        );
+    assert_eq!(
+        WorkResult::decode_recorded(moved.as_bytes()).err(),
+        Some(RecordedResultError::NotCanonical)
+    );
+    assert_eq!(
+        WorkResult::decode_recorded(&vec![b' '; MAX_WORK_RESULT_BYTES + 1]).err(),
+        Some(RecordedResultError::TooLarge)
     );
     Ok(())
 }

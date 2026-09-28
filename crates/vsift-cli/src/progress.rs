@@ -86,6 +86,11 @@ impl ProgressGate {
         self.dropped = self.dropped.saturating_add(1);
     }
 
+    /// Observations dropped so far (the cap, a full queue).
+    pub(crate) const fn dropped(&self) -> u64 {
+        self.dropped
+    }
+
     /// At the end of the command: the held observation, if the cap allows.
     pub(crate) fn finish(&mut self) -> Option<Admitted> {
         let held = self.held.take()?;

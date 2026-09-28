@@ -980,7 +980,7 @@ fn write_record(
 /// flushes it, renames it over `name` and, for a durable session,
 /// synchronises the directory. `points` names the write, flush and rename
 /// fault points and the plan that counts them.
-fn replace_file(
+pub(super) fn replace_file(
     directory: &Dir,
     name: &str,
     staged: &str,
@@ -1017,7 +1017,7 @@ fn replace_file(
     sync_if_durable(durability, directory)
 }
 
-fn sync_if_durable(
+pub(super) fn sync_if_durable(
     durability: StoredDurability,
     directory: &Dir,
 ) -> Result<(), SessionStorageError> {
@@ -1158,7 +1158,10 @@ fn create_directory(parent: &Dir, name: &str) -> Result<(), SessionStorageError>
 /// action, not damage, so the open is retried within the same bounded budget
 /// as a file met mid-replacement; a directory that really vanished still fails
 /// once the budget is spent.
-fn create_or_open(directory: &Dir, name: &str) -> Result<cap_std::fs::File, SessionStorageError> {
+pub(super) fn create_or_open(
+    directory: &Dir,
+    name: &str,
+) -> Result<cap_std::fs::File, SessionStorageError> {
     let mut options = OpenOptions::new();
     options
         .read(true)

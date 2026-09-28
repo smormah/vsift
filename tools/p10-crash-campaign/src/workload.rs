@@ -1,6 +1,13 @@
 //! The durable workload: opens durable sessions through the engine, commits
-//! evidence, runs checkpointed retranscription jobs and renews sessions,
-//! and acknowledges every operation that succeeded.
+//! evidence, runs checkpointed retranscription jobs, renews sessions and
+//! runs worker requests (P11 PR 3), and acknowledges every operation that
+//! succeeded.
+//!
+//! The root is a durable worker workspace (ADR 0021 section 3), created by
+//! the first run: worker requests run only in one, and every session of a
+//! durable workspace is durable, as `IngestRequest`'s durability also asks.
+//! A request is acknowledged only once its result is recorded, so its
+//! record is part of what a crash must keep.
 //!
 //! Durable mode is requested at the engine level only (`IngestRequest`'s
 //! durability, ADR 0020 D-3); every later commit follows the session's own
@@ -19,8 +26,10 @@ use std::{
 };
 
 use vsift::{
-    Cancellation, Engine, EngineConfig, EngineError, EnginePorts, HostIsolation, IngestRequest,
-    SessionRootError, SessionRootLocation, UserConfigurationLocation,
+    AdmissionWait, Cancellation, Engine, EngineConfig, EngineError, EnginePorts, HostIsolation,
+    IngestRequest, ProgressObserver, SessionRootError, SessionRootLocation,
+    UserConfigurationLocation, WorkRequestRun, WorkspaceInitRequest, WorkspacePolicy,
+    WorkspaceRetention,
 };
 use vsift_application::{
     EvidenceBudget, EvidenceCall, EvidenceScope, FrameAtRequest, JobRequest, JobRunError, JobSpec,
@@ -29,6 +38,7 @@ use vsift_application::{
     retranscribe_request_digest, retranscription_range, run_retranscription,
     whole_file_source_segment,
 };
+use vsift_contract::decode_work_request;
 use vsift_domain::{
     ChunkPlan, DurabilityRequirement, EvidenceProfile, FailureCode, FrameSelection, FrameTolerance,
     MediaTime, OperationId, PublicationGuarantee, SessionId, Sha256Hex, SourceCheck,
@@ -40,7 +50,7 @@ use vsift_infrastructure::{
 
 use crate::{
     error::CampaignError,
-    protocol::{Ack, OperationKind, parse_events},
+    protocol::{Ack, OperationKind, RequestAck, parse_events},
     rng::SplitMix64,
     standins::{
         NeverStop, NoBackoff, SPEECH_MICROS, STAND_IN_DIGEST, SourceUnchanged, StandInAudio,
@@ -231,6 +241,7 @@ pub async fn run(config: &WorkloadConfig) -> Result<u64, CampaignError> {
         },
         EnginePorts::system(),
     );
+    ensure_workspace(&engine, config)?;
     let mut rng = SplitMix64::new(config.seed);
     let mut failures_in_a_row = 0_u32;
     channel.line(&format!("WORKLOAD-START seq={}", config.first_seq))?;
@@ -249,6 +260,7 @@ pub async fn run(config: &WorkloadConfig) -> Result<u64, CampaignError> {
                 retranscribe(config, &session.id, &mut rng, seq).await
             }
             (OperationKind::Renew, Some(session)) => renew(config, &session.id, &mut rng, seq),
+            (OperationKind::Request, _) => request(&engine, config, &mut rng, seq).await,
         };
         match outcome {
             Ok(ack) => {
@@ -309,7 +321,8 @@ fn choose(rng: &mut SplitMix64, active: &[ActiveSession], mix: Mix) -> (Operatio
     } else {
         match (rng.below(100), mix) {
             (0..6, _) => OperationKind::Ingest,
-            (6..56, _) | (56..84, Mix::NoJobs) => OperationKind::Evidence,
+            (6..12, _) => OperationKind::Request,
+            (12..56, _) | (56..84, Mix::NoJobs) => OperationKind::Evidence,
             (56..84, Mix::All) => OperationKind::Retranscribe,
             _ => OperationKind::Renew,
         }
@@ -332,6 +345,24 @@ fn advance(active: &mut Vec<ActiveSession>, ack: &Ack, rotate_after: u64) {
     if active.len() > 4 {
         active.remove(0);
     }
+}
+
+/// Creates the root as a durable worker workspace when it does not exist
+/// yet (the first run of a campaign); later runs find it.
+fn ensure_workspace(engine: &Engine, config: &WorkloadConfig) -> Result<(), CampaignError> {
+    if config.root.exists() {
+        return Ok(());
+    }
+    let policy = WorkspacePolicy::new(
+        DurabilityRequirement::Durable,
+        std::num::NonZeroU16::new(4).ok_or(CampaignError::StandIn)?,
+        WorkspaceRetention::from_hours(168).map_err(|_| CampaignError::StandIn)?,
+    )
+    .map_err(|_| CampaignError::StandIn)?;
+    engine
+        .init_workspace(WorkspaceInitRequest { policy })
+        .map_err(|_| CampaignError::NotDurable)?;
+    Ok(())
 }
 
 /// Records a dm-log-writes mark, so the replay knows where in the write
@@ -423,7 +454,100 @@ async fn ingest(
         manifest_sha256: manifest,
         artifacts: vec![digest],
         revision: None,
+        request: None,
     })
+}
+
+/// A worker request: an ingest of a fresh source from the input root,
+/// through `Engine::run_work_request`, acknowledged only when it completed
+/// and its result is recorded.
+async fn request(
+    engine_handle: &Engine,
+    config: &WorkloadConfig,
+    rng: &mut SplitMix64,
+    seq: u64,
+) -> Result<Ack, OperationStop> {
+    let inputs = config.scratch.join("inputs");
+    fs::create_dir_all(&inputs).map_err(CampaignError::io("creating the input root", &inputs))?;
+    let (low, high) = config.source_kib;
+    let kib = low + rng.below(high.saturating_sub(low).max(1));
+    let mut bytes = b"\0\0\0\x18ftypisomvsift-campaign-request".to_vec();
+    let size = usize::try_from(kib * 1024).map_err(|_| CampaignError::StandIn)?;
+    while bytes.len() < size {
+        bytes.extend_from_slice(&rng.next().to_le_bytes());
+    }
+    let name = format!("request-{seq}.mp4");
+    let source = inputs.join(&name);
+    fs::write(&source, &bytes).map_err(CampaignError::io("writing a source", &source))?;
+    let operation = operation_id(rng)?;
+    let request = decode_work_request(
+        format!(
+            r#"{{"schema_version":"1","operation_id":"{}","durability":"durable","target":{{"ingest":{{"source":"{name}","transcript":null}}}},"steps":[]}}"#,
+            operation.as_str()
+        )
+        .as_bytes(),
+    )
+    .map_err(|_| CampaignError::StandIn)?;
+    let outcome = engine_handle
+        .run_work_request(WorkRequestRun {
+            request,
+            input_root: inputs,
+            bundle_root: None,
+            admission: AdmissionWait::Immediate,
+            concurrency: std::num::NonZeroU16::MIN,
+            stop: Cancellation::new(),
+            cancellation: Cancellation::new(),
+            progress: ProgressObserver::none(),
+        })
+        .await;
+    let _ = fs::remove_file(&source);
+    if let Some(code) = outcome.result().failure_code() {
+        return Err(OperationStop::Failed(code));
+    }
+    if outcome.unrecorded().is_some() {
+        return Err(OperationStop::Failed(FailureCode::StorageIo));
+    }
+    let store = open_store(&config.root)?;
+    let record = store
+        .read_worker_request(&operation)
+        .map_err(storage)?
+        .and_then(|record| record.result)
+        .ok_or(OperationStop::Failed(FailureCode::Internal))?;
+    let session = record_session(&store, &operation)?;
+    let status = store.session_status(&session).map_err(storage)?;
+    let (generation, manifest) = committed(&store, &session, status.generation())?;
+    let digest = status
+        .source_id()
+        .as_str()
+        .strip_prefix("src_sha256_")
+        .ok_or(CampaignError::Identifier)?
+        .to_owned();
+    Ok(Ack {
+        seq,
+        unix_ns: unix_nanos()?,
+        kind: OperationKind::Request,
+        session,
+        generation,
+        manifest_sha256: manifest,
+        artifacts: vec![digest],
+        revision: None,
+        request: Some(RequestAck {
+            operation_id: operation,
+            result_sha256: record.sha256().as_str().to_owned(),
+        }),
+    })
+}
+
+/// The session a request's record names.
+fn record_session(
+    store: &FilesystemSessionStore,
+    operation: &OperationId,
+) -> Result<SessionId, OperationStop> {
+    store
+        .read_worker_request(operation)
+        .map_err(storage)?
+        .and_then(|record| record.session_id)
+        .ok_or(OperationStop::Failed(FailureCode::Internal))
 }
 
 async fn evidence(
@@ -503,6 +627,7 @@ async fn evidence(
         manifest_sha256: manifest,
         artifacts,
         revision: None,
+        request: None,
     })
 }
 
@@ -603,6 +728,7 @@ async fn retranscribe(
         manifest_sha256: manifest,
         artifacts: Vec::new(),
         revision: Some(outcome.revision.id().clone()),
+        request: None,
     })
 }
 
@@ -632,5 +758,6 @@ fn renew(
         manifest_sha256: manifest,
         artifacts: Vec::new(),
         revision: None,
+        request: None,
     })
 }

@@ -35,6 +35,14 @@ serde_json = "1.0.151"
 vsift-application = { version = "0.1.0", path = "../crates/vsift-application" }
 
 [[bin]]
+name = "request_record"
+path = "fuzz_targets/request_record.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
 name = "transcript_srt"
 path = "fuzz_targets/transcript_srt.rs"
 test = false

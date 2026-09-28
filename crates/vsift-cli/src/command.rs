@@ -709,7 +709,9 @@ pub(crate) struct JobArguments {
 /// Recoverable worker-job operations.
 #[derive(Debug, Subcommand)]
 pub(crate) enum JobCommand {
-    /// Execute one versioned request (reserved for the worker host).
+    /// Execute one versioned job request in a worker workspace: ingest,
+    /// retranscribe, candidates, retain and close, each once per operation
+    /// id.
     Run(JobRequestArguments),
     /// Execute a finite JSONL request stream (reserved for the worker host).
     Batch(JobBatchArguments),
@@ -734,12 +736,30 @@ impl JobCommand {
     }
 }
 
-/// One request document.
+/// One request document and the operator's roots and controls (P11 PR 3,
+/// ADR 0021).
 #[derive(Args, Debug)]
 pub(crate) struct JobRequestArguments {
-    /// Versioned JSON request file.
+    /// Versioned JSON request file (job-request v1, at most 64 KiB).
     #[arg(long)]
     pub request: PathBuf,
+    /// Absolute directory the request's source and transcript paths are
+    /// relative to; nothing outside it is read, and no link is followed.
+    #[arg(long)]
+    pub input_root: PathBuf,
+    /// Absolute, existing directory a retain step writes its bundle below.
+    #[arg(long)]
+    pub bundle_root: Option<PathBuf>,
+    /// After a shutdown signal, how long the running step may finish before
+    /// it is cancelled, 0 through 300000 milliseconds; defaults to 0 (stop
+    /// at once).
+    #[arg(long, value_parser = clap::value_parser!(u64).range(0..=300_000), default_value_t = 0)]
+    pub drain_timeout_ms: u64,
+    /// How long a step waits (with jittered retries) for admission capacity
+    /// before it answers BUSY, 0 through 60000 milliseconds; defaults to
+    /// 60000.
+    #[arg(long, value_parser = clap::value_parser!(u64).range(0..=60_000), default_value_t = 60_000)]
+    pub admission_wait_ms: u64,
 }
 
 /// Finite request stream.
