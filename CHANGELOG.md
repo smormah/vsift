@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `job run` (P11 PR 3, [ADR 0021](docs/decisions/0021-worker-and-batch-host.md) PR 3
+  notes). `vsift --session-root <workspace> job run --request <file> --input-root <dir>
+  [--bundle-root <dir>] [--drain-timeout-ms N] [--admission-wait-ms N]` runs one job
+  request in a worker workspace: an ingest from the input root (following no link),
+  then `retranscribe` (a recoverable job under an operation id derived from the
+  request's), `candidates` (until nothing is left unanalysed), `retain` (under
+  `--bundle-root`, with the bundle's manifest digest) and `close`. The job result is
+  the data of every outcome; a failed or cancelled request carries its error and exits
+  with the failing step's class. Each request is recorded under its operation id in
+  `worker-requests/`: the same request again replays its result (`replayed: true`),
+  another request under the id is `IDEMPOTENCY_CONFLICT`, one running elsewhere is
+  `BUSY` (2 s), and an interrupted one continues from its first unfinished step, so a
+  redelivered request commits once. Contention is retried with jitter within the
+  admission wait and the request's deadline; `DEADLINE_EXCEEDED` when too little is
+  left. The first shutdown signal stops the request before its next step and cancels
+  the running one after the drain time (exit 6, resumable); a second escalates.
+  `--events jsonl` streams `lifecycle`, `progress` and `result` events before the
+  terminal event. The crash campaign's workload now runs worker requests in a durable
+  workspace. A 22nd fuzz target, `request_record`; request fault points
+  `request-accept`, `request-step` and `request-complete`. New known limits L-063
+  (request record cap), L-064 (retain staging directories) and L-065 (per-delivery
+  deadlines); L-038 now covers `job batch` only.
+
 - Worker workspaces, weighted admission, strict Linux attestation and contained inputs
   (P11 PR 2, [ADR 0021](docs/decisions/0021-worker-and-batch-host.md) PR 2 notes).
   `vsift --session-root <dir> session init-workspace --durability durable|ephemeral

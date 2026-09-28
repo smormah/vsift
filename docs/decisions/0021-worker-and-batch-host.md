@@ -357,6 +357,124 @@ PR 2 implements sections 3, 5a, 8 and 9 as groundwork for `job run` and
   `free_space_reserve`; no host emits a job result before PR 3, and the frozen examples
   are updated with it.
 
+## Implementation notes: PR 3 (2026-09-28)
+
+PR 3 implements sections 2, 4 and 6 for one request at a time: `job run`. `job batch`
+still answers `COMMAND_NOT_IMPLEMENTED` (PR 4).
+
+- **Command.** `vsift --session-root <workspace> job run --request <file> --input-root
+  <dir> [--bundle-root <dir>] [--drain-timeout-ms 0..300000] [--admission-wait-ms
+  0..60000] --json|--events jsonl` (defaults: drain 0, admission wait 60000; `0`
+  reports contention at once). The file is read bounded (64 KiB + 1 byte) and decoded
+  by `decode_work_request`; a refusal is its rejection's code and fixed remediation, and
+  an unreadable file `INVALID_ARGUMENT`. Requests run only in a worker workspace (D1):
+  a desktop root is `INVALID_ARGUMENT`. The `job-result` is the `data` of every
+  outcome: `complete` and `partial` exit 0; `failed` and `cancelled` carry the error of
+  the failure that ended the request (its typed remediation, the session in
+  `affected_ids`, `retry_after_ms`) and exit with its class (D5: the failing step's).
+  Every `BUSY` a request reports carries the 2 s hint.
+- **Engine.** `Engine::run_work_request(WorkRequestRun) -> WorkOutcome` (`worker.rs`)
+  never fails outright; `Engine::worker_readiness` gives the `started` event's
+  readiness. The order is part of the contract: the workspace; a record with another
+  digest (`IDEMPOTENCY_CONFLICT`) or with a result (replayed at once, before any input
+  is opened, so a replay works after the inputs are gone); the durability
+  (`workspace_not_durable`); a `retain` without an absolute existing bundle root; the
+  source and sidecar opened inside the input root (a link is `path_outside_input_root`,
+  a missing file `INVALID_ARGUMENT`, a hard-linked or special file `INVALID_SOURCE`);
+  a session target that is not in the workspace; a shutdown already begun. Nothing is
+  written before these pass.
+- **Request records (section 4).** `worker-requests/<bucket>/<op>.json` (bucket: the
+  first byte of SHA-256 of the operation id) with `<op>.lock` as the liveness authority,
+  as for P10 jobs; a claimant that locked a lock file pruning removed notices by file
+  identity and reports the request as held. A record holds the digest, the attempt,
+  the timestamps, the session id and, while running, the canonical documents of the
+  finished steps; once ended, only the canonical result and its SHA-256, checked on
+  every read. Writes are staged, flushed and renamed; in a durable workspace the
+  bucket is synchronised after the rename and every new directory into its parent.
+  Readers use the retrying open. The step and result documents are the contract's
+  (`StepResult::recorded_bytes` / `decode_recorded`, `WorkResult::…`): read back
+  strictly, they must reproduce exactly the bytes they came from. The record bound is
+  192 KiB, not 64: an ended record holds a result of up to 64 KiB escaped as JSON text
+  (known limit L-063).
+- **Ended, interrupted, busy.** A request has ended when it completed, completed with
+  a stated gap, or failed with a code the retry policy classes as permanent; a failure
+  classed transient or resumable (`BUSY`, `DEADLINE_EXCEEDED`, `STORAGE_IO`,
+  `CANCELLED`) leaves it interrupted, like a cancellation, so a redelivery continues
+  it (the domain's `admit_request` and `ends_request`). This extends section 4's table,
+  which named only `failed`: replaying a `BUSY` for ever would defeat X-09. A request
+  held by another process is `BUSY`; one held with another digest is a conflict even
+  before it is recorded.
+- **Pruning.** At 4,096 records the first record of a new operation id prunes the
+  records of sessions that no longer exist (never a held one); with none to prune the
+  request is `RESOURCE_LIMIT`. Section 4's "oldest ended first" is not implemented: an
+  ended record whose session exists is kept, because its removal would let a
+  redelivery run the work again (L-063).
+- **Steps (section 2).** *Ingest:* the session id is recorded (the `request-accept`
+  write) before the copy; the copy's admission is taken before the session is
+  registered, so a busy root is retried without leaving a registration per try; the
+  source and sidecar are opened again inside the input root for each try and staged
+  through `ContainedSourceStore` (the application's open-session use case over a held,
+  contained file). The public `IngestRequest` is unchanged: the engine's internal
+  `PreparedIngest` carries the session id and the contained files. A continuation that
+  finds the recorded session open adopts it (the ingest ended after activation but
+  before its record said so); otherwise it records a new id and the abandoned
+  registration is removed by normal cleanup, so one key opens one session.
+  *Retranscribe:* `Engine::retranscribe` under `worker_step_operation_id` (application:
+  `op_` and the first 32 hex digits of `sha256("vsift.job-step.v1\n" + op + "\n" +
+  index)`), with the host's `AdmissionWait`; its own bounded admission wait is not
+  retried again. *Candidates:* `Engine::candidates` until no `not_analyzed` or
+  `deadline_exceeded` window is left, a call analyses nothing, or 16 calls
+  (`MAX_CANDIDATE_CALLS`); a whole-source range is clipped by the operation; a stop
+  mid-way commits what was analysed and cancels the step. *Retain:* into a hidden
+  staging directory beside the bundle's name, renamed once it validates, with the
+  manifest's SHA-256 as `bundle_sha256` (`BundleSummary::manifest_sha256`); a directory
+  already under the name is accepted only when it validates as this session's bundle
+  (same session, source, source inclusion and artifact count; the bundle records no
+  generation), else `INVALID_ARGUMENT` (L-064). A retain already recorded is not
+  validated again on a continuation (only `close` can follow it). *Close:* a closed
+  session is success.
+- **Retries and deadline (X-09).** `step_retry` (domain): only `BUSY` is retried, after
+  the host's full-jitter `AdmissionWait` delays, within that wait and never leaving
+  less than one second of the deadline (`MIN_STEP_BUDGET`); a step never starts with
+  less. At the deadline the running step's signal is cancelled
+  (`run_until_deadline`) and awaited, never dropped, so providers are reaped; the
+  request ends `DEADLINE_EXCEEDED`, resumable. Deadlines and waits count per delivery
+  (L-065).
+- **Shutdown (section 6, D4).** `job run` registers a two-stage listener before any
+  work: the first `SIGINT`/`SIGTERM` (Ctrl-C/Ctrl-Break) fires the run's `stop` (no
+  further step starts) and, after `--drain-timeout-ms`, its cancellation (the running
+  step stops at its next boundary: a recognition is left interrupted, candidates keep
+  what they committed, a commit in progress completes); a second signal escalates. The
+  request ends `cancelled` (resumable, exit 6); the stream says `draining` and
+  `stopped` with reason `shutdown`. No member was added to the terminal event: the
+  `stopped` lifecycle event carries the reason.
+- **Events.** `--events jsonl`: `lifecycle started` (readiness), `request_admitted`,
+  `progress` (`running_request` steps; a recognition's `recognising_speech` chunks, each
+  with `request_operation_id`), `admission_waiting`, `draining`, the `result` event,
+  `request_finished`, `stopped` (`end_of_input` or `shutdown`), then the terminal event
+  carrying the `--json` response.
+- **Unrecorded results.** When an ended request's result cannot be recorded
+  (`WorkOutcome::unrecorded`) the work is committed and every step recorded, but the
+  result is not acknowledged: `job run` answers `STORAGE_IO` (exit 7) with the result as
+  data, and a redelivery records and returns it.
+- **Result.** A request names its session only once the session exists; `publication`
+  is the workspace's; `controls.free_space_reserve` is `enforced` for an ingest target
+  on Unix, else `not_enforced`; a replay is the recorded result with `replayed: true`
+  and nothing else changed. The contract formats the expiry itself
+  (`LifecycleResponse::of_session`).
+- **Fault points and fuzzing.** `request-accept`, `request-step` and `request-complete`
+  (`FaultPoint::REQUEST`) pass after each record write; the engine's kill test stops a
+  child at each and checks the rerun. The `request_record` target (22 targets) decodes a
+  record, round-trips it and requires every recorded step and result to read back to
+  exactly its bytes; its seeds are the example records pinned by
+  `request_record_examples`.
+- **Crash campaign.** The workload creates its root as a durable workspace, runs worker
+  requests among its operations and acknowledges a request only once its result is
+  recorded, with the operation id and result digest in the `ACK` line; the verifier
+  holds each acknowledged record to its result and reads every record on disk. The data
+  images grew to 3 GiB for the workspace's free-space reserve. Results are in
+  [p10-durable-publication.md](../planning/p10-durable-publication.md) (P11 rerun).
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

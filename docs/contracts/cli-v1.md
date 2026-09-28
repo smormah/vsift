@@ -5,12 +5,12 @@ Status: published v1 boundary. `setup check/plan/configure/configure-model`, for
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
 `candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
 and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
-recoverable jobs) and `bundle validate` are operational. Other commands below
+recoverable jobs), `job run` and `session init-workspace` (P11 worker host) and
+`bundle validate` are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
-The P11 worker contracts (job request, job result, batch summary, workspace data and
-the `progress`, `lifecycle` and `result` events) are published ahead of `job run` and
-`job batch`; see "P11 worker contracts and events".
+The P11 batch contracts (batch summary and its events) are published ahead of `job
+batch`; see "P11 worker contracts and events".
 
 ## Command namespace
 
@@ -62,7 +62,8 @@ told about a Ctrl-C (only Ctrl-Break); see L-053.
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
 | `job status/resume/cancel` | Report, continue or cancel one recoverable job by its id | Implemented in P10 PR 3 |
-| `job run/batch` | Versioned worker requests and finite batches; the request, result, batch and event contracts are published (P11 PR 1), the commands land in P11 PR 3 (`job run`) and PR 4 (`job batch`) | P11 |
+| `job run` | One versioned worker request in a worker workspace, recorded under its operation id: replay, conflict, busy and continuation; two-stage shutdown | Implemented in P11 PR 3 |
+| `job batch` | A finite JSONL stream of worker requests; the batch summary and event contracts are published (P11 PR 1) | P11 PR 4 |
 
 ### P05 disposable sessions and bundles
 
@@ -566,18 +567,127 @@ member of the status is unchanged; `session list`, `renew` and `close` do not li
 | `job cancel` while an owner appeared meanwhile, or the state lock stayed busy | `BUSY` |
 | Every failure of `transcript retranscribe` (the resumed run) | as listed above |
 
+### P11 `job run`
+
+```console
+vsift --session-root /srv/vsift/workspace job run --request request.json \
+  --input-root /srv/vsift/inputs --bundle-root /srv/vsift/bundles --json
+vsift --session-root /srv/vsift/workspace job run --request request.json \
+  --input-root /srv/vsift/inputs --drain-timeout-ms 30000 --events jsonl
+```
+
+`job run` (P11 PR 3, [ADR 0021](../decisions/0021-worker-and-batch-host.md) sections 2,
+4 and 6) runs one job request (below) in the worker workspace `--session-root` names.
+Flags:
+
+- `--request <file>` (required): one job-request v1 document of at most 64 KiB. It is
+  read bounded and decoded strictly before anything else; a refused request is
+  `INVALID_ARGUMENT` (or `UNSUPPORTED_SCHEMA`) with its fixed rejection's remediation,
+  and a file that cannot be read `INVALID_ARGUMENT` with fixed remediation. Nothing of
+  the input is echoed.
+- `--input-root <dir>` (required): the absolute, existing, local directory every path of
+  the request is relative to (contained inputs, below).
+- `--bundle-root <dir>`: the absolute, existing directory a `retain` step writes
+  `<bundle_name>` into; a request with a `retain` step and no usable bundle root is
+  `INVALID_ARGUMENT` before anything runs.
+- `--drain-timeout-ms 0..300000` (default 0): after a shutdown signal, how long the
+  running step may finish before it is cancelled (D4).
+- `--admission-wait-ms 0..60000` (default 60000): how long a step waits for admission
+  capacity, retrying with full jitter, before it answers `BUSY` (`0`: at once).
+
+Requests run only in a workspace created by `session init-workspace` (D1); a desktop
+root is `INVALID_ARGUMENT` with fixed remediation. A durable request in an ephemeral
+workspace is refused (`workspace_not_durable`); an ephemeral request in a durable
+workspace opens a durable session (the workspace decides, ADR 0020 D-3).
+
+**Steps.** The request's target, then each step, in order; each is one operation, run
+at most once per operation id:
+
+- *ingest* (an `ingest` target) copies the source (and imports a supplied transcript,
+  as `ingest --transcript --transcript-offset` does) into a new session whose id is
+  recorded before the copy starts. The files are opened inside `--input-root` one name
+  at a time following no link: a link anywhere on the path is `path_outside_input_root`
+  (L-062), a missing file `INVALID_ARGUMENT`, a directory, special file or file with
+  several hard links `INVALID_SOURCE`.
+- *retranscribe* runs `transcript retranscribe` of the range as a recoverable job under
+  the operation id `op_` + 32 hex digits of SHA-256(`vsift.job-step.v1`, the request's
+  operation id, the step's index): `job status <job>` reports it, and a redelivered
+  request continues or replays it.
+- *candidates* runs `candidates` over the range (the whole video without one) until no
+  window is left unanalysed, at most 16 calls; what stays uncovered (`undecodable`,
+  `no_decoded_frame`, a candidate budget) is its `coverage` and makes it `partial`.
+- *retain* writes the bundle under a hidden staging name beside
+  `<bundle-root>/<bundle_name>` and renames it once it validates; its outputs name the
+  bundle and the SHA-256 of its manifest. A directory already under the name is
+  accepted only when it validates as this session's bundle, else `INVALID_ARGUMENT`
+  (L-064).
+- *close* closes the session; a closed session is success.
+
+**Result.** The `job-result` (below) is the `data` of every outcome, and the envelope's
+`operation_id` is the request's. `complete` and `partial` (with the partial warning)
+exit 0. A `failed` or `cancelled` request carries the error of the failure that ended it
+(the failing step's, or the refusal's): its code, fixed remediation, `retry_after_ms`
+(every `BUSY` has 2000) and the session in `affected_ids`; the exit status is its class
+(D5: the failing step's; a shutdown is 6). The result names no path and carries no
+evidence text; the session is named once it exists.
+
+**Replay, conflict, busy, continue (ADR 0021 section 4).** Each request is recorded in
+the workspace under its operation id:
+
+| The workspace holds | Same request digest | Another digest |
+| --- | --- | --- |
+| nothing | run it (attempt 1) | run it |
+| an ended request (complete, partial, or failed for good) | the recorded result again, `replayed: true`, exit as recorded, nothing run, even if the inputs are gone | `IDEMPOTENCY_CONFLICT`, exit 2, nothing changed |
+| a request another process runs now | `BUSY`, exit 4, `retry_after_ms` 2000 | `IDEMPOTENCY_CONFLICT` |
+| an unfinished request (interrupted, cancelled, or failed with `BUSY`, `DEADLINE_EXCEEDED`, `STORAGE_IO` or `CANCELLED`) | continue from the first unfinished step (`attempt` + 1) | `IDEMPOTENCY_CONFLICT` |
+
+A redelivered request therefore commits once: one session per operation id, and every
+delivery after the first recorded result returns exactly that result. Spacing, member
+order and an omitted or `null` deadline do not change the digest. When an ended
+request's result cannot be recorded, its work is committed but the result is not
+acknowledged: `STORAGE_IO` (exit 7) with the result as `data`; delivering the request
+again records and returns it. A workspace keeps at most 4,096 records; records of
+sessions that are gone are pruned first, else `RESOURCE_LIMIT` (L-063).
+
+**Retries and deadline (X-09).** A step that meets contention (`BUSY`: an admission
+unit, a busy session or writer, the same job elsewhere) is tried again after a
+full-jitter backoff within `--admission-wait-ms` and the deadline; nothing else is
+retried. The deadline is the request's `deadline_ms`, or one day; a step never starts,
+and a retry never waits, with less than one second of it left, and a step still
+running at the deadline is cancelled at its next boundary: `DEADLINE_EXCEEDED` (exit
+5), resumable. Deadlines and waits count per delivery (L-065).
+
+**Shutdown (O-04, D4).** `job run` traps `SIGINT`/`SIGTERM` (console Ctrl-C/Ctrl-Break
+on Windows) before it starts. The first signal stops the request before its next step
+and, after `--drain-timeout-ms` (at once by default), cancels the running step at its
+next boundary: a recognition is left interrupted with its checkpoints, candidates
+keep the windows they committed, a commit in progress completes. The request ends
+`cancelled` (exit 6), resumable: the same request continues it. A second signal
+escalates (providers are killed without the graceful wait); providers are always
+reaped before the process ends.
+
+**Events.** With `--events jsonl`: `lifecycle` `started` (readiness: the workspace's
+publication, the isolation, the admission capacity, concurrency 1), `request_admitted`,
+`progress` (`running_request` in `steps`; a recognition's `recognising_speech` in
+`chunks` with its `job_id`; each with `request_operation_id`), `admission_waiting` when a
+step waits, `draining` (`reason` `shutdown`) when a shutdown begins, the `result` event
+(`line` `null`), `request_finished` (status, code, rejection, dropped progress),
+`stopped` (`reason` `end_of_input`, or `shutdown`) and the terminal event, whose result
+is the `--json` response. A failure before the request is read or the workspace is
+opened is the one terminal event.
+
 ### P11 worker contracts and events
 
 ```console
-vsift job run --request request.json --json                 # P11 PR 3
-vsift job batch --requests requests.jsonl --events jsonl    # P11 PR 4
+vsift job run --request request.json --input-root /srv/vsift/inputs --json   # P11 PR 3
+vsift job batch --requests requests.jsonl --events jsonl                    # P11 PR 4
 ```
 
 P11 PR 1 publishes the worker contracts
 ([ADR 0021](../decisions/0021-worker-and-batch-host.md), maintainer decisions D1-D5
-accepted 2026-09-28) before the commands that use them: `job run` and `job batch`
-still answer `COMMAND_NOT_IMPLEMENTED` (exit 2). What follows is the contract they
-will implement; the schemas and frozen examples are authoritative.
+accepted 2026-09-28) before the commands that use them: `job run` implements them
+since PR 3 (above); `job batch` still answers `COMMAND_NOT_IMPLEMENTED` (exit 2). The
+schemas and frozen examples are authoritative.
 
 **Job request** ([`job-request.schema.json`](../../schemas/v1/job-request.schema.json),
 example [`job-request.json`](../../schemas/v1/examples/job-request.json)). One JSON
@@ -735,8 +845,9 @@ provenance, so a smaller root gives a different revision id, L-023). Work that n
 more than the root's whole capacity fails with `RESOURCE_LIMIT` (exit 5) and fixed
 remediation before any tool runs (for example `candidates` on a one-unit workspace).
 Contention is `BUSY` (exit 4) with `retry_after_ms`; interactive commands keep their
-two bounded retries, and P11's job commands will wait a bounded, jittered time (at
-most 60 s) before answering `BUSY`, reporting the wait as `admission_wait_ms`. No
+two bounded retries, and `job run` (P11 PR 3) waits a bounded, jittered time
+(`--admission-wait-ms`, at most 60 s) before answering `BUSY`, reporting the wait as
+`admission_wait_ms`. No
 order is kept between processes sharing a root (L-060).
 
 **Strict Linux isolation (ADR 0021 section 8).** `--host-isolation strict-linux` is
@@ -749,7 +860,7 @@ reports them (`controls.resource_limits` `host_cgroup`) and never claims to enfo
 them.
 
 **Contained inputs (ADR 0021 section 9; S-01, S-02).** A worker request's source and
-transcript paths will be opened inside the operator's `--input-root` (P11 PR 3): the
+transcript paths are opened inside the operator's `--input-root` (`job run`, P11 PR 3): the
 root is canonicalised once and held; a path must pass the request path grammar and is
 opened one name at a time following no link, so a link anywhere on the path (even one
 inside the root) and a file with several hard links are refused
@@ -1489,10 +1600,10 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages, search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) and candidate pages (`candidates_cli_contract`, `engine_candidates`, the application's `visual` tests with the property `any_range_and_limit_page_without_gaps_or_duplicates`) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
-| C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`) |
+| C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`) and the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) |
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
-| C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`) |
+| C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 
 These tests establish the public boundary only. Provider execution, filesystem

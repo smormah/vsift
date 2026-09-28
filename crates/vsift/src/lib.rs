@@ -57,6 +57,11 @@
 //!   checkpoints, and a retry with the same operation id returns its commit.
 //!   [`Engine::job_status`], [`Engine::job_resume`] and [`Engine::job_cancel`]
 //!   act on a job by its id.
+//! - **Worker requests (P11):** [`Engine::run_work_request`] runs one
+//!   versioned job request in a worker workspace, each step at most once per
+//!   operation id (replay, conflict, busy and continuation from its request
+//!   record), with a deadline and a two-stage shutdown;
+//!   [`Engine::worker_readiness`] states what a worker host runs under.
 //! - **Bundles:** [`Engine::validate_bundle`].
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that

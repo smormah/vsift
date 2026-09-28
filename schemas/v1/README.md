@@ -263,7 +263,10 @@ The P11 worker examples (checked by `vsift-contract`'s `worker_contract` and
 and retranscribes it, pages its candidates and retains it as `f01-review`;
 `job-run.json` is its complete `job.run` result and `job-run.replayed.json` the same
 result replayed by operation id; `job-run.partial.json` is a candidates request over
-a 150 s range with an undecodable minute, so it is `partial`.
+a 150 s range with an undecodable minute, so it is `partial`. Since P11 PR 3 `job run`
+emits these results: a `failed` or `cancelled` `job.run` response carries the job
+result as its `data` beside its `error`, and a result whose record could not be
+written is presented as `STORAGE_IO` with the result as data.
 `job-batch.requests.jsonl` holds two requests (an F10 ingest with its supplied
 transcript, then candidates and close; a 5.5-6 s retranscription of an existing F01
 session and close); `job-batch.events.jsonl` is their `--events jsonl` batch (started,

@@ -524,6 +524,44 @@ failure), so a request can never raise it.
 passes, checked before anything is created; its sessions all use ADR 0020's durable
 protocol (the command line's durable mode). The commit path is unchanged.
 
+P11 PR 3 (2026-09-28): `job run`, request records and the two-stage shutdown
+([ADR 0021](../decisions/0021-worker-and-batch-host.md) PR 3 notes).
+**SEC-09.** A worker request never deletes anything outside VSift's own root: a
+`retain` step writes to a hidden staging directory beside its bundle's name and
+renames it once it validates, and a staging directory a killed try left behind stays
+(L-064); an existing directory under the bundle's name is accepted only when it
+validates as the request's own bundle, never replaced. Request records are pruned only
+when the session they name is gone and no process holds them, under the record's own
+owner lock. Sources in the input root are opened read-only and never written.
+**SEC-10.** A request record is replaced by a staged, flushed rename (and the bucket
+synchronised in a durable workspace), so a reader sees the old or the new record whole;
+an ended record holds its result's canonical bytes and their SHA-256, both checked on
+every read, and the recorded steps and results must read back to exactly their bytes,
+so a changed record is `INTEGRITY_FAILURE`, never a different replay. A result whose
+record could not be written is not acknowledged (`STORAGE_IO`). The crash campaign
+was rerun with requests in its workload (p10-durable-publication.md).
+**SEC-11.** A request's operation id is its idempotency key: another digest under the
+same id is `IDEMPOTENCY_CONFLICT` and changes nothing; the owner lock (the only
+liveness authority) makes a concurrent duplicate `BUSY`; a claimant that locked a
+lock file that pruning removed notices by file identity. Each step is idempotent: the
+ingest's session id is recorded before its copy (a continuation adopts the session if
+it opened, else opens a new one, so one key opens one session), a recognition runs
+under an operation id derived from the request's, a retain accepts only its own bundle.
+The kill test stops a process after each record write and the external-delivery
+simulation kills workers at random while duplicates race: every request committed
+once.
+**SEC-18 (O-01).** A job result, its events and every remediation name identities,
+counts, digests and enums only: never an input path (the request's paths stay inside
+the engine), a sidecar's text, provider output, the environment or proxy settings.
+`job_run_cli_contract` puts sentinel values in input path components, a rejected
+sidecar, a parent environment variable and `HTTP_PROXY`/`HTTPS_PROXY` credentials and
+finds none of them, nor any absolute path of the workspace, input or bundle root, in
+stdout, stderr or events; an opt-in run adds a failing provider.
+**SEC-25.** Providers a request starts inherit the same allowlisted environment as any
+other command; a request can name no executable, environment or argument (ADR 0021
+section 1), and the sentinel test above covers a credential-bearing proxy variable in
+the parent environment.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.
