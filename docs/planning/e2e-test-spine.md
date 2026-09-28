@@ -1,8 +1,9 @@
 # Incremental end-to-end test spine
 
 Status: P04, P05 and P06 checkpoints, the P07 supplied-transcript and local-ASR
-stages, the P08 search and visual-candidates stages and the P09 evidence-navigation
-stages are implemented; the complete journey remains `not_implemented`. Managed
+stages, the P08 search and visual-candidates stages, the P09 evidence-navigation
+stages, the P10 recoverable run and the P11 single-host worker run are implemented;
+the complete journey remains `not_implemented`. Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -286,18 +287,41 @@ a rerun completes to the control call's candidates). It prints `p10_recovery: pa
 and writes `.vsift/e2e-runs/p10-<run-id>/report.json`; results are recorded in the
 [verification plan](verification.md) "P10 PR 3 evidence".
 
-P11's **single-host worker run** is P11 PR 4's checkpoint (`p11_*`, with `job batch`
-and the SEC-T01 container job). Until then P11 PR 3 has two opt-in pieces of it:
-`every_step_runs_with_real_tools` (in `job_run_cli_contract`: one `job run` of every
-step kind over F01 with real FFmpeg and whisper.cpp, the recognition's job visible to
-`job status`, then a replay) and `repeated_external_delivery_commits_once` (in
-`external_delivery_stress`: twenty requests delivered at least once through the
-binary, workers killed at random, duplicates racing, until each commits once):
+P11 PR 4 adds the **single-host worker run** (X-07, X-08, X-11, O-01, O-03, O-04
+through the binary):
 
 ```console
-cargo test -p vsift-cli --locked --test job_run_cli_contract -- --ignored
-cargo test -p vsift-cli --locked --test external_delivery_stress -- --ignored --nocapture
+VSIFT_TEST_WHISPER_CLI=<abs> VSIFT_TEST_WHISPER_MODEL=<abs> \
+  cargo test --release -p vsift-cli --locked --test p11_worker_e2e -- --ignored --nocapture
 ```
+
+It needs FFmpeg and FFprobe on `PATH` and whisper.cpp with its model, registers them in
+isolated per-user bases and runs the binary with an empty `PATH` against ephemeral
+worker workspaces, an input root and a bundle root. Clips are built at run time
+without re-encoding. Stages: `p11_batch_mechanical` (one `job batch` of F03's speech
+variant with recognition and candidates, F10 with its sidecar at +500 ms, F01 with a
+closing retain, a malformed line and a path out of the input root: D5's exit 2, each
+refused line reported alone; then `search`, `candidates`, `frame get --candidate` and
+`bundle validate` on the batch's outputs, every citation checked against the frozen
+truth and every bundle's manifest digest against the recorded one);
+`p11_admission_ladder` (four candidate requests over a 180 s clip at concurrency 1, 2
+and 4 in a four-unit workspace: the stream never has more requests in flight than the
+concurrency, a sampler of the batch's provider processes never sees more weight than
+the capacity, and each rung finds the same candidates); `p11_shutdown_and_redelivery`
+(a batch with two long recognitions stopped mid-way by `SIGTERM` on Unix or a console
+Ctrl-Break through `tools/send-console-ctrl.ps1` on Windows: exit 6 within 15 s, the
+running requests `cancelled`, no provider left; `job resume` finishes one recognition,
+redelivery continues the other, and the results equal an uninterrupted control; a
+third delivery replays every line unchanged); and `p11_durable_workspace` (on Ubuntu
+24.04 with ext4 a durable request runs and replays with `os_crash_durable`
+publication; elsewhere the refusal is checked and the stage is `blocked`, required only
+on that profile). It prints `p11_worker: passed` and writes
+`.vsift/e2e-runs/p11-<run-id>/report.json`. On Windows 11 with FFmpeg 9.0 and
+whisper.cpp v1.9.2 the release run passed on 2026-09-28 in 209 s; results are in the
+[P11 qualification record](p11-worker-host.md). Two opt-in pieces from PR 3 remain
+beside it: `every_step_runs_with_real_tools` (`job_run_cli_contract`) and the repeated
+external-delivery simulation `repeated_external_delivery_commits_once`
+(`external_delivery_stress`).
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- P11 single-host worker checkpoint `p11_worker_e2e` (opt-in, the P11 stage of the E2E
+  spine): a mixed batch whose outputs are searched, cited and validated against the
+  frozen truth; an admission ladder at concurrency 1, 2 and 4 whose sampled provider
+  weight never exceeds the capacity; a batch stopped by `SIGTERM` or a console
+  Ctrl-Break, finished by `job resume` and redelivery, equal to an uninterrupted
+  control and then replayed unchanged; and a durable-workspace stage required only on
+  Ubuntu 24.04 with ext4. It writes `.vsift/e2e-runs/p11-<id>/report.json`.
+- Operator runbook [docs/operations/worker-host.md](docs/operations/worker-host.md)
+  (P11 operator deliverables): supervisor invocation, queue acknowledgement order,
+  duplicates, restart, cleanup, disk pressure, provider revocation, an isolated
+  container deployment and a systemd example with the CI job's controls, and a
+  guarantee matrix for Linux, Windows and macOS.
+- P11 qualification record
+  [docs/planning/p11-worker-host.md](docs/planning/p11-worker-host.md): evidence for
+  X-07..X-11, O-01..O-04 and SEC-T01, the checkpoint's results and residuals.
+
 - Fuzz target `job_batch_file` (P11 PR 4): a whole `job batch` file through the batch
   reader, held to an independent split of the file under the production limits and
   under small ones, with every line then decoded as `job batch` does; seeds copy the
@@ -410,6 +426,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   field. New limits are added to it in the same change that finds them.
 
 ### Changed
+
+- SEC-T01 is met for P11 by non-adversarial evidence (the strict-Linux attestation
+  checks and the hardened `strict-worker-boundary` container controls), by maintainer
+  decision of 2026-09-28; the adversarial containment evidence is technical debt,
+  required before the R0 release (new known limit L-068). ADR 0021 section 10 carries
+  the amendment.
+- Known limits: L-038 now states the worker host's final P11 position (a
+  qualification target, pending merge and P14); L-004 points to L-068; L-010 now
+  covers only candidates and evidence calls (batches are recoverable); L-055 and L-057
+  point to the runbook. New L-069: a request that failed for good because of the host
+  (`MISSING_CAPABILITY`, the free-space reserve) replays that failure under its
+  operation id.
 
 - Local speech recognition now uses at most as many threads as the session root's
   admission capacity (4 on a desktop root; previously up to 8), and that count is part

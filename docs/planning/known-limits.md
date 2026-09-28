@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-28 (P00-P10 complete; P11 in progress: PRs 1-3 merged, PR 4 in part on its branch).
+Date: 2026-09-28 (P00-P10 complete; P11 implemented, pending merge; SEC-T01's adversarial evidence deferred as technical debt, L-068).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -50,13 +50,13 @@ Each entry has these fields:
 | [L-001](#l-001) | Evidence calls check the source copy by identity only (D1) | security | low | unscheduled | none | accepted residual |
 | [L-002](#l-002) | A change undone before the closing hash is not seen (bracketed binding) | security | low | unscheduled | none | accepted residual |
 | [L-003](#l-003) | A forged diagnostics line that continues the real numbering (SEC-17) | security | low | unscheduled | none | accepted residual |
-| [L-004](#l-004) | Native decoders and the recognizer are not sandboxed on the desktop | security | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-004](#l-004) | Native decoders and the recognizer are not sandboxed on the desktop | security | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-005](#l-005) | Private Windows folders get their DACL just after creation, not atomically | security | low | unscheduled | none | accepted residual |
 | [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents | security | low | unscheduled | none | accepted residual |
 | [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-008](#l-008) | OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01) | integrity/durability | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
-| [L-010](#l-010) | Recovery covers retranscription and worker requests; batches are still to come | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-010](#l-010) | Visual candidates and evidence calls are not recoverable jobs | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | [#170](https://github.com/smormah/vsift/issues/170) | monitoring |
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
 | [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
@@ -83,7 +83,7 @@ Each entry has these fields:
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-038](#l-038) | The worker host is not yet qualified: SEC-T01, the P11 checkpoint and the runbook remain | platform/distribution | high | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-039](#l-039) | No agent skill; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -99,9 +99,9 @@ Each entry has these fields:
 | [L-052](#l-052) | A read that meets a file being replaced waits for it, at most 0.5 s | performance | low | unscheduled | none | accepted residual |
 | [L-053](#l-053) | Windows: a process that inherited "ignore Ctrl-C" sees only Ctrl-Break | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-054](#l-054) | A second interruption cannot cut short VSift's own work between boundaries | contract/UX | low | unscheduled | none | accepted residual |
-| [L-055](#l-055) | On Unix a hard-killed CLI's running provider finishes its current unit | security | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
+| [L-055](#l-055) | On Unix a hard-killed CLI's running provider finishes its current unit | security | low | unscheduled | none | accepted residual |
 | [L-056](#l-056) | Durability rests on storage that honours flushes | integrity/durability | medium | unscheduled | none | accepted residual |
-| [L-057](#l-057) | Losing the disk or the host loses the evidence (X-10) | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
+| [L-057](#l-057) | Losing the disk or the host loses the evidence (X-10) | integrity/durability | medium | unscheduled | none | accepted residual |
 | [L-058](#l-058) | The durable profile recognises Ubuntu 24.04 by `os-release`, not by its kernel | integrity/durability | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-059](#l-059) | Durable sessions need an explicit durable worker workspace | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-060](#l-060) | Admission is not fair between processes sharing a root | performance | low | unscheduled | none | accepted residual |
@@ -112,8 +112,10 @@ Each entry has these fields:
 | [L-065](#l-065) | A request's deadline, admission wait and attempt count per delivery | contract/UX | low | unscheduled | none | accepted residual |
 | [L-066](#l-066) | A batch file holds at most 1,000 lines; a longer file runs nothing | contract/UX | low | unscheduled | none | accepted residual |
 | [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
+| [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | issue to be linked | deferred (technical debt) |
+| [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
 
-Counts: 4 high, 18 medium, 41 low (63 entries).
+Counts: 4 high, 18 medium, 45 low (67 entries).
 
 ## Security
 
@@ -215,14 +217,16 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
   kernel attests a cgroup v2 with finite CPU, memory and PID limits, a read-only root
   and no network interface but loopback (`attest_strict_linux_host`); otherwise the
   command answers `ISOLATION_UNAVAILABLE` before any work. The limits are the host's,
-  never VSift's; the attestation's parsers are fuzzed (`host_attestation`), but the
-  real containment of a hostile decoder is still unproven.
-- **Next step:** P11 PR 4's SEC-T01 container job (the attested profile against an
-  isolated hostile fixture); P14 malicious-decoder and decompression-bomb
-  qualification in a disposable environment.
-- **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
-  [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
-  **Review:** pending.
+  never VSift's; the attestation's parsers are fuzzed (`host_attestation`). For P11
+  the maintainer accepted SEC-T01 on this non-adversarial evidence and the hardened
+  `strict-worker-boundary` container controls (2026-09-28); whether an attested host
+  contains a hostile decoder is unproven and deferred as technical debt
+  ([L-068](#l-068)). The [worker-host runbook](../operations/worker-host.md) gives an
+  isolated deployment example with the same controls.
+- **Next step:** resolve [L-068](#l-068) before release; P14 malicious-decoder and
+  decompression-bomb qualification in a disposable environment.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
+  **Status:** deferred. **Review:** pending.
 
 ### L-005
 
@@ -326,11 +330,13 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
   120 s by the chunk deadline it no longer enforces, usually a few seconds).
 - **Why:** a group leader's death does not signal its group; a Linux parent-death
   signal needs `prctl`, platform code outside the reviewed dependencies.
-- **Mitigation:** send `SIGTERM`, not `SIGKILL`; the worker host (P11) owns
-  supervision of killed hosts.
-- **Next step:** P11 worker supervision.
-- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
-  **Status:** accepted residual. **Review:** pending.
+- **Mitigation:** send `SIGTERM`, not `SIGKILL`. The
+  [worker-host runbook](../operations/worker-host.md) runs VSift in a cgroup (a
+  systemd unit with `KillMode=mixed`, or a container) whose stop kills every process
+  left after the drain time, providers included.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-062
 
@@ -426,9 +432,10 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
   0010, ADR 0020).
 - **Mitigation:** retain a bundle (`session retain`) onto replicated storage, or back
   up the session root; `bundle validate` checks a copy.
-- **Next step:** document the responsibility in the P11 worker contract.
-- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
-  **Status:** accepted residual. **Review:** pending.
+- **Next step:** none planned; the [worker-host runbook](../operations/worker-host.md)
+  (restart and recovery) states the operator's responsibility.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-058
 
@@ -525,34 +532,33 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
 
 ### L-010
 
-**Recovery covers retranscription and worker requests; batches are still to come.**
+**Visual candidates and evidence calls are not recoverable jobs.**
 
 - **What:** a retranscription is a recoverable job: an interrupted run (a crash, a
   failure, Ctrl-C or `SIGTERM`, a library cancellation) is found by the same request, or
   resumed by id with `job resume`, from its chunk checkpoints to the revision an
-  uninterrupted run commits; `transcript retranscribe --operation-id` makes a retry
-  return the committed result without a new generation, and the same id with another
-  request is `IDEMPOTENCY_CONFLICT`; `job status` and `session status` report jobs;
-  `job cancel` is serialized with the commit and reaches a running owner within 250 ms;
-  `BUSY` contention is retried with jitter. Since P11 PR 3 a worker request (`job
-  run`) is recoverable as a whole: its record keeps its finished steps, a redelivery
-  continues from the first unfinished one (a recognition resumes its P10 job under a
-  derived operation id), and an ended request is replayed. On the qualified profile a
-  durable workspace's generations, jobs and request records also survive an OS crash
-  and power loss (P10 PR 4, rerun with requests in P11 PR 3, [L-008](#l-008)). What is
-  still missing: jobs for candidates and evidence calls (short; they commit partial
-  results instead) and the batch host (P11 PR 4).
-- **Evidence:** [verification](verification.md) "P10 PR 2 evidence" to "P10 PR 4
-  evidence" and "P11 PR 3 evidence"; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
-  and [ADR 0021](../decisions/0021-worker-and-batch-host.md) implementation notes;
-  [p10-durable-publication.md](p10-durable-publication.md) (P11 rerun).
-- **Impact:** R-09 and R-10 still need the batch host.
-- **Why:** P11 PR 4 delivers `job batch`.
-- **Mitigation:** process crashes, kills and interruptions are qualified everywhere,
-  OS crashes on the durable profile; a supervisor redelivers a request until it ends.
-- **Next step:** P11 PR 4.
-- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
-  **Status:** deferred. **Review:** pending.
+  uninterrupted run commits; `--operation-id` makes a retry return the committed result
+  without a new generation. A worker request (`job run`) and every line of a batch
+  (`job batch`) are recoverable as a whole: a redelivery continues from the first
+  unfinished step and an ended request is replayed; on the qualified profile a durable
+  workspace's generations, jobs and request records survive an OS crash and power loss
+  ([L-008](#l-008)). `candidates`, `frame`, `crop` and `audio` calls are not jobs: an
+  interrupted `candidates` call commits the windows it analysed and answers `partial`,
+  and an evidence call commits nothing partial, so their reruns redo at most one call's
+  work.
+- **Evidence:** [verification](verification.md) "P10 PR 2 evidence" to "P11 PR 4
+  evidence"; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
+  and [ADR 0021](../decisions/0021-worker-and-batch-host.md) implementation notes; the
+  [P11 qualification record](p11-worker-host.md) (`p11_shutdown_and_redelivery`).
+- **Impact:** an interrupted visual or evidence call costs its own work again, bounded
+  by one call (at most 30 visual windows).
+- **Why:** these calls are short and already commit partial results; a job record per
+  call would cost more than it saves.
+- **Mitigation:** candidates keep every committed window; a worker request's
+  candidates step continues from what is committed.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-064
 
@@ -798,6 +804,61 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
 - **Next step:** maintainer to confirm the exit reading of a cancelled line.
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** open. **Review:** pending.
+
+### L-068
+
+**SEC-T01 adversarial containment evidence deferred (technical debt).**
+
+- **What:** no adversarial provider fixture exists. SEC-T01 asks for evidence that a
+  strict worker host contains a hostile native provider; for P11 the maintainer
+  accepted non-adversarial evidence instead (decision of 2026-09-28): the strict-Linux
+  attestation checks (fixture-file and decision-table tests, fuzz targets
+  `host_attestation` and `mountinfo`, `ISOLATION_UNAVAILABLE` before any work off an
+  attested host) and the hardened `strict-worker-boundary` CI container job, which
+  verifies the inherited container and cgroup controls (read-only root, no network,
+  CPU, memory, swap and PID limits, no capabilities, no new privileges, an unprivileged
+  user) around the process supervisor. The adversarial evidence is technical debt and
+  must be resolved before the R0 release.
+- **Evidence:** [P11 qualification record](p11-worker-host.md) (SEC-T01);
+  [verification](verification.md) "P11 PR 4 evidence"; the handoff document
+  [sec-t01-adversarial-handoff.md](sec-t01-adversarial-handoff.md).
+- **Impact:** strict isolation is attested and its controls are shown present, but
+  that they contain a hostile decoder is not demonstrated; the strict worker profile
+  cannot be released on this evidence.
+- **Why:** maintainer decision (2026-09-28, option 2): the adversarial work is
+  deferred for maintainer discussion.
+- **Mitigation:** strict mode fails closed; the runbook's deployments apply the same
+  controls as the CI container job; desktop profiles claim no isolation
+  ([L-004](#l-004)).
+- **Next step:** maintainer discussion (see the handoff document); resolved before P14.
+- **Owner:** maintainer discussion, before P14. **Issue:** issue to be linked.
+  **Status:** deferred (technical debt). **Review:** pending.
+
+### L-069
+
+**A request that failed for good because of the host replays that failure.**
+
+- **What:** a request whose step fails with a permanent code has ended, and every
+  later delivery of the same operation id replays that failure. Some permanent codes
+  describe the host rather than the request: `MISSING_CAPABILITY` (a tool or model not
+  registered, or changed during the run) and `RESOURCE_LIMIT` from the workspace's
+  free-space reserve before a copy. After the operator fixes the host, the same
+  message still replays the failure.
+- **Evidence:** domain `ends_request` and `RetryClass::of`; ADR 0021 PR 3 notes
+  ("Ended, interrupted, busy"); the [worker-host runbook](../operations/worker-host.md)
+  sections 4, 8 and 9.
+- **Impact:** a supervisor must route these failures to a person and resubmit the work
+  under a new operation id once the host is fixed; the earlier failed session stays
+  until it expires or is cleaned.
+- **Why:** a replay must never change what an acknowledged id means; transient
+  classes (`BUSY`, `DEADLINE_EXCEEDED`, `STORAGE_IO`, `CANCELLED`) already stay
+  continuable.
+- **Mitigation:** the result names the code and the failing step; the runbook's
+  acknowledgement table marks the host unhealthy on `MISSING_CAPABILITY` and says to
+  keep disk free above the reserve.
+- **Next step:** none planned; revisit if operators need a host-side retry class.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-014
 
@@ -1315,25 +1376,30 @@ Counts: 4 high, 18 medium, 41 low (63 entries).
 
 ### L-038
 
-**The worker host is not yet qualified: SEC-T01, the P11 checkpoint and the runbook remain.**
+**The worker host is a qualification target, not a supported platform.**
 
-- **What:** `job batch` runs since P11 PR 4 (a finite streaming reader, concurrency up
-  to 16 and the capacity, backpressure, line isolation, the batch shutdown and the D5
-  exit). Still missing: SEC-T01 (the strict profile in a hardened container against a
-  hostile provider fixture), the `p11_*` single-host checkpoint of the E2E spine, the
-  operator runbook (packet "P11 operator deliverables") and the P11 qualification
-  record.
-- **Evidence:** [CLI contract](../contracts/cli-v1.md) "P11 `job batch`"; ADR 0021 PR 4
-  notes; P11 row of the [work packets](implementation-work-packets.md).
-- **Impact:** strict worker isolation is attested but not yet demonstrated against a
-  hostile provider; no reviewed supervisor example or deployment guidance yet.
-- **Why:** P11 PR 4 stopped at a green subset; the rest needs a maintainer decision on
-  how SEC-T01's hostile fixture is built and reviewed.
-- **Mitigation:** `job run` and `job batch` are fully tested without it; strict mode
-  fails closed off an attested host.
-- **Next step:** the remainder of P11 PR 4.
-- **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
-  **Status:** deferred. **Review:** pending.
+- **What:** P11 is implemented: `job run` and `job batch` in a worker workspace,
+  weighted admission, contained inputs, strict Linux attestation, request records,
+  the two-stage shutdown, the `p11_*` single-host checkpoint, the
+  [operator runbook](../operations/worker-host.md) and the
+  [qualification record](p11-worker-host.md). The packet completes when it merges.
+  What it does not give: public support (P14 qualifies the release matrix), adversarial
+  containment evidence for the strict profile ([L-068](#l-068)), and a run of the
+  runbook's systemd unit and container example exactly as written: they are adapted
+  from the CI container job and the tested flags, and an operator confirms on the host
+  that a batch starts with `isolation` `strict_linux`. The single-host checkpoint ran on
+  one Windows 11 machine; Linux and macOS run the contract tests in CI.
+- **Evidence:** the [P11 qualification record](p11-worker-host.md); ADR 0021
+  implementation notes; P11 row of the [work packets](implementation-work-packets.md).
+- **Impact:** a worker deployment follows reviewed guidance, but its hardening is the
+  operator's to verify; documentation says "qualification target".
+- **Why:** support is claimed only after release qualification (ADR 0005).
+- **Mitigation:** strict mode fails closed off an attested host; the runbook's
+  readiness rule refuses work before `started` says what is in force.
+- **Next step:** P11 merge; P14 release qualification.
+- **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
+  [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
+  **Review:** pending.
 
 ### L-039
 

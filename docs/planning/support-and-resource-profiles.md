@@ -9,7 +9,7 @@ Date: 2026-09-10.
 | --- | --- | --- | --- |
 | Desktop Windows | Windows 11 25H2 x64, `x86_64-pc-windows-msvc` | Local NTFS | CLI, setup, ephemeral sessions, native provider lifecycle, cancellation and process-crash recovery |
 | Desktop macOS | macOS 15 arm64, `aarch64-apple-darwin` | Local APFS | Same ephemeral desktop behavior; report available process/resource confinement |
-| Strict worker Linux | Ubuntu 24.04 LTS x86-64, `x86_64-unknown-linux-gnu` | Local ext4 | Headless job/batch, cgroup-v2/container limits, durable recovery and shutdown after P10/P11 fault qualification |
+| Strict worker Linux | Ubuntu 24.04 LTS x86-64, `x86_64-unknown-linux-gnu` | Local ext4 | Headless job/batch, cgroup-v2/container limits, durable recovery and shutdown after P10/P11 fault qualification (P11 record: [p11-worker-host.md](p11-worker-host.md); deployment: [worker-host runbook](../operations/worker-host.md)) |
 
 Windows and macOS worker use may be qualified later, but R0 makes no strict-worker
 claim for them. Linux desktop use and other distributions may work without an R0
@@ -21,7 +21,7 @@ exact OS updates, Rust target, FFmpeg/whisper.cpp build, filesystem and host con
 | Setting | `desktop-safe` | `worker-strict` |
 | --- | --- | --- |
 | Heavy-stage admission | 4 weight units per desktop root: a recognition takes its threads (at most 4 here), a visual window 2, a copy or evidence extraction 1 | The workspace's `--admission-slots` (1-64), set once at `session init-workspace` from measured CPU/RAM/GPU; a recognition takes up to 8 threads within it |
-| Pending requests | At most 16 in a batch | Bounded by host policy; external queue owns backlog |
+| Pending requests | At most 16 in a batch | `job batch`: a file of at most 1,000 lines, at most `--concurrency` (1-16, never above the capacity) running, the next line read only when one ends; the external queue owns the backlog |
 | Source maximum | 4 hours and 20 GiB | Explicit job limit no larger than host maximum |
 | Decoded frame | 16 megapixels | Same default; may be lowered by host |
 | Candidate page | 20 default, 100 maximum | Same schema and hard maximum |
@@ -31,10 +31,10 @@ exact OS updates, Rust target, FFmpeg/whisper.cpp build, filesystem and host con
 | Probe structured output | 4 MiB | Same hard cap |
 | Session/root temporary storage | 10 GiB / 20 GiB with reserve | Explicit reservation plus host quota |
 | Session expiry | 24-hour idle, seven-day absolute | The workspace's retention (default 168 hours, 1 to 720) after opening or renewal, at most 720 hours in all |
-| Shutdown target | Five-second graceful then five-second forced cleanup | `job run`: the first signal stops the next step and, after `--drain-timeout-ms` (default 0, at most 300 s), cancels the running one at its next boundary; the same five-second provider budgets; a second signal escalates |
+| Shutdown target | Five-second graceful then five-second forced cleanup | `job run` and `job batch`: the first signal stops admitting and the next step and, after `--drain-timeout-ms` (default 0, at most 300 s), cancels the running ones at their next boundary; the same five-second provider budgets; a second signal escalates. A supervisor's stop timeout must cover the drain plus 10 s (runbook) |
 | Worker request | Not applicable | One request of at most 64 KiB and 8 steps per `job run`; `deadline_ms` up to one day (per delivery); a step waits at most `--admission-wait-ms` (default and maximum 60 s) for admission; at most 16 `candidates` calls per step; at most 4,096 request records of at most 192 KiB per workspace |
 | Durability | Ephemeral unless explicitly retained | A workspace created with `--durability durable` (Ubuntu 24.04 / ext4 only); its every session is `os_crash_durable` |
-| Network/filesystem isolation | Report effective controls | `--host-isolation strict-linux`: attested cgroup v2 CPU, memory and PID limits, read-only root, loopback only, else `ISOLATION_UNAVAILABLE` before any work; limits reported as the host cgroup's |
+| Network/filesystem isolation | Report effective controls | `--host-isolation strict-linux`: attested cgroup v2 CPU, memory and PID limits, read-only root, loopback only, else `ISOLATION_UNAVAILABLE` before any work; limits reported as the host cgroup's. SEC-T01 for P11: non-adversarial evidence accepted by the maintainer (attestation and the CI container job's controls); adversarial containment evidence deferred as technical debt (L-068) |
 | Free-space reserve | Not checked | 1 GiB beyond each source copy, checked on Unix; not checked on Windows |
 
 Visual analysis (P08, `candidates`) in both profiles: 60 s windows, at most 30 per
@@ -130,8 +130,9 @@ has made it survive an OS crash or power loss, as the
 profile, and every ephemeral session, reports `process_crash_consistent`, and a
 durable request there fails with `MISSING_CAPABILITY` before anything changes.
 Storage that ignores flushes and the loss of the disk or host stay outside the
-guarantee (known limits L-056 and L-057); the strict worker profile still needs P11
-and P14.
+guarantee (known limits L-056 and L-057). P11 delivered the worker host and its
+[qualification record](p11-worker-host.md); the strict worker profile still needs P14
+and the adversarial SEC-T01 evidence deferred as technical debt (L-068).
 
 - Fresh-machine installation without Rust, upgrade, rollback and uninstall.
 - All deterministic PR checks plus platform process/filesystem conformance tests.

@@ -12,8 +12,14 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > changed can be listed as visual candidates with honest coverage (P08). The exact
 > frame at a time, the frames around it, bursts, native-size crops and short audio
 > clips can be extracted with their requested and actual times, reused when asked
-> again (P09, pending review and merge). Worker execution, recovery, managed
-> dependency installation and the complete agent handoff remain future R0 work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
+> again (P09). Long transcriptions are recoverable jobs, and durable sessions survive
+> an OS crash on Ubuntu 24.04 with local ext4 (P10). A supervisor can run versioned
+> worker requests one at a time (`job run`) or from a finite file (`job batch`) in a
+> worker workspace, with weighted admission, exactly-once replay by operation id and a
+> resumable shutdown; see the [worker-host runbook](docs/operations/worker-host.md)
+> (P11, implemented and pending merge; a qualification target, not yet a supported
+> platform). Managed dependency installation, the agent skill and the complete agent
+> handoff remain future R0 work. See the [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
 and server-worker design, security review, test matrix and delivery work packets.
@@ -63,9 +69,9 @@ vsift session clean --expired --dry-run --json
 
 The full R0 command namespace is visible through `vsift --help` so integrations can
 target a stable grammar. `session status/renew/close/retain/clean/init-workspace`,
-`frame`, `crop`, `audio`, `job status/resume/cancel/run` and `bundle validate` are
-also operational. `job batch` and setup installation still return
-`COMMAND_NOT_IMPLEMENTED` until their owning packets ship.
+`frame`, `crop`, `audio`, `job status/resume/cancel/run/batch` and `bundle validate`
+are also operational. Setup installation still returns `COMMAND_NOT_IMPLEMENTED`
+until its owning packet (P13) ships.
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.
 R0 setup will first detect user-installed tools, then offer an explicitly approved,
