@@ -166,9 +166,9 @@ pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
     FailureCode, IdentifierError, JobId, JobKind, JobState, MAX_ADMISSION_WAIT,
-    MAX_RECOGNIZER_THREADS, OperationId, ProgressStage, ProgressUnit, ProgressUpdate,
-    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
-    SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
+    MAX_RECOGNIZER_THREADS, OperationId, OperationStatus, ProgressStage, ProgressUnit,
+    ProgressUpdate, PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness,
+    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
     WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
 };
 /// Transcript evidence values that appear in this API.

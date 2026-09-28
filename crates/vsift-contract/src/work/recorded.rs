@@ -137,6 +137,18 @@ impl WorkResult {
         &self.steps
     }
 
+    /// The rejection that refused the request, if one did.
+    #[must_use]
+    pub const fn rejection(&self) -> Option<RequestRejection> {
+        self.rejection
+    }
+
+    /// The lifecycle of the request's session, once it had one.
+    #[must_use]
+    pub const fn lifecycle(&self) -> Option<&LifecycleResponse> {
+        self.lifecycle.as_ref()
+    }
+
     /// The retry hint of the failure that ended the request, if any.
     #[must_use]
     pub fn retry_after_ms(&self) -> Option<u64> {

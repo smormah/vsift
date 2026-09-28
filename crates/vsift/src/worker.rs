@@ -50,7 +50,7 @@ use std::{
 
 use vsift_application::{RetryTimer, SessionStorageError, worker_step_operation_id};
 use vsift_contract::{
-    BundleSourceInclusion, FreeSpaceReserve, LifecycleResponse, MAX_REQUEST_DEADLINE_MS,
+    BundleSourceInclusion, FreeSpaceReserve, LifecycleResponse, MAX_REQUEST_DEADLINE_MS, Readiness,
     RequestDurability, RequestFailure, RequestRejection, ResourceLimits, ResultOrigin, StepOutputs,
     StepResult, StepTiming, WorkControls, WorkFailure, WorkRequest, WorkResult, WorkResultParts,
     WorkStep, WorkStepKind, WorkTarget, WorkerIsolation,
@@ -246,6 +246,30 @@ impl Engine {
             outcome.cause = None;
         }
         outcome
+    }
+
+    /// What a worker host states when it starts (O-03): the guarantee the
+    /// workspace's sessions get, the isolation it runs under, its admission
+    /// capacity and the host's `concurrency`.
+    ///
+    /// # Errors
+    ///
+    /// As a request would fail: a root that is missing, unreadable or not a
+    /// worker workspace.
+    pub fn worker_readiness(&self, concurrency: NonZeroU16) -> Result<Readiness, EngineError> {
+        let (store, policy) = self.worker_store()?;
+        let isolation = match self.config().host_isolation {
+            HostIsolation::ProcessOnly => WorkerIsolation::ProcessOnly,
+            #[cfg(target_os = "linux")]
+            HostIsolation::StrictLinux => WorkerIsolation::StrictLinux,
+        };
+        Ok(Readiness {
+            publication: policy.durability().required_guarantee(),
+            isolation,
+            admission_capacity: NonZeroU16::new(store.admission_capacity())
+                .unwrap_or(NonZeroU16::MIN),
+            concurrency,
+        })
     }
 
     /// The session root as a worker workspace, which it must already be.
@@ -597,7 +621,9 @@ impl Engine {
                         });
                     }
                     if !sleep_unless_cancelled(delay, &context.work.0).await {
-                        return Err(stop(failed.error.clone(), waited));
+                        // A shutdown (or the host) cancelled the step while
+                        // it waited to try again.
+                        return Err(stop(EngineError::Worker(WorkerFailure::Stopped), waited));
                     }
                     waited = waited.saturating_add(delay);
                     polls = polls.saturating_add(1);

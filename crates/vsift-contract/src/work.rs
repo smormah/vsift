@@ -575,6 +575,8 @@ pub struct WorkResult {
     outcome: OperationStatus,
     #[serde(skip)]
     failure_code: Option<FailureCode>,
+    #[serde(skip)]
+    rejection: Option<RequestRejection>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -639,6 +641,7 @@ impl WorkResult {
             (None, None) => (None, None),
         };
         let failure_code = failure.map(|(failure, _)| failure.code);
+        let rejection = failure.and_then(|(_, rejection)| rejection);
         let failure =
             failure.map(|(failure, rejection)| RequestFailureData::of(failure, step, rejection));
         let outcome = match failure_code {
@@ -674,6 +677,7 @@ impl WorkResult {
             },
             outcome,
             failure_code,
+            rejection,
         })
     }
 
@@ -720,6 +724,7 @@ impl WorkResult {
             },
             outcome,
             failure_code: Some(cause.code),
+            rejection,
         }
     }
 
