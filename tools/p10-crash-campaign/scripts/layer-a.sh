@@ -36,7 +36,7 @@ mountpoint=$work/mnt
 
 mkdir -p "$work" "$out" "$mountpoint" "$work/scratch"
 rm -f "$data" "$log" "$base"
-truncate -s 1G "$data"
+truncate -s 3G "$data"
 truncate -s 8G "$log"
 # Ubuntu 24.04's mke2fs defaults, 4 KiB blocks, and every inode table and the
 # journal written now, so no lazy initialisation runs while the log records.

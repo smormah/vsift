@@ -33,7 +33,7 @@ acks=$out/acks.log
 mkdir -p "$work" "$out" "$mountpoint" "$work/scratch"
 rm -f "$data"
 : > "$acks"
-truncate -s 1G "$data"
+truncate -s 3G "$data"
 mkfs.ext4 -q -F -b 4096 -E lazy_itable_init=0,lazy_journal_init=0 "$data"
 dumpe2fs -h "$data" > "$out/dumpe2fs.txt" 2>/dev/null
 loop=$(losetup --show -f "$data")

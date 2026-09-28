@@ -6,20 +6,23 @@
 //!
 //! ```text
 //! START <seq> <unix_ns> <kind>
-//! ACK <seq> <unix_ns> <kind> <session> <generation> <manifest_sha256> <artifacts> <revision>
+//! ACK <seq> <unix_ns> <kind> <session> <generation> <manifest_sha256> <artifacts> <revision> [<request>]
 //! FAIL <seq> <unix_ns> <kind> <FAILURE_CODE>
 //! ```
 //!
 //! `<artifacts>` is a comma-separated list of the SHA-256 digests the
 //! operation committed (the source copy, a frame and its evidence record),
 //! or `-`; `<revision>` is the transcript revision a retranscription
-//! committed, or `-`. An `ACK` is written only after the operation returned
+//! committed, or `-`; `<request>`, only on a worker request's
+//! acknowledgement (P11 PR 3), is `<operation_id>:<result_sha256>`, the
+//! request's key and the digest of the result its record holds. An `ACK`
+//! is written only after the operation returned
 //! success, so it is the acknowledgement the campaign holds the store to.
 //! Every other line (kernel messages, the verifier's report) is ignored.
 
 use std::fmt;
 
-use vsift_domain::{SessionId, TranscriptRevisionId};
+use vsift_domain::{OperationId, SessionId, TranscriptRevisionId};
 
 /// One kind of operation the workload runs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -32,15 +35,19 @@ pub enum OperationKind {
     Retranscribe,
     /// A lifecycle generation that extends the session.
     Renew,
+    /// A worker request (P11 PR 3): an ingest through
+    /// `Engine::run_work_request`, acknowledged once its result is recorded.
+    Request,
 }
 
 impl OperationKind {
     /// Every kind, in a fixed order.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::Ingest,
         Self::Evidence,
         Self::Retranscribe,
         Self::Renew,
+        Self::Request,
     ];
 
     /// The kind's name on the wire.
@@ -51,6 +58,7 @@ impl OperationKind {
             Self::Evidence => "evidence",
             Self::Retranscribe => "retranscribe",
             Self::Renew => "renew",
+            Self::Request => "request",
         }
     }
 
@@ -85,6 +93,18 @@ pub struct Ack {
     pub artifacts: Vec<String>,
     /// The transcript revision it committed, for a retranscription.
     pub revision: Option<TranscriptRevisionId>,
+    /// The worker request's key and recorded result, for a request.
+    pub request: Option<RequestAck>,
+}
+
+/// What a worker request's acknowledgement holds the store to: its record
+/// under `operation_id` holds the result whose SHA-256 is `result_sha256`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RequestAck {
+    /// The request's operation id.
+    pub operation_id: OperationId,
+    /// SHA-256 of its recorded result.
+    pub result_sha256: String,
 }
 
 impl Ack {
@@ -100,8 +120,15 @@ impl Ack {
             .revision
             .as_ref()
             .map_or("-", TranscriptRevisionId::as_str);
+        let request = self.request.as_ref().map_or_else(String::new, |request| {
+            format!(
+                " {}:{}",
+                request.operation_id.as_str(),
+                request.result_sha256
+            )
+        });
         format!(
-            "ACK {} {} {} {} {} {} {artifacts} {revision}",
+            "ACK {} {} {} {} {} {} {artifacts} {revision}{request}",
             self.seq,
             self.unix_ns,
             self.kind,
@@ -216,7 +243,18 @@ fn parse_ack<'a>(fields: &mut impl Iterator<Item = &'a str>) -> Option<Ack> {
         "-" => None,
         text => Some(TranscriptRevisionId::parse(text).ok()?),
     };
-    if fields.next().is_some() {
+    let request = match fields.next() {
+        Some(text) => {
+            let (operation, digest) = text.split_once(':')?;
+            Some(RequestAck {
+                operation_id: OperationId::parse(operation).ok()?,
+                result_sha256: hex_digest(digest)?,
+            })
+        }
+        None => None,
+    };
+    // Exactly a request's acknowledgement names a request.
+    if fields.next().is_some() || request.is_some() != (kind == OperationKind::Request) {
         return None;
     }
     Some(Ack {
@@ -228,6 +266,7 @@ fn parse_ack<'a>(fields: &mut impl Iterator<Item = &'a str>) -> Option<Ack> {
         manifest_sha256,
         artifacts,
         revision,
+        request,
     })
 }
 
@@ -288,7 +327,32 @@ mod tests {
             manifest_sha256: DIGEST.to_owned(),
             artifacts: vec![DIGEST.to_owned(), DIGEST.replace('0', "f")],
             revision: None,
+            request: None,
         })
+    }
+
+    /// P11 PR 3: a request's acknowledgement names its key and result, and
+    /// only a request's may.
+    #[test]
+    fn a_request_acknowledgement_names_its_record() -> Result<(), Box<dyn std::error::Error>> {
+        let mut ack = ack()?;
+        ack.kind = OperationKind::Request;
+        ack.request = Some(super::RequestAck {
+            operation_id: vsift_domain::OperationId::parse("op_0123456789abcdef0123456789abcdef")?,
+            result_sha256: DIGEST.to_owned(),
+        });
+        let events = parse_events(&ack.line());
+        assert_eq!(events.acks, vec![ack.clone()]);
+        let without = ack
+            .line()
+            .rsplit_once(' ')
+            .map(|(head, _)| head.to_owned())
+            .ok_or("no field")?;
+        let foreign = ack.line().replacen(" request ", " renew ", 1);
+        let events = parse_events(&format!("{without}\n{foreign}\n"));
+        assert!(events.acks.is_empty());
+        assert_eq!(events.malformed, vec![1, 2]);
+        Ok(())
     }
 
     #[test]

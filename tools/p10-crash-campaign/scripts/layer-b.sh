@@ -59,7 +59,7 @@ qemu() {
 # The data disk under test, and an empty acknowledgement disk for the
 # preparation boot.
 rm -f "$work/data.img"
-truncate -s 1G "$work/data.img"
+truncate -s 3G "$work/data.img"
 mkfs.ext4 -q -F -b 4096 -E lazy_itable_init=0,lazy_journal_init=0 "$work/data.img"
 dumpe2fs -h "$work/data.img" > "$out/dumpe2fs.txt" 2>/dev/null
 truncate -s 0 "$work/empty-acks.img"

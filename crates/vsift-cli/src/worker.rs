@@ -48,9 +48,9 @@ use vsift_contract::{
     INPUT_UNREADABLE_REMEDIATION, LifecycleEventResponse, LifecycleReason, OperationResponse,
     PARTIAL_REQUEST_WARNING, ProgressEventResponse, ProgressReport, REQUEST_BUSY_REMEDIATION,
     REQUEST_CONFLICT_REMEDIATION, REQUEST_DEADLINE_REMEDIATION, REQUEST_FILE_REMEDIATION,
-    REQUEST_SESSION_REMEDIATION, REQUEST_STOPPED_REMEDIATION, Readiness, RequestEnd, RequestRef,
-    ResultEventResponse, WORK_REQUEST_LIMITS, WORKER_WORKSPACE_REQUIRED_REMEDIATION, WorkRequest,
-    WorkResult, decode_work_request,
+    REQUEST_SESSION_REMEDIATION, REQUEST_STOPPED_REMEDIATION, REQUEST_UNRECORDED_REMEDIATION,
+    Readiness, RequestEnd, RequestRef, ResultEventResponse, WORK_REQUEST_LIMITS,
+    WORKER_WORKSPACE_REQUIRED_REMEDIATION, WorkRequest, WorkResult, decode_work_request,
 };
 
 type Response = OperationResponse<serde_json::Value>;
@@ -168,12 +168,26 @@ pub(crate) fn work_run(
 }
 
 /// The `job.run` response for an outcome, and the process exit it earns.
+///
+/// A result whose record could not be written is not acknowledged: it is
+/// presented as `STORAGE_IO` (exit 7) with the result as its data, so a
+/// supervisor delivers the request again and receives the recorded result.
 pub(crate) fn present(outcome: WorkOutcome) -> (Response, ProcessExit) {
+    let unrecorded = outcome.unrecorded().is_some();
     let (result, cause) = outcome.into_parts();
     let command = CommandName::JobRun.identifier();
     let operation = OperationId::parse(result.operation_id()).ok();
     let lifecycle = result.lifecycle().cloned();
     let presented = match (result.status(), result.failure_code()) {
+        _ if unrecorded => failure_response(
+            CommandName::JobRun,
+            CommandFailure::with_remediation(
+                FailureCode::StorageIo,
+                REQUEST_UNRECORDED_REMEDIATION.to_owned(),
+            ),
+        )
+        .with_failure_data(&result)
+        .map(|response| (response, ProcessExit::StorageOrIo)),
         (OperationStatus::Partial, _) => {
             OperationResponse::partial(command, &result, PARTIAL_REQUEST_WARNING)
                 .map(|response| (response, ProcessExit::Success))
@@ -347,11 +361,21 @@ where
             ))
         });
     }
-    let end = RequestEnd {
-        status: item_status(outcome.result()),
-        code: outcome.result().failure_code(),
-        rejection: outcome.result().rejection(),
-        progress_dropped: dropped,
+    // An unrecorded result is not acknowledged (see [`present`]).
+    let end = if outcome.unrecorded().is_some() {
+        RequestEnd {
+            status: BatchItemStatus::Failed,
+            code: Some(FailureCode::StorageIo),
+            rejection: None,
+            progress_dropped: dropped,
+        }
+    } else {
+        RequestEnd {
+            status: item_status(outcome.result()),
+            code: outcome.result().failure_code(),
+            rejection: outcome.result().rejection(),
+            progress_dropped: dropped,
+        }
     };
     let result = outcome.result().clone();
     let (response, exit) = present(outcome);

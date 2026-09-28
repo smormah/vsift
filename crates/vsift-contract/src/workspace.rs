@@ -83,6 +83,9 @@ pub const REQUEST_STOPPED_REMEDIATION: &str = "A shutdown stopped the request be
 /// Remediation when the job request file cannot be read (P11 PR 3).
 pub const REQUEST_FILE_REMEDIATION: &str = "Name a readable job request file with --request; it holds one job-request v1 object of at most 64 KiB.";
 
+/// Remediation when an ended request's result could not be recorded (P11 PR 3).
+pub const REQUEST_UNRECORDED_REMEDIATION: &str = "The request's work is done and every step is recorded, but its result could not be recorded, so it is not acknowledged. Deliver the same request again: it records and returns the result without running anything again.";
+
 /// Remediation when strict worker isolation cannot be attested.
 pub const ISOLATION_UNAVAILABLE_REMEDIATION: &str = "Strict worker isolation needs a Linux cgroup v2 with finite CPU, memory and process limits, a read-only root filesystem and no network interface but loopback, and this host does not attest them all. Nothing was run. Run the worker in such a container, or without strict isolation.";
 

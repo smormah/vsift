@@ -116,6 +116,7 @@ pub struct WorkOutcome {
     result: WorkResult,
     cause: Option<EngineError>,
     stopped: bool,
+    unrecorded: Option<EngineError>,
 }
 
 impl WorkOutcome {
@@ -137,6 +138,16 @@ impl WorkOutcome {
     #[must_use]
     pub const fn stopped_by_shutdown(&self) -> bool {
         self.stopped
+    }
+
+    /// Why an ended request's result could not be recorded, when it could
+    /// not: its work is committed and every step is recorded, but a
+    /// delivery that finds the request again records the result then. A
+    /// host must not acknowledge such a result as final (the command line
+    /// answers `STORAGE_IO`); delivering the same request again returns it.
+    #[must_use]
+    pub const fn unrecorded(&self) -> Option<&EngineError> {
+        self.unrecorded.as_ref()
     }
 
     /// The result and its cause.
@@ -530,14 +541,20 @@ impl Engine {
             && let Err(error) = self.record_result(context, &mut progress, &result)
         {
             // The work is committed; only its record failed. The result
-            // stands, and the next delivery finds every step recorded and
-            // records the result then.
-            cause.get_or_insert(error);
+            // stands, but it is not recorded: the next delivery finds every
+            // step recorded and records the result then.
+            return WorkOutcome {
+                result,
+                cause,
+                stopped: false,
+                unrecorded: Some(error),
+            };
         }
         WorkOutcome {
             result,
             cause,
             stopped: false,
+            unrecorded: None,
         }
     }
 
@@ -987,6 +1004,7 @@ impl Engine {
                 result: recorded.into_replayed(),
                 cause: None,
                 stopped: false,
+                unrecorded: None,
             },
             Err(_) => self.refused(
                 context.run,
@@ -1077,6 +1095,7 @@ impl Engine {
             ),
             cause,
             stopped: false,
+            unrecorded: None,
         }
     }
 
