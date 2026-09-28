@@ -431,7 +431,7 @@ async fn p08_process_only_host_cannot_claim_strict_worker_isolation() -> Result<
 }
 
 /// SEC-T01 (non-adversarial evidence, accepted for P11 on 2026-09-28): inside
-/// the hardened CI container, VSift's own strict-Linux attestation must
+/// the hardened CI container, `VSift`'s own strict-Linux attestation must
 /// succeed, so `--host-isolation strict-linux` is proven to run on a real
 /// strict host rather than only on parsed fixtures. Outside that container
 /// the test does nothing.
