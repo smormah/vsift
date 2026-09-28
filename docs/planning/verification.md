@@ -247,6 +247,8 @@ from model interpretation so a model's confident prose cannot mask missing evide
 
 - SEC-T01: isolated malicious native fixture attempts filesystem/network/credential
   access, fork pressure and output flooding; demonstrate actual host containment.
+  *P11 (2026-09-28): non-adversarial evidence accepted for P11 by the maintainer;
+  adversarial evidence is technical debt (known limit L-068), required before release.*
 - SEC-T02: adversarial evidence and output rendering tests, including hidden markup,
   terminal links and multimodal prompt injection.
 - SEC-T03: before any multi-tenant host ships, cross-tenant lookup/export/delete,
@@ -293,6 +295,29 @@ and A-08/A-09 prove the complete local-video-to-grounded-handoff lifecycle throu
 independent coding-agent clients. A release containing only scaffolding, transcription,
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
+
+## 2026-09-28 P11 PR 4 evidence, second part, and the P11 summary (branch `p11/qualification-docs`)
+
+This completes P11's evidence; the packet completes when this pull request merges.
+The per-requirement detail, the checkpoint's timings and the residuals are in the
+[P11 qualification record](p11-worker-host.md); the operator side is the
+[worker-host runbook](../operations/worker-host.md). No production code changed in
+this part.
+
+| Gate | Final P11 evidence |
+| --- | --- |
+| X-07 | `weighted_admission_never_exceeds_root_capacity` (100 of 100, with a negative control); `p11_admission_ladder` (binary, real FFmpeg): at concurrency 1, 2 and 4 in a four-unit workspace the sampled provider weight never exceeded 4, and at concurrency 4 at most two windows ran with four requests in flight; host limits attested (SEC-T01 row) and shown in the `strict-worker-boundary` container job |
+| X-08 | The PR 4a rows below (read-ahead bounded by the concurrency, a host or stdout reader that stops reading holds the batch back, bounded memory); fuzz target `job_batch_file` (23 targets) over the reader |
+| X-09 | The PR 3 rows below: only `BUSY` is retried, with full jitter, within the admission wait and never past the deadline |
+| X-10 | PR 2 durable workspaces and the crash campaign rerun with requests (36379513017: 0 lost acknowledgements in layers A and B, every injected failure `STORAGE_IO` and unacknowledged); `p11_durable_workspace` checks the refusal off the profile; disk or host loss is the operator's (runbook, L-057) |
+| X-11 | `every_line_is_isolated_and_reported`, the opt-in `a_mixed_batch_reports_independent_outcomes`, and `p11_batch_mechanical`: a batch of three real-tool requests, a malformed line and a path out of the root exits 2 with each refused line alone, and its outputs are searched, framed and validated against the frozen truth (F03's segment in its speech span, its candidate in F03-E02 at delta 0, F10's dialog id on F10-E01, F01's candidate in F01-E01, three bundles whose manifest digests equal the recorded ones) |
+| O-01 | The PR 3 and PR 4a sentinel tests; every `p11_*` batch stream is free of the host's absolute paths |
+| O-02 | `events_are_bounded_by_the_lines` and the PR 1 schema and progress bounds |
+| O-03 | `lifecycle_events_distinguish_ready_busy_unhealthy_missing`; stage timings, admission waits and termination reasons in every result and summary |
+| O-04 | The `SIGTERM` (CI) and Ctrl-Break (opt-in, run here) tests for `job run` and `job batch`; `p11_shutdown_and_redelivery`: a console Ctrl-Break mid-batch, exit 6 in 2.0 s with both running recognitions `cancelled` and no provider left; `job resume` and redelivery complete every line, equal to an uninterrupted control; a third delivery replays unchanged |
+| Repeated external-delivery simulation | `repeated_external_delivery_commits_once` (PR 3): 24 seeded runs passed; every request committed once and replays its first result |
+| SEC-T01 | **Non-adversarial evidence accepted for P11 by the maintainer (2026-09-28):** the strict-Linux attestation checks (fixture-file and decision-table tests, fuzz targets `host_attestation` and `mountinfo`, `ISOLATION_UNAVAILABLE` before any work) and the hardened `strict-worker-boundary` container controls. Adversarial evidence is technical debt ([known limit L-068](known-limits.md#l-068)), required before the R0 release |
+| E2E spine (P11 stage) | `p11_worker_e2e` passed on Windows 11 (FFmpeg 9.0, whisper.cpp v1.9.2, release build) in 209 s; `p11_durable_workspace` blocked by the platform as designed |
 
 ## 2026-09-28 P11 PR 4 evidence, first part (`job batch`, branch `p11/job-batch`)
 
@@ -347,7 +372,7 @@ evidence those commands build on, not their X-08..X-11 or SEC-T01 evidence.
 | X-10 (durable mode through the CLI, ADR 0020 D-3) | `a_durable_workspace_is_created_only_where_durability_is_qualified` and `ingest_in_a_workspace_inherits_its_durability_and_retention` (CLI) and `a_workspace_decides_the_durability_of_its_sessions` (engine) assert the outcome the host's own profile check predicts: on Ubuntu 24.04 / ext4 a durable workspace is created and its sessions report `os_crash_durable`; anywhere else `MISSING_CAPABILITY` and no directory; `a_durable_workspace_fails_closed_off_the_qualified_profile` (store). The commit path is unchanged, so P10's crash campaign still stands |
 | Workspace policy (D1, D2) | `a_workspace_is_created_once_and_its_policy_is_immutable` (idempotent, every other policy refused), `racing_initialisations_create_one_workspace` (six engines race one root: exactly one `created`, the rest `already_initialized` or the documented `BUSY`; 200 of 200 runs in four lanes), `a_desktop_root_never_becomes_a_workspace`, `a_workspace_needs_an_explicit_absolute_root_and_a_bounded_policy` (no root, the per-user cache, a relative root, out-of-range slots and retention); `a_workspace_records_its_policy_and_reopens_with_it`, `a_changed_workspace_policy_is_never_adopted` (a marker changed underneath is `INTEGRITY_FAILURE`; an out-of-range or unknown policy is refused); `a_workspace_session_lives_the_workspace_retention` (expiry after the retention, renewal by it, capped at 720 hours, then cleaned); `a_workspace_session_lives_its_retention_within_the_hard_limit`, `a_retention_is_one_to_seven_hundred_and_twenty_hours` (domain) |
 | S-01, S-02, SEC-05 (contained inputs) | `contained_inputs.rs`: `every_escape_spelling_is_refused_before_anything_is_opened` (`..`, `.`, absolute, drive, `\`, ADS `:` and `::$DATA`, `CON`, `nul.txt`, `COM1`, `LPT¹`, trailing dot or space, control and wildcard characters, 33 components), `a_hard_link_out_of_the_root_is_refused`, `a_symbolic_link_out_of_the_root_is_refused` (a file and a directory outside and a directory inside the root; run with links on this Windows 11 host, and on Unix), `a_contained_source_and_transcript_are_read_through_the_root`; the outside sentinel stays byte-identical in each |
-| SEC-T01 groundwork (strict Linux attestation) | `a_cgroup_v2_membership_is_one_unified_line`, `cgroup_limits_are_max_or_a_count`, `only_loopback_counts_as_no_network`, `the_root_mount_is_read_only_only_when_its_own_options_say_so`, `the_strict_decision_needs_every_control` (the decision table: each missing control is its own gap, anything unread fails closed), `this_host_is_attested_or_every_gap_is_named`, `process_only_is_never_attested_and_strict_fails_closed_off_a_strict_host`, `strict_isolation_is_attested_before_any_work` (CLI: `ISOLATION_UNAVAILABLE`, exit 2, and no workspace created); fuzz target `host_attestation` (21 targets) and the `mountinfo` target's root-mount consistency, replayed over committed seeds. The real attestation runs in PR 4's container job |
+| SEC-T01 groundwork (strict Linux attestation) | `a_cgroup_v2_membership_is_one_unified_line`, `cgroup_limits_are_max_or_a_count`, `only_loopback_counts_as_no_network`, `the_root_mount_is_read_only_only_when_its_own_options_say_so`, `the_strict_decision_needs_every_control` (the decision table: each missing control is its own gap, anything unread fails closed), `this_host_is_attested_or_every_gap_is_named`, `process_only_is_never_attested_and_strict_fails_closed_off_a_strict_host`, `strict_isolation_is_attested_before_any_work` (CLI: `ISOLATION_UNAVAILABLE`, exit 2, and no workspace created); fuzz target `host_attestation` (21 targets) and the `mountinfo` target's root-mount consistency, replayed over committed seeds. The real attestation was to run in PR 4's container job; see the PR 4 second part for SEC-T01's final status |
 | Free-space reserve and controls | `the_free_space_reserve_is_checked_on_unix_only`; `published_enums_match_the_contract` covers `controls.resource_limits` and `controls.free_space_reserve`, and the frozen job-result examples carry both |
 
 ## 2026-09-28 P11 PR 1 evidence (worker contracts, events, progress and fuzzing, branch `p11/contracts-events`)

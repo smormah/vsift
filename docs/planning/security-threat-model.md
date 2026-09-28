@@ -509,7 +509,7 @@ own options and no network interface but loopback; every parser refuses a damage
 file whole and is fuzzed (`host_attestation`, `mountinfo`), and anything unread fails
 closed with `ISOLATION_UNAVAILABLE` before any work. The limits are the host's and are
 reported as such; VSift claims no enforcement. Whether such a host actually contains a
-hostile decoder is SEC-T01, P11 PR 4.
+hostile decoder is SEC-T01 (status under P11 PR 4 below).
 **SEC-20 (oversubscription).** Admission now weighs what runs: a recognition reserves
 its recognizer threads (capped at the root's capacity and at 8), a visual window 2
 units, anything else 1; the recognition's reservation covers its chunk decoding, so a
@@ -561,6 +561,33 @@ stdout, stderr or events; an opt-in run adds a failing provider.
 other command; a request can name no executable, environment or argument (ADR 0021
 section 1), and the sentinel test above covers a credential-bearing proxy variable in
 the parent environment.
+
+P11 PR 4 (2026-09-28): `job batch`, the single-host checkpoint, the
+[worker-host runbook](../operations/worker-host.md) and the
+[P11 qualification record](p11-worker-host.md).
+**SEC-T01 status.** Non-adversarial evidence accepted for P11 by the maintainer
+(2026-09-28): the strict-Linux attestation checks above and the controls the hardened
+`strict-worker-boundary` CI container job verifies (read-only root, no network, CPU,
+memory, swap and PID limits, no capabilities, no new privileges, an unprivileged user,
+a new process group kept inside the worker cgroup). Adversarial evidence is technical
+debt, deferred for maintainer discussion and required before the R0 release (known
+limit L-068). SEC-06 and SEC-25 therefore rest, for P11, on controls shown present and
+attested, not on a demonstrated containment of a hostile provider.
+**SEC-19 status (tenants).** P11 ships no multi-tenant host, and a workspace is one
+trust domain: a request delivered to it may target any of its sessions by id and
+writes into its one bundle root (an existing bundle of another session is refused,
+never replaced). The runbook tells operators to give each tenant or trust domain its
+own workspace, input and bundle roots and worker account; SEC-T03 still gates any
+multi-tenant host. Results and events name no path, so one tenant's paths never reach
+another's output.
+**SEC-25 status.** Providers of a batch inherit the same allowlisted environment as any
+command, and no request can name an executable, environment or argument; the runbook's
+systemd and container deployments give the worker no network, a read-only root, no
+host credentials and only the input (read-only), workspace and bundle mounts.
+**SEC-20 (X-07, X-08) through the binary.** The `p11_admission_ladder` stage samples a
+batch's provider processes at concurrency 1, 2 and 4 in a four-unit workspace and
+never sees more weight than the capacity; a batch whose stdout is not read stops
+starting requests (backpressure) with bounded memory.
 
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain

@@ -210,6 +210,8 @@ paths are opened through it, never joined as strings, and a link out of it is
 X-07..X-11, O-01..O-04 and SEC-T01 (an isolated hostile native fixture attempting
 filesystem, network and credential access, fork pressure and output flooding) are
 recorded in a P11 qualification record with the repeated external-delivery simulation.
+*Amended 2026-09-28 by maintainer decision (PR 4 second-part notes): SEC-T01 is met for
+P11 by non-adversarial evidence; the adversarial evidence is technical debt (L-068).*
 
 ## Decisions for maintainer confirmation
 
@@ -534,6 +536,50 @@ in this part (known limit L-038).
 - **Contention.** The requests of one batch share the workspace's admission and
   root-level locks, so with `--admission-wait-ms 0` one may answer `BUSY` because a
   sibling holds a unit for a moment (L-067); the default wait retries with jitter.
+
+## Implementation notes: PR 4, second part (2026-09-28)
+
+The second part of PR 4 completes section 10 and the packet's operator deliverables.
+
+- **SEC-T01 (section 10), maintainer decision of 2026-09-28 (option 2).** SEC-T01 is
+  satisfied for P11 by non-adversarial evidence: the strict-Linux attestation checks
+  (section 8; the parsers and decision table on fixture files, the `host_attestation`
+  and `mountinfo` fuzz targets, `ISOLATION_UNAVAILABLE` before any work off an attested
+  host) and the controls the existing hardened `strict-worker-boundary` CI container job
+  verifies. The adversarial evidence section 10 describes is technical debt, deferred
+  for maintainer discussion and required before the R0 release (known limit L-068);
+  this record's section 10 is amended accordingly, and nothing else in it changes.
+  The PR 2 note that "the real attestation runs in PR 4's SEC-T01 container job" no
+  longer holds as written: the adversarial job was not added. Instead the existing
+  `strict-worker-boundary` job now also runs
+  `p11_strict_linux_attestation_holds_inside_the_hardened_container`, so the real
+  attestation succeeds on a real strict host in CI; a full `job run --host-isolation
+  strict-linux` there remains a residual of the qualification record.
+- **Fuzzing.** Target `job_batch_file` (23 targets): a whole batch file through the
+  reader (`BatchLines`) under the production limits and under small ones, held to an
+  independent split of the file at its line feeds, each line then decoded as `job
+  batch` decodes it; seeds copy the frozen batch examples.
+- **Single-host checkpoint.** `crates/vsift-cli/tests/p11_worker_e2e.rs` (opt-in, the
+  P11 stage of the E2E spine): a mixed batch whose outputs are then searched, cited and
+  validated against the frozen truth; the admission ladder at concurrency 1, 2 and 4,
+  with the providers' sampled weight never above the capacity; a batch stopped by
+  `SIGTERM` or a console Ctrl-Break, finished by `job resume` and redelivery, equal to
+  an uninterrupted control and then replayed unchanged; and the durable workspace,
+  required only on the qualified profile. Results are in the
+  [P11 qualification record](../planning/p11-worker-host.md).
+- **Operator runbook.** [docs/operations/worker-host.md](../operations/worker-host.md)
+  (the packet's operator deliverables): supervisor invocation, acknowledgement order,
+  duplicates, restart, cleanup, disk pressure, provider revocation, an isolated
+  container deployment with the CI job's controls, a systemd example and the guarantee
+  matrix. **Refinement:** the systemd example uses `KillMode=mixed`, not
+  `control-group`: `control-group` signals the providers at the same moment as VSift,
+  so a provider can exit abnormally before VSift's cancellation reaches it and fail its
+  step instead of leaving it resumable; `mixed` signals VSift alone and `SIGKILL`s the
+  whole cgroup only after `TimeoutStopSec` (at least the drain time plus 10 s).
+- **Reading recorded for the runbook (L-069).** A permanent failure that describes the
+  host (`MISSING_CAPABILITY`, the free-space reserve's `RESOURCE_LIMIT`) ends the
+  request like any permanent failure (PR 3 notes), so the same operation id replays it
+  after the host is fixed; the runbook tells supervisors to resubmit under a new id.
 
 ## Consequences
 

@@ -561,6 +561,18 @@ results. It never needs the whole queue in RAM. Queue redelivery, cluster leases
 tenant fairness and dead-letter routing belong to the external supervisor. A result
 printed on stdout is not an external queue acknowledgement or remote storage commit.
 
+2026-09-28 (P11 PR 4): `job run` and `job batch` implement this in the engine
+(`Engine::run_work_request`, `Engine::run_work_batch`); the CLI only parses, signals
+and presents. The batch reads a file of at most 1,000 lines one line at a time, only
+when a slot frees, and isolates every line. The
+[worker-host runbook](../operations/worker-host.md) states the supervisor's side:
+acknowledge a message only after its result is recorded, derive the operation id from
+the message's own key, route redeliveries to the same workspace, and treat a
+workspace as one trust domain. The single-host checkpoint and the evidence for
+X-07..X-11 and O-01..O-04 are in the [P11 qualification record](p11-worker-host.md);
+SEC-T01 is met for P11 by non-adversarial evidence (maintainer decision, 2026-09-28),
+its adversarial evidence deferred as technical debt (known limit L-068).
+
 The retained bundle is the public index handoff: manifest version, source identity,
 artifact/segment IDs, normalized timestamps, typed content, provenance, hashes and
 capability/coverage flags. Future index consumers use upsert keys plus explicit

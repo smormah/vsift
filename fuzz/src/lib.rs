@@ -12,11 +12,12 @@
 
 #![forbid(unsafe_code)]
 
-use std::{collections::BTreeSet, error::Error, fmt};
+use std::{collections::BTreeSet, error::Error, fmt, io::Cursor};
 
 use vsift_contract::{
-    BatchLine, MAX_REQUEST_STEPS, RelativeInputPath, StepResult, WORK_REQUEST_LIMITS, WorkResult,
-    WorkTarget, decode_batch_line, decode_work_request, validate_steps,
+    BatchLine, MAX_BATCH_LINES, MAX_REQUEST_STEPS, RelativeInputPath, StepResult,
+    WORK_REQUEST_LIMITS, WorkResult, WorkTarget, decode_batch_line, decode_work_request,
+    validate_steps,
 };
 use vsift_domain::{
     CropRect, CursorToken, FrameDimensions, JobId, ListingTail, MAX_CUE_TEXT_BYTES,
@@ -28,16 +29,17 @@ use vsift_domain::{
     normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
-    CgroupLimit, CgroupMembership, FrameListingWindow, MAX_CGROUP_DEPTH, MAX_DIAGNOSTIC_BYTES,
-    MAX_LISTING_DIAGNOSTIC_BYTES, MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES, MountDevice,
-    NetworkInterfaces, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
-    classify_mountinfo, classify_os_release, classify_root_mount, decode_chunk_checkpoint,
-    decode_evidence_record, decode_job_record, decode_request_record, decode_transcript_record,
-    decode_visual_index_record, encode_chunk_checkpoint, encode_evidence_record, encode_job_record,
-    encode_request_record, encode_transcript_record, encode_visual_index_record,
-    parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata,
-    parse_frame_listing, parse_frame_showinfo, parse_net_dev, parse_png_sequence,
-    parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    BatchFileError, BatchLine as FileLine, BatchLines, CgroupLimit, CgroupMembership,
+    FrameListingWindow, MAX_CGROUP_DEPTH, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES,
+    MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, NetworkInterfaces, SourceContainer,
+    VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo, classify_os_release,
+    classify_root_mount, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
+    decode_request_record, decode_transcript_record, decode_visual_index_record,
+    encode_chunk_checkpoint, encode_evidence_record, encode_job_record, encode_request_record,
+    encode_transcript_record, encode_visual_index_record, parse_ashowinfo_start,
+    parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_net_dev, parse_png_sequence, parse_proc_cgroup,
+    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -149,11 +151,17 @@ pub enum Target {
     /// `StepResult::decode_recorded` and `WorkResult::decode_recorded`, as
     /// a continuation and a replay read them. The input is the record.
     RequestRecord,
+    /// A whole `job batch` request file (P11 PR 4) through the reader
+    /// `BatchLines` (`vsift-infrastructure`'s `batch_file`): counted, then
+    /// read one bounded line at a time, under the production limits and
+    /// under small ones the fuzzer reaches quickly; every line handed out is
+    /// then decoded as `job batch` decodes it. The input is the file.
+    JobBatchFile,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -176,6 +184,7 @@ impl Target {
         Self::ChunkCheckpoint,
         Self::HostAttestation,
         Self::RequestRecord,
+        Self::JobBatchFile,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -204,6 +213,7 @@ impl Target {
             Self::ChunkCheckpoint => "chunk_checkpoint",
             Self::HostAttestation => "host_attestation",
             Self::RequestRecord => "request_record",
+            Self::JobBatchFile => "job_batch_file",
         }
     }
 
@@ -236,6 +246,7 @@ impl Target {
             Self::ChunkCheckpoint => check_chunk_checkpoint(data),
             Self::HostAttestation => check_host_attestation(data),
             Self::RequestRecord => check_request_record(data),
+            Self::JobBatchFile => check_job_batch_file(data),
         }
     }
 }
@@ -339,6 +350,12 @@ pub enum Violation {
     /// round trip, or holds a recorded step or result that reads back but is
     /// not its own canonical form.
     RequestRecordInconsistent,
+    /// The batch reader counted another number of lines than the file
+    /// holds, refused a file within its limit or accepted one beyond it,
+    /// handed out a line that is not the file's line of that number (or
+    /// kept one over the bound, or refused one within it), numbered lines
+    /// out of order, failed on an in-memory source, or read on after its end.
+    BatchFileInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -394,6 +411,7 @@ impl fmt::Display for Violation {
                 "an accepted kernel file broke its bounds or its canonical form"
             }
             Self::RequestRecordInconsistent => "an accepted request record is inconsistent",
+            Self::BatchFileInconsistent => "the batch reader disagrees with the file's lines",
         })
     }
 }
@@ -1094,6 +1112,88 @@ fn check_job_batch_line(data: &[u8]) -> Result<(), Violation> {
         Ok(())
     } else {
         Err(Violation::BatchLineInconsistent)
+    }
+}
+
+/// Small limits under which the fuzzer reaches the line limit and the line
+/// bound with short inputs; the production limits are checked as well.
+const SMALL_BATCH_LINES: u32 = 4;
+const SMALL_BATCH_LINE_BYTES: usize = 16;
+
+/// The reader over the whole file under the production limits (each line
+/// handed out then decoded as `job batch` decodes it) and under small ones.
+fn check_job_batch_file(data: &[u8]) -> Result<(), Violation> {
+    let production_lines = u32::try_from(MAX_BATCH_LINES).map_err(|_| Violation::HarnessSetup)?;
+    check_batch_reader(
+        data,
+        production_lines,
+        WORK_REQUEST_LIMITS.max_bytes,
+        DecodeLines::AsBatchLines,
+    )?;
+    check_batch_reader(
+        data,
+        SMALL_BATCH_LINES,
+        SMALL_BATCH_LINE_BYTES,
+        DecodeLines::No,
+    )
+}
+
+/// Whether [`check_batch_reader`] also decodes each line it is handed.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum DecodeLines {
+    AsBatchLines,
+    No,
+}
+
+/// Holds [`BatchLines`] to an independent model of the file's lines: the
+/// bytes between line feeds, a final line without one counting and an empty
+/// file having none.
+fn check_batch_reader(
+    data: &[u8],
+    max_lines: u32,
+    max_line_bytes: usize,
+    decode: DecodeLines,
+) -> Result<(), Violation> {
+    let mut expected: Vec<&[u8]> = data.split(|byte| *byte == b'\n').collect();
+    if expected.last().is_some_and(|last| last.is_empty()) {
+        expected.pop();
+    }
+    let within_limit = u32::try_from(expected.len()).is_ok_and(|count| count <= max_lines);
+    let mut reader = match BatchLines::scan(Cursor::new(data), max_lines, max_line_bytes) {
+        Ok(reader) if within_limit => reader,
+        Err(BatchFileError::TooManyLines) if !within_limit => return Ok(()),
+        _ => return Err(Violation::BatchFileInconsistent),
+    };
+    if usize::try_from(reader.lines()).ok() != Some(expected.len()) {
+        return Err(Violation::BatchFileInconsistent);
+    }
+    for (index, expected_line) in expected.iter().enumerate() {
+        let number = u32::try_from(index + 1).map_err(|_| Violation::BatchFileInconsistent)?;
+        match reader.next_line() {
+            Ok(Some(FileLine::Line {
+                number: read_number,
+                bytes,
+            })) if read_number == number
+                && expected_line.len() <= max_line_bytes
+                && bytes.as_slice() == *expected_line =>
+            {
+                if decode == DecodeLines::AsBatchLines {
+                    // Only a panic matters here; `job_batch_line` checks
+                    // what the decoder accepts.
+                    let _ = decode_batch_line(&bytes);
+                }
+            }
+            Ok(Some(FileLine::TooLong {
+                number: read_number,
+            })) if read_number == number && expected_line.len() > max_line_bytes => {}
+            _ => return Err(Violation::BatchFileInconsistent),
+        }
+    }
+    let ended = matches!(reader.next_line(), Ok(None)) && matches!(reader.next_line(), Ok(None));
+    if ended && usize::try_from(reader.lines_read()).ok() == Some(expected.len()) {
+        Ok(())
+    } else {
+        Err(Violation::BatchFileInconsistent)
     }
 }
 

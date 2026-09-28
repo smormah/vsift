@@ -125,3 +125,8 @@ accepted only when the kernel attests a cgroup v2 with finite CPU, memory and PI
 limits, a read-only root and no network interface but loopback (ADR 0021 section 8),
 and otherwise answers `ISOLATION_UNAVAILABLE` before any work. Its qualification
 against a hostile fixture (SEC-T01) is P11 PR 4; the rest of this decision stands.
+
+Note of 2026-09-28 (P11 PR 4): by maintainer decision SEC-T01 is met for P11 by
+non-adversarial evidence (the attestation checks and the hardened CI container
+controls); the qualification against a hostile fixture is technical debt required
+before the R0 release (known limit L-068). The rest of this decision stands.

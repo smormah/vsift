@@ -143,3 +143,20 @@ jobs:
             "/workspace/${test_binary}" \
             --exact p08_qualified_linux_host_reports_inherited_kernel_controls \
             --nocapture --test-threads=1
+          docker run --rm \
+            --network none \
+            --read-only \
+            --pids-limit 64 \
+            --memory 512m \
+            --memory-swap 512m \
+            --cpus 1 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --user 65534:65534 \
+            --env VSIFT_STRICT_WORKER_TEST=1 \
+            --volume "${PWD}:/workspace:ro" \
+            --workdir /workspace \
+            ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61 \
+            "/workspace/${test_binary}" \
+            --exact p11_strict_linux_attestation_holds_inside_the_hardened_container \
+            --nocapture --test-threads=1

@@ -81,7 +81,13 @@ each recorded step and result through the contract's `decode_recorded`, which mu
 read back to exactly its bytes); its seeds are the example records in
 `crates/vsift-infrastructure/tests/data/worker-requests/`, which the engine's
 `request_record_examples` test pins to the store's encoder and the contract's
-recorded form (regenerate with `VSIFT_REGENERATE_REQUEST_EXAMPLES=1`). The two
+recorded form (regenerate with `VSIFT_REGENERATE_REQUEST_EXAMPLES=1`). P11 PR 4 added
+`job_batch_file` (a whole `job batch` file through the reader `BatchLines`, under the
+production limits and under small ones of 4 lines of 16 bytes: the count, every line
+handed out, its number and whether it was over the bound must match an independent
+split of the file at its line feeds, and each line is then decoded as `job batch`
+decodes it); its seeds copy the frozen `job-batch.requests.jsonl` and
+`job-batch.events.jsonl` in `schemas/v1/examples/`. The two
 diagnostics targets also require that indented copies of every line, as FFmpeg echoes
 source metadata, never change a result; their seeds are the real FFmpeg 9.0 output in
 `crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/`. It is a separate package with its
