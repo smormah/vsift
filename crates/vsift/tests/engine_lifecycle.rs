@@ -793,3 +793,64 @@ async fn a_workspace_decides_the_durability_of_its_sessions() -> TestResult {
     }
     Ok(())
 }
+
+/// Concurrent `session init-workspace` calls for one root converge: exactly
+/// one creates it, and each other one finds it with the same policy
+/// (`already_initialized`) or, if the creator is still provisioning after
+/// the bounded wait, answers the documented `BUSY`; nobody gets another
+/// outcome, and the root ends with the policy.
+#[test]
+fn racing_initialisations_create_one_workspace() -> TestResult {
+    const RACERS: usize = 6;
+    let harness = Harness::new()?;
+    let policy = workspace_policy(vsift::DurabilityRequirement::Ephemeral, 24)?;
+    let barrier = std::sync::Barrier::new(RACERS);
+    let outcomes: Vec<Result<vsift::WorkspaceInitOutcome, EngineError>> =
+        std::thread::scope(|scope| {
+            let racers: Vec<_> = (0..RACERS)
+                .map(|_| {
+                    let clock = harness.clock.clone();
+                    let identifiers = harness.identifiers.clone();
+                    let sessions = harness.root.path("sessions");
+                    let config = harness.root.path("config");
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        let engine = Engine::new(
+                            EngineConfig {
+                                session_root: SessionRootLocation::Explicit(sessions),
+                                user_configuration: UserConfigurationLocation::Explicit(config),
+                                host_isolation: HostIsolation::ProcessOnly,
+                            },
+                            EnginePorts::new(clock, identifiers),
+                        );
+                        barrier.wait();
+                        engine
+                            .init_workspace(vsift::WorkspaceInitRequest { policy })
+                            .map(|initialised| initialised.outcome())
+                    })
+                })
+                .collect();
+            racers
+                .into_iter()
+                .map(|racer| racer.join().unwrap_or(Err(EngineError::JobInvariant)))
+                .collect()
+        });
+    let mut created = 0;
+    for outcome in &outcomes {
+        match outcome {
+            Ok(vsift::WorkspaceInitOutcome::Created) => created += 1,
+            Ok(vsift::WorkspaceInitOutcome::AlreadyInitialized)
+            | Err(EngineError::SessionRoot(SessionRootError::ProvisioningInProgress)) => {}
+            Err(other) => return Err(format!("unexpected outcome: {other}").into()),
+        }
+    }
+    assert_eq!(created, 1, "{outcomes:?}");
+    let settled = harness
+        .engine
+        .init_workspace(vsift::WorkspaceInitRequest { policy })?;
+    assert_eq!(
+        settled.outcome(),
+        vsift::WorkspaceInitOutcome::AlreadyInitialized
+    );
+    Ok(())
+}

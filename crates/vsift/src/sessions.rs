@@ -39,8 +39,13 @@ pub struct IngestRequest {
     /// with write barriers, ADR 0010) can honour it, and anywhere else the
     /// ingest fails with `MISSING_CAPABILITY` before any session is
     /// registered, never downgrading the request.
-    /// Engine-level only in this release; the command line gains it with
-    /// the worker host (ADR 0020 D-3).
+    ///
+    /// It is the least the caller requires. In a worker workspace the
+    /// workspace's policy decides (ADR 0021 section 3): a durable workspace
+    /// makes the session durable whatever was asked, which is how the
+    /// command line's plain `ingest --session-root <workspace>` becomes its
+    /// durable mode (ADR 0020 D-3), and a durable requirement in an
+    /// ephemeral workspace fails with [`EngineError::WorkspaceNotDurable`].
     pub durability: DurabilityRequirement,
 }
 
