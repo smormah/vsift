@@ -6,19 +6,17 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P10 are complete. P11 (worker and batch host) is implemented; it completes when
-its last pull request merges.** PRs 1-3 and PR 4's first part (`job batch`) are merged
-(`0bcfac5`, `6e89bdb`, `d64dfa1`, `45c25d1`). PR 4's second part is on branch
-`p11/qualification-docs` (local commits, not pushed): the `job_batch_file` fuzz target,
-the `p11_*` single-host checkpoint, the operator runbook, the qualification record and
-the final docs. ADR 0021 is accepted with maintainer decisions D1-D5 (2026-09-28).
+**P00-P11 are complete.** P11 (worker and batch host) closed on 2026-09-28 with merge
+`40c4038` (PRs #184-#187, #189; ADR 0021 accepted with D1-D5): `job run`, `job batch`,
+request records, worker workspaces (CLI durable mode), weighted admission, contained
+inputs, strict-Linux attestation (passes in the hardened CI container), progress and
+lifecycle events, operator runbook `docs/operations/worker-host.md`.
 
-1. **Review and merge PR 4b** (supervisor): push `p11/qualification-docs`, open the pull
-   request with the gate results and the checkpoint timings from the qualification
-   record, merge through protected checks.
-2. **Then** one small follow-up sets P11 `complete` in the ledger with the merge commit
-   and its verification record (delivery governance rule 9). Stop at packet completion;
-   P12 starts only on the maintainer's word.
+1. **Next: P12 (agent skill), not started.** The maintainer starts it (governance rule
+   10). Read the P12 row of `docs/planning/implementation-work-packets.md` and A-01..A-09,
+   SEC-T02 first.
+2. **Technical debt:** SEC-T01 adversarial containment evidence (#188, L-068,
+   `docs/planning/sec-t01-adversarial-handoff.md`), for maintainer discussion before P14.
 
 ## Technical debt
 

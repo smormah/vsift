@@ -31,12 +31,12 @@ Today it can:
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
 - keep every folder it creates private to the user.
 
-**P00-P10 are complete. P11 (worker and batch host) is implemented and pending the
-merge of its last pull request** (PR 4b, branch `p11/qualification-docs`, local
-commits). The packet is complete once that merges and the ledger follow-up records
-it. SEC-T01 is met for P11 by non-adversarial evidence (maintainer decision,
-2026-09-28); its adversarial containment evidence is technical debt required before
-the R0 release (L-068). Every known limit is in `docs/planning/known-limits.md`.
+**P00-P11 are complete.** P11 (worker and batch host) closed on 2026-09-28 with merge
+`40c4038` (PRs #184-#187, #189; ADR 0021 accepted with D1-D5). SEC-T01 is met for P11
+by non-adversarial evidence (maintainer decision, 2026-09-28): the real strict-Linux
+attestation passes inside the hardened CI container. Its adversarial containment
+evidence is technical debt required before the R0 release (#188, L-068,
+`docs/planning/sec-t01-adversarial-handoff.md`). P12 (agent skill) is next.
 
 ## P11 in one view
 
@@ -103,7 +103,7 @@ only there. Timings are in the qualification record.
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
-| P11 | Implemented; PR 4b pending review and merge; SEC-T01 adversarial evidence is technical debt (L-068) |
+| P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
