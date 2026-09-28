@@ -713,7 +713,8 @@ pub(crate) enum JobCommand {
     /// retranscribe, candidates, retain and close, each once per operation
     /// id.
     Run(JobRequestArguments),
-    /// Execute a finite JSONL request stream (reserved for the worker host).
+    /// Execute a finite JSON Lines file of job requests in a worker
+    /// workspace, a bounded number at a time, each line independently.
     Batch(JobBatchArguments),
     /// Report one job: state, resumability, progress, result or failure.
     Status(JobIdentityArguments),
@@ -762,12 +763,34 @@ pub(crate) struct JobRequestArguments {
     pub admission_wait_ms: u64,
 }
 
-/// Finite request stream.
+/// A finite JSON Lines request file and the operator's roots and controls
+/// (P11 PR 4, ADR 0021 section 5).
 #[derive(Args, Debug)]
 pub(crate) struct JobBatchArguments {
-    /// Versioned JSONL request file.
+    /// Regular file of at most 1,000 lines, each one job-request v1 object
+    /// of at most 64 KiB, or blank.
     #[arg(long)]
     pub requests: PathBuf,
+    /// Absolute directory every request's source and transcript paths are
+    /// relative to; nothing outside it is read, and no link is followed.
+    #[arg(long)]
+    pub input_root: PathBuf,
+    /// Absolute, existing directory retain steps write their bundles below.
+    #[arg(long)]
+    pub bundle_root: Option<PathBuf>,
+    /// Requests run at once, 1 through 16 and at most the workspace's
+    /// admission capacity; the next line is read only when one ends.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=16), default_value_t = 1)]
+    pub concurrency: u16,
+    /// After a shutdown signal, how long running steps may finish before
+    /// they are cancelled, 0 through 300000 milliseconds; defaults to 0.
+    #[arg(long, value_parser = clap::value_parser!(u64).range(0..=300_000), default_value_t = 0)]
+    pub drain_timeout_ms: u64,
+    /// How long a step waits (with jittered retries) for admission capacity
+    /// before it answers BUSY, 0 through 60000 milliseconds; defaults to
+    /// 60000.
+    #[arg(long, value_parser = clap::value_parser!(u64).range(0..=60_000), default_value_t = 60_000)]
+    pub admission_wait_ms: u64,
 }
 
 /// One validated job identifier; the job's session is found through the

@@ -10,6 +10,9 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+# Already a dependency of every layer below; the engine uses it directly for
+# the per-request tasks and the event channel of a worker batch (P11 PR 4).
+tokio.workspace = true
 vsift-application.workspace = true
 vsift-contract.workspace = true
 vsift-domain.workspace = true
@@ -18,7 +21,6 @@ vsift-infrastructure.workspace = true
 [dev-dependencies]
 jsonschema.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
 # The worker request kill test (engine_worker) stops its child at the
 # request fault points; development builds only, never a release.
 vsift-infrastructure = { workspace = true, features = ["fault-injection"] }

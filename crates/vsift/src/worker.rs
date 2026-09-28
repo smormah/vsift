@@ -284,7 +284,9 @@ impl Engine {
     }
 
     /// The session root as a worker workspace, which it must already be.
-    fn worker_store(&self) -> Result<(FilesystemSessionStore, WorkspacePolicy), EngineError> {
+    pub(crate) fn worker_store(
+        &self,
+    ) -> Result<(FilesystemSessionStore, WorkspacePolicy), EngineError> {
         let root = self.session_root_path()?;
         let store = self
             .open_session_store(&root, SessionRootProvisioning::ExistingOnly)?

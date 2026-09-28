@@ -19,6 +19,7 @@ compile_error!(
 );
 
 mod archive_inventory;
+mod batch_file;
 mod bounded_tar_inventory;
 mod contained_source_store;
 mod durable_profile;
@@ -65,6 +66,7 @@ pub use archive_inventory::{
     MAX_ARCHIVE_ENTRIES, MAX_ARCHIVE_EXPANDED_BYTES, ReviewedArchiveAlias,
     validate_archive_inventory,
 };
+pub use batch_file::{BatchFile, BatchFileError, BatchLine, BatchLines};
 pub use bounded_tar_inventory::{
     MAX_TAR_STREAM_BYTES, ReviewedArchiveFile, TarInventoryError, inspect_tar_inventory,
     inspect_tar_selected_files, stage_tar_selected_files,

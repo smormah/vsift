@@ -266,6 +266,32 @@ impl JobBatchData {
         self
     }
 
+    /// Why the batch stopped reading (end of input until [`Self::finish`]
+    /// says otherwise).
+    #[must_use]
+    pub const fn termination(&self) -> BatchTermination {
+        self.termination
+    }
+
+    /// The first line the batch did not start, if [`Self::finish`] named
+    /// one.
+    #[must_use]
+    pub const fn not_started_from_line(&self) -> Option<u32> {
+        self.not_started_from_line
+    }
+
+    /// How many lines ended with `status`.
+    #[must_use]
+    pub const fn count(&self, status: BatchItemStatus) -> u32 {
+        match status {
+            BatchItemStatus::Complete => self.counts.complete,
+            BatchItemStatus::Partial => self.counts.partial,
+            BatchItemStatus::Failed => self.counts.failed,
+            BatchItemStatus::Cancelled => self.counts.cancelled,
+            BatchItemStatus::Rejected => self.counts.rejected,
+        }
+    }
+
     /// The batch's outcome (maintainer decision D5): success when every
     /// line's request was complete or partial; stopped when a shutdown
     /// stopped it; otherwise the most severe failure among the lines and

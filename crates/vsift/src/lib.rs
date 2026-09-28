@@ -92,6 +92,7 @@
 #![forbid(unsafe_code)]
 
 mod asr;
+mod batch;
 mod candidates;
 mod engine;
 mod error;
@@ -109,6 +110,7 @@ mod worker;
 mod workspace;
 
 pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
+pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, MAX_SESSION_ROOT_WAIT, SessionRootLocation,

@@ -86,6 +86,26 @@ pub const REQUEST_FILE_REMEDIATION: &str = "Name a readable job request file wit
 /// Remediation when an ended request's result could not be recorded (P11 PR 3).
 pub const REQUEST_UNRECORDED_REMEDIATION: &str = "The request's work is done and every step is recorded, but its result could not be recorded, so it is not acknowledged. Deliver the same request again: it records and returns the result without running anything again.";
 
+/// Remediation when `job batch` cannot read its request file (P11 PR 4).
+pub const BATCH_FILE_REMEDIATION: &str = "The batch request file could not be opened or read to its end, or is not a regular file. No line from not_started_from_line on ran. Name a readable regular file with --requests and deliver the lines that did not run again.";
+
+/// Remediation when a batch file holds too many lines (P11 PR 4).
+pub const BATCH_LINE_LIMIT_REMEDIATION: &str = "A batch request file holds at most 1,000 lines, and this one holds more. Nothing was run. Split it into files of at most 1,000 lines.";
+
+/// Remediation when `--concurrency` exceeds the workspace's capacity (P11 PR 4).
+pub const BATCH_CONCURRENCY_REMEDIATION: &str = "--concurrency may not exceed the workspace's admission capacity (and at most 16). Nothing was run. Lower --concurrency, or create a workspace with more admission slots.";
+
+/// Remediation when a shutdown stops a batch (P11 PR 4).
+pub const BATCH_STOPPED_REMEDIATION: &str = "A shutdown stopped the batch. Requests that were running stay resumable, and lines from not_started_from_line never started. Deliver the unfinished lines again: a request continues from its first unfinished step and a finished one returns its recorded result.";
+
+/// Remediation when at least one line of a batch did not succeed (P11 PR 4).
+pub const BATCH_LINES_FAILED_REMEDIATION: &str = "At least one line of the batch failed or was refused; the others ran independently. The code is the most severe failure among the lines. See each line's item and result event, fix or retry those lines by their operation_id, and deliver them again.";
+
+/// The warning of a batch in which a request completed with a stated gap
+/// (P11 PR 4).
+pub const PARTIAL_BATCH_WARNING: &str =
+    "At least one request completed with a stated gap; see the coverage of its partial steps.";
+
 /// Remediation when strict worker isolation cannot be attested.
 pub const ISOLATION_UNAVAILABLE_REMEDIATION: &str = "Strict worker isolation needs a Linux cgroup v2 with finite CPU, memory and process limits, a read-only root filesystem and no network interface but loopback, and this host does not attest them all. Nothing was run. Run the worker in such a container, or without strict isolation.";
 
