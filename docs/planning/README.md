@@ -40,6 +40,8 @@ Read these documents together:
    [qualification profiles](support-and-resource-profiles.md): enforceable scope controls.
 10. [Known limits register](known-limits.md): every current limitation, residual risk,
     deferral and accepted trade-off in one reviewable place.
+11. [Worker-host runbook](../operations/worker-host.md): how an operator runs VSift
+    under an external supervisor (P11), with the guarantee matrix per platform.
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
 ledger describe approved direction. Existing ADRs remain intact. A reviewed design
