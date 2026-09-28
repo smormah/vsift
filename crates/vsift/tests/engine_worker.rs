@@ -20,7 +20,10 @@ use std::{
     num::NonZeroU16,
     path::PathBuf,
     process::{Command, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -524,15 +527,32 @@ async fn busy_admission_is_retried_within_the_wait() -> TestResult {
     assert!(value["steps"][0]["admission_wait_ms"].as_u64() >= Some(300));
     assert_eq!(Layout::opened_sessions(&engine)?, 0);
 
-    // Freed while it waits: the same request continues and completes.
-    let releaser = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(300));
-        drop(permit);
-    });
+    // Freed while it waits: the same request continues and completes. The
+    // slot is released from the engine's admission-waiting callback, so the
+    // request is known to be waiting first; a fixed sleep raced a slow
+    // runner's setup and let the request find the slot already free (#190).
+    // A fallback releases it after 5 s should the callback never fire.
+    let slot = Arc::new(Mutex::new(Some(permit)));
+    let release = {
+        let slot = Arc::clone(&slot);
+        move || {
+            if let Ok(mut held) = slot.lock() {
+                drop(held.take());
+            }
+        }
+    };
+    let fallback = {
+        let release = release.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(5));
+            release();
+        })
+    };
     let mut run = layout.run(&request);
     run.admission = AdmissionWait::Bounded(AdmissionBudget::new(Duration::from_secs(20))?);
+    run.progress = ProgressObserver::none().with_admission_waiting(move |_| release());
     let ran = engine.run_work_request(run).await;
-    releaser.join().map_err(|_| "releaser panicked")?;
+    fallback.join().map_err(|_| "fallback releaser panicked")?;
     let value = data(&ran)?;
     assert_eq!(value["status"], "complete", "{value}");
     assert_eq!(value["attempt"], 2);
