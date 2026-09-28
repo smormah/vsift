@@ -841,6 +841,11 @@ fn every_job_state_and_reason_is_schema_valid() -> TestResult {
     ] {
         assert!(prose.len() <= 1_024 && !prose.contains('/') && !prose.contains('\\'));
     }
+    // L-070 regression: a renewal only extends an open session, so the
+    // remediation for a closed or expired one must not send the caller to
+    // `session renew`, which would be refused.
+    assert!(!JOB_SESSION_NOT_OPEN_REMEDIATION.contains("session renew"));
+    assert!(JOB_SESSION_NOT_OPEN_REMEDIATION.contains("ingest"));
     Ok(())
 }
 

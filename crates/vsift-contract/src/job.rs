@@ -22,7 +22,11 @@ use crate::{TranscriptRetranscribeData, session::StatusData, transcript::RangeDa
 pub const JOB_INTERRUPTED_REMEDIATION: &str = "The run was cancelled before it committed, so nothing was committed; affected_ids names its session and job. The job is interrupted and keeps the chunks it finished: resume it with job resume <job>, or run the same command again.";
 
 /// Remediation when a job's session is closed or expired.
-pub const JOB_SESSION_NOT_OPEN_REMEDIATION: &str = "The job's session is closed or expired, so the job cannot continue; affected_ids names the session and job. Nothing was run or changed. Renew an expired session within its seven-day limit with session renew <session> and resume the job, or open a new session with ingest and run the request there.";
+///
+/// It must not advise `session renew`: a renewal only extends a session that
+/// is still open (the domain's `SessionLifetime::renew`), so the only way on is
+/// a new session.
+pub const JOB_SESSION_NOT_OPEN_REMEDIATION: &str = "The job's session is closed or expired, so the job cannot continue; affected_ids names the session and job. Nothing was run or changed. A closed or expired session cannot be renewed or reopened: open a new session with ingest and run the request there.";
 
 /// Remediation when no session of the root holds the job.
 pub const UNKNOWN_JOB_REMEDIATION: &str = "No session of this session root holds a job with that identity. Use a job_id returned by transcript retranscribe or session status for a session that still exists; jobs are removed with their session.";

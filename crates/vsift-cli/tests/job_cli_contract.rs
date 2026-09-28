@@ -870,7 +870,14 @@ fn a_closed_sessions_job_cannot_resume() -> TestResult {
     let summary = value["error"]["remediation"][0]["summary"]
         .as_str()
         .ok_or("no remediation")?;
-    assert!(summary.contains("session renew") && summary.contains("ingest"));
+    // L-070: the remediation must name the way on that works. A renewal only
+    // extends an open session, so it must not be advised, and following it
+    // is refused.
+    assert!(!summary.contains("session renew") && summary.contains("ingest"));
+    let renewed = vsift(&root, &["session", "renew", SESSION, "--json"])?;
+    assert_ne!(renewed.status.code(), Some(0));
+    let renewed: Value = serde_json::from_slice(&renewed.stdout)?;
+    assert_eq!(renewed["status"], "failed");
 
     let status = job_result(
         &vsift(&root, &["job", "status", job.as_str(), "--json"])?,
