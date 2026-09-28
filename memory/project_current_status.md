@@ -34,10 +34,12 @@ Today it can:
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
 - keep every folder it creates private to the user.
 
-**P00-P10 are complete.** **P11 (worker and batch host) is in progress: PRs 1-3 are
-merged; PR 4 is done only in part, on its branch `p11/job-batch`, not yet merged.
-The packet is not complete:** SEC-T01, the `p11_*` E2E checkpoint, the operator
-runbook and the qualification record remain (L-038). Every known limit is in
+**P00-P10 are complete.** **P11 (worker and batch host) is in progress: PRs 1-3 and
+the first part of PR 4 (`job batch`, `45c25d1`) are merged; the rest of PR 4 is on
+branch `p11/qualification`, done only in part (the batch-reader fuzz target). The
+packet is not complete:** SEC-T01 (stopped pending a maintainer decision on its
+hostile fixture), the `p11_*` E2E checkpoint, the operator runbook and the
+qualification record remain (L-038). Every known limit is in
 `docs/planning/known-limits.md`.
 
 ## P11 plan and decisions
@@ -54,12 +56,13 @@ worst failure class 7 > 1 > 5 > 3 > 2 > 4 (D5).
 - **PR 2 (merged):** workspace, weighted admission, strict attestation, contained
   inputs, free-space reserve.
 - **PR 3 (merged, `d64dfa1`):** `job run`, request records, two-stage shutdown.
-- **PR 4, first part (branch):** `job batch` (below).
-- **PR 4, rest (not started or stopped):** SEC-T01 container job (stopped pending a
-  maintainer decision on its hostile fixture), `p11_*` E2E checkpoint, operator
-  runbook, qualification record, batch-reader fuzz target, final docs.
+- **PR 4, first part (merged, `45c25d1`):** `job batch` (below).
+- **PR 4, rest (branch `p11/qualification`):** done: the `job_batch_file` fuzz
+  target. Remaining: SEC-T01 container job (stopped pending a maintainer decision on
+  its hostile fixture), `p11_*` E2E checkpoint, operator runbook, qualification
+  record, final docs.
 
-## P11 PR 4, first part: `job batch` (branch)
+## P11 PR 4, first part: `job batch` (merged)
 
 - **Command.** `vsift --session-root <workspace> job batch --requests <file>
   --input-root <dir> [--bundle-root <dir>] [--concurrency 1..16]
@@ -107,7 +110,7 @@ worst failure class 7 > 1 > 5 > 3 > 2 > 4 (D5).
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
-| P11 | In progress: PRs 1-3 merged; PR 4 in part on its branch; SEC-T01, E2E, runbook, qualification remain |
+| P11 | In progress: PRs 1-3 and PR 4's first part merged; SEC-T01, E2E, runbook, qualification remain |
 | P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
@@ -122,7 +125,9 @@ CLI `batch.rs`; contract batch remediations and `JobBatchData` accessors. Storag
 
 ## Quality evidence
 
-- P11 PR 4 branch (first part): fmt, strict Clippy (with and without features, on
+- Branch `p11/qualification` (fuzz target): fuzz fmt, Clippy (all features) and replay
+  (7 tests) green on Windows 11; the workspace gates run before review.
+- P11 PR 4 first part (merged): fmt, strict Clippy (with and without features, on
   Windows and for `x86_64-unknown-linux-gnu`), 994 workspace tests, warning-denied
   rustdoc, governance, fuzz fmt/Clippy/replay on Windows 11; results go in the PR
   description.

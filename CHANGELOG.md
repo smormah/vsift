@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Fuzz target `job_batch_file` (P11 PR 4): a whole `job batch` file through the batch
+  reader, held to an independent split of the file under the production limits and
+  under small ones, with every line then decoded as `job batch` does; seeds copy the
+  frozen batch examples. The `Fuzz` workflow runs 23 targets.
+
 - `job batch` (P11 PR 4, first part; [ADR 0021](docs/decisions/0021-worker-and-batch-host.md)
   PR 4 notes). `vsift --session-root <workspace> job batch --requests <file>
   --input-root <dir> [--bundle-root <dir>] [--concurrency 1..16] [--admission-wait-ms N]

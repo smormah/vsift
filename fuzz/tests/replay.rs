@@ -12,6 +12,7 @@ use std::{
     fmt::Write as _,
     fs,
     future::Future,
+    io::Cursor,
     num::{NonZeroU16, NonZeroU32},
     path::{Path, PathBuf},
     pin::pin,
@@ -24,7 +25,9 @@ use vsift_application::{
     VisualSampler, VisualSamplingError, build_asr_revision, extend_visual_index,
     whole_file_source_segment,
 };
-use vsift_contract::{BatchLine, decode_batch_line, decode_work_request};
+use vsift_contract::{
+    BatchLine, MAX_BATCH_LINES, WORK_REQUEST_LIMITS, decode_batch_line, decode_work_request,
+};
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CropRect, CursorToken, FrameDimensions,
@@ -37,13 +40,14 @@ use vsift_fuzz::{
     REQUEST_FUZZ_OPERATION, Target, VISUAL_FUZZ_SESSION, png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
-    FrameListingWindow, MountDevice, OsReleaseProfile, SourceContainer, VisualSamplingWindow,
-    WhisperOutputLimits, classify_mountinfo, classify_os_release, decode_chunk_checkpoint,
-    decode_evidence_record, decode_job_record, decode_request_record, decode_transcript_record,
-    decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
-    parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata,
-    parse_frame_listing, parse_frame_showinfo, parse_net_dev, parse_png_sequence,
-    parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice, OsReleaseProfile,
+    SourceContainer, VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo,
+    classify_os_release, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
+    decode_request_record, decode_transcript_record, decode_visual_index_record,
+    encode_transcript_record, encode_visual_index_record, parse_ashowinfo_start,
+    parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_net_dev, parse_png_sequence, parse_proc_cgroup,
+    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -145,6 +149,16 @@ const SEEDS: &[Seed] = &[
         Target::JobBatchLine,
         "f01-session-line.jsonl",
         Origin::InlineIn(BATCH_EXAMPLE),
+    ),
+    seed(
+        Target::JobBatchFile,
+        "job-batch.requests.jsonl",
+        Origin::Copy("schemas/v1/examples"),
+    ),
+    seed(
+        Target::JobBatchFile,
+        "job-batch.events.jsonl",
+        Origin::Copy("schemas/v1/examples"),
     ),
     seed(
         Target::JobRecord,
@@ -560,6 +574,8 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::JobRequest, "f01-session-line.json"),
         (Target::JobBatchLine, "f10-ingest-line.jsonl"),
         (Target::JobBatchLine, "f01-session-line.jsonl"),
+        (Target::JobBatchFile, "job-batch.requests.jsonl"),
+        (Target::JobBatchFile, "job-batch.events.jsonl"),
         (Target::JobRecord, "job-record.succeeded.json"),
         (Target::JobRecord, "job-record.interrupted.json"),
         (Target::RequestRecord, "request-record.running.json"),
@@ -573,6 +589,46 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         assert!(is_accepted, "{}/{file} is rejected", target.name());
     }
     Ok(())
+}
+
+/// The batch file target holds the reader to its model at the edges the
+/// small limits (4 lines of at most 16 bytes) put within the fuzzer's
+/// reach: no line, a final line without a line feed, carriage returns, a
+/// line exactly at and one byte over the bound, and one line too many.
+#[test]
+fn the_batch_file_target_holds_the_reader_to_its_edges() -> TestResult {
+    let long = "x".repeat(17);
+    let edges = [
+        String::new(),
+        "\n".to_owned(),
+        "a".to_owned(),
+        "a\r\n\r\n".to_owned(),
+        "\n\n\n\n".to_owned(),
+        "\n\n\n\n\n".to_owned(),
+        format!("{}\n{long}\nz", "y".repeat(16)),
+        format!("{long}{long}{long}"),
+        "1\n2\n3\n4\n5".to_owned(),
+        "{\"schema_version\":\"1\"}\n\u{feff}\n".to_owned(),
+    ];
+    for edge in edges {
+        Target::JobBatchFile.check(edge.as_bytes())?;
+    }
+    Ok(())
+}
+
+/// A batch file seed is within the production limits, and every line of it
+/// is handed out whole.
+fn batch_file_is_read_whole(data: &[u8]) -> Result<bool, Box<dyn Error>> {
+    let mut lines = BatchLines::scan(
+        Cursor::new(data),
+        u32::try_from(MAX_BATCH_LINES)?,
+        WORK_REQUEST_LIMITS.max_bytes,
+    )?;
+    let mut whole = true;
+    while let Some(line) = lines.next_line()? {
+        whole &= matches!(line, FileLine::Line { .. });
+    }
+    Ok(whole && lines.lines() > 0)
 }
 
 /// Whether `target`'s parser accepts a well-formed seed.
@@ -645,6 +701,7 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         Target::OsRelease => classify_os_release(data) == Ok(OsReleaseProfile::Ubuntu2404),
         Target::JobRequest => decode_work_request(data).is_ok(),
         Target::JobBatchLine => matches!(decode_batch_line(data), Ok(BatchLine::Request(_))),
+        Target::JobBatchFile => batch_file_is_read_whole(data)?,
         Target::JobRecord => decode_job_record(
             data,
             &JobId::parse(JOB_FUZZ_JOB)?,

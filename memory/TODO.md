@@ -6,26 +6,24 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P10 are complete. P11 (worker and batch host) is in progress: PRs 1-3 are
-merged (`0bcfac5`, `6e89bdb`, `d64dfa1`); PR 4 is done only in part on its branch
-`p11/job-batch`; the packet is not complete.** ADR 0021 is accepted with maintainer
-decisions D1-D5 (2026-09-28).
+**P00-P10 are complete. P11 (worker and batch host) is in progress: PRs 1-3 and the
+first part of PR 4 (`job batch`) are merged (`0bcfac5`, `6e89bdb`, `d64dfa1`,
+`45c25d1`); the rest of PR 4 is on branch `p11/qualification`, done only in part;
+the packet is not complete.** ADR 0021 is accepted with maintainer decisions D1-D5
+(2026-09-28).
 
-1. **PR 4, first part (`job batch`): done on its branch, awaiting review.** Engine
-   `run_work_batch` (reader counted then streamed, one Tokio task per request,
-   bounded event channel), CLI `job batch` with events, summary and the D5 exit,
-   batch shutdown; engine, binary and opt-in real-tool tests (X-08, X-11, O-02,
-   O-03, O-04, shared workspace, kill mid-batch). See ADR 0021 "PR 4, first part".
+1. **PR 4, rest (branch `p11/qualification`): done so far:** the fuzz target
+   `job_batch_file` for the batch reader (`BatchLines`), with seeds copied from the
+   frozen batch examples (23 targets).
 2. **Still to do in PR 4 (L-038):**
    - SEC-T01: the strict profile in the hardened CI container against a hostile
-     provider fixture. Stopped: needs a maintainer decision on how that fixture is
-     built and reviewed before any work resumes.
+     provider fixture. Stopped again on 2026-09-28: the implementing session was
+     halted while designing the fixture; the maintainer decides how the fixture is
+     built, reviewed and by whom before any work resumes.
    - The `p11_*` single-host checkpoint of the E2E spine
      (`crates/vsift-cli/tests/p11_worker_e2e.rs`).
    - The operator runbook `docs/operations/worker-host.md` (packet "P11 operator
      deliverables") and the qualification record `docs/planning/p11-worker-host.md`.
-   - A fuzz target for the batch file's line reader (`BatchLines`, generic over
-     `Read + Seek` for this), with committed seeds.
    - Final rows for X-08, X-11, O-02..O-04 and SEC-T01 in `verification.md`,
      `e2e-test-spine.md`, the support profiles' worker-strict column, the threat
      model's SEC-T01/SEC-19/SEC-25 status, architecture-and-contracts and README.
