@@ -276,6 +276,84 @@ PR 1 implements sections 1 and 7, the progress half of L-025 and the fuzz target
   `crates/vsift-infrastructure/tests/data/jobs/`, which `job_record_examples` pins to
   the encoder. `request_record` follows with PR 3.
 
+## Implementation notes: PR 2 (2026-09-28)
+
+PR 2 implements sections 3, 5a, 8 and 9 as groundwork for `job run` and
+`job batch`, which still answer `COMMAND_NOT_IMPLEMENTED`.
+
+- **Workspace (section 3, D1, D2).** `session init-workspace --durability
+  durable|ephemeral --admission-slots N --retention-hours H` (`session.init-workspace`,
+  `workspace-data`) needs an explicit absolute `--session-root` that is not the
+  per-user cache and whose parent exists. The ownership marker gains an optional
+  `workspace` member (`profile`, `durability`, `session_retention_seconds`; the
+  capacity stays the marker's `admission_capacity`); a desktop root's marker is
+  unchanged, and a build before P11 refuses a workspace marker (unknown member). The
+  same policy again answers `already_initialized`; any other policy, or a desktop
+  root, is `INVALID_ARGUMENT` with a fixed remediation (the mapping of
+  `STATE_CONFLICT`: the request cannot succeed against the root as it stands). Every
+  revalidation requires the marker to still hold the store's policy, so a policy
+  changed underneath is `INTEGRITY_FAILURE`, never adopted. A durable policy is
+  checked on the parent's filesystem before anything is created and on the new root
+  before its marker is written: off Ubuntu 24.04 / ext4 it is `MISSING_CAPABILITY`
+  with no directory left.
+- **Retention (D2), as implemented.** A workspace session expires the workspace's
+  retention after it opens or is renewed, and never beyond 720 hours from its opening
+  (`SessionLifetimePolicy::Workspace`); the retention is recorded in the session's
+  lifecycle (`workspace_retention_seconds`) so each session validates under its own
+  rules. With the maximum retention a renewal therefore changes nothing. This reading
+  of "renewable within it" is recorded for the maintainer's confirmation.
+- **Lifecycle mode.** Every session of a workspace, ephemeral or durable, reports
+  `lifecycle.mode` `durable_worker`: the mode names whose rules bound the session's
+  life; how it publishes is `data.publication` (`process_crash_consistent` in an
+  ephemeral workspace, `os_crash_durable` in a durable one).
+- **CLI durable mode (ADR 0020 D-3).** `ingest --session-root <workspace>` opens a
+  session with the workspace's durability: a durable workspace makes every session
+  durable, and a durable engine request in an ephemeral workspace is refused
+  (`WorkspaceNotDurable`, `INVALID_ARGUMENT`), never weakened.
+- **Weighted admission (section 5a, X-07).** A visual window reserves 2 units, a copy,
+  probe or evidence extraction 1, and a recognition its recognizer threads, now
+  min(available parallelism, 8, the root's capacity); the capped count is in the run's
+  provenance (known limit L-023). The recognition's reservation covers its chunk
+  decoding (`FfmpegMedia::within_caller_admission`), because the decoding and the
+  recognizer alternate and never run at once: a separate slot would count the job twice
+  and could leave a one-unit root unable to recognise anything. Work heavier than the
+  root's whole capacity fails `RESOURCE_LIMIT` before any tool is resolved or run.
+  `AdmissionWait` (domain policy, application loop) is `Immediate` for interactive
+  commands, which keep P10's two bounded retries, or `Bounded` (at most 60 s) with a
+  full-jitter poll (50 ms doubling to 1 s, at least 10 ms, never past the budget) that
+  reports its wait (`JobSummary::admission_wait`), tells the progress observer once
+  (`admission_waiting`, for PR 3's lifecycle event) and ends in `BUSY` with
+  `retry_after_ms` 2000, the job left resumable and not retried again. In PR 2 the
+  bounded wait is wired into the recognition job; PR 3 applies it to its other steps.
+  `Cancellation::child` gives each request a signal the process-wide one cancels but
+  that cancels nothing else.
+- **Strict Linux attestation (section 8).** The flag is the global
+  `--host-isolation process-only|strict-linux` (the section's `--isolation`): with
+  `strict-linux` the CLI attests the host before building its engine, and a host that
+  does not attest answers `ISOLATION_UNAVAILABLE` (exit 2) before any work.
+  `attest_strict_linux_host` reads, each bounded, `/proc/self/cgroup` (cgroup v2 only,
+  at most 32 levels, no `..`), `cpu.max`, `memory.max` and `pids.max` of the cgroup and
+  every ancestor (a limit on any level bounds the process), the root mount's own
+  options (the fuzzed mountinfo parser) and `/proc/self/net/dev` (loopback only); a
+  pure decision table names every gap. The limits are reported, never set: job-result
+  `controls.resource_limits` is `host_cgroup` or `not_enforced`. The real attestation
+  runs in PR 4's SEC-T01 container job; here the parsers and the table are tested on
+  fixture files everywhere and fuzzed (`host_attestation`, the 21st target).
+- **Contained inputs (section 9).** `InputRoot` canonicalises the root once and holds
+  it; a request path passes the relative grammar again, then is opened one component
+  at a time following no link. The implementation is stricter than the section: a link
+  anywhere on the path is refused, even one inside the root (known limit L-062), and
+  the file must have one hard link. `SourceSnapshot::stage_contained` and
+  `read_supplied_transcript_contained` read the opened file; the engine request path
+  and the `--input-root` and `--bundle-root` flags come with `job run` in PR 3.
+- **Free-space reserve.** Before a copy into a workspace on Unix, `fstatvfs` on the
+  held root must show the source's size and 1 GiB free, else `RESOURCE_LIMIT`; Windows
+  reports `not_enforced` (known limit L-061). Job-result `controls.free_space_reserve`
+  says which.
+- **Contract change.** `job-result.controls` gains the required `resource_limits` and
+  `free_space_reserve`; no host emits a job result before PR 3, and the frozen examples
+  are updated with it.
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

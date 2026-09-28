@@ -110,3 +110,18 @@ decision stands: Windows/NTFS and macOS/APFS stay ephemeral desktop targets, dur
 requests elsewhere still fail with `MISSING_CAPABILITY` before mutation, retained
 bundles keep process-crash consistency, and losing the disk or host is the caller's
 responsibility (X-10). The strict worker profile still needs P11 and P14.
+
+## 2026-09-28 note: durable workspaces and the strict worker groundwork (P11 PR 2)
+
+The qualified profile is now reachable from the command line, but only deliberately:
+an operator creates a worker workspace with `session init-workspace --durability
+durable` ([ADR 0021](0021-worker-and-batch-host.md) D1), which is accepted only where
+this decision's profile check passes (the parent's filesystem before anything is
+created, the new root before its marker is written), and every session of that
+workspace is durable. Off the profile the command fails with `MISSING_CAPABILITY` and
+creates nothing; an ephemeral workspace is available everywhere for development and CI.
+The strict worker profile has its groundwork: `--host-isolation strict-linux` is
+accepted only when the kernel attests a cgroup v2 with finite CPU, memory and PID
+limits, a read-only root and no network interface but loopback (ADR 0021 section 8),
+and otherwise answers `ISOLATION_UNAVAILABLE` before any work. Its qualification
+against a hostile fixture (SEC-T01) is P11 PR 4; the rest of this decision stands.

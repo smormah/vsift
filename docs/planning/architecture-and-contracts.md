@@ -408,6 +408,24 @@ new admissions for that provider within the host; persistent circuits require an
 explicit policy and recovery probe. Shutdown stops admission, drains to deadline,
 checkpoints committed work, cancels remaining children, and releases resources.
 
+As implemented in P11 PR 2 (ADR 0021 section 5a): reservations weigh what they run on
+the root's stable OS-locked slots. A visual window's `FFmpeg` pass reserves 2 units
+(`-threads 2`), a copy, probe or evidence extraction 1, and a recognition attempt its
+recognizer threads, min(available parallelism, 8, root capacity); that reservation
+also covers the chunk decoding between recognitions, which never runs beside the
+recognizer. Work heavier than the whole root fails `RESOURCE_LIMIT` before any work.
+Interactive commands never wait for admission (contention is `BUSY`, with P10's two
+bounded retries for a recognition); a job host's bounded `AdmissionWait` polls with
+full jitter for at most 60 s. The root's policy (capacity, and for a worker workspace
+its durability and retention) is recorded once in its marker and is immutable: a
+marker changed underneath an open store is an integrity failure. Model memory
+estimates, GPU tokens and expected disk usage are not yet part of a reservation; a
+workspace checks a 1 GiB free-space reserve before each copy on Unix. There is no
+ordering between processes sharing a root (known limit L-060). A strict Linux worker
+is accepted only after the kernel attests the inherited cgroup v2 CPU, memory and PID
+limits, a read-only root and loopback-only networking (`--host-isolation
+strict-linux`); VSift reports those limits and never claims to enforce them.
+
 ## 8. Proposed initial budgets
 
 These are starting policies to qualify, not measured capacity claims. All are visible
@@ -427,6 +445,12 @@ in effective configuration, validated before work, and tested at boundaries.
 | Temporary storage | 10 GiB session, 20 GiB root | Explicit reservation + host disk quota; maintain free-space reserve |
 | Stage timeout | Profile-derived with an overall deadline | Caller deadline constrained by host maximum |
 | Shutdown | 5 s graceful + 5 s forced cleanup target | Configured supervisor grace must cover this budget |
+
+As implemented through P11 PR 2: a desktop root admits 4 weight units; a worker
+workspace sets 1 to 64 when it is created (`session init-workspace`), with its
+sessions' retention (default 168 hours, 1 to 720, renewable within a 720-hour life)
+and durability. A workspace keeps 1 GiB free beyond each source copy on Unix; Windows
+does not check (known limit L-061).
 
 Long audio must be streamed/chunked: four hours of mono 16 kHz 16-bit PCM is roughly
 461 MB before overhead. Never load it all into memory. Enforce output quotas during

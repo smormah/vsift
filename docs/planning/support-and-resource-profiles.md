@@ -20,7 +20,7 @@ exact OS updates, Rust target, FFmpeg/whisper.cpp build, filesystem and host con
 
 | Setting | `desktop-safe` | `worker-strict` |
 | --- | --- | --- |
-| Heavy-stage admission | One weighted slot per state root | Finite host policy derived from measured CPU/RAM/GPU |
+| Heavy-stage admission | 4 weight units per desktop root: a recognition takes its threads (at most 4 here), a visual window 2, a copy or evidence extraction 1 | The workspace's `--admission-slots` (1-64), set once at `session init-workspace` from measured CPU/RAM/GPU; a recognition takes up to 8 threads within it |
 | Pending requests | At most 16 in a batch | Bounded by host policy; external queue owns backlog |
 | Source maximum | 4 hours and 20 GiB | Explicit job limit no larger than host maximum |
 | Decoded frame | 16 megapixels | Same default; may be lowered by host |
@@ -30,15 +30,16 @@ exact OS updates, Rust target, FFmpeg/whisper.cpp build, filesystem and host con
 | Provider diagnostic capture | 64 KiB for each stream | Same hard cap |
 | Probe structured output | 4 MiB | Same hard cap |
 | Session/root temporary storage | 10 GiB / 20 GiB with reserve | Explicit reservation plus host quota |
-| Session expiry | 24-hour idle, seven-day absolute | Job/workspace policy, explicit and finite |
+| Session expiry | 24-hour idle, seven-day absolute | The workspace's retention (default 168 hours, 1 to 720) after opening or renewal, at most 720 hours in all |
 | Shutdown target | Five-second graceful then five-second forced cleanup | Host-configured deadline at least as strict |
-| Durability | Ephemeral unless explicitly retained | Explicit durable workspace required |
-| Network/filesystem isolation | Report effective controls | Required external container/cgroup policy; fail if requested controls absent |
+| Durability | Ephemeral unless explicitly retained | A workspace created with `--durability durable` (Ubuntu 24.04 / ext4 only); its every session is `os_crash_durable` |
+| Network/filesystem isolation | Report effective controls | `--host-isolation strict-linux`: attested cgroup v2 CPU, memory and PID limits, read-only root, loopback only, else `ISOLATION_UNAVAILABLE` before any work; limits reported as the host cgroup's |
+| Free-space reserve | Not checked | 1 GiB beyond each source copy, checked on Unix; not checked on Windows |
 
 Visual analysis (P08, `candidates`) in both profiles: 60 s windows, at most 30 per
 call; per window at most 122 decoded 128x72 grey frames (about 1.1 MiB), 256 KiB of
 FFmpeg diagnostics, two decoder threads, a 64 MiB decoder allocation cap and a 120 s
-deadline, each holding one admission slot; at most 32 candidates per window; a
+deadline, each holding two admission units (one before P11 PR 2); at most 32 candidates per window; a
 session holds at most 64 visual-index records of at most 8 MiB (the four-hour source
 bound at full budget is a 2.2 MB record). Measured on Windows 11 (Xeon E5-2698 v4,
 FFmpeg 9.0): about 30 media seconds per second of analysis on 1440x900 video, and a

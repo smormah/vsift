@@ -491,6 +491,39 @@ into development builds (the `durability-campaign` feature is refused without de
 assertions and by the governance check outside the campaign tool's non-default
 feature).
 
+P11 PR 2 (2026-09-28): worker workspaces, weighted admission, strict Linux
+attestation and contained inputs ([ADR 0021](../decisions/0021-worker-and-batch-host.md)
+PR 2 notes).
+**SEC-05 (inputs and bombs).** A worker request's paths are opened inside an operator
+input root held as a capability, one component at a time and following no link, after
+the request path grammar (no `..`, absolute, drive, `\`, `:` or stream, device names,
+control characters); a link anywhere on the path and a file with several hard links
+are refused, and nothing outside the root is read (S-01, S-02; L-062). A worker
+workspace checks, on Unix, that a source copy leaves 1 GiB free before it starts; it
+is a pre-copy check, not a quota (L-061). Decoder allocation and thread caps are
+unchanged.
+**SEC-06/SEC-25 (strict worker).** `--host-isolation strict-linux` is accepted only
+after bounded reads of the kernel's own view attest a cgroup v2 with finite CPU,
+memory and PID limits (on the cgroup or an ancestor), a root mount read-only in its
+own options and no network interface but loopback; every parser refuses a damaged
+file whole and is fuzzed (`host_attestation`, `mountinfo`), and anything unread fails
+closed with `ISOLATION_UNAVAILABLE` before any work. The limits are the host's and are
+reported as such; VSift claims no enforcement. Whether such a host actually contains a
+hostile decoder is SEC-T01, P11 PR 4.
+**SEC-20 (oversubscription).** Admission now weighs what runs: a recognition reserves
+its recognizer threads (capped at the root's capacity and at 8), a visual window 2
+units, anything else 1; the recognition's reservation covers its chunk decoding, so a
+job is never counted twice and never runs beside an unreserved decoder. Work heavier
+than the root fails `RESOURCE_LIMIT` before any work; the cross-process property is
+tested on real OS locks with child processes at capacities 2, 4 and 8, with a negative
+control. A job host's bounded admission wait is at most 60 s with full jitter; there is
+no fairness between processes (L-060). The workspace policy (capacity, durability,
+retention) is recorded once and never adopted when changed underneath (an integrity
+failure), so a request can never raise it.
+**SEC-24.** A durable worker workspace exists only where the qualified profile check
+passes, checked before anything is created; its sessions all use ADR 0020's durable
+protocol (the command line's durable mode). The commit path is unchanged.
+
 - Rust memory safety does not prevent logic errors or vulnerabilities in native tools.
 - Provider supply-chain compromise, OS compromise and hostile same-user code remain
   risks beyond the CLI's own permission boundary.
