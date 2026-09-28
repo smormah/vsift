@@ -19,6 +19,8 @@ mod cleanup;
 mod commit;
 mod evidence;
 mod index;
+#[cfg(test)]
+mod index_tests;
 mod initialization;
 mod job_records;
 #[cfg(test)]

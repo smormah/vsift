@@ -18,6 +18,10 @@
 //! worker request's record: an attempt accepted, a step finished, the
 //! request ended.
 //!
+//! Each registration point ([`FaultPoint::REGISTRATION`], issue #197) marks
+//! one boundary of a session's registration in the index: its marker staged
+//! but not yet written, and the marker renamed into its bucket.
+//!
 //! Stopping the process is compiled only into this crate's unit tests and
 //! into builds with the `fault-injection` feature, which must never be
 //! enabled in a release build (the crate refuses to compile it without debug
@@ -94,6 +98,12 @@ pub enum FaultPoint {
     RequestStep,
     /// A worker request's record holds its result: the request has ended.
     RequestComplete,
+    /// A session's staged index marker was created, before its bytes are
+    /// written: the moment a marker created in place was empty (#197).
+    RegistrationMarkerCreate,
+    /// A session's index marker was renamed into its bucket, before the
+    /// registration holds it.
+    RegistrationMarkerRename,
 }
 
 impl FaultPoint {
@@ -135,10 +145,18 @@ impl FaultPoint {
         Self::RequestComplete,
     ];
 
-    /// Every point: the commit points, the job points, then the request
-    /// points.
+    /// Every session registration point, in the order a registration
+    /// reaches them.
     #[cfg(any(test, feature = "fault-injection"))]
-    pub const ALL: [Self; 23] = [
+    pub const REGISTRATION: [Self; 2] = [
+        Self::RegistrationMarkerCreate,
+        Self::RegistrationMarkerRename,
+    ];
+
+    /// Every point: the commit points, the job points, the request points,
+    /// then the registration points.
+    #[cfg(any(test, feature = "fault-injection"))]
+    pub const ALL: [Self; 25] = [
         Self::ArtifactInstall,
         Self::ArtifactDirectorySync,
         Self::ManifestWrite,
@@ -162,6 +180,8 @@ impl FaultPoint {
         Self::RequestAccept,
         Self::RequestStep,
         Self::RequestComplete,
+        Self::RegistrationMarkerCreate,
+        Self::RegistrationMarkerRename,
     ];
 
     /// The point's stable name, as `VSIFT_FAULT_POINT` spells it.
@@ -191,6 +211,8 @@ impl FaultPoint {
             Self::RequestAccept => "request-accept",
             Self::RequestStep => "request-step",
             Self::RequestComplete => "request-complete",
+            Self::RegistrationMarkerCreate => "registration-marker-create",
+            Self::RegistrationMarkerRename => "registration-marker-rename",
         }
     }
 
@@ -281,11 +303,12 @@ mod tests {
     use super::{FaultPoint, parse_selection};
 
     #[test]
-    fn the_commit_job_and_request_points_together_are_every_point() {
+    fn the_commit_job_request_and_registration_points_together_are_every_point() {
         let joined: Vec<FaultPoint> = FaultPoint::COMMIT
             .into_iter()
             .chain(FaultPoint::JOB)
             .chain(FaultPoint::REQUEST)
+            .chain(FaultPoint::REGISTRATION)
             .collect();
         assert_eq!(joined, FaultPoint::ALL.to_vec());
     }

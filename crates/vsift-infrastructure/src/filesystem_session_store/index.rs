@@ -1,26 +1,51 @@
 //! The bounded session index: registration before initialization and bucket scans.
+//!
+//! ```text
+//! session-index/<bucket>/<session-id>   marker: who registered the session, when
+//! session-index/.registering.tmp        the staged marker of a registration in progress
+//! ```
 
-use std::{io, path::Path};
+use std::{
+    io::{self, Write},
+    path::Path,
+};
 
-use cap_fs_ext::DirExt;
+use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
+use cap_std::fs::{Dir, OpenOptions};
 use vsift_application::SessionStorageError;
 use vsift_domain::{OperationId, SessionId};
 
 use super::map_committed_io;
 use super::{
     FilesystemSessionStore, SESSION_INDEX_DIRECTORY, STORAGE_SCHEMA_VERSION, SessionIndexMarker,
-    SessionIndexPage, SessionRegistration, create_private_child_directory, create_regular_file,
-    map_lock_error, map_storage_io, open_regular_file, session_bucket,
-    stored::read_versioned_json_file,
+    SessionIndexPage, SessionRegistration, create_private_child_directory, map_lock_error,
+    map_storage_io, open_regular_file, session_bucket, stored::read_versioned_json_file,
 };
-use crate::file_lock::HeldFileLock;
+use crate::{
+    fault_point::{FaultPlan, FaultPoint},
+    file_lock::HeldFileLock,
+};
+
+/// The staged marker of the registration in progress, in `session-index/`.
+///
+/// A marker is written here, flushed and renamed into its bucket, so a
+/// process killed while it registers leaves no marker or a whole one. A
+/// marker created in place and killed before its bytes were written was an
+/// empty file, and every later scan of its bucket, and its cleanup, failed as
+/// an integrity failure (issue #197). Every registration holds the root's
+/// initialization lock, so at most one staged marker exists, and the next
+/// registration replaces one a killed registrar left. No scan reads
+/// `session-index/` itself, only its bucket directories.
+const STAGED_MARKER: &str = ".registering.tmp";
 
 impl FilesystemSessionStore {
     /// Registers a new disposable session before initialization and source I/O.
     ///
     /// A SHA-256 bucket index caps each scan at 256 markers. The held marker lock
     /// prevents expiry cleanup of a suspended or slow opener across processes.
-    /// An interrupted open remains registered for bounded later cleanup.
+    /// An interrupted open remains registered for bounded later cleanup. The
+    /// marker is staged in `session-index/`, flushed and renamed into its
+    /// bucket, so an interrupted registration never leaves a torn one.
     ///
     /// # Errors
     ///
@@ -54,6 +79,7 @@ impl FilesystemSessionStore {
             .open_dir_nofollow(&bucket_name)
             .map_err(map_committed_io)?;
         let mut count = 0_u16;
+        let mut registered = false;
         for entry in bucket.entries().map_err(map_storage_io)? {
             let entry = entry.map_err(map_storage_io)?;
             count = count
@@ -65,6 +91,10 @@ impl FilesystemSessionStore {
             let name = entry.file_name();
             let name = name.to_str().ok_or(SessionStorageError::IntegrityFailure)?;
             SessionId::parse(name).map_err(|_| SessionStorageError::IntegrityFailure)?;
+            registered |= name == session_id.as_str();
+        }
+        if registered {
+            return Err(SessionStorageError::StateConflict);
         }
         let marker = SessionIndexMarker {
             schema_version: STORAGE_SCHEMA_VERSION,
@@ -73,13 +103,14 @@ impl FilesystemSessionStore {
             registered_at_unix_seconds: now_unix_seconds,
         };
         let bytes = serde_json::to_vec(&marker).map_err(|_| SessionStorageError::Io)?;
-        create_regular_file(&bucket, session_id.as_str(), &bytes).map_err(|error| {
-            if error.kind() == io::ErrorKind::AlreadyExists {
-                SessionStorageError::StateConflict
-            } else {
-                map_storage_io(error)
-            }
-        })?;
+        let plan = FaultPlan::from_environment();
+        stage_marker(&index, &bytes, &plan)?;
+        // The name is free: this process holds the initialization lock every
+        // registration takes, and it found no marker of this id above.
+        index
+            .rename(STAGED_MARKER, &bucket, session_id.as_str())
+            .map_err(map_storage_io)?;
+        plan.reach(FaultPoint::RegistrationMarkerRename);
         let marker_lock = HeldFileLock::try_shared(
             open_regular_file(&bucket, session_id.as_str(), true)
                 .map_err(map_storage_io)?
@@ -163,4 +194,27 @@ impl FilesystemSessionStore {
             next_bucket,
         })
     }
+}
+
+/// Writes `bytes` to [`STAGED_MARKER`] in `index`, created new after a
+/// leftover of a killed registration is removed, and flushes it. The caller
+/// holds the root's initialization lock.
+fn stage_marker(index: &Dir, bytes: &[u8], plan: &FaultPlan) -> Result<(), SessionStorageError> {
+    match index.remove_file(STAGED_MARKER) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(map_storage_io(error)),
+    }
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .follow(FollowSymlinks::No);
+    let mut file = index
+        .open_with(STAGED_MARKER, &options)
+        .map_err(map_storage_io)?;
+    plan.reach(FaultPoint::RegistrationMarkerCreate);
+    file.write_all(bytes).map_err(map_storage_io)?;
+    file.sync_all().map_err(map_storage_io)
 }
