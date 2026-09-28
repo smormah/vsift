@@ -79,9 +79,12 @@ progress.** PR 1 is an increment, not the packet.
 - **L-070 (fixed):** the `job resume` remediation for a closed or expired session now
   says to open a new session with `ingest`; it no longer advises a renewal the CLI
   refuses.
-- **#197 (open):** a macOS CI run once reported `IntegrityFailure` in the P11 kill
-  mid-batch test; a re-run passed. Under investigation as a possible crash-consistency
-  defect, not dismissed as a flake.
+- **#197 (fix in review, PR #200):** a real defect, not a flake. A process killed while
+  it registered a session could leave an empty index marker, after which every session
+  listing and that registration's cleanup failed with `INTEGRITY_FAILURE` for good; the
+  P11 batch kill test hit it on macOS and it reproduces on Windows. The marker is now
+  staged in `session-index/.registering.tmp` and renamed into its bucket (store test
+  `a_kill_while_registering_leaves_the_index_readable`). Complete once PR #200 merges.
 - **L-071:** parse failures in JSON modes carry no remediation; the skill tells agents
   to quote `--rect` on PowerShell and check commands against its reference.
 

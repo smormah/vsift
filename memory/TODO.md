@@ -26,8 +26,8 @@ and ADR 0022 (Proposed); an increment, not the packet.
 
 - **L-070 (fixed 2026-09-28):** the `job resume` remediation for a closed or expired
   session now says to open a new session with `ingest`; the limit is removed.
-- **#197 (open):** macOS once reported `IntegrityFailure` in the P11 kill mid-batch
-  test (a re-run passed); treated as a possible crash-consistency defect until diagnosed.
+- **#197 (fix in review, PR #200):** a kill during a session registration left an empty
+  index marker that failed every listing; the marker is now staged and renamed.
 - **L-071 (deferred to P13):** a command line that does not parse answers `parse`
   with no remediation in JSON modes; on PowerShell an unquoted `--rect a,b,c,d` fails
   that way. The skill tells agents to quote it.
@@ -59,6 +59,7 @@ and ADR 0022 (Proposed); an increment, not the packet.
 
 ## Tracked issues
 
+- #197: closes with PR #200; maintainer decides whether to dispatch the P10 campaign.
 - #15 (P12): the packet issue. #14 (P11): close with the ledger follow-up. #180:
   close it. #144: close after a clean main.
 - #170-#178: tracking issues for L-011, L-013, L-015, L-018, L-024, L-028, L-043,

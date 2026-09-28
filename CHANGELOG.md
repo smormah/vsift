@@ -521,6 +521,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (`JOB_SESSION_NOT_OPEN_REMEDIATION`) and the contract's failure row now say to open
   a new session with `ingest`. Found while writing the P12 skill; known limit L-070
   is removed.
+- A process killed while it registered a new session could leave an empty entry in
+  the session index. From then on every session listing, and the cleanup of that
+  registration, failed with `INTEGRITY_FAILURE`, for good. A worker batch met this
+  when one request's process was killed while another request registered its session
+  (#197, seen on macOS CI and reproduced on Windows). A registration now writes its
+  index entry to a staging file, flushes it and renames it into place, so a killed
+  registration leaves no entry or a whole one. The batch kill test now names the
+  fault point and the operation that failed.
 - A storage failure while committed state was read (for example `EIO` from a disk,
   or from ext4 after it shut itself down on a write error) was reported as
   `INTEGRITY_FAILURE`, as if the evidence had been altered; it is now `STORAGE_IO`,
