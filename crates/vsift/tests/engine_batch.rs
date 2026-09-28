@@ -149,6 +149,23 @@ impl Layout {
         })
     }
 
+    /// Request records the workspace holds: one per request that started.
+    fn recorded_requests(&self) -> Built<usize> {
+        let root = self.workspace().join("worker-requests");
+        if !root.exists() {
+            return Ok(0);
+        }
+        let mut records = 0;
+        for bucket in fs::read_dir(root)? {
+            for entry in fs::read_dir(bucket?.path())? {
+                if entry?.file_name().to_string_lossy().ends_with(".json") {
+                    records += 1;
+                }
+            }
+        }
+        Ok(records)
+    }
+
     /// The sessions of the workspace that opened.
     fn opened_sessions(engine: &Engine) -> Built<usize> {
         let mut opened = 0;
@@ -516,10 +533,12 @@ async fn a_host_that_stops_reading_holds_the_batch_back() -> TestResult {
     )?));
     tokio::time::sleep(Duration::from_millis(1_500)).await;
     assert!(!batch.is_finished());
-    let opened = Layout::opened_sessions(&engine)?;
+    // Counted from the request records on disk: listing sessions while
+    // requests register theirs may answer the documented `BUSY`.
+    let started = layout.recorded_requests()?;
     assert!(
-        opened <= 2,
-        "{opened} sessions opened while the host was not reading"
+        started <= 2,
+        "{started} requests started while the host was not reading"
     );
     let mut events = 0;
     while receiver.recv().await.is_some() {

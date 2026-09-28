@@ -103,7 +103,15 @@ fn fixture(name: &str) -> PathBuf {
 fn build_clip(target: &Path, seconds: u32) -> TestResult {
     let duration = seconds.to_string();
     let status = Command::new("ffmpeg")
-        .args(["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i"])
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+        ])
         .arg(format!("sine=frequency=440:duration={duration}"))
         .args(["-f", "lavfi", "-i"])
         .arg(format!("color=c=blue:s=320x240:r=10:d={duration}"))
@@ -227,10 +235,20 @@ fn severity(code: FailureCode) -> usize {
 /// documentation), and its outcome is the most severe failure.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "opt-in: needs FFmpeg and FFprobe on PATH"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One X-11 scenario: its five lines and their outcomes read best in one place"
+)]
 async fn a_mixed_batch_reports_independent_outcomes() -> TestResult {
     let layout = Layout::new()?;
-    fs::copy(fixture("generated/F10.mp4"), layout.inputs().join("F10.mp4"))?;
-    fs::copy(fixture("transcripts/F10.srt"), layout.inputs().join("F10.srt"))?;
+    fs::copy(
+        fixture("generated/F10.mp4"),
+        layout.inputs().join("F10.mp4"),
+    )?;
+    fs::copy(
+        fixture("transcripts/F10.srt"),
+        layout.inputs().join("F10.srt"),
+    )?;
     build_clip(&layout.inputs().join("long70.mp4"), 70)?;
     build_clip(&layout.inputs().join("long50.mp4"), 50)?;
     let bytes = fs::read(fixture("generated/F05.mp4"))?;
