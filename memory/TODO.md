@@ -33,9 +33,8 @@ Claude Code `claude-opus-5-5`/`claude-haiku-4-5-20251001`, Codex
   Windows sandbox mode (now `unelevated`); Opus never ran `search` (skill says search
   first, guarded). Claude Code runs read-only commands like `echo` under `dontAsk`;
   the grader fails them.
-- **L-071 (P13):** an unparsable command line gets no remediation in JSON modes (the
-  skill tells agents to quote `--rect` on PowerShell). **L-074 (open):** the SubRip
-  importer removes any `<letter...>` tag; `original_text` keeps everything.
+- **L-071 (P13):** no remediation for an unparsable line in JSON modes (quote `--rect`
+  on PowerShell). **L-074 (open):** SubRip import removes any `<letter...>` tag.
 - **Plan vs code/truth:** `session renew` and `job cancel` are `explicit` as a whole;
   F05's code is spoken at 6.5 s but shown from 9 s, F12's is drawn from the first
   frame, so the grader binds spoken facts by text (ADR 0022 note).
@@ -44,8 +43,9 @@ Claude Code `claude-opus-5-5`/`claude-haiku-4-5-20251001`, Codex
 
 - **P11 D1-D5** (ADR 0021): explicit workspaces, workspace-set retention, request
   steps, stop-then-cancel shutdown with opt-in drain, the D5 batch exit.
-- **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial evidence is
-  technical debt (above).
+- **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial as debt (above).
+- **P13 plan:** npm launcher over per-platform packages, no install scripts, npm/pnpm/
+  Yarn/Bun; all names held, no announcement before P14 (open items: P13 name checklist).
 
 ## Open decisions (maintainer)
 

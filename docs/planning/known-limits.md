@@ -1448,7 +1448,8 @@ Counts: 4 high, 22 medium, 47 low (73 entries).
 - **Impact:** R-14 is an R0 release gate.
 - **Why:** scheduled in P13.
 - **Mitigation:** none needed before release.
-- **Next step:** P13.
+- **Next step:** P13, following its launcher pattern and name checklist in
+  [`implementation-work-packets.md`](implementation-work-packets.md) (added 2026-09-28).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 

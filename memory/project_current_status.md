@@ -124,7 +124,7 @@ progress.** PR 1, PR 2 and PR 3a are increments, not the packet.
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | In progress: PR 1 (skill, guard) and PR 2 (harness) merged; PR 3a (dry-trial fixes) in review; L-076 decision, then the counted trials |
-| P13 | Not started; also delivers managed installation and human-readable output |
+| P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
 ## Architecture snapshot

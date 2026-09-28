@@ -84,7 +84,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P10 — Recovery integration | Stage checkpoints, operation-key handling, interrupted-job discovery/resume, cancellation/commit ordering and retry policy; Ubuntu/ext4 durable publication qualification | P03/P05/P07/P08/P09 | X-01..06/X-09/X-10, S-07/S-08; owned OS/storage crash campaign demonstrates no lost acknowledged durable evidence before enablement. In progress in four PRs ([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md), accepted 2026-09-27): commit path (incremental chain validation #164, durable protocol disabled, fault points; merged `e2b14d9`), jobs and checkpointed retranscribe (keys, chunk checkpoints, retry policy, exactly-once commit, engine job operations, `IDEMPOTENCY_CONFLICT`, caps D-2; merged `2ae55be`), public job surface and cancellation (`job status/resume/cancel`, `--operation-id`, trapped SIGINT/SIGTERM and Ctrl-C/Ctrl-Break; merged `8af331b`), Ubuntu 24.04/ext4 crash campaign and durable enablement (dm-log-writes power loss, QEMU kills, dm-flakey errors, negative control; engine-level durable ingest; [record](p10-durable-publication.md); PR 4) |
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualifies only after P10 durable evidence; repeated external-delivery simulation passes |
 | P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic. In progress ([ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md), Proposed): PR 1 delivers the skill `skills/vsift/` (procedure, command policy, budgets, image check, handoff v1, resume and lifecycle) and its CLI contract guard; the named-client trials follow |
-| P13 — Distribution and managed installation | Native artifacts and thin npm launcher; architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target. Human-readable terminal output for every command (ADR 0008; the readable terminal text of `cli-v1.md`), assigned 2026-09-26 | P06/P11/P12 | Fresh OS install without Rust; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02 |
+| P13 — Distribution and managed installation | Native artifacts and thin npm launcher over per-platform optional packages with no install scripts (see "P13 launcher boundary"); package-name checklist held before release (see "P13 name checklist"); architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target. Human-readable terminal output for every command (ADR 0008; the readable terminal text of `cli-v1.md`), assigned 2026-09-26 | P06/P11/P12 | Fresh OS install without Rust; install and run through npm, pnpm, Yarn and Bun on every supported target; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02 |
 | P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
 
 ### P00/P03 feasibility decisions
@@ -170,6 +170,57 @@ native artifact, forwards arguments/signals/stdin/out/err and propagates status.
 No application logic in npm scripts. Test spaces/Unicode, unsupported architecture,
 optional dependencies omitted, offline execution, broken binary, Ctrl-C and clean
 uninstall. The launcher and artifacts have matching versions and verified provenance.
+
+2026-09-28 (maintainer): the npm launcher uses per-platform packages, the pattern
+esbuild and Biome use.
+
+- One npm package per supported target holds that target's native binary and
+  declares `os` and `cpu` (and `libc` if both glibc and musl Linux builds ship), so
+  a package manager installs only the matching one. Their names are in the scope on
+  the name checklist below.
+- The `vsift` package contains only the launcher and its `bin` entry, and lists the
+  platform packages as `optionalDependencies` pinned to its own exact version.
+- No package has `preinstall`, `install` or `postinstall` scripts. Bun skips
+  dependency lifecycle scripts by default, pnpm and Yarn can be set to, and many
+  organisations disable them; a launcher that fetched its binary during install would
+  install cleanly and then fail at first use. It also keeps ADR 0007/0014's rule that
+  installing the package downloads nothing else.
+- The launcher finds the installed platform package, checks that its version equals
+  its own, and runs the binary through an explicit executable and argument list, never
+  a shell. A missing, mismatched or unsupported platform fails with a readable message
+  that names the expected package and the supported targets, not a stack trace.
+- The launcher runs unchanged under Node.js and Bun (`bunx` honours its `node`
+  shebang; `bunx --bun` runs it on Bun), so it uses only `node:` built-ins both
+  support. P13 sets the minimum Node.js and Bun versions.
+- Qualification installs and runs the release candidate on every supported target
+  with npm, pnpm, Yarn and Bun, both globally and one-shot (`npx`, `pnpm dlx`,
+  `yarn dlx`, `bunx`), including with install scripts disabled, alongside the cases
+  above. The native binaries stay downloadable from GitHub Releases for users with no
+  JavaScript runtime.
+
+### P13 name checklist
+
+2026-09-28 (maintainer): every name VSift will be published under is held by the real
+release before it is announced anywhere. Public promotion starts only after P14. An
+availability observation is not a reservation (ADR 0009), and no placeholder package
+is published, so a name is held only once the release workflow publishes to it.
+
+| Channel | Name(s) | State on 2026-09-28 | Note |
+| --- | --- | --- | --- |
+| npm package | `vsift` | Observed free 2026-09-10; not held | ADR 0009; a maintainer-approved scoped name is the fallback |
+| npm scope | For example `@vsift` | Unchecked | Holds the per-platform packages, and the fallback package name |
+| crates.io | `vsift`, `vsift-contract` | Unchecked | Names confirmed in ADR 0016 |
+| crates.io | `vsift-domain`, `vsift-application`, `vsift-infrastructure` | Unchecked | crates.io needs every dependency of a published crate published too |
+| crates.io | `vsift-cli` | Unchecked | Only if `cargo install` is offered; maintainer decision |
+| GitHub | `smormah/vsift` repository and its Releases | Held | Hosts the native binaries; whether a `vsift` organisation is wanted is a maintainer decision |
+| Native installers | winget, Scoop, Homebrew, Debian/Ubuntu package | Not chosen | ADR 0001 says "appropriate native installation methods" without naming them; the maintainer picks the R0 set and each joins this table |
+
+- P13 checks each name with that registry's own client (`npm view`, `cargo info`,
+  `gh`), sending no personal contact details.
+- Publishing identities use two-factor authentication and trusted publishing where the
+  registry supports it; P13 verifies account and scope ownership before publication.
+- A name found taken is a maintainer decision recorded in ADR 0009, never a silent
+  rename.
 
 ## R1 industrial capability expansion
 
