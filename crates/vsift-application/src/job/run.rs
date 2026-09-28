@@ -23,11 +23,18 @@
 //! request over it gives the same range, the recognised segments are spliced
 //! onto the new newest revision; otherwise the job fails as superseded.
 
-use std::{error::Error, fmt, future::Future, num::NonZeroU32, time::Duration};
+use std::{
+    error::Error,
+    fmt,
+    future::Future,
+    num::{NonZeroU16, NonZeroU32},
+    time::Duration,
+};
 
 use vsift_domain::{
-    AttemptFailure, FailureCode, Jitter, JobId, JobState, OperationId, RetryDecision, RetryPolicy,
-    SessionId, SourceId, StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionId,
+    AdmissionDecision, AdmissionWait, AttemptFailure, FailureCode, Jitter, JobId, JobState,
+    OperationId, RetryDecision, RetryPolicy, SessionId, SourceId, StorageGeneration, TimeRange,
+    TranscriptRevision, TranscriptRevisionId,
 };
 
 use super::{
@@ -56,12 +63,16 @@ pub trait RevisionStore: Send + Sync {
     /// A held admission slot; dropping it releases the slot.
     type Permit: Send;
 
-    /// Takes one admission slot of the session root without waiting.
+    /// Takes `weight` units of the session root's admission capacity
+    /// without waiting: a recognition reserves its recognizer threads
+    /// (X-07).
     ///
     /// # Errors
     ///
-    /// [`SessionStorageError::Busy`] when every slot is taken.
-    fn admit(&self) -> Result<Self::Permit, SessionStorageError>;
+    /// [`SessionStorageError::Busy`] when the units are taken, and
+    /// [`SessionStorageError::CapacityExhausted`] when `weight` exceeds the
+    /// root's whole capacity.
+    fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError>;
 
     /// The committed head of an open, unexpired session.
     ///
@@ -142,6 +153,9 @@ pub struct RetranscriptionRun<'a> {
     pub observed: StorageGeneration,
     /// Current time in Unix seconds.
     pub now: u64,
+    /// How an attempt waits for its admission weight (the recognizer's
+    /// threads): at once for interactive callers, bounded for job hosts.
+    pub admission: AdmissionWait,
 }
 
 /// The ports one run uses.
@@ -180,6 +194,8 @@ pub struct JobReport {
     pub checkpoints_discarded: u32,
     /// Whether the result is an earlier commit, returned without a new one.
     pub replayed: bool,
+    /// Time this call spent waiting for admission, over every attempt.
+    pub admission_wait: Duration,
 }
 
 /// A committed (or replayed) retranscription.
@@ -236,6 +252,15 @@ pub enum JobRunError {
     Job(JobStoreError),
     /// A key could not be derived; an internal fault.
     Key(JobKeyError),
+    /// The root's capacity stayed taken for the whole bounded admission
+    /// wait; the job stays resumable and is not retried automatically,
+    /// because the wait already spent the caller's budget.
+    AdmissionBusy {
+        /// The job.
+        job: JobId,
+        /// The retry hint.
+        retry_after: Duration,
+    },
 }
 
 impl fmt::Display for JobRunError {
@@ -261,6 +286,9 @@ impl fmt::Display for JobRunError {
             Self::Storage(error) => error.fmt(formatter),
             Self::Job(error) => error.fmt(formatter),
             Self::Key(error) => error.fmt(formatter),
+            Self::AdmissionBusy { .. } => {
+                formatter.write_str("the root's admission capacity stayed taken")
+            }
         }
     }
 }
@@ -277,7 +305,8 @@ impl JobRunError {
             | Self::NotResumable { job, .. }
             | Self::Cancelled { job }
             | Self::Superseded { job }
-            | Self::Asr { job, .. } => Some(job),
+            | Self::Asr { job, .. }
+            | Self::AdmissionBusy { job, .. } => Some(job),
             Self::Assembly(_) | Self::Storage(_) | Self::Job(_) | Self::Key(_) => None,
         }
     }
@@ -377,11 +406,20 @@ where
     let mut retries = 0_u32;
     let mut first_use: Option<CheckpointUse> = None;
     let mut discarded = 0_u32;
+    let mut admission_wait = Duration::ZERO;
     loop {
         owner
             .apply(&JobChange::Start, run.now)
             .map_err(JobRunError::Job)?;
-        let attempt = attempt_once(&run, &ports, &mut owner, guard, &mut retries).await;
+        let attempt = attempt_once(
+            &run,
+            &ports,
+            &mut owner,
+            guard,
+            &mut retries,
+            &mut admission_wait,
+        )
+        .await;
         match attempt {
             Ok((revision, usage, commit_operation)) => {
                 let first = first_use.unwrap_or(usage);
@@ -399,6 +437,7 @@ where
                         chunks_reused: first.reused,
                         checkpoints_discarded: discarded,
                         replayed: false,
+                        admission_wait,
                     },
                 });
             }
@@ -458,8 +497,11 @@ where
         JobChange::Interrupt(Some(failure))
     };
     owner.apply(&change, run.now).map_err(JobRunError::Job)?;
+    // A bounded admission wait already spent the caller's budget: retrying
+    // would wait again.
+    let waited_out = matches!(error, JobRunError::AdmissionBusy { .. });
     match decision {
-        RetryDecision::RetryAfter(delay) if !ends => Ok(delay),
+        RetryDecision::RetryAfter(delay) if !ends && !waited_out => Ok(delay),
         RetryDecision::RetryAfter(_) | RetryDecision::LeaveToCaller | RetryDecision::Never => {
             Err(error)
         }
@@ -509,6 +551,7 @@ fn replay<S: RevisionStore>(
             chunks_reused: 0,
             checkpoints_discarded: 0,
             replayed: true,
+            admission_wait: Duration::ZERO,
         },
     })
 }
@@ -561,6 +604,7 @@ async fn attempt_once<S, A, R, C, T, G>(
     owner: &mut S::Owner,
     guard: &mut G,
     retries: &mut u32,
+    admission_wait: &mut Duration,
 ) -> AttemptResult
 where
     S: JobStore + CommitLedger + RevisionStore,
@@ -571,10 +615,12 @@ where
     G: CommitGuard,
 {
     let job = &run.spec.job_id;
-    let permit = ports
-        .store
-        .admit()
-        .map_err(|error| (AttemptStop::failed(JobRunError::Storage(error)), None))?;
+    // The permit covers the recognizer's threads and the chunk decoding the
+    // attempt does between recognitions: one reservation for everything the
+    // attempt runs, so the root is never oversubscribed (X-07).
+    let permit = admit_waiting(run, ports, admission_wait)
+        .await
+        .map_err(|error| (AttemptStop::failed(error), None))?;
     let recognised = {
         let shared: &S::Owner = owner;
         let cancellation = JobAwareCancellation {
@@ -640,6 +686,70 @@ where
     .await
     .map(|revision| (revision, usage, operation))
     .map_err(with_usage)
+}
+
+/// Reserves the recognizer's threads of the root's capacity, as the run's
+/// [`AdmissionWait`] says.
+///
+/// An immediate wait reports contention at once as a storage `Busy`, which
+/// the retry policy retries at most twice (P10). A bounded wait polls with
+/// the policy's full-jitter backoff until the capacity frees, the caller
+/// cancels (the attempt then fails as a cancelled recognition) or the budget
+/// is spent ([`JobRunError::AdmissionBusy`]); the progress sink hears once
+/// that the run waits, and the time spent is added to `waited`.
+async fn admit_waiting<S, A, R, C, T>(
+    run: &RetranscriptionRun<'_>,
+    ports: &RetranscriptionPorts<'_, S, A, R, C, T>,
+    waited: &mut Duration,
+) -> Result<S::Permit, JobRunError>
+where
+    S: RevisionStore,
+    C: AsrCancellation,
+    T: RetryTimer,
+{
+    let weight = run.transcribe.expected.threads;
+    let mut polls = 0_u32;
+    let mut this_wait = Duration::ZERO;
+    loop {
+        match ports.store.admit(weight) {
+            Ok(permit) => return Ok(permit),
+            Err(SessionStorageError::Busy) => {}
+            Err(other) => return Err(JobRunError::Storage(other)),
+        }
+        let delay = match run.admission {
+            AdmissionWait::Immediate => {
+                return Err(JobRunError::Storage(SessionStorageError::Busy));
+            }
+            AdmissionWait::Bounded(_) => {
+                match run.admission.decide(polls, this_wait, ports.timer.jitter()) {
+                    AdmissionDecision::PollAfter(delay) => delay,
+                    AdmissionDecision::Busy { retry_after } => {
+                        return Err(JobRunError::AdmissionBusy {
+                            job: run.spec.job_id.clone(),
+                            retry_after,
+                        });
+                    }
+                }
+            }
+        };
+        if polls == 0 {
+            ports.progress.admission_waiting(weight);
+        }
+        ports.timer.sleep(delay).await;
+        this_wait = this_wait.saturating_add(delay);
+        *waited = waited.saturating_add(delay);
+        polls = polls.saturating_add(1);
+        if ports.cancellation.is_cancelled() {
+            return Err(JobRunError::Asr {
+                job: run.spec.job_id.clone(),
+                failure: AsrFailure {
+                    stage: AsrStage::Planning,
+                    reason: AsrFailureReason::Cancelled,
+                }
+                .into(),
+            });
+        }
+    }
 }
 
 /// Builds the revision the run's transcription makes over `base`.

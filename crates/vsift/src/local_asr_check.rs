@@ -129,7 +129,8 @@ impl Engine {
         if model.profile().is_none() {
             return not_run(LocalAsrNotRunReason::ModelNotPinned);
         }
-        let Ok(cli) = self.whisper_recognizer(executable, path) else {
+        let Ok(cli) = self.whisper_recognizer(executable, path, self.admission_capacity_hint())
+        else {
             return not_run(LocalAsrNotRunReason::ModelNotPinned);
         };
         let identity = match cli.recognizer_identity().await {

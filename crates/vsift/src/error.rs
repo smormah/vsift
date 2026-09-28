@@ -844,6 +844,9 @@ impl From<JobRunError> for EngineError {
             JobRunError::Storage(error) => Self::Storage(error),
             JobRunError::Job(error) => error.into(),
             JobRunError::Key(_) => Self::JobInvariant,
+            JobRunError::AdmissionBusy { retry_after, .. } => Self::AdmissionBusy {
+                retry_after_ms: u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX),
+            },
         }
     }
 }

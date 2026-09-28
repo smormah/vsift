@@ -866,8 +866,8 @@ impl CommitLedger for FilesystemSessionStore {
 impl RevisionStore for FilesystemSessionStore {
     type Permit = FilesystemAdmissionPermit;
 
-    fn admit(&self) -> Result<Self::Permit, SessionStorageError> {
-        self.try_admit(1)
+    fn admit(&self, weight: std::num::NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
+        self.try_admit(weight.get())
     }
 
     fn head(&self, session_id: &SessionId, now: u64) -> Result<SessionHead, SessionStorageError> {

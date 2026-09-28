@@ -325,6 +325,8 @@ pub(crate) async fn retranscribe(
             operation_id: arguments.operation_id,
             cancellation: cancellation.clone(),
             progress,
+            // Interactive: contention keeps P10's two bounded retries.
+            admission: vsift::AdmissionWait::Immediate,
         })
         .await?;
     let presented = retranscription(&outcome)?;

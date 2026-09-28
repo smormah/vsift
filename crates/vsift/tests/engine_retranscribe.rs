@@ -289,6 +289,7 @@ fn request(session: &SessionId, range: Option<(u64, u64)>) -> RetranscribeReques
         operation_id: None,
         cancellation: Cancellation::new(),
         progress: ProgressObserver::none(),
+        admission: vsift::AdmissionWait::Immediate,
     }
 }
 

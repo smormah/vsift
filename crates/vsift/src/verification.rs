@@ -66,6 +66,14 @@ impl Cancellation {
     pub fn is_escalated(&self) -> bool {
         self.0.is_escalated()
     }
+
+    /// A new signal for one part of the work, such as one request of a
+    /// worker's batch: it is cancelled (or escalated) whenever this one is,
+    /// while cancelling it leaves this one and every sibling running.
+    #[must_use]
+    pub fn child(&self) -> Self {
+        Self(self.0.child())
+    }
 }
 
 impl Default for Cancellation {

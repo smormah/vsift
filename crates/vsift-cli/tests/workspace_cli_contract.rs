@@ -23,8 +23,8 @@ use assert_cmd::Command;
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_contract::{
-    DURABILITY_UNAVAILABLE_REMEDIATION, WORKSPACE_POLICY_MISMATCH_REMEDIATION,
-    WORKSPACE_ROOT_REMEDIATION,
+    ADMISSION_CAPACITY_REMEDIATION, DURABILITY_UNAVAILABLE_REMEDIATION,
+    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION,
 };
 use vsift_infrastructure::directory_offers_os_crash_durability;
 
@@ -444,4 +444,55 @@ fn rfc3339(seconds: u64) -> Result<String, Box<dyn Error>> {
         time::OffsetDateTime::from_unix_timestamp(i64::try_from(seconds)?)?
             .format(&time::format_description::well_known::Rfc3339)?,
     )
+}
+
+/// X-07: work heavier than the whole root fails with `RESOURCE_LIMIT`
+/// before any work: on a one-unit workspace a visual window (two units)
+/// can never be admitted, so `candidates` is refused before any tool is
+/// looked for, run or recorded.
+#[test]
+fn a_request_heavier_than_the_root_fails_before_work() -> TestResult {
+    let owned = OwnedRoot::new()?;
+    let workspace = owned.workspace();
+    let small = [
+        "--durability",
+        "ephemeral",
+        "--admission-slots",
+        "1",
+        "--retention-hours",
+        "1",
+    ];
+    assert!(init(&owned, &workspace, &small)?.status.success());
+    let source = owned.source()?;
+    let opened = result(&vsift(
+        &owned,
+        Some(&workspace),
+        &["ingest", source.to_str().ok_or("path")?],
+    )?)?;
+    let id = opened["data"]["session_id"].as_str().ok_or("session id")?;
+    let before = result(&vsift(
+        &owned,
+        Some(&workspace),
+        &["session", "status", id],
+    )?)?;
+    let refused = vsift(
+        &owned,
+        Some(&workspace),
+        &["candidates", id, "--from", "0", "--to", "1000000"],
+    )?;
+    assert_eq!(refused.status.code(), Some(5), "{refused:?}");
+    let value = result(&refused)?;
+    assert_eq!(value["error"]["code"], "RESOURCE_LIMIT");
+    assert_eq!(
+        value["error"]["remediation"][0]["summary"],
+        ADMISSION_CAPACITY_REMEDIATION
+    );
+    let after = result(&vsift(
+        &owned,
+        Some(&workspace),
+        &["session", "status", id],
+    )?)?;
+    assert_eq!(after["data"]["artifact_count"], 0);
+    assert_eq!(after["data"]["generation"], before["data"]["generation"]);
+    Ok(())
 }

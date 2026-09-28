@@ -123,7 +123,7 @@ pub use jobs::{
     MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
 };
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
-pub use progress::{JobProgress, ProgressObserver};
+pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
@@ -160,6 +160,15 @@ pub use vsift_application::{
 };
 /// Why a crop rectangle's text or geometry was rejected.
 pub use vsift_domain::GeometryError;
+pub use vsift_domain::{
+    ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
+    DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
+    FailureCode, IdentifierError, JobId, JobKind, JobState, MAX_ADMISSION_WAIT,
+    MAX_RECOGNIZER_THREADS, OperationId, ProgressStage, ProgressUnit, ProgressUpdate,
+    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
+    SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
+    WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+};
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
     AlignmentOrigin, CarriedFrom, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText,
@@ -177,14 +186,6 @@ pub use vsift_domain::{
     AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, ProviderChunkOutput,
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
     Sha256Hex,
-};
-pub use vsift_domain::{
-    AttemptFailure, DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId,
-    FailureClass, FailureCode, IdentifierError, JobId, JobKind, JobState, OperationId,
-    ProgressStage, ProgressUnit, ProgressUpdate, PublicationGuarantee, RuntimeCapability,
-    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy,
-    SessionPhase, SourceId, StorageGeneration, WorkspacePolicy, WorkspacePolicyError,
-    WorkspaceRetention,
 };
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_domain::{

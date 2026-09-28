@@ -84,6 +84,8 @@ pub(crate) async fn resume(
             job: arguments.job.clone(),
             cancellation: cancellation.clone(),
             progress,
+            // Interactive: contention keeps P10's two bounded retries.
+            admission: vsift::AdmissionWait::Immediate,
         })
         .await?;
     let presented = retranscription(report.outcome())?;

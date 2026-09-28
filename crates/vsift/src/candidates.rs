@@ -36,8 +36,8 @@ use vsift_application::{
 };
 use vsift_domain::{
     MediaSelection, MediaTime, PageLimit, SessionArtifactKind, SessionId, SourceSegmentId,
-    TimeRange, VisualCandidate, VisualCoverageGap, VisualIndex, VisualIndexError,
-    VisualIndexProfile, VisualStreamError,
+    TimeRange, VISUAL_WINDOW_WEIGHT, VisualCandidate, VisualCoverageGap, VisualIndex,
+    VisualIndexError, VisualIndexProfile, VisualStreamError,
 };
 use vsift_infrastructure::{
     BoundSource, FfmpegMedia, FfmpegVisualSampler, FilesystemSessionStore,
@@ -259,6 +259,10 @@ impl Engine {
         now: u64,
     ) -> Result<Analysis, EngineError> {
         let cancellation = request.cancellation.0.clone();
+        // A visual window's FFmpeg pass runs two decoder threads and reserves
+        // two units of the root's capacity (X-07); a root too small for it
+        // is refused before any tool is resolved or run.
+        crate::asr::admission_fits(store, VISUAL_WINDOW_WEIGHT)?;
         let tools = self.visual_media_tools()?;
         self.ensure_media_tools_verified_with(&tools, &cancellation)
             .await?;

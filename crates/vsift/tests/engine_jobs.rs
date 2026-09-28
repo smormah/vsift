@@ -308,6 +308,7 @@ fn request(
         operation_id: operation_id.cloned(),
         cancellation: Cancellation::new(),
         progress: ProgressObserver::none(),
+        admission: vsift::AdmissionWait::Immediate,
     }
 }
 
@@ -338,6 +339,7 @@ async fn unknown_jobs_are_not_found() -> TestResult {
                 job: job.clone(),
                 cancellation: Cancellation::new(),
                 progress: ProgressObserver::none(),
+                admission: vsift::AdmissionWait::Immediate,
             })
             .await
             .err(),
@@ -445,6 +447,7 @@ async fn committed_through_the_use_case(
             base: head.newest.as_ref(),
             observed: head.generation,
             now,
+            admission: vsift_domain::AdmissionWait::Immediate,
         },
         RetranscriptionPorts {
             store,
@@ -531,6 +534,7 @@ async fn a_committed_operation_is_replayed_before_any_check_or_hash() -> TestRes
                 job: job.clone(),
                 cancellation: Cancellation::new(),
                 progress: ProgressObserver::none(),
+                admission: vsift::AdmissionWait::Immediate,
             })
             .await,
         Err(EngineError::JobNotResumable {
@@ -647,6 +651,7 @@ async fn a_job_is_resumed_and_cancelled_by_its_id() -> TestResult {
             job: job.clone(),
             cancellation: Cancellation::new(),
             progress: observer,
+            admission: vsift::AdmissionWait::Immediate,
         })
         .await?;
     // P11: the resumed run reports every chunk of its job, the reused one

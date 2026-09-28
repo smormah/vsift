@@ -92,8 +92,8 @@ pub use ffmpeg_media::{
     parse_png_sequence, parse_visual_samples, wav_from_pcm_s16le_mono,
 };
 pub use filesystem_session_store::{
-    BundleSourcePolicy, BundleStatus, CleanOutcome, EvidenceInventory, EvidenceMediaFile,
-    ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemJobOwner,
+    BundleSourcePolicy, BundleStatus, CleanOutcome, DEFAULT_ADMISSION_CAPACITY, EvidenceInventory,
+    EvidenceMediaFile, ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemJobOwner,
     FilesystemSessionStore, JOB_CANCEL_POLL, SessionIndexPage, SessionReadHold,
     SessionRegistration, SessionStatus, SessionStoreOpenError, SessionWorkDirectory,
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,

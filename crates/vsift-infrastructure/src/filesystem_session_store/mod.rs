@@ -101,7 +101,9 @@ const CHAIN_CHECKPOINT_FILE: &str = "chain-verified.json";
 const STORAGE_SCHEMA_VERSION: u16 = 1;
 const STORAGE_LAYOUT_VERSION: u16 = 1;
 const MAX_ADMISSION_CAPACITY: u16 = 64;
-const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
+/// The admission capacity of a desktop root created on first use, in weight
+/// units: a whisper.cpp run of four threads, or two visual windows, at once.
+pub const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
 const MAX_GENERATIONS_PER_SESSION: u64 = 4_096;
 /// Most artifacts one session holds (ADR 0020 D-2; 256 before P10).
 const MAX_SESSION_ARTIFACTS: usize = 512;

@@ -24,6 +24,7 @@ use std::{
     num::NonZeroU16,
     path::{Path, PathBuf},
     pin::Pin,
+    time::Duration,
 };
 
 use vsift_application::{
@@ -38,9 +39,9 @@ use vsift_application::{
     retranscription_range, run_retranscription, whole_file_source_segment,
 };
 use vsift_domain::{
-    AsrModelProfile, ChunkPlan, JobId, MediaSelection, MediaTime, OperationId, PlannedChunk,
-    ProviderChunkOutput, RuntimeDependency, SessionId, SessionPhase, TimeRange, TranscriptRevision,
-    plan_chunks,
+    AdmissionWait, AsrModelProfile, ChunkPlan, JobId, MediaSelection, MediaTime, OperationId,
+    PlannedChunk, ProviderChunkOutput, RuntimeDependency, SessionId, SessionPhase, TimeRange,
+    TranscriptRevision, plan_chunks, recognizer_threads,
 };
 use vsift_infrastructure::{
     BoundSource, ExecutableResolutionError, ExecutableResolver, FfmpegMedia, FfmpegSpeechAudio,
@@ -58,10 +59,6 @@ use crate::{
     sessions::SessionSnapshot,
     verification::Cancellation,
 };
-
-/// Most recognizer threads a run asks for. More gives little on the pinned
-/// base model and would starve the rest of the machine.
-const MAX_RECOGNIZER_THREADS: u16 = 8;
 
 /// A request to transcribe a session's speech locally with whisper.cpp.
 #[derive(Clone, Debug)]
@@ -83,6 +80,12 @@ pub struct RetranscribeRequest {
     /// plan once it is made, then each chunk, reused ones included. A replay
     /// reports nothing.
     pub progress: ProgressObserver,
+    /// How the run waits for its admission weight (its recognizer threads)
+    /// when the root is busy: [`AdmissionWait::Immediate`] for interactive
+    /// commands, which keep P10's two bounded retries, or a bounded wait of
+    /// at most 60 s for a job host, after which the run answers
+    /// [`EngineError::AdmissionBusy`] with a retry hint.
+    pub admission: AdmissionWait,
 }
 
 /// A half-open source range to retranscribe, in microseconds.
@@ -103,6 +106,7 @@ pub struct JobSummary {
     chunks_reused: u32,
     checkpoints_discarded: u32,
     replayed: bool,
+    admission_wait: Duration,
 }
 
 impl JobSummary {
@@ -114,7 +118,16 @@ impl JobSummary {
             chunks_reused: report.chunks_reused,
             checkpoints_discarded: report.checkpoints_discarded,
             replayed: report.replayed,
+            admission_wait: report.admission_wait,
         }
+    }
+
+    /// Time the run waited for admission capacity (a bounded
+    /// [`AdmissionWait`] only; zero otherwise), which a worker reports as a
+    /// step's `admission_wait_ms`.
+    #[must_use]
+    pub const fn admission_wait(&self) -> Duration {
+        self.admission_wait
     }
 
     /// The job: derived from the session and the request's operation key,
@@ -299,7 +312,7 @@ impl Engine {
 
         // 2. Resolve and identify everything before anything runs.
         let tools = self.local_asr_media_tools()?;
-        let recognizer = self.select_recognizer()?;
+        let recognizer = self.select_recognizer(self.admission_capacity_hint())?;
         let identity = match &recognizer {
             SelectedRecognizer::Whisper(cli) => cli.recognizer_identity().await,
             SelectedRecognizer::Host(host) => host.recognizer.identity_boxed().await,
@@ -321,6 +334,9 @@ impl Engine {
         // The newest revision and the generation come from one manifest, so
         // the commit below never builds on a base older than it expects.
         let (base, status) = store.read_transcript_head(&request.session, now)?;
+        // A recognition reserves its threads of the root (X-07): one that
+        // could never fit is refused before any work.
+        admission_fits(&store, identity.threads)?;
 
         // 4. Prove the tools and the recognizer work before touching user media.
         self.ensure_media_tools_verified(&tools).await?;
@@ -386,11 +402,14 @@ impl Engine {
         };
 
         // 7. Recognise from the job's checkpoints and the audio, assemble the
-        // complete revision, verify the copy and commit exactly once. The job
-        // holds one admission slot of the root while it recognises (SEC-20);
-        // each chunk's decoding takes its own slot as every media stage does.
+        // complete revision, verify the copy and commit exactly once. Each
+        // attempt reserves the recognizer's threads of the root's capacity
+        // while it recognises (SEC-20, X-07); that reservation also covers
+        // the chunk decoding between recognitions, so the decoding adapter
+        // takes none of its own.
+        let speech_media = media.within_caller_admission();
         let audio = FfmpegSpeechAudio::new(
-            &media,
+            &speech_media,
             &bound,
             &description,
             MediaSelection {
@@ -414,6 +433,7 @@ impl Engine {
             base: base.as_ref(),
             observed: status.generation(),
             now,
+            admission: request.admission,
         };
         let mut guard = SourceUnchanged(&bound);
         let selected = match &recognizer {
@@ -494,6 +514,7 @@ impl Engine {
                 chunks_reused: 0,
                 checkpoints_discarded: 0,
                 replayed: true,
+                admission_wait: Duration::ZERO,
             },
         })
     }
@@ -512,7 +533,10 @@ impl Engine {
     /// The host's recognizer when one was supplied, otherwise whisper.cpp
     /// (configured, then `whisper-cli` on the filtered `PATH`) with the
     /// configured model.
-    fn select_recognizer(&self) -> Result<SelectedRecognizer<'_>, EngineError> {
+    fn select_recognizer(
+        &self,
+        capacity: NonZeroU16,
+    ) -> Result<SelectedRecognizer<'_>, EngineError> {
         if let Some(host) = self.host_asr() {
             return Ok(SelectedRecognizer::Host(host));
         }
@@ -520,21 +544,25 @@ impl Engine {
         let executable = resolve_whisper(store.read()?.whisper)?;
         let model = store.read_model()?.ok_or(EngineError::ModelNotSelected)?;
         Ok(SelectedRecognizer::Whisper(
-            self.whisper_recognizer(executable, &model)?,
+            self.whisper_recognizer(executable, &model, capacity)?,
         ))
     }
 
-    /// whisper.cpp with `model`, the machine's recognizer threads and the
-    /// host's isolation.
+    /// whisper.cpp with `model`, the host's isolation and the machine's
+    /// recognizer threads capped by the root's admission `capacity`
+    /// ([`recognizer_threads`]): the count is its admission weight and is
+    /// recorded in every run's provenance, so the same audio recognised on
+    /// a root of smaller capacity is a different run (known limit L-023).
     pub(crate) fn whisper_recognizer(
         &self,
         executable: TrustedExecutable,
         model: &Path,
+        capacity: NonZeroU16,
     ) -> Result<WhisperCli, EngineError> {
         WhisperCli::new(
             executable,
             model,
-            recognizer_threads(),
+            recognizer_threads(std::thread::available_parallelism().ok(), capacity),
             self.config().host_isolation.into_infrastructure(),
         )
         .map_err(|_: WhisperError| EngineError::LocalAsrModelUnavailable)
@@ -703,15 +731,21 @@ pub(crate) fn open_status(
     Ok(status)
 }
 
-/// Recognizer threads: the machine's parallelism, at most
-/// [`MAX_RECOGNIZER_THREADS`]. The count is recorded in every run's provenance.
-fn recognizer_threads() -> NonZeroU16 {
-    std::thread::available_parallelism()
-        .ok()
-        .and_then(|threads| u16::try_from(threads.get()).ok())
-        .map_or(4, |threads| threads.min(MAX_RECOGNIZER_THREADS))
-        .try_into()
-        .unwrap_or(NonZeroU16::MIN)
+/// Refuses work whose admission weight exceeds the root's whole capacity:
+/// it could never be admitted, so it fails with `RESOURCE_LIMIT` before any
+/// work instead of waiting or retrying (X-07).
+pub(crate) fn admission_fits(
+    store: &FilesystemSessionStore,
+    weight: NonZeroU16,
+) -> Result<(), EngineError> {
+    let capacity = store.admission_capacity();
+    if weight.get() > capacity {
+        return Err(EngineError::AdmissionExceedsCapacity {
+            weight: weight.get(),
+            capacity,
+        });
+    }
+    Ok(())
 }
 
 /// Storage failure for a committed source copy that could not be reopened.

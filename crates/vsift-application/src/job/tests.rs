@@ -15,11 +15,12 @@ use std::{
 
 use proptest::prelude::{ProptestConfig, prop_assert_eq, proptest};
 use vsift_domain::{
-    AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, ChunkCheckpoint,
-    ChunkPlan, ChunkTime, CueText, FailureCode, Jitter, JobId, JobState, LanguageTag, MediaTime,
-    OperationId, PlannedChunk, ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderSegment,
-    ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId, SourceSegment,
-    SourceSegmentId, StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionId,
+    AdmissionBudget, AdmissionWait, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
+    AsrProviderBuild, ChunkCheckpoint, ChunkPlan, ChunkTime, CueText, FailureCode, Jitter, JobId,
+    JobState, LanguageTag, MediaTime, OperationId, PlannedChunk, ProgressStage, ProgressUpdate,
+    ProviderChunkOutput, ProviderSegment, ProviderToken, ProviderTokenKind, SessionId, Sha256Hex,
+    SourceId, SourceSegment, SourceSegmentId, StorageGeneration, TimeRange, TranscriptRevision,
+    TranscriptRevisionId,
 };
 
 use super::{
@@ -352,6 +353,7 @@ struct Shared {
     revisions: Vec<TranscriptRevision>,
     publish_faults: VecDeque<PublishFault>,
     busy_admissions: u32,
+    admitted_weights: Vec<u16>,
     publishes: usize,
 }
 
@@ -638,8 +640,9 @@ impl CommitLedger for MemoryStore {
 impl RevisionStore for MemoryStore {
     type Permit = ();
 
-    fn admit(&self) -> Result<Self::Permit, SessionStorageError> {
+    fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
         let mut shared = self.lock()?;
+        shared.admitted_weights.push(weight.get());
         if shared.busy_admissions > 0 {
             shared.busy_admissions -= 1;
             return Err(SessionStorageError::Busy);
@@ -716,6 +719,7 @@ struct Harness {
     source: SourceSegment,
     source_id: SourceId,
     identity: RecognizerIdentity,
+    admission: AdmissionWait,
 }
 
 /// A request resolved against the session's current head.
@@ -731,6 +735,7 @@ fn classify(error: &JobRunError) -> FailureCode {
     match error {
         JobRunError::Busy { .. }
         | JobRunError::Superseded { .. }
+        | JobRunError::AdmissionBusy { .. }
         | JobRunError::Storage(SessionStorageError::Busy) => FailureCode::Busy,
         JobRunError::IdempotencyConflict { .. } => FailureCode::IdempotencyConflict,
         JobRunError::NotResumable { .. } => FailureCode::InvalidArgument,
@@ -756,6 +761,7 @@ impl Harness {
             source: segment()?,
             source_id: source_id()?,
             identity: identity()?,
+            admission: AdmissionWait::Immediate,
         })
     }
 
@@ -815,6 +821,7 @@ impl Harness {
                 base: resolved.base.as_ref(),
                 observed: resolved.observed,
                 now: NOW,
+                admission: self.admission,
             },
             RetranscriptionPorts {
                 store: &self.store,
@@ -1195,6 +1202,145 @@ async fn an_operation_id_reused_for_another_request_conflicts() -> TestResult {
     Ok(())
 }
 
+// ---------------------------------------------------------- X-07 admission
+
+/// Counts the admission waits a run announces.
+#[derive(Default)]
+struct WaitRecorder(AtomicUsize);
+
+impl ProgressSink for WaitRecorder {
+    fn report(&self, _update: ProgressUpdate) {}
+
+    fn admission_waiting(&self, weight: NonZeroU16) {
+        assert_eq!(weight.get(), 4, "the recognizer's threads");
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl Harness {
+    /// Runs the whole-range request with `admission` and `progress`.
+    async fn run_admitted(
+        &self,
+        admission: AdmissionWait,
+        progress: &dyn ProgressSink,
+    ) -> Built<Result<RetranscriptionOutcome, JobRunError>> {
+        let resolved = self.resolve(None)?;
+        let flag = Flag(Arc::clone(&self.recognizer.flag));
+        let mut guard = CountingGuard::default();
+        Ok(run_retranscription(
+            RetranscriptionRun {
+                spec: &resolved.spec,
+                operation_id: None,
+                transcribe: TranscribeRangeRequest {
+                    source_segment: &self.source,
+                    range: resolved.replaced,
+                    plan: ChunkPlan::R0,
+                    audio_stream: 1,
+                    expected: &self.identity,
+                },
+                source_id: &self.source_id,
+                requested: None,
+                base: None,
+                observed: resolved.observed,
+                now: NOW,
+                admission,
+            },
+            RetranscriptionPorts {
+                store: &self.store,
+                audio: &self.audio,
+                recognizer: &self.recognizer,
+                cancellation: &flag,
+                timer: &self.timer,
+                classify,
+                progress,
+            },
+            &mut guard,
+        )
+        .await)
+    }
+}
+
+/// X-07: an attempt reserves the recognizer's threads, not one slot; a
+/// bounded wait polls with jittered backoff, says once that it waits,
+/// reports the time it waited and then runs.
+#[tokio::test]
+async fn a_bounded_admission_wait_polls_until_the_capacity_frees() -> TestResult {
+    let harness = Harness::new()?;
+    harness.store.with(|shared| shared.busy_admissions = 3)?;
+    let waits = WaitRecorder::default();
+    let budget = AdmissionBudget::new(Duration::from_secs(5))?;
+    let committed = harness
+        .run_admitted(AdmissionWait::Bounded(budget), &waits)
+        .await??;
+    assert_eq!(committed.revision.number(), 1);
+    // Full jitter at one half: 25, 50 and 100 ms below 50, 100 and 200 ms.
+    let polls = vec![
+        Duration::from_millis(25),
+        Duration::from_millis(50),
+        Duration::from_millis(100),
+    ];
+    assert_eq!(harness.timer.sleeps(), polls);
+    assert_eq!(committed.report.admission_wait, Duration::from_millis(175));
+    assert_eq!(waits.0.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        harness
+            .store
+            .with(|shared| shared.admitted_weights.clone())?,
+        vec![4, 4, 4, 4]
+    );
+    Ok(())
+}
+
+/// X-07: a bounded wait never waits longer than its budget; then it
+/// answers busy with a retry hint, leaves the job resumable and is not
+/// retried automatically (the budget is spent).
+#[tokio::test]
+async fn admission_wait_is_bounded_then_busy() -> TestResult {
+    let harness = Harness::new()?;
+    harness
+        .store
+        .with(|shared| shared.busy_admissions = u32::MAX)?;
+    let budget = AdmissionBudget::new(Duration::from_millis(900))?;
+    let resolved = harness.resolve(None)?;
+    let outcome = harness
+        .run_admitted(AdmissionWait::Bounded(budget), &NoProgress)
+        .await?;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::AdmissionBusy {
+            job: resolved.spec.job_id.clone(),
+            retry_after: Duration::from_secs(2),
+        })
+    );
+    let slept: Duration = harness.timer.sleeps().iter().sum();
+    assert_eq!(slept, budget.duration());
+    let record = harness.record(&resolved.spec.job_id)?;
+    assert_eq!(record.state, JobState::Interrupted);
+    Ok(())
+}
+
+/// An immediate wait keeps P10's behaviour: contention is retried at most
+/// twice by the retry policy, never polled.
+#[tokio::test]
+async fn an_immediate_admission_keeps_the_bounded_retries() -> TestResult {
+    let harness = Harness::new()?;
+    harness
+        .store
+        .with(|shared| shared.busy_admissions = u32::MAX)?;
+    let outcome = harness
+        .run_admitted(AdmissionWait::Immediate, &NoProgress)
+        .await?;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::Storage(SessionStorageError::Busy))
+    );
+    assert_eq!(
+        harness.timer.sleeps(),
+        vec![Duration::from_millis(100), Duration::from_millis(200)]
+    );
+    Ok(())
+}
+
 // ---------------------------------------------------------------- X-09 retries
 
 /// X-09: busy admission and a busy writer are retried at most twice with
@@ -1433,6 +1579,7 @@ async fn a_cancel_requested_during_the_run_wins_before_the_commit() -> TestResul
             base: None,
             observed: resolved.observed,
             now: NOW,
+            admission: AdmissionWait::Immediate,
         },
         RetranscriptionPorts {
             store: &SlowStore(&harness.store),
@@ -1555,8 +1702,8 @@ impl CommitLedger for SlowStore<'_> {
 impl RevisionStore for SlowStore<'_> {
     type Permit = ();
 
-    fn admit(&self) -> Result<Self::Permit, SessionStorageError> {
-        self.0.admit()
+    fn admit(&self, weight: NonZeroU16) -> Result<Self::Permit, SessionStorageError> {
+        self.0.admit(weight)
     }
 
     fn head(&self, session_id: &SessionId, now: u64) -> Result<SessionHead, SessionStorageError> {
