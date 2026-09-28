@@ -335,7 +335,10 @@ PR 2 implements sections 3, 5a, 8 and 9 as groundwork for `job run` and
   at most 32 levels, no `..`), `cpu.max`, `memory.max` and `pids.max` of the cgroup and
   every ancestor (a limit on any level bounds the process), the root mount's own
   options (the fuzzed mountinfo parser) and `/proc/self/net/dev` (loopback only); a
-  pure decision table names every gap. The limits are reported, never set: job-result
+  pure decision table names every gap. On an attested host the supervisor requires the
+  strict boundary of every provider (`HostIsolation::minimum_requirement` is
+  `StrictWorker`), so a provider never runs below it. The limits are reported, never
+  set: job-result
   `controls.resource_limits` is `host_cgroup` or `not_enforced`. The real attestation
   runs in PR 4's SEC-T01 container job; here the parsers and the table are tested on
   fixture files everywhere and fuzzed (`host_attestation`, the 21st target).

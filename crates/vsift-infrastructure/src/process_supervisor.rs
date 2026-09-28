@@ -77,6 +77,21 @@ pub enum HostIsolation {
     StrictLinux,
 }
 
+impl HostIsolation {
+    /// The least isolation every provider run under this host requires: on
+    /// an attested strict Linux worker every provider runs as a strict
+    /// worker request (P11 PR 2), so a supervisor whose effective controls
+    /// ever fell short would refuse it rather than run it unconfined.
+    #[must_use]
+    pub const fn minimum_requirement(self) -> IsolationRequirement {
+        match self {
+            Self::ProcessOnly => IsolationRequirement::ProcessTree,
+            #[cfg(target_os = "linux")]
+            Self::StrictLinux => IsolationRequirement::StrictWorker,
+        }
+    }
+}
+
 /// Immutable limits applied to every process run by one supervisor.
 #[derive(Clone, Copy, Debug)]
 pub struct SupervisorPolicy {
@@ -492,9 +507,9 @@ impl ProcessSupervisor {
         cancellation: ProcessCancellation,
     ) -> Result<ProcessOutcome, ProcessError> {
         let hard_isolation = effective_hard_isolation(self.host_isolation);
-        if request.isolation == IsolationRequirement::StrictWorker
-            && hard_isolation != HardIsolation::InheritedStrictLinux
-        {
+        let strict_required = request.isolation == IsolationRequirement::StrictWorker
+            || self.host_isolation.minimum_requirement() == IsolationRequirement::StrictWorker;
+        if strict_required && hard_isolation != HardIsolation::InheritedStrictLinux {
             return Err(ProcessError::IsolationUnavailable);
         }
         if cancellation.is_cancelled() {
@@ -1289,6 +1304,21 @@ mod tests {
         plain.cancel();
         assert!(plain.is_cancelled() && !plain.is_escalated());
         Ok(())
+    }
+
+    /// P11 PR 2: a process-only host asks nothing more of a request; a
+    /// strict worker host requires the strict boundary of every provider.
+    #[test]
+    fn a_host_sets_the_least_isolation_of_every_provider() {
+        assert_eq!(
+            HostIsolation::ProcessOnly.minimum_requirement(),
+            IsolationRequirement::ProcessTree
+        );
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            HostIsolation::StrictLinux.minimum_requirement(),
+            IsolationRequirement::StrictWorker
+        );
     }
 
     /// P11: a request's child signal stops with the process-wide one, but
