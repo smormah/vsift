@@ -6,27 +6,28 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P10 are complete. P11 (worker and batch host) is in progress: PRs 1-3 and the
-first part of PR 4 (`job batch`) are merged (`0bcfac5`, `6e89bdb`, `d64dfa1`,
-`45c25d1`); the rest of PR 4 is on branch `p11/qualification`, done only in part;
-the packet is not complete.** ADR 0021 is accepted with maintainer decisions D1-D5
-(2026-09-28).
+**P00-P10 are complete. P11 (worker and batch host) is implemented; it completes when
+its last pull request merges.** PRs 1-3 and PR 4's first part (`job batch`) are merged
+(`0bcfac5`, `6e89bdb`, `d64dfa1`, `45c25d1`). PR 4's second part is on branch
+`p11/qualification-docs` (local commits, not pushed): the `job_batch_file` fuzz target,
+the `p11_*` single-host checkpoint, the operator runbook, the qualification record and
+the final docs. ADR 0021 is accepted with maintainer decisions D1-D5 (2026-09-28).
 
-1. **PR 4, rest (branch `p11/qualification`): done so far:** the fuzz target
-   `job_batch_file` for the batch reader (`BatchLines`), with seeds copied from the
-   frozen batch examples (23 targets).
-2. **Still to do in PR 4 (L-038):**
-   - SEC-T01: the strict profile in the hardened CI container against a hostile
-     provider fixture. Stopped again on 2026-09-28: the implementing session was
-     halted while designing the fixture; the maintainer decides how the fixture is
-     built, reviewed and by whom before any work resumes.
-   - The `p11_*` single-host checkpoint of the E2E spine
-     (`crates/vsift-cli/tests/p11_worker_e2e.rs`).
-   - The operator runbook `docs/operations/worker-host.md` (packet "P11 operator
-     deliverables") and the qualification record `docs/planning/p11-worker-host.md`.
-   - Final rows for X-08, X-11, O-02..O-04 and SEC-T01 in `verification.md`,
-     `e2e-test-spine.md`, the support profiles' worker-strict column, the threat
-     model's SEC-T01/SEC-19/SEC-25 status, architecture-and-contracts and README.
+1. **Review and merge PR 4b** (supervisor): push `p11/qualification-docs`, open the pull
+   request with the gate results and the checkpoint timings from the qualification
+   record, merge through protected checks.
+2. **Then** one small follow-up sets P11 `complete` in the ledger with the merge commit
+   and its verification record (delivery governance rule 9). Stop at packet completion;
+   P12 starts only on the maintainer's word.
+
+## Technical debt
+
+- **SEC-T01 adversarial containment evidence** (known limit L-068, high): deferred by
+  the maintainer on 2026-09-28 (option 2); P11 rests on non-adversarial evidence
+  (attestation checks and the `strict-worker-boundary` container controls). Must be
+  resolved before the R0 release (P14). Handoff document:
+  `docs/planning/sec-t01-adversarial-handoff.md` (written by the supervisor); GitHub
+  issue to be opened and linked in L-068.
 
 ## Decided (maintainer, 2026-09-28)
 
@@ -37,27 +38,30 @@ the packet is not complete.** ADR 0021 is accepted with maintainer decisions D1-
   cancels in-flight work at its next boundary; drain is opt-in via
   `--drain-timeout-ms` (at most 300 s). **D5** `job batch` exits 0 when every request
   is complete or partial, 6 on shutdown, else the worst class 7 > 1 > 5 > 3 > 2 > 4.
+- **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial evidence is
+  technical debt (above).
 
 ## Open decisions (maintainer)
 
-- **PR 4 readings to confirm:** a file of more than 1,000 lines is refused whole
-  before any work (the ADR said line 1,001 ends the batch); a line over 64 KiB is
-  refused alone rather than failing the batch; a line cancelled by `job cancel` that
-  is the most severe exits 6 like a shutdown, told apart by `termination_reason`
-  (L-067); the engine depends on `tokio` directly.
-- **SEC-T01 approach:** how the hostile provider fixture is built, reviewed and run.
-- **PR 3 readings to confirm:** transient or resumable failures stay continuable;
-  pruning removes only records of gone sessions; the 192 KiB record bound; a foreign
-  bundle directory is `INVALID_ARGUMENT`; `lifecycle stopped` carries the job run
-  shutdown reason; `--admission-wait-ms` defaults to 60 s; an unrecorded result is
-  `STORAGE_IO`.
-- **From PR 2:** the D2 reading; ephemeral workspace sessions report
-  `durable_worker`; every link on an input path is refused (L-062). Also: MSRV and
-  0.x pre-releases; a local MCP adapter after P12.
+- **PR 4b readings to confirm:** the runbook's systemd example uses `KillMode=mixed`,
+  not the `control-group` of the brief (control-group signals providers together with
+  VSift, so a step can fail instead of stopping resumably; ADR 0021 PR 4 second-part
+  notes); a host-caused permanent failure (`MISSING_CAPABILITY`, the free-space
+  reserve's `RESOURCE_LIMIT`) replays under its operation id, so supervisors resubmit
+  under a new id (L-069).
+- **PR 4a readings to confirm:** a file of more than 1,000 lines is refused whole
+  before any work; a line over 64 KiB is refused alone; a job-cancelled line that is
+  the most severe exits 6 like a shutdown, told apart by `termination_reason` (L-067);
+  the engine depends on `tokio` directly.
+- **PR 2-3 readings to confirm** (ADR 0021 notes): transient failures stay continuable;
+  pruning only records of gone sessions; the 192 KiB record bound; the D2 reading;
+  ephemeral workspace sessions report `durable_worker`; every input-path link refused
+  (L-062). Also: MSRV and 0.x pre-releases; a local MCP adapter after P12.
 
 ## Tracked issues
 
-- #180 (job record/checkpoint fuzz targets): close it. #144: close after a clean main.
+- #14 (P11): close with the ledger follow-up. #180 (job record/checkpoint fuzz
+  targets): close it. #144: close after a clean main.
 - #170-#178: tracking issues for L-011, L-013, L-015, L-018, L-024, L-028, L-043,
   L-045 and L-042 (review pending).
 - #159 motion fixtures; #150 noisy-speech fixtures; #147 faster-whisper adapter; #128
@@ -65,21 +69,19 @@ the packet is not complete.** ADR 0021 is accepted with maintainer decisions D1-
 
 ## Other follow-ups
 
-- **Known limits:** 65 entries to L-067 (review pending); PR 4 rewrote L-038 (what
-  remains of P11) and added L-066 (1,000-line batch file) and L-067 (contention
-  inside a batch; exit of a job-cancelled line).
+- **Known limits:** 67 entries to L-069 (review pending). PR 4b rewrote L-004, L-010,
+  L-038, L-055 and L-057 and added L-068 (SEC-T01 technical debt) and L-069.
+- **Not yet run as written:** the runbook's systemd unit and container example (L-038);
+  the `p11_durable_workspace` stage on Ubuntu 24.04 / ext4 (it reports `blocked`
+  elsewhere); a CI run of `--host-isolation strict-linux` succeeding end to end.
 - **Campaign upkeep:** bump the three `UBUNTU_IMAGE_*` values together (3 GiB images).
 
 ## Known issues and gates
 
-- Real-tool success paths are opt-in (`--ignored`): the P07-P10 E2E tests,
-  `engine_retranscribe`, `engine_jobs`, `engine_batch_tools`, the evidence and
-  candidates fixtures, the S-11 measurements, the Windows console-interrupt tests,
-  `every_step_runs_with_real_tools`, `provider_output_never_reaches_output` and
-  `repeated_external_delivery_commits_once`.
-- Linux-only code is checked on Windows with `cargo clippy --target
-  x86_64-unknown-linux-gnu` and an OpenSSL links override (the `openssl` cfg and
-  `ossl*` cfgs up to `ossl340`); it runs for real only on Linux CI.
+- Real-tool success paths are opt-in (`--ignored`): the P07-P11 E2E tests, the
+  `*_tools` engine tests, the Windows console-interrupt tests and the external-delivery
+  simulation (L-042). Linux-only code is linted on Windows with `cargo clippy --target
+  x86_64-unknown-linux-gnu` and runs for real only on Linux CI.
 - Never run the crash campaign's scripts on a machine whose disks matter. Durability
   ends at the disk (L-056, L-057); Windows/macOS durable requests fail closed.
 
