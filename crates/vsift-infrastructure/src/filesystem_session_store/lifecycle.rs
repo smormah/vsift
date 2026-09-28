@@ -53,6 +53,7 @@ impl FilesystemSessionStore {
                 source_bytes: snapshot.bytes(),
                 now: now_unix_seconds,
                 artifacts: Vec::new(),
+                lifetime: self.lifetime_policy(),
             },
             LifetimeHold::Shared,
             &CommitHooks::new(),
@@ -134,6 +135,7 @@ impl FilesystemSessionStore {
                     bytes: u64::try_from(bytes.len())
                         .map_err(|_| SessionStorageError::CapacityExhausted)?,
                 }],
+                lifetime: self.lifetime_policy(),
             },
             LifetimeHold::Shared,
             &hooks,

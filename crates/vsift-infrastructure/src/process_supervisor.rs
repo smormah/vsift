@@ -77,6 +77,21 @@ pub enum HostIsolation {
     StrictLinux,
 }
 
+impl HostIsolation {
+    /// The least isolation every provider run under this host requires: on
+    /// an attested strict Linux worker every provider runs as a strict
+    /// worker request (P11 PR 2), so a supervisor whose effective controls
+    /// ever fell short would refuse it rather than run it unconfined.
+    #[must_use]
+    pub const fn minimum_requirement(self) -> IsolationRequirement {
+        match self {
+            Self::ProcessOnly => IsolationRequirement::ProcessTree,
+            #[cfg(target_os = "linux")]
+            Self::StrictLinux => IsolationRequirement::StrictWorker,
+        }
+    }
+}
+
 /// Immutable limits applied to every process run by one supervisor.
 #[derive(Clone, Copy, Debug)]
 pub struct SupervisorPolicy {
@@ -250,9 +265,16 @@ impl ProcessRequest {
 /// only for the forced kill and the reap, never for a provider that ignores
 /// `SIGTERM`. Neither step ever abandons a provider: the supervisor still
 /// reaps the whole tree before it returns (SEC-04).
+///
+/// A [`ProcessCancellation::child`] observes its parent as well as its own
+/// signal: cancelling the parent stops every child, while cancelling a child
+/// stops only that child. A worker host gives each request its own child of
+/// the process-wide signal, so one request can be stopped without the others
+/// and a shutdown still reaches them all (P11, ADR 0021).
 #[derive(Clone, Debug)]
 pub struct ProcessCancellation {
     sender: watch::Sender<CancellationState>,
+    parent: Option<Box<ProcessCancellation>>,
 }
 
 /// The steps of a cancellation, in order; a signal only moves forward.
@@ -268,7 +290,21 @@ impl ProcessCancellation {
     #[must_use]
     pub fn new() -> Self {
         let (sender, _) = watch::channel(CancellationState::Active);
-        Self { sender }
+        Self {
+            sender,
+            parent: None,
+        }
+    }
+
+    /// A new signal that is also cancelled (or escalated) whenever this one
+    /// is, but whose own cancellation leaves this one untouched.
+    #[must_use]
+    pub fn child(&self) -> Self {
+        let (sender, _) = watch::channel(CancellationState::Active);
+        Self {
+            sender,
+            parent: Some(Box::new(self.clone())),
+        }
     }
 
     /// Requests cancellation. Repeated requests are idempotent.
@@ -283,16 +319,26 @@ impl ProcessCancellation {
         self.advance(CancellationState::Escalated);
     }
 
-    /// Reports whether cancellation was already requested.
+    /// Reports whether cancellation was already requested, here or on an
+    /// ancestor.
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
-        *self.sender.borrow() >= CancellationState::Cancelled
+        self.state() >= CancellationState::Cancelled
     }
 
-    /// Reports whether the graceful stop was skipped by a second request.
+    /// Reports whether the graceful stop was skipped by a second request,
+    /// here or on an ancestor.
     #[must_use]
     pub fn is_escalated(&self) -> bool {
-        *self.sender.borrow() == CancellationState::Escalated
+        self.state() == CancellationState::Escalated
+    }
+
+    /// The furthest step this signal or any ancestor has reached.
+    fn state(&self) -> CancellationState {
+        let own = *self.sender.borrow();
+        self.parent
+            .as_ref()
+            .map_or(own, |parent| own.max(parent.state()))
     }
 
     fn advance(&self, next: CancellationState) {
@@ -306,16 +352,38 @@ impl ProcessCancellation {
         });
     }
 
-    async fn reached(&self, step: CancellationState) {
-        let mut receiver = self.sender.subscribe();
-        loop {
-            if *receiver.borrow_and_update() >= step {
-                return;
+    /// Resolves once this signal or an ancestor reaches `step`. A chain is
+    /// a handful of links at most (the process signal and one request), and
+    /// each level waits on its own signal and its parent's at once.
+    fn reached(
+        &self,
+        step: CancellationState,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            let mut receiver = self.sender.subscribe();
+            loop {
+                if *receiver.borrow_and_update() >= step {
+                    return;
+                }
+                match &self.parent {
+                    Some(parent) => {
+                        tokio::select! {
+                            changed = receiver.changed() => {
+                                if changed.is_err() {
+                                    return;
+                                }
+                            }
+                            () = parent.reached(step) => return,
+                        }
+                    }
+                    None => {
+                        if receiver.changed().await.is_err() {
+                            return;
+                        }
+                    }
+                }
             }
-            if receiver.changed().await.is_err() {
-                return;
-            }
-        }
+        })
     }
 
     async fn cancelled(&self) {
@@ -439,9 +507,9 @@ impl ProcessSupervisor {
         cancellation: ProcessCancellation,
     ) -> Result<ProcessOutcome, ProcessError> {
         let hard_isolation = effective_hard_isolation(self.host_isolation);
-        if request.isolation == IsolationRequirement::StrictWorker
-            && hard_isolation != HardIsolation::InheritedStrictLinux
-        {
+        let strict_required = request.isolation == IsolationRequirement::StrictWorker
+            || self.host_isolation.minimum_requirement() == IsolationRequirement::StrictWorker;
+        if strict_required && hard_isolation != HardIsolation::InheritedStrictLinux {
             return Err(ProcessError::IsolationUnavailable);
         }
         if cancellation.is_cancelled() {
@@ -1235,6 +1303,46 @@ mod tests {
         let plain = ProcessCancellation::new();
         plain.cancel();
         assert!(plain.is_cancelled() && !plain.is_escalated());
+        Ok(())
+    }
+
+    /// P11 PR 2: a process-only host asks nothing more of a request; a
+    /// strict worker host requires the strict boundary of every provider.
+    #[test]
+    fn a_host_sets_the_least_isolation_of_every_provider() {
+        assert_eq!(
+            HostIsolation::ProcessOnly.minimum_requirement(),
+            IsolationRequirement::ProcessTree
+        );
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            HostIsolation::StrictLinux.minimum_requirement(),
+            IsolationRequirement::StrictWorker
+        );
+    }
+
+    /// P11: a request's child signal stops with the process-wide one, but
+    /// cancelling one request never stops another or the process.
+    #[tokio::test]
+    async fn a_child_follows_its_parent_but_not_the_other_way()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let process = ProcessCancellation::new();
+        let first = process.child();
+        let second = process.child();
+        let nested = first.child();
+
+        first.cancel();
+        assert!(first.is_cancelled() && nested.is_cancelled());
+        assert!(!process.is_cancelled() && !second.is_cancelled());
+
+        let waiter_signal = second.clone();
+        let waiter = tokio::spawn(async move { waiter_signal.cancelled().await });
+        let escalated_signal = nested.clone();
+        tokio::task::yield_now().await;
+        process.escalate();
+        tokio::time::timeout(Duration::from_secs(1), waiter).await??;
+        assert!(second.is_cancelled() && second.is_escalated());
+        assert!(escalated_signal.is_escalated());
         Ok(())
     }
 }

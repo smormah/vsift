@@ -388,6 +388,7 @@ fn run(
             base: resolved.base.as_ref(),
             observed: resolved.observed,
             now: now()?,
+            admission: vsift::AdmissionWait::Immediate,
         },
         RetranscriptionPorts {
             store,

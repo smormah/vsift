@@ -4,27 +4,31 @@
 //! results into `vsift-contract` data, formats RFC 3339 timestamps and decides
 //! the command-line response shape.
 
+use std::num::NonZeroU16;
+
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, Cancellation, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest,
-    CleanScope, Engine, FailureCode, IngestRequest, ProgressObserver, RetranscribeOutcome,
-    RetranscribeRange, RetranscribeRequest, SessionJobs, SessionListEntry, SessionPage,
-    SessionSnapshot, SourceRetention, SuppliedTranscriptRequest, TranscriptExcerpt,
-    TranscriptQuery,
+    CleanScope, DurabilityRequirement, Engine, FailureCode, IngestRequest, ProgressObserver,
+    RetranscribeOutcome, RetranscribeRange, RetranscribeRequest, SessionJobs, SessionLifetime,
+    SessionLifetimePolicy, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
+    SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery, WorkspaceInitRequest,
+    WorkspacePolicy, WorkspaceRetention,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
-    LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RetranscribeJob,
-    SessionJobData, SessionState, SessionStatusData, StatusData, TranscriptEvidenceStream,
-    TranscriptPageData, TranscriptRetranscribeData, job_warning_messages,
-    transcript_warning_messages,
+    LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RequestDurability,
+    RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
+    TranscriptEvidenceStream, TranscriptPageData, TranscriptRetranscribeData, WorkspaceData,
+    WorkspaceInitOutcome, job_warning_messages, transcript_warning_messages,
 };
 
 use crate::{
     CommandFailure,
     command::{
-        IngestArguments, SessionCommand, TranscriptGetArguments, TranscriptRetranscribeArguments,
+        IngestArguments, SessionCommand, SessionInitWorkspaceArguments, TranscriptGetArguments,
+        TranscriptRetranscribeArguments,
     },
 };
 
@@ -36,6 +40,24 @@ pub(crate) fn rfc3339(seconds: u64) -> Result<String, FailureCode> {
         .map_err(|_| FailureCode::InvalidArgument)?
         .format(&Rfc3339)
         .map_err(|_| FailureCode::Internal)
+}
+
+/// The lifecycle a session-backed result reports: `ephemeral` for a desktop
+/// session, `durable_worker` for a session of a worker workspace (ADR 0021
+/// D2), with the session's expiry either way.
+///
+/// The mode states whose rules bound the session's life, not how it
+/// publishes: a session of an ephemeral workspace is also `durable_worker`
+/// (it lives the workspace's retention), and its `publication` in the
+/// ingest data says it is only process-crash consistent.
+pub(crate) fn session_lifecycle(
+    lifetime: SessionLifetime,
+) -> Result<LifecycleResponse, FailureCode> {
+    let expires_at = rfc3339(lifetime.expires_at_unix_seconds())?;
+    Ok(match lifetime.policy() {
+        SessionLifetimePolicy::Desktop => LifecycleResponse::ephemeral(expires_at),
+        SessionLifetimePolicy::Workspace(_) => LifecycleResponse::durable_worker(expires_at),
+    })
 }
 
 fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
@@ -73,8 +95,7 @@ fn status_response(
     snapshot: &SessionSnapshot,
 ) -> Result<Response, FailureCode> {
     let data = status_data(snapshot)?;
-    Ok(response(command, &data)?
-        .with_lifecycle(LifecycleResponse::ephemeral(data.expires_at.clone())))
+    Ok(response(command, &data)?.with_lifecycle(session_lifecycle(snapshot.lifetime())?))
 }
 
 /// `session status`: the committed status and, since P10 PR 3, the
@@ -84,7 +105,7 @@ fn session_status_response(
     jobs: &SessionJobs,
 ) -> Result<Response, FailureCode> {
     let status = status_data(snapshot)?;
-    let expires_at = status.expires_at.clone();
+    let lifecycle = session_lifecycle(snapshot.lifetime())?;
     let listed = jobs
         .entries()
         .iter()
@@ -99,8 +120,7 @@ fn session_status_response(
         })
         .collect();
     let data = SessionStatusData::new(status, listed, jobs.truncated());
-    Ok(response(CommandName::SessionStatus, &data)?
-        .with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
+    Ok(response(CommandName::SessionStatus, &data)?.with_lifecycle(lifecycle))
 }
 
 fn bundle_data(bundle: &BundleSummary) -> BundleData {
@@ -210,14 +230,14 @@ pub(crate) async fn ingest(
         })
         .await?;
     let expires_at = rfc3339(outcome.session.lifetime.expires_at_unix_seconds())?;
-    let mut data = OpenData::new(&outcome.session, expires_at.clone());
+    let mut data = OpenData::new(&outcome.session, expires_at);
     let mut warnings = Vec::new();
     if let Some(revision) = &outcome.transcript {
         data = data.with_transcript(revision);
         warnings = transcript_warning_messages(revision);
     }
     Ok(response(CommandName::Ingest, &data)?
-        .with_lifecycle(LifecycleResponse::ephemeral(expires_at))
+        .with_lifecycle(session_lifecycle(outcome.session.lifetime)?)
         .with_warnings(&warnings))
 }
 
@@ -260,7 +280,7 @@ pub(crate) fn retranscription(
             replayed: job.replayed(),
         },
     );
-    let expires_at = rfc3339(outcome.session().lifetime().expires_at_unix_seconds())?;
+    let lifecycle = session_lifecycle(outcome.session().lifetime())?;
     let mut warnings = transcript_warning_messages(outcome.revision());
     warnings.extend(job_warning_messages(
         job.chunks_reused(),
@@ -268,7 +288,7 @@ pub(crate) fn retranscription(
     ));
     Ok(PresentedRetranscription {
         data,
-        lifecycle: LifecycleResponse::ephemeral(expires_at),
+        lifecycle,
         warnings,
     })
 }
@@ -305,6 +325,8 @@ pub(crate) async fn retranscribe(
             operation_id: arguments.operation_id,
             cancellation: cancellation.clone(),
             progress,
+            // Interactive: contention keeps P10's two bounded retries.
+            admission: vsift::AdmissionWait::Immediate,
         })
         .await?;
     let presented = retranscription(&outcome)?;
@@ -329,9 +351,8 @@ pub(crate) fn transcript_get(
         excerpt.segments(),
         excerpt.next_cursor(),
     );
-    let expires_at = rfc3339(excerpt.session().lifetime().expires_at_unix_seconds())?;
-    Ok(response(CommandName::TranscriptGet, &data)?
-        .with_lifecycle(LifecycleResponse::ephemeral(expires_at)))
+    let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
+    Ok(response(CommandName::TranscriptGet, &data)?.with_lifecycle(lifecycle))
 }
 
 /// Reads one bounded page of a session's transcript as an evidence stream:
@@ -341,14 +362,14 @@ pub(crate) fn transcript_stream(
     arguments: TranscriptGetArguments,
 ) -> Result<TranscriptEvidenceStream, CommandFailure> {
     let excerpt = read_transcript(engine, arguments)?;
-    let expires_at = rfc3339(excerpt.session().lifetime().expires_at_unix_seconds())?;
+    let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
     TranscriptEvidenceStream::new(
         excerpt.session().session_id(),
         excerpt.revision(),
         excerpt.range(),
         excerpt.segments(),
         excerpt.next_cursor(),
-        LifecycleResponse::ephemeral(expires_at),
+        lifecycle,
     )
     .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
@@ -403,7 +424,46 @@ pub(crate) fn execute_session(
             })?;
             Ok(clean_response(page)?)
         }
+        SessionCommand::InitWorkspace(arguments) => init_workspace(engine, &arguments),
     }
+}
+
+/// `session init-workspace` (P11, ADR 0021 D1, D2): creates the worker
+/// workspace at `--session-root`, or confirms it exists with exactly this
+/// policy. The result states the policy and never names the path.
+fn init_workspace(
+    engine: &Engine,
+    arguments: &SessionInitWorkspaceArguments,
+) -> Result<Response, CommandFailure> {
+    let retention = arguments
+        .retention_hours
+        .map_or(
+            Ok(WorkspaceRetention::DEFAULT),
+            WorkspaceRetention::from_hours,
+        )
+        .map_err(|_| FailureCode::InvalidArgument)?;
+    let capacity =
+        NonZeroU16::new(arguments.admission_slots).ok_or(FailureCode::InvalidArgument)?;
+    let durability = DurabilityRequirement::from(arguments.durability);
+    let policy = WorkspacePolicy::new(durability, capacity, retention)
+        .map_err(|_| FailureCode::InvalidArgument)?;
+    let initialised = engine.init_workspace(WorkspaceInitRequest { policy })?;
+    let data = WorkspaceData::new(
+        match initialised.policy().durability() {
+            DurabilityRequirement::Durable => RequestDurability::Durable,
+            DurabilityRequirement::Ephemeral => RequestDurability::Ephemeral,
+        },
+        initialised.policy().admission_capacity(),
+        initialised.policy().retention().seconds(),
+        match initialised.outcome() {
+            vsift::WorkspaceInitOutcome::Created => WorkspaceInitOutcome::Created,
+            vsift::WorkspaceInitOutcome::AlreadyInitialized => {
+                WorkspaceInitOutcome::AlreadyInitialized
+            }
+        },
+    )
+    .map_err(|_| FailureCode::Internal)?;
+    Ok(response(CommandName::SessionInitWorkspace, &data)?)
 }
 
 /// Validates one user-selected bundle independently of any disposable root.

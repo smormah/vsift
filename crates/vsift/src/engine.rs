@@ -3,7 +3,7 @@
 use std::{
     env,
     future::Future,
-    num::NonZeroUsize,
+    num::{NonZeroU16, NonZeroUsize},
     path::{Path, PathBuf},
     pin::Pin,
     time::Duration,
@@ -15,8 +15,9 @@ use vsift_application::{
 };
 use vsift_domain::{OperationId, SessionId};
 use vsift_infrastructure::{
-    FilesystemSessionStore, PROVISIONING_WAIT, RandomIdentifierSource, SessionRootProvisioning,
-    SystemClock, UserDependencyConfigStore, open_session_root_within, platform_session_root,
+    DEFAULT_ADMISSION_CAPACITY, FilesystemSessionStore, PROVISIONING_WAIT, RandomIdentifierSource,
+    SessionRootProvisioning, SystemClock, UserDependencyConfigStore, open_session_root_within,
+    platform_session_root,
 };
 
 use crate::{
@@ -278,6 +279,24 @@ impl Engine {
     ) -> Result<Option<FilesystemSessionStore>, EngineError> {
         open_session_root_within(root, provisioning, self.ports.session_root_wait)
             .map_err(|error| EngineError::SessionRoot(SessionRootError::from(error)))
+    }
+
+    /// The admission capacity of the session root as it stands, for sizing
+    /// work (a recognizer's threads) before the root is otherwise needed:
+    /// the root's own capacity when it opens, else the capacity a new
+    /// desktop root gets. It never fails and never creates the root, so the
+    /// operation that needs the root still reports its failures in their
+    /// documented order.
+    pub(crate) fn admission_capacity_hint(&self) -> NonZeroU16 {
+        let opened = self.session_root_path().ok().and_then(|root| {
+            self.open_session_store(&root, SessionRootProvisioning::ExistingOnly)
+                .ok()
+                .flatten()
+        });
+        opened
+            .and_then(|store| NonZeroU16::new(store.admission_capacity()))
+            .or_else(|| NonZeroU16::new(DEFAULT_ADMISSION_CAPACITY))
+            .unwrap_or(NonZeroU16::MIN)
     }
 
     pub(crate) fn user_configuration(&self) -> Result<UserDependencyConfigStore, EngineError> {

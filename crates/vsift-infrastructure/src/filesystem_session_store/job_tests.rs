@@ -200,6 +200,7 @@ fn classify(error: &JobRunError) -> FailureCode {
     match error {
         JobRunError::Busy { .. }
         | JobRunError::Superseded { .. }
+        | JobRunError::AdmissionBusy { .. }
         | JobRunError::Storage(SessionStorageError::Busy) => FailureCode::Busy,
         JobRunError::IdempotencyConflict { .. } => FailureCode::IdempotencyConflict,
         JobRunError::NotResumable { .. } => FailureCode::InvalidArgument,
@@ -284,6 +285,7 @@ async fn run(
             base: resolved.base.as_ref(),
             observed: resolved.observed,
             now: now()?,
+            admission: vsift_domain::AdmissionWait::Immediate,
         },
         RetranscriptionPorts {
             store,

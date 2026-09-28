@@ -6,7 +6,9 @@
     "controls": {
       "admission_capacity": 8,
       "concurrency": 2,
-      "isolation": "strict_linux"
+      "free_space_reserve": "enforced",
+      "isolation": "strict_linux",
+      "resource_limits": "host_cgroup"
     },
     "failure": null,
     "lifecycle": {

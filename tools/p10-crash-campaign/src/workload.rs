@@ -575,6 +575,7 @@ async fn retranscribe(
             base: head.newest.as_ref(),
             observed: head.generation,
             now,
+            admission: vsift_domain::AdmissionWait::Immediate,
         },
         RetranscriptionPorts {
             store: &store,

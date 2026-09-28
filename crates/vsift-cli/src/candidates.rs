@@ -11,7 +11,7 @@ use vsift_contract::{
     candidates_response,
 };
 
-use crate::{CommandFailure, command::CandidatesArguments, session::rfc3339};
+use crate::{CommandFailure, command::CandidatesArguments, session::session_lifecycle};
 
 async fn run(
     engine: &Engine,
@@ -47,9 +47,7 @@ fn presentation(results: &CandidatesResults) -> CandidatesPresentation<'_> {
 }
 
 fn lifecycle(results: &CandidatesResults) -> Result<LifecycleResponse, FailureCode> {
-    Ok(LifecycleResponse::ephemeral(rfc3339(
-        results.session().lifetime().expires_at_unix_seconds(),
-    )?))
+    session_lifecycle(results.session().lifetime())
 }
 
 /// Pages a session's visual candidates, analysing missing windows first,

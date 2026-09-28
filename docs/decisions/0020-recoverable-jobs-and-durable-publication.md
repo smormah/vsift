@@ -414,6 +414,25 @@ refines the design:
   have called an ephemeral session on a qualified root `os_crash_durable` once the
   constant was set.
 
+## Note: D-3 fulfilled and admission weights (P11 PR 2, 2026-09-28)
+
+- **D-3 is fulfilled.** The command line's durable mode is a durable worker workspace
+  ([ADR 0021](0021-worker-and-batch-host.md) section 3): `session init-workspace
+  --durability durable` on the qualified profile, then `ingest --session-root
+  <workspace>`, whose sessions all publish with this record's durable protocol and
+  report `os_crash_durable`. `IngestRequest::durability` is now the least a caller
+  requires: a durable workspace raises an ephemeral request to durable, and a durable
+  request in an ephemeral workspace is refused (`INVALID_ARGUMENT`), never weakened.
+  The commit path itself is unchanged, so the crash campaign's evidence still applies.
+- **Admission weights.** A recognition attempt (section 4) now reserves its recognizer
+  threads of the root's capacity instead of one slot, and that reservation covers the
+  chunk decoding between recognitions; the threads are capped at the root's capacity,
+  so the recognizer identity, and with it the job and revision identity, can differ on
+  a root of smaller capacity (known limit L-023). Contention keeps section 5's retry
+  rule for interactive callers; a job host may instead wait a bounded, jittered time
+  for admission (`AdmissionWait::Bounded`, at most 60 s), after which the attempt ends
+  `BUSY` with the job interrupted and is not retried automatically.
+
 ## Consequences
 
 - PR 1 changes no public contract. Warm reads no longer grow with the chain; every

@@ -8,7 +8,7 @@ use vsift_contract::{
     LifecycleResponse, OperationResponse, SearchEvidenceStream, SearchPresentation, search_response,
 };
 
-use crate::{CommandFailure, command::SearchArguments, session::rfc3339};
+use crate::{CommandFailure, command::SearchArguments, session::session_lifecycle};
 
 fn run(engine: &Engine, arguments: SearchArguments) -> Result<SearchResults, CommandFailure> {
     let range = arguments
@@ -45,9 +45,7 @@ fn presentation(results: &SearchResults) -> SearchPresentation<'_> {
 }
 
 fn lifecycle(results: &SearchResults) -> Result<LifecycleResponse, FailureCode> {
-    Ok(LifecycleResponse::ephemeral(rfc3339(
-        results.session().lifetime().expires_at_unix_seconds(),
-    )?))
+    session_lifecycle(results.session().lifetime())
 }
 
 /// Searches a session's transcript and presents one page as one result.

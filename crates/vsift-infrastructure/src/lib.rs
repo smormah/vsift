@@ -29,6 +29,8 @@ mod ffmpeg_media;
 mod file_lock;
 mod filesystem_session_store;
 mod gzip_tar_inventory;
+mod host_attestation;
+mod input_root;
 mod local_asr_verification;
 mod managed_artifact_store;
 mod managed_catalogue;
@@ -67,7 +69,8 @@ pub use bounded_tar_inventory::{
 };
 pub use durable_profile::{
     MAX_MOUNTINFO_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, MountInfoError, MountProfile,
-    OsReleaseError, OsReleaseProfile, classify_mountinfo, classify_os_release, qualifies,
+    OsReleaseError, OsReleaseProfile, RootMountAccess, classify_mountinfo, classify_os_release,
+    classify_root_mount, directory_offers_os_crash_durability, qualifies,
 };
 pub use evidence_media::{FfmpegAudioExtractor, FfmpegFrameExtractor};
 pub use evidence_record::{
@@ -90,15 +93,26 @@ pub use ffmpeg_media::{
     parse_png_sequence, parse_visual_samples, wav_from_pcm_s16le_mono,
 };
 pub use filesystem_session_store::{
-    BundleSourcePolicy, BundleStatus, CleanOutcome, EvidenceInventory, EvidenceMediaFile,
-    ExclusiveSessionLifetimeHold, FilesystemAdmissionPermit, FilesystemJobOwner,
-    FilesystemSessionStore, JOB_CANCEL_POLL, SessionIndexPage, SessionReadHold,
-    SessionRegistration, SessionStatus, SessionStoreOpenError, SessionWorkDirectory,
-    decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
+    BundleSourcePolicy, BundleStatus, CleanOutcome, DEFAULT_ADMISSION_CAPACITY, EvidenceInventory,
+    EvidenceMediaFile, ExclusiveSessionLifetimeHold, FREE_SPACE_RESERVE_BYTES,
+    FilesystemAdmissionPermit, FilesystemJobOwner, FilesystemSessionStore, FreeSpaceCheck,
+    JOB_CANCEL_POLL, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
+    SessionStoreOpenError, SessionWorkDirectory, decode_chunk_checkpoint, decode_job_record,
+    encode_chunk_checkpoint, encode_job_record,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,
     inspect_gzip_tar_selected_files, stage_gzip_tar_selected_files,
+};
+pub use host_attestation::{
+    AttestationGap, AttestationParseError, CgroupLimit, CgroupMembership, HostObservation,
+    MAX_CGROUP_DEPTH, MAX_CGROUP_FILE_BYTES, MAX_NET_DEV_BYTES, MAX_PROC_CGROUP_BYTES,
+    NetworkInterfaces, StrictLinuxAttestation, attest_strict_linux_host, decide_strict_linux,
+    parse_cgroup_limit, parse_cpu_max, parse_net_dev, parse_proc_cgroup,
+};
+pub use input_root::{
+    ContainedFile, ContainedPathError, InputRoot, InputRootError, MAX_INPUT_PATH_BYTES,
+    MAX_INPUT_PATH_COMPONENTS,
 };
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
@@ -153,7 +167,10 @@ pub use system_clock::SystemClock;
 pub use transcript_record::{
     MAX_TRANSCRIPT_RECORD_BYTES, decode_transcript_record, encode_transcript_record,
 };
-pub use transcript_sidecar::{MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript};
+pub use transcript_sidecar::{
+    MAX_LINE_BYTES, parse_supplied_transcript, read_supplied_transcript,
+    read_supplied_transcript_contained,
+};
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use visual_index_record::{

@@ -33,6 +33,8 @@ mod stored;
 #[cfg(test)]
 mod tests;
 mod work;
+#[cfg(test)]
+mod workspace_tests;
 
 use std::{
     collections::BTreeSet,
@@ -50,7 +52,8 @@ use sha2::{Digest, Sha256};
 use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
     DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
-    SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
+    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
+    WorkspacePolicy, WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -59,6 +62,7 @@ pub use job_records::{
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
 };
 pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
+pub use root::{FREE_SPACE_RESERVE_BYTES, FreeSpaceCheck};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
@@ -98,7 +102,9 @@ const CHAIN_CHECKPOINT_FILE: &str = "chain-verified.json";
 const STORAGE_SCHEMA_VERSION: u16 = 1;
 const STORAGE_LAYOUT_VERSION: u16 = 1;
 const MAX_ADMISSION_CAPACITY: u16 = 64;
-const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
+/// The admission capacity of a desktop root created on first use, in weight
+/// units: a whisper.cpp run of four threads, or two visual windows, at once.
+pub const DEFAULT_ADMISSION_CAPACITY: u16 = 4;
 const MAX_GENERATIONS_PER_SESSION: u64 = 4_096;
 /// Most artifacts one session holds (ADR 0020 D-2; 256 before P10).
 const MAX_SESSION_ARTIFACTS: usize = 512;
@@ -125,6 +131,10 @@ pub enum SessionStoreOpenError {
     RootAlreadyExists,
     /// The immutable root admission capacity is outside the supported bound.
     InvalidAdmissionCapacity,
+    /// A durable workspace was requested where OS-crash durability is not
+    /// qualified (anything but Ubuntu 24.04 on local ext4, ADR 0010);
+    /// nothing was created.
+    DurabilityUnavailable,
 }
 
 impl fmt::Display for SessionStoreOpenError {
@@ -138,6 +148,9 @@ impl fmt::Display for SessionStoreOpenError {
             Self::InvalidLayout => "session storage layout is invalid",
             Self::RootAlreadyExists => "session storage root already exists",
             Self::InvalidAdmissionCapacity => "session storage admission capacity is invalid",
+            Self::DurabilityUnavailable => {
+                "durable publication is not qualified for this session storage root"
+            }
         };
         formatter.write_str(message)
     }
@@ -158,6 +171,11 @@ pub struct FilesystemSessionStore {
     /// What this root may acknowledge on this host, decided once when the
     /// store is opened (`durable_profile`, ADR 0010).
     capabilities: StorageCapabilities,
+    /// The operator policy of a worker workspace (ADR 0021 D1, D2), read
+    /// from the root's marker; `None` for an ordinary desktop root. It is
+    /// immutable: every revalidation requires the marker to still say the
+    /// same.
+    workspace: Option<WorkspacePolicy>,
     /// The last head this store instance verified, so several reads in one
     /// command walk the chain once (#164). Adapter state, never shared
     /// between instances or processes.
@@ -507,6 +525,8 @@ enum LifecycleUpdate {
         source_bytes: u64,
         now: u64,
         artifacts: Vec<StoredArtifact>,
+        /// The lifetime rules of the root the session opens in.
+        lifetime: SessionLifetimePolicy,
     },
     Renew {
         now: u64,
@@ -909,6 +929,48 @@ struct OwnershipMarker {
     application: String,
     layout_version: u16,
     admission_capacity: u16,
+    /// The policy of a worker workspace (P11, ADR 0021 D1). Absent for an
+    /// ordinary desktop root, whose marker is unchanged since P03. A build
+    /// before P11 refuses a marker that has it (unknown fields are refused),
+    /// so an older build never opens a workspace as a desktop root.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    workspace: Option<StoredWorkspacePolicy>,
+}
+
+/// A workspace's policy as its marker records it; the admission capacity is
+/// the marker's own `admission_capacity`.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredWorkspacePolicy {
+    profile: StoredWorkspaceProfile,
+    durability: StoredDurability,
+    session_retention_seconds: u64,
+}
+
+/// The one workspace profile.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StoredWorkspaceProfile {
+    /// A worker workspace created by `session init-workspace`.
+    DurableWorkspace,
+}
+
+impl StoredWorkspacePolicy {
+    fn from_policy(policy: WorkspacePolicy) -> Self {
+        Self {
+            profile: StoredWorkspaceProfile::DurableWorkspace,
+            durability: StoredDurability::from_requirement(policy.durability()),
+            session_retention_seconds: policy.retention().seconds(),
+        }
+    }
+
+    /// The validated policy, with the marker's admission capacity.
+    fn policy(self, admission_capacity: u16) -> Option<WorkspacePolicy> {
+        let StoredWorkspaceProfile::DurableWorkspace = self.profile;
+        let retention = WorkspaceRetention::from_seconds(self.session_retention_seconds).ok()?;
+        let capacity = std::num::NonZeroU16::new(admission_capacity)?;
+        WorkspacePolicy::new(self.durability.requirement(), capacity, retention).ok()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -980,6 +1042,11 @@ struct StoredLifecycle {
     /// verification by an evidence call (ADR 0019 D1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     verified_source_identity: Option<String>,
+    /// The retention of the worker workspace the session was opened in
+    /// (ADR 0021 D2), which bounds its expiry; absent for a desktop
+    /// session, whose record is unchanged since P05.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    workspace_retention_seconds: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

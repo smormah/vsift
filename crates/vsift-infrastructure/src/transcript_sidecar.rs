@@ -59,7 +59,32 @@ pub fn read_supplied_transcript(
         SourceError::Io(_) => SuppliedTranscriptError::Io,
         _ => SuppliedTranscriptError::InvalidPath,
     })?;
-    if metadata.len() > MAX_SUPPLIED_TRANSCRIPT_BYTES {
+    read_opened_transcript(file, metadata.len())
+}
+
+/// Reads, identifies and parses a supplied transcript a worker request named
+/// inside the operator's input root (P11, ADR 0021 section 9): the file was
+/// opened by [`crate::InputRoot::open_file`], following no link, so nothing
+/// outside the root is read. Content rules are those of
+/// [`read_supplied_transcript`].
+///
+/// # Errors
+///
+/// As [`read_supplied_transcript`], for the content and reading.
+pub fn read_supplied_transcript_contained(
+    transcript: crate::ContainedFile,
+) -> Result<SuppliedTranscript, SuppliedTranscriptError> {
+    let length = transcript.len();
+    read_opened_transcript(transcript.file, length)
+}
+
+/// Reads at most the transcript bound from an opened file of `length`
+/// bytes and parses it.
+fn read_opened_transcript(
+    file: cap_std::fs::File,
+    length: u64,
+) -> Result<SuppliedTranscript, SuppliedTranscriptError> {
+    if length > MAX_SUPPLIED_TRANSCRIPT_BYTES {
         return Err(SuppliedTranscriptError::Rejected(
             TranscriptImportError::new(TranscriptRejection::TooLarge),
         ));

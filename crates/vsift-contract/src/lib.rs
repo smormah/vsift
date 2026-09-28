@@ -120,13 +120,16 @@ pub use request::{
     WorkStepKind, WorkTarget, decode_batch_line, decode_work_request, validate_steps,
 };
 pub use work::{
-    MAX_RESULT_STEPS, MAX_WORK_RESULT_BYTES, PARTIAL_REQUEST_WARNING, RequestFailure, ResultOrigin,
-    StepOutputs, StepResult, StepStatus, StepTiming, WorkControls, WorkFailure, WorkResult,
-    WorkResultError, WorkResultParts, WorkerIsolation,
+    FreeSpaceReserve, MAX_RESULT_STEPS, MAX_WORK_RESULT_BYTES, PARTIAL_REQUEST_WARNING,
+    RequestFailure, ResourceLimits, ResultOrigin, StepOutputs, StepResult, StepStatus, StepTiming,
+    WorkControls, WorkFailure, WorkResult, WorkResultError, WorkResultParts, WorkerIsolation,
 };
 pub use workspace::{
-    DEFAULT_SESSION_RETENTION_SECONDS, MAX_ADMISSION_CAPACITY, MAX_SESSION_RETENTION_SECONDS,
-    MIN_SESSION_RETENTION_SECONDS, WorkspaceData, WorkspaceInitOutcome, WorkspacePolicyError,
+    ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, DEFAULT_SESSION_RETENTION_SECONDS,
+    DURABILITY_UNAVAILABLE_REMEDIATION, ISOLATION_UNAVAILABLE_REMEDIATION, MAX_ADMISSION_CAPACITY,
+    MAX_SESSION_RETENTION_SECONDS, MIN_SESSION_RETENTION_SECONDS,
+    WORKSPACE_NOT_DURABLE_REMEDIATION, WORKSPACE_POLICY_MISMATCH_REMEDIATION,
+    WORKSPACE_ROOT_REMEDIATION, WorkspaceData, WorkspaceInitOutcome, WorkspacePolicyError,
 };
 
 pub use candidates::{

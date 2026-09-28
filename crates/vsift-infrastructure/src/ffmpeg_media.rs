@@ -1,13 +1,18 @@
 //! Restricted FFprobe/FFmpeg adapter over the trusted process supervisor.
 
-use std::{error::Error, fmt, num::NonZeroUsize, time::Duration};
+use std::{
+    error::Error,
+    fmt,
+    num::{NonZeroU16, NonZeroUsize},
+    time::Duration,
+};
 
 use serde::Deserialize;
 use vsift_domain::{
     DisplayRotation, FrameDimensions, FrameTiming, MAX_WINDOW_SAMPLES, MediaDecodeSupport,
-    MediaDescription, MediaSelection, MediaStream, MediaStreamKind, MediaTime, StreamTime,
-    TimeRange, VISUAL_FRAME_BYTES, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH,
-    VISUAL_SAMPLE_INTERVAL_MICROS, VisualWindow,
+    MediaDescription, MediaSelection, MediaStream, MediaStreamKind, MediaTime, SINGLE_STAGE_WEIGHT,
+    StreamTime, TimeRange, VISUAL_FRAME_BYTES, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH,
+    VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_WEIGHT, VisualWindow,
 };
 
 mod evidence;
@@ -102,6 +107,17 @@ pub struct FfmpegMedia<'a> {
     registry: MediaProviderConformance,
     host_isolation: HostIsolation,
     store: &'a FilesystemSessionStore,
+    admission: AdmissionScope,
+}
+
+/// Whose admission covers an operation's provider run (X-07).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AdmissionScope {
+    /// Each operation reserves its own weight of the root's capacity.
+    PerOperation,
+    /// The caller holds a reservation that covers every operation it runs
+    /// through this adapter, so none takes another.
+    HeldByCaller,
 }
 
 impl<'a> FfmpegMedia<'a> {
@@ -116,6 +132,40 @@ impl<'a> FfmpegMedia<'a> {
             registry,
             host_isolation,
             store,
+            admission: AdmissionScope::PerOperation,
+        }
+    }
+
+    /// The same adapter for a caller whose own admission reservation covers
+    /// every operation it runs through it: a recognition job reserves its
+    /// recognizer threads for its whole attempt, and decodes each chunk
+    /// between recognitions, never at the same time, so the decoding needs
+    /// no reservation of its own. Taking one as well would count the job
+    /// twice and could leave a small root unable to run it at all.
+    #[must_use]
+    pub fn within_caller_admission(&self) -> Self {
+        Self {
+            registry: self.registry.clone(),
+            host_isolation: self.host_isolation,
+            store: self.store,
+            admission: AdmissionScope::HeldByCaller,
+        }
+    }
+
+    /// Reserves `weight` units for one operation, unless the caller's
+    /// reservation covers it. A weight beyond the root's whole capacity is
+    /// a capacity error, as is contention: the adapter never waits.
+    fn admit(
+        &self,
+        weight: NonZeroU16,
+    ) -> Result<Option<crate::FilesystemAdmissionPermit>, MediaError> {
+        match self.admission {
+            AdmissionScope::PerOperation => self
+                .store
+                .try_admit(weight.get())
+                .map(Some)
+                .map_err(|_| MediaError::CapacityUnavailable),
+            AdmissionScope::HeldByCaller => Ok(None),
         }
     }
 
@@ -132,10 +182,7 @@ impl<'a> FfmpegMedia<'a> {
         binding: &impl SourceBinding,
         cancellation: ProcessCancellation,
     ) -> Result<MediaDescription, MediaError> {
-        let _admission = self
-            .store
-            .try_admit(1)
-            .map_err(|_| MediaError::CapacityUnavailable)?;
+        let _admission = self.admit(SINGLE_STAGE_WEIGHT)?;
         binding
             .check_before_provider_call()
             .map_err(MediaError::Source)?;
@@ -197,10 +244,7 @@ impl<'a> FfmpegMedia<'a> {
         tolerance_micros: u64,
         cancellation: ProcessCancellation,
     ) -> Result<ExtractedFrame, MediaError> {
-        let _admission = self
-            .store
-            .try_admit(1)
-            .map_err(|_| MediaError::CapacityUnavailable)?;
+        let _admission = self.admit(SINGLE_STAGE_WEIGHT)?;
         binding
             .check_before_provider_call()
             .map_err(MediaError::Source)?;
@@ -410,10 +454,7 @@ impl<'a> FfmpegMedia<'a> {
         window: VisualWindow,
         cancellation: ProcessCancellation,
     ) -> Result<Vec<RawGrayFrame>, MediaError> {
-        let _admission = self
-            .store
-            .try_admit(1)
-            .map_err(|_| MediaError::CapacityUnavailable)?;
+        let _admission = self.admit(VISUAL_WINDOW_WEIGHT)?;
         binding
             .check_before_provider_call()
             .map_err(MediaError::Source)?;
@@ -508,10 +549,7 @@ impl<'a> FfmpegMedia<'a> {
         range: TimeRange,
         cancellation: ProcessCancellation,
     ) -> Result<ExtractedAudio, MediaError> {
-        let _admission = self
-            .store
-            .try_admit(1)
-            .map_err(|_| MediaError::CapacityUnavailable)?;
+        let _admission = self.admit(SINGLE_STAGE_WEIGHT)?;
         binding
             .check_before_provider_call()
             .map_err(MediaError::Source)?;

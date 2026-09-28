@@ -169,9 +169,54 @@ pub fn classify_mountinfo(
     })
 }
 
+/// Whether the process's root filesystem is mounted read-only (P11 strict
+/// worker attestation, ADR 0021 section 8).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RootMountAccess {
+    /// The mount visible at `/` is read-only (`ro` in its mount options).
+    ReadOnly,
+    /// The mount visible at `/` is writable.
+    Writable,
+    /// No mount at `/` is listed.
+    NotListed,
+}
+
+/// Classifies the mount visible at `/` in a `/proc/<pid>/mountinfo` table.
+///
+/// The table is parsed whole with the same strict line parser as
+/// [`classify_mountinfo`], so a table damaged anywhere is refused. When
+/// several mounts sit at `/` (one mounted over another), the last listed is
+/// the one the process sees, because the kernel lists mounts in the order
+/// they were made. Only the per-mount options count: a mount read-only only
+/// in its superblock options could be remounted writable elsewhere, and a
+/// strict worker must not rely on it.
+///
+/// # Errors
+///
+/// A table over [`MAX_MOUNTINFO_BYTES`], not UTF-8, or with a malformed line.
+pub fn classify_root_mount(mountinfo: &[u8]) -> Result<RootMountAccess, MountInfoError> {
+    if mountinfo.len() > MAX_MOUNTINFO_BYTES {
+        return Err(MountInfoError::TooLarge);
+    }
+    let text = std::str::from_utf8(mountinfo).map_err(|_| MountInfoError::NotUtf8)?;
+    let mut root = RootMountAccess::NotListed;
+    for (index, line) in text.lines().enumerate() {
+        let entry = parse_line(line).ok_or(MountInfoError::Malformed { line: index + 1 })?;
+        if entry.mount_point == "/" {
+            root = if entry.mount_options.split(',').any(|option| option == "ro") {
+                RootMountAccess::ReadOnly
+            } else {
+                RootMountAccess::Writable
+            };
+        }
+    }
+    Ok(root)
+}
+
 /// The fields of one mount line the profile needs.
 struct MountEntry<'a> {
     device: MountDevice,
+    mount_point: &'a str,
     mount_options: &'a str,
     filesystem: &'a str,
     super_options: &'a str,
@@ -203,6 +248,7 @@ fn parse_line(line: &str) -> Option<MountEntry<'_>> {
     }
     Some(MountEntry {
         device,
+        mount_point,
         mount_options,
         filesystem,
         super_options,
@@ -368,6 +414,16 @@ pub(crate) fn storage_capabilities(root: &Dir) -> StorageCapabilities {
     })
 }
 
+/// Whether an existing directory's filesystem offers OS-crash durability on
+/// this host: the decision a new root created in it, or a store opened on
+/// it, would make. Hosts and tests use it to know which outcome a durable
+/// request must have here; anything unreadable is `false`.
+#[must_use]
+pub fn directory_offers_os_crash_durability(directory: &std::path::Path) -> bool {
+    Dir::open_ambient_dir(directory, cap_std::ambient_authority())
+        .is_ok_and(|opened| os_crash_durable(&opened))
+}
+
 /// Whether the root sits on the qualified Ubuntu/ext4 profile.
 #[cfg(target_os = "linux")]
 fn os_crash_durable(root: &Dir) -> bool {
@@ -413,7 +469,8 @@ fn os_crash_durable(_root: &Dir) -> bool {
 mod tests {
     use super::{
         MAX_MOUNTINFO_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, MountInfoError, MountProfile,
-        OsReleaseError, OsReleaseProfile, classify_mountinfo, classify_os_release, qualifies,
+        OsReleaseError, OsReleaseProfile, RootMountAccess, classify_mountinfo, classify_os_release,
+        classify_root_mount, qualifies,
     };
 
     /// Ubuntu 24.04's own file, as `/usr/lib/os-release` ships it.
@@ -621,6 +678,48 @@ LOGO=ubuntu-logo
         assert_eq!(
             classify_mountinfo(b"", MountDevice::new(8, 1)),
             Ok(MountProfile::NotMounted)
+        );
+    }
+
+    /// The mount the process sees at `/` decides, the last one listed when
+    /// mounts are stacked; only its per-mount options count, and a damaged
+    /// table is refused whole.
+    #[test]
+    fn the_root_mount_is_read_only_only_when_its_own_options_say_so() {
+        let container = "\
+100 90 0:50 / / ro,relatime master:1 - overlay overlay rw,lowerdir=/l,upperdir=/u,workdir=/w
+101 100 0:51 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
+102 100 0:52 / /tmp rw,nosuid,nodev - tmpfs tmpfs rw,size=65536k
+";
+        assert_eq!(
+            classify_root_mount(container.as_bytes()),
+            Ok(RootMountAccess::ReadOnly)
+        );
+        assert_eq!(
+            classify_root_mount(TABLE.as_bytes()),
+            Ok(RootMountAccess::Writable)
+        );
+        let remounted = format!("{container}103 100 0:53 / / rw,relatime - overlay overlay rw\n");
+        assert_eq!(
+            classify_root_mount(remounted.as_bytes()),
+            Ok(RootMountAccess::Writable)
+        );
+        let superblock_only = "22 1 8:1 / / rw,relatime - ext4 /dev/sda1 ro\n";
+        assert_eq!(
+            classify_root_mount(superblock_only.as_bytes()),
+            Ok(RootMountAccess::Writable)
+        );
+        assert_eq!(
+            classify_root_mount(b"23 22 0:21 / /proc rw - proc proc rw\n"),
+            Ok(RootMountAccess::NotListed)
+        );
+        assert_eq!(
+            classify_root_mount(b"22 1 8:1 / / ro - ext4 /dev/sda1 ro\nbroken\n"),
+            Err(MountInfoError::Malformed { line: 2 })
+        );
+        assert_eq!(
+            classify_root_mount(&vec![b'a'; MAX_MOUNTINFO_BYTES + 1]),
+            Err(MountInfoError::TooLarge)
         );
     }
 

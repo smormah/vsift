@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-28 (P00-P10 complete; P11 in progress, PR 1 on its branch).
+Date: 2026-09-28 (P00-P10 complete; P11 in progress: PR 1 merged, PR 2 on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -68,7 +68,7 @@ Each entry has these fields:
 | [L-020](#l-020) | Noisy speech: `base` word error rate 61.5% on F08, not gated | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
 | [L-021](#l-021) | Reviewed known misses: "queued", "4407", "E-409" | accuracy/ASR | medium | unscheduled | none | accepted residual |
 | [L-022](#l-022) | No accent, crosstalk, human-voice or long-recording ASR evidence | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | open |
-| [L-023](#l-023) | ASR output differs across CPU backends; revision ids differ by host | accuracy/ASR | low | unscheduled | none | accepted residual |
+| [L-023](#l-023) | ASR output differs across CPU backends; revision ids differ by host and root | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-024](#l-024) | An ASR segment can start at the audio's start, before the speech | accuracy/ASR | medium | unscheduled | [#174](https://github.com/smormah/vsift/issues/174) | open |
 | [L-025](#l-025) | Local ASR runs: progress is coarse and advisory, model hashed per run | contract/UX | low | unscheduled | none | accepted residual |
 | [L-026](#l-026) | whisper.cpp output with a split multi-byte token fails the chunk | accuracy/ASR | low | unscheduled | none | accepted residual |
@@ -103,9 +103,12 @@ Each entry has these fields:
 | [L-056](#l-056) | Durability rests on storage that honours flushes | integrity/durability | medium | unscheduled | none | accepted residual |
 | [L-057](#l-057) | Losing the disk or the host loses the evidence (X-10) | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | accepted residual |
 | [L-058](#l-058) | The durable profile recognises Ubuntu 24.04 by `os-release`, not by its kernel | integrity/durability | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
-| [L-059](#l-059) | Durable sessions can be requested only through the engine API | integrity/durability | medium | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-059](#l-059) | Durable sessions need an explicit durable worker workspace | integrity/durability | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | deferred |
+| [L-060](#l-060) | Admission is not fair between processes sharing a root | performance | low | unscheduled | none | accepted residual |
+| [L-061](#l-061) | The free-space reserve is a pre-copy check on Unix only, not a quota | integrity/durability | low | unscheduled | none | accepted residual |
+| [L-062](#l-062) | A worker request's input path may not go through any link | security | low | unscheduled | none | accepted residual |
 
-Counts: 4 high, 19 medium, 34 low (57 entries).
+Counts: 4 high, 18 medium, 38 low (60 entries).
 
 ## Security
 
@@ -202,9 +205,16 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
   external host controls.
 - **Mitigation:** forced local demuxers, `file` protocol only, MOV external references
   off, closed argument lists, Job Object / process-group cleanup; strict-worker mode
-  fails closed when isolation is requested but unavailable.
-- **Next step:** P11 strict worker isolation (SEC-T01); P14 malicious-decoder and
-  decompression-bomb qualification in a disposable environment.
+  fails closed when isolation is requested but unavailable. Since P11 PR 2 a worker
+  host asks for `--host-isolation strict-linux`, which is accepted only when the
+  kernel attests a cgroup v2 with finite CPU, memory and PID limits, a read-only root
+  and no network interface but loopback (`attest_strict_linux_host`); otherwise the
+  command answers `ISOLATION_UNAVAILABLE` before any work. The limits are the host's,
+  never VSift's; the attestation's parsers are fuzzed (`host_attestation`), but the
+  real containment of a hostile decoder is still unproven.
+- **Next step:** P11 PR 4's SEC-T01 container job (the attested profile against an
+  isolated hostile fixture); P14 malicious-decoder and decompression-bomb
+  qualification in a disposable environment.
 - **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
   **Review:** pending.
@@ -317,13 +327,37 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** accepted residual. **Review:** pending.
 
+### L-062
+
+**A worker request's input path may not go through any link.**
+
+- **What:** a request's source and transcript paths are opened inside the operator's
+  `--input-root` one component at a time, following no link: a symbolic link,
+  junction or other reparse point anywhere on the path is refused, even one that
+  points inside the root, and the file must have a single hard link. A Windows
+  junction is refused by the same check, but only symbolic links are exercised by the
+  tests (creating a junction needs a shell or an unstable API).
+- **Evidence:** ADR 0021 section 9 and PR 2 notes; `contained_inputs.rs`
+  (`a_symbolic_link_out_of_the_root_is_refused`, `a_hard_link_out_of_the_root_is_refused`,
+  `every_escape_spelling_is_refused_before_anything_is_opened`).
+- **Impact:** an operator cannot lay out inputs with symlinks or hard links; they must
+  copy or bind-mount them into the root.
+- **Why:** refusing every link removes every way out of the root, at the cost of
+  convenience (SEC-05).
+- **Mitigation:** the refusal is typed (`ContainedPathError::Link`,
+  `path_outside_input_root` in PR 3) and names no path.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
 ## Integrity and durability
 
 ### L-008
 
 **OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01).**
 
-- **What:** a durable session (requested through the engine API only, ADR 0020 D-3)
+- **What:** a durable session (an engine request, or since P11 PR 2 any session of a
+  durable worker workspace, ADR 0020 D-3)
   keeps every acknowledged generation through power loss, an OS crash and write or
   flush errors on Ubuntu 24.04 with the session root on local ext4 mounts that keep
   write barriers. Everywhere else (Windows/NTFS, macOS/APFS, other Linux
@@ -338,14 +372,14 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
   2026-09-27 note; [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md)
   section 7 and PR 4 notes; threat model SEC-24.
 - **Impact:** desktop users on Windows and macOS get ephemeral guarantees only; the
-  command line cannot ask for a durable session until P11
+  command line reaches durability only through an explicit durable workspace
   ([L-059](#l-059)); the strict worker profile still needs P11 and P14.
 - **Why:** each further profile needs its own owned crash campaign; the Windows
   writable-directory flush and APFS behaviour have no fault evidence (P03).
 - **Mitigation:** durable requests fail closed and the effective guarantee is
   reported; the Ubuntu campaign reruns weekly.
-- **Next step:** P11 exposes durable workspaces on the qualified profile; other
-  profiles only with their own campaign and ADR.
+- **Next step:** P11 worker requests in durable workspaces (PR 3) and the strict
+  worker qualification (PR 4); other profiles only with their own campaign and ADR.
 - **Owner:** P11, P14. **Issue:** [#14](https://github.com/smormah/vsift/issues/14),
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** accepted residual
   (desktop profiles), deferred (worker profile). **Review:** pending.
@@ -414,18 +448,48 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
 
 ### L-059
 
-**Durable sessions can be requested only through the engine API.**
+**Durable sessions need an explicit durable worker workspace.**
 
-- **What:** `IngestRequest::durability` asks the engine for a durable session; the
-  `vsift` command line still opens ephemeral sessions only (ADR 0020 D-3), so an agent
-  using the CLI cannot ask for durability yet.
-- **Evidence:** ADR 0020 D-3 and PR 4 notes; `a_durable_ingest_is_durable_or_fails_closed`.
-- **Impact:** durable evidence needs a host that embeds the engine.
-- **Why:** the command-line durable workspace belongs to P11's worker host.
-- **Mitigation:** embed the engine; desktop sessions stay ephemeral by design (ADR 0002).
-- **Next step:** P11's explicit durable workspace.
+- **What:** since P11 PR 2 the command line reaches durability: an operator creates a
+  worker workspace with `session init-workspace --durability durable` (only on Ubuntu
+  24.04 with local ext4; anywhere else it is `MISSING_CAPABILITY` and nothing is
+  created), and `ingest --session-root <workspace>` then opens durable sessions
+  (`publication` `os_crash_durable`, ADR 0020 D-3). A desktop root never gives
+  durability, and worker requests (`job run`) reach the workspace only with P11 PR 3.
+- **Evidence:** ADR 0021 PR 2 notes;
+  `a_durable_workspace_is_created_only_where_durability_is_qualified`,
+  `ingest_in_a_workspace_inherits_its_durability_and_retention`,
+  `a_workspace_decides_the_durability_of_its_sessions`.
+- **Impact:** durability needs a deliberate operator step and a qualified host.
+- **Why:** nothing becomes durable by accident (ADR 0021 D1); durability is qualified
+  on one profile (L-008).
+- **Mitigation:** typed `MISSING_CAPABILITY` with remediation; desktop sessions stay
+  ephemeral by design (ADR 0002).
+- **Next step:** P11 PR 3 (`job run` requests in a workspace).
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** deferred. **Review:** pending.
+
+### L-061
+
+**The free-space reserve is a pre-copy check on Unix only, not a quota.**
+
+- **What:** before a source is copied into a worker workspace on Unix, VSift reads the
+  filesystem's available space (`fstatvfs` on the held root) and refuses the copy
+  (`RESOURCE_LIMIT`) unless the source's size and a 1 GiB reserve are free. On Windows
+  nothing is checked and the job result reports `free_space_reserve: not_enforced`.
+  Desktop roots are not checked on any platform. The check reserves nothing: another
+  writer can use the space between the check and the copy, and later evidence and
+  records are not checked.
+- **Evidence:** ADR 0021 PR 2 notes; `the_free_space_reserve_is_checked_on_unix_only`.
+- **Impact:** a full disk still fails a commit with `STORAGE_IO` (never a half commit,
+  X-10), rather than being refused up front.
+- **Why:** a real quota needs the host (filesystem quotas, a dedicated volume); Windows
+  has no equivalent in the reviewed dependencies.
+- **Mitigation:** commits are atomic and fail closed on a full disk; operators give a
+  worker workspace its own volume or quota.
+- **Next step:** none planned; revisit with P14's worker profile.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-009
 
@@ -469,7 +533,8 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
   session's jobs and generations also survive an OS crash and power loss (P10 PR 4,
   [L-008](#l-008)). What is still missing: jobs for anything but retranscription
   (candidates and evidence calls are short and commit their partial results instead)
-  and the worker host's durable workspace, job requests and batches (P11).
+  and the worker host's job requests and batches (P11 PRs 3 and 4; its durable
+  workspace exists since PR 2).
 - **Evidence:** [verification](verification.md) "P10 PR 2 evidence", "P10 PR 3
   evidence" and "P10 PR 4 evidence" (X-01..X-06, X-09, X-10; the opt-in
   `p10_recovery_e2e` recoverable mechanical run with real FFmpeg and whisper.cpp; the
@@ -591,6 +656,28 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
 - **Mitigation:** the budget is bounded; hard links and non-regular files are still
   refused at once.
 - **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-060
+
+**Admission is not fair between processes sharing a root.**
+
+- **What:** weighted admission (P11 PR 2, X-07) never lets the work admitted at once
+  weigh more than the root's capacity, but it is a set of non-waiting OS try-locks:
+  processes that share a root take free units in no particular order, a heavy request
+  (a recognition of eight threads) can wait behind a stream of light ones, and a
+  bounded `AdmissionWait` ends in `BUSY` rather than in a queue position. Requests of
+  one batch will be admitted in line order (PR 4); across processes nothing orders them.
+- **Evidence:** ADR 0021 section 5a; `weighted_admission_never_exceeds_root_capacity`,
+  `admission_wait_is_bounded_then_busy`.
+- **Impact:** under sustained contention a heavy request may be starved until it gives up
+  with `BUSY` and a retry hint.
+- **Why:** fairness across workers is the external supervisor's job (architecture and
+  contracts section 10); an in-root queue would need a coordinator process.
+- **Mitigation:** bounded waits with full jitter; `retry_after_ms` on `BUSY`; one
+  workspace per worker, or an external queue that schedules heavy work.
+- **Next step:** none planned for R0; R1 P19 (industrial worker plane).
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
@@ -803,13 +890,18 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
 
 ### L-023
 
-**ASR output differs across CPU backends; revision ids differ by host.**
+**ASR output differs across CPU backends; revision ids differ by host and root.**
 
 - **What:** whisper.cpp output is deterministic on one host but ggml picks an optimised
   CPU backend at load time, and backends differ slightly in floating point. Transcripts,
   and therefore content-derived revision ids, can differ between machines. The P07
   checkpoint's whole-file stage fails with `base_q5_1` (F05 "in voice"), so the workflow
-  runs it with `base` only.
+  runs it with `base` only. Since P11 PR 2 the recognizer's thread count is also its
+  admission weight and is capped at min(available parallelism, 8, the root's admission
+  capacity); the count is recorded in the run's provenance, so the same audio
+  recognised on a root of smaller capacity (a desktop root has 4 units) is a different
+  run with a different revision id, and a job interrupted before the upgrade with more
+  threads starts afresh under its new identity instead of continuing.
 - **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md)
   consequences; [P07 ASR record](p07-asr-qualification.md) hosted runners (run
   36198903762).
@@ -1110,21 +1202,21 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
 **No worker or batch host; `job run` and `job batch` are reserved.**
 
 - **What:** `job run` and `job batch` return `COMMAND_NOT_IMPLEMENTED` (`job status`,
-  `resume` and `cancel` work since P10 PR 3); there is no durable workspace, finite
-  batch reader, request records, weighted admission or worker-level graceful
-  shutdown, and the strict Linux worker is qualified only at the process boundary
-  (P02). Since P11 PR 1 their contracts are published and fuzzed (the job request and
+  `resume` and `cancel` work since P10 PR 3); there is no finite batch reader, request
+  records or worker-level graceful shutdown yet. P11 PR 2 added the durable workspace
+  (`session init-workspace`), weighted admission, the strict Linux attestation
+  (`--host-isolation strict-linux`) and contained inputs, which the job commands will
+  use. Since P11 PR 1 their contracts are published and fuzzed (the job request and
   result, batch summary, workspace data and the `progress`, `lifecycle` and `result`
   events; ADR 0021), so hosts can build against them; nothing runs them yet.
 - **Evidence:** [CLI contract](../contracts/cli-v1.md) command table and "P11 worker
   contracts and events"; P11 row of the
   [work packets](implementation-work-packets.md) (X-07..X-11, O-01..O-04, SEC-T01).
 - **Impact:** no server use; R-10..R-12 are R0 release gates.
-- **Why:** P11 is in progress: PR 2 (workspace, admission, attestation, contained
-  inputs), PR 3 (`job run`, request records, shutdown) and PR 4 (`job batch`, SEC-T01,
-  qualification) remain.
+- **Why:** P11 is in progress: PR 3 (`job run`, request records, shutdown) and PR 4
+  (`job batch`, SEC-T01, qualification) remain.
 - **Mitigation:** the engine library can be embedded.
-- **Next step:** P11 PRs 2-4.
+- **Next step:** P11 PRs 3 and 4.
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** deferred. **Review:** pending.
 

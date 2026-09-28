@@ -16,6 +16,8 @@ use vsift_application::{
     TranscriptQueryError, VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
+
+use crate::isolation::IsolationGaps;
 use vsift_domain::{
     FailureCode, FrameSelectionError, JobId, JobState, NavigationError, RuntimeDependency,
     SearchQueryRejection, SessionId, TranscriptImportError,
@@ -203,6 +205,26 @@ pub enum EngineError {
     JobNotFound,
     /// A job record or key violated an invariant; an internal fault.
     JobInvariant,
+    /// A durable session was required in a worker workspace whose policy is
+    /// ephemeral; a request never raises a workspace's policy (ADR 0021).
+    WorkspaceNotDurable,
+    /// The work needs more admission weight than the root's whole capacity,
+    /// so it could never be admitted; refused before any work (X-07).
+    AdmissionExceedsCapacity {
+        /// The weight the work needs.
+        weight: u16,
+        /// The root's capacity.
+        capacity: u16,
+    },
+    /// The root's capacity stayed taken for the whole admission wait; retry
+    /// after [`EngineError::retry_after_ms`].
+    AdmissionBusy {
+        /// The retry hint, in milliseconds.
+        retry_after_ms: u64,
+    },
+    /// Strict worker isolation was required and the host could not attest
+    /// it; nothing ran (ADR 0021 section 8).
+    IsolationUnavailable(IsolationGaps),
 }
 
 impl EngineError {
@@ -260,6 +282,7 @@ impl EngineError {
             | Self::NavigationRangeTooLong
             | Self::InvalidNavigation(_)
             | Self::CandidateNotFound
+            | Self::WorkspaceNotDurable
             | Self::Executable(
                 ExecutableRejection::NotAbsolute
                 | ExecutableRejection::NotRegularFile
@@ -282,10 +305,15 @@ impl EngineError {
             | Self::TranscriptAssembly(_)
             | Self::EvidenceAssembly
             | Self::JobInvariant => FailureCode::Internal,
-            Self::JobBusy { .. } | Self::RetranscriptionSuperseded { .. } => FailureCode::Busy,
+            Self::IsolationUnavailable(_) => FailureCode::IsolationUnavailable,
+            Self::JobBusy { .. }
+            | Self::RetranscriptionSuperseded { .. }
+            | Self::AdmissionBusy { .. } => FailureCode::Busy,
             Self::IdempotencyConflict { .. } => FailureCode::IdempotencyConflict,
             Self::JobCancelled { .. } | Self::JobInterrupted { .. } => FailureCode::Cancelled,
-            Self::EvidenceBudgetExhausted => FailureCode::ResourceLimit,
+            Self::EvidenceBudgetExhausted | Self::AdmissionExceedsCapacity { .. } => {
+                FailureCode::ResourceLimit
+            }
             Self::EvidenceMedia(error) => evidence_media_failure_code(*error),
             Self::MediaToolVerificationFailed(failure) => {
                 media_tool_verification_failure_code(failure.failure)
@@ -657,6 +685,20 @@ impl fmt::Display for EngineError {
             }
             Self::JobNotFound => formatter.write_str("no session holds a job with that identity"),
             Self::JobInvariant => formatter.write_str("a job record violated an invariant"),
+            Self::WorkspaceNotDurable => {
+                formatter.write_str("the worker workspace's policy is not durable")
+            }
+            Self::AdmissionExceedsCapacity { weight, capacity } => write!(
+                formatter,
+                "the work needs {weight} admission units but the root has {capacity}"
+            ),
+            Self::AdmissionBusy { .. } => {
+                formatter.write_str("the session root's admission capacity stayed busy")
+            }
+            Self::IsolationUnavailable(gaps) => write!(
+                formatter,
+                "strict worker isolation is unavailable here ({gaps})"
+            ),
         }
     }
 }
@@ -723,7 +765,11 @@ impl Error for EngineError {
             | Self::JobInterrupted { .. }
             | Self::JobSessionNotOpen { .. }
             | Self::JobNotFound
-            | Self::JobInvariant => None,
+            | Self::JobInvariant
+            | Self::WorkspaceNotDurable
+            | Self::AdmissionExceedsCapacity { .. }
+            | Self::AdmissionBusy { .. }
+            | Self::IsolationUnavailable(_) => None,
         }
     }
 }
@@ -779,6 +825,7 @@ impl EngineError {
     pub fn retry_after_ms(&self) -> Option<u64> {
         match self {
             Self::JobBusy { .. } => u64::try_from(LIVE_JOB_RETRY_AFTER.as_millis()).ok(),
+            Self::AdmissionBusy { retry_after_ms } => Some(*retry_after_ms),
             _ => None,
         }
     }
@@ -797,6 +844,9 @@ impl From<JobRunError> for EngineError {
             JobRunError::Storage(error) => Self::Storage(error),
             JobRunError::Job(error) => error.into(),
             JobRunError::Key(_) => Self::JobInvariant,
+            JobRunError::AdmissionBusy { retry_after, .. } => Self::AdmissionBusy {
+                retry_after_ms: u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX),
+            },
         }
     }
 }
@@ -949,6 +999,17 @@ pub enum SessionRootError {
     /// Another process was still creating the root when the bounded wait for
     /// it ended; a retry is expected to succeed.
     ProvisioningInProgress,
+    /// A durable worker workspace was requested where OS-crash durability
+    /// is not qualified (anything but Ubuntu 24.04 on local ext4); nothing
+    /// was created.
+    DurabilityUnavailable,
+    /// The root already exists with another policy, or as an ordinary
+    /// desktop root: a workspace's policy is immutable once created, and a
+    /// desktop root never becomes a workspace (ADR 0021 D1).
+    WorkspacePolicyMismatch,
+    /// A worker workspace needs an explicit absolute root that is not the
+    /// platform's per-user session cache.
+    WorkspaceRootNotExplicit,
 }
 
 impl SessionRootError {
@@ -960,8 +1021,16 @@ impl SessionRootError {
             | Self::WithoutParent
             | Self::NotDirectory
             | Self::AlreadyExists
-            | Self::InvalidAdmissionCapacity => FailureCode::InvalidArgument,
-            Self::PlatformDefaultUnavailable => FailureCode::MissingCapability,
+            | Self::InvalidAdmissionCapacity
+            // A policy that differs from the recorded one is the same kind of
+            // failure as a state conflict (`INVALID_ARGUMENT`): the request
+            // cannot succeed against this root as it stands, and retrying it
+            // unchanged never helps.
+            | Self::WorkspacePolicyMismatch
+            | Self::WorkspaceRootNotExplicit => FailureCode::InvalidArgument,
+            Self::PlatformDefaultUnavailable | Self::DurabilityUnavailable => {
+                FailureCode::MissingCapability
+            }
             // A root other accounts can access is storage that cannot be used,
             // whether it was selected or is the platform default, reported like
             // a non-private per-user configuration folder.
@@ -992,6 +1061,13 @@ impl fmt::Display for SessionRootError {
             Self::ProvisioningInProgress => {
                 "session root is still being created by another process"
             }
+            Self::DurabilityUnavailable => {
+                "durable publication is not qualified for this session root"
+            }
+            Self::WorkspacePolicyMismatch => "session root already exists with another policy",
+            Self::WorkspaceRootNotExplicit => {
+                "a worker workspace needs an explicit absolute session root"
+            }
         })
     }
 }
@@ -1009,6 +1085,7 @@ impl From<SessionStoreOpenError> for SessionRootError {
             SessionStoreOpenError::InvalidLayout => Self::InvalidLayout,
             SessionStoreOpenError::RootAlreadyExists => Self::AlreadyExists,
             SessionStoreOpenError::InvalidAdmissionCapacity => Self::InvalidAdmissionCapacity,
+            SessionStoreOpenError::DurabilityUnavailable => Self::DurabilityUnavailable,
         }
     }
 }

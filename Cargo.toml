@@ -37,7 +37,7 @@ predicates = "3.1"
 process-wrap = { version = "10.0", default-features = false, features = ["job-object", "kill-on-drop", "process-group", "tokio1"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls"] }
 proptest = { version = "1.11", default-features = false, features = ["std"] }
-rustix = { version = "1.1", default-features = false, features = ["process"] }
+rustix = { version = "1.1", default-features = false, features = ["fs", "process"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = { version = "0.11", default-features = false }

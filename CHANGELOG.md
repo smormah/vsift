@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Worker workspaces, weighted admission, strict Linux attestation and contained inputs
+  (P11 PR 2, [ADR 0021](docs/decisions/0021-worker-and-batch-host.md) PR 2 notes).
+  `vsift --session-root <dir> session init-workspace --durability durable|ephemeral
+  --admission-slots N [--retention-hours H]` creates a worker workspace with an
+  immutable operator policy (`workspace-data`): the same policy again answers
+  `already_initialized`, any other policy or a desktop root is `INVALID_ARGUMENT`, and a
+  durable workspace off Ubuntu 24.04 / ext4 is `MISSING_CAPABILITY` with nothing
+  created. `ingest --session-root <workspace>` opens sessions with the workspace's
+  durability, so a durable workspace gives the command line durable sessions
+  (`os_crash_durable`, ADR 0020 D-3); workspace sessions report `lifecycle.mode`
+  `durable_worker` and live the workspace's retention (default 168 hours, at most 720
+  in all). Admission now weighs what runs: a visual window 2 units, a copy or evidence
+  extraction 1, a recognition its recognizer threads; work heavier than the root is
+  `RESOURCE_LIMIT` before any work. The global `--host-isolation strict-linux` is
+  accepted only when the kernel attests cgroup v2 CPU, memory and PID limits, a
+  read-only root and loopback-only networking, else `ISOLATION_UNAVAILABLE` before any
+  work. Worker input paths are opened inside an operator input root without following
+  links (engine groundwork for `job run`). On Unix a workspace checks a 1 GiB
+  free-space reserve before each copy. `job-result.controls` gains `resource_limits`
+  and `free_space_reserve`. A 21st fuzz target, `host_attestation`.
+
 - Worker contracts and progress events (P11 PR 1,
   [ADR 0021](docs/decisions/0021-worker-and-batch-host.md), maintainer decisions D1-D5
   accepted 2026-09-28). The versioned job request (`job-request.schema.json`: an
@@ -343,6 +364,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   field. New limits are added to it in the same change that finds them.
 
 ### Changed
+
+- Local speech recognition now uses at most as many threads as the session root's
+  admission capacity (4 on a desktop root; previously up to 8), and that count is part
+  of the run's provenance, so revision ids can differ from earlier runs and between
+  roots of different capacity (L-023); a job interrupted before this change with more
+  threads starts afresh. A visual-candidate window now reserves two admission units
+  (P11 PR 2).
 
 - ADR 0017 decision 4 is superseded: the CLI traps Ctrl-C and `SIGTERM` (see Added).
 - A provider that fails after its caller cancelled is reported as cancelled, so an

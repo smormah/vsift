@@ -10,12 +10,12 @@ use jsonschema::{Retrieve, Uri};
 use serde::Serialize;
 use serde_json::Value;
 use vsift_contract::{
-    BatchItemStatus, BatchLine, BatchTermination, CommandName, EventKind, JobBatchData,
-    LifecycleEventResponse, LifecycleKind, LifecycleReason, LifecycleResponse,
+    BatchItemStatus, BatchLine, BatchTermination, CommandName, EventKind, FreeSpaceReserve,
+    JobBatchData, LifecycleEventResponse, LifecycleKind, LifecycleReason, LifecycleResponse,
     MAX_EVENT_LINE_BYTES, OperationResponse, ProgressEventResponse, ProgressReport, Readiness,
-    RequestEnd, RequestRef, RequestRejection, ResultEventResponse, ResultOrigin, StepOutputs,
-    StepResult, StepTiming, TerminalEventResponse, WorkControls, WorkRequest, WorkResult,
-    WorkResultParts, WorkerIsolation, decode_batch_line,
+    RequestEnd, RequestRef, RequestRejection, ResourceLimits, ResultEventResponse, ResultOrigin,
+    StepOutputs, StepResult, StepTiming, TerminalEventResponse, WorkControls, WorkRequest,
+    WorkResult, WorkResultParts, WorkerIsolation, decode_batch_line,
 };
 use vsift_domain::{
     FailureCode, JobId, OperationStatus, ProgressStage, ProgressUnit, ProgressUpdate,
@@ -109,6 +109,8 @@ fn controls() -> Result<WorkControls, Box<dyn std::error::Error>> {
         isolation: WorkerIsolation::ProcessOnly,
         admission_capacity: NonZeroU16::new(4).ok_or("zero")?,
         concurrency: NonZeroU16::new(2).ok_or("zero")?,
+        resource_limits: ResourceLimits::NotEnforced,
+        free_space_reserve: FreeSpaceReserve::NotEnforced,
     })
 }
 

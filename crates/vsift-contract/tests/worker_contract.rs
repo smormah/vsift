@@ -18,12 +18,12 @@ use std::{
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_contract::{
-    BatchLine, BatchTermination, BundleName, CommandName, JobBatchData, LifecycleResponse,
-    MAX_RESULT_STEPS, MAX_WORK_RESULT_BYTES, OperationResponse, PARTIAL_REQUEST_WARNING,
-    RequestDurability, RequestFailure, RequestRejection, ResultOrigin, StepOutputs, StepResult,
-    StepStatus, StepTiming, WorkControls, WorkFailure, WorkRequest, WorkResult, WorkResultError,
-    WorkResultParts, WorkStepKind, WorkerIsolation, WorkspaceData, WorkspaceInitOutcome,
-    decode_batch_line, decode_work_request,
+    BatchLine, BatchTermination, BundleName, CommandName, FreeSpaceReserve, JobBatchData,
+    LifecycleResponse, MAX_RESULT_STEPS, MAX_WORK_RESULT_BYTES, OperationResponse,
+    PARTIAL_REQUEST_WARNING, RequestDurability, RequestFailure, RequestRejection, ResourceLimits,
+    ResultOrigin, StepOutputs, StepResult, StepStatus, StepTiming, WorkControls, WorkFailure,
+    WorkRequest, WorkResult, WorkResultError, WorkResultParts, WorkStepKind, WorkerIsolation,
+    WorkspaceData, WorkspaceInitOutcome, decode_batch_line, decode_work_request,
 };
 use vsift_domain::{
     CoverageGapReason, FailureCode, JobId, MediaTime, OperationId, PublicationGuarantee, SessionId,
@@ -94,6 +94,8 @@ fn controls() -> Result<WorkControls, Box<dyn std::error::Error>> {
         isolation: WorkerIsolation::StrictLinux,
         admission_capacity: NonZeroU16::new(8).ok_or("zero")?,
         concurrency: NonZeroU16::new(2).ok_or("zero")?,
+        resource_limits: ResourceLimits::HostCgroup,
+        free_space_reserve: FreeSpaceReserve::Enforced,
     })
 }
 
@@ -412,6 +414,8 @@ fn cancellation_and_rejection_are_reported_as_such() -> TestResult {
             isolation: WorkerIsolation::ProcessOnly,
             admission_capacity: NonZeroU16::MIN,
             concurrency: NonZeroU16::MIN,
+            resource_limits: ResourceLimits::NotEnforced,
+            free_space_reserve: FreeSpaceReserve::NotEnforced,
         },
     };
     let cancelled = WorkResult::new(base(
@@ -586,6 +590,18 @@ fn published_enums_match_the_contract() -> TestResult {
             &mut WorkerIsolation::ALL
                 .iter()
                 .map(|isolation| isolation.identifier())
+        )
+    );
+    assert_eq!(
+        listed("/properties/controls/properties/resource_limits/enum")?,
+        identifiers(&mut ResourceLimits::ALL.iter().map(|limits| limits.identifier()))
+    );
+    assert_eq!(
+        listed("/properties/controls/properties/free_space_reserve/enum")?,
+        identifiers(
+            &mut FreeSpaceReserve::ALL
+                .iter()
+                .map(|reserve| reserve.identifier())
         )
     );
     let batch = load("job-batch-data.schema.json")?;

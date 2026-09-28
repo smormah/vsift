@@ -69,8 +69,14 @@ through `decode_chunk_checkpoint`, round-tripped). Their seeds are the frozen re
 examples in `schemas/v1/examples/` and the example records in
 `crates/vsift-infrastructure/tests/data/jobs/`, which that crate's
 `job_record_examples` test pins to the encoder (regenerate with
-`VSIFT_REGENERATE_JOB_EXAMPLES=1` and review the diff). A `request_record` target
-follows with the worker's request records in P11 PR 3. The two
+`VSIFT_REGENERATE_JOB_EXAMPLES=1` and review the diff). P11 PR 2 added
+`host_attestation` (the strict worker's kernel files: the same bytes through
+`parse_proc_cgroup`, `parse_cpu_max`, `parse_cgroup_limit` and `parse_net_dev`; an
+accepted limit reads back from its canonical form and adding an interface line decides
+the network verdict as documented; seeds quote the attestation tests) and made
+`mountinfo` also check that `classify_root_mount` accepts exactly the tables
+`classify_mountinfo` does. A `request_record` target follows with the worker's
+request records in P11 PR 3. The two
 diagnostics targets also require that indented copies of every line, as FFmpeg echoes
 source metadata, never change a result; their seeds are the real FFmpeg 9.0 output in
 `crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/`. It is a separate package with its

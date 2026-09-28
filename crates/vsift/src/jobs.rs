@@ -11,7 +11,7 @@ use vsift_application::{
     job_status as job_status_query, observed_state, resumable_request,
 };
 use vsift_domain::{
-    AttemptFailure, JobId, JobKind, JobState, OperationId, SessionId, SessionPhase,
+    AdmissionWait, AttemptFailure, JobId, JobKind, JobState, OperationId, SessionId, SessionPhase,
     StorageGeneration, TimeRange, TranscriptRevisionId,
 };
 use vsift_infrastructure::FilesystemSessionStore;
@@ -217,6 +217,9 @@ pub struct JobResumeRequest {
     /// Receives the resumed run's chunk progress, as
     /// [`RetranscribeRequest::progress`] does (P11).
     pub progress: ProgressObserver,
+    /// How the resumed run waits for admission, as
+    /// [`RetranscribeRequest::admission`] does.
+    pub admission: AdmissionWait,
 }
 
 /// A resumed job's result and the job as it stands afterwards.
@@ -398,6 +401,7 @@ impl Engine {
                 operation_id: record.operation_ids.first().cloned(),
                 cancellation: request.cancellation,
                 progress: request.progress,
+                admission: request.admission,
             })
             .await?;
         let status = self.job_status(outcome.job().job_id())?;

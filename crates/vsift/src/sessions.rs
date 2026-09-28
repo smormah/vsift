@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use vsift_application::{OpenSession, OpenSessionOutcome, OpenSessionRequest};
 use vsift_domain::{
     DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
-    TranscriptRevision,
+    TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, FfprobeSourceDuration, FilesystemSessionStore,
-    SessionIndexPage, SessionRootProvisioning, SessionStatus,
+    FreeSpaceCheck, SessionIndexPage, SessionRootProvisioning, SessionStatus,
 };
 
 use crate::{
@@ -39,8 +39,13 @@ pub struct IngestRequest {
     /// with write barriers, ADR 0010) can honour it, and anywhere else the
     /// ingest fails with `MISSING_CAPABILITY` before any session is
     /// registered, never downgrading the request.
-    /// Engine-level only in this release; the command line gains it with
-    /// the worker host (ADR 0020 D-3).
+    ///
+    /// It is the least the caller requires. In a worker workspace the
+    /// workspace's policy decides (ADR 0021 section 3): a durable workspace
+    /// makes the session durable whatever was asked, which is how the
+    /// command line's plain `ingest --session-root <workspace>` becomes its
+    /// durable mode (ADR 0020 D-3), and a durable requirement in an
+    /// ephemeral workspace fails with [`EngineError::WorkspaceNotDurable`].
     pub durability: DurabilityRequirement,
 }
 
@@ -62,6 +67,19 @@ pub struct IngestOutcome {
     pub session: OpenSessionOutcome,
     /// The imported revision, committed in the same generation as the source.
     pub transcript: Option<TranscriptRevision>,
+    /// Whether the workspace's free-space reserve was checked before the
+    /// copy: only a worker workspace on Unix checks it (P11 PR 2).
+    pub free_space: FreeSpaceReserveCheck,
+}
+
+/// Whether an ingest checked the free-space reserve before its copy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FreeSpaceReserveCheck {
+    /// A workspace on Unix: the filesystem had the source's size and the
+    /// 1 GiB reserve free before the copy.
+    Enforced,
+    /// A desktop root, or a workspace on Windows: nothing was checked.
+    NotEnforced,
 }
 
 /// Committed facts about one session, observed at a known time.
@@ -419,6 +437,8 @@ impl Engine {
         let store = self
             .open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
             .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        let durability = session_durability(request.durability, store.workspace_policy())?;
+        let free_space = free_space_reserve(&store, &source)?;
         let now = self.now_unix_seconds()?;
         let open = OpenSessionRequest {
             source,
@@ -426,7 +446,7 @@ impl Engine {
             initialize_operation_id: self.new_operation_id()?,
             stage_operation_id: self.new_operation_id()?,
             activate_operation_id: self.new_operation_id()?,
-            durability: request.durability,
+            durability,
             now_unix_seconds: now,
         };
         let Some((import, tools)) = import else {
@@ -437,6 +457,7 @@ impl Engine {
             return Ok(IngestOutcome {
                 session,
                 transcript: None,
+                free_space,
             });
         };
         let probe_store = self
@@ -455,6 +476,7 @@ impl Engine {
         Ok(IngestOutcome {
             session,
             transcript: Some(revision),
+            free_space,
         })
     }
 
@@ -639,6 +661,48 @@ impl Engine {
         let now = self.now_unix_seconds()?;
         let store = self.open_session_store(&root, SessionRootProvisioning::ExistingOnly)?;
         Ok((store, now))
+    }
+}
+
+/// Checks a worker workspace's free-space reserve before the source is
+/// copied into it: the source's size (read from its metadata; the copy
+/// itself still refuses a file that grows) and the 1 GiB reserve must be
+/// available. A desktop root is not checked, as before P11.
+fn free_space_reserve(
+    store: &FilesystemSessionStore,
+    source: &Path,
+) -> Result<FreeSpaceReserveCheck, EngineError> {
+    if store.workspace_policy().is_none() {
+        return Ok(FreeSpaceReserveCheck::NotEnforced);
+    }
+    let incoming = std::fs::metadata(source).map_or(0, |metadata| metadata.len());
+    Ok(match store.ensure_free_space(incoming)? {
+        FreeSpaceCheck::Enforced => FreeSpaceReserveCheck::Enforced,
+        FreeSpaceCheck::NotEnforced => FreeSpaceReserveCheck::NotEnforced,
+    })
+}
+
+/// The durability a new session publishes with: at least what the caller
+/// requires, and in a worker workspace exactly the workspace's policy, which
+/// the caller cannot lower (ADR 0020 D-3, ADR 0021 section 3).
+///
+/// A durable workspace makes every session durable, so the command line's
+/// plain `ingest --session-root <workspace>` is its durable mode. A durable
+/// requirement in an ephemeral workspace is refused rather than silently
+/// weakened.
+fn session_durability(
+    required: DurabilityRequirement,
+    workspace: Option<WorkspacePolicy>,
+) -> Result<DurabilityRequirement, EngineError> {
+    match (workspace.map(WorkspacePolicy::durability), required) {
+        (None, required) => Ok(required),
+        (Some(DurabilityRequirement::Durable), _) => Ok(DurabilityRequirement::Durable),
+        (Some(DurabilityRequirement::Ephemeral), DurabilityRequirement::Ephemeral) => {
+            Ok(DurabilityRequirement::Ephemeral)
+        }
+        (Some(DurabilityRequirement::Ephemeral), DurabilityRequirement::Durable) => {
+            Err(EngineError::WorkspaceNotDurable)
+        }
     }
 }
 

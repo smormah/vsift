@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use vsift_domain::{
     CropRect, FrameDimensions, FrameListing, ListedFrame, ListingTail, MediaDescription,
-    MediaSelection, MediaStream, MediaStreamKind, MediaTime, TimeRange,
+    MediaSelection, MediaStream, MediaStreamKind, MediaTime, SINGLE_STAGE_WEIGHT, TimeRange,
 };
 
 use super::{
@@ -218,10 +218,7 @@ impl FfmpegMedia<'_> {
             first = window.first_pts(),
             end = window.end_pts(),
         );
-        let _admission = self
-            .store
-            .try_admit(1)
-            .map_err(|_| MediaError::CapacityUnavailable)?;
+        let _admission = self.admit(SINGLE_STAGE_WEIGHT)?;
         binding
             .check_before_provider_call()
             .map_err(MediaError::Source)?;
@@ -407,10 +404,7 @@ impl FfmpegMedia<'_> {
             "select='{}',format=rgb24{crop},showinfo=checksum=0",
             terms.join("+")
         );
-        let _admission = self
-            .store
-            .try_admit(1)
-            .map_err(|_| MediaError::CapacityUnavailable)?;
+        let _admission = self.admit(SINGLE_STAGE_WEIGHT)?;
         binding
             .check_before_provider_call()
             .map_err(MediaError::Source)?;

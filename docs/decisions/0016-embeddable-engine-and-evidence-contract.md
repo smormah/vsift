@@ -333,3 +333,14 @@ This note fixes the CLI surface decision 5 left to P07.
   (`request_record`) when it exists (P11 PR 3).
 - The harness now depends on `vsift-contract` too; its lockfile adds only that crate.
   The Fuzz workflow runs 20 targets.
+
+## 2026-09-28 note: the strict worker attestation parsers are fuzzed (P11 PR 2)
+
+The strict Linux attestation ([ADR 0021](0021-worker-and-batch-host.md) section 8)
+reads kernel files, so its parsers follow decision 6: `parse_proc_cgroup`,
+`parse_cpu_max`, `parse_cgroup_limit` and `parse_net_dev` are public in
+`vsift-infrastructure` and fuzzed together as `host_attestation` (an accepted path
+stays within its depth, a limit reads back from its canonical form, an added interface
+line decides the network verdict as documented), and the `mountinfo` target also
+checks `classify_root_mount` against `classify_mountinfo`. Seeds quote the attestation
+tests' kernel files verbatim. The Fuzz workflow runs 21 targets.

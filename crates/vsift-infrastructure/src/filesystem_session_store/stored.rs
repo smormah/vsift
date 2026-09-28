@@ -4,7 +4,8 @@ use cap_std::fs::Dir;
 use serde::Deserialize;
 use vsift_application::SessionStorageError;
 use vsift_domain::{
-    OperationId, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
+    OperationId, SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId,
+    StorageGeneration, WorkspaceRetention,
 };
 
 use super::map_committed_io;
@@ -48,9 +49,22 @@ pub(super) fn validate_source_record(
 }
 
 impl StoredLifecycle {
+    /// The recorded lifetime, validated under the rules it was opened with:
+    /// a workspace session's recorded retention, else the desktop policy.
     pub(super) fn validated_lifetime(&self) -> Result<SessionLifetime, SessionStorageError> {
-        SessionLifetime::from_record(self.opened_at_unix_seconds, self.expires_at_unix_seconds)
-            .map_err(|_| SessionStorageError::IntegrityFailure)
+        let policy = match self.workspace_retention_seconds {
+            None => SessionLifetimePolicy::Desktop,
+            Some(seconds) => SessionLifetimePolicy::Workspace(
+                WorkspaceRetention::from_seconds(seconds)
+                    .map_err(|_| SessionStorageError::IntegrityFailure)?,
+            ),
+        };
+        SessionLifetime::from_record_under(
+            policy,
+            self.opened_at_unix_seconds,
+            self.expires_at_unix_seconds,
+        )
+        .map_err(|_| SessionStorageError::IntegrityFailure)
     }
 
     pub(super) fn to_status(

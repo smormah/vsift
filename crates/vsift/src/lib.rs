@@ -91,6 +91,7 @@ mod candidates;
 mod engine;
 mod error;
 mod evidence;
+mod isolation;
 mod jobs;
 mod local_asr_check;
 mod progress;
@@ -99,6 +100,7 @@ mod sessions;
 mod setup;
 mod transcripts;
 mod verification;
+mod workspace;
 
 pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRequest};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
@@ -115,17 +117,18 @@ pub use evidence::{
     DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
     FrameNeighboursRequest, FrameTarget,
 };
+pub use isolation::{IsolationGap, IsolationGaps, IsolationProfile, attest_host_isolation};
 pub use jobs::{
     JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,
     MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
 };
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
-pub use progress::{JobProgress, ProgressObserver};
+pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    IngestOutcome, IngestRequest, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
-    SuppliedTranscriptRequest,
+    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SessionListEntry, SessionPage,
+    SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
 };
 pub use setup::{
     EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport, SetupCheckRequest, SetupPlanRequest,
@@ -134,6 +137,7 @@ pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
+pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
 pub use vsift_application::{
     AsrFailure, AsrFailureReason, AsrStage, Clock, ClockError, IdentifierGenerationError,
@@ -156,6 +160,15 @@ pub use vsift_application::{
 };
 /// Why a crop rectangle's text or geometry was rejected.
 pub use vsift_domain::GeometryError;
+pub use vsift_domain::{
+    ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
+    DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
+    FailureCode, IdentifierError, JobId, JobKind, JobState, MAX_ADMISSION_WAIT,
+    MAX_RECOGNIZER_THREADS, OperationId, ProgressStage, ProgressUnit, ProgressUpdate,
+    PublicationGuarantee, RuntimeCapability, RuntimeDependency, RuntimeReadiness, SessionId,
+    SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
+    WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
+};
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
     AlignmentOrigin, CarriedFrom, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText,
@@ -173,13 +186,6 @@ pub use vsift_domain::{
     AsrProviderBuild, AsrRun, ChunkPlan, ChunkTime, PlannedChunk, ProviderChunkOutput,
     ProviderOutputError, ProviderSegment, ProviderToken, ProviderTokenKind, ReviewedAsrModel,
     Sha256Hex,
-};
-pub use vsift_domain::{
-    AttemptFailure, DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId,
-    FailureClass, FailureCode, IdentifierError, JobId, JobKind, JobState, OperationId,
-    ProgressStage, ProgressUnit, ProgressUpdate, PublicationGuarantee, RuntimeCapability,
-    RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionPhase, SourceId,
-    StorageGeneration,
 };
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_domain::{

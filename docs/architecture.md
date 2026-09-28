@@ -126,7 +126,8 @@ the commit pointer only after validation and file synchronization. Recovery veri
 the bounded manifest chain, ignores unpublished attempts, and rejects corrupt, missing
 or future-version metadata. Fault and child-process tests cover every manifest/pointer
 write, flush and rename boundary. An ephemeral session is process-crash consistent.
-A durable session (ADR 0020, requested through the engine API) also synchronises the
+A durable session (ADR 0020; an engine request, or since P11 PR 2 any session of a
+durable worker workspace created by `session init-workspace`) also synchronises the
 artifact, generation and session directories before it acknowledges; since P10 PR 4
 the adapter offers it only on the qualified Ubuntu 24.04 / local ext4 profile (ADR
 0010's crash campaign, `durable_profile`), and an explicit durable request anywhere
@@ -152,8 +153,12 @@ functional release. A server supervisor would stage sources and manage its own q
 tenant authorization and durable remote result storage. Default desktop investigations
 remain disposable; cross-video indexing remains an explicit R1 capability.
 
-This extension is recorded in [accepted ADR 0004](decisions/0004-recoverable-worker-core.md).
-It is not an implemented durability or throughput guarantee.
+This extension is recorded in [accepted ADR 0004](decisions/0004-recoverable-worker-core.md)
+and designed in [ADR 0021](decisions/0021-worker-and-batch-host.md). As of P11 PR 2 the
+worker workspace (an explicit root with an immutable durability, admission and
+retention policy), weighted cross-process admission, the strict Linux attestation and
+contained request inputs exist; `job run` and `job batch` come with P11 PRs 3 and 4.
+It is not yet a throughput guarantee.
 
 ## Public contracts
 

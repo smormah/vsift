@@ -41,8 +41,9 @@ use vsift_infrastructure::{
     WhisperOutputLimits, classify_mountinfo, classify_os_release, decode_chunk_checkpoint,
     decode_evidence_record, decode_job_record, decode_transcript_record,
     decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
-    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_png_sequence, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata,
+    parse_frame_listing, parse_frame_showinfo, parse_net_dev, parse_png_sequence,
+    parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -105,6 +106,9 @@ const CROP_TESTS: &str = "crates/vsift-domain/src/timeline.rs";
 /// The durable-profile tests whose mount tables and os-release files the
 /// `mountinfo` and `os_release` seeds quote.
 const MOUNTINFO_TESTS: &str = "crates/vsift-infrastructure/src/durable_profile.rs";
+/// The strict-worker attestation tests whose kernel files the
+/// `host_attestation` seeds quote (P11 PR 2).
+const ATTESTATION_TESTS: &str = "crates/vsift-infrastructure/src/host_attestation.rs";
 
 /// The committed example job records and checkpoints (P11 PR 1, issue #180),
 /// pinned to the encoder by `vsift-infrastructure`'s `job_record_examples`.
@@ -172,6 +176,26 @@ const SEEDS: &[Seed] = &[
         Target::Mountinfo,
         "missing-separator.txt",
         Origin::InlineIn(MOUNTINFO_TESTS),
+    ),
+    seed(
+        Target::HostAttestation,
+        "cgroup-v2.txt",
+        Origin::InlineIn(ATTESTATION_TESTS),
+    ),
+    seed(
+        Target::HostAttestation,
+        "cpu-max.txt",
+        Origin::InlineIn(ATTESTATION_TESTS),
+    ),
+    seed(
+        Target::HostAttestation,
+        "memory-max.txt",
+        Origin::InlineIn(ATTESTATION_TESTS),
+    ),
+    seed(
+        Target::HostAttestation,
+        "net-dev-loopback.txt",
+        Origin::InlineIn(ATTESTATION_TESTS),
     ),
     seed(
         Target::OsRelease,
@@ -513,6 +537,10 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::Mountinfo, "ext4-and-proc.txt"),
         (Target::Mountinfo, "nobarrier-and-xfs.txt"),
         (Target::OsRelease, "noble.txt"),
+        (Target::HostAttestation, "cgroup-v2.txt"),
+        (Target::HostAttestation, "cpu-max.txt"),
+        (Target::HostAttestation, "memory-max.txt"),
+        (Target::HostAttestation, "net-dev-loopback.txt"),
         (Target::JobRequest, "job-request.json"),
         (Target::JobRequest, "f10-ingest-line.json"),
         (Target::JobRequest, "f01-session-line.json"),
@@ -608,6 +636,13 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         )
         .is_ok(),
         Target::ChunkCheckpoint => decode_chunk_checkpoint(data, 1).is_some(),
+        // Each seed is one kernel file that its own parser accepts.
+        Target::HostAttestation => {
+            parse_proc_cgroup(data).is_ok()
+                || parse_cpu_max(data).is_ok()
+                || parse_cgroup_limit(data).is_ok()
+                || parse_net_dev(data).is_ok()
+        }
         // The outer and the inner rectangle are both accepted.
         Target::CropRect => {
             let (outer, inner) = std::str::from_utf8(data)?

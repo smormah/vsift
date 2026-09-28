@@ -22,6 +22,11 @@ that needs the root creates it. Commands that race to create it converge on one
 root: the others wait at most five seconds for the creator and use the root only
 after the full ownership and privacy checks, failing with `BUSY` if it is still
 being created. An existing directory that VSift did not create is never adopted.
+`--host-isolation process-only|strict-linux` (P11 PR 2; default `process-only`)
+selects the isolation a command runs under: `strict-linux` is accepted only when the
+kernel attests the strict worker controls, and otherwise the command answers
+`ISOLATION_UNAVAILABLE` (exit 2) before any work (see "P11 worker workspaces, admission
+and isolation").
 
 **Interruption (P10 PR 3).** While a long command runs (`ingest`, `transcript
 retranscribe`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`, `job
@@ -48,6 +53,7 @@ told about a Ctrl-C (only Ctrl-Break); see L-053.
 | `setup install/repair/list/remove/rollback` | Explicit managed dependency lifecycle, still reserved | P13 ([ADR 0015](../decisions/0015-r0-delivery-replan.md)) |
 | `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
+| `session init-workspace` | Create a worker workspace: an explicit root with an immutable operator policy (durability, admission capacity, session retention) | Implemented in P11 PR 2 |
 | `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
@@ -74,15 +80,15 @@ vsift session clean --expired --json
 ```
 
 `ingest` stages and hashes one local source, returning its session/source IDs,
-source bytes, committed generation, `process_crash_consistent` publication and
-an RFC 3339 expiry. Without `--transcript` it does not start FFmpeg, setup,
-transcription or indexing; supplied-transcript import is described in the next
-section.
+source bytes, committed generation, `process_crash_consistent` publication (or
+`os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
+Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
+supplied-transcript import is described in the next section.
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
-days from open. Close and cleanup return busy while active work holds the
-session. Expiry becomes visible at the wall-clock boundary, but physical
-cleanup requires a later `clean` invocation; no daemon or secure deletion is
-promised.
+days from open. A worker workspace sets its own retention (P11, below). Close and
+cleanup return busy while active work holds the session. Expiry becomes visible at
+the wall-clock boundary, but physical cleanup requires a later `clean` invocation;
+no daemon or secure deletion is promised.
 
 `session list [--cursor 0..255]` and `session clean --expired
 [--cursor 0..255] [--dry-run]` return one bounded hash-bucket page at a time.
@@ -620,7 +626,10 @@ requested step: `kind`, `status` (`complete`, `partial`, `failed`, `cancelled`,
 `not_started`), `elapsed_ms`, `admission_wait_ms`, `job_id`, typed `outputs`,
 `coverage` and `failure`), `failure` (`code`, `retryable`, `retry_after_ms`, the
 `step` that ended the request or the `rejection` that refused it) and `controls`
-(`isolation` `process_only` or `strict_linux`, `admission_capacity`, `concurrency`).
+(`isolation` `process_only` or `strict_linux`, `admission_capacity`, `concurrency`,
+`resource_limits` `host_cgroup` or `not_enforced`: the attested host cgroup's limits,
+never VSift's own, and `free_space_reserve` `enforced` or `not_enforced`: whether the
+workspace's free-space reserve was checked before the copy).
 The outputs are: ingest `generation`, `revision_id` (an imported transcript or
 `null`); retranscribe `revision_id`, `generation`, `chunks_reused`; candidates
 `visual_index_id`, `generation`, `candidate_count` (the step analyses until no window
@@ -676,6 +685,75 @@ event names a path or carries text. Each line is at most 64 KiB.
 Lifecycle, result and terminal events are never dropped. Example:
 [`job-batch.events.jsonl`](../../schemas/v1/examples/job-batch.events.jsonl) (two
 requests, one with chunk progress; its terminal result is `job-batch.json`).
+
+### P11 worker workspaces, admission and isolation
+
+```console
+vsift --session-root /srv/vsift/workspace session init-workspace \
+  --durability durable --admission-slots 8 --retention-hours 168 --json
+vsift --session-root /srv/vsift/workspace ingest ./recording.mp4 --json
+vsift --host-isolation strict-linux --session-root /srv/vsift/workspace session list --json
+```
+
+**Worker workspace (P11 PR 2, [ADR 0021](../decisions/0021-worker-and-batch-host.md)
+section 3, D1, D2).** `session init-workspace` creates a worker workspace at
+`--session-root`, which must be given explicitly, be absolute, not be the per-user
+session cache, and have an existing parent (else `INVALID_ARGUMENT`). Its policy is
+fixed when it is created and recorded in the root's ownership marker:
+
+- `--durability durable|ephemeral`: `durable` is accepted only where OS-crash
+  durability is qualified (Ubuntu 24.04 with the root on local ext4 keeping write
+  barriers); anywhere else the command fails with `MISSING_CAPABILITY` and creates
+  nothing. `ephemeral` works everywhere (development and CI).
+- `--admission-slots 1..64`: the workspace's admission capacity, in weight units.
+- `--retention-hours 1..720` (default 168): how long a session lives after it opens
+  or is renewed; renewals never extend a session beyond 720 hours from its opening.
+
+The data is `workspace-data` (above), with `outcome` `created`, or
+`already_initialized` when the root already holds exactly this policy. Any other
+policy, raised or lowered, and an existing desktop root are refused with
+`INVALID_ARGUMENT` and fixed remediation; nothing is changed. Values out of range are
+`INVALID_ARGUMENT` (`parse`).
+
+A workspace is used with the ordinary commands through `--session-root`. `ingest
+--session-root <workspace>` opens a session with the workspace's durability: in a
+durable workspace every session reports `publication` `os_crash_durable` (the command
+line's durable mode, ADR 0020 D-3); in an ephemeral one `process_crash_consistent`.
+Every session of a workspace reports `lifecycle.mode` `durable_worker` with its
+expiry, since the mode names whose rules bound its life; `session renew` extends it
+by the retention, and `session clean --expired` removes it once expired, as for any
+session. Before a source is copied into a workspace on Unix, the filesystem must have
+the source's size and a 1 GiB reserve free, else `RESOURCE_LIMIT`; Windows does not
+check (L-061).
+
+**Weighted admission (X-07, ADR 0021 section 5a).** Every root (4 units for a desktop
+root) limits the work it runs at once by weight: a visual-candidate window's `FFmpeg`
+pass takes 2 units, a source copy, probe or evidence extraction 1, and a local
+speech-recognition attempt its recognizer threads, which are the machine's
+parallelism capped at 8 and at the root's capacity (the count is in the revision's
+provenance, so a smaller root gives a different revision id, L-023). Work that needs
+more than the root's whole capacity fails with `RESOURCE_LIMIT` (exit 5) and fixed
+remediation before any tool runs (for example `candidates` on a one-unit workspace).
+Contention is `BUSY` (exit 4) with `retry_after_ms`; interactive commands keep their
+two bounded retries, and P11's job commands will wait a bounded, jittered time (at
+most 60 s) before answering `BUSY`, reporting the wait as `admission_wait_ms`. No
+order is kept between processes sharing a root (L-060).
+
+**Strict Linux isolation (ADR 0021 section 8).** `--host-isolation strict-linux` is
+accepted only when the kernel attests that the process runs in a cgroup v2 with finite
+`cpu.max`, `memory.max` and `pids.max` (on its cgroup or an ancestor), on a read-only
+root filesystem, with no network interface but loopback. Otherwise every command
+answers `ISOLATION_UNAVAILABLE` (exit 2) with fixed remediation before any work; the
+missing controls are not named in the result. The limits are the host's; VSift
+reports them (`controls.resource_limits` `host_cgroup`) and never claims to enforce
+them.
+
+**Contained inputs (ADR 0021 section 9; S-01, S-02).** A worker request's source and
+transcript paths will be opened inside the operator's `--input-root` (P11 PR 3): the
+root is canonicalised once and held; a path must pass the request path grammar and is
+opened one name at a time following no link, so a link anywhere on the path (even one
+inside the root) and a file with several hard links are refused
+(`path_outside_input_root`, L-062).
 
 ### P08 transcript search
 
@@ -1406,7 +1484,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 
 | Test ID | Executable evidence |
 | --- | --- |
-| C-01 | CLI hierarchy, help/version, parse errors, reserved-command failure |
+| C-01 | CLI hierarchy, help/version, parse errors, reserved-command failure; `session init-workspace` creation, idempotence, policy refusal, durable fail-closed and strict-isolation refusal before work (`workspace_cli_contract`) |
 | C-02 | deterministic ready/degraded/blocked setup and terminal response states |
 | C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages, search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) and candidate pages (`candidates_cli_contract`, `engine_candidates`, the application's `visual` tests with the property `any_range_and_limit_page_without_gaps_or_duplicates`) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |

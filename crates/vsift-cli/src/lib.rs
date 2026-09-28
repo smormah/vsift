@@ -26,20 +26,24 @@ use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use output::{JsonLines, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
     Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
-    EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, ProgressObserver,
-    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
+    EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, IsolationProfile,
+    ProgressObserver, SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    UserConfigurationLocation, attest_host_isolation,
 };
 use vsift_contract::{
-    CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
-    ConfiguredSelectionResponse, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
-    JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION,
-    JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION,
-    LOCAL_ASR_TOOLS_REMEDIATION, MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION,
-    NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, NO_VIDEO_STREAM_REMEDIATION,
-    OperationResponse, SUPERSEDED_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION,
-    local_asr_failure_summary, local_asr_verification_summary, media_tool_verification_summary,
-    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
+    ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, CANDIDATE_CURSOR_REMEDIATION,
+    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse,
+    DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
+    ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION,
+    JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
+    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
+    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SUPERSEDED_REMEDIATION, TerminalEventResponse,
+    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
+    local_asr_verification_summary, media_tool_verification_summary, non_private_folder_summary,
+    search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -92,8 +96,14 @@ const fn is_long_running(command: &Command) -> bool {
 ///
 /// The CLI is a local, per-user host: sessions and dependency selections live in
 /// the platform's per-user locations unless `--session-root` selects another
-/// root, and no strict worker isolation is claimed.
-fn compose_engine(session_root: Option<PathBuf>, ports: EnginePorts) -> Engine {
+/// root. It claims strict worker isolation only as `isolation` says, which
+/// is the result of an attestation (see [`attest_host_isolation`]), never a
+/// flag taken at its word.
+fn compose_engine(
+    session_root: Option<PathBuf>,
+    isolation: HostIsolation,
+    ports: EnginePorts,
+) -> Engine {
     Engine::new(
         EngineConfig {
             session_root: session_root.map_or(
@@ -101,10 +111,31 @@ fn compose_engine(session_root: Option<PathBuf>, ports: EnginePorts) -> Engine {
                 SessionRootLocation::Explicit,
             ),
             user_configuration: UserConfigurationLocation::PlatformDefault,
-            host_isolation: HostIsolation::ProcessOnly,
+            host_isolation: isolation,
         },
         ports,
     )
+}
+
+/// The public operation a parsed command performs; `None` for bare `setup`,
+/// which only prints help.
+const fn operation_name(command: &Command) -> Option<CommandName> {
+    Some(match command {
+        Command::Setup(arguments) => match &arguments.command {
+            Some(setup) => setup.operation_name(),
+            None => return None,
+        },
+        Command::Ingest(_) => CommandName::Ingest,
+        Command::Session(arguments) => arguments.command.operation_name(),
+        Command::Transcript(arguments) => arguments.command.operation_name(),
+        Command::Search(_) => CommandName::Search,
+        Command::Candidates(_) => CommandName::Candidates,
+        Command::Frame(arguments) => arguments.command.operation_name(),
+        Command::Audio(_) => CommandName::Audio,
+        Command::Crop(_) => CommandName::Crop,
+        Command::Bundle(arguments) => arguments.command.operation_name(),
+        Command::Job(arguments) => arguments.command.operation_name(),
+    })
 }
 
 #[allow(
@@ -166,7 +197,25 @@ where
     let Some(command) = cli.command else {
         return write_root_help(&mut writer);
     };
-    let engine = compose_engine(cli.session_root, ports);
+    // A strict boundary is attested before anything else runs: a host that
+    // cannot provide it stops here with `ISOLATION_UNAVAILABLE` (exit 2).
+    let isolation = match operation_name(&command) {
+        Some(operation) => {
+            match attest_host_isolation(IsolationProfile::from(cli.host_isolation)) {
+                Ok(isolation) => isolation,
+                Err(error) => {
+                    return write_command_failure(
+                        &mut writer,
+                        mode,
+                        operation,
+                        CommandFailure::from(error),
+                    );
+                }
+            }
+        }
+        None => HostIsolation::ProcessOnly,
+    };
+    let engine = compose_engine(cli.session_root, isolation, ports);
     // One cancellation for the whole command; registered before any work
     // starts, so an early interruption is not missed. A handler the system
     // refuses leaves the default behaviour, which commits nothing partial.
@@ -613,8 +662,30 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::JobNotFound => Some(UNKNOWN_JOB_REMEDIATION.to_owned()),
         EngineError::JobNotResumable { .. } => Some(JOB_NOT_RESUMABLE_REMEDIATION.to_owned()),
         EngineError::JobCancelled { .. } => Some(JOB_CANCELLED_REMEDIATION.to_owned()),
-        _ => None,
+        other => worker_remediation(other),
     }
+}
+
+/// Fixed-prose remediation for worker workspaces, admission and isolation
+/// (P11).
+fn worker_remediation(error: &EngineError) -> Option<String> {
+    let summary = match error {
+        EngineError::SessionRoot(SessionRootError::WorkspacePolicyMismatch) => {
+            WORKSPACE_POLICY_MISMATCH_REMEDIATION
+        }
+        EngineError::SessionRoot(SessionRootError::DurabilityUnavailable) => {
+            DURABILITY_UNAVAILABLE_REMEDIATION
+        }
+        EngineError::SessionRoot(SessionRootError::WorkspaceRootNotExplicit) => {
+            WORKSPACE_ROOT_REMEDIATION
+        }
+        EngineError::WorkspaceNotDurable => WORKSPACE_NOT_DURABLE_REMEDIATION,
+        EngineError::AdmissionExceedsCapacity { .. } => ADMISSION_CAPACITY_REMEDIATION,
+        EngineError::AdmissionBusy { .. } => ADMISSION_BUSY_REMEDIATION,
+        EngineError::IsolationUnavailable(_) => ISOLATION_UNAVAILABLE_REMEDIATION,
+        _ => return None,
+    };
+    Some(summary.to_owned())
 }
 
 fn write_session_result<StandardOutput, StandardError, Failure>(

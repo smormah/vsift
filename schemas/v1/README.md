@@ -40,12 +40,14 @@ These files are the machine-readable public v1 boundary:
   the step order);
 - `job-result.schema.json` — the answer to one request: derived status, replay flag,
   attempt, session, source, publication, lifecycle, the steps with typed outputs,
-  coverage and failures, the request's failure and the controls it ran under; at most
-  64 KiB, no path and no evidence text;
+  coverage and failures, the request's failure and the controls it ran under
+  (isolation, admission capacity, concurrency and, since P11 PR 2, where the resource
+  limits come from and whether the free-space reserve was checked); at most 64 KiB, no
+  path and no evidence text;
 - `job-batch-data.schema.json` — the `data` of a `job.batch` result: counts per status,
   one item per processed line, the first line not started and why the batch stopped;
-- `workspace-data.schema.json` — the `data` of `session.init-workspace` (P11 PR 2):
-  the immutable policy of a worker workspace;
+- `workspace-data.schema.json` — the `data` of `session.init-workspace` (implemented
+  in P11 PR 2): the immutable policy of a worker workspace;
 - `config.schema.json` — strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` — the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was

@@ -405,6 +405,12 @@ where
 pub trait ProgressSink: Send + Sync {
     /// Receives one observation.
     fn report(&self, update: ProgressUpdate);
+
+    /// Told once when the run starts waiting for `weight` units of the
+    /// root's admission capacity (a bounded [`vsift_domain::AdmissionWait`]),
+    /// so a worker host can emit its `admission_waiting` lifecycle event.
+    /// Most sinks ignore it.
+    fn admission_waiting(&self, _weight: std::num::NonZeroU16) {}
 }
 
 /// A sink that reports nowhere, for runs nobody watches.

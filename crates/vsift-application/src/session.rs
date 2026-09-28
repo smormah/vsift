@@ -3,8 +3,9 @@
 use std::{error::Error, fmt, num::NonZeroU32, path::PathBuf};
 
 use vsift_domain::{
-    DurabilityRequirement, OperationId, PublicationGuarantee, SessionId, SessionLifetime, SourceId,
-    StorageGeneration, TranscriptImportError, TranscriptRevision, TranscriptRevisionError,
+    DurabilityRequirement, OperationId, PublicationGuarantee, SessionId, SessionLifetime,
+    SessionLifetimePolicy, SourceId, StorageGeneration, TranscriptImportError, TranscriptRevision,
+    TranscriptRevisionError,
 };
 
 use crate::{
@@ -62,6 +63,11 @@ pub trait ForegroundSessionPort: SessionStore {
         operation_id: &OperationId,
         now_unix_seconds: u64,
     ) -> Result<Self::Registration, OpenSessionError>;
+
+    /// The lifetime rules of sessions this root opens: the desktop policy,
+    /// or a worker workspace's retention (ADR 0021 D2). The use case reports
+    /// the lifetime the adapter will commit, so the two never disagree.
+    fn lifetime_policy(&self) -> SessionLifetimePolicy;
 
     /// Copies and hashes one selected local source under the session
     /// capability, checking `cancellation` between bounded blocks.
@@ -292,8 +298,9 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
             }
             .into());
         }
-        let lifetime = SessionLifetime::open(request.now_unix_seconds)
-            .map_err(|_| OpenSessionError::InvalidClock)?;
+        let lifetime =
+            SessionLifetime::open_under(self.port.lifetime_policy(), request.now_unix_seconds)
+                .map_err(|_| OpenSessionError::InvalidClock)?;
         let registration = self.port.register(
             &request.session_id,
             &request.initialize_operation_id,
@@ -418,6 +425,10 @@ mod tests {
     impl ForegroundSessionPort for FakePort {
         type Registration = ();
         type Snapshot = FakeSnapshot;
+
+        fn lifetime_policy(&self) -> vsift_domain::SessionLifetimePolicy {
+            vsift_domain::SessionLifetimePolicy::Desktop
+        }
 
         fn register(
             &self,
@@ -587,6 +598,10 @@ mod transcript_open_tests {
     impl ForegroundSessionPort for RecordingPort {
         type Registration = ();
         type Snapshot = Snapshot;
+
+        fn lifetime_policy(&self) -> vsift_domain::SessionLifetimePolicy {
+            vsift_domain::SessionLifetimePolicy::Desktop
+        }
 
         fn register(
             &self,
