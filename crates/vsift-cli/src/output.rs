@@ -8,7 +8,9 @@ use std::{error::Error, fmt, io, io::Write};
 
 use serde::Serialize;
 use vsift::{FailureClass, FailureCode, RuntimeReadiness};
-use vsift_contract::sanitize_untrusted_text;
+use vsift_contract::{
+    MAX_EVENT_LINE_BYTES, OperationResponse, TerminalEventResponse, sanitize_untrusted_text,
+};
 
 const MAX_RESULT_BYTES: usize = 1_048_576;
 const MAX_DIAGNOSTIC_BYTES: usize = 4_096;
@@ -123,6 +125,14 @@ where
             .map_err(OutputError::Io)
     }
 
+    /// Writes one encoded line and flushes it, so a reader sees it now.
+    fn write_flushed(&mut self, line: &[u8]) -> Result<(), OutputError> {
+        self.standard_output
+            .write_all(line)
+            .and_then(|()| self.standard_output.flush())
+            .map_err(OutputError::Io)
+    }
+
     /// Writes trusted application text to stdout without panic-on-I/O behavior.
     pub(crate) fn write_trusted_stdout(&mut self, value: &str) -> Result<(), OutputError> {
         if value.len() > MAX_RESULT_BYTES {
@@ -169,12 +179,82 @@ impl JsonLines {
     }
 }
 
+/// Writes a JSON Lines stream one event at a time, as each is ready (P11).
+///
+/// Evidence streams are bounded pages and are assembled first
+/// ([`JsonLines`]); a long command's progress and a worker host's lifecycle
+/// and result events must reach the reader while the work runs, so this
+/// writer numbers each event with the next `sequence`, bounds every line
+/// but the terminal one to [`MAX_EVENT_LINE_BYTES`], writes and flushes it
+/// at once, and ends the stream with the terminal event at the count of
+/// events before it. Blocking on a slow reader is the caller's to avoid:
+/// progress is dropped before it reaches this writer, never other events.
+pub(crate) struct JsonLinesWriter<'writer, StandardOutput, StandardError> {
+    output: &'writer mut OutputWriter<StandardOutput, StandardError>,
+    next_sequence: u64,
+}
+
+impl<'writer, StandardOutput, StandardError> JsonLinesWriter<'writer, StandardOutput, StandardError>
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    /// Starts a stream at sequence 0.
+    pub(crate) const fn new(
+        output: &'writer mut OutputWriter<StandardOutput, StandardError>,
+    ) -> Self {
+        Self {
+            output,
+            next_sequence: 0,
+        }
+    }
+
+    /// Writes one non-terminal event built for the next sequence number.
+    /// A line over the budget writes nothing and does not use the number.
+    pub(crate) fn write_event<T, Build>(&mut self, build: Build) -> Result<(), OutputError>
+    where
+        T: Serialize,
+        Build: FnOnce(u64) -> T,
+    {
+        let line = encode_line_within(&build(self.next_sequence), MAX_EVENT_LINE_BYTES)?;
+        self.output.write_flushed(&line)?;
+        self.next_sequence = self.next_sequence.saturating_add(1);
+        Ok(())
+    }
+
+    /// Ends the stream with `result` as its terminal event.
+    pub(crate) fn write_terminal(
+        self,
+        result: OperationResponse<serde_json::Value>,
+    ) -> Result<(), OutputError> {
+        let line = encode_line(&TerminalEventResponse::at_sequence(
+            result,
+            self.next_sequence,
+        ))?;
+        self.output.write_flushed(&line)
+    }
+
+    /// The writer's diagnostics channel.
+    pub(crate) fn output(&mut self) -> &mut OutputWriter<StandardOutput, StandardError> {
+        self.output
+    }
+}
+
 /// Serializes one value as a newline-terminated line within the result budget.
 fn encode_line<T>(value: &T) -> Result<Vec<u8>, OutputError>
 where
     T: Serialize,
 {
-    let mut buffer = BoundedBuffer::new(MAX_RESULT_BYTES.saturating_sub(1));
+    encode_line_within(value, MAX_RESULT_BYTES)
+}
+
+/// Serializes one value as a newline-terminated line of at most
+/// `maximum_bytes`, newline included.
+fn encode_line_within<T>(value: &T, maximum_bytes: usize) -> Result<Vec<u8>, OutputError>
+where
+    T: Serialize,
+{
+    let mut buffer = BoundedBuffer::new(maximum_bytes.saturating_sub(1));
     if let Err(error) = serde_json::to_writer(&mut buffer, value) {
         return if buffer.exceeded {
             Err(OutputError::TooLarge)
@@ -272,7 +352,7 @@ mod tests {
     use vsift::{FailureClass, FailureCode};
     use vsift_contract::OperationResponse;
 
-    use super::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
+    use super::{JsonLines, JsonLinesWriter, OutputError, OutputMode, OutputWriter, ProcessExit};
 
     struct BrokenWriter;
 
@@ -389,6 +469,95 @@ mod tests {
             matches!(result, Err(OutputError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
         );
         Ok(())
+    }
+
+    /// Records every write and flush, to prove each event is flushed as it
+    /// is written.
+    #[derive(Default)]
+    struct FlushLog {
+        bytes: Vec<u8>,
+        flushed_at: Vec<usize>,
+    }
+
+    impl io::Write for FlushLog {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            self.bytes.extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushed_at.push(self.bytes.len());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn events_are_numbered_flushed_and_ended_by_the_terminal_event()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut log = FlushLog::default();
+        let mut output = OutputWriter::new(&mut log, Vec::<u8>::new());
+        let mut stream = JsonLinesWriter::new(&mut output);
+        stream.write_event(
+            |sequence| serde_json::json!({"event": "progress", "sequence": sequence}),
+        )?;
+        stream.write_event(
+            |sequence| serde_json::json!({"event": "progress", "sequence": sequence}),
+        )?;
+        stream.write_terminal(OperationResponse::failure(
+            "job.run",
+            FailureCode::Cancelled,
+        ))?;
+
+        let lines: Vec<serde_json::Value> = log
+            .bytes
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(serde_json::from_slice)
+            .collect::<Result<_, _>>()?;
+        assert_eq!(lines.len(), 3);
+        for (index, line) in lines.iter().enumerate() {
+            assert_eq!(line["sequence"], u64::try_from(index)?);
+        }
+        assert_eq!(lines[2]["event"], "terminal");
+        assert_eq!(lines[2]["result"]["error"]["code"], "CANCELLED");
+        // One flush per line, each at the end of its line.
+        assert_eq!(log.flushed_at.len(), 3);
+        for offset in &log.flushed_at {
+            assert_eq!(log.bytes.get(offset - 1), Some(&b'\n'));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn an_event_over_its_line_budget_writes_nothing_and_keeps_its_number()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut stdout = Vec::new();
+        let mut output = OutputWriter::new(&mut stdout, Vec::<u8>::new());
+        let mut stream = JsonLinesWriter::new(&mut output);
+        let oversized = stream.write_event(|_| "a".repeat(super::MAX_EVENT_LINE_BYTES));
+        assert!(matches!(oversized, Err(OutputError::TooLarge)));
+        stream.write_event(|sequence| serde_json::json!({"sequence": sequence}))?;
+        // The terminal event keeps the whole result budget.
+        stream.write_terminal(OperationResponse::complete(
+            "job.batch",
+            &"b".repeat(super::MAX_EVENT_LINE_BYTES),
+        )?)?;
+        let text = String::from_utf8(stdout)?;
+        let mut lines = text.lines();
+        assert_eq!(lines.next(), Some("{\"sequence\":0}"));
+        let terminal: serde_json::Value = serde_json::from_str(lines.next().ok_or("terminal")?)?;
+        assert_eq!(terminal["sequence"], 1);
+        Ok(())
+    }
+
+    #[test]
+    fn a_closed_stdout_fails_an_event_with_a_typed_io_error() {
+        let mut output = OutputWriter::new(BrokenWriter, Vec::<u8>::new());
+        let mut stream = JsonLinesWriter::new(&mut output);
+        let result = stream.write_event(|sequence| serde_json::json!({"sequence": sequence}));
+        assert!(
+            matches!(result, Err(OutputError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
+        );
     }
 
     #[test]

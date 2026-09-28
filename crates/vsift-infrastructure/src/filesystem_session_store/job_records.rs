@@ -499,6 +499,52 @@ fn decode_output(payload: &str) -> Option<ProviderChunkOutput> {
     Some(ProviderChunkOutput { language, segments })
 }
 
+/// Decodes a job record (`job.json` v1) of `job_id` in `session_id`, exactly
+/// as the store reads one back.
+///
+/// Public for the `job_record` fuzz target (ADR 0016 decision 6, issue
+/// #180): the record is private storage, read only after ownership and link
+/// checks, but it is still untrusted input to its decoder.
+///
+/// # Errors
+///
+/// [`SessionStorageError::UnsupportedVersion`] for a newer record and
+/// [`SessionStorageError::IntegrityFailure`] for anything else that is not a
+/// valid record of exactly this job.
+pub fn decode_job_record(
+    bytes: &[u8],
+    job_id: &JobId,
+    session_id: &SessionId,
+) -> Result<JobRecord, SessionStorageError> {
+    decode_job(bytes, job_id, session_id)
+}
+
+/// Encodes a job record exactly as the store writes one.
+///
+/// # Errors
+///
+/// [`SessionStorageError::Io`] only if serialisation failed.
+pub fn encode_job_record(record: &JobRecord) -> Result<Vec<u8>, SessionStorageError> {
+    encode_job(record)
+}
+
+/// Decodes the chunk checkpoint stored as the 1-based `ordinal`
+/// (`chunks/<ordinal>.json` v1), exactly as a resumed run reads one; `None`
+/// is a checkpoint the run discards and redoes.
+///
+/// Public for the `chunk_checkpoint` fuzz target (issue #180).
+#[must_use]
+pub fn decode_chunk_checkpoint(bytes: &[u8], ordinal: u32) -> Option<ChunkCheckpoint> {
+    decode_checkpoint(bytes, ordinal)
+}
+
+/// Encodes a chunk checkpoint exactly as a run stores one; `None` only if
+/// serialisation failed.
+#[must_use]
+pub fn encode_chunk_checkpoint(checkpoint: &ChunkCheckpoint) -> Option<Vec<u8>> {
+    encode_checkpoint(checkpoint)
+}
+
 #[cfg(test)]
 mod tests {
     use vsift_domain::{

@@ -130,6 +130,16 @@ impl LifecycleResponse {
         }
     }
 
+    /// A session of an explicitly initialised worker workspace (P11): it
+    /// lives as long as the workspace policy says, with an RFC 3339 expiry.
+    #[must_use]
+    pub const fn durable_worker(expires_at: String) -> Self {
+        Self {
+            mode: "durable_worker",
+            expires_at: Some(expires_at),
+        }
+    }
+
     /// Explicitly retained bundle outside automatic session cleanup.
     #[must_use]
     pub const fn retained() -> Self {
@@ -381,7 +391,8 @@ impl TerminalEventResponse {
 
     /// Wraps the result that ends a stream after `sequence` earlier events;
     /// the event repeats the result's operation id.
-    pub(crate) fn at_sequence(result: OperationResponse<serde_json::Value>, sequence: u64) -> Self {
+    #[must_use]
+    pub fn at_sequence(result: OperationResponse<serde_json::Value>, sequence: u64) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
             event: EventKind::Terminal.identifier(),

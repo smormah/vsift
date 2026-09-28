@@ -23,15 +23,24 @@ use crate::{
 
 /// One published JSON Lines event kind, written to the event's `event` field.
 ///
-/// A reader dispatches on this value. Within major v1 new kinds (for example
-/// progress) may be added before the terminal event, so a reader skips a kind
-/// it does not know but still counts its `sequence`.
+/// A reader dispatches on this value. Within major v1 new kinds may be added
+/// before the terminal event (P11 added `progress`, `lifecycle` and
+/// `result`), so a reader skips a kind it does not know but still counts its
+/// `sequence`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EventKind {
     /// One evidence record (`evidence-event.schema.json`).
     Evidence,
     /// The single event that ends a stream (`terminal-event.schema.json`).
     Terminal,
+    /// How far a long operation has come (`progress-event.schema.json`, P11).
+    Progress,
+    /// A worker host's own state: started, a request admitted, waiting or
+    /// finished, draining, stopped (`lifecycle-event.schema.json`, P11).
+    Lifecycle,
+    /// One request's complete result in a `job batch` stream
+    /// (`result-event.schema.json`, P11).
+    Result,
 }
 
 impl EventKind {
@@ -39,7 +48,13 @@ impl EventKind {
     ///
     /// Contract tests compare this list with the `event` constants of the
     /// published event schemas, so a kind cannot be added on one side only.
-    pub const ALL: [Self; 2] = [Self::Evidence, Self::Terminal];
+    pub const ALL: [Self; 5] = [
+        Self::Evidence,
+        Self::Terminal,
+        Self::Progress,
+        Self::Lifecycle,
+        Self::Result,
+    ];
 
     /// Returns the stable identifier written to the `event` field.
     #[must_use]
@@ -47,7 +62,18 @@ impl EventKind {
         match self {
             Self::Evidence => "evidence",
             Self::Terminal => "terminal",
+            Self::Progress => "progress",
+            Self::Lifecycle => "lifecycle",
+            Self::Result => "result",
         }
+    }
+
+    /// Whether a host may drop an event of this kind when its reader is
+    /// slow: only progress is advisory; evidence, lifecycle, result and
+    /// terminal events are never dropped.
+    #[must_use]
+    pub const fn droppable(self) -> bool {
+        matches!(self, Self::Progress)
     }
 
     /// Returns the variant's position in [`EventKind::ALL`]; the exhaustive
@@ -56,6 +82,9 @@ impl EventKind {
         match self {
             Self::Evidence => 0,
             Self::Terminal => 1,
+            Self::Progress => 2,
+            Self::Lifecycle => 3,
+            Self::Result => 4,
         }
     }
 }

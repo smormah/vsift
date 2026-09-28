@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-09-27. Current-state document: rewrite it, don't append to it. Next
+As of 2026-09-28. Current-state document: rewrite it, don't append to it. Next
 actions and open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -16,7 +16,8 @@ Today it can:
 - import an existing SRT or WebVTT transcript with the video, aligned by an offset;
 - transcribe the video's speech itself with whisper.cpp (`transcript retranscribe`),
   continue an interrupted transcription where it stopped, and report, resume or cancel
-  that work by its job id (`job status/resume/cancel`);
+  that work by its job id (`job status/resume/cancel`); with `--events jsonl` a
+  transcription now reports its progress chunk by chunk;
 - return timestamped transcript segments for a time range, as a page or a JSON Lines
   stream of keyed evidence records;
 - search the transcript for words (`search`);
@@ -30,83 +31,76 @@ Today it can:
   session's every acknowledged result through an OS crash or power loss;
 - keep every folder it creates private to the user.
 
-**P00-P10 are complete.** P10 (recovery integration) closed on 2026-09-28 with merge
-`3f27ce3` (PRs #169, #179, #181, #182; ADR 0020 accepted). Durable publication is
-qualified and enabled for Ubuntu 24.04 / ext4 only (engine API; CLI via P11). P11
-(worker and batch host) is next. Every known limit is in `docs/planning/known-limits.md`.
+**P00-P10 are complete.** **P11 (worker and batch host) is in progress: PR 1 of four is
+complete on its branch (`p11/contracts-events`), not yet merged; the packet is not
+complete.** A supervisor cannot run `job run` or `job batch` yet: they still answer
+`COMMAND_NOT_IMPLEMENTED`. Every known limit is in `docs/planning/known-limits.md`.
 
-## P10 PR 4: crash campaign and durable enablement (merged, #182)
+## P11 plan and decisions
 
-- **What a host sees:** `IngestRequest::durability` (engine API only, ADR 0020 D-3).
-  On Ubuntu 24.04 with the session root on ext4 mounts that keep write barriers a
-  durable request is honoured and reported `os_crash_durable`; everywhere else it fails
-  with `MISSING_CAPABILITY` before anything changes. The CLI still opens ephemeral
-  sessions; an ingest now reports its session's own guarantee (it used to report the
-  store's strongest).
-- **Gate:** `QUALIFIED_UBUNTU_EXT4 = true`; `durable_profile` also reads `os-release`
-  (64 KiB bound, strict `classify_os_release`, fuzz target `os_release`) and decides by
-  the public `qualifies` table; anything unread or unparsed fails closed.
-- **Campaign:** `tools/p10-crash-campaign/` (workspace tool `vsift-crash-campaign`:
-  `workload`, `verify`, `replay`, `assess`; scripts; guest service) and
-  `.github/workflows/p10-durability-campaign.yml` (manual, weekly; hosted
-  `ubuntu-24.04` with KVM). Layer A: dm-log-writes replay at every flush and FUA write
-  with verification, a write probe and `e2fsck -fn` at each point. Layer B: SIGKILL of
-  the pinned Ubuntu 24.04 cloud image (release 20260911, SHA-256 pinned) with a
-  `cache=none` data disk, four shards. Layer C: dm-flakey `error_writes` swapped in at
-  random. The negative control (`durability-campaign` feature,
-  `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1`) removes every sync after the pointer rename and
-  must lose acknowledgements. Gating run 36340043451 (before the flip) and
-  confirmation run 36347502530 (release build, flipped) each met every criterion:
-  ~11,040 replay points, 320 kills, 144-180 injected failures, nothing lost; the
-  control lost 54 of 80. Details: `docs/planning/p10-durable-publication.md`.
-- **Findings fixed:** (1) removing only the session-directory sync hid behind ext4's
-  journal (the checkpoint's flush commits the rename), so the control removes every
-  sync after the rename; (2) a storage failure reading committed state (ext4 shut down
-  after a write error: `EIO`) was `INTEGRITY_FAILURE`; now `STORAGE_IO`
-  (`map_committed_io`, also the root's layout check); (3) the ingest guarantee report.
-- **Governance:** the checker allows `durability-campaign` only in development
-  dependencies and the unpublished campaign tool's non-default `campaign` feature; the
-  feature refuses release builds. New action pin: `actions/download-artifact` v8.0.1.
-- **Residuals:** storage ignoring flushes (L-056), disk or host loss (L-057, X-10),
-  Ubuntu recognised by `os-release` (L-058), engine-only durable requests (L-059),
-  Windows/macOS unqualified (L-008).
+[ADR 0021](../docs/decisions/0021-worker-and-batch-host.md) is accepted (maintainer,
+2026-09-28) with decisions D1-D5 as recommended: explicit `session init-workspace`
+with operator policy (D1); worker sessions live a workspace-set time, default 168 h,
+at most 720 h (D2); request steps are ingest, retranscribe, candidates, retain and
+close (D3); the first shutdown signal stops admitting and cancels at the next
+boundary, draining only with `--drain-timeout-ms` up to 300 s (D4); `job batch` exits
+0, 6 on shutdown, else the worst failure class 7 > 1 > 5 > 3 > 2 > 4 (D5).
 
-## P10 PRs 1-3 (merged)
+- **PR 1 (done on its branch):** contracts, events, progress, fuzzing (below).
+- **PR 2 (next):** durable workspace and CLI durable mode, weighted admission,
+  strict-Linux attestation, contained input and bundle roots.
+- **PR 3:** `job run`, request records and replay, step idempotency, graceful shutdown.
+- **PR 4:** `job batch`, SEC-T01, external-delivery simulation, qualification record.
 
-- PR 1 (`e2b14d9`): store split into `filesystem_session_store/`; #164 resolved (reads
-  stop at the writer's `chain-verified.json`); durable protocol (then disabled); eleven
-  commit fault points.
-- PR 2 (`2ae55be`): `JobState` `Interrupted`/`Committing`, retry policy and poison rule;
-  keys (request digest, recognition key, `opk_sha256_` operation key, `job_` id);
-  checkpoints in `sessions/<ses>/jobs/<job>/chunks/`; exactly-once commit reconciled
-  from the chain; `IDEMPOTENCY_CONFLICT` (exit 2, D-4); caps 512 / 384 / 128 KiB (D-2).
-- PR 3 (`8af331b`): `job status/resume/cancel <job>`, `session status` `jobs`,
-  `--operation-id` (D-1); first SIGINT/SIGTERM or Ctrl-C/Ctrl-Break cancels a long
-  command, the second escalates; `job cancel` reaches a running owner within 250 ms;
-  Tokio `signal` feature; Windows inherited "ignore Ctrl-C" is L-053.
+## P11 PR 1: contracts, events, progress and fuzzing (branch)
+
+- **Request.** `vsift-contract::decode_work_request` / `decode_batch_line`: strict,
+  at most 64 KiB and 16 levels, unknown members refused, a newer major
+  `UNSUPPORTED_SCHEMA`. Operation id, durability, optional deadline, an ingest target
+  (a path relative to the operator's input root, optional supplied transcript) or a
+  session, and up to 8 steps with order rules (retain once and only close after it;
+  close once and last). A strict relative-path grammar (no absolute, `..`, `\`, `:`,
+  control characters, trailing dot or space, Windows device names). Canonical
+  SHA-256 digest (`vsift.job-request.v1`, without the operation id). Typed
+  `RequestRejection` with fixed remediation. The P01 strict decoder moved from the CLI
+  into the contract (`decode_strict_json`).
+- **Result.** `WorkResult` (`job-result`): derived status, replay flag, steps with
+  typed outputs, coverage and failures, request failure, controls; at most 64 KiB, no
+  path, no text. `JobBatchData` (`job-batch-data`) with the D5 outcome rule;
+  `WorkspaceData` (`workspace-data`). Rust names avoid the application's `JobRequest`.
+- **Events.** `EventKind` gains `progress`, `lifecycle`, `result` (schemas, ordinal
+  and schema guards; only progress droppable). New incremental `JsonLinesWriter` in
+  the CLI (each line flushed; non-terminal lines at most 64 KiB).
+- **Progress.** Application port `ProgressSink` (in `CheckpointScope` and
+  `RetranscriptionPorts`), engine `ProgressObserver` on `RetranscribeRequest` and
+  `JobResumeRequest`, CLI `ProgressGate` (one per second, 4,096 per request, a 16-slot
+  queue that drops and counts). Evidence streams unchanged. Supersedes ADR 0017 D7.
+- **Fuzzing.** Targets `job_request`, `job_batch_line`, `job_record`,
+  `chunk_checkpoint` (20 in all); the record codecs are public in infrastructure, and
+  their seeds copy pinned example records in `tests/data/jobs/`.
+- **Schemas and examples.** Seven new schemas, nine new examples;
+  `ingest-data.publication` admits `os_crash_durable`.
 
 ## What works (public CLI)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`.
 - `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`: disposable
   session (24 idle hours, at most 7 days); supplied SRT/WebVTT import never needs whisper.
-- `transcript retranscribe <session> [--from --to] [--operation-id]` (resumable),
-  `transcript get ... [--events jsonl]`.
-- `job status|resume|cancel <job>`.
-- `search <session> --query <text> [--from --to] [--limit] [--cursor] [--revision]`.
-- `candidates <session> --from <us> --to <us> [--limit 1..100] [--cursor]`.
-- `frame get/neighbours/burst`, `crop`, `audio` (P09).
-- `session list/status/renew/close/retain/clean` and `bundle validate` (records too).
+- `transcript retranscribe <session> [--from --to] [--operation-id]` (resumable; chunk
+  progress with `--events jsonl`), `transcript get ... [--events jsonl]`.
+- `job status|resume|cancel <job>` (`resume` reports progress like retranscribe).
+- `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
+- `session list/status/renew/close/retain/clean` and `bundle validate`.
 - Still `COMMAND_NOT_IMPLEMENTED`: `job run/batch` and setup
   install/repair/list/rollback/remove. Human-readable terminal output is P13's.
 
-## Earlier packets and the engine
+## P10 in brief (complete 2026-09-28, `3f27ce3`)
 
-- P07/P08: 30 s ASR chunks with 5 s overlap (`base` default, 3.25% clean WER), search
-  tiers, 0.5 s visual sampling with a candidate per 10 s cell (`p08-candidate-recall.md`).
-- P09: evidence navigation qualified in `docs/planning/p09-evidence-navigation.md`.
-- **`crates/vsift`** is the engine (one typed `EngineError`, `failure_code()` the single
-  public mapping, API 0.x); **`vsift-contract`** holds every v1 wire type; the CLI is thin.
+Recoverable retranscribe jobs with chunk checkpoints and exactly-once commit,
+`IDEMPOTENCY_CONFLICT`, `job status/resume/cancel`, Ctrl-C/SIGTERM cancellation, and
+durable publication qualified on Ubuntu 24.04 / ext4 by an owned crash campaign
+(`docs/planning/p10-durable-publication.md`; ADR 0020). Durable sessions are
+engine-only until P11 PR 2's workspace (L-059).
 
 ## Packet status
 
@@ -118,26 +112,26 @@ qualified and enabled for Ubuntu 24.04 / ext4 only (engine API; CLI via P11). P1
 | P08 | Complete (2026-09-26, `b830fc9`): search, candidates, source binding |
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
-| P11, P12, P14 | Not started; P11 (worker and batch host) is next |
+| P11 | In progress: PR 1 of 4 complete on its branch; PRs 2-4 to come |
+| P12, P14 | Not started |
 | P13 | Not started; also delivers managed installation and human-readable output |
 
 ## Architecture snapshot
 
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <-
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
-<- `vsift-cli` (parse, present, signals). `vsift-contract` sits beside the engine.
-Storage: `filesystem_session_store/` (commit path in `commit.rs`/`publication.rs`, chain
-in `chain.rs`, jobs in `jobs.rs`/`job_records.rs`), `durable_profile.rs`,
-`fault_point.rs`, `retry_timer.rs`. Jobs: `vsift-application/src/job.rs` and
-`job/run.rs`, `vsift/src/jobs.rs`; CLI `job.rs` and `signal.rs`. Campaign:
-`tools/p10-crash-campaign/`.
+<- `vsift-cli` (parse, present, signals). `vsift-contract` sits beside the engine and
+now also owns the worker request/result, batch and workspace types and the event
+kinds (`request`, `work`, `batch`, `workspace`, `events`, `input`). Progress: domain
+`ProgressStage`/`ProgressUpdate`, application `ProgressSink`, engine
+`ProgressObserver`, CLI `progress.rs` and `output::JsonLinesWriter`. Storage:
+`filesystem_session_store/` (jobs in `jobs.rs`/`job_records.rs`).
 
 ## Quality evidence
 
-- P10 PR 4 branch: fmt, strict Clippy (with and without features), workspace tests,
-  warning-denied rustdoc, governance, fuzz fmt/Clippy/replay and cargo deny on Windows
-  11; the Linux build, Clippy and tests plus the whole campaign on hosted
-  `ubuntu-24.04`. Results and run links go in the PR description and the record.
+- P11 PR 1 branch: fmt, strict Clippy (with and without features), workspace tests,
+  warning-denied rustdoc, governance, and fuzz fmt/Clippy/replay on Windows 11. Results
+  go in the PR description; evidence rows in `docs/planning/verification.md`.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

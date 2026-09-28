@@ -17,9 +17,9 @@ use proptest::prelude::{ProptestConfig, prop_assert_eq, proptest};
 use vsift_domain::{
     AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, ChunkCheckpoint,
     ChunkPlan, ChunkTime, CueText, FailureCode, Jitter, JobId, JobState, LanguageTag, MediaTime,
-    OperationId, PlannedChunk, ProviderChunkOutput, ProviderSegment, ProviderToken,
-    ProviderTokenKind, SessionId, Sha256Hex, SourceId, SourceSegment, SourceSegmentId,
-    StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionId,
+    OperationId, PlannedChunk, ProgressStage, ProgressUpdate, ProviderChunkOutput, ProviderSegment,
+    ProviderToken, ProviderTokenKind, SessionId, Sha256Hex, SourceId, SourceSegment,
+    SourceSegmentId, StorageGeneration, TimeRange, TranscriptRevision, TranscriptRevisionId,
 };
 
 use super::{
@@ -31,9 +31,10 @@ use super::{
     retranscribe_operation_key, retranscribe_request_digest, run_retranscription,
 };
 use crate::{
-    AsrCancellation, AsrFailureReason, AsrStage, CheckpointScope, RecognizerIdentity,
-    SessionStorageError, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
-    SpeechRecognizer, TranscribeRangeRequest, transcribe_range, transcribe_range_checkpointed,
+    AsrCancellation, AsrFailureReason, AsrStage, CheckpointScope, NoProgress, ProgressSink,
+    RecognizerIdentity, SessionStorageError, SpeechAudioError, SpeechAudioSource, SpeechPcm,
+    SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, transcribe_range,
+    transcribe_range_checkpointed,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -822,6 +823,7 @@ impl Harness {
                 cancellation: &flag,
                 timer: &self.timer,
                 classify,
+                progress: &NoProgress,
             },
             &mut guard,
         )
@@ -864,8 +866,36 @@ impl Harness {
 
 // ---------------------------------------------------------------- checkpoints
 
+/// Records every progress report.
+#[derive(Default)]
+struct RecordedProgress(Mutex<Vec<ProgressUpdate>>);
+
+impl ProgressSink for RecordedProgress {
+    fn report(&self, update: ProgressUpdate) {
+        if let Ok(mut reports) = self.0.lock() {
+            reports.push(update);
+        }
+    }
+}
+
+impl RecordedProgress {
+    /// The reports so far, emptied.
+    fn take(&self) -> Built<Vec<(u64, Option<u64>)>> {
+        let mut reports = self.0.lock().map_err(|_| "progress lock poisoned")?;
+        Ok(reports
+            .drain(..)
+            .map(|update| {
+                assert_eq!(update.stage, ProgressStage::RecognisingSpeech);
+                (update.completed, update.total)
+            })
+            .collect())
+    }
+}
+
 /// Checkpoints are written per chunk; a second run over all of them decodes
-/// and recognises nothing and returns the same transcription.
+/// and recognises nothing and returns the same transcription. Both report
+/// their progress chunk by chunk (P11): 0 of 3 once planned, then each
+/// chunk, reused or not.
 #[tokio::test]
 async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> TestResult {
     let harness = Harness::new()?;
@@ -878,16 +908,20 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
         audio_stream: 1,
         expected: &harness.identity,
     };
+    let progress = RecordedProgress::default();
     let scope = CheckpointScope {
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
+        progress: &progress,
     };
+    let every_chunk = [(0, Some(3)), (1, Some(3)), (2, Some(3)), (3, Some(3))];
     let never = Flag(Arc::new(AtomicBool::new(false)));
     let (first, used) =
         transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
             .await?;
     assert_eq!(used.reused, 0);
     assert_eq!(harness.checkpoints(&resolved.spec.job_id)?, 3);
+    assert_eq!(progress.take()?, every_chunk);
     let decoded = harness.audio.calls.load(Ordering::SeqCst);
     let recognised = harness.recognizer.calls.load(Ordering::SeqCst);
 
@@ -899,6 +933,7 @@ async fn a_run_over_its_own_checkpoints_decodes_and_recognises_nothing() -> Test
     assert_eq!(second, first);
     assert_eq!(harness.audio.calls.load(Ordering::SeqCst), decoded);
     assert_eq!(harness.recognizer.calls.load(Ordering::SeqCst), recognised);
+    assert_eq!(progress.take()?, every_chunk);
 
     // Without checkpoints the same range gives the same transcription.
     let plain = transcribe_range(request, &harness.audio, &harness.recognizer, &never).await?;
@@ -925,6 +960,7 @@ async fn foreign_or_invalid_checkpoints_are_discarded_and_redone() -> TestResult
     let scope = CheckpointScope {
         checkpoints: &owner,
         key: &resolved.spec.recognition_key,
+        progress: &NoProgress,
     };
     let (control, _) =
         transcribe_range_checkpointed(request, scope, &harness.audio, &harness.recognizer, &never)
@@ -1405,6 +1441,7 @@ async fn a_cancel_requested_during_the_run_wins_before_the_commit() -> TestResul
             cancellation: &never,
             timer: &harness.timer,
             classify,
+            progress: &NoProgress,
         },
         &mut guard,
     )

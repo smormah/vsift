@@ -295,3 +295,15 @@ and suggesting `vsift job resume <job>`. A second interruption kills providers w
 the graceful wait; the process still exits only after they are reaped. The dependency
 review of Tokio's `signal` feature is recorded in ADR 0020. The rest of this ADR is
 unchanged.
+
+## 2026-09-28 note: section 6 "no progress events" superseded (P11 PR 1)
+
+The bullet of section 6 (D7) that deferred progress events is superseded by
+[ADR 0021](0021-worker-and-batch-host.md) section 7. `transcript retranscribe
+--events jsonl` (and `job resume`) now writes `progress` events before its one
+terminal event: stage `recognising_speech` in `chunks`, 0 of the planned chunks once
+the plan is made, then every chunk (reused ones included), at most one per second and
+4,096 per run, advisory and dropped rather than blocking a slow reader. The terminal
+event follows at the count of events before it; its result is unchanged. The records
+of a revision are still read with `transcript get --revision <revision_id> --events
+jsonl`. The rest of this record is unchanged.

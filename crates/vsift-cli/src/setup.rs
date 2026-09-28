@@ -11,8 +11,9 @@ use vsift::{
     RuntimeReadiness,
 };
 use vsift_contract::{
-    CommandName, DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, OperationResponse, SavedSetupPlan,
-    SetupCheckResponse, TerminalEventResponse, explicit_path_option, sanitize_untrusted_text,
+    CommandName, DependencyLookup, JsonLimits, MAX_PROVIDER_DETAIL_BYTES, OperationResponse,
+    SavedSetupPlan, SetupCheckResponse, TerminalEventResponse, explicit_path_option,
+    sanitize_untrusted_text,
 };
 
 use crate::{
@@ -64,7 +65,8 @@ where
 
 /// Reads one bounded, strict `setup plan --json` result supplied for acceptance.
 pub(crate) fn read_saved_plan(path: &Path) -> Result<SavedSetupPlan, FailureCode> {
-    let plan: SavedSetupPlan = read_json_file(path).map_err(|error| error.code())?;
+    let plan: SavedSetupPlan =
+        read_json_file(path, JsonLimits::DOCUMENT).map_err(|error| error.code())?;
     plan.validate_envelope()?;
     Ok(plan)
 }

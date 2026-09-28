@@ -399,6 +399,7 @@ fn run(
                 vsift_application::JobRunError::Asr { .. } => FailureCode::DeadlineExceeded,
                 _ => FailureCode::Internal,
             },
+            progress: &vsift_application::NoProgress,
         },
         &mut Unchanged,
     ))?;

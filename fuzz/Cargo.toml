@@ -24,6 +24,7 @@ libfuzzer = ["dep:libfuzzer-sys"]
 
 [dependencies]
 libfuzzer-sys = { version = "0.4.13", optional = true }
+vsift-contract = { version = "0.1.0", path = "../crates/vsift-contract" }
 vsift-domain = { version = "0.1.0", path = "../crates/vsift-domain" }
 vsift-infrastructure = { version = "0.1.0", path = "../crates/vsift-infrastructure" }
 
@@ -156,6 +157,38 @@ required-features = ["libfuzzer"]
 [[bin]]
 name = "os_release"
 path = "fuzz_targets/os_release.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "job_request"
+path = "fuzz_targets/job_request.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "job_batch_line"
+path = "fuzz_targets/job_batch_line.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "job_record"
+path = "fuzz_targets/job_record.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "chunk_checkpoint"
+path = "fuzz_targets/chunk_checkpoint.rs"
 test = false
 doc = false
 bench = false

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/result-event.schema.json",
+  "title": "VSift JSONL result event v1",
+  "description": "One worker request's complete result in a job.batch --events jsonl stream (P11, ADR 0021), written as soon as the request ends: line is its 1-based line in the batch file (null in job.run), result is job-result.schema.json. A refused line has no result event; its request_finished lifecycle event carries the rejection. Never dropped; at most 64 KiB per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event", "sequence", "command", "operation_id", "line", "result"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "event": { "const": "result" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "command": {
+      "type": "string",
+      "pattern": "^[a-z]+(?:-[a-z]+)*(?:[.][a-z]+(?:-[a-z]+)*)?$",
+      "maxLength": 64
+    },
+    "operation_id": { "type": "null" },
+    "line": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 1, "maximum": 1000 }] },
+    "result": { "$ref": "job-result.schema.json" }
+  }
+}

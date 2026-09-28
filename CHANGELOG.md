@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Worker contracts and progress events (P11 PR 1,
+  [ADR 0021](docs/decisions/0021-worker-and-batch-host.md), maintainer decisions D1-D5
+  accepted 2026-09-28). The versioned job request (`job-request.schema.json`: an
+  operation id, durability, an optional deadline, a file to ingest relative to the
+  operator's input root or an existing session, and up to eight `retranscribe`,
+  `candidates`, `retain` and `close` steps), its result (`job-result.schema.json`), the
+  batch summary (`job-batch-data.schema.json`) and the worker workspace's policy
+  (`workspace-data.schema.json`) are published with frozen examples, a strict bounded
+  decoder in `vsift-contract` (`decode_work_request`, `decode_batch_line`, typed
+  rejections with fixed remediation, a canonical request digest) and conformance
+  tests. `job run` and `job batch` still answer `COMMAND_NOT_IMPLEMENTED`; they land
+  in P11 PRs 3 and 4. New JSON Lines event kinds `progress`, `lifecycle` and `result`
+  (schemas with bounded string members; readers that skip unknown kinds are
+  unaffected). `transcript retranscribe` and `job resume` with `--events jsonl` now
+  write their chunk progress before the terminal event (at most one per second,
+  dropped rather than slowing the work when the reader is slow), so a long
+  recognition no longer looks stalled. `ingest-data.publication` admits
+  `os_crash_durable`. Four new fuzz targets: `job_request`, `job_batch_line`, and
+  `job_record` and `chunk_checkpoint` for the P10 job files (issue #180).
+
 - Durable sessions on Ubuntu 24.04 with local ext4 (P10 PR 4,
   [ADR 0020](docs/decisions/0020-recoverable-jobs-and-durable-publication.md) section 7,
   [ADR 0010](docs/decisions/0010-storage-qualification-gate.md)). An owned crash

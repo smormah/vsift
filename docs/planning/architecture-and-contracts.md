@@ -524,6 +524,14 @@ capabilities, timings, resource measurements and typed failure. Same key with di
 request digest yields IDEMPOTENCY_CONFLICT. Deduplication is local to the explicitly
 managed workspace and expires with its documented state lifecycle.
 
+2026-09-28 (P11 PR 1): both are published as `job-request.schema.json` and
+`job-result.schema.json` (Rust `vsift_contract::WorkRequest` and `WorkResult`, so the
+wire type does not reuse the application's P10 `JobRequest`), with the batch summary,
+the workspace policy and the `progress`, `lifecycle` and `result` events; the request
+names a file relative to the operator's input root or an existing session, and up to
+eight `retranscribe`, `candidates`, `retain` and `close` steps. See
+[ADR 0021](../decisions/0021-worker-and-batch-host.md).
+
 `job batch` streams a finite input list, admits bounded active work and emits per-job
 results. It never needs the whole queue in RAM. Queue redelivery, cluster leases,
 tenant fairness and dead-letter routing belong to the external supervisor. A result

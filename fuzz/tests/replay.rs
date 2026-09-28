@@ -24,24 +24,25 @@ use vsift_application::{
     VisualSampler, VisualSamplingError, build_asr_revision, extend_visual_index,
     whole_file_source_segment,
 };
+use vsift_contract::{BatchLine, decode_batch_line, decode_work_request};
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CropRect, CursorToken, FrameDimensions,
-    ListingTail, MediaTime, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange,
-    VISUAL_BLOCKS, VISUAL_FRAME_BYTES, VisualHash, VisualIndexProfile, VisualSample, VisualWindow,
-    merge_chunks, plan_chunks, validate_chunk_output,
+    JobId, ListingTail, MediaTime, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId,
+    TimeRange, VISUAL_BLOCKS, VISUAL_FRAME_BYTES, VisualHash, VisualIndexProfile, VisualSample,
+    VisualWindow, merge_chunks, plan_chunks, validate_chunk_output,
 };
 use vsift_fuzz::{
-    CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, Target, VISUAL_FUZZ_SESSION,
-    png_sequence_input, visual_samples_input,
+    CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, JOB_FUZZ_JOB, JOB_FUZZ_SESSION,
+    Target, VISUAL_FUZZ_SESSION, png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
     FrameListingWindow, MountDevice, OsReleaseProfile, SourceContainer, VisualSamplingWindow,
-    WhisperOutputLimits, classify_mountinfo, classify_os_release, decode_evidence_record,
-    decode_transcript_record, decode_visual_index_record, encode_transcript_record,
-    encode_visual_index_record, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
-    parse_frame_showinfo, parse_png_sequence, parse_supplied_transcript, parse_visual_samples,
-    parse_whisper_full_json,
+    WhisperOutputLimits, classify_mountinfo, classify_os_release, decode_chunk_checkpoint,
+    decode_evidence_record, decode_job_record, decode_transcript_record,
+    decode_visual_index_record, encode_transcript_record, encode_visual_index_record,
+    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
+    parse_png_sequence, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -105,7 +106,58 @@ const CROP_TESTS: &str = "crates/vsift-domain/src/timeline.rs";
 /// `mountinfo` and `os_release` seeds quote.
 const MOUNTINFO_TESTS: &str = "crates/vsift-infrastructure/src/durable_profile.rs";
 
+/// The committed example job records and checkpoints (P11 PR 1, issue #180),
+/// pinned to the encoder by `vsift-infrastructure`'s `job_record_examples`.
+const JOB_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/jobs";
+/// The frozen worker batch whose lines the request seeds quote.
+const BATCH_EXAMPLE: &str = "schemas/v1/examples/job-batch.requests.jsonl";
+
 const SEEDS: &[Seed] = &[
+    seed(
+        Target::JobRequest,
+        "job-request.json",
+        Origin::Copy("schemas/v1/examples"),
+    ),
+    seed(
+        Target::JobRequest,
+        "f10-ingest-line.json",
+        Origin::InlineIn(BATCH_EXAMPLE),
+    ),
+    seed(
+        Target::JobRequest,
+        "f01-session-line.json",
+        Origin::InlineIn(BATCH_EXAMPLE),
+    ),
+    seed(
+        Target::JobBatchLine,
+        "f10-ingest-line.jsonl",
+        Origin::InlineIn(BATCH_EXAMPLE),
+    ),
+    seed(
+        Target::JobBatchLine,
+        "f01-session-line.jsonl",
+        Origin::InlineIn(BATCH_EXAMPLE),
+    ),
+    seed(
+        Target::JobRecord,
+        "job-record.succeeded.json",
+        Origin::Copy(JOB_EXAMPLES),
+    ),
+    seed(
+        Target::JobRecord,
+        "job-record.interrupted.json",
+        Origin::Copy(JOB_EXAMPLES),
+    ),
+    seed(
+        Target::ChunkCheckpoint,
+        "checkpoint.recognised.json",
+        Origin::Copy(JOB_EXAMPLES),
+    ),
+    seed(
+        Target::ChunkCheckpoint,
+        "checkpoint.silent.json",
+        Origin::Copy(JOB_EXAMPLES),
+    ),
     seed(
         Target::Mountinfo,
         "ext4-and-proc.txt",
@@ -461,6 +513,15 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::Mountinfo, "ext4-and-proc.txt"),
         (Target::Mountinfo, "nobarrier-and-xfs.txt"),
         (Target::OsRelease, "noble.txt"),
+        (Target::JobRequest, "job-request.json"),
+        (Target::JobRequest, "f10-ingest-line.json"),
+        (Target::JobRequest, "f01-session-line.json"),
+        (Target::JobBatchLine, "f10-ingest-line.jsonl"),
+        (Target::JobBatchLine, "f01-session-line.jsonl"),
+        (Target::JobRecord, "job-record.succeeded.json"),
+        (Target::JobRecord, "job-record.interrupted.json"),
+        (Target::ChunkCheckpoint, "checkpoint.recognised.json"),
+        (Target::ChunkCheckpoint, "checkpoint.silent.json"),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
@@ -538,6 +599,15 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         }
         Target::Mountinfo => classify_mountinfo(data, MountDevice::new(8, 1)).is_ok(),
         Target::OsRelease => classify_os_release(data) == Ok(OsReleaseProfile::Ubuntu2404),
+        Target::JobRequest => decode_work_request(data).is_ok(),
+        Target::JobBatchLine => matches!(decode_batch_line(data), Ok(BatchLine::Request(_))),
+        Target::JobRecord => decode_job_record(
+            data,
+            &JobId::parse(JOB_FUZZ_JOB)?,
+            &SessionId::parse(JOB_FUZZ_SESSION)?,
+        )
+        .is_ok(),
+        Target::ChunkCheckpoint => decode_chunk_checkpoint(data, 1).is_some(),
         // The outer and the inner rectangle are both accepted.
         Target::CropRect => {
             let (outer, inner) = std::str::from_utf8(data)?

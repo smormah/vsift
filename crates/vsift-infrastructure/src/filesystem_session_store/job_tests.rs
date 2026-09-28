@@ -24,7 +24,7 @@ use std::{
 use vsift_application::{
     AsrCancellation, AsrFailureReason, CancelOutcome, CancelRequest, CheckpointRead,
     ChunkCheckpoints, CommitGuard, JobChange, JobCommit, JobLiveness, JobOwner, JobRecord,
-    JobRequest, JobRunError, JobSpec, JobStore, JobStoreError, RecognitionScope,
+    JobRequest, JobRunError, JobSpec, JobStore, JobStoreError, NoProgress, RecognitionScope,
     RecognizerIdentity, RetranscriptionOutcome, RetranscriptionPorts, RetranscriptionRun,
     RetryTimer, RevisionStore, SessionStorageError, SpeechAudioError, SpeechAudioSource, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscribeRangeRequest, cancel_job, job_id,
@@ -292,6 +292,7 @@ async fn run(
             cancellation: &Never,
             timer: &InstantTimer,
             classify,
+            progress: &NoProgress,
         },
         &mut Unchanged,
     )

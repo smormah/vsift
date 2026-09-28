@@ -65,6 +65,13 @@
 //!   for an existing [`PrivateFolder`] that other accounts can access.
 //! - **Text:** [`sanitize_untrusted_text`], the one rule for placing untrusted
 //!   provider text in public output.
+//! - **Worker requests (P11):** the strict bounded document decoder
+//!   [`decode_strict_json`]; the versioned [`WorkRequest`] decoded by
+//!   [`decode_work_request`] (and [`decode_batch_line`] for a `job batch`
+//!   line) with its canonical [`WorkRequestDigest`] and typed
+//!   [`RequestRejection`]; the [`WorkResult`] that answers it; the batch
+//!   summary [`JobBatchData`] with its outcome rule; and [`WorkspaceData`],
+//!   the result of initialising a worker workspace.
 //!
 //! The published JSON Schemas under `schemas/v1` are authoritative. This crate's
 //! tests validate its serialized values against them. The Rust API itself is 0.x
@@ -76,13 +83,17 @@
 
 #![forbid(unsafe_code)]
 
+mod batch;
 mod candidates;
 mod command;
 mod envelope;
+mod events;
 mod evidence;
+mod input;
 mod job;
 mod local_asr;
 mod navigation;
+mod request;
 mod search;
 mod session;
 mod setup;
@@ -91,6 +102,32 @@ mod stream;
 mod text;
 mod transcript;
 mod verification;
+mod work;
+mod workspace;
+
+pub use batch::{BatchDataError, BatchItemStatus, BatchOutcome, BatchTermination, JobBatchData};
+pub use events::{
+    LifecycleEventResponse, LifecycleKind, LifecycleReason, MAX_EVENT_LINE_BYTES,
+    MAX_PROGRESS_EVENTS, PROGRESS_INTERVAL_MS, ProgressEventResponse, ProgressReport, Readiness,
+    RequestEnd, RequestRef, ResultEventResponse,
+};
+pub use input::{JsonLimits, StrictJsonError, decode_strict_json};
+pub use request::{
+    BatchLine, BundleName, InputPathError, MAX_BATCH_LINES, MAX_BUNDLE_NAME_BYTES,
+    MAX_INPUT_PATH_BYTES, MAX_INPUT_PATH_COMPONENTS, MAX_REQUEST_DEADLINE_MS, MAX_REQUEST_STEPS,
+    RelativeInputPath, RequestDeadline, RequestDurability, RequestRejection,
+    SuppliedTranscriptInput, WORK_REQUEST_LIMITS, WorkRequest, WorkRequestDigest, WorkStep,
+    WorkStepKind, WorkTarget, decode_batch_line, decode_work_request, validate_steps,
+};
+pub use work::{
+    MAX_RESULT_STEPS, MAX_WORK_RESULT_BYTES, PARTIAL_REQUEST_WARNING, RequestFailure, ResultOrigin,
+    StepOutputs, StepResult, StepStatus, StepTiming, WorkControls, WorkFailure, WorkResult,
+    WorkResultError, WorkResultParts, WorkerIsolation,
+};
+pub use workspace::{
+    DEFAULT_SESSION_RETENTION_SECONDS, MAX_ADMISSION_CAPACITY, MAX_SESSION_RETENTION_SECONDS,
+    MIN_SESSION_RETENTION_SECONDS, WorkspaceData, WorkspaceInitOutcome, WorkspacePolicyError,
+};
 
 pub use candidates::{
     CANDIDATE_CURSOR_REMEDIATION, CandidatesData, CandidatesEvidenceStream, CandidatesPresentation,

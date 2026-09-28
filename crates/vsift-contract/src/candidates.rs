@@ -319,7 +319,7 @@ pub struct CandidatesStreamData {
 /// The envelope coverage of a candidates page: truncated when the range has
 /// any gap, the gaps merged across reasons as `<from_us>-<to_us>`, and the
 /// distinct reasons in taxonomy order.
-fn envelope_coverage(gaps: &[VisualCoverageGap]) -> CoverageResponse {
+pub(crate) fn envelope_coverage(gaps: &[VisualCoverageGap]) -> CoverageResponse {
     let mut ranges: Vec<TimeRange> = Vec::new();
     let mut ordered: Vec<TimeRange> = gaps.iter().map(|gap| gap.range).collect();
     ordered.sort_by_key(|range| (range.start(), range.end()));

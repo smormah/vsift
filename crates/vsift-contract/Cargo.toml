@@ -12,6 +12,8 @@ homepage.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+# The worker request digest (P11, ADR 0021); already used by the application.
+sha2.workspace = true
 vsift-application.workspace = true
 vsift-domain.workspace = true
 

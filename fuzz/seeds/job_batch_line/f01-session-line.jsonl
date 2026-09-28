@@ -1,0 +1,1 @@
+{"schema_version":"1","operation_id":"op_9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b","durability":"ephemeral","deadline_ms":600000,"target":{"session_id":"ses_0123456789abcdef0123456789abcdef"},"steps":[{"retranscribe":{"range":{"from_us":5500000,"to_us":6000000}}},{"close":{}}]}

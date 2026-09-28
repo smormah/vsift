@@ -22,10 +22,10 @@ mod visual;
 
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
-    AsrTranscription, CheckpointScope, CheckpointUse, RecognizerIdentity, RevisionSplice,
-    SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
-    TranscribeRangeRequest, build_asr_revision, retranscription_range, transcribe_range,
-    transcribe_range_checkpointed,
+    AsrTranscription, CheckpointScope, CheckpointUse, NoProgress, ProgressSink, RecognizerIdentity,
+    RevisionSplice, SpeechAudioError, SpeechAudioSource, SpeechPcm, SpeechRecognitionError,
+    SpeechRecognizer, TranscribeRangeRequest, build_asr_revision, retranscription_range,
+    transcribe_range, transcribe_range_checkpointed,
 };
 pub use clock::{Clock, ClockError};
 pub use evidence::{

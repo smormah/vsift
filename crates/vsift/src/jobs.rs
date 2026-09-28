@@ -20,6 +20,7 @@ use crate::{
     asr::{RetranscribeOutcome, RetranscribeRange, RetranscribeRequest},
     engine::Engine,
     error::EngineError,
+    progress::ProgressObserver,
     verification::Cancellation,
 };
 
@@ -213,6 +214,9 @@ pub struct JobResumeRequest {
     pub job: JobId,
     /// Signal that stops the run at its next provider boundary.
     pub cancellation: Cancellation,
+    /// Receives the resumed run's chunk progress, as
+    /// [`RetranscribeRequest::progress`] does (P11).
+    pub progress: ProgressObserver,
 }
 
 /// A resumed job's result and the job as it stands afterwards.
@@ -393,6 +397,7 @@ impl Engine {
                 }),
                 operation_id: record.operation_ids.first().cloned(),
                 cancellation: request.cancellation,
+                progress: request.progress,
             })
             .await?;
         let status = self.job_status(outcome.job().job_id())?;

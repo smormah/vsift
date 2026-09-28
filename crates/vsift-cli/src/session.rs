@@ -8,9 +8,10 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, Cancellation, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest,
-    CleanScope, Engine, FailureCode, IngestRequest, RetranscribeOutcome, RetranscribeRange,
-    RetranscribeRequest, SessionJobs, SessionListEntry, SessionPage, SessionSnapshot,
-    SourceRetention, SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery,
+    CleanScope, Engine, FailureCode, IngestRequest, ProgressObserver, RetranscribeOutcome,
+    RetranscribeRange, RetranscribeRequest, SessionJobs, SessionListEntry, SessionPage,
+    SessionSnapshot, SourceRetention, SuppliedTranscriptRequest, TranscriptExcerpt,
+    TranscriptQuery,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
@@ -288,6 +289,7 @@ pub(crate) async fn retranscribe(
     engine: &Engine,
     arguments: TranscriptRetranscribeArguments,
     cancellation: &Cancellation,
+    progress: ProgressObserver,
 ) -> Result<Response, CommandFailure> {
     let range = arguments
         .from
@@ -302,6 +304,7 @@ pub(crate) async fn retranscribe(
             range,
             operation_id: arguments.operation_id,
             cancellation: cancellation.clone(),
+            progress,
         })
         .await?;
     let presented = retranscription(&outcome)?;

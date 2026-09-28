@@ -59,7 +59,18 @@ a 1440x900 frame, a line feed and an inner crop, parsed and composed), `mountinf
 (a `/proc/self/mountinfo` table through the durable-profile check, which must give one
 verdict for every device and keep it when the table is repeated) and `os_release`
 (an `os-release` file through the same check's Ubuntu 24.04 test, whose verdict must
-not change when a comment is appended or the file repeated). The two
+not change when a comment is appended or the file repeated). P11 PR 1 added
+`job_request` (a worker request through `vsift_contract::decode_work_request`: an
+accepted request keeps its bounds and step order and decodes to itself again, also
+with whitespace appended), `job_batch_line` (one `job batch` line through
+`decode_batch_line`), and, for issue #180, `job_record` (a stored `job.json` through
+`decode_job_record`, round-tripped) and `chunk_checkpoint` (a stored chunk checkpoint
+through `decode_chunk_checkpoint`, round-tripped). Their seeds are the frozen request
+examples in `schemas/v1/examples/` and the example records in
+`crates/vsift-infrastructure/tests/data/jobs/`, which that crate's
+`job_record_examples` test pins to the encoder (regenerate with
+`VSIFT_REGENERATE_JOB_EXAMPLES=1` and review the diff). A `request_record` target
+follows with the worker's request records in P11 PR 3. The two
 diagnostics targets also require that indented copies of every line, as FFmpeg echoes
 source metadata, never change a result; their seeds are the real FFmpeg 9.0 output in
 `crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/`. It is a separate package with its

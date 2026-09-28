@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/job-request.schema.json",
+  "title": "VSift worker job request v1",
+  "description": "One request of `job run --request <file>`, or one line of `job batch --requests <file>` (P11, ADR 0021). Strict: every member is required except deadline_ms, unknown members are refused, and a document is at most 64 KiB and 16 levels deep. Paths are relative to the operator's --input-root with / between names; besides this pattern the decoder also refuses . and .. names, names ending in a dot or space and Windows device names (CON, NUL, COM1, ...). Steps run in order after the target: retain at most once and followed only by close; close at most once and last; a session target needs at least one step. The request digest is SHA-256 over 'vsift.job-request.v1', a line feed and the canonical serialization of the decoded request without its operation_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation_id", "durability", "target", "steps"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "operation_id": { "type": "string", "pattern": "^op_[a-z0-9]{16,64}$" },
+    "durability": { "enum": ["durable", "ephemeral"] },
+    "deadline_ms": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 1, "maximum": 86400000 }
+      ]
+    },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ingest"],
+          "properties": { "ingest": { "$ref": "#/$defs/ingest" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["session_id"],
+          "properties": {
+            "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" }
+          }
+        }
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^/\\\\:<>\"|?*\\x00-\\x1f\\x7f-\\x9f]+(?:/[^/\\\\:<>\"|?*\\x00-\\x1f\\x7f-\\x9f]+){0,31}$"
+    },
+    "ingest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "transcript"],
+      "properties": {
+        "source": { "$ref": "#/$defs/relative_path" },
+        "transcript": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "offset_us"],
+              "properties": {
+                "path": { "$ref": "#/$defs/relative_path" },
+                "offset_us": {
+                  "type": "integer",
+                  "minimum": -86400000000,
+                  "maximum": 86400000000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "range": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from_us", "to_us"],
+          "description": "A half-open source range; to_us must be greater than from_us.",
+          "properties": {
+            "from_us": { "type": "integer", "minimum": 0 },
+            "to_us": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "ranged_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["range"],
+      "properties": { "range": { "$ref": "#/$defs/range" } }
+    },
+    "step": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["retranscribe"],
+          "properties": { "retranscribe": { "$ref": "#/$defs/ranged_step" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["candidates"],
+          "properties": { "candidates": { "$ref": "#/$defs/ranged_step" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["retain"],
+          "properties": {
+            "retain": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["bundle_name", "include_source"],
+              "properties": {
+                "bundle_name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" },
+                "include_source": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["close"],
+          "properties": {
+            "close": { "type": "object", "additionalProperties": false, "maxProperties": 0 }
+          }
+        }
+      ]
+    }
+  }
+}

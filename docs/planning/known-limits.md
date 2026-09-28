@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-27 (P00-P09 complete; P10 implemented across PRs 1-4, PR 4 on its branch).
+Date: 2026-09-28 (P00-P10 complete; P11 in progress, PR 1 on its branch).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -70,7 +70,7 @@ Each entry has these fields:
 | [L-022](#l-022) | No accent, crosstalk, human-voice or long-recording ASR evidence | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | open |
 | [L-023](#l-023) | ASR output differs across CPU backends; revision ids differ by host | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-024](#l-024) | An ASR segment can start at the audio's start, before the speech | accuracy/ASR | medium | unscheduled | [#174](https://github.com/smormah/vsift/issues/174) | open |
-| [L-025](#l-025) | Local ASR runs: no progress events, model hashed per run | contract/UX | low | unscheduled | none | accepted residual |
+| [L-025](#l-025) | Local ASR runs: progress is coarse and advisory, model hashed per run | contract/UX | low | unscheduled | none | accepted residual |
 | [L-026](#l-026) | whisper.cpp output with a split multi-byte token fails the chunk | accuracy/ASR | low | unscheduled | none | accepted residual |
 | [L-027](#l-027) | whisper.cpp is the only speech engine | accuracy/ASR | low | unscheduled | [#147](https://github.com/smormah/vsift/issues/147) | deferred |
 | [L-028](#l-028) | Change thresholds are calibrated only on the synthetic corpus | visual detection | medium | unscheduled | [#175](https://github.com/smormah/vsift/issues/175) | open |
@@ -840,12 +840,17 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
 
 ### L-025
 
-**Local ASR runs: no progress events, model hashed per run.**
+**Local ASR runs: progress is coarse and advisory, model hashed per run.**
 
 - **What:**
-  - `transcript retranscribe` emits no progress events; `--events jsonl` writes one
-    terminal event. At a real-time factor of 0.39, an hour of audio is about 23 minutes
-    of silence for the caller (`job status` from another process shows the chunks
+  - Since P11 PR 1, `transcript retranscribe` and `job resume` with `--events jsonl`
+    write `progress` events (ADR 0021 section 7), which closes the "looks stalled" half
+    of this entry. What remains: progress counts whole 30 s chunks (at a real-time
+    factor of 0.39 one chunk takes about 12 s, so the count can stand still that long);
+    at most one event per second, and an update inside the second is held until the
+    next one or the terminal event (there is no timer); progress is dropped, and
+    counted in `progress_dropped`, when the reader is slower than the work; `--json`
+    and human output show none (`job status` from another process shows the chunks
     checkpointed so far).
   - The model file is hashed up to three times per run (about 0.3 s each in release),
     with no identity cache; the first run with a new tool, model or VSift version adds
@@ -854,13 +859,17 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
     the run stops before its commit, keeps its finished chunks and names the job to
     resume; that part of this entry is closed.
 - **Evidence:** [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md) section
-  6 and consequences; ADR 0020 PR 3 notes.
-- **Impact:** long runs look stalled to the caller that started them.
-- **Why:** readers already skip unknown event kinds, so progress can be added later
-  without breaking v1.
+  6 and its 2026-09-28 note; [ADR 0021](../decisions/0021-worker-and-batch-host.md)
+  section 7; ADR 0020 PR 3 notes; the CLI's `progress` tests and the frozen
+  `transcript-retranscribe.events.jsonl`.
+- **Impact:** a caller sees a long run advance chunk by chunk, not second by second;
+  a slow reader can miss intermediate counts.
+- **Why:** progress is advisory by design (the terminal event is authoritative), and
+  keeping it bounded and non-blocking matters more than its resolution.
 - **Mitigation:** `job status <job>` reports `progress.chunks_checkpointed` of
-  `chunks_total`.
-- **Next step:** progress events with P11's structured events.
+  `chunks_total`; the event's `progress_dropped` says when counts were lost.
+- **Next step:** none planned; finer (per-window) progress would need whisper.cpp's
+  own progress output.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
@@ -1102,14 +1111,20 @@ Counts: 4 high, 19 medium, 34 low (57 entries).
 
 - **What:** `job run` and `job batch` return `COMMAND_NOT_IMPLEMENTED` (`job status`,
   `resume` and `cancel` work since P10 PR 3); there is no durable workspace, finite
-  batch reader, supervisor event stream or worker-level graceful shutdown, and the
-  strict Linux worker is qualified only at the process boundary (P02).
-- **Evidence:** [CLI contract](../contracts/cli-v1.md) command table; P11 row of the
+  batch reader, request records, weighted admission or worker-level graceful
+  shutdown, and the strict Linux worker is qualified only at the process boundary
+  (P02). Since P11 PR 1 their contracts are published and fuzzed (the job request and
+  result, batch summary, workspace data and the `progress`, `lifecycle` and `result`
+  events; ADR 0021), so hosts can build against them; nothing runs them yet.
+- **Evidence:** [CLI contract](../contracts/cli-v1.md) command table and "P11 worker
+  contracts and events"; P11 row of the
   [work packets](implementation-work-packets.md) (X-07..X-11, O-01..O-04, SEC-T01).
 - **Impact:** no server use; R-10..R-12 are R0 release gates.
-- **Why:** scheduled after P10.
+- **Why:** P11 is in progress: PR 2 (workspace, admission, attestation, contained
+  inputs), PR 3 (`job run`, request records, shutdown) and PR 4 (`job batch`, SEC-T01,
+  qualification) remain.
 - **Mitigation:** the engine library can be embedded.
-- **Next step:** P11.
+- **Next step:** P11 PRs 2-4.
 - **Owner:** P11. **Issue:** [#14](https://github.com/smormah/vsift/issues/14).
   **Status:** deferred. **Review:** pending.
 

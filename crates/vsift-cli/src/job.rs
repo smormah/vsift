@@ -5,7 +5,9 @@
 //! runs or cancels it; this module maps its typed reports into
 //! `vsift-contract` data. A job result names no path and no transcript text.
 
-use vsift::{Cancellation, Engine, JobCancelReport, JobResumeRequest, JobStatusReport};
+use vsift::{
+    Cancellation, Engine, JobCancelReport, JobResumeRequest, JobStatusReport, ProgressObserver,
+};
 use vsift_contract::{
     CANCELLATION_TOO_LATE_WARNING, CommandName, JobData, JobPresentation, JobResumeData,
     OperationResponse,
@@ -75,11 +77,13 @@ pub(crate) async fn resume(
     engine: &Engine,
     arguments: &JobIdentityArguments,
     cancellation: &Cancellation,
+    progress: ProgressObserver,
 ) -> Result<Response, CommandFailure> {
     let report = engine
         .job_resume(JobResumeRequest {
             job: arguments.job.clone(),
             cancellation: cancellation.clone(),
+            progress,
         })
         .await?;
     let presented = retranscription(report.outcome())?;
