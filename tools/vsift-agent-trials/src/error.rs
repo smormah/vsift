@@ -51,6 +51,13 @@ impl TrialError {
         Self::io(path.display().to_string(), source)
     }
 
+    /// An I/O failure of one step on `path`, for example
+    /// `("creating", <raw-log directory>)`, so the message names both.
+    #[must_use]
+    pub fn io_step(step: &str, path: &Path, source: io::Error) -> Self {
+        Self::io(format!("{step} {}", path.display()), source)
+    }
+
     /// A JSON failure in `context`.
     #[must_use]
     pub fn json(context: impl Into<String>, source: serde_json::Error) -> Self {

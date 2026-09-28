@@ -217,7 +217,7 @@ pub fn trust_workspace(client_home: &Path, workspace: &Path) -> Result<TrustOutc
             ))
         })?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".to_owned(),
-        Err(error) => return Err(TrialError::io_at(&path, error)),
+        Err(error) => return Err(TrialError::io_step("reading", &path, error)),
     };
     // A byte-order mark is not JSON; Claude Code does not write one.
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
@@ -233,15 +233,20 @@ pub fn trust_workspace(client_home: &Path, workspace: &Path) -> Result<TrustOutc
 /// Writes `bytes` beside `path` and renames the copy over it.
 fn replace(path: &Path, bytes: &[u8]) -> Result<(), TrialError> {
     let staged = staged_path(path);
-    let written = File::create(&staged).and_then(|mut file| {
-        file.write_all(bytes)?;
-        file.sync_all()
-    });
-    if let Err(error) = written.and_then(|()| fs::rename(&staged, path)) {
+    let written = File::create(&staged)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .map_err(|error| TrialError::io_step("writing the staged copy", &staged, error))
+        .and_then(|()| {
+            fs::rename(&staged, path)
+                .map_err(|error| TrialError::io_step("renaming the staged copy over", path, error))
+        });
+    if written.is_err() {
         let _ = fs::remove_file(&staged);
-        return Err(TrialError::io_at(path, error));
     }
-    Ok(())
+    written
 }
 
 fn staged_path(path: &Path) -> PathBuf {

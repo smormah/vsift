@@ -399,17 +399,18 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         layout.raw(request.phase),
         layout.phase(request.phase),
     ] {
-        fs::create_dir_all(&directory).map_err(|error| TrialError::io_at(&directory, error))?;
+        fs::create_dir_all(&directory)
+            .map_err(|error| TrialError::io_step("creating", &directory, error))?;
     }
     let client_setup = prepare_client(request, &layout)?;
     let client_version = client_version(&request.executable, &environment, &layout).await;
     let raw = layout.raw(request.phase);
     let stdout_path = raw.join("stdout.jsonl");
     let stderr_path = raw.join("stderr.txt");
-    let stdout =
-        File::create(&stdout_path).map_err(|error| TrialError::io_at(&stdout_path, error))?;
-    let stderr =
-        File::create(&stderr_path).map_err(|error| TrialError::io_at(&stderr_path, error))?;
+    let stdout = File::create(&stdout_path)
+        .map_err(|error| TrialError::io_step("creating the raw stdout log", &stdout_path, error))?;
+    let stderr = File::create(&stderr_path)
+        .map_err(|error| TrialError::io_step("creating the raw stderr log", &stderr_path, error))?;
 
     let mut command = tokio::process::Command::new(&request.executable);
     command
@@ -547,7 +548,7 @@ pub fn raw_output(record: &RunRecord) -> Result<(String, String), TrialError> {
     let read = |path: &Path| {
         fs::read(path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .map_err(|error| TrialError::io_at(path, error))
+            .map_err(|error| TrialError::io_step("reading the raw log", path, error))
     };
     Ok((read(&record.stdout)?, read(&record.stderr)?))
 }

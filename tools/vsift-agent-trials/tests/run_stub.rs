@@ -10,8 +10,9 @@
 use std::{
     collections::BTreeMap,
     error::Error,
-    fs,
+    fs, io,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -46,6 +47,22 @@ fn scenario_file(id: &str) -> PathBuf {
         .join(format!("{id}.json"))
 }
 
+/// Distinguishes the trials one test process creates. The clock alone did
+/// not: macOS reports wall time in microseconds, so two tests starting in
+/// parallel got the same root, and the first to finish deleted the other's
+/// files (`NotFound` on hosted macOS, PR #203).
+static NEXT_TRIAL: AtomicU64 = AtomicU64::new(0);
+
+/// Names the step and path of a failed file operation.
+fn at<T>(step: &str, path: &Path, result: io::Result<T>) -> Result<T, Box<dyn Error>> {
+    result.map_err(|error| format!("{step} {}: {error}", path.display()).into())
+}
+
+/// Reads a text file, naming it on failure.
+fn read_text(path: &Path) -> Result<String, Box<dyn Error>> {
+    at("reading", path, fs::read_to_string(path))
+}
+
 /// A trial directory below the system temporary directory, removed on drop.
 struct Trial {
     root: PathBuf,
@@ -55,13 +72,29 @@ struct Trial {
 impl Trial {
     fn new(scenario: &str) -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let root =
-            std::env::temp_dir().join(format!("vsift-trials-stub-{}-{stamp}", std::process::id()));
+        let sequence = NEXT_TRIAL.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "vsift-trials-stub-{}-{sequence}-{stamp}",
+            std::process::id()
+        ));
+        // `create_dir`, not `create_dir_all`: a root that already exists
+        // belongs to someone else and must fail loudly, never be shared.
+        at("creating the trial root", &root, fs::create_dir(&root))?;
         let layout = TrialLayout::new(root.join("trial"));
-        fs::create_dir_all(layout.workspace().join(".stub"))?;
-        fs::create_dir_all(root.join("client-home"))?;
-        fs::create_dir_all(layout.harness())?;
-        fs::copy(scenario_file(scenario), layout.scenario())?;
+        let stub = layout.workspace().join(".stub");
+        at("creating", &stub, fs::create_dir_all(&stub))?;
+        let client_home = root.join("client-home");
+        at("creating", &client_home, fs::create_dir_all(&client_home))?;
+        at(
+            "creating",
+            &layout.harness(),
+            fs::create_dir_all(layout.harness()),
+        )?;
+        at(
+            "copying the scenario to",
+            &layout.scenario(),
+            fs::copy(scenario_file(scenario), layout.scenario()),
+        )?;
         let parsed = Scenario::load(&layout.scenario())?;
         let manifest = TrialManifest {
             schema_version: 1,
@@ -92,8 +125,14 @@ impl Trial {
 
     fn behave(&self, behaviour: &Value, replay: &str) -> TestResult {
         let stub = self.layout.workspace().join(".stub");
-        fs::write(stub.join("behaviour.json"), behaviour.to_string())?;
-        fs::write(stub.join("replay.jsonl"), replay)?;
+        let behaviour_file = stub.join("behaviour.json");
+        at(
+            "writing",
+            &behaviour_file,
+            fs::write(&behaviour_file, behaviour.to_string()),
+        )?;
+        let replay_file = stub.join("replay.jsonl");
+        at("writing", &replay_file, fs::write(&replay_file, replay))?;
         Ok(())
     }
 
@@ -115,8 +154,9 @@ impl Trial {
     }
 
     fn invocation(&self) -> Result<Value, Box<dyn Error>> {
-        Ok(serde_json::from_str(&fs::read_to_string(
-            self.layout
+        Ok(serde_json::from_str(&read_text(
+            &self
+                .layout
                 .workspace()
                 .join(".stub")
                 .join("invocation.json"),
@@ -188,16 +228,16 @@ async fn run_passes_an_explicit_argument_list_and_a_cleared_environment() -> Tes
     let record = run(&request).await?;
     assert_eq!(record.exit_code, Some(0));
     assert!(!record.timed_out);
-    assert_eq!(fs::read_to_string(&record.stdout)?, replay);
-    assert!(fs::read_to_string(&record.stderr)?.contains("stub client stderr line"));
+    assert_eq!(read_text(&record.stdout)?, replay);
+    assert!(read_text(&record.stderr)?.contains("stub client stderr line"));
     assert!(record.stdout.starts_with(trial.layout.raw(1)));
 
     let invocation = trial.invocation()?;
     let scenario = Scenario::load(&trial.layout.scenario())?;
     let prompt = phase_prompt(
         &trial.layout,
-        &serde_json::from_value(serde_json::from_str::<Value>(&fs::read_to_string(
-            trial.layout.manifest(),
+        &serde_json::from_value(serde_json::from_str::<Value>(&read_text(
+            &trial.layout.manifest(),
         )?)?)?,
         1,
     )?;
@@ -281,13 +321,51 @@ async fn run_passes_an_explicit_argument_list_and_a_cleared_environment() -> Tes
     Ok(())
 }
 
+/// Regression for PR #203 on hosted macOS: trials created at the same
+/// instant by parallel tests must get separate roots, or one test's cleanup
+/// deletes another's files.
+#[test]
+fn trials_created_in_parallel_never_share_a_root() -> TestResult {
+    let trials: Vec<Trial> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..32)
+            .map(|_| {
+                scope.spawn(|| Trial::new("A-01-f01-missing-tools").map_err(|e| e.to_string()))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .map_err(|_| "a trial thread failed".to_owned())
+                    .and_then(|trial| trial)
+            })
+            .collect::<Result<Vec<_>, String>>()
+    })?;
+    let roots: std::collections::BTreeSet<&PathBuf> =
+        trials.iter().map(|trial| &trial.root).collect();
+    assert_eq!(roots.len(), trials.len());
+    for trial in &trials {
+        assert!(
+            trial.layout.scenario().is_file(),
+            "{}",
+            trial.root.display()
+        );
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn claude_code_gets_one_settings_source_in_a_trusted_workspace() -> TestResult {
     let trial = Trial::new("A-01-f01-missing-tools")?;
     let state_file = trial.root.join("client-home").join(CLAUDE_STATE_FILE);
-    fs::write(
+    at(
+        "writing",
         &state_file,
-        "{\n  \"userID\": \"kept\",\n  \"projects\": {\n    \"elsewhere\": {\"hasTrustDialogAccepted\": false}\n  }\n}\n",
+        fs::write(
+            &state_file,
+            "{\n  \"userID\": \"kept\",\n  \"projects\": {\n    \"elsewhere\": {\"hasTrustDialogAccepted\": false}\n  }\n}\n",
+        ),
     )?;
     trial.behave(&json!({"exit_code": 0}), "")?;
     let request = trial.request(ClientKind::ClaudeCode, Duration::from_secs(60));
@@ -301,7 +379,7 @@ async fn claude_code_gets_one_settings_source_in_a_trusted_workspace() -> TestRe
             .windows(2)
             .any(|pair| pair[0] == "--setting-sources" && pair[1] == "project")
     );
-    let state: Value = serde_json::from_str(&fs::read_to_string(&state_file)?)?;
+    let state: Value = serde_json::from_str(&read_text(&state_file)?)?;
     assert_eq!(
         state["projects"][project_key(&trial.layout.workspace())]["hasTrustDialogAccepted"],
         true
@@ -313,14 +391,14 @@ async fn claude_code_gets_one_settings_source_in_a_trusted_workspace() -> TestRe
     assert_eq!(state["userID"], "kept");
     assert_eq!(record.client_setup.len(), 1);
     // A missing client home is refused before the client starts.
-    fs::remove_dir_all(trial.root.join("client-home"))?;
-    fs::remove_file(
-        trial
-            .layout
-            .workspace()
-            .join(".stub")
-            .join("invocation.json"),
-    )?;
+    let client_home = trial.root.join("client-home");
+    at("removing", &client_home, fs::remove_dir_all(&client_home))?;
+    let invocation = trial
+        .layout
+        .workspace()
+        .join(".stub")
+        .join("invocation.json");
+    at("removing", &invocation, fs::remove_file(&invocation))?;
     assert!(matches!(run(&request).await, Err(TrialError::Refused(_))));
     assert!(
         !trial
@@ -412,8 +490,7 @@ async fn a_root_in_the_profile_is_refused_before_anything_runs() -> TestResult {
 #[test]
 fn a_later_phase_gets_the_earlier_resume_card() -> TestResult {
     let trial = Trial::new("A-02-f02-compact-resume")?;
-    let manifest: TrialManifest =
-        serde_json::from_str(&fs::read_to_string(trial.layout.manifest())?)?;
+    let manifest: TrialManifest = serde_json::from_str(&read_text(&trial.layout.manifest())?)?;
     assert!(
         phase_prompt(&trial.layout, &manifest, 2).is_err(),
         "no phase 1 grade yet"
