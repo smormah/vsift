@@ -433,6 +433,20 @@ refines the design:
   for admission (`AdmissionWait::Bounded`, at most 60 s), after which the attempt ends
   `BUSY` with the job interrupted and is not retried automatically.
 
+## Note: index markers are published by rename (#197, 2026-09-28)
+
+A session's registration, which comes before the initialization above, created its
+index marker in place and then wrote it. A process killed between the two left an
+empty marker that failed every later scan of its bucket, and its own cleanup, with
+`INTEGRITY_FAILURE`. The marker is now written to `session-index/.registering.tmp`,
+flushed and renamed into its bucket, under the root initialization lock every
+registration holds; a leftover staged marker is replaced by the next registration.
+A durable initialization still synchronises the bucket and the index before it
+acknowledges, which now also makes the rename and the staged file's removal
+durable. Fault points `registration-marker-create` and `registration-marker-rename`
+(`FaultPoint::REGISTRATION`) stop a test child at both boundaries. The commit path is
+unchanged.
+
 ## Consequences
 
 - PR 1 changes no public contract. Warm reads no longer grow with the chain; every
