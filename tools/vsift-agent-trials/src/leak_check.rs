@@ -16,15 +16,15 @@ use serde_json::Value;
 
 /// The sign-in files of the supported clients, relative to the client
 /// home: Codex's `auth.json` and Claude Code's `.credentials.json`.
-pub const CLIENT_SECRET_FILES: [&str; 2] = ["auth.json", ".credentials.json"];
+pub const CLIENT_SIGN_IN_FILES: [&str; 2] = ["auth.json", ".credentials.json"];
 
 /// Shortest value that counts as secret. Tokens and keys are far longer;
 /// short members (flags, modes, dates) would match ordinary text.
-pub const MIN_SECRET_CHARS: usize = 24;
+pub const MIN_VALUE_CHARS: usize = 24;
 
 /// What the scan found, without the values.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
-pub struct SecretScan {
+pub struct LeakCheck {
     /// Sign-in files found and read in the client home.
     pub files_checked: usize,
     /// Distinct values searched for.
@@ -33,11 +33,11 @@ pub struct SecretScan {
     pub found: bool,
 }
 
-/// Every string of at least [`MIN_SECRET_CHARS`] characters in a sign-in
+/// Every string of at least [`MIN_VALUE_CHARS`] characters in a sign-in
 /// document, and each such dot-separated part of one (a JWT's header,
 /// payload and signature), so a partial copy of a token is found too.
 #[must_use]
-pub fn secret_values(document: &Value) -> Vec<String> {
+pub fn sign_in_values(document: &Value) -> Vec<String> {
     let mut values = Vec::new();
     collect(document, &mut values);
     values.sort();
@@ -48,12 +48,12 @@ pub fn secret_values(document: &Value) -> Vec<String> {
 fn collect(value: &Value, values: &mut Vec<String>) {
     match value {
         Value::String(text) => {
-            if text.chars().count() >= MIN_SECRET_CHARS {
+            if text.chars().count() >= MIN_VALUE_CHARS {
                 values.push(text.clone());
                 if text.contains('.') {
                     values.extend(
                         text.split('.')
-                            .filter(|part| part.chars().count() >= MIN_SECRET_CHARS)
+                            .filter(|part| part.chars().count() >= MIN_VALUE_CHARS)
                             .map(str::to_owned),
                     );
                 }
@@ -68,9 +68,9 @@ fn collect(value: &Value, values: &mut Vec<String>) {
 /// Scans `outputs` for the values of the client home's sign-in files. A
 /// file that is missing or not JSON is skipped (and not counted).
 #[must_use]
-pub fn scan(client_home: &Path, outputs: &[&str]) -> SecretScan {
-    let mut result = SecretScan::default();
-    for name in CLIENT_SECRET_FILES {
+pub fn scan(client_home: &Path, outputs: &[&str]) -> LeakCheck {
+    let mut result = LeakCheck::default();
+    for name in CLIENT_SIGN_IN_FILES {
         let Ok(bytes) = fs::read(client_home.join(name)) else {
             continue;
         };
@@ -78,7 +78,7 @@ pub fn scan(client_home: &Path, outputs: &[&str]) -> SecretScan {
             continue;
         };
         result.files_checked += 1;
-        let values = secret_values(&document);
+        let values = sign_in_values(&document);
         result.values_checked += values.len();
         if values
             .iter()
@@ -97,7 +97,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn long_strings_and_token_parts_are_secret_and_short_members_are_not() {
+    fn long_strings_and_their_parts_count_and_short_members_do_not() {
         let header = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9";
         let payload = "eyJzdWIiOiJ0cmlhbC11c2VyLTAwMDAwMDAwIn0";
         let document = json!({
@@ -109,7 +109,7 @@ mod tests {
             },
             "last_refresh": "2026-09-28T00:00:00Z"
         });
-        let values = secret_values(&document);
+        let values = sign_in_values(&document);
         assert!(values.iter().any(|value| value == header));
         assert!(values.iter().any(|value| value == payload));
         assert!(values.iter().any(|value| value.starts_with("rt_")));

@@ -137,7 +137,7 @@ impl Bench {
             expected: Expected::default(),
             deviations: Vec::new(),
             client_warnings,
-            client_secret_found: false,
+            sign_in_value_found: false,
         })
     }
 }

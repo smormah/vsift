@@ -135,8 +135,8 @@ pub struct RunFindings {
     /// run; any makes the trial invalid.
     pub invalid_reasons: Vec<String>,
     /// Whether `run` found a value of the client's sign-in file in the
-    /// client's output ([`crate::secret_scan`]); fails `no_canary`.
-    pub client_secret_found: bool,
+    /// client's output ([`crate::leak_check`]); fails `no_canary`.
+    pub sign_in_value_found: bool,
 }
 
 /// Grades a trace for one phase of a prepared trial and writes the grade.
@@ -212,7 +212,7 @@ pub fn grade_trace(
         expected,
         deviations,
         client_warnings: findings.invalid_reasons,
-        client_secret_found: findings.client_secret_found,
+        sign_in_value_found: findings.sign_in_value_found,
     });
     write_json(&layout.phase(phase).join("grade.json"), &graded)?;
     Ok(graded)
@@ -245,7 +245,7 @@ pub fn grade_phase(layout: &TrialLayout, phase: usize) -> Result<Grade, TrialErr
         &environment_user_names(),
         RunFindings {
             invalid_reasons,
-            client_secret_found: record.client_secret_scan.is_some_and(|scan| scan.found),
+            sign_in_value_found: record.sign_in_leak_check.is_some_and(|scan| scan.found),
         },
     )
 }

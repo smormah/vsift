@@ -294,7 +294,7 @@ or with another trial:
    and copied into a tmpfs `CODEX_HOME` that is emptied when the run ends (a note says
    so if Codex refreshed it: then sign in again on Windows). Right after Codex exits,
    `run` searches the raw logs for every value of the sign-in file and keeps only
-   counts (`client_secret_scan` in `run.json`);
+   counts (`sign_in_leak_check` in `run.json`);
 3. `grade` (harness image) grades, records the trial to
    `C:\vsift-trials\linux\records\<trial>-codex.json` and copies the trial's `harness`
    folder (raw logs included) to `C:\vsift-trials\linux\trials\<trial>\`.

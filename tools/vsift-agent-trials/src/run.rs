@@ -68,9 +68,9 @@ use crate::{
     claude_trust::{TrustOutcome, trust_workspace},
     error::{TrialError, read_json, write_json},
     layout::{TrialLayout, TrialManifest},
+    leak_check::{self, LeakCheck},
     roots::RootPolicy,
     scenario::{ImagePolicy, Scenario},
-    secret_scan::{self, SecretScan},
     skill::file_digest,
     trace::ClientKind,
 };
@@ -160,10 +160,10 @@ pub struct RunRecord {
     pub debug_prompt: bool,
     /// Whether a value of the client home's sign-in file appeared in the
     /// raw output, scanned right after the client exited (counts only,
-    /// never the values: [`crate::secret_scan`]). `None` in run records
+    /// never the values: [`crate::leak_check`]). `None` in run records
     /// written before this field existed.
     #[serde(default)]
-    pub client_secret_scan: Option<SecretScan>,
+    pub sign_in_leak_check: Option<LeakCheck>,
     /// Start time, Unix seconds.
     pub started_unix_s: u64,
     /// Wall time.
@@ -471,7 +471,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         None
     };
     let wall_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let client_secret_scan = scan_client_secrets(&request.client_home, &stdout_path, &stderr_path)?;
+    let sign_in_leak_check = check_sign_in_leak(&request.client_home, &stdout_path, &stderr_path)?;
     let record = RunRecord {
         client: request.client,
         client_version,
@@ -481,7 +481,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         environment_names: environment.iter().map(|(name, _)| name.clone()).collect(),
         client_setup,
         debug_prompt: request.debug_prompt.is_some(),
-        client_secret_scan: Some(client_secret_scan),
+        sign_in_leak_check: Some(sign_in_leak_check),
         started_unix_s,
         wall_ms,
         exit_code,
@@ -496,23 +496,23 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
 }
 
 /// Scans the phase's raw logs for the client's sign-in values while the
-/// sign-in is still present ([`crate::secret_scan`]).
+/// sign-in is still present ([`crate::leak_check`]).
 ///
 /// # Errors
 ///
 /// [`TrialError::Io`] when a raw log cannot be read.
-fn scan_client_secrets(
+fn check_sign_in_leak(
     client_home: &Path,
     stdout: &Path,
     stderr: &Path,
-) -> Result<SecretScan, TrialError> {
+) -> Result<LeakCheck, TrialError> {
     let read = |path: &Path| {
         fs::read(path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .map_err(|error| TrialError::io_step("reading the raw log", path, error))
     };
     let (out, err) = (read(stdout)?, read(stderr)?);
-    Ok(secret_scan::scan(client_home, &[&out, &err]))
+    Ok(leak_check::scan(client_home, &[&out, &err]))
 }
 
 /// Changes the client home needs before this trial starts, described for

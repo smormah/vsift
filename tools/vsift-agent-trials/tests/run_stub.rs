@@ -519,7 +519,7 @@ async fn a_debug_run_uses_the_operators_prompt_and_is_never_a_trial() -> TestRes
 
 #[tokio::test]
 async fn a_sign_in_value_in_the_output_fails_no_canary_and_is_never_logged() -> TestResult {
-    const TOKEN_PART: &str = "c2lnbi1pbi12YWx1ZS1mb3ItdGhlLXNjYW4tdGVzdA";
+    const SIGN_IN_PART: &str = "c2lnbi1pbi12YWx1ZS1mb3ItdGhlLXNjYW4tdGVzdA";
     let trial = Trial::new("A-01-f01-missing-tools")?;
     let client_home = trial.root.join("client-home");
     let auth = client_home.join("auth.json");
@@ -528,7 +528,7 @@ async fn a_sign_in_value_in_the_output_fails_no_canary_and_is_never_logged() -> 
         &auth,
         fs::write(
             &auth,
-            json!({"tokens": {"access_token": format!("eyJhbGciOiJub25lIn0x.{TOKEN_PART}.sig")}})
+            json!({"tokens": {"access_token": format!("eyJhbGciOiJub25lIn0x.{SIGN_IN_PART}.sig")}})
                 .to_string(),
         ),
     )?;
@@ -536,15 +536,18 @@ async fn a_sign_in_value_in_the_output_fails_no_canary_and_is_never_logged() -> 
     let replay = format!(
         "{}\n{}",
         a01_stream(),
-        json!({"type": "system", "subtype": "note", "text": TOKEN_PART})
+        json!({"type": "system", "subtype": "note", "text": SIGN_IN_PART})
     );
     trial.behave(&json!({"replay": "replay.jsonl", "exit_code": 0}), &replay)?;
     let record = run(&trial.request(ClientKind::ClaudeCode, Duration::from_secs(60))).await?;
-    let scan = record.client_secret_scan.ok_or("no scan")?;
+    let scan = record.sign_in_leak_check.ok_or("no scan")?;
     assert_eq!(scan.files_checked, 1);
     assert!(scan.found);
     let run_json = read_text(&trial.layout.phase(1).join("run.json"))?;
-    assert!(!run_json.contains(TOKEN_PART), "the value is never logged");
+    assert!(
+        !run_json.contains(SIGN_IN_PART),
+        "the value is never logged"
+    );
     let graded = grade_phase(&trial.layout, 1)?;
     let no_canary = graded
         .mechanical
@@ -553,7 +556,7 @@ async fn a_sign_in_value_in_the_output_fails_no_canary_and_is_never_logged() -> 
         .find(|check| check.name == "no_canary")
         .ok_or("no no_canary check")?;
     assert!(!no_canary.passed);
-    assert!(!serde_json::to_string(&graded)?.contains(TOKEN_PART));
+    assert!(!serde_json::to_string(&graded)?.contains(SIGN_IN_PART));
     Ok(())
 }
 
