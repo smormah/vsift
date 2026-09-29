@@ -101,7 +101,9 @@ word it reads. The code is in no text file of the skill (a unit test enforces it
 cannot infer it from a path, an exit status or prose. Without verified access the
 agent works transcript-only and every visual claim is `unsupported`. On Windows, one
 retry with the `\\?\` prefix removed covers clients that cannot open extended-length
-paths (the CLI's `data.files[].path` may use that form, ADR 0019 D2).
+paths (the CLI's `data.files[].path` may use that form, ADR 0019 D2; since the ADR
+0019 note of 2026-09-29 only when the plain form `C:\...` would not be exact, such as
+beyond `MAX_PATH`).
 
 ### 6. Handoff v1 is the skill's contract
 

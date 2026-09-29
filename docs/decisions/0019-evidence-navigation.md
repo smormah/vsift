@@ -277,7 +277,8 @@ evidence record type `frame_evidence`.
 - **Paths (D2).** `files[].path` is the verified absolute artifact path as the engine
   returns it; on Windows that may be the extended-length form `\\?\C:\...`, kept
   verbatim because it is valid and long-path safe (maintainer, 2026-09-26; friendlier
-  display is P13's human output). A path that is
+  display is P13's human output; superseded for Windows by the 2026-09-29 note below,
+  which writes the plain form when it is exact). A path that is
   not valid UTF-8 cannot be written as JSON text and is `STORAGE_IO` with a remediation
   rather than a lossy string. The frozen examples write paths under the placeholder
   root `/vsift-session-root`.
@@ -345,3 +346,39 @@ on each evidence call (now at most 384 of 256 KiB), which known limit L-014 trac
 Measured through the binary with the budget full (Windows 11, release build), a warm
 reused `frame get` has p95 177 / 164 / 166 / 177 ms at 2 / 64 / 256 / 1,024
 generations: the slope stays about zero (`s11_warm_reuse_with_a_full_evidence_budget`).
+
+## 2026-09-29 note: plain Windows paths in `files[].path` (D2, #210)
+
+The maintainer approved this change to D2's path form on 2026-09-29. In the P12 agent
+trials, Claude Code's file-reading tool and its permission rules refused the
+extended-length form `\\?\C:\...`: agents spent a retry and an image-budget slot per
+frame, and in one run an agent gave up opening the frames and reported them as
+unverified, so the form lost evidence.
+
+- **Decision.** On Windows, `files[].path` is now the plain absolute form `C:\...`
+  whenever that form names the same file as the extended-length path the engine
+  verified. That holds when the plain form is shorter than `MAX_PATH` (260 UTF-16 code
+  units with the terminating NUL) and no component is one that Win32 normalisation
+  changes or reinterprets: an empty component, `.` or `..`, a trailing dot or space, a
+  reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, `CLOCK$`,
+  `COM0`-`COM9`, `LPT0`-`LPT9` and their superscript-digit forms, before any extension
+  and ignoring spaces before the dot), or a character not valid in a file name.
+  Otherwise the path keeps the extended-length form, which stays the documented,
+  always-exact fallback. Unix and macOS paths are unchanged.
+- **Presentation only.** The decision is one function in the contract crate
+  (`delivered_path`), applied where the result writes `files[]`. The engine still
+  verifies, canonicalises and contains the artifact through its extended-length root,
+  and `vsift::EvidenceFile::path()` still returns the verified `PathBuf`; only the JSON
+  text changes. The rules are conservative: any doubt keeps the extended-length form.
+  Session roots are limited to drive paths (UNC roots are refused), so only the drive
+  form `\\?\C:\...` is ever shortened.
+- **Contract.** Consumers must accept either form, as D2 already required. The v1
+  schemas never constrained the form (`path` is a string of 1 to 4,096 characters), so
+  they are unchanged and both forms validate.
+- **Evidence.** Unit tests of the decision (trailing dot and space, reserved names,
+  invalid characters, the `MAX_PATH` bound counted in UTF-16 units, UNC and volume
+  paths) run on every platform; on Windows the binary's `evidence_cli_contract` shows a
+  short session root yields a plain path that canonicalises back to the verified file,
+  and a session root padded beyond `MAX_PATH` keeps the extended-length form.
+- **Skill.** The agent skill's rule to retry once without the `\\?\` prefix stays
+  correct and now rarely fires; its wording can be simplified in a later change.

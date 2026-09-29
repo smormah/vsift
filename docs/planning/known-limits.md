@@ -61,7 +61,7 @@ Each entry has these fields:
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
 | [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
 | [L-015](#l-015) | Bursts over more than 20 s of 60 fps video are refused | contract/UX | low | unscheduled | [#172](https://github.com/smormah/vsift/issues/172) | open |
-| [L-016](#l-016) | Delivered file paths use the Windows `\\?\` form and die with the session | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | accepted residual |
+| [L-016](#l-016) | Delivered file paths die with the session; very long Windows paths keep the `\\?\` form | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | accepted residual |
 | [L-017](#l-017) | Human-readable output is pretty-printed JSON | contract/UX | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-018](#l-018) | Tiny text is measured on synthetic glyphs only; crops are never upscaled | visual detection | low | unscheduled | [#173](https://github.com/smormah/vsift/issues/173) | open |
 | [L-019](#l-019) | A seek that lands past the requested frame reports "not found" | contract/UX | low | unscheduled | none | accepted residual |
@@ -1031,17 +1031,25 @@ Counts: 4 high, 23 medium, 50 low (77 entries).
 
 ### L-016
 
-**Delivered file paths use the Windows `\\?\` form and die with the session.**
+**Delivered file paths die with the session; very long Windows paths keep the `\\?\` form.**
 
-- **What:** `files[].path` is the absolute path of the committed artifact; on Windows it
-  is the extended-length form `\\?\C:\...`. Paths are valid only while the session
-  exists; a path that is not valid UTF-8 is `STORAGE_IO`.
-- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) D2 and PR 3 note
-  (maintainer decision 2026-09-26); [CLI contract](../contracts/cli-v1.md) P09 frames.
-- **Impact:** some tools and humans find the form unusual; a closed session invalidates
-  earlier paths.
-- **Why:** the form is valid and long-path safe; evidence records never hold paths.
-- **Mitigation:** hosts may display the path as they wish.
+- **What:** `files[].path` is the absolute path of the committed artifact. On Windows
+  it is the plain form `C:\...` when that form is exact, and the extended-length form
+  `\\?\C:\...` otherwise: at or beyond `MAX_PATH`, or when a component has a trailing
+  dot or space, a reserved device name or a character Win32 normalisation would
+  reinterpret. Paths are valid only while the session exists; a path that is not
+  valid UTF-8 is `STORAGE_IO`.
+- **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) D2, PR 3 note
+  (maintainer decision 2026-09-26) and the 2026-09-29 note (#210);
+  [CLI contract](../contracts/cli-v1.md) P09 frames.
+- **Impact:** some agent file tools (Claude Code's `Read` and its permission rules)
+  refuse the extended-length form, so under a very long session root an agent still
+  needs its retry without the prefix; a closed session invalidates earlier paths.
+- **Why:** only the extended-length form is exact beyond `MAX_PATH`; evidence records
+  never hold paths.
+- **Mitigation:** keep the session root short: the session folders and artifact name
+  add 134 characters, so a root of at most 125 characters gets plain paths; the skill
+  retries once without the prefix; hosts may display the path as they wish.
 - **Next step:** friendlier display in P13 human output.
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** accepted residual. **Review:** pending.

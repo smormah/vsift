@@ -86,6 +86,7 @@
 mod batch;
 mod candidates;
 mod command;
+mod delivered_path;
 mod envelope;
 mod events;
 mod evidence;

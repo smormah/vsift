@@ -39,13 +39,14 @@ pass their counted runs. The smaller models ran next: Claude Sonnet 5.5 answered
 question right but often wrote the report's JSON block with words the skill never
 listed; GPT-6-Luna did well; Claude Haiku 4.5 did not follow the procedure. The
 maintainer made Sonnet 5.5 and GPT-6-Luna the compact tier (Haiku is below the line)
-and asked for the vocabulary fix now. PR 3g (in review) does that and re-grades every
+and asked for the vocabulary fix now. PR 3g (merged) did that and re-graded every
 run; the compact tier is re-run next. Until the named-client trials pass, the skill is
-a candidate, not a qualified integration.
+a candidate, not a qualified integration. Separately, a fix for #210 (PR #215, in
+review) makes Windows image and audio paths plain `C:\...` whenever that is exact.
 
 **P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
 adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
-progress.** PRs 1, 2, 3a-3f (merged) and 3g are increments, not the packet.
+progress.** PRs 1, 2 and 3a-3g (all merged) are increments, not the packet.
 
 ## P12 in one view
 
@@ -74,18 +75,18 @@ progress.** PRs 1, 2, 3a-3f (merged) and 3g are increments, not the packet.
 - **Compact-tier runs (on `b68d746`, 28 trials each):** Sonnet 5.5 (Claude Code
   2.1.284) 28/28 answers, 9/28 full passes, 18 failing only on the handoff; GPT-6-Luna
   24/28 and 11/28; Haiku 4.5 6/28 and 2/28.
-- **PR 3g (branch `p12-pr3g-handoff-vocabulary`, this change): maintainer decisions of
-  2026-09-29.** The compact tier is Sonnet 5.5 and GPT-6-Luna; Haiku 4.5 is below the
-  line (L-082); a handoff validator command is P13's (#213). `SKILL.md` lists the words
+- **PR 3g (#214, `f018e0d`, merged): maintainer decisions of 2026-09-29.** Compact
+  tier Sonnet 5.5, GPT-6-Luna; Haiku 4.5 below the line (L-082); validator P13 (#213). `SKILL.md` lists the words
   of fifteen closed members beside the skeleton, `handoff.md` all of them (guard:
   exactly the schema's); `resume.md` shows one exact card; the failure-code table moved
   to `commands.md`. Schema: gap notes 600 characters; the resume card accepts
   `remaining.images`, null counts and no `job_id`, and is required only when work can
   continue (supervisor). Grader: letter case normalised with a warning, synonyms refused;
-  unused citations are warnings. Trial settings set `disableBundledSkills`. L-083 (raw hidden characters; a proposal, not implemented).
-  Every compact-tier and review-tier run re-graded beside its original (`grade-3g.json`).
-- **Next:** merge PR 3g, then re-run the compact tier on its merge commit. The packet
-  completes only when the named-client trials pass.
+  unused citations are warnings. Trial settings set `disableBundledSkills`. L-083 (raw
+  hidden characters; a proposal, not implemented). Every compact-tier and review-tier
+  run re-graded beside its original (`grade-3g.json`).
+- **Next:** re-run the compact tier on the latest `main` (after PR #215 if it merges
+  first). The packet completes only when the named-client trials pass.
 
 ## Found in P12
 
@@ -125,7 +126,7 @@ progress.** PRs 1, 2, 3a-3f (merged) and 3g are increments, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PRs 1, 2, 3a-3f merged; review tier passes; compact tier (Sonnet 5.5, GPT-6-Luna) re-run after 3g (vocabulary fix, in review) |
+| P12 | In progress: PRs 1, 2, 3a-3g merged; review tier passes; compact tier (Sonnet 5.5, GPT-6-Luna) to be re-run on the vocabulary fix |
 | P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
@@ -142,9 +143,8 @@ is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `
 
 ## Quality evidence
 
-- P12 PR 3g gates on Windows 11 (fmt, strict Clippy with and without features,
-  workspace tests, warning-denied rustdoc, governance), the image digests and the
-  re-grade table go in the pull request description.
+- PR #215 (#210): Windows 11 gates (fmt, strict Clippy with and without features,
+  workspace tests, warning-denied rustdoc, governance) are in its description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

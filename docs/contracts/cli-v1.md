@@ -1195,10 +1195,17 @@ in ADR 0012).
 **Files (D2).** `files` delivers each item's image as `{evidence_id, media_type, path}`,
 in item order. `path` is the absolute path of the committed artifact inside the
 session (`<session root>/sessions/<session>/artifacts/artifact-<sha256>.png`). On
-Windows the path may use the extended-length form `\\?\C:\...`, exactly as the engine
-verified it: it is a valid, long-path-safe path that the Windows file APIs accept, and
-hosts may display it as they wish (friendlier display is P13's human output); consumers
-must not assume either form. It is valid while the session exists: until
+Windows the path is the plain absolute form `C:\...` whenever that form names the
+same file the engine verified: it is shorter than `MAX_PATH` (260 UTF-16 code units
+with the terminating NUL) and no component is one that Win32 path normalisation
+changes or reinterprets (a trailing dot or space, `.` or `..`, an empty component, a
+reserved device name such as `CON`, `NUL`, `COM1` or `LPT1` with or without an
+extension, or a character not valid in a file name). Otherwise, for example under a
+very long session root, it is the extended-length form `\\?\C:\...`, which is exact
+at any length and which the Windows file APIs accept. Both forms name the verified
+artifact; consumers must accept either (ADR 0019 note of 2026-09-29, #210). Unix and
+macOS paths are written as the engine verified them. It is valid while the session
+exists: until
 `session close`, expiry and cleanup remove it. Read it; never write to it. To keep
 evidence, `session retain` the session; retained bundles and evidence records never
 contain a path. This is the only place public output names a local path. The frozen

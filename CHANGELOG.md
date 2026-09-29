@@ -673,6 +673,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Windows evidence paths (#210, ADR 0019 note of 2026-09-29): `data.files[].path` of
+  `frame`, `crop` and `audio` results is now the plain absolute form `C:\...` whenever
+  that form names the same file (shorter than `MAX_PATH`, and no component that Win32
+  normalisation would change: a trailing dot or space, a reserved device name, an
+  invalid character). Otherwise it keeps the extended-length form `\\?\C:\...`, the
+  documented fallback. Claude Code's file-reading tool and its permission rules refuse
+  the extended-length form, which in the P12 trials cost agents a retry and an image
+  read per frame and once made an agent report frames as unverified. Output only: the
+  engine's verification and containment checks are unchanged, and Unix and macOS
+  paths are unchanged.
+
 - P12 trial grader: Claude Code's `Glob`, `Grep` and `LS` inside the skill folders count
   as reading the skill (a listing without a path, outside them or with a pattern that
   climbs out stays unauthorized), and the skill now says to read its files with the

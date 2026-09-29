@@ -26,7 +26,9 @@
 //! A path is the one place public output names a local path; records and
 //! bundles never do. A path that is not valid UTF-8 cannot be written as
 //! JSON text, so it is a typed [`EvidencePresentationError`] rather than a
-//! lossy string.
+//! lossy string. On Windows a path is written in the plain form `C:\...`
+//! whenever that form names the same file, and in the extended-length form
+//! `\\?\C:\...` otherwise (ADR 0019's 2026-09-29 note, #210).
 
 use std::{error::Error, fmt, path::Path};
 
@@ -39,7 +41,7 @@ use vsift_domain::{
 
 use crate::{
     CommandName, EvidenceEventResponse, LifecycleResponse, OperationResponse,
-    TerminalEventResponse, stream::EvidenceStream,
+    TerminalEventResponse, delivered_path::delivered_path_text, stream::EvidenceStream,
 };
 
 /// Media type of every delivered image: 8-bit RGB PNG at native resolution.
@@ -145,7 +147,8 @@ pub struct DeliveredEvidenceFile<'a> {
     pub evidence_id: &'a EvidenceId,
     /// What the file is.
     pub kind: EvidenceMediaKind,
-    /// Absolute path of the committed session artifact.
+    /// Absolute path of the committed session artifact, as the engine
+    /// verified it; the result chooses how to write it.
     pub path: &'a Path,
 }
 
@@ -351,11 +354,8 @@ pub(crate) fn files_data(
             Ok(FileData {
                 evidence_id: item.id().as_str().to_owned(),
                 media_type: media_type(file.kind),
-                path: file
-                    .path
-                    .to_str()
-                    .ok_or(EvidencePresentationError::NonUtf8Path)?
-                    .to_owned(),
+                path: delivered_path_text(file.path)
+                    .ok_or(EvidencePresentationError::NonUtf8Path)?,
             })
         })
         .collect()
