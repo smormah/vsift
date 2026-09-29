@@ -451,9 +451,7 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
     assert_eq!(record.exit_code, Some(3));
     let invocation = trial.invocation()?;
     let arguments: Vec<String> = serde_json::from_value(invocation["arguments"].clone())?;
-    assert_eq!(&arguments[..2], ["exec", "--json"]);
-    // Not ephemeral: the image views are counted from Codex's rollout.
-    assert!(!arguments.iter().any(|argument| argument == "--ephemeral"));
+    assert_eq!(&arguments[..3], ["exec", "--json", "--ephemeral"]);
     for flag in [
         "--ignore-user-config",
         "--sandbox",
@@ -479,10 +477,6 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
             .any(|argument| argument.contains("tools.view_image"))
     );
     assert_eq!(record.client_home, Some(trial.root.join("client-home")));
-    assert_eq!(
-        record.codex_image_views, None,
-        "no rollout, nothing counted"
-    );
     // Without a Windows sandbox mode codex-cli 0.155 rejects every command
     // ("blocked by policy", the first dry trial).
     assert_eq!(
@@ -522,52 +516,6 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
     let names: Vec<String> = serde_json::from_value(invocation["environment_names"].clone())?;
     assert!(names.iter().any(|name| name == "CODEX_HOME"));
     assert!(!names.iter().any(|name| name == "CLAUDE_CONFIG_DIR"));
-    Ok(())
-}
-
-/// codex-cli 0.155's `exec --json` stream shows no viewed image (L-075);
-/// `run` counts the `view_image` calls in the rollout Codex writes below
-/// its home and keeps only counts and the rollout's structure.
-#[tokio::test]
-async fn codex_image_views_are_counted_from_its_rollout() -> TestResult {
-    let trial = Trial::new("A-08-f05-local-asr")?;
-    let check = trial
-        .layout
-        .workspace()
-        .join(".agents")
-        .join("skills")
-        .join("vsift")
-        .join("assets")
-        .join("image-check.png");
-    let frame = trial.layout.session_root().join("frame.png");
-    let line = |value: Value| value.to_string();
-    let rollout = [
-        line(json!({"timestamp": "t", "type": "session_meta",
-            "payload": {"id": "s", "cwd": "workspace", "cli_version": "0.155.0-alpha.16"}})),
-        line(json!({"timestamp": "t", "type": "response_item", "payload": {"type": "function_call",
-            "name": "view_image", "arguments": json!({"path": check}).to_string(), "call_id": "a"}})),
-        line(json!({"timestamp": "t", "type": "response_item",
-            "payload": {"type": "function_call_output", "call_id": "a", "output": "image"}})),
-        line(json!({"timestamp": "t", "type": "response_item", "payload": {"type": "function_call",
-            "name": "view_image", "arguments": json!({"path": frame}).to_string(), "call_id": "b"}})),
-        line(json!({"timestamp": "t", "type": "response_item",
-            "payload": {"type": "function_call_output", "call_id": "b", "output": "image"}})),
-    ]
-    .join("\n");
-    let stub = trial.layout.workspace().join(".stub");
-    let rollout_file = stub.join("rollout.jsonl");
-    at("writing", &rollout_file, fs::write(&rollout_file, rollout))?;
-    trial.behave(&json!({"exit_code": 0, "rollout": "rollout.jsonl"}), "")?;
-    let record = run(&trial.request(ClientKind::Codex, Duration::from_secs(60))).await?;
-    let views = record.codex_image_views.ok_or("no image views counted")?;
-    assert_eq!(views.rollout_files, 1);
-    assert_eq!(views.total, 2);
-    assert_eq!(views.max_per_step, 1);
-    assert!(views.check_image_viewed);
-    assert!(!views.sign_in_value_found);
-    assert_eq!(views.session_meta_members, vec!["cli_version", "cwd", "id"]);
-    let arguments = trial.invocation()?["arguments"].to_string();
-    assert!(!arguments.contains("--disable"), "images stay on in A-08");
     Ok(())
 }
 

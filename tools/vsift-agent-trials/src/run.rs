@@ -26,7 +26,7 @@
 //! fails. `CLAUDE_CONFIG_DIR` is the operator's signed-in trial
 //! configuration, so no personal settings or memory file is loaded.
 //!
-//! Codex: `codex exec --json --ignore-user-config --ignore-rules
+//! Codex: `codex exec --json --ephemeral --ignore-user-config --ignore-rules
 //! --skip-git-repo-check -m <m> --sandbox workspace-write -C <workspace>
 //! -c approval_policy="never" -c sandbox_workspace_write.network_access=false
 //! -c sandbox_workspace_write.writable_roots=['<session root or per-user base>']
@@ -36,10 +36,11 @@
 //! scenario without images turns Codex's image tool off with `--disable
 //! view_image` (the `view_image` feature); the earlier `-c
 //! tools.view_image=false` was an unknown setting Codex ignored (the Codex
-//! diagnostic pass, 2026-09-29). The run is not `--ephemeral`: Codex's
-//! `exec --json` stream shows no viewed image (L-075), so `run` counts the
-//! `view_image` calls in the session rollout Codex writes below its home
-//! ([`crate::codex_rollout`]) and keeps the counts only. Codex trials run on
+//! diagnostic pass, 2026-09-29). The run stays `--ephemeral`: a debug run
+//! without it (2026-09-29) showed that codex-cli 0.155's session rollout
+//! records an image view only inside a code-mode `exec` tool call, not as a
+//! `view_image` record a harness could count, so Codex's image budgets
+//! remain unmeasured (known limit L-075). Codex trials run on
 //! Linux, inside the trial container (`tools/vsift-agent-trials/containers/
 //! codex`), where Codex's own Linux sandbox (its bundled bubblewrap) keeps
 //! writes to the workspace and the writable roots and takes the network
@@ -73,7 +74,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     claude_trust::{TrustOutcome, trust_workspace},
-    codex_rollout::{self, ImageScope, ImageViews},
     error::{TrialError, read_json, write_json},
     layout::{TrialLayout, TrialManifest},
     leak_check::{self, LeakCheck},
@@ -182,12 +182,6 @@ pub struct RunRecord {
     /// `record` never copies it.
     #[serde(default)]
     pub client_home: Option<PathBuf>,
-    /// Codex's image views, counted from its session rollout right after it
-    /// exited ([`crate::codex_rollout`]); `None` for Claude Code, for runs
-    /// recorded before this field existed and when Codex wrote no rollout
-    /// (its images are then unmeasured).
-    #[serde(default)]
-    pub codex_image_views: Option<ImageViews>,
     /// Start time, Unix seconds.
     pub started_unix_s: u64,
     /// Wall time.
@@ -278,6 +272,7 @@ pub fn client_arguments(
             let mut arguments = vec![
                 "exec".to_owned(),
                 "--json".to_owned(),
+                "--ephemeral".to_owned(),
                 "--ignore-user-config".to_owned(),
                 "--ignore-rules".to_owned(),
                 "--skip-git-repo-check".to_owned(),
@@ -473,8 +468,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     let mut wrapped = CommandWrap::from(command);
     contain(&mut wrapped);
     wrapped.wrap(KillOnDrop);
-    let started_at = SystemTime::now();
-    let started_unix_s = started_at
+    let started_unix_s = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs());
     let started = Instant::now();
@@ -496,7 +490,6 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     };
     let wall_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let sign_in_leak_check = check_sign_in_leak(&request.client_home, &stdout_path, &stderr_path)?;
-    let codex_image_views = count_codex_images(request, &layout, started_at);
     let record = RunRecord {
         client: request.client,
         client_version,
@@ -508,7 +501,6 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         debug_prompt: request.debug_prompt.is_some(),
         sign_in_leak_check: Some(sign_in_leak_check),
         client_home: Some(request.client_home.clone()),
-        codex_image_views,
         started_unix_s,
         wall_ms,
         exit_code,
@@ -520,30 +512,6 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     };
     write_json(&layout.phase(request.phase).join("run.json"), &record)?;
     Ok(record)
-}
-
-/// Counts Codex's image views in the rollouts it wrote during this run,
-/// while its home still exists ([`crate::codex_rollout`]); `None` for
-/// Claude Code.
-fn count_codex_images(
-    request: &RunRequest,
-    layout: &TrialLayout,
-    started_at: SystemTime,
-) -> Option<ImageViews> {
-    match request.client {
-        ClientKind::Codex => codex_rollout::image_views(
-            &request.client_home,
-            started_at
-                .checked_sub(Duration::from_secs(1))
-                .unwrap_or(started_at),
-            &ImageScope {
-                workspace: layout.workspace(),
-                skill_directories: layout.skill_directories().to_vec(),
-                session_root: layout.session_root(),
-            },
-        ),
-        ClientKind::ClaudeCode | ClientKind::ProcedureWalker => None,
-    }
 }
 
 /// Scans the phase's raw logs for the client's sign-in values while the

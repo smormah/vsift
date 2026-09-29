@@ -19,7 +19,6 @@ use crate::{
     bundle::BundleIndex,
     calls::{ReadScope, normalise_path},
     client_warnings::configuration_warnings,
-    codex_rollout::ImageViews,
     error::{TrialError, read_json, write_json},
     grade::{Expected, Grade, GradeInput, grade},
     handoff::{PrivateMarkers, extract},
@@ -161,8 +160,6 @@ pub struct RunFindings {
     pub client: Option<ClientKind>,
     /// The client home, so the client's own spill files are recognised.
     pub client_home: Option<PathBuf>,
-    /// Codex's image views from its session rollout.
-    pub image_views: Option<ImageViews>,
 }
 
 /// How a phase is graded again; the defaults grade a fresh run.
@@ -286,7 +283,6 @@ pub fn grade_trace_with(
     let code = image_code();
     let graded = grade(&GradeInput {
         client: findings.client.unwrap_or(ClientKind::ProcedureWalker),
-        image_views: findings.image_views,
         scenario: &scenario,
         phase: phase - 1,
         truth: &truth,
@@ -352,7 +348,6 @@ pub fn grade_phase(
                 .client_home
                 .clone()
                 .or_else(|| options.client_home.clone()),
-            image_views: record.codex_image_views.clone(),
         },
         options,
     )

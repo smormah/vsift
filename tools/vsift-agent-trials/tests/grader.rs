@@ -18,7 +18,6 @@ use vsift_agent_trials::{
     bundle::{BundleIndex, Crop, Segment, Selection},
     calls::ReadScope,
     client_warnings::configuration_warnings,
-    codex_rollout::ImageViews,
     grade::{Expected, Grade, GradeInput, grade},
     handoff::PrivateMarkers,
     scenario::Scenario,
@@ -47,8 +46,6 @@ struct Bench {
     bundle: BundleIndex,
     /// The client the trace is graded as (Claude Code unless a test says).
     client: ClientKind,
-    /// Codex's image views from its rollout, when a test supplies them.
-    image_views: Option<ImageViews>,
     /// The client home, for Claude Code's spill files.
     client_home: Option<PathBuf>,
 }
@@ -96,7 +93,6 @@ impl Bench {
                 .join("workspace"),
             bundle,
             client: ClientKind::ClaudeCode,
-            image_views: None,
             client_home: None,
         })
     }
@@ -122,7 +118,6 @@ impl Bench {
     fn grade_with_warnings(&self, trace: &Trace, raw: &str, client_warnings: Vec<String>) -> Grade {
         grade(&GradeInput {
             client: self.client,
-            image_views: self.image_views.clone(),
             scenario: &self.scenario,
             phase: 0,
             truth: &self.truth,
@@ -1315,39 +1310,6 @@ fn a_codex_image_check_is_proven_by_the_right_code() -> TestResult {
         Some(2),
         "a wrong code, and nothing shows the image was opened: {failures:?}"
     );
-
-    // Counted from the rollout: the budgets see the images, the check
-    // image counts as opened, and nothing is unmeasured.
-    bench.image_views = Some(ImageViews {
-        rollout_files: 1,
-        total: 2,
-        max_per_step: 1,
-        check_image_viewed: true,
-        ..ImageViews::default()
-    });
-    let log = codex(&items, &report(&wrong));
-    let graded = bench.grade(&parse_codex(&log), &log);
-    assert_eq!(
-        failed_checks(&graded).get("image_check").map(Vec::len),
-        Some(1)
-    );
-    assert_eq!(graded.usage.images_total, 2);
-    assert_eq!(graded.usage.tool_calls, 7, "five commands and two images");
-    assert!(
-        !graded
-            .deviations
-            .iter()
-            .any(|deviation| deviation.contains("unmeasured"))
-    );
-    bench.image_views = Some(ImageViews {
-        total: 7,
-        max_per_step: 2,
-        ..ImageViews::default()
-    });
-    let budgets = failed_checks(&bench.grade(&parse_codex(&log), &log))
-        .remove("budgets")
-        .ok_or("budgets passed")?;
-    assert_eq!(budgets.len(), 2, "{budgets:?}");
 
     // The images-disabled scenario (A-05, GPT-6-Luna): Codex viewed the
     // check image anyway and reported the right code; still a failure.

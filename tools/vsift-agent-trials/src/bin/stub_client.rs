@@ -4,8 +4,7 @@
 //! the arguments, the working directory and the environment variable names
 //! it received in `.stub/invocation.json`, replays the recorded event
 //! stream named by `.stub/behaviour.json` on stdout, writes a line to
-//! stderr, optionally writes a Codex session rollout below `CODEX_HOME`,
-//! optionally sleeps (to exercise the timeout) and exits with the
+//! stderr, optionally sleeps (to exercise the timeout) and exits with the
 //! configured code. `--version` prints a version and exits.
 
 use std::{env, fs, path::Path, process::ExitCode, thread, time::Duration};
@@ -39,22 +38,6 @@ fn main() -> ExitCode {
         && let Ok(stream) = fs::read_to_string(stub.join(replay))
     {
         print!("{stream}");
-    }
-    // Codex writes a session rollout below its home unless it is ephemeral.
-    if let Some(rollout) = behaviour["rollout"].as_str()
-        && let Ok(text) = fs::read_to_string(stub.join(rollout))
-        && let Some(home) = env::var_os("CODEX_HOME")
-    {
-        let directory = Path::new(&home)
-            .join("sessions")
-            .join("2026")
-            .join("09")
-            .join("29");
-        if fs::create_dir_all(&directory).is_err()
-            || fs::write(directory.join("rollout-stub.jsonl"), text).is_err()
-        {
-            return ExitCode::from(91);
-        }
     }
     eprintln!("stub client stderr line");
     if let Some(sleep) = behaviour["sleep_ms"].as_u64() {

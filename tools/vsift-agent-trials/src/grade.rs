@@ -42,7 +42,6 @@ use serde_json::Value;
 use crate::{
     bundle::{BundleIndex, Resolved},
     calls::{Action, GradedCall, ReadScope, classify, vsift_commands},
-    codex_rollout::ImageViews,
     handoff::{HandoffSchema, MAX_RESUME_BYTES, PrivateMarkers, extract, text_problems},
     policy::{BudgetLimits, CommandClass, CommandPolicy, HELP_OPERATION},
     scenario::{Expectation, ImagePolicy, Scenario, TranscriptSource},
@@ -50,8 +49,9 @@ use crate::{
     truth::{CorpusTruth, Event, Fixture, KeyFact, SpeechSpan, normalize},
 };
 
-/// The deviation a Codex grade carries when no rollout counted its images.
-pub const CODEX_IMAGES_UNMEASURED: &str = "Codex's image views are unmeasured: its event stream shows none and no session rollout was counted, so the image budgets hold only images the stream showed (L-075)";
+/// The deviation a Codex grade carries: codex-cli 0.155 shows no image view
+/// in its event stream or in a countable form in its session rollout.
+pub const CODEX_IMAGES_UNMEASURED: &str = "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)";
 
 /// Local speech recognition places segments within this much of the
 /// generator's speech span (the P07-P10 checkpoints' tolerance).
@@ -189,9 +189,6 @@ pub struct GradeInput<'a> {
     /// Which client produced the trace: Codex's stream shows no image view,
     /// so its image check and image budgets are graded differently.
     pub client: ClientKind,
-    /// Codex's image views counted from its session rollout by `run`, when
-    /// there were any to count.
-    pub image_views: Option<ImageViews>,
     /// The scenario.
     pub scenario: &'a Scenario,
     /// Which phase (0-based).
@@ -603,9 +600,8 @@ fn policy_problems(calls: &[GradedCall]) -> Vec<String> {
     problems
 }
 
-/// Measures usage from the graded calls and, for Codex, from the image
-/// views `run` counted in its session rollout. The second value is false
-/// when the images of a Codex run could not be measured at all.
+/// Measures usage from the graded calls. The second value is false for a
+/// Codex run whose stream showed no image: its image views are unmeasured.
 fn measure(calls: &[GradedCall], input: &GradeInput<'_>) -> (MeasuredUsage, bool) {
     let mut usage = MeasuredUsage::default();
     let mut per_step: std::collections::BTreeMap<usize, u64> = std::collections::BTreeMap::new();
@@ -628,20 +624,9 @@ fn measure(calls: &[GradedCall], input: &GradeInput<'_>) -> (MeasuredUsage, bool
         .wall_time_s
         .or_else(|| input.trace.duration_ms.map(|value| value / 1_000))
         .unwrap_or_default();
-    let mut measured = true;
-    if input.client == ClientKind::Codex && usage.images_total == 0 {
-        // Codex's stream carries no image view; the rollout's count is the
-        // only measure (a stream that did show views is used as it is).
-        match &input.image_views {
-            Some(views) => {
-                usage.tool_calls += views.total;
-                usage.images_total = views.total;
-                usage.images_per_step = views.max_per_step;
-                usage.image_bytes = views.bytes;
-            }
-            None => measured = false,
-        }
-    }
+    // codex-cli 0.155 reports no image view (L-075); a stream that does
+    // show views is measured as it is.
+    let measured = input.client != ClientKind::Codex || usage.images_total > 0;
     (usage, measured)
 }
 
@@ -743,10 +728,7 @@ fn image_check_problems(
                 ..
             }
         )
-    }) || input
-        .image_views
-        .as_ref()
-        .is_some_and(|views| views.check_image_viewed);
+    });
     // Codex's event stream shows no image view (L-075). The code is printed
     // only in the check image's pixels, never in any text the agent can
     // read, so for Codex the right code is itself the proof that it saw
