@@ -27,6 +27,7 @@ pub mod evaluate;
 pub mod grade;
 pub mod handoff;
 pub mod layout;
+pub mod leak_check;
 pub mod policy;
 pub mod prepare;
 pub mod record;

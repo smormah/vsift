@@ -7,16 +7,19 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 **P00-P11 are complete. P12 (agent skill) is in progress.** Merged increments: PR 1
-(#196), PR 2 (#201), PR 3a (#203) and PR 3c (#207, `9791f70`); PR 3d fixes the grader's
-reading of skill-folder listings. The maintainer approved ~80 counted runs (Claude Code
-`claude-opus-5-5`/`claude-haiku-4-5-20251001`; Codex `gpt-6-astra`/`gpt-6-luna`).
+(#196), PR 2 (#201), PR 3a (#203), PR 3c (#207, `9791f70`) and PR 3d (#208, `ed07c0d`,
+skill-folder listings). PR 3b (branch `p12-pr3b-codex-container`, in review) runs the
+Codex trials in a Linux container. The maintainer approved ~80 counted runs (Claude
+Code `claude-opus-5-5`/`claude-haiku-4-5-20251001`; Codex `gpt-6-astra`/`gpt-6-luna`).
 
 1. **Claude Code counted trials (39 runs):** the third dry trial passed cleanly on
    `9791f70`; the first counted run then listed the skill's `examples/` with `Glob`
    and the campaign was stopped. It restarts from zero after PR 3d, from a frozen
    checkout, with records under `docs/planning/p12-agent-trials/`.
-2. **Codex trials run in a Linux container (maintainer decision 2026-09-28, L-076,
-   #204):** PR 3b builds it (Rust, crates and Ubuntu packages approved 2026-09-29).
+2. **Codex trials in a Linux container (decision 2026-09-28, L-076, #204):** PR 3b.
+   Its dry A-08 trial passed all but `image_check`: codex-cli 0.155's stream has no
+   event for a viewed image. **Maintainer: decide how to grade Codex's images (L-075)**
+   and review L-078..L-080 before the Codex counted trials.
 3. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes) and the corpus
    truth amendment (persistent events F04-E05, F05-E04, F12-E03; corpus README).
 4. **Technical debt:** SEC-T01 adversarial containment evidence (#188, L-068), for
@@ -24,6 +27,8 @@ reading of skill-folder listings. The maintainer approved ~80 counted runs (Clau
 
 ## Found in P12 (for the maintainer)
 
+- **Codex container (PR 3b):** bubblewrap needs user namespaces (seccomp, L-078) and
+  existing writable roots; VSift refuses a session root it did not provision.
 - **Second Claude dry trial (PR 3c, fixed):** it chained `date` to time its budget
   (now forbidden; the host keeps the wall time, L-077), first sent an invalid
   `--operation-id`, and a correct frame citation of `INVOICE 4407` at 9 s failed
@@ -44,7 +49,7 @@ reading of skill-folder listings. The maintainer approved ~80 counted runs (Clau
 
 ## Open decisions (maintainer)
 
-- **ADR 0022** and **L-076** (above).
+- **ADR 0022** (above); **#204** (the product side of L-076: Codex on Windows).
 - **P11 PR 4b readings to confirm:** the runbook's systemd example uses
   `KillMode=mixed`; a host-caused permanent failure replays under its operation id, so
   supervisors resubmit under a new id (L-069).
@@ -65,7 +70,7 @@ reading of skill-folder listings. The maintainer approved ~80 counted runs (Clau
 
 ## Other follow-ups
 
-- **Known limits:** entries to L-077, review pending (P12 added L-071..L-077).
+- **Known limits:** entries to L-080, review pending (P12 added L-071..L-080).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   the `p11_durable_workspace` stage on Ubuntu 24.04 / ext4; a CI run of
   `--host-isolation strict-linux` succeeding end to end.

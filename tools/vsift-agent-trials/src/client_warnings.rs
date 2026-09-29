@@ -21,7 +21,7 @@ use crate::trace::ClientKind;
 /// Lower-case phrases that show the client ignored or could not apply part
 /// of its configuration: settings, permission rules, the sandbox or the
 /// skill.
-const CONFIGURATION_PHRASES: [&str; 11] = [
+const CONFIGURATION_PHRASES: [&str; 16] = [
     "has not been trusted",
     "entries from .claude/settings",
     "invalid settings",
@@ -33,6 +33,13 @@ const CONFIGURATION_PHRASES: [&str; 11] = [
     "refusing to run unsandboxed",
     "windows sandbox setup",
     "failed to load skill",
+    // Codex's Linux sandbox (bubblewrap) could not be set up: commands
+    // would fail or, worse, the client might fall back to no sandbox.
+    "could not find bubblewrap",
+    "needs access to create user namespaces",
+    "no permissions to create a new namespace",
+    "error building bubblewrap command",
+    "sandbox failed a command",
 ];
 
 /// Longest report kept, in characters.
@@ -94,6 +101,17 @@ fn client_notices(client: ClientKind, event: &Value) -> Vec<String> {
                 strings(event)
             } else if event["item"]["type"] == "error" {
                 strings(&event["item"])
+            } else if event["item"]["type"] == "command_execution" {
+                // Codex's Linux sandbox reports its own failure as the
+                // command's output, before the command runs ("bwrap: Can't
+                // bind mount ...", the first container debug run). Only
+                // output that *starts* with bubblewrap's prefix counts, so
+                // a transcript that merely contains the words cannot.
+                event["item"]["aggregated_output"]
+                    .as_str()
+                    .filter(|output| output.trim_start().starts_with("bwrap: "))
+                    .map(|output| vec![format!("sandbox failed a command: {output}")])
+                    .unwrap_or_default()
             } else {
                 Vec::new()
             }
@@ -127,6 +145,25 @@ mod tests {
                 .iter()
                 .any(|warning| warning.starts_with("stream: "))
         );
+    }
+
+    #[test]
+    fn a_linux_sandbox_that_cannot_start_invalidates_a_codex_trial() {
+        // What bubblewrap and codex-cli 0.155 print when the container
+        // refuses user namespaces (Docker's builtin seccomp profile).
+        let stderr = "bwrap: No permissions to create a new namespace, likely because the kernel does not allow non-privileged user namespaces.\n\
+            error building bubblewrap command: Read-only file system (os error 30)\n";
+        let warnings = configuration_warnings(ClientKind::Codex, "", stderr);
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        // The first container debug run: the sandbox failed every command
+        // before it ran, reported as the command's output.
+        let failed = "{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\",\"exit_code\":1,\"aggregated_output\":\"bwrap: Can't bind mount /bindfile on /newroot/t/workspace/.home/.cache/vsift-sessions: Unable to mount source on destination: No such file or directory\\n\"}}";
+        assert_eq!(
+            configuration_warnings(ClientKind::Codex, failed, "").len(),
+            1
+        );
+        let quoted = "{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\",\"aggregated_output\":\"{\\\"text\\\":\\\"bwrap: Can't bind mount\\\"}\"}}";
+        assert!(configuration_warnings(ClientKind::Codex, quoted, "").is_empty());
     }
 
     #[test]

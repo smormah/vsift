@@ -1,10 +1,11 @@
 # Named-client agent trials: operator runbook
 
-Status: P12 increment (PR 3a, 2026-09-28). The trial harness, its grader, the scenario
-files and the SEC-T02 tool-level suite exist. One dry A-08 trial per client has run;
-PR 3a fixes what they showed (below). **No counted trial has run**, and Codex trials on
-Windows are blocked until the maintainer decides how to run them (known limit
-[L-076](../planning/known-limits.md#l-076)). Design:
+Status: P12 increment (PR 3b, 2026-09-29). The trial harness, its grader, the scenario
+files and the SEC-T02 tool-level suite exist. Dry A-08 trials have run for both
+clients; PR 3a, PR 3c and PR 3d fix what they showed (below). **No counted trial has run.**
+Claude Code trials run on Windows; **Codex trials run in a Linux container**
+([below](#codex-trials-in-a-linux-container)), because Codex's Windows sandbox cannot
+run VSift (known limit [L-076](../planning/known-limits.md#l-076)). Design:
 [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) decision 7
 (Proposed) and its dry-trial note. The skill itself: [skill.md](skill.md).
 
@@ -144,9 +145,9 @@ does.
      trial settings come from the workspace. You do **not** need to accept a trust
      dialog per trial: `run` does it for each new workspace (next section).
    - Codex: set `CODEX_HOME=C:\vsift-trials\.clients\codex` and run `codex login`.
-     No sandbox setup is needed for the unelevated Windows sandbox the harness uses,
-     but read [L-076](../planning/known-limits.md#l-076) first: on Windows that
-     sandbox cannot run VSift, so Codex trials there wait for your decision.
+     The Codex trials run in the Linux container, which copies only this home's
+     `auth.json` into each run ([below](#codex-trials-in-a-linux-container)); the
+     Windows sign-in works there.
    These folders hold credentials: never commit or share them. Pass them to `run`
    with `--client-home`, and to `record` so they are redacted.
 6. **Claude Code on Windows** needs Git Bash for its Bash tool: add its `usr\bin` with
@@ -201,8 +202,15 @@ invalidates a trial whose client says it ignored it (`client_configuration`).
   writes to the trial's `tmp` and `harness` folders are refused. What it does not:
   network is off only through proxy variables (a direct request succeeded), and VSift
   cannot create or open its private session root inside it (`STORAGE_IO`, or
-  `INTEGRITY_FAILURE` for a root made outside). See L-076 for the options; the
-  harness adopts none of them.
+  `INTEGRITY_FAILURE` for a root made outside). That is why Codex trials run on
+  Linux (L-076).
+- On Linux there is no Windows option. Codex's own sandbox (its bundled bubblewrap)
+  makes the workspace writable, and the extra writable root is the per-user base
+  `.home` (which holds the session root), created by `run` before the start: bubblewrap
+  refuses a writable root that does not exist yet, and VSift must create and provision
+  its session root itself (an empty folder made by anyone else is refused as
+  `INTEGRITY_FAILURE`). `TMPDIR` and `/tmp` stay read-only for commands, and commands
+  have no network.
 
 ## Running one trial
 
@@ -220,8 +228,8 @@ workspace's allow rules, Codex rejected every command without a Windows sandbox 
 and the strong Claude model never ran `search` (the skill now says to search first).
 After PR 3a, re-run one dry Claude Code trial and check that stderr has no "Ignoring
 ... permissions" line, `grade` does not print `INVALID TRIAL`, `run.json` lists the
-trust entry in `client_setup`, and `commands_required` passes. Re-run a Codex dry
-trial only after the L-076 decision. In each, check that every stream line parsed, the
+trust entry in `client_setup`, and `commands_required` passes. Codex dry trials run in
+the Linux container (next section). In each, check that every stream line parsed, the
 client found the skill, and no call was unrecognised; fix the harness if needed and
 re-grade from the raw log (`grade` never re-runs the client) before counting trials.
 
@@ -241,6 +249,106 @@ keep trials inside a checkout, use `.vsift/agent-trials/`, which is ignored. Rec
 contain the calls with local paths replaced by `<workspace>`, `<session-root>`,
 `<home>`, `<trial>`, `<vsift-dir>` and `<client-home>`, the handoff, both results and
 the SHA-256 of the raw logs.
+
+## Codex trials in a Linux container
+
+Codex trials run on Linux inside Docker Desktop (maintainer decision, 2026-09-28; ADR
+0022's 2026-09-29 note). Everything is in `tools/vsift-agent-trials/containers/codex/`:
+the `Dockerfile`, the committed seccomp profile, the in-container driver
+`trial-driver.sh` and the operator wrapper `codex-trial.ps1`, which passes every
+`docker` argument as its own array element and checks every value you give it.
+
+**What is in the images.** One multi-stage build makes two images:
+
+- `vsift-codex-trials-agent:<short commit>`: Ubuntu 24.04 (pinned by digest), `vsift`
+  and the harness built from the commit under test, whisper.cpp v1.9.2 built from its
+  tag commit, the reviewed BtbN FFmpeg 9.0.1 (the build CI uses) and codex-cli
+  0.155.0-alpha.16's official Linux package. Nothing of the repository: no corpus, no
+  truth, no scenarios, no tests.
+- `vsift-codex-trials-harness:<short commit>`: the same plus the repository at
+  `/opt/vsift/src`, for `prepare` and `grade` only.
+
+Each download is checked in the build (size and SHA-256, or the tag's commit for
+whisper.cpp); see the `Dockerfile` header for the pins. The model is not in any image:
+the reviewed `ggml-base.bin` is mounted read-only and its size and SHA-256 are checked
+before every step. No credential is ever in an image.
+
+**Build** (from the checkout, at the commit under test; about 15 minutes the first
+time, then minutes):
+
+```console
+pwsh tools/vsift-agent-trials/containers/codex/codex-trial.ps1 build
+```
+
+It prints both image IDs (`sha256:...`) and the commit; record them with the trial.
+`docker image inspect --format '{{.Id}}' vsift-codex-trials-agent:<short commit>`
+shows the ID again. The images are local and never pushed.
+
+**One trial is three containers**, so the agent never shares one with the repository
+or with another trial:
+
+1. `prepare` (harness image, the whole trial volume) writes the trial under `/trials`;
+2. `run` (agent image) runs Codex once, with only this trial's folder (a Docker volume
+   subpath at the same `/trials/<trial>` path), the model and the sign-in mounted. The
+   sign-in is **only** `C:\vsift-trials\.clients\codex\auth.json`, mounted read-only
+   and copied into a tmpfs `CODEX_HOME` that is emptied when the run ends (a note says
+   so if Codex refreshed it: then sign in again on Windows). Right after Codex exits,
+   `run` searches the raw logs for every value of the sign-in file and keeps only
+   counts (`sign_in_leak_check` in `run.json`);
+3. `grade` (harness image) grades, records the trial to
+   `C:\vsift-trials\linux\records\<trial>-codex.json` and copies the trial's `harness`
+   folder (raw logs included) to `C:\vsift-trials\linux\trials\<trial>\`.
+
+```console
+pwsh tools/vsift-agent-trials/containers/codex/codex-trial.ps1 sandbox-check
+pwsh tools/vsift-agent-trials/containers/codex/codex-trial.ps1 trial -Scenario A-08-f05-local-asr -Model gpt-6-astra
+pwsh tools/vsift-agent-trials/containers/codex/codex-trial.ps1 continue -Trial <trial> -Phase 2 -Model gpt-6-astra
+pwsh tools/vsift-agent-trials/containers/codex/codex-trial.ps1 debug -Name <name> -Model gpt-6-luna -Prompt "<text>"
+```
+
+`sandbox-check` calls no model: it shows that a command in Codex's sandbox can write
+in its workspace but not beside it, and that its `curl` fails while the same request
+outside the sandbox succeeds. `continue` runs a later phase (A-02's second phase).
+`debug` prepares A-08 under `/trials/debug-<name>` and runs Codex once with your prompt
+(`run --debug-prompt`): `grade` marks it invalid and it is never recorded.
+
+The trial root is the Docker volume `vsift-codex-trials`, not a Windows folder: VSift
+checks that its private folders belong to the user with mode 0700, which a Windows
+bind mount cannot show. Inspect or clean it with `docker run --rm -v
+vsift-codex-trials:/trials ...` or `docker volume rm vsift-codex-trials`. The exported
+records and harness folders under `C:\vsift-trials\linux` stay local, like the Windows
+trials' raw logs; copy a record into `docs/planning/p12-agent-trials/` to commit it.
+
+**Container options, and why.** Every container runs as the unprivileged user 10001
+with `--cap-drop ALL`, `no-new-privileges`, a read-only root, a tmpfs `/tmp`, a
+1,024-process and 8 GiB memory limit and the hostname `vsift-trials`; never
+`--privileged`. One relaxation: `--security-opt seccomp=seccomp-userns.json`. Codex's
+sandbox is bubblewrap, which creates a user namespace per command, and Docker's
+builtin seccomp profile refuses that ("No permissions to create a new namespace");
+Codex's older Landlock mode no longer runs `workspace-write`. The committed profile
+allows every call except a deny list (keyrings, eBPF, `io_uring`, `userfaultfd`,
+modules, `kexec`, clocks, file handles and similar); it is weaker than Docker's
+builtin allowlist (known limit [L-078](../planning/known-limits.md#l-078)). Docker
+Desktop needs no AppArmor change; on an Ubuntu Docker host the `docker-default`
+AppArmor profile may refuse bubblewrap's mounts (untested).
+
+**What the agent can and cannot reach.** Its commands have no network and can write
+only in the workspace (the per-user base included); the trial's `harness` and `tmp`
+folders and `/tmp` are read-only to them. They can *read* the sign-in copy and the
+trial's own `harness` folder (L-080): reading them needs a non-`vsift` command, which
+fails the trial, and a sign-in value in the output fails `no_canary`. The container
+itself has ordinary outbound network for the Codex client's model API and is not
+limited to it (L-079). Nothing from Windows is visible inside: the model sees only
+`/trials/...` paths.
+
+**Checked on 2026-09-29** (Docker Desktop 26.1.1, WSL 2 kernel 5.15.146.1; five
+`gpt-6-luna` debug runs and one `gpt-6-astra` dry trial): Codex read the skill;
+`vsift setup check` (local speech recognition verified) and `vsift ingest` succeeded in
+the sandbox; writes to `../harness`, `../tmp` and `/tmp` were refused ("Read-only file
+system") and a workspace write worked; `curl https://example.com/` failed with "Could
+not resolve host". The dry A-08 trial passed every mechanical check except
+`image_check` and passed interpretation: codex-cli's `exec --json` stream shows no
+event for an image the model views, so the grader counts no images (L-075).
 
 ## Scenarios
 
@@ -281,13 +389,12 @@ registered). It writes `.vsift/e2e-runs/p12-<run-id>/report.json`.
 
 ## Decisions for the maintainer
 
-- How to run the Codex trials, since Codex's unelevated Windows sandbox cannot run
-  VSift and does not enforce the network (L-076): under WSL or Ubuntu; with
-  `danger-full-access` and the policy enforced by the grader only; or with the elevated
-  sandbox, whose one-time setup needs administrator rights (a UAC prompt):
-  `set CODEX_HOME=C:\vsift-trials\.clients\codex` then
-  `C:\tools\clients\codex-0.155.0-alpha.16\codex.exe sandbox setup --elevated --current-user`
-  (untested; see L-076 for its cross-account risks).
+- How to grade Codex's image use: codex-cli 0.155's `exec --json` stream has no event
+  for a viewed image (L-075), so `image_check` fails for every Codex trial that uses
+  images and Codex's image budgets cannot be counted. Options include accepting the
+  check code alone for Codex, or another evidence source.
+- The Codex container's relaxations: the seccomp profile (L-078), the unrestricted
+  container network (L-079) and the readable sign-in and harness folder (L-080).
 - The reading allowances (skill text through plain readers for Codex, line filters in
   a pipeline, Claude Code's `Glob`/`Grep`/`LS` inside the skill folders) and the
   strictness of everything else (`cd`, `ls`, a listing anywhere else fail a trial).

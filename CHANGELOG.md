@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- A Linux container for the Codex agent trials (P12 PR 3b, ADR 0022 note of
+  2026-09-29; runbook `docs/agents/trials.md`), since Codex's Windows sandbox cannot run
+  VSift (L-076, #204). `tools/vsift-agent-trials/containers/codex/` builds, from the
+  commit under test and with every download pinned and verified, an `agent` image
+  (Ubuntu 24.04, `vsift`, the harness, whisper.cpp v1.9.2 from its tag commit, BtbN
+  FFmpeg 9.0.1, codex-cli 0.155.0-alpha.16) and a `harness` image that adds the
+  repository. A trial is three containers: `prepare` and `grade` in the harness image,
+  `run` in the agent image with only its own trial folder, the model and a tmpfs copy
+  of the Codex sign-in, so the agent cannot read the corpus truth, the scenarios or
+  other trials. Containers run unprivileged with no capabilities, a read-only root and
+  a committed seccomp profile that lets Codex's bubblewrap create user namespaces
+  (L-078); agent commands have no network, the container itself is not limited to the
+  model API (L-079), and the agent can still read its sign-in and trial folder (L-080).
+  Operator wrapper `codex-trial.ps1` (build, versions, sandbox-check, trial, continue,
+  debug); CI workflow `p12-codex-container.yml` builds both images without secrets.
+  Harness: on Linux Codex's extra writable root is the per-user base, created before
+  the start; `run --debug-prompt` for debug runs that `grade` marks invalid and
+  `record` refuses; `run` scans the raw output for the client's sign-in values
+  (counts only) and `grade` fails `no_canary` if one appears; a Linux sandbox that
+  cannot start or fails a command makes the trial invalid. Five `gpt-6-luna` debug runs
+  and one `gpt-6-astra` dry A-08 trial showed the skill read, `setup check` and
+  `ingest` working, writes outside the workspace refused and `curl` failing; the dry
+  trial failed only `image_check`, because Codex's stream shows no image event (L-075).
 - Fixes from the second Claude Code dry trial (P12 PR 3c, ADR 0022 note of
   2026-09-28). Skill: the rules now say that nothing but `vsift` runs, one command per
   call, never chained, piped or redirected, not even `date` to time the budget; the one

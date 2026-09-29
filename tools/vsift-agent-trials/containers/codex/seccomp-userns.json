@@ -1,0 +1,69 @@
+{
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "defaultErrnoRet": 1,
+  "architectures": [
+    "SCMP_ARCH_X86_64",
+    "SCMP_ARCH_X86",
+    "SCMP_ARCH_X32"
+  ],
+  "syscalls": [
+    {
+      "comment": "Kernel keyrings: no trial process needs them, and they are shared across user namespaces.",
+      "names": ["add_key", "keyctl", "request_key"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
+    },
+    {
+      "comment": "eBPF, performance counters, userfaultfd and io_uring: large kernel attack surface no trial needs.",
+      "names": [
+        "bpf",
+        "perf_event_open",
+        "userfaultfd",
+        "io_uring_setup",
+        "io_uring_enter",
+        "io_uring_register"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
+    },
+    {
+      "comment": "Kernel modules, kexec, reboot, swap, accounting, clocks and the kernel log: host administration.",
+      "names": [
+        "init_module",
+        "finit_module",
+        "delete_module",
+        "create_module",
+        "get_kernel_syms",
+        "query_module",
+        "kexec_load",
+        "kexec_file_load",
+        "reboot",
+        "swapon",
+        "swapoff",
+        "acct",
+        "settimeofday",
+        "clock_settime",
+        "clock_adjtime",
+        "adjtimex",
+        "stime",
+        "syslog",
+        "quotactl",
+        "lookup_dcookie",
+        "nfsservctl",
+        "uselib",
+        "_sysctl",
+        "iopl",
+        "ioperm",
+        "vhangup"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
+    },
+    {
+      "comment": "File handles bypass path-based confinement (the classic container escape).",
+      "names": ["open_by_handle_at", "name_to_handle_at"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
+    }
+  ]
+}

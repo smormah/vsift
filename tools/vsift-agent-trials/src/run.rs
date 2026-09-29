@@ -29,20 +29,28 @@
 //! Codex: `codex exec --json --ephemeral --ignore-user-config --ignore-rules
 //! --skip-git-repo-check -m <m> --sandbox workspace-write -C <workspace>
 //! -c approval_policy="never" -c sandbox_workspace_write.network_access=false
-//! -c sandbox_workspace_write.writable_roots=['<session root>']
+//! -c sandbox_workspace_write.writable_roots=['<session root or per-user base>']
 //! -c sandbox_workspace_write.exclude_tmpdir_env_var=true
 //! -c sandbox_workspace_write.exclude_slash_tmp=true <prompt>`, with
-//! `CODEX_HOME` the operator's signed-in trial home. On Windows it adds
+//! `CODEX_HOME` the operator's signed-in trial home. Codex trials run on
+//! Linux, inside the trial container (`tools/vsift-agent-trials/containers/
+//! codex`), where Codex's own Linux sandbox (its bundled bubblewrap) keeps
+//! writes to the workspace and the writable roots and takes the network
+//! away from every command. On Windows `run` adds
 //! `-c windows.sandbox="unelevated"`: codex-cli 0.155 reads the Windows
 //! sandbox mode from the user configuration, which `--ignore-user-config`
 //! skips, and without a mode it rejects every command as "blocked by
-//! policy" (the first dry trial). The unelevated sandbox needs no
-//! administrator setup and confines writes to the workspace (the session
-//! root is inside it), but it turns the network off only through proxy
-//! environment variables (known limit L-076). Codex's permission model
-//! differs from Claude Code's; the grader enforces the same policy on both
-//! from the event stream (ADR 0022 decision 7), so a permissive
-//! configuration cannot pass a forbidden action.
+//! policy" (the first dry trial). That sandbox cannot run `VSift` and does
+//! not enforce the network (known limit L-076), which is why Codex trials
+//! moved to the container. Codex's permission model differs from Claude
+//! Code's; the grader enforces the same policy on both from the event
+//! stream (ADR 0022 decision 7), so a permissive configuration cannot pass
+//! a forbidden action.
+//!
+//! A *debug run* replaces the scenario's prompt with the operator's
+//! (`--debug-prompt`), to check a client's environment with a trivial
+//! request. Its run record says so, `grade` marks it invalid and `record`
+//! refuses it: a debug run is never a trial.
 
 use std::{
     env,
@@ -60,6 +68,7 @@ use crate::{
     claude_trust::{TrustOutcome, trust_workspace},
     error::{TrialError, read_json, write_json},
     layout::{TrialLayout, TrialManifest},
+    leak_check::{self, LeakCheck},
     roots::RootPolicy,
     scenario::{ImagePolicy, Scenario},
     skill::file_digest,
@@ -119,6 +128,9 @@ pub struct RunRequest {
     pub system_path: Vec<PathBuf>,
     /// What the trial root must avoid.
     pub root_policy: RootPolicy,
+    /// A prompt that replaces the scenario's, for a debug run (see the
+    /// module documentation); `None` for a trial.
+    pub debug_prompt: Option<String>,
 }
 
 /// What `run` did, written to `harness/phase-<n>/run.json`.
@@ -141,6 +153,17 @@ pub struct RunRecord {
     /// written before this field existed.
     #[serde(default)]
     pub client_setup: Vec<String>,
+    /// Whether the operator replaced the scenario's prompt: a debug run,
+    /// never a trial. False in run records written before this field
+    /// existed.
+    #[serde(default)]
+    pub debug_prompt: bool,
+    /// Whether a value of the client home's sign-in file appeared in the
+    /// raw output, scanned right after the client exited (counts only,
+    /// never the values: [`crate::leak_check`]). `None` in run records
+    /// written before this field existed.
+    #[serde(default)]
+    pub sign_in_leak_check: Option<LeakCheck>,
     /// Start time, Unix seconds.
     pub started_unix_s: u64,
     /// Wall time.
@@ -248,7 +271,7 @@ pub fn client_arguments(
                 "-c".to_owned(),
                 format!(
                     "sandbox_workspace_write.writable_roots=['{}']",
-                    layout.session_root().to_string_lossy()
+                    codex_writable_root(layout).to_string_lossy()
                 ),
                 "-c".to_owned(),
                 "sandbox_workspace_write.exclude_tmpdir_env_var=true".to_owned(),
@@ -391,7 +414,10 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     }
     let manifest = read_manifest(&layout)?;
     let scenario = Scenario::load(&layout.scenario())?;
-    let prompt = phase_prompt(&layout, &manifest, request.phase)?;
+    let prompt = match &request.debug_prompt {
+        Some(prompt) => prompt.clone(),
+        None => phase_prompt(&layout, &manifest, request.phase)?,
+    };
     let arguments = client_arguments(request, &layout, &scenario, &prompt);
     let environment = client_environment(request, &layout, &manifest)?;
     for directory in [
@@ -445,6 +471,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         None
     };
     let wall_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let sign_in_leak_check = check_sign_in_leak(&request.client_home, &stdout_path, &stderr_path)?;
     let record = RunRecord {
         client: request.client,
         client_version,
@@ -453,6 +480,8 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         arguments,
         environment_names: environment.iter().map(|(name, _)| name.clone()).collect(),
         client_setup,
+        debug_prompt: request.debug_prompt.is_some(),
+        sign_in_leak_check: Some(sign_in_leak_check),
         started_unix_s,
         wall_ms,
         exit_code,
@@ -464,6 +493,26 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     };
     write_json(&layout.phase(request.phase).join("run.json"), &record)?;
     Ok(record)
+}
+
+/// Scans the phase's raw logs for the client's sign-in values while the
+/// sign-in is still present ([`crate::leak_check`]).
+///
+/// # Errors
+///
+/// [`TrialError::Io`] when a raw log cannot be read.
+fn check_sign_in_leak(
+    client_home: &Path,
+    stdout: &Path,
+    stderr: &Path,
+) -> Result<LeakCheck, TrialError> {
+    let read = |path: &Path| {
+        fs::read(path)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|error| TrialError::io_step("reading the raw log", path, error))
+    };
+    let (out, err) = (read(stdout)?, read(stderr)?);
+    Ok(leak_check::scan(client_home, &[&out, &err]))
 }
 
 /// Changes the client home needs before this trial starts, described for
@@ -488,8 +537,61 @@ fn prepare_client(request: &RunRequest, layout: &TrialLayout) -> Result<Vec<Stri
                 .to_owned(),
             ])
         }
-        ClientKind::Codex => Ok(Vec::new()),
+        ClientKind::Codex => create_writable_roots(layout),
     }
+}
+
+/// The extra writable root Codex gets: a directory that holds `VSift`'s
+/// session root (which is also inside the workspace, itself writable).
+///
+/// On Windows it is the session root itself. On Unix it is the per-user
+/// base (`<workspace>/.home`): Codex's Linux sandbox bind-mounts every
+/// writable root and refuses to run a command when one does not exist yet
+/// (bubblewrap: "Can't bind mount ... No such file or directory", the first
+/// container debug run), and the session root cannot be made in advance:
+/// `VSift` creates and provisions it on its first command (an empty folder
+/// made by anyone else has no ownership marker, and `VSift` rightly refuses
+/// it as `INTEGRITY_FAILURE`).
+#[must_use]
+pub fn codex_writable_root(layout: &TrialLayout) -> PathBuf {
+    if cfg!(windows) {
+        layout.session_root()
+    } else {
+        layout.user_base()
+    }
+}
+
+/// Makes sure Codex's extra writable root exists before Codex starts, on
+/// Unix (see [`codex_writable_root`]): the per-user base, mode 0700 as
+/// `VSift` makes its own folders. It never creates the session root.
+///
+/// # Errors
+///
+/// [`TrialError::Io`] when the directory cannot be created.
+#[cfg(unix)]
+fn create_writable_roots(layout: &TrialLayout) -> Result<Vec<String>, TrialError> {
+    use std::os::unix::fs::DirBuilderExt;
+    let root = codex_writable_root(layout);
+    if root.is_dir() {
+        return Ok(Vec::new());
+    }
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&root)
+        .map_err(|error| TrialError::io_step("creating the per-user base", &root, error))?;
+    Ok(vec![
+        "created the per-user base (mode 0700) so Codex's Linux sandbox can bind it".to_owned(),
+    ])
+}
+
+#[cfg(not(unix))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "One signature for every platform; only Unix can fail here"
+)]
+fn create_writable_roots(_layout: &TrialLayout) -> Result<Vec<String>, TrialError> {
+    Ok(Vec::new())
 }
 
 #[cfg(windows)]
