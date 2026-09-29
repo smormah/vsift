@@ -27,16 +27,34 @@ fails with `IDEMPOTENCY_CONFLICT`; that means "choose the next counter", not "re
 ## The resume card
 
 The handoff's `resume` object (see [../handoff.schema.json](../handoff.schema.json)),
-at most 2 KiB of JSON:
+at most 2 KiB of JSON. Every partial report has one; a finished one leaves it out. It
+looks exactly like this (your own values; an empty list or null where you have none):
 
-- `state`: the state you stopped in (`VERIFY_SOURCE`, ...);
-- `session_id`, `revision_id` and `job_id` (the transcription job, if any);
+```json
+{"state": "VERIFY_SOURCE",
+ "session_id": "ses_0123456789abcdef0123456789abcdef",
+ "revision_id": "trv_0123456789abcdef0123456789abcdef",
+ "job_id": null,
+ "operation_ids": [],
+ "evidence": [{"kind": "transcript_segment", "id": "tsg_0123456789abcdef0123456789abcdef", "at_us": 500000},
+  {"kind": "visual_candidate", "id": "vcd_0123456789abcdef0123456789abcdef", "at_us": 12063964},
+  {"kind": "frame", "id": "evd_0123456789abcdef0123456789abcdef", "at_us": 4000000}],
+ "summary": "The value at 4 s is 12. Candidates are listed to 72.5 s; later frames are unread.",
+ "remaining": {"images_total": 0, "tool_calls": 12, "wall_time_s": null},
+ "next_command": "vsift frame get ses_0123456789abcdef0123456789abcdef --candidate vcd_0123456789abcdef0123456789abcdef --json"}
+```
+
+- `state`: the state you stopped in, one of the eight state names;
+- `session_id` and `revision_id` (null when there is none) and `job_id`, the
+  transcription job (null or left out when there is none);
 - `operation_ids`: the operation ids you used;
-- `evidence`: up to 8 identities you found and want to keep, each with its kind and
-  time (`at_us`): transcript segments, visual candidates, frames, crops or clips;
+- `evidence`: up to 8 identities you found and want to keep, each with its `kind`
+  (`transcript_segment`, `visual_candidate`, `frame`, `crop` or `audio`), its `id` and
+  its time `at_us`;
 - `summary`: what you know so far and what is still open, in at most 500 characters
   of your own words (no evidence text, no paths);
-- `remaining`: images, tool calls and seconds left in the budget;
+- `remaining`: what is left of the budget: `images_total`, `tool_calls` and
+  `wall_time_s`, each null when you did not count it;
 - `next_command`: the one `free` command you would run next, or null.
 
 Update your working notes with the same facts after every state, so that a reset

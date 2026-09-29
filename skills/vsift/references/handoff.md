@@ -71,7 +71,42 @@ A visual claim needs a frame or crop citation whose `pixels_inspected` is true. 
 `image_access` is `unavailable`, every visual claim is `unsupported`, each frame or
 crop citation has `pixels_inspected` false, and a gap with reason
 `image_access_unavailable` says so. An observed claim is never `unsupported`: if you
-could not observe it, it is not an observation.
+could not observe it, it is not an observation. Write a claim you could not check as
+`inferred` (or `reported`, when the user said it) with `unsupported`.
+
+A claim that is `supported`, `partially_supported` or `contradicted` cites at least one
+piece of evidence. What `setup check` or `session status` told you (a tool is missing,
+the session expired) is not evidence from the video: record it as a gap, not a claim.
+
+## Closed values
+
+Every member below takes exactly one of the listed words. Write them as listed; no
+other word is accepted, even one that means the same (`image` is not a gap kind: use
+`visual` or `image_access`).
+
+| Member | Allowed values |
+| --- | --- |
+| `status` | `complete`, `partial`, `insufficient_evidence` |
+| `capabilities.image_access` | `verified`, `unavailable` |
+| `capabilities.media_tools` | `available`, `missing`, `unhealthy` |
+| `capabilities.local_asr` | `verified`, `failed`, `not_run`, `not_checked` |
+| `capabilities.transcript_basis` | `supplied_transcript`, `local_asr`, `mixed`, `none` |
+| `claims[].section` | `problem`, `expected`, `actual`, `reproduction` (the Reproduction steps section), `context` (anything else) |
+| `claims[].kind` | `observed`, `inferred`, `reported` |
+| `claims[].support` | `supported`, `partially_supported`, `unsupported`, `contradicted` |
+| `claims[].certainty` | `high`, `medium`, `low` |
+| `citations[].type` | `transcript_segment`, `frame`, `crop`, `audio` |
+| `gaps[].kind` | `transcript`, `visual`, `audio`, `image_access`, `dependency`, `budget`, `lifecycle` |
+| `gaps[].reason` | `untranscribed_range`, `not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`, `candidate_budget_exhausted`, `frame_budget`, `pixel_budget`, `byte_budget`, `session_evidence_budget`, `cancelled`, `transcript_unavailable`, `image_access_unavailable`, `image_unreadable`, `not_inspected`, `budget_exhausted`, `needs_user_authority`, `session_expired`, `not_audible_to_agent` |
+| `gaps[].code` | `INTERNAL`, `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED`, `INVALID_SOURCE`, `BUSY`, `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT`, `CANCELLED`, `STORAGE_IO`, `INTEGRITY_FAILURE`, `IDEMPOTENCY_CONFLICT` |
+| `untrusted_instructions[].action_taken` | `none`, `attempted` |
+| `budget.profile` | `compact`, `standard` |
+| `budget.exhausted[]` | `images_total`, `image_bytes`, `tool_calls`, `refinement_depth`, `wall_time_s` |
+| `lifecycle.policy` | `user_stated`, `default` |
+| `lifecycle.action` | `left_open`, `closed`, `retained`, `not_opened`, `expired` |
+| `lifecycle.mode` | `ephemeral`, `retained`, `durable_worker` |
+| `resume.state` | `CHECK_CAPABILITIES`, `PREPARE`, `FIND_SPOKEN_SPANS`, `INSPECT_CARDS`, `VERIFY_SOURCE`, `REFINE_OR_STOP`, `REPORT`, `CLOSE_OR_RETAIN` |
+| `resume.evidence[].kind` | `transcript_segment`, `visual_candidate`, `frame`, `crop`, `audio` |
 
 ## What the JSON must hold, and what it may
 
@@ -115,8 +150,9 @@ the one asked for.
 
 ## Gaps
 
-Each gap has a `kind`, a `reason` and a short `note` (or null); it may add the `range`
-it covers and the failure `code` that caused it. Use the CLI's own reason when there is
+Each gap has a `kind`, a `reason` and a `note` of at most 600 characters (or null),
+enough to quote VSift's remediation whole; it may add the `range` it covers and the
+failure `code` that caused it. Use the CLI's own reason when there is
 one: `untranscribed_range` (from `coverage.reasons`), a candidate gap reason
 (`not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`,
 `candidate_budget_exhausted`) or a frame `partial_reason` (`frame_budget`,
@@ -138,13 +174,17 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
 - The final message ends with exactly one `vsift-handoff` block, also when you stop
   early (a missing tool, an expired session, a budget): SKILL.md's REPORT state shows
   the smallest valid one. Never save the report to a file.
-- Every `e` id in a claim exists in `citations`; every citation is used.
+- Every `e` id in a claim exists in `citations`; cite only what a claim or an
+  instruction uses (an unused citation is noted, not refused).
+- Every closed value is a word of the table above, in lower case (states and failure
+  codes in upper case).
 - No absolute path, home folder, web address, Markdown link, secret or environment
   value anywhere ([safety.md](safety.md)); the JSON schema refuses most of them.
 - Evidence text appears only in quotes or code blocks, with hidden characters shown
   as `<U+202E>`-style notation.
 - `lifecycle.action` is filled and, for a partial report or an exhausted limit,
-  `resume`; any `wall_time_s` you give is `null` unless your client showed you the
+  `resume` in the shape [resume.md](resume.md) shows (leave it out when the task
+  finished); any `wall_time_s` you give is `null` unless your client showed you the
   elapsed time ([budgets.md](budgets.md)).
 
 Examples: [../examples/](../examples/).

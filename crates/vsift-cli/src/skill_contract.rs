@@ -1285,7 +1285,9 @@ fn check_handoff_semantics(name: &str, handoff: &Value, problems: &mut Problems)
             claim["support"].as_str(),
             Some("supported" | "partially_supported" | "contradicted")
         );
-        if rests_on_evidence && !grounded {
+        // A claim that rests on evidence and cites none is the schema's
+        // `minItems` failure; this rule is about what the citations show.
+        if rests_on_evidence && !references.is_empty() && !grounded {
             problems.add(format!(
                 "{name}: claim {} is {} on uninspected images only",
                 claim["id"], claim["support"]
@@ -1534,6 +1536,330 @@ fn report_skeleton_holds_only_the_required_members() -> Result<(), String> {
     ] {
         if !flat.contains(needle) {
             problems.add(format!("SKILL.md does not say {needle:?}"));
+        }
+    }
+    problems.into_result()
+}
+
+/// The members whose closed values `SKILL.md`'s REPORT state lists beside
+/// the skeleton (maintainer decision of 2026-09-29, PR 3g): the compact-tier
+/// runs wrote `"Actual"`, `"image"`, `"coverage"` and `"supplied"` where the
+/// skill showed no list. `references/handoff.md` lists every member.
+const SKILL_MD_VOCABULARY: [&str; 15] = [
+    "status",
+    "capabilities.image_access",
+    "capabilities.media_tools",
+    "capabilities.local_asr",
+    "capabilities.transcript_basis",
+    "claims[].section",
+    "claims[].kind",
+    "claims[].support",
+    "claims[].certainty",
+    "citations[].type",
+    "gaps[].kind",
+    "gaps[].reason",
+    "untrusted_instructions[].action_taken",
+    "lifecycle.action",
+    "lifecycle.policy",
+];
+
+/// The one closed value an agent never chooses: the skeleton shows it.
+const FIXED_MEMBERS: [&str; 1] = ["handoff_version"];
+
+/// Guards the schema walk against a reference cycle.
+const MAX_SCHEMA_DEPTH: usize = 32;
+
+/// Every `enum` and string `const` of the handoff schema with the member
+/// path that holds it (`claims[].section`), following `$ref`, `oneOf`,
+/// `anyOf`, `allOf`, `properties` and `items`. Conditional subschemas
+/// (`if`, `then`, `else`, `not`) only restrict members defined elsewhere.
+/// The trial grader reads the schema the same way to accept a closed value
+/// in another letter case.
+fn schema_vocabulary(schema: &Value) -> BTreeMap<String, BTreeSet<String>> {
+    fn walk(
+        schema: &Value,
+        node: &Value,
+        path: &str,
+        depth: usize,
+        into: &mut BTreeMap<String, BTreeSet<String>>,
+    ) {
+        if depth > MAX_SCHEMA_DEPTH {
+            return;
+        }
+        if let Some(target) = node["$ref"]
+            .as_str()
+            .and_then(|reference| reference.strip_prefix('#'))
+            .and_then(|pointer| schema.pointer(pointer))
+        {
+            walk(schema, target, path, depth + 1, into);
+        }
+        for keyword in ["oneOf", "anyOf", "allOf"] {
+            for branch in node[keyword].as_array().into_iter().flatten() {
+                walk(schema, branch, path, depth + 1, into);
+            }
+        }
+        let mut values: Vec<String> = node["enum"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect();
+        values.extend(node["const"].as_str().map(str::to_owned));
+        if !values.is_empty() && !path.is_empty() {
+            into.entry(path.to_owned()).or_default().extend(values);
+        }
+        for (name, member) in node["properties"].as_object().into_iter().flatten() {
+            let child = if path.is_empty() {
+                name.clone()
+            } else {
+                format!("{path}.{name}")
+            };
+            walk(schema, member, &child, depth + 1, into);
+        }
+        if let Some(items) = node.get("items") {
+            walk(schema, items, &format!("{path}[]"), depth + 1, into);
+        }
+    }
+    let mut vocabulary = BTreeMap::new();
+    walk(schema, schema, "", 0, &mut vocabulary);
+    for member in FIXED_MEMBERS {
+        vocabulary.remove(member);
+    }
+    vocabulary
+}
+
+/// The inline code spans of one line.
+fn code_spans_of(line: &str) -> Vec<String> {
+    line.split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The `| Member | Allowed values |` table of `text`: each member with the
+/// code spans of its values cell. Words outside code spans are guidance.
+fn vocabulary_table(
+    name: &str,
+    text: &str,
+    problems: &mut Problems,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut table = BTreeMap::new();
+    let mut inside = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("| Member | Allowed values |") {
+            inside = true;
+            continue;
+        }
+        if !inside || trimmed.starts_with("| ---") {
+            continue;
+        }
+        if !trimmed.starts_with('|') {
+            break;
+        }
+        let cells: Vec<&str> = trimmed.split('|').map(str::trim).collect();
+        let (Some(member), Some(values)) = (cells.get(1), cells.get(2)) else {
+            problems.add(format!("{name}: malformed vocabulary row {trimmed:?}"));
+            continue;
+        };
+        let member = member.trim_matches('`').to_owned();
+        let values: BTreeSet<String> = code_spans_of(values).into_iter().collect();
+        if table.insert(member.clone(), values).is_some() {
+            problems.add(format!("{name}: {member} is listed twice"));
+        }
+    }
+    if table.is_empty() {
+        problems.add(format!("{name} has no | Member | Allowed values | table"));
+    }
+    table
+}
+
+/// Every closed value an agent writes is listed beside the skeleton in
+/// `SKILL.md` and, for every member, in `references/handoff.md`, exactly as
+/// the schema has it, so the lists can never drift from the schema.
+#[test]
+fn vocabulary_tables_list_exactly_the_schema_values() -> Result<(), String> {
+    let schema = read_json(&skill_directory().join("handoff.schema.json"))?;
+    let vocabulary = schema_vocabulary(&schema);
+    let mut problems = Problems::default();
+    let skill = read_text(&skill_directory().join("SKILL.md"))?;
+    let report = skill
+        .find("### 7. REPORT")
+        .and_then(|start| {
+            skill[start..]
+                .find("### 8. CLOSE_OR_RETAIN")
+                .map(|length| &skill[start..start + length])
+        })
+        .ok_or("SKILL.md lacks REPORT before CLOSE_OR_RETAIN")?;
+    let listed = vocabulary_table("SKILL.md REPORT", report, &mut problems);
+    let expected: BTreeSet<String> = SKILL_MD_VOCABULARY
+        .iter()
+        .map(|member| (*member).to_owned())
+        .collect();
+    let members: BTreeSet<String> = listed.keys().cloned().collect();
+    if members != expected {
+        problems.add(format!(
+            "SKILL.md's vocabulary lists {members:?}, not {expected:?}"
+        ));
+    }
+    for (member, values) in &listed {
+        match vocabulary.get(member) {
+            Some(allowed) if allowed == values => {}
+            Some(allowed) => problems.add(format!(
+                "SKILL.md lists {values:?} for {member}; the schema allows {allowed:?}"
+            )),
+            None => problems.add(format!(
+                "SKILL.md lists {member}, which has no closed values"
+            )),
+        }
+    }
+    let handoff = read_text(&skill_directory().join("references").join("handoff.md"))?;
+    let complete = vocabulary_table("handoff.md", &handoff, &mut problems);
+    if complete != vocabulary {
+        let missing: Vec<&String> = vocabulary
+            .keys()
+            .filter(|member| complete.get(*member) != vocabulary.get(*member))
+            .collect();
+        let extra: Vec<&String> = complete
+            .keys()
+            .filter(|member| !vocabulary.contains_key(*member))
+            .collect();
+        problems.add(format!(
+            "handoff.md's closed values differ from the schema: wrong or missing {missing:?}, unknown {extra:?}"
+        ));
+    }
+    let flat = flattened_skill_md()?;
+    for needle in [
+        "`observed` is never `unsupported`",
+        "cites at least one `e` id",
+    ] {
+        if !flat.contains(needle) {
+            problems.add(format!("SKILL.md does not say {needle:?}"));
+        }
+    }
+    problems.into_result()
+}
+
+/// `resume.md` shows one exact resume card that validates, fits 2 KiB and
+/// names a `free` next command: the compact-tier runs wrote `"images"`,
+/// `"candidate"`, `{}` and `{"note": ...}` where the skill showed only a
+/// list of members.
+#[test]
+fn resume_md_shows_one_valid_resume_card() -> Result<(), String> {
+    let text = read_text(&skill_directory().join("references").join("resume.md"))?;
+    let document = parse_markdown("resume.md".to_owned(), &text);
+    let cards: Vec<&Fence> = document
+        .fences
+        .iter()
+        .filter(|fence| fence.info == "json")
+        .collect();
+    let [card] = cards.as_slice() else {
+        return Err(format!(
+            "resume.md must show exactly one json resume card, found {}",
+            cards.len()
+        ));
+    };
+    let card: Value = serde_json::from_str(&card.lines.join("\n"))
+        .map_err(|error| format!("resume.md's card is not JSON: {error}"))?;
+    let schema = read_json(&skill_directory().join("handoff.schema.json"))?;
+    let validator = jsonschema::options()
+        .build(&schema)
+        .map_err(|error| format!("handoff.schema.json is not a valid schema: {error}"))?;
+    let mut handoff = read_json(
+        &skill_directory()
+            .join("examples")
+            .join("supplied-transcript.handoff.json"),
+    )?;
+    handoff["status"] = Value::String("partial".to_owned());
+    handoff["resume"] = card.clone();
+    let mut problems = Problems::default();
+    for error in validator.iter_errors(&handoff) {
+        problems.add(format!(
+            "resume.md's card: {error} at {}",
+            error.instance_path()
+        ));
+    }
+    check_handoff_semantics("resume.md's card", &handoff, &mut problems);
+    let policy = policy_table(&mut problems)?;
+    if let Some(next) = card["next_command"].as_str()
+        && let Some(identifier) = check_console_command("resume.md", next, &mut problems)?
+        && policy.get(&identifier) != Some(&Class::Free)
+    {
+        problems.add(format!(
+            "resume.md's next_command {identifier} is not a free command"
+        ));
+    }
+    let mut members: Vec<String> = card
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(key, _)| key.clone())
+        .collect();
+    members.sort();
+    let mut every: Vec<String> = schema["$defs"]["resume"]["properties"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(key, _)| key.clone())
+        .collect();
+    every.sort();
+    if members != every {
+        problems.add(format!(
+            "resume.md's card shows {members:?}, not every member {every:?}"
+        ));
+    }
+    problems.into_result()
+}
+
+/// A gap note holds `VSift`'s longest fixed remediations whole, with a
+/// sentence of context: a Sonnet 5.5 run quoted the setup check remediation
+/// (316 characters) and failed the earlier 300-character limit. The safety
+/// patterns still refuse hidden characters, paths and links in a note.
+#[test]
+fn a_gap_note_holds_a_quoted_remediation() -> Result<(), String> {
+    let schema = read_json(&skill_directory().join("handoff.schema.json"))?;
+    let validator = jsonschema::options()
+        .build(&schema)
+        .map_err(|error| format!("handoff.schema.json is not a valid schema: {error}"))?;
+    let example = read_json(
+        &skill_directory()
+            .join("examples")
+            .join("no-transcript-no-images.handoff.json"),
+    )?;
+    let with_note = |note: &str| -> Value {
+        let mut handoff = example.clone();
+        handoff["gaps"][0]["note"] = Value::String(note.to_owned());
+        handoff
+    };
+    let context = "Local speech recognition could not run on this machine, so the video has no transcript. VSift says:";
+    let mut problems = Problems::default();
+    for remediation in [
+        vsift_contract::UNPINNED_MODEL_REMEDIATION,
+        vsift_contract::LOCAL_ASR_TOOLS_REMEDIATION,
+        vsift_contract::EVIDENCE_BUDGET_REMEDIATION,
+    ] {
+        let note = format!("{context} {remediation}");
+        if !validator.is_valid(&with_note(&note)) {
+            problems.add(format!(
+                "a gap note of {} characters quoting a remediation is refused",
+                note.chars().count()
+            ));
+        }
+    }
+    let limit = schema["$defs"]["safe_text_600"]["allOf"][1]["maxLength"]
+        .as_u64()
+        .ok_or("safe_text_600 has no maxLength")?;
+    let too_long = "a".repeat(usize::try_from(limit).map_err(|error| error.to_string())? + 1);
+    for refused in [
+        too_long.as_str(),
+        "Hidden \u{202E}text in a note.",
+        "Install it from https://example.invalid first.",
+        "It lives in C:\\tools\\ffmpeg.",
+    ] {
+        if validator.is_valid(&with_note(refused)) {
+            problems.add(format!("the schema accepts the gap note {refused:?}"));
         }
     }
     problems.into_result()

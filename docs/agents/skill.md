@@ -78,7 +78,11 @@ select the skill; the user can also name it.
   what it did with the session and, for a partial report or an exhausted limit, the
   resume card. Times, revisions, the session's details and the budget's limits are
   optional, since VSift recorded them; a value the agent does give must be VSift's own
-  (handoff v1 revised in place on 2026-09-29, before any release).
+  (handoff v1 revised in place on 2026-09-29, before any release). `SKILL.md` lists the
+  allowed words of every closed member beside the skeleton, and
+  `references/handoff.md` lists all of them; a gap note may quote VSift's remediation
+  whole (600 characters), and `references/resume.md` shows one exact resume card
+  (PR 3g). What to do per failure code is in `references/commands.md`.
 
 ## Keeping it in step with the CLI
 
@@ -107,7 +111,11 @@ test --workspace`) fails when the skill drifts from the CLI:
   or the handoff schema;
 - the example handoffs validate against `handoff.schema.json` and its citation,
   image-access and resume rules (a partial report or an exhausted limit carries a card
-  of at most 2 KiB);
+  of at most 2 KiB); `resume.md`'s card validates, shows every member and names a free
+  next command;
+- the vocabulary tables of `SKILL.md` (its fifteen members) and `references/handoff.md`
+  (every member) list exactly the `enum` and `const` values the schema holds, and a
+  gap note fits `VSift`'s longest fixed remediations with context;
 - the image check's code appears in no text file; `SKILL.md` stays within 300 lines,
   holds only `name` and `description` in its front matter and links every reference.
 
@@ -121,7 +129,9 @@ never write the code into any skill or documentation file.
 ## Not yet done
 
 Named-client trials (A-01..A-09 through Claude Code and Codex, the compact-model
-gates, SEC-T02 adversarial evidence) are later P12 work; see ADR 0022 for the planned
-protocol. The trial harness, its grader and the scenarios exist since P12 PR 2; how to
-run them is in the [trial runbook](trials.md). Until the trials pass, the skill is a
-candidate, not a qualified integration.
+gates, SEC-T02 adversarial evidence) are in progress; see ADR 0022 for the protocol and
+its notes for the results so far. The compact tier is Claude Sonnet 5.5 (Claude Code)
+and GPT-6-Luna (Codex) by the maintainer's decision of 2026-09-29; Claude Haiku 4.5 is
+below the supported line (known limit L-082). How to run the trials is in the
+[trial runbook](trials.md). Until the trials pass, the skill is a candidate, not a
+qualified integration.

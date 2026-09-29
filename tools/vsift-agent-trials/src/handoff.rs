@@ -5,7 +5,10 @@
 //! rules of `references/handoff.md` a schema cannot express (every cited
 //! reference exists, a partial report or an exhausted budget carries a
 //! resume card of at most 2 KiB, a visual claim rests on inspected pixels,
-//! given budget limits are the profile's). The text checks here
+//! given budget limits are the profile's). Before any check, a closed value
+//! written in another letter case is read as the schema's spelling
+//! ([`HandoffSchema::normalize_case`]); another word is still refused. The
+//! text checks here
 //! also apply to the whole final message: no local path or home prefix, no
 //! live link and no raw hidden or control character.
 
@@ -64,11 +67,139 @@ pub fn extract(message: &str) -> Result<Value, String> {
     }
 }
 
+/// The closed vocabularies of the handoff schema: every member that holds
+/// one, written as a path (`claims[].section`, `budget.exhausted[]`), with
+/// its allowed values. Read from the schema itself, so the grader and the
+/// skill's vocabulary table (checked by the CLI's `skill_contract` guard
+/// against the same schema) cannot drift from it.
+pub type Vocabulary = BTreeMap<String, BTreeSet<String>>;
+
+/// Guards the schema walk against a reference cycle; the handoff schema
+/// nests about eight levels deep.
+const MAX_SCHEMA_DEPTH: usize = 32;
+
+/// Reads every `enum` and string `const` of `schema` with the member path
+/// that holds it, following `$ref`, `oneOf`, `anyOf`, `allOf`, `properties`
+/// and `items`. Conditional subschemas (`if`, `then`, `else`, `not`) only
+/// restrict members defined elsewhere, so they are not read.
+#[must_use]
+pub fn vocabulary(schema: &Value) -> Vocabulary {
+    let mut vocabulary = Vocabulary::new();
+    collect_vocabulary(schema, schema, "", 0, &mut vocabulary);
+    vocabulary
+}
+
+fn collect_vocabulary(
+    schema: &Value,
+    node: &Value,
+    path: &str,
+    depth: usize,
+    into: &mut Vocabulary,
+) {
+    if depth > MAX_SCHEMA_DEPTH {
+        return;
+    }
+    if let Some(target) = node["$ref"]
+        .as_str()
+        .and_then(|reference| reference.strip_prefix('#'))
+        .and_then(|pointer| schema.pointer(pointer))
+    {
+        collect_vocabulary(schema, target, path, depth + 1, into);
+    }
+    for keyword in ["oneOf", "anyOf", "allOf"] {
+        for branch in node[keyword].as_array().into_iter().flatten() {
+            collect_vocabulary(schema, branch, path, depth + 1, into);
+        }
+    }
+    let mut values: Vec<String> = node["enum"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect();
+    values.extend(node["const"].as_str().map(str::to_owned));
+    if !values.is_empty() && !path.is_empty() {
+        into.entry(path.to_owned()).or_default().extend(values);
+    }
+    for (name, member) in node["properties"].as_object().into_iter().flatten() {
+        let child = if path.is_empty() {
+            name.clone()
+        } else {
+            format!("{path}.{name}")
+        };
+        collect_vocabulary(schema, member, &child, depth + 1, into);
+    }
+    if let Some(items) = node.get("items") {
+        collect_vocabulary(schema, items, &format!("{path}[]"), depth + 1, into);
+    }
+}
+
+/// Rewrites a closed value written in another letter case (`"Actual"`) to
+/// the schema's own spelling (`"actual"`) at every member of `path`, and
+/// says where. Another word is left as it is, so the schema refuses it:
+/// only the case is tolerated, never a synonym (maintainer decision,
+/// 2026-09-29).
+fn normalize_case_at(
+    value: &mut Value,
+    segments: &[&str],
+    location: &str,
+    allowed: &BTreeSet<String>,
+    notes: &mut Vec<String>,
+) {
+    let Some((first, rest)) = segments.split_first() else {
+        if let Value::String(text) = value
+            && !allowed.contains(text.as_str())
+            && let Some(canonical) = allowed
+                .iter()
+                .find(|candidate| candidate.eq_ignore_ascii_case(text))
+        {
+            notes.push(format!(
+                "{location}: {text:?} read as {canonical:?} (letter case)"
+            ));
+            text.clone_from(canonical);
+        }
+        return;
+    };
+    let (name, each) = first
+        .strip_suffix("[]")
+        .map_or((*first, false), |name| (name, true));
+    let child = if location.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{location}.{name}")
+    };
+    let Some(member) = value.get_mut(name) else {
+        return;
+    };
+    if !each {
+        normalize_case_at(member, rest, &child, allowed, notes);
+        return;
+    }
+    if let Value::Array(items) = member {
+        for (index, item) in items.iter_mut().enumerate() {
+            normalize_case_at(item, rest, &format!("{child}[{index}]"), allowed, notes);
+        }
+    }
+}
+
+/// What the handoff checks found: `problems` fail `handoff_valid`,
+/// `warnings` are recorded beside it and fail nothing.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Findings {
+    /// Schema and rule violations.
+    pub problems: Vec<String>,
+    /// Harmless departures, such as a citation no claim or instruction uses.
+    /// ([`HandoffSchema::normalize_case`] returns its own notes.)
+    pub warnings: Vec<String>,
+}
+
 /// The handoff schema, compiled once, with the budget profiles a handoff's
-/// optional `budget.limits` must agree with.
+/// optional `budget.limits` must agree with and its closed vocabularies.
 pub struct HandoffSchema {
     validator: jsonschema::Validator,
     budgets: Budgets,
+    vocabulary: Vocabulary,
 }
 
 impl HandoffSchema {
@@ -82,20 +213,48 @@ impl HandoffSchema {
         let validator = jsonschema::options()
             .build(schema)
             .map_err(|error| TrialError::Invalid(format!("handoff.schema.json: {error}")))?;
-        Ok(Self { validator, budgets })
+        Ok(Self {
+            validator,
+            budgets,
+            vocabulary: vocabulary(schema),
+        })
     }
 
-    /// Every schema and semantic problem of a handoff.
+    /// The schema's closed vocabularies.
     #[must_use]
-    pub fn problems(&self, handoff: &Value) -> Vec<String> {
-        let mut problems: Vec<String> = self
-            .validator
-            .iter_errors(handoff)
-            .map(|error| format!("{error} at {}", error.instance_path()))
-            .collect();
-        semantic_problems(handoff, &mut problems);
-        self.budget_problems(handoff, &mut problems);
-        problems
+    pub const fn vocabulary(&self) -> &Vocabulary {
+        &self.vocabulary
+    }
+
+    /// Rewrites every closed value written in another letter case to the
+    /// schema's spelling, before anything else reads the handoff, and
+    /// returns one note per rewritten value. The values are what an agent
+    /// knows, and `"Actual"` means `"actual"`; a different word (`"image"`
+    /// for a gap kind) is left for the schema to refuse.
+    #[must_use]
+    pub fn normalize_case(&self, handoff: &mut Value) -> Vec<String> {
+        let mut notes = Vec::new();
+        for (path, allowed) in &self.vocabulary {
+            let segments: Vec<&str> = path.split('.').collect();
+            normalize_case_at(handoff, &segments, "", allowed, &mut notes);
+        }
+        notes
+    }
+
+    /// Every schema and semantic problem of a handoff, and its warnings.
+    #[must_use]
+    pub fn check(&self, handoff: &Value) -> Findings {
+        let mut findings = Findings {
+            problems: self
+                .validator
+                .iter_errors(handoff)
+                .map(|error| format!("{error} at {}", error.instance_path()))
+                .collect(),
+            warnings: Vec::new(),
+        };
+        semantic_problems(handoff, &mut findings);
+        self.budget_problems(handoff, &mut findings.problems);
+        findings
     }
 
     /// `budget.limits` is optional because the profile implies it; limits
@@ -131,7 +290,15 @@ impl HandoffSchema {
 }
 
 /// The rules of `references/handoff.md` that one schema cannot express.
-fn semantic_problems(handoff: &Value, problems: &mut Vec<String>) {
+///
+/// A citation that no claim or instruction uses is a warning, not a
+/// problem (2026-09-29, PR 3g): it names real evidence, which
+/// `citations_resolve` still checks, and misleads no reader, while an
+/// agent often lists everything it opened. A claim that rests on evidence
+/// but cites none is refused by the schema (`minItems`), so it is not
+/// reported a second time here.
+fn semantic_problems(handoff: &Value, findings: &mut Findings) {
+    let problems = &mut findings.problems;
     let citations = handoff["citations"].as_array().cloned().unwrap_or_default();
     let by_id: BTreeMap<&str, &Value> = citations
         .iter()
@@ -153,12 +320,13 @@ fn semantic_problems(handoff: &Value, problems: &mut Vec<String>) {
     }
     for claim in handoff["claims"].as_array().into_iter().flatten() {
         let mut grounded = false;
-        for reference in claim["citations"]
+        let references: Vec<&str> = claim["citations"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
-        {
+            .collect();
+        for &reference in &references {
             used.insert(reference.to_owned());
             match by_id.get(reference) {
                 None => problems.push(format!("claim {} cites missing {reference}", claim["id"])),
@@ -172,7 +340,7 @@ fn semantic_problems(handoff: &Value, problems: &mut Vec<String>) {
             claim["support"].as_str(),
             Some("supported" | "partially_supported" | "contradicted")
         );
-        if rests_on_evidence && !grounded {
+        if rests_on_evidence && !references.is_empty() && !grounded {
             problems.push(format!(
                 "claim {} is {} on uninspected images only",
                 claim["id"], claim["support"]
@@ -195,9 +363,12 @@ fn semantic_problems(handoff: &Value, problems: &mut Vec<String>) {
     }
     for id in by_id.keys() {
         if !used.contains(*id) {
-            problems.push(format!("citation {id} is never used"));
+            findings
+                .warnings
+                .push(format!("citation {id} is never used"));
         }
     }
+    let problems = &mut findings.problems;
     if handoff["status"] == "partial" && handoff["resume"].is_null() {
         problems.push("a partial handoff has no resume card".to_owned());
     }

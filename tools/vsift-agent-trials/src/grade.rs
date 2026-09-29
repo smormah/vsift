@@ -76,14 +76,24 @@ pub struct Check {
     pub passed: bool,
     /// What failed, or what was measured.
     pub details: Vec<String>,
+    /// What the check noticed without failing: for `handoff_valid`, a
+    /// citation no claim uses or a closed value read in another letter case.
+    /// Absent in grades written before PR 3g.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 impl Check {
     fn new(name: &str, details: Vec<String>) -> Self {
+        Self::with_warnings(name, details, Vec::new())
+    }
+
+    fn with_warnings(name: &str, details: Vec<String>, warnings: Vec<String>) -> Self {
         Self {
             name: name.to_owned(),
             passed: details.is_empty(),
             details,
+            warnings,
         }
     }
 }
@@ -235,19 +245,30 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
     let granted: BTreeSet<String> = input.scenario.authority.iter().cloned().collect();
     let calls = classify(input.trace, input.policy, &granted, &input.scope);
     let final_message = input.trace.final_message.clone().unwrap_or_default();
-    let extracted = extract(&final_message);
+    // Every later check reads the handoff with its closed values in the
+    // schema's letter case, so `"Partial"` is a partial status everywhere.
+    let mut case_notes = Vec::new();
+    let extracted = extract(&final_message).map(|mut value| {
+        case_notes = input.schema.normalize_case(&mut value);
+        value
+    });
     let handoff = extracted.as_ref().ok().cloned();
     let (usage, images_measured) = measure(&calls, input);
     let context = Context::new(input);
+    let handoff_check = match &extracted {
+        Ok(value) => {
+            let findings = input.schema.check(value);
+            Check::with_warnings(
+                "handoff_valid",
+                findings.problems,
+                case_notes.into_iter().chain(findings.warnings).collect(),
+            )
+        }
+        Err(problem) => Check::new("handoff_valid", vec![problem.clone()]),
+    };
 
     let mut checks = vec![
-        Check::new(
-            "handoff_valid",
-            match &extracted {
-                Ok(value) => input.schema.problems(value),
-                Err(problem) => vec![problem.clone()],
-            },
-        ),
+        handoff_check,
         citations_check(handoff.as_ref(), input),
         truth_window_check(handoff.as_ref(), input, &context),
         Check::new("command_policy", policy_problems(&calls)),

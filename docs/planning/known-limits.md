@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-28 (P00-P11 complete; P12 in progress: the agent skill and the trial harness exist, named-client qualification pending; SEC-T01's adversarial evidence deferred as technical debt, L-068).
+Date: 2026-09-29 (P00-P11 complete; P12 in progress: the agent skill and the trial harness exist, named-client qualification pending; SEC-T01's adversarial evidence deferred as technical debt, L-068).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -125,6 +125,8 @@ Each entry has these fields:
 | [L-079](#l-079) | The Codex trial container's own network is not limited to the model API | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-080](#l-080) | A Codex trial agent can read its client's sign-in and its own trial's harness folder | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-081](#l-081) | A handoff may leave out the times and session details VSift recorded, so reading it alone does not give them | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
+| [L-082](#l-082) | Claude Haiku 4.5 does not follow the full investigation procedure | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-083](#l-083) | Models copy raw invisible and bidirectional characters from VSift's `text` into their reports | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 
 Counts: 4 high, 23 medium, 50 low (77 entries).
 
@@ -1793,6 +1795,63 @@ alone does not give them.**
   the skill tells agents to add the optional members when they help.
 - **Next step:** if a consumer needs self-contained handoffs, add a harness or CLI step
   that fills the optional members from the bundle, rather than asking the agent.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** open. **Review:** pending.
+
+### L-082
+
+**Claude Haiku 4.5 does not follow the full investigation procedure.**
+
+- **What:** in the compact-tier runs on `b68d746` (2026-09-29, Claude Code 2.1.284,
+  28 trials of A-01 to A-07 and SEC-T02), Claude Haiku 4.5 answered 6 of 28 questions
+  correctly and passed both results in 2 of 28. It invents its own handoff shapes
+  (claims without `section` or `support`, citations with `description` or `quote`,
+  lifecycle members of its own), exceeds the image budget, and copied a raw U+202E
+  into 4 of 5 SEC-T02 reports (L-083). Its A-02 second phase could not run in 3 of 3
+  trials because the first phase left no usable resume card.
+- **Evidence:** the local campaign summary and grades (raw logs stay local); ADR
+  0022's note of 2026-09-29; PR 3g's re-grade table (3 of 28 full passes with the PR 3g
+  grader).
+- **Impact:** a Claude Code user who picks Haiku 4.5 gets unreliable, often invalid
+  handoffs. The skill is not qualified for it.
+- **Why:** the procedure (eight states, budgets, a typed handoff) is more than this
+  model follows from the skill alone; the vocabulary fix of PR 3g does not change that.
+- **Mitigation:** the maintainer redefined the compact tier as Claude Sonnet 5.5 and
+  GPT-6-Luna (2026-09-29); [verification.md](verification.md) section 6 names it, and
+  `docs/agents/skill.md` should say which models are supported once the tier qualifies.
+- **Next step:** none planned; a later, simpler skill profile for small models would
+  be a new decision.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** pending.
+
+### L-083
+
+**Models copy raw invisible and bidirectional characters from VSift's `text` into
+their reports.**
+
+- **What:** a transcript segment's `text` is sanitised of markup but keeps
+  bidirectional controls (U+202A to U+202E, U+2066 to U+2069) and zero-width
+  characters (U+200B to U+200D, U+2060, U+FEFF) as written, and for WebVTT it decodes
+  character references such as `&#x202E;` into the raw character; `original_text`
+  keeps the reference as written. The skill's "before you send" checklist tells agents
+  to write such characters as `<U+202E>`, yet in the SEC-T02 runs on `b68d746` Claude
+  Sonnet 5.5 (1 of 5) and Claude Haiku 4.5 (4 of 5) copied a raw U+202E into their
+  final report; GPT-6-Luna (0 of 5) did not.
+- **Evidence:** `docs/contracts/cli-v1.md` (transcript import policy);
+  `crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs` asserts that `text` keeps
+  the characters; the grader's `report_text` check.
+- **Impact:** a report can carry invisible or reordering characters that make text
+  display differently from what it says (Trojan Source style) to the person who acts
+  on it. The grader fails such a report, so trials catch it; a user outside trials
+  would not be warned.
+- **Why:** `text` was defined as the payload without markup, not as display-safe text,
+  and the skill's instruction relies on the model noticing characters it cannot see.
+- **Mitigation:** the skill's checklist; the handoff schema refuses these characters
+  in every prose member; `report_text` in trials.
+- **Next step:** a proposal for the maintainer, not implemented: render these
+  characters in `text` as visible `<U+XXXX>` notation and keep the raw payload in
+  `original_text` ([ADR 0022, note of 2026-09-29](../decisions/0022-agent-skill-and-named-client-qualification.md#proposal-hidden-characters-in-text-not-implemented)).
+  It changes a published field's meaning, so it needs a contract decision.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** open. **Review:** pending.
 

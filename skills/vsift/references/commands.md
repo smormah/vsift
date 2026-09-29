@@ -130,6 +130,25 @@ vsift session clean --expired --json
 vsift job cancel <job> --json
 ```
 
+## Failure codes
+
+On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
+`error.remediation`, then:
+
+| Code | What you do |
+| --- | --- |
+| `BUSY` | Wait `retry_after_ms`, retry once, then report the gap. |
+| `INVALID_ARGUMENT` | Read the remediation, correct the request once; a `command` of `parse` means the command line itself is wrong: check it against this file or its `--help`. |
+| `MISSING_CAPABILITY` | Quote the remediation to the user; continue on another path (transcript-only or visual-only) or go to REPORT with the gap. Never install. |
+| `CANCELLED` | For a transcription, follow resume.md. |
+| `DEADLINE_EXCEEDED` | Retry once with a smaller range; otherwise report the gap. |
+| `RESOURCE_LIMIT` | Use a smaller range or fewer frames; report the gap. |
+| `IDEMPOTENCY_CONFLICT` | You reused an operation id for another request; use a new id. |
+| `INVALID_SOURCE` | The video (or part of it) cannot be read; report it. |
+| `INTEGRITY_FAILURE`, `STORAGE_IO`, `INTERNAL`, `UNSUPPORTED_SCHEMA` | Go to REPORT with the code; do not work around it. |
+
+A gap caused by a failure may carry its code in `gaps[].code`.
+
 ## Useful limits of the commands
 
 - `--limit` is 1 to 100 (default 20) for `transcript get`, `search` and `candidates`.

@@ -1,10 +1,11 @@
 # Named-client agent trials: operator runbook
 
-Status: P12 increment (PR 3e, 2026-09-29). The trial harness, its grader, the scenario
-files and the SEC-T02 tool-level suite exist. Dry A-08 trials have run for both
-clients; PR 3a, PR 3c and PR 3d fix what they showed, and PR 3e fixes what two
-diagnostic passes (39 Claude Code runs, 11 Codex runs) showed (ADR 0022's note of
-2026-09-29). **No counted trial has run.**
+Status: P12 increment (PR 3g, 2026-09-29). The trial harness, its grader, the scenario
+files and the SEC-T02 tool-level suite exist. The counted campaigns ran on `261b50d`
+(review tier: Opus 5.5, GPT-6-Astra) and the compact-tier runs on `b68d746` (Claude
+Sonnet 5.5, GPT-6-Luna, and Claude Haiku 4.5, which is below the supported line,
+L-082). PR 3g fixes the handoff vocabulary friction those runs showed; the compact tier
+needs a re-run on it (ADR 0022's notes of 2026-09-29). **The skill is not yet qualified.**
 Claude Code trials run on Windows; **Codex trials run in a Linux container**
 ([below](#codex-trials-in-a-linux-container)), because Codex's Windows sandbox cannot
 run VSift (known limit [L-076](../planning/known-limits.md#l-076)). Design:
@@ -35,7 +36,11 @@ The **mechanical** result is decided by the program; model prose cannot change i
   identities, `pixels_inspected`, gaps, untrusted instructions, `lifecycle.action`, the
   resume card when partial or a limit is exhausted); everything VSift recorded is
   optional. Given `budget.limits` must be the named profile's unless
-  `budget.overrides` is true;
+  `budget.overrides` is true. Since PR 3g, before any check reads the handoff, a closed
+  value (every `enum` and `const` of the schema) written in another letter case is read
+  as the schema's spelling (`"Actual"` as `"actual"`) and noted in the check's
+  `warnings`; another word (`"image"` for a gap kind) still fails. A citation that no
+  claim or instruction uses is a warning, not a failure;
 - `citations_resolve`: every cited identity is in the retained bundle with the
   citation's type (a segment by `segment_id`, a frame, crop or clip by `evidence_id`),
   and every optional member the handoff gives (times, revision, requested/actual/delta,
@@ -179,10 +184,12 @@ does.
    `PATH`: `run` refuses to start a client if `ffmpeg`, `ffprobe` or `whisper-cli` is
    reachable on the client's `PATH`.
 4. **Clients.** Use the executables the desktop apps install: Claude Code's `claude.exe`
-   under the Claude app's per-user `claude-code\<version>` folder (2.1.281 when this was
-   written) and the `codex.exe` the Codex app keeps in its per-user `.codex` folder
-   (codex-cli 0.155.0-alpha.16; the copy inside `WindowsApps` cannot be started
-   directly). Record both versions; `run` also records `<client> --version`.
+   under the Claude app's per-user `claude-code\<version>` folder, copied to a neutral
+   folder per version (2.1.281 ran the `261b50d` campaigns; 2.1.284 ran the Claude
+   Sonnet 5.5 runs on `b68d746`), and the `codex.exe` the Codex app keeps in its
+   per-user `.codex` folder (codex-cli 0.155.0-alpha.16; the copy inside `WindowsApps`
+   cannot be started directly). Record both versions; `run` also records
+   `<client> --version`.
 5. **Sign in once per client, into a trial home under the root.**
    - Claude Code: set `CLAUDE_CONFIG_DIR=C:\vsift-trials\.clients\claude`, start
      `claude` interactively, sign in, and exit. Nothing else is configured there; the
@@ -228,6 +235,17 @@ invalidates a trial whose client says it ignored it (`client_configuration`).
   `mkdir` refused by `dontAsk`; a `Read` of `.env` refused by the deny rule; the web
   tools absent. Claude Code still runs commands it classes as read-only, such as
   `echo`, without an allow rule; the grader fails those as non-`vsift` commands.
+- **Bundled skills.** Claude Code loads the skills it ships with into every session,
+  whatever the setting sources: the 2.1.284 init event of every Sonnet 5.5 run listed
+  sixteen besides `vsift` (among them `claude-api`, `deep-research`, `dataviz`,
+  `code-review`, `debug`, `loop` and `schedule`), each described to the model. No run
+  invoked one (every `Skill` call was `vsift`), but they cost context and invite
+  detours. Claude Code's settings schema (2.1.281 and 2.1.284) has
+  `disableBundledSkills` ("bundled skills and workflows are removed entirely ...
+  Plugins, .claude/skills/, and .claude/commands/ are unaffected"), so the trial
+  settings set it to `true` since PR 3g. It has not been checked on a run yet (PR 3g
+  made no model calls): on the next run, check that the init event's `skills` lists
+  only `vsift`.
 
 **Codex: command-line overrides only.**
 
@@ -291,10 +309,13 @@ they changed; for Claude Code runs recorded before PR 3e, also name the client h
 its spill files are recognised (`--scenario <checkout>\tools\vsift-agent-trials\scenarios\<scenario>.json`
 replaces the frozen scenario). Grade phase 1 before phase 2: a later phase reads the
 earlier phase's grade of the same file name when it exists (else `grade.json`) for the
-session it must reuse. PR 3f's re-grade of both counted campaigns wrote `grade-3f.json`:
+session it must reuse. PR 3f's re-grade of both counted campaigns wrote `grade-3f.json`;
+PR 3g's re-grade of the compact-tier runs and the review-tier runs wrote `grade-3g.json`
+(for Codex, `codex-trial.ps1 regrade -Output grade-3g.json` with images built at the
+PR's commit):
 
 ```console
-cargo run --release --locked -p vsift-agent-trials --bin vsift-agent-trials -- grade --trial C:\vsift-trials\<trial-id> --phase <n> --output grade-3f.json --repository <checkout> --client-home C:\vsift-trials\.clients\claude
+cargo run --release --locked -p vsift-agent-trials --bin vsift-agent-trials -- grade --trial C:\vsift-trials\<trial-id> --phase <n> --output grade-3g.json --repository <checkout> --client-home C:\vsift-trials\.clients\claude
 ```
 
 A bundle that an earlier grading retained (`harness/phase-<n>/harness-bundle`) is
