@@ -246,7 +246,7 @@ vsift frame burst <session> --from <from-us> --to <to-us> --max-frames <n> --jso
     there is no other web address at all: name a tool and quote VSift's remediation
     instead of linking to it;
   - no Markdown link anywhere (no `[...]` directly followed by `(...)`);
-  - no absolute path, drive letter, `\\?\` path, `/trials` or home folder: cite
+  - no absolute path, drive letter, `\\?\` path or home folder: cite
     evidence ids, and call a retained bundle "the folder you named (`<name>`)".
 - **Stop when** the handoff is written.
 
