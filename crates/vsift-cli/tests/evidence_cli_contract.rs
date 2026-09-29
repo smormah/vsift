@@ -61,10 +61,20 @@ const FRAME_MICROS: u64 = 50_000;
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
-struct OwnedRoot(PathBuf);
+/// An owned temporary folder, with the session root at `sessions` below it.
+struct OwnedRoot {
+    path: PathBuf,
+    sessions: PathBuf,
+}
 
 impl OwnedRoot {
     fn new() -> Built<Self> {
+        Self::with_sessions(Path::new("private sessions"))
+    }
+
+    /// An owned folder whose session root is `sessions` below it; the
+    /// session root's parent folders are created, the root itself is not.
+    fn with_sessions(sessions: &Path) -> Built<Self> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let sequence = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
         let path = env::temp_dir().join(format!(
@@ -72,15 +82,20 @@ impl OwnedRoot {
             std::process::id()
         ));
         fs::create_dir(&path)?;
-        Ok(Self(path))
+        let sessions = path.join(sessions);
+        let root = Self { path, sessions };
+        if let Some(parent) = root.sessions.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        Ok(root)
     }
 
     fn path(&self, child: &str) -> PathBuf {
-        self.0.join(child)
+        self.path.join(child)
     }
 
     fn sessions(&self) -> PathBuf {
-        self.path("private sessions")
+        self.sessions.clone()
     }
 
     fn user_base(&self) -> PathBuf {
@@ -91,12 +106,12 @@ impl OwnedRoot {
 impl Drop for OwnedRoot {
     fn drop(&mut self) {
         if self
-            .0
+            .path
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.starts_with(OWNED_PREFIX))
         {
-            let _ = fs::remove_dir_all(&self.0);
+            let _ = fs::remove_dir_all(&self.path);
         }
     }
 }
@@ -369,7 +384,10 @@ struct Harness {
 
 impl Harness {
     fn open() -> Built<Self> {
-        let root = OwnedRoot::new()?;
+        Self::open_in(OwnedRoot::new()?)
+    }
+
+    fn open_in(root: OwnedRoot) -> Built<Self> {
         let source = root.path("stand-in.mp4");
         fs::write(&source, b"\0\0\0\x18ftypisomframe-cli-contract")?;
         let opened = json(&vsift(&root, &["ingest", text(&source)?, "--json"])?)?;
@@ -614,6 +632,91 @@ async fn an_identical_frame_request_is_reused_with_its_verified_file() -> TestRe
     let other = json(&harness.run(&frame_get(&harness.session, "2000000", &["--json"]))?)?;
     assert!(other["error"]["code"].is_string());
     assert_eq!(harness.artifact_count()?, before);
+    Ok(())
+}
+
+/// The Windows extended-length prefix (ADR 0019 D2, 2026-09-29 note).
+#[cfg(windows)]
+const EXTENDED_LENGTH_PREFIX: &str = r"\\?\";
+
+/// The legacy Win32 path limit in UTF-16 code units, including the NUL.
+#[cfg(windows)]
+const WINDOWS_MAX_PATH: usize = 260;
+
+/// Seeds one frame in `root`'s session, answers an identical `frame get`
+/// through the binary and returns the harness (which owns the folder), the
+/// delivered path's text and the frame's committed bytes.
+#[cfg(windows)]
+async fn delivered_frame_path(root: OwnedRoot) -> Built<(Harness, String, Vec<u8>)> {
+    let harness = Harness::open_in(root)?;
+    harness.trust_tools()?;
+    let seeded = harness.seeded_frame(1_025_000).await?;
+    harness.seed(&seeded, 0)?;
+    let value = json(&harness.run(&frame_get(&harness.session, "1025000", &["--json"]))?)?;
+    assert_eq!(value["status"], "complete");
+    assert_eq!(value["data"]["reused"], true);
+    let path = value["data"]["files"][0]["path"]
+        .as_str()
+        .ok_or("no path")?
+        .to_owned();
+    let bytes = seeded.media.first().ok_or("no image")?.bytes.clone();
+    Ok((harness, path, bytes))
+}
+
+/// #210: under a session root of ordinary length, a delivered Windows path
+/// is the plain absolute form `C:\...` (which agent file tools accept), and
+/// it names exactly the file the engine verified: canonicalising it gives
+/// back the extended-length form of the same text.
+#[cfg(windows)]
+#[tokio::test]
+async fn a_short_session_root_delivers_a_plain_windows_path() -> TestResult {
+    let (_harness, path, bytes) = delivered_frame_path(OwnedRoot::new()?).await?;
+    assert!(
+        !path.starts_with(EXTENDED_LENGTH_PREFIX),
+        "a short path kept the extended-length form"
+    );
+    assert!(
+        path.encode_utf16().count() < WINDOWS_MAX_PATH,
+        "the test's session root is too long for a plain path"
+    );
+    let mut drive = path.chars();
+    assert!(
+        drive
+            .next()
+            .is_some_and(|letter| letter.is_ascii_alphabetic())
+            && drive.next() == Some(':')
+            && drive.next() == Some('\\'),
+        "a delivered path does not start with a drive"
+    );
+    assert!(Path::new(&path).is_absolute());
+    assert_eq!(
+        fs::canonicalize(&path)?,
+        PathBuf::from(format!("{EXTENDED_LENGTH_PREFIX}{path}")),
+        "the plain path names another file"
+    );
+    assert_eq!(fs::read(&path)?, bytes);
+    Ok(())
+}
+
+/// #210: when the plain form would reach `MAX_PATH`, the delivered path
+/// keeps the extended-length form `\\?\C:\...`, the documented fallback that
+/// is exact at any length.
+#[cfg(windows)]
+#[tokio::test]
+async fn a_session_root_beyond_max_path_keeps_the_extended_length_form() -> TestResult {
+    let padding = "p".repeat(120);
+    let sessions = Path::new(&padding).join(&padding).join("private sessions");
+    let (_harness, path, bytes) =
+        delivered_frame_path(OwnedRoot::with_sessions(&sessions)?).await?;
+    let plain = path
+        .strip_prefix(EXTENDED_LENGTH_PREFIX)
+        .ok_or("a long path lost the extended-length form")?;
+    assert!(
+        plain.encode_utf16().count() >= WINDOWS_MAX_PATH,
+        "the padded path is not beyond MAX_PATH"
+    );
+    assert_eq!(fs::canonicalize(&path)?, PathBuf::from(&path));
+    assert_eq!(fs::read(&path)?, bytes);
     Ok(())
 }
 

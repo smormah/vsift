@@ -228,7 +228,8 @@ two-generation session's, set by process start-up (fastest calls 104-116 ms thro
 - **Paths:** delivered paths are absolute and, on Windows, in the extended-length form
   `\\?\C:\...` the engine returns, kept verbatim because it is valid and long-path
   safe (hosts may display it as they wish); they are valid only while the session
-  exists.
+  exists. Since 2026-09-29 (#210, ADR 0019 note) Windows results write the plain form
+  `C:\...` whenever it names the same file, and the extended-length form otherwise.
 - **Manifest chain:** resolved in P10 PR 1 (above); reads now re-verify only the
   generations since the writer's chain checkpoint (known-limits L-047).
 - **Performance** was measured on one Windows machine; Ubuntu and macOS runs of the

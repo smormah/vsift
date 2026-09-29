@@ -6,19 +6,17 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P11 are complete. P12 (agent skill) is in progress.** Merged: PRs 1, 2, 3a-3f
+**P00-P11 are complete. P12 (agent skill) is in progress.** Merged: PRs 1, 2, 3a-3g
 (3e #211 `261b50d`: the review tier's counted campaigns, Opus 5.5 and GPT-6-Astra;
 3f #212 `b68d746`: the compact-tier runs, Sonnet 5.5, GPT-6-Luna, Haiku 4.5; raw logs
-local). **PR 3g** (branch `p12-pr3g-handoff-vocabulary`, in review) implements the
-maintainer's decisions of 2026-09-29: the compact tier is Sonnet 5.5 and GPT-6-Luna
-(Haiku 4.5 below the line, L-082), and the handoff's vocabulary friction is fixed now
-(the validator command is P13's, #213).
+local; 3g #214 `f018e0d`: compact tier is Sonnet 5.5 and GPT-6-Luna, Haiku 4.5 below
+the line (L-082), handoff vocabulary table and exact resume card; validator in P13,
+#213). **#210 fix** (PR #215, branch `fix/210-plain-windows-paths`, in review): Windows
+`files[].path` is plain `C:\...` when exact, `\\?\` otherwise (ADR 0019 note, L-016).
 
-1. **Review and merge PR 3g** (an increment, not the packet). Its table re-grades every
-   compact-tier run and the review tier (`grade-3g.json` beside the originals); the
-   skill text changed too (vocabulary table, exact resume card).
+1. **Review and merge PR #215** (a standalone fix, not a packet increment).
 2. **Then re-run the compact tier** (Sonnet 5.5 in Claude Code 2.1.284, GPT-6-Luna in
-   Codex) on PR 3g's merge commit, images rebuilt there; check the init event lists only
+   Codex) on the latest `main`, images rebuilt there; check the init event lists only
    `vsift` (`disableBundledSkills`). Records go to `docs/planning/p12-agent-trials/`.
 3. **Maintainer: decide the hidden-character proposal** (L-083; ADR 0022's PR 3g note:
    `text` renders bidi and zero-width characters as `<U+XXXX>`, `original_text` keeps
@@ -36,7 +34,7 @@ maintainer's decisions of 2026-09-29: the compact tier is Sonnet 5.5 and GPT-6-L
   `&#x202E;` into it); Sonnet copied one into 1 of 5 SEC-T02 reports, Haiku 4 of 5.
 - **Still open (grader):** `untrusted_listed` takes only F12-E01 (0-8 s) though the
   instructions last to 12 s; the line-filter allowance is the harness's, not the skill's.
-  L-071 (P13), L-074 (SubRip `<letter...>` tags), #210 (the `\\?\` retry) stay open.
+  L-071 (P13) and L-074 (SubRip `<letter...>` tags) stay open; #210 is in review.
 
 ## Decided (maintainer, 2026-09-28/29)
 
@@ -46,9 +44,11 @@ maintainer's decisions of 2026-09-29: the compact tier is Sonnet 5.5 and GPT-6-L
 - **P13 plan:** npm launcher over per-platform packages, no install scripts; all names
   held, no announcement before P14 (open items: P13 name checklist); a handoff
   validator command (#213).
-- **PR 3e (supervisor):** `--help` forms free, never piped; the `\\?\` retry stays
-  (#210). **PR 3f (maintainer):** orientation is housekeeping (`cd` elsewhere strict);
-  handoff v1 states only what the agent knows. **PR 3g (maintainer):** the compact tier
+- **PR 3e (supervisor):** `--help` forms free, never piped; the skill's `\\?\` retry
+  stays. **#210 (maintainer):** plain Windows paths when exact, `\\?\` only when needed;
+  the broad legacy reserved-name rule accepted. **PR 3f (maintainer):** orientation is
+  housekeeping (`cd` elsewhere strict); handoff v1 states only what the agent knows.
+  **PR 3g (maintainer):** the compact tier
   is Sonnet 5.5 and GPT-6-Luna; fix the vocabulary now, validator in P13. **PR 3g
   (supervisor):** resume card only when work can continue; keep `disableBundledSkills`.
 
@@ -67,7 +67,7 @@ maintainer's decisions of 2026-09-29: the compact tier is Sonnet 5.5 and GPT-6-L
 - #15 (P12) packet issue; #14 (P11) close with the ledger follow-up; #180 close;
   #144 close after a clean main. #170-#178 track L-011/013/015/018/024/028/043/045/042.
 - #159 motion fixtures; #150 noisy-speech fixtures; #147 faster-whisper; #128 flaky
-  Windows supervisor tests; #210 the `\\?\` image path.
+  Windows supervisor tests; #210 plain Windows image paths (PR #215).
 
 ## Other follow-ups
 
