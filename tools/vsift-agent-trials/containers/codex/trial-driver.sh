@@ -56,6 +56,11 @@ trial-driver run --trial <relative directory> --model <model> [--phase <n>]
 trial-driver grade --trial <relative directory> [--phase <n>] (harness image)
     Grades, records (not a debug run) to /exports/records/ and exports the
     harness folder (raw logs) to /exports/trials/.
+trial-driver regrade --trial <relative directory> --output <grade-name.json>
+                     [--phase <n>]                           (harness image)
+    Grades a finished trial again with this image's grader, from the raw
+    logs only, into harness/phase-<n>/<grade-name.json> beside the original
+    grade (never over it), and exports only that file.
 EOF
 }
 
@@ -231,6 +236,29 @@ cmd_grade() {
   echo "exported /exports/trials/$id/harness"
 }
 
+cmd_regrade() {
+  local relative="" phase=1 output=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --trial) relative=${2-}; shift 2 ;;
+      --phase) phase=${2-}; shift 2 ;;
+      --output) output=${2-}; shift 2 ;;
+      *) fail "unknown argument" ;;
+    esac
+  done
+  [ -e "$SRC" ] || fail "regrade needs the harness image"
+  local trial
+  trial=$(trial_directory "$relative")
+  require_match "$phase" '^[1-9]$' "phase"
+  require_match "$output" '^grade-[a-z0-9-]{1,32}\.json$' "grade file name"
+  "$HARNESS" grade --trial "$trial" --phase "$phase" --output "$output" || true
+  local id
+  id=$(basename "$trial")
+  mkdir -p "$EXPORTS/trials/$id/harness/phase-$phase"
+  cp "$trial/harness/phase-$phase/$output" "$EXPORTS/trials/$id/harness/phase-$phase/$output"
+  echo "exported /exports/trials/$id/harness/phase-$phase/$output"
+}
+
 [ -n "${VSIFT_COMMIT:-}" ] || fail "VSIFT_COMMIT is not set in the image"
 command=${1-help}
 [ $# -gt 0 ] && shift
@@ -240,6 +268,7 @@ case "$command" in
   prepare) cmd_prepare "$@" ;;
   run) cmd_run "$@" ;;
   grade) cmd_grade "$@" ;;
+  regrade) cmd_regrade "$@" ;;
   help|--help|-h) usage ;;
   *) usage; exit 2 ;;
 esac

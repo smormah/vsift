@@ -55,7 +55,9 @@ const MAX_RESUME_BYTES: usize = 2 * 1024;
 /// Placeholders the skill's command lines use, with a value the parser
 /// accepts. An unknown placeholder fails the guard, so a new one is added here
 /// deliberately.
-const PLACEHOLDERS: [(&str, &str); 21] = [
+const PLACEHOLDERS: [(&str, &str); 23] = [
+    ("namespace", "session"),
+    ("operation", "retain"),
     ("video", "recording.mp4"),
     ("transcript", "recording.srt"),
     ("offset-us", "500000"),
@@ -113,6 +115,18 @@ const FREE_FORMS: [(&str, &str); 1] = [("session.clean", "--dry-run")];
 /// (2026-09-28) a strong model chained `date` before and after its commands
 /// to time itself, so the examples never show any other combination.
 const LINE_FILTER_SUFFIX: &str = " | tail -n 1";
+
+/// The identifier the guard gives a help form (`vsift --help`, `vsift
+/// <namespace> <operation> --help`). It is not a [`CommandName`]: it runs no
+/// operation, it only prints the parser's usage text, and the skill classes
+/// it `free` so an agent can recover a command's flags (added 2026-09-29,
+/// after a small model guessed `session retain --directory` and piped the
+/// help through `grep`). The trial grader reads the same forms from
+/// `commands.md`.
+const HELP_IDENTIFIER: &str = "help";
+
+/// The flag of the help forms; clap adds it to every command.
+const HELP_FLAG: &str = "--help";
 
 /// Shell syntax that joins, pipes, redirects or substitutes commands.
 const SHELL_OPERATORS: [&str; 8] = ["&&", "||", ";", "|", ">", "<", "$(", "`"];
@@ -470,8 +484,37 @@ fn policy_table(problems: &mut Problems) -> Result<BTreeMap<String, Class>, Stri
     Ok(table)
 }
 
+/// Checks a help form: `vsift`, then only subcommand words, then `--help`,
+/// which the parser answers with its help text. Returns whether `arguments`
+/// is one; a help form the parser does not answer with help is a problem.
+fn check_help_form(source: &str, arguments: &[String], problems: &mut Problems) -> bool {
+    let Some((last, words)) = arguments.split_last() else {
+        return false;
+    };
+    if last != HELP_FLAG {
+        return false;
+    }
+    let mut command = Cli::command();
+    for word in words.iter().skip(1) {
+        let Some(next) = command.find_subcommand(word).cloned() else {
+            problems.add(format!(
+                "{source}: {arguments:?}: {word} is not a subcommand, so this is no help form"
+            ));
+            return true;
+        };
+        command = next;
+    }
+    match Cli::try_parse_from(arguments) {
+        Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp => {}
+        _ => problems.add(format!(
+            "{source}: {arguments:?} does not print the parser's help"
+        )),
+    }
+    true
+}
+
 /// Checks one `vsift` command line from a console fence and returns its
-/// operation identifier.
+/// operation identifier ([`HELP_IDENTIFIER`] for a help form).
 fn check_console_command(
     source: &str,
     line: &str,
@@ -482,6 +525,9 @@ fn check_console_command(
         None => (line, false),
     };
     let arguments = split_arguments(&substitute(command)?)?;
+    if !filtered && check_help_form(source, &arguments, problems) {
+        return Ok(Some(HELP_IDENTIFIER.to_owned()));
+    }
     let cli = match Cli::try_parse_from(&arguments) {
         Ok(cli) => cli,
         Err(error) => {
@@ -572,6 +618,104 @@ fn skill_md_has_front_matter_states_and_a_size_bound() -> Result<(), String> {
     problems.into_result()
 }
 
+/// `SKILL.md` without line breaks, so a rule can be found whatever its wrap.
+fn flattened_skill_md() -> Result<String, String> {
+    Ok(read_text(&skill_directory().join("SKILL.md"))?
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" "))
+}
+
+/// The REPORT state carries a filled-in minimal handoff, not only a link,
+/// and every stop ends there. In the diagnostic passes (2026-09-29) small
+/// models ended without a handoff when a tool was missing ("explain the
+/// remediation and stop"), wrote free-form reports or blocks with invented
+/// schemas, and one wrote the report to a file.
+#[test]
+fn skill_md_report_state_shows_a_valid_minimal_handoff() -> Result<(), String> {
+    let text = read_text(&skill_directory().join("SKILL.md"))?;
+    let start = text.find("### 7. REPORT").ok_or("SKILL.md lacks REPORT")?;
+    let end = text[start..]
+        .find("### 8. CLOSE_OR_RETAIN")
+        .map(|length| start + length)
+        .ok_or("SKILL.md lacks CLOSE_OR_RETAIN after REPORT")?;
+    let section = parse_markdown("REPORT".to_owned(), &text[start..end]);
+    let blocks: Vec<&Fence> = section
+        .fences
+        .iter()
+        .filter(|fence| fence.info == "vsift-handoff")
+        .collect();
+    let mut problems = Problems::default();
+    let [block] = blocks.as_slice() else {
+        return Err(format!(
+            "REPORT must show exactly one vsift-handoff block, found {}",
+            blocks.len()
+        ));
+    };
+    let handoff: Value = serde_json::from_str(&block.lines.join("\n"))
+        .map_err(|error| format!("REPORT's vsift-handoff block is not JSON: {error}"))?;
+    let schema = read_json(&skill_directory().join("handoff.schema.json"))?;
+    let validator = jsonschema::options()
+        .build(&schema)
+        .map_err(|error| format!("handoff.schema.json is not a valid schema: {error}"))?;
+    for error in validator.iter_errors(&handoff) {
+        problems.add(format!(
+            "REPORT's handoff: {error} at {}",
+            error.instance_path()
+        ));
+    }
+    check_handoff_semantics("REPORT's handoff", &handoff, &mut problems);
+    let flat = flattened_skill_md()?;
+    for needle in [
+        "Every stop ends in REPORT",
+        "exactly one** fenced `vsift-handoff` block",
+        "Never create, edit or save a file",
+        "Never `cd`",
+        "run nothing else to check",
+        "**Before you send**",
+    ] {
+        if !flat.contains(needle) {
+            problems.add(format!("SKILL.md does not say {needle:?}"));
+        }
+    }
+    if flat.contains("remediation to the user and stop") {
+        problems.add("SKILL.md still stops without a handoff".to_owned());
+    }
+    problems.into_result()
+}
+
+/// The compact limits stand in `SKILL.md`'s rules as numbers, equal to the
+/// `compact` column of `budgets.md`: a small model used `--limit 100` and
+/// 43 tool calls when the rules only named the profile (2026-09-29).
+#[test]
+fn skill_md_states_the_compact_limits_from_budgets_md() -> Result<(), String> {
+    let budgets = read_text(&skill_directory().join("references").join("budgets.md"))?;
+    let compact = |row: &str| -> Result<String, String> {
+        budgets
+            .lines()
+            .find_map(|line| {
+                let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+                (cells.get(1) == Some(&row)).then(|| cells.get(2).map(|cell| (*cell).to_owned()))
+            })
+            .flatten()
+            .ok_or_else(|| format!("budgets.md has no {row:?} row"))
+    };
+    let flat = flattened_skill_md()?;
+    let mut problems = Problems::default();
+    for needle in [
+        format!("at most {} tool calls", compact("Tool calls")?),
+        format!("{} images in total", compact("Images in total")?),
+        format!("{} image per step", compact("Images per step")?),
+        format!("`--limit {}`", compact("Page size")?),
+        format!("`--max-frames {}`", compact("Burst frames")?),
+    ] {
+        if !flat.contains(&needle) {
+            problems.add(format!("SKILL.md's rules do not state {needle:?}"));
+        }
+    }
+    problems.into_result()
+}
+
 /// `FIND_SPOKEN_SPANS` starts with `vsift search`: its hits carry the segment
 /// identities and times a handoff cites, and A-08 requires search. In the
 /// first dry trial (2026-09-28) a strong model read a short transcript whole
@@ -655,7 +799,12 @@ fn console_commands_parse_and_respect_their_class() -> Result<(), String> {
                 else {
                     continue;
                 };
-                match (policy.get(&identifier), wanted) {
+                let class = if identifier == HELP_IDENTIFIER {
+                    Some(&Class::Free)
+                } else {
+                    policy.get(&identifier)
+                };
+                match (class, wanted) {
                     (None, _) => problems.add(format!(
                         "{}: {identifier} has no class in commands.md",
                         document.name
@@ -831,12 +980,16 @@ fn the_skill_forbids_other_programs_and_self_timing() -> Result<(), String> {
 #[test]
 fn inline_commands_and_flags_exist() -> Result<(), String> {
     let mut problems = Problems::default();
-    let flags = every_long_flag();
+    let mut flags = every_long_flag();
+    flags.insert(HELP_FLAG.to_owned());
     let globals = long_flags(&Cli::command());
     for document in markdown_files()? {
         for span in inline_spans(&document, &mut problems) {
             if span.starts_with("vsift ") {
                 let arguments = split_arguments(&substitute(&span)?)?;
+                if check_help_form(&document.name, &arguments, &mut problems) {
+                    continue;
+                }
                 let Some((identifier, leaf)) = resolve_operation(&arguments) else {
                     problems.add(format!(
                         "{}: `{span}` does not name a vsift operation",

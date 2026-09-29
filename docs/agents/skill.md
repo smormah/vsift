@@ -1,6 +1,6 @@
 # The VSift agent skill
 
-Status: P12 increments (2026-09-28). The skill exists and its command and schema
+Status: P12 increments (2026-09-29). The skill exists and its command and schema
 references are held to the CLI by tests; the trial harness is built
 ([runbook](trials.md)); it has **not** yet been qualified with named agent clients
 (A-01..A-09, SEC-T02). Design: [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Proposed).
@@ -65,8 +65,14 @@ select the skill; the user can also name it.
   explicit instruction; managed installation, worker-host commands and any other
   executable are never run by the skill, not even `date` to time itself: the host
   measures and enforces the wall time, and the handoff reports it as `null` when the
-  agent could not measure it. Each `vsift` command runs alone; the only addition is
-  `| tail -n 1` after `--events jsonl`.
+  agent could not measure it. Each `vsift` command runs alone, from the folder the
+  agent started in (never after `cd`); the only addition is `| tail -n 1` after
+  `--events jsonl`. `vsift --help` and `vsift <namespace> <operation> --help` are free,
+  read whole, to recover a command's flags.
+- **Reporting.** Every stop, including a missing tool, an expired session or an
+  exhausted budget, ends with the handoff as the final message: one `vsift-handoff`
+  block (`SKILL.md` shows the smallest valid one), never a file, with no web address,
+  Markdown link or local path (added 2026-09-29 after the diagnostic passes).
 
 ## Keeping it in step with the CLI
 
@@ -76,7 +82,11 @@ test --workspace`) fails when the skill drifts from the CLI:
 - every `vsift` line in a `console` block of the skill (and of this page) parses with
   the real parser, uses `--json` or `--events jsonl` and no operator-only option, and
   has the class its place requires; nothing is chained, piped or redirected except
-  `| tail -n 1` after `--events jsonl`;
+  `| tail -n 1` after `--events jsonl`; a help form (`--help` after nothing, a
+  namespace or an operation) must make the parser print its help, and is free;
+- the REPORT state's minimal handoff validates against `handoff.schema.json`, and the
+  rules state the stop-in-REPORT, no-file, no-`cd` and setup-check rules and the
+  `compact` limits as the numbers `budgets.md` gives;
 - every operation id the skill shows parses as one (`op_` and 16 to 64 lowercase
   letters or digits), and `SKILL.md` shows a valid example before its first command
   that takes one; the rules forbid every other program and self-timing;

@@ -214,15 +214,7 @@ fn build_video(
         }
         Some(ClipBuild::Blur { region, .. }) => {
             let ffmpeg = required(request.ffmpeg.as_ref(), "ffmpeg")?;
-            let [x, y, width, height] = *region;
-            // A box blur as wide as the plane allows removes 5x7 glyph
-            // strokes six pixels wide; the luma radius must stay within half
-            // the region's smaller side, the chroma radius within a quarter.
-            let luma = (width.min(height) / 2).saturating_sub(1).max(1);
-            let chroma = (width.min(height) / 4).saturating_sub(1).max(1);
-            let filter = format!(
-                "[0:v]split[base][copy];[copy]crop={width}:{height}:{x}:{y},boxblur=luma_radius={luma}:luma_power=6:chroma_radius={chroma}:chroma_power=6[blur];[base][blur]overlay={x}:{y}[out]"
-            );
+            let filter = blur_filter(*region);
             ffmpeg_run(
                 ffmpeg,
                 &arguments(&[
@@ -250,6 +242,26 @@ fn build_video(
         file_digest(&target)?,
     );
     Ok(target)
+}
+
+/// The `FFmpeg` filter graph that blurs `[x, y, width, height]` of the video
+/// beyond reading and leaves the rest untouched.
+///
+/// It uses `gblur` (Gaussian blur), an LGPL filter present in both `FFmpeg`
+/// builds the trials use: the gyan.dev full build on Windows and the `BtbN`
+/// LGPL build in the Codex container. `boxblur`, used before, is GPL-only,
+/// so the container's build refused it ("No such filter: 'boxblur'", the
+/// Codex diagnostic pass of 2026-09-29). A sigma of half the region's
+/// smaller side, over six steps, smears the banner's glyph strokes (a few
+/// pixels wide) across the whole strip; the check that the code is
+/// unreadable is recorded in ADR 0022's 2026-09-29 note.
+#[must_use]
+pub fn blur_filter(region: [u32; 4]) -> String {
+    let [x, y, width, height] = region;
+    let sigma = (width.min(height) / 2).max(1);
+    format!(
+        "[0:v]split[base][copy];[copy]crop={width}:{height}:{x}:{y},gblur=sigma={sigma}:steps=6:planes=15[blur];[base][blur]overlay={x}:{y}[out]"
+    )
 }
 
 /// A `SubRip` time.
@@ -602,4 +614,22 @@ fn render_prompts(
             Ok(text)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Codex diagnostic pass (2026-09-29): the container's LGPL `FFmpeg`
+    /// has no `boxblur`, so A-09-f05-blurred could not be prepared there.
+    #[test]
+    fn the_blur_uses_an_lgpl_filter_on_the_region_only() {
+        let filter = blur_filter([120, 460, 420, 62]);
+        assert!(!filter.contains("boxblur"), "{filter}");
+        assert!(
+            filter.contains("crop=420:62:120:460,gblur=sigma=31:steps=6"),
+            "{filter}"
+        );
+        assert!(filter.ends_with("overlay=120:460[out]"), "{filter}");
+    }
 }

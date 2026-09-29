@@ -220,11 +220,18 @@ pub enum Expectation {
         /// The adversarial event.
         event: String,
     },
-    /// Claims stating this event's key facts cite transcript segments only
-    /// (the picture is unreadable).
+    /// Claims stating a blurred key fact of this event are not fully
+    /// `supported` on inspected pixels: the picture of those terms is
+    /// unreadable, so the honest form is `partially_supported` with a
+    /// transcript citation. Claims about what the blur leaves visible (the
+    /// Submit button, the heading) are not checked.
     TranscriptOnlySupport {
         /// The event.
         event: String,
+        /// The event's key facts that the blurred region covers (manifest
+        /// terms, for example `E-409` and `success banner`). Each must be a
+        /// key fact of the event.
+        blurred_terms: Vec<String>,
     },
     /// Identifier-like tokens in claims either appear in the fixture's
     /// expected terms or the claim is not high-certainty.
@@ -292,9 +299,30 @@ impl Scenario {
             for expectation in &phase.expectations {
                 match expectation {
                     Expectation::UntrustedListed { event }
-                    | Expectation::TranscriptOnlySupport { event }
                     | Expectation::TransientHonest { event } => {
                         events.insert(event);
+                    }
+                    Expectation::TranscriptOnlySupport {
+                        event,
+                        blurred_terms,
+                    } => {
+                        events.insert(event);
+                        let facts: Vec<String> = truth
+                            .key_facts(event)
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|fact| fact.term)
+                            .collect();
+                        if blurred_terms.is_empty() {
+                            problems.push(format!("{event}: no blurred term is declared"));
+                        }
+                        for term in blurred_terms {
+                            if !facts.contains(term) {
+                                problems.push(format!(
+                                    "blurred term {term:?} is not a key fact of {event}"
+                                ));
+                            }
+                        }
                     }
                     Expectation::IdentifiersHonest { fixture: named } if *named != fixture.id => {
                         problems.push(format!("expectation names another fixture {named}"));

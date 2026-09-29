@@ -21,7 +21,7 @@ use vsift_agent_trials::{
     TrialError,
     claude_trust::{CLAUDE_STATE_FILE, project_key},
     error::write_json,
-    evaluate::grade_phase,
+    evaluate::{GradeOptions, grade_phase},
     layout::{PreparedState, TrialLayout, TrialManifest},
     record::{MAX_RECORD_BYTES, write_record},
     roots::RootPolicy,
@@ -287,7 +287,7 @@ async fn run_passes_an_explicit_argument_list_and_a_cleared_environment() -> Tes
         fs::canonicalize(trial.layout.workspace())?
     );
 
-    let graded = grade_phase(&trial.layout, 1)?;
+    let graded = grade_phase(&trial.layout, 1, &GradeOptions::default())?;
     let failed: Vec<&str> = graded
         .mechanical
         .checks
@@ -298,6 +298,7 @@ async fn run_passes_an_explicit_argument_list_and_a_cleared_environment() -> Tes
     assert!(failed.is_empty(), "{failed:?}");
     assert!(graded.interpretation.passed, "{:?}", graded.interpretation);
     assert!(trial.layout.phase(1).join("grade.json").is_file());
+    a_regrade_writes_beside_the_original(&trial.layout, graded.mechanical.passed)?;
 
     // The bounded record: under 64 KiB, local paths and the canary
     // replaced by tokens, the raw log identified by its digest only.
@@ -414,6 +415,34 @@ async fn claude_code_gets_one_settings_source_in_a_trusted_workspace() -> TestRe
     Ok(())
 }
 
+/// A re-grade (PR 3e) writes beside the original grade and never over it;
+/// a file name that is not a plain `.json` name is refused.
+fn a_regrade_writes_beside_the_original(layout: &TrialLayout, passed: bool) -> TestResult {
+    let original = fs::read(layout.phase(1).join("grade.json"))?;
+    let again = GradeOptions {
+        output: Some("grade-3e.json".to_owned()),
+        ..GradeOptions::default()
+    };
+    let regraded = grade_phase(layout, 1, &again)?;
+    assert_eq!(regraded.mechanical.passed, passed);
+    assert!(layout.phase(1).join("grade-3e.json").is_file());
+    assert_eq!(fs::read(layout.phase(1).join("grade.json"))?, original);
+    for refused in ["../grade.json", "grade.txt", ".json"] {
+        let options = GradeOptions {
+            output: Some(refused.to_owned()),
+            ..GradeOptions::default()
+        };
+        assert!(
+            matches!(
+                grade_phase(layout, 1, &options),
+                Err(TrialError::Refused(_))
+            ),
+            "{refused}"
+        );
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult {
     let trial = Trial::new("A-05-f07-images-disabled")?;
@@ -430,10 +459,24 @@ async fn codex_gets_its_sandbox_and_the_session_root_as_writable() -> TestResult
         "sandbox_workspace_write.network_access=false",
         "sandbox_workspace_write.exclude_tmpdir_env_var=true",
         "sandbox_workspace_write.exclude_slash_tmp=true",
-        "tools.view_image=false",
     ] {
         assert!(arguments.iter().any(|argument| argument == flag), "{flag}");
     }
+    // The Codex diagnostic pass (2026-09-29): codex-cli 0.155 reported
+    // "`tools.view_image` is ignored" and let the agent view images. The
+    // images-disabled scenario turns the `view_image` feature off instead.
+    assert!(
+        arguments
+            .windows(2)
+            .any(|pair| pair[0] == "--disable" && pair[1] == "view_image"),
+        "{arguments:?}"
+    );
+    assert!(
+        !arguments
+            .iter()
+            .any(|argument| argument.contains("tools.view_image"))
+    );
+    assert_eq!(record.client_home, Some(trial.root.join("client-home")));
     // Without a Windows sandbox mode codex-cli 0.155 rejects every command
     // ("blocked by policy", the first dry trial).
     assert_eq!(
@@ -500,7 +543,7 @@ async fn a_debug_run_uses_the_operators_prompt_and_is_never_a_trial() -> TestRes
     )?;
     assert!(!arguments.contains(&scenario_prompt));
     // grade marks it invalid; record refuses it.
-    let graded = grade_phase(&trial.layout, 1)?;
+    let graded = grade_phase(&trial.layout, 1, &GradeOptions::default())?;
     assert!(!graded.is_valid());
     assert!(
         graded
@@ -548,7 +591,7 @@ async fn a_sign_in_value_in_the_output_fails_no_canary_and_is_never_logged() -> 
         !run_json.contains(SIGN_IN_PART),
         "the value is never logged"
     );
-    let graded = grade_phase(&trial.layout, 1)?;
+    let graded = grade_phase(&trial.layout, 1, &GradeOptions::default())?;
     let no_canary = graded
         .mechanical
         .checks

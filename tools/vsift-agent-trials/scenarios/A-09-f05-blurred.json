@@ -3,7 +3,7 @@
   "tests": [
     "A-09"
   ],
-  "purpose": "F05 with E-409 blurred beyond reading: the error code is supported by the transcript only.",
+  "purpose": "F05 with the error-banner strip (E-409, no success banner) blurred beyond reading: those terms rest on the transcript; the Submit button and the heading stay visible.",
   "fixture": {
     "id": "F05",
     "file": "F05-speech.mp4",
@@ -50,7 +50,11 @@
       "expectations": [
         {
           "kind": "transcript_only_support",
-          "event": "F05-E03"
+          "event": "F05-E03",
+          "blurred_terms": [
+            "E-409",
+            "success banner"
+          ]
         }
       ]
     }

@@ -10,7 +10,7 @@ use std::{
 use clap::{Parser, Subcommand, ValueEnum};
 use vsift_agent_trials::{
     TrialError,
-    evaluate::{environment_user_names, grade_phase},
+    evaluate::{GradeOptions, environment_user_names, grade_phase},
     layout::TrialLayout,
     policy::CommandPolicy,
     prepare::{PrepareRequest, prepare},
@@ -108,7 +108,7 @@ enum Step {
         #[arg(long)]
         debug_prompt: Option<String>,
     },
-    /// Grades a phase that run finished.
+    /// Grades a phase that run finished (again, with the options below).
     Grade {
         /// The trial directory.
         #[arg(long)]
@@ -116,6 +116,19 @@ enum Step {
         /// The phase, from 1.
         #[arg(long, default_value_t = 1)]
         phase: usize,
+        /// The grade's file name in harness/phase-<n>/ (default grade.json);
+        /// a re-grade writes beside the original, for example grade-3e.json.
+        #[arg(long)]
+        output: Option<String>,
+        /// A checkout whose skill and corpus truth replace the trial's.
+        #[arg(long)]
+        repository: Option<PathBuf>,
+        /// An amended scenario file of the same scenario.
+        #[arg(long)]
+        scenario: Option<PathBuf>,
+        /// The client home, for run records that did not keep it.
+        #[arg(long)]
+        client_home: Option<PathBuf>,
     },
     /// Writes a bounded record of a graded phase.
     Record {
@@ -229,8 +242,24 @@ async fn execute(step: Step) -> Result<String, TrialError> {
                 record.phase, record.exit_code, record.timed_out, record.wall_ms
             ))
         }
-        Step::Grade { trial, phase } => {
-            let graded = grade_phase(&TrialLayout::new(trial), phase)?;
+        Step::Grade {
+            trial,
+            phase,
+            output,
+            repository,
+            scenario,
+            client_home,
+        } => {
+            let graded = grade_phase(
+                &TrialLayout::new(trial),
+                phase,
+                &GradeOptions {
+                    output,
+                    repository,
+                    scenario,
+                    client_home,
+                },
+            )?;
             let failed: Vec<&str> = graded
                 .mechanical
                 .checks

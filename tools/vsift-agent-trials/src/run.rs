@@ -31,8 +31,16 @@
 //! -c approval_policy="never" -c sandbox_workspace_write.network_access=false
 //! -c sandbox_workspace_write.writable_roots=['<session root or per-user base>']
 //! -c sandbox_workspace_write.exclude_tmpdir_env_var=true
-//! -c sandbox_workspace_write.exclude_slash_tmp=true <prompt>`, with
-//! `CODEX_HOME` the operator's signed-in trial home. Codex trials run on
+//! -c sandbox_workspace_write.exclude_slash_tmp=true [--disable view_image]
+//! <prompt>`, with `CODEX_HOME` the operator's signed-in trial home. A
+//! scenario without images turns Codex's image tool off with `--disable
+//! view_image` (the `view_image` feature); the earlier `-c
+//! tools.view_image=false` was an unknown setting Codex ignored (the Codex
+//! diagnostic pass, 2026-09-29). The run stays `--ephemeral`: a debug run
+//! without it (2026-09-29) showed that codex-cli 0.155's session rollout
+//! records an image view only inside a code-mode `exec` tool call, not as a
+//! `view_image` record a harness could count, so Codex's image budgets
+//! remain unmeasured (known limit L-075). Codex trials run on
 //! Linux, inside the trial container (`tools/vsift-agent-trials/containers/
 //! codex`), where Codex's own Linux sandbox (its bundled bubblewrap) keeps
 //! writes to the workspace and the writable roots and takes the network
@@ -92,6 +100,10 @@ const WINDOWS_PASSTHROUGH: [&str; 9] = [
 /// The Windows sandbox mode Codex runs with: the restricted-token sandbox,
 /// which needs no administrator setup (see the module documentation).
 pub const CODEX_WINDOWS_SANDBOX: &str = "windows.sandbox=\"unelevated\"";
+
+/// Codex's feature for its image tool; `codex features list` shows it as
+/// stable and on by default, and `--disable` turns it off for one run.
+pub const CODEX_IMAGE_FEATURE: &str = "view_image";
 
 /// Executables that must not be reachable on the client's `PATH`: the
 /// dependency picture must come from registrations alone.
@@ -164,6 +176,12 @@ pub struct RunRecord {
     /// written before this field existed.
     #[serde(default)]
     pub sign_in_leak_check: Option<LeakCheck>,
+    /// The client home the run used, so `grade` can recognise the client's
+    /// own spill files below it. `None` in run records written before this
+    /// field existed (`grade --client-home` supplies it then). Local only:
+    /// `record` never copies it.
+    #[serde(default)]
+    pub client_home: Option<PathBuf>,
     /// Start time, Unix seconds.
     pub started_unix_s: u64,
     /// Wall time.
@@ -282,7 +300,7 @@ pub fn client_arguments(
                 arguments.extend(["-c".to_owned(), CODEX_WINDOWS_SANDBOX.to_owned()]);
             }
             if scenario.image_policy == ImagePolicy::Disabled {
-                arguments.extend(["-c".to_owned(), "tools.view_image=false".to_owned()]);
+                arguments.extend(["--disable".to_owned(), CODEX_IMAGE_FEATURE.to_owned()]);
             }
             arguments.push(prompt.to_owned());
             arguments
@@ -482,6 +500,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         client_setup,
         debug_prompt: request.debug_prompt.is_some(),
         sign_in_leak_check: Some(sign_in_leak_check),
+        client_home: Some(request.client_home.clone()),
         started_unix_s,
         wall_ms,
         exit_code,

@@ -21,8 +21,16 @@ use crate::trace::ClientKind;
 /// Lower-case phrases that show the client ignored or could not apply part
 /// of its configuration: settings, permission rules, the sandbox or the
 /// skill.
-const CONFIGURATION_PHRASES: [&str; 16] = [
+const CONFIGURATION_PHRASES: [&str; 20] = [
     "has not been trusted",
+    // Codex reports a setting it does not know as a stream item of type
+    // `error` ("Codex is ignoring 1 unrecognized configuration setting ...
+    // `tools.view_image` is ignored", the Codex diagnostic pass of
+    // 2026-09-29), not on stderr.
+    "unrecognized configuration",
+    "is ignoring",
+    "is ignored",
+    "deprecated setting",
     "entries from .claude/settings",
     "invalid settings",
     "settings error",
@@ -59,8 +67,10 @@ pub fn configuration_warnings(client: ClientKind, stdout: &str, stderr: &str) ->
             continue;
         };
         for notice in client_notices(client, &event) {
-            if names_configuration(&notice) {
-                warnings.push(report("stream", &notice));
+            if names_configuration(&notice.text)
+                || (notice.error && names_configuration_topic(&notice.text))
+            {
+                warnings.push(report("stream", &notice.text));
             }
         }
     }
@@ -75,32 +85,54 @@ fn names_configuration(text: &str) -> bool {
         .any(|phrase| lower.contains(phrase))
 }
 
+/// Whether a client's own error notice is about its configuration, a
+/// setting or its sandbox, whatever the wording: an error of that kind
+/// always means the trial did not run as configured.
+fn names_configuration_topic(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    ["config", "setting", "sandbox"]
+        .iter()
+        .any(|topic| lower.contains(topic))
+}
+
+/// One piece of text in which the client itself speaks.
+struct Notice {
+    text: String,
+    /// Whether the client reported it as an error (Codex `error` events and
+    /// items), which counts on its topic alone.
+    error: bool,
+}
+
 fn report(source: &str, text: &str) -> String {
     let trimmed: String = text.trim().chars().take(MAX_REPORT_CHARS).collect();
     format!("{source}: {trimmed}")
 }
 
 /// The text of a stream event that is the client speaking, not a tool.
-fn client_notices(client: ClientKind, event: &Value) -> Vec<String> {
-    let strings = |value: &Value| -> Vec<String> {
+fn client_notices(client: ClientKind, event: &Value) -> Vec<Notice> {
+    let strings = |value: &Value, error: bool| -> Vec<Notice> {
         ["message", "text", "content", "warning", "error"]
             .iter()
-            .filter_map(|field| value[*field].as_str().map(str::to_owned))
+            .filter_map(|field| value[*field].as_str())
+            .map(|text| Notice {
+                text: text.to_owned(),
+                error,
+            })
             .collect()
     };
     match client {
         ClientKind::ClaudeCode | ClientKind::ProcedureWalker => {
             if event["type"] == "system" {
-                strings(event)
+                strings(event, false)
             } else {
                 Vec::new()
             }
         }
         ClientKind::Codex => {
             if event["type"] == "error" {
-                strings(event)
+                strings(event, true)
             } else if event["item"]["type"] == "error" {
-                strings(&event["item"])
+                strings(&event["item"], true)
             } else if event["item"]["type"] == "command_execution" {
                 // Codex's Linux sandbox reports its own failure as the
                 // command's output, before the command runs ("bwrap: Can't
@@ -110,7 +142,12 @@ fn client_notices(client: ClientKind, event: &Value) -> Vec<String> {
                 event["item"]["aggregated_output"]
                     .as_str()
                     .filter(|output| output.trim_start().starts_with("bwrap: "))
-                    .map(|output| vec![format!("sandbox failed a command: {output}")])
+                    .map(|output| {
+                        vec![Notice {
+                            text: format!("sandbox failed a command: {output}"),
+                            error: false,
+                        }]
+                    })
                     .unwrap_or_default()
             } else {
                 Vec::new()

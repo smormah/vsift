@@ -20,6 +20,15 @@ only thing ever added to a `vsift` command line.
 Run each command on its own, as one tool call: never chain commands with `&&`, `||`
 or `;`, never pipe into anything else, never redirect output into a file.
 
+Run every command from the folder you started in: it holds the user's files, and the
+paths the user gives are relative to it. Never `cd` anywhere first, and never into
+this skill's folder, which holds only instructions.
+
+If you are unsure of a command's flags, read its help, which runs nothing and is
+`free`: `vsift --help` lists the commands, `vsift <namespace> <operation> --help`
+(for example `vsift session retain --help`) shows one command's flags. Read the help
+whole; do not pipe it into `grep`, `head` or anything else.
+
 ## Command classes
 
 | Command | Class | Notes |
@@ -105,6 +114,8 @@ vsift job resume <job> --events jsonl | tail -n 1
 vsift session close <session> --json
 vsift session clean --expired --dry-run --json
 vsift bundle validate <bundle-directory> --json
+vsift --help
+vsift <namespace> <operation> --help
 ```
 
 Only on the user's explicit instruction:
