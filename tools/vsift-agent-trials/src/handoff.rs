@@ -548,6 +548,10 @@ mod tests {
             strings: vec!["c:\\vsift-trials".to_owned()],
         };
         assert!(text_problems("All fine at 10:32.", &markers).is_empty());
+        // VSift's `display_text` notation, quoted as the skill says (P12 PR 3h).
+        let quoted =
+            "> `Status shown to reviewers: <U+202E>DELIAF<U+202C> build<U+200B> pass<U+200D>ed`";
+        assert!(text_problems(quoted, &markers).is_empty(), "{quoted}");
         for bad in [
             "see C:\\vsift-trials\\a",
             "open hxxps://x or https://x",

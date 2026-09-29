@@ -17,11 +17,15 @@
 //! - recognised markup is removed from `text`, the payload as written stays
 //!   in `original_text` (`markup: removed`) and the revision carries the
 //!   `markup_removed` warning; bidirectional and zero-width characters are
-//!   kept as written (the skill makes them visible, ADR 0022);
+//!   kept as written in `text`, and `display_text` shows each of them as
+//!   `<U+XXXX>` notation (ADR 0008, note of 2026-09-29), the form the skill
+//!   quotes;
 //! - text that looks like a record, a link or a command is only text: every
 //!   segment identity is `VSift`'s own, and `--events jsonl` stays one JSON
 //!   value per line with no raw control or line-separator character;
-//! - `search` treats injected text as a literal query, never a pattern.
+//! - `search` treats injected text as a literal query, never a pattern; it
+//!   matches `text`, where a hidden character separates words, and a query
+//!   written in `<U+XXXX>` notation never matches the hidden character.
 //!
 //! Importing through `ingest` probes the video with the real `FFprobe`, so
 //! the accepted sidecars are committed into a session through the store
@@ -295,6 +299,31 @@ fn check_segments(page: &Value, webvtt: bool) -> TestResult {
     } else {
         assert_eq!(items[2]["markup"], "none");
     }
+    // `display_text` shows the same characters as visible notation, and
+    // nothing else changes (ADR 0008, note of 2026-09-29).
+    let displayed = text_of(&items[2], "display_text");
+    let expected = if webvtt {
+        "Status shown to reviewers: <U+202E>DELIAF<U+202C> build<U+200B> pass<U+200D>ed <b>ok</b>"
+    } else {
+        "Status shown to reviewers: <U+202E>DELIAF<U+202C> build<U+200B> pass<U+200D>ed"
+    };
+    assert_eq!(displayed, expected);
+    for item in items {
+        let display = text_of(item, "display_text");
+        assert!(
+            !display.chars().any(vsift_contract::is_hidden_character),
+            "display_text holds a raw hidden character: {display:?}"
+        );
+        if !text_of(item, "text")
+            .chars()
+            .any(vsift_contract::is_hidden_character)
+        {
+            assert_eq!(item["display_text"], item["text"], "plain text changed");
+        }
+        if !item["speaker"].is_null() {
+            assert_eq!(item["speaker"]["display_label"], item["speaker"]["label"]);
+        }
+    }
 
     // Links stay text: the Markdown link verbatim, and the payload as
     // written (HTML anchor included) in the original. Whether a SubRip
@@ -452,6 +481,26 @@ async fn search_treats_injected_text_as_a_literal_query() -> TestResult {
     assert!(
         hit_texts(&alternation).is_empty(),
         "an alternation was read as a pattern"
+    );
+
+    // Search matches `text`, where a hidden character separates words, and
+    // its hits carry `display_text`. Notation in a query stays literal: it
+    // is the words "U" and "202E", which no segment of F12 says.
+    let (code, reversed) = search(&root, &session, "DELIAF")?;
+    assert_eq!(code, Some(0));
+    assert_eq!(
+        reversed["data"]["items"][0]["display_text"],
+        "Status shown to reviewers: <U+202E>DELIAF<U+202C> build<U+200B> pass<U+200D>ed"
+    );
+    let (code, notation) = search(&root, &session, "<U+202E>")?;
+    assert_eq!(code, Some(0));
+    assert!(
+        hit_texts(&notation).is_empty(),
+        "notation matched a hidden character"
+    );
+    assert_eq!(
+        notation["data"]["query"]["terms"],
+        serde_json::json!(["u", "202e"])
     );
 
     let (code, wildcard) = search(&root, &session, ".*")?;

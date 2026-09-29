@@ -13,6 +13,7 @@
     "start_us",
     "end_us",
     "text",
+    "display_text",
     "original_text",
     "markup",
     "speaker",
@@ -29,13 +30,19 @@
     "start_us": { "type": "integer", "minimum": 0 },
     "end_us": { "type": "integer", "minimum": 1 },
     "text": {
-      "description": "Plain text with recognised markup removed.",
+      "description": "Plain text with recognised markup removed. Hidden characters (bidirectional controls, zero-width and other format or default-ignorable characters) are kept raw, as written; quote display_text instead.",
       "type": "string",
       "minLength": 1,
       "maxLength": 4096
     },
+    "display_text": {
+      "description": "text with every hidden character written as visible <U+XXXX> notation (U+, uppercase hexadecimal of at least four digits, angle brackets): Unicode 16.0 general category Cf, Default_Ignorable_Code_Point, and U+2028/U+2029. Everything else, including \\n and text that literally reads <U+202E>, is exactly as in text, so it equals text when nothing is hidden. The form to quote in a report. Added to v1 on 2026-09-29 (additive; always present).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16384
+    },
     "original_text": {
-      "description": "The cue payload as supplied, present only when markup removal changed it.",
+      "description": "The cue payload as supplied, present only when markup removal changed it. Hidden characters are kept raw.",
       "oneOf": [
         { "type": "null" },
         { "type": "string", "minLength": 1, "maxLength": 4096 }
@@ -49,9 +56,15 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["label", "origin"],
+          "required": ["label", "display_label", "origin"],
           "properties": {
             "label": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "display_label": {
+              "description": "label with every hidden character written as <U+XXXX>, by the same rule as display_text. Added to v1 on 2026-09-29.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
             "origin": { "enum": ["imported_webvtt_voice"] }
           }
         }

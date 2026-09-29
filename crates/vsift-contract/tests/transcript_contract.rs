@@ -22,8 +22,8 @@ use vsift_contract::{
 use vsift_domain::{
     CueSource, CueText, CueTiming, FailureCode, ImportedCue, MediaTime, PageLimit,
     ParsedTranscript, PublicationGuarantee, SessionId, SessionLifetime, SidecarIdentity, SourceId,
-    StorageGeneration, TimeRange, TranscriptFormat, TranscriptImportError, TranscriptOffset,
-    TranscriptRejection, TranscriptRevision, TranscriptWarnings,
+    SpeakerLabel, StorageGeneration, TimeRange, TranscriptFormat, TranscriptImportError,
+    TranscriptOffset, TranscriptRejection, TranscriptRevision, TranscriptWarnings,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -381,5 +381,79 @@ fn segments_state_unknown_confidence_and_sanitize_original_text() -> TestResult 
         "Dialog\u{fffd}R-17 is <b>displayed</b> now."
     );
     assert_eq!(segment["speaker"], Value::Null);
+    Ok(())
+}
+
+/// `display_text` (ADR 0008, note of 2026-09-29): every hidden character of
+/// `text` written as `<U+XXXX>`, plain text unchanged, literal notation never
+/// escaped again; `text` and `original_text` keep the characters raw. A
+/// speaker label gets the same rendering in `display_label`.
+#[test]
+fn display_text_makes_hidden_characters_visible_and_keeps_text_raw() -> TestResult {
+    let mut cues = f10_cues()?;
+    cues[0].text = CueText::new(
+        "Status: \u{202E}DELIAF\u{202C} build\u{200B} pass\u{200D}ed".to_owned(),
+        "Status: &#x202E;DELIAF&#x202C; build&#x200B; pass&#8205;ed".to_owned(),
+    )?;
+    cues[1].text = CueText::new(
+        "The slide literally reads <U+202E> and <U+".to_owned(),
+        "The slide literally reads <U+202E> and <U+".to_owned(),
+    )?;
+    cues[1].speaker = Some(SpeakerLabel::parse("Admin\u{2066}istrator")?);
+    let supplied = SuppliedTranscript {
+        transcript: ParsedTranscript::new(
+            TranscriptFormat::WebVtt,
+            None,
+            cues,
+            TranscriptWarnings::default(),
+        )?,
+        sidecar: SidecarIdentity::new(F10_SRT_SHA256, F10_SRT_BYTES)?,
+    };
+    let revision = build_imported_revision(ImportedRevisionRequest {
+        session_id: &SessionId::parse(SESSION)?,
+        source_id: &SourceId::parse(F10_SOURCE)?,
+        source_duration: MediaTime::from_micros(12_000_000),
+        supplied: &supplied,
+        offset: TranscriptOffset::from_micros(500_000)?,
+        number: NonZeroU32::MIN,
+    })?;
+    let segments: Vec<Value> = revision
+        .segments()
+        .iter()
+        .map(|segment| serde_json::to_value(TranscriptSegmentData::new(&revision, segment)))
+        .collect::<Result<_, _>>()?;
+    for segment in &segments {
+        validate("transcript-segment.schema.json", segment)?;
+    }
+
+    let hidden = &segments[0];
+    assert_eq!(
+        hidden["text"],
+        "Status: \u{202E}DELIAF\u{202C} build\u{200B} pass\u{200D}ed"
+    );
+    assert_eq!(
+        hidden["display_text"],
+        "Status: <U+202E>DELIAF<U+202C> build<U+200B> pass<U+200D>ed"
+    );
+    assert_eq!(
+        hidden["original_text"],
+        "Status: &#x202E;DELIAF&#x202C; build&#x200B; pass&#8205;ed"
+    );
+
+    let literal = &segments[1];
+    assert_eq!(literal["display_text"], literal["text"]);
+    assert_eq!(
+        literal["display_text"],
+        "The slide literally reads <U+202E> and <U+"
+    );
+    assert_eq!(literal["speaker"]["label"], "Admin\u{2066}istrator");
+    assert_eq!(literal["speaker"]["display_label"], "Admin<U+2066>istrator");
+
+    let plain = &segments[2];
+    assert_eq!(plain["display_text"], plain["text"]);
+    assert_eq!(
+        plain["display_text"],
+        "End of the synthetic imported transcript."
+    );
     Ok(())
 }

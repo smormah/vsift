@@ -177,6 +177,7 @@ describes both versions. Versions above 2 are `UNSUPPORTED_SCHEMA`.
 | Text without cue timing, or a SubRip cue continued after a blank line | Rejected (`untimed_text`): untimed text cannot support a timestamp citation | `INVALID_SOURCE` |
 | Timed cue with no text | Skipped; warning `empty_cues_skipped` | none |
 | Recognised markup (WebVTT spans, timestamps and character references; SubRip `<i>`/`<b>`/`<u>`/`<font>` and `{\...}` blocks) | Removed from `text`; the payload as written is kept in `original_text`; warning `markup_removed` | none |
+| Hidden characters (bidirectional controls, zero-width and other format or default-ignorable characters), written raw or, in WebVTT, as character references | Kept raw in `text` (references decoded) and as written in `original_text`; shown as `<U+XXXX>` in `display_text` (below) | none |
 | WebVTT `<v Name>` naming exactly one voice | Provider speaker label (`imported_webvtt_voice`); an invalid or ambiguous voice is dropped with warning `speaker_label_discarded`. SubRip `Name:` prefixes stay text. | none |
 | WebVTT `NOTE`, `STYLE`, `REGION` blocks and cue settings | Ignored (no cue text) | none |
 | WebVTT `Language:` header with a well-formed tag | Revision language | none |
@@ -275,8 +276,9 @@ holds the revision summary, the range, the `items` and `next_cursor`. Each item 
 self-contained transcript evidence record
 ([`transcript-segment.schema.json`](../../schemas/v1/transcript-segment.schema.json)):
 segment, revision, source and source-segment identities, `start_us`/`end_us`,
-sanitized `text` (lines joined with `\n`), `original_text` when markup was removed,
-`markup`, `speaker`, `confidence` (always `null` with origin `unavailable` for
+sanitized `text` (lines joined with `\n`), `display_text` (below), `original_text`
+when markup was removed, `markup`, `speaker` (`label`, `display_label` and `origin`),
+`confidence` (always `null` with origin `unavailable` for
 imported text), `language`, `alignment` (origin, offset and the cue timing as
 written) and `cue` (its ordinal and line in the file). `--limit` and `--cursor` are
 additions to the reserved grammar, needed because overlapping cues make time-based
@@ -290,6 +292,44 @@ retranscribe`, the last one naming where revision identities come from. A malfor
 `--revision` is a parse error. `transcript get` never runs a provider. With `--events
 jsonl` the page is streamed as one evidence event per segment followed by one
 terminal event (below).
+
+**Display text (`display_text`, added to v1 on 2026-09-29).** `text` and
+`original_text` are the payload: they keep every character as written, including
+characters a reader cannot see. Every transcript segment record, wherever it is
+returned (`transcript get` and `search`, as `--json` items and as `--events jsonl`
+evidence records), therefore also carries `display_text`: `text` with each hidden
+character written as visible notation `<U+XXXX>` (`U+`, the code point in uppercase
+hexadecimal with at least four digits, between angle brackets), and a speaker object
+carries `display_label`, its `label` rendered the same way. A report or any other
+display quotes `display_text`, never `text` or `original_text`
+([ADR 0008, note of 2026-09-29](../decisions/0008-cli-and-json-contract.md#2026-09-29-note-display_text-for-hidden-characters)).
+
+- **Hidden characters** are, from Unicode 16.0.0: general category `Cf` (format:
+  bidirectional controls U+061C, U+200E, U+200F, U+202A to U+202E and U+2066 to
+  U+2069; zero-width characters and joiners U+200B to U+200D; the word joiner and
+  invisible operators U+2060 to U+2064; the byte-order mark U+FEFF; the soft hyphen
+  U+00AD; tag characters U+E0001 and U+E0020 to U+E007F; and every other `Cf`
+  character), every `Default_Ignorable_Code_Point` (such as U+034F, the Hangul
+  fillers, the variation selectors U+FE00 to U+FE0F and U+E0100 to U+E01EF, and the
+  ranges Unicode reserves for them), and U+2028 and U+2029. Spaces of any width,
+  private-use characters, noncharacters and other unassigned code points are shown as
+  written. The rule is `vsift_contract::is_hidden_character`.
+- **Everything else is unchanged.** Lines stay joined with `\n`; when `text` holds no
+  hidden character, `display_text` equals it. An emoji sequence shows its joiners and
+  variation selectors (`<U+200D>`, `<U+FE0F>`), because the same characters can carry
+  data invisibly.
+- **Literal notation is not escaped.** Text that already reads `<U+202E>` in the
+  source is shown exactly so; rendering is applied once and applying it again changes
+  nothing. `<U+202E>` in `display_text` is therefore either a hidden character or
+  those eight characters as written; `text` says which. Both are visible.
+- **Output only.** `display_text` and `display_label` are rendered when a record is
+  presented. Stored revisions, retained bundles, segment and revision identities and
+  every digest are unchanged, and `bundle-transcript-record.schema.json` does not
+  gain the members.
+- **Size.** A hidden character of two bytes becomes eight, so `display_text` is at
+  most four times the bytes of `text` (at most 16,384 characters). A page whose
+  result exceeds the 1 MiB result budget fails with exit 7 like any oversized result;
+  ask for fewer segments with `--limit`.
 
 **Evidence stream (`--events jsonl`).** ADR 0016 decision 5 makes evidence records
 available as JSON Lines, so a pipeline or indexer can consume them without reading a
@@ -949,7 +989,12 @@ thousands separator is removed (`2,048` is `2048`); a hyphen between letters or 
 joins them (`E-409` is `e409`); a colon between digits separates numbers (`10:32` is
 `10 32`); a decimal compares by value (`125.00` is `125`); `zero` to `twenty` and the
 tens are digits; any other punctuation separates words. There is no Unicode
-normalisation or accent folding. A segment matches as a `phrase` when the query words
+normalisation or accent folding. Search reads `text`, never `display_text`: a hidden
+character (see "Display text" above) is not a letter or digit, so it separates words
+like punctuation (a U+202E written before `DELIAF` does not stop `DELIAF` from being
+found). A query stays literal: one
+written in notation, such as `<U+202E>`, is the words `u` and `202e` and never
+matches a hidden character. A segment matches as a `phrase` when the query words
 joined without spaces equal consecutive segment words joined without spaces (`AB 731`
 finds `AB-731`, `dialog r 17` finds `Dialog R-17`, `407` never finds `4407`), or by
 `all_terms` when every query word is one of its words. A phrase that continues into the
@@ -1657,6 +1702,11 @@ unknown or missing fields, invalid enums, more than 1,048,576 input bytes, and n
 deeper than 64 containers (a P11 job request or batch line: 65,536 bytes and 16 levels).
 Within major v1, readers must ignore additive response
 fields; producers must not reinterpret or remove existing fields without a new major.
+Additive response fields so far: the `setup check` `local_asr` object (P07), and a
+transcript segment's `display_text` and its speaker's `display_label` (2026-09-29).
+An added member is always present from the version that adds it and is listed as
+required in the v1 schema, so a current reader can rely on it; a reader written
+against an older copy of the schema ignores it.
 
 ## Contract-test traceability
 
@@ -1669,7 +1719,7 @@ fields; producers must not reinterpret or remove existing fields without a new m
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`) and the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
 | C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`) |
 

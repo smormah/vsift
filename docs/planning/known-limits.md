@@ -126,9 +126,9 @@ Each entry has these fields:
 | [L-080](#l-080) | A Codex trial agent can read its client's sign-in and its own trial's harness folder | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-081](#l-081) | A handoff may leave out the times and session details VSift recorded, so reading it alone does not give them | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 | [L-082](#l-082) | Claude Haiku 4.5 does not follow the full investigation procedure | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-083](#l-083) | Models copy raw invisible and bidirectional characters from VSift's `text` into their reports | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
+| [L-083](#l-083) | Only `display_text` shows hidden characters; `text` and `original_text` keep them raw | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 
-Counts: 4 high, 23 medium, 50 low (77 entries).
+Counts: 4 high, 22 medium, 51 low (77 entries).
 
 ## Security
 
@@ -1834,34 +1834,43 @@ alone does not give them.**
 
 ### L-083
 
-**Models copy raw invisible and bidirectional characters from VSift's `text` into
-their reports.**
+**Only `display_text` shows hidden characters; `text` and `original_text` keep them
+raw.**
 
-- **What:** a transcript segment's `text` is sanitised of markup but keeps
-  bidirectional controls (U+202A to U+202E, U+2066 to U+2069) and zero-width
-  characters (U+200B to U+200D, U+2060, U+FEFF) as written, and for WebVTT it decodes
-  character references such as `&#x202E;` into the raw character; `original_text`
-  keeps the reference as written. The skill's "before you send" checklist tells agents
-  to write such characters as `<U+202E>`, yet in the SEC-T02 runs on `b68d746` Claude
-  Sonnet 5.5 (1 of 5) and Claude Haiku 4.5 (4 of 5) copied a raw U+202E into their
-  final report; GPT-6-Luna (0 of 5) did not.
-- **Evidence:** `docs/contracts/cli-v1.md` (transcript import policy);
-  `crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs` asserts that `text` keeps
-  the characters; the grader's `report_text` check.
-- **Impact:** a report can carry invisible or reordering characters that make text
-  display differently from what it says (Trojan Source style) to the person who acts
-  on it. The grader fails such a report, so trials catch it; a user outside trials
-  would not be warned.
-- **Why:** `text` was defined as the payload without markup, not as display-safe text,
-  and the skill's instruction relies on the model noticing characters it cannot see.
-- **Mitigation:** the skill's checklist; the handoff schema refuses these characters
-  in every prose member; `report_text` in trials.
-- **Next step:** a proposal for the maintainer, not implemented: render these
-  characters in `text` as visible `<U+XXXX>` notation and keep the raw payload in
-  `original_text` ([ADR 0022, note of 2026-09-29](../decisions/0022-agent-skill-and-named-client-qualification.md#proposal-hidden-characters-in-text-not-implemented)).
-  It changes a published field's meaning, so it needs a contract decision.
+- **What:** since P12 PR 3h every transcript segment carries `display_text`, its
+  `text` with every hidden character (Unicode `Cf`, `Default_Ignorable_Code_Point`,
+  U+2028 and U+2029: bidirectional controls, zero-width characters, variation
+  selectors, tag characters and the like) written as visible `<U+XXXX>` notation, and
+  a speaker object carries `display_label`; the skill quotes only those. `text` and
+  `original_text` (and `label`) keep the characters as written, by design: they are
+  the payload, and for WebVTT `text` decodes a reference such as `&#x202E;` into the
+  raw character. A consumer that quotes them, or an agent that ignores the skill,
+  still carries invisible or reordering characters into what it writes. Before the
+  field existed, Claude Sonnet 5.5 (1 of 5) and Claude Haiku 4.5 (4 of 5) copied a raw
+  U+202E into SEC-T02 reports on `b68d746`; whether the compact tier now quotes
+  `display_text` is measured by its re-run. `display_text` can be four times the bytes
+  of `text`, so a 100-segment page of adversarial text can exceed the 1 MiB result
+  budget (exit 7; a smaller `--limit` reads it). The handoff schema's prose members
+  and the trial grader's `report_text` check refuse a narrower set than
+  `display_text` renders: bidirectional controls, zero-width characters and U+FEFF
+  (the grader also U+2060 to U+2064).
+- **Evidence:** [ADR 0008, note of 2026-09-29](../decisions/0008-cli-and-json-contract.md#2026-09-29-note-display_text-for-hidden-characters);
+  `docs/contracts/cli-v1.md` ("Display text"); `vsift-contract`'s `text` tests and
+  `display_text_makes_hidden_characters_visible_and_keeps_text_raw`;
+  `crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs`.
+- **Impact:** a report written from `text` can display differently from what it says
+  (Trojan Source style). Trials fail such a report; a user outside trials would not be
+  warned.
+- **Why:** the maintainer chose a strictly additive field over redefining `text`
+  (2026-09-29), so published fields keep their meaning and stored records, identities
+  and digests do not change.
+- **Mitigation:** `display_text` and `display_label`; the skill's rule and "before you
+  send" checklist, held by the `skill_contract` guard; the handoff schema's refusal in
+  prose members; `report_text` in trials.
+- **Next step:** the compact-tier re-run (P12) shows whether models quote
+  `display_text`.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** open. **Review:** pending.
+  **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** pending.
 
 ### L-040
 

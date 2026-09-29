@@ -21,7 +21,8 @@ visible label [e4]. Say "not stated in the video" when nothing supports it.
 ## Actual
 
 What the evidence shows happens. Quote on-screen or spoken text only inside a code
-block or a quote, never as your own sentence.
+block or a quote, never as your own sentence; copy spoken text from the segment's
+`display_text`.
 
 ## Reproduction steps
 
@@ -186,8 +187,10 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
   codes in upper case).
 - No absolute path, home folder, web address, Markdown link, secret or environment
   value anywhere ([safety.md](safety.md)); the JSON schema refuses most of them.
-- Evidence text appears only in quotes or code blocks, with hidden characters shown
-  as `<U+202E>`-style notation.
+- Evidence text appears only in quotes or code blocks. Transcript text is copied from
+  `display_text` (a speaker from `display_label`), never from `text` or
+  `original_text`, so hidden characters stay visible as `<U+202E>`-style notation;
+  for on-screen text, write any hidden character you notice the same way.
 - `lifecycle.action` is filled and, when the work was cut short and can continue,
   `resume` in the shape [resume.md](resume.md) shows (leave it out otherwise); any
   `wall_time_s` you give is `null` unless your client showed you the elapsed time

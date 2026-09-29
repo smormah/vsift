@@ -297,7 +297,8 @@ an agent trial.
   `INVALID_SOURCE` at their line before any tool or session, with a remediation that
   repeats no evidence; hidden-colour and class-hidden markup is removed from `text` and
   kept in `original_text` with `markup_removed`; bidirectional and zero-width characters
-  are kept as written; forged records, links and commands stay text with VSift's own
+  are kept as written in `text` and shown as `<U+XXXX>` in `display_text` (P12 PR 3h),
+  which search hits carry too (a query in that notation never matches one); forged records, links and commands stay text with VSift's own
   identities; `--events jsonl` stays one JSON value per line; `search` is literal. The
   agent trial (`SEC-T02-f12-webvtt`) is pending P12 PR 3; human-readable output is P13's
   (known limit L-073).*

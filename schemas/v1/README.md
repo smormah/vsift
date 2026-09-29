@@ -141,7 +141,11 @@ These files are the machine-readable public v1 boundary:
   evidence record (ADR 0016): self-describing identities, normalized source time,
   sanitized text, confidence, alignment and cue provenance (P07). A local-ASR segment
   has alignment origin `local_asr` with its chunk, provider times and recognizer, and
-  `cue: null`; a segment carried into a spliced revision adds `carried_from`;
+  `cue: null`; a segment carried into a spliced revision adds `carried_from`. The
+  additive `display_text` (2026-09-29) is `text` with every hidden character (Unicode
+  `Cf`, `Default_Ignorable_Code_Point`, U+2028 and U+2029) written as `<U+XXXX>`, the
+  form to quote; `text` and `original_text` keep the characters raw. A speaker object
+  adds `display_label` by the same rule;
 - `bundle-transcript-record.schema.json` — the content of a retained bundle's
   `transcript_record` artifact: one revision with all its segments, as stored. It is
   a storage record, not a response: its `schema_version` is the integer record

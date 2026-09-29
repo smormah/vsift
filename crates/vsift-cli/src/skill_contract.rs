@@ -1983,12 +1983,69 @@ fn handoff_schema_refuses_paths_links_and_hidden_characters() -> Result<(), Stri
     let accepted = [
         "Does dialog R-17 appear at 00:05.000, and/or later?",
         "Is the ratio 3/4 shown (about ~5 s in)?",
+        "Why does the status read `<U+202E>DELIAF<U+202C>` in display_text?",
     ];
     for text in accepted {
         let mut handoff = example.clone();
         handoff["question"] = Value::String(text.to_owned());
         if !validator.is_valid(&handoff) {
             problems.add(format!("the schema refuses {text:?}"));
+        }
+    }
+    problems.into_result()
+}
+
+/// The skill quotes transcript text from `display_text` (ADR 0008, note of
+/// 2026-09-29): SKILL.md's steps and checklist, `safety.md` and `handoff.md`
+/// say so, and the published segment schema requires the members they name,
+/// so the instruction cannot outlive the field.
+#[test]
+fn the_skill_quotes_display_text_which_every_segment_carries() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let segment = read_json(
+        &repository()
+            .join("schemas")
+            .join("v1")
+            .join("transcript-segment.schema.json"),
+    )?;
+    let required = |schema: &Value, member: &str| {
+        schema["required"]
+            .as_array()
+            .is_some_and(|members| members.iter().any(|value| value == member))
+            && schema["properties"][member].is_object()
+    };
+    if !required(&segment, "display_text") {
+        problems.add("transcript-segment.schema.json does not require display_text".to_owned());
+    }
+    let speaker_requires_display_label = segment["properties"]["speaker"]["oneOf"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|branch| required(branch, "display_label"));
+    if !speaker_requires_display_label {
+        problems.add(
+            "transcript-segment.schema.json: the speaker object does not require display_label"
+                .to_owned(),
+        );
+    }
+    let skill = flattened_skill_md()?;
+    let before_you_send = skill
+        .split("**Before you send**")
+        .nth(1)
+        .and_then(|rest| rest.split("**Stop when**").next())
+        .unwrap_or_default();
+    if !before_you_send.contains("`display_text`") || !before_you_send.contains("`display_label`") {
+        problems.add(
+            "SKILL.md's \"Before you send\" checklist does not name display_text and display_label"
+                .to_owned(),
+        );
+    }
+    for reference in ["safety.md", "handoff.md"] {
+        let text = read_text(&skill_directory().join("references").join(reference))?;
+        if !text.contains("`display_text`") || !text.contains("`display_label`") {
+            problems.add(format!(
+                "references/{reference} does not tell the agent to quote display_text and display_label"
+            ));
         }
     }
     problems.into_result()

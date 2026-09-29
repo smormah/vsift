@@ -665,6 +665,11 @@ model cannot see what it must escape.
   transcript schemas' descriptions, the SEC-T02 suite's assertion, and a skill change
   (quote `text`, which is then safe). It is the maintainer's decision; nothing is
   implemented.
+- **Decided (maintainer, 2026-09-29): the compatible addition.** `text` and
+  `original_text` keep their meaning; every transcript segment gains `display_text`
+  (and a speaker `display_label`), and the skill quotes it. Implemented in P12 PR 3h;
+  the decision, the character set and the reasons are in
+  [ADR 0008's note of 2026-09-29](0008-cli-and-json-contract.md#2026-09-29-note-display_text-for-hidden-characters).
 
 ## Consequences
 
