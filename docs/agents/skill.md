@@ -72,7 +72,13 @@ select the skill; the user can also name it.
 - **Reporting.** Every stop, including a missing tool, an expired session or an
   exhausted budget, ends with the handoff as the final message: one `vsift-handoff`
   block (`SKILL.md` shows the smallest valid one), never a file, with no web address,
-  Markdown link or local path (added 2026-09-29 after the diagnostic passes).
+  Markdown link or local path (added 2026-09-29 after the diagnostic passes). The
+  JSON states only what the agent alone knows: its claims, the identity of each piece
+  of evidence it cites, whether it looked at each image, gaps, the instructions it saw,
+  what it did with the session and, for a partial report or an exhausted limit, the
+  resume card. Times, revisions, the session's details and the budget's limits are
+  optional, since VSift recorded them; a value the agent does give must be VSift's own
+  (handoff v1 revised in place on 2026-09-29, before any release).
 
 ## Keeping it in step with the CLI
 
@@ -84,7 +90,9 @@ test --workspace`) fails when the skill drifts from the CLI:
   has the class its place requires; nothing is chained, piped or redirected except
   `| tail -n 1` after `--events jsonl`; a help form (`--help` after nothing, a
   namespace or an operation) must make the parser print its help, and is free;
-- the REPORT state's minimal handoff validates against `handoff.schema.json`, and the
+- the REPORT state's minimal handoff validates against `handoff.schema.json` and holds
+  only the members the schema requires, the schema requires exactly the members the
+  agent alone knows, and the
   rules state the stop-in-REPORT, no-file, no-`cd` and setup-check rules and the
   `compact` limits as the numbers `budgets.md` gives;
 - every operation id the skill shows parses as one (`op_` and 16 to 64 lowercase
@@ -98,7 +106,8 @@ test --workspace`) fails when the skill drifts from the CLI:
   reason name resolves in the v1 contract (`schemas/v1` or `docs/contracts/cli-v1.md`)
   or the handoff schema;
 - the example handoffs validate against `handoff.schema.json` and its citation,
-  image-access and resume-size rules;
+  image-access and resume rules (a partial report or an exhausted limit carries a card
+  of at most 2 KiB);
 - the image check's code appears in no text file; `SKILL.md` stays within 300 lines,
   holds only `name` and `description` in its front matter and links every reference.
 

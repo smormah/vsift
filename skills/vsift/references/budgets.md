@@ -31,8 +31,9 @@ or its operator), which stops you when it runs out. You cannot measure it:
 - You run nothing but `vsift` commands, so you never run `date` or any other program
   to read the time, before, after or chained to a command ([commands.md](commands.md)).
 
-So report `budget.used.wall_time_s` and `resume.remaining.wall_time_s` as `null`
-(not measured), unless your client itself shows you the elapsed time. Add
+So report `resume.remaining.wall_time_s`, and `budget.used.wall_time_s` if you give
+`budget.used` at all, as `null` (not measured), unless your client itself shows you
+the elapsed time. Add
 `wall_time_s` to `budget.exhausted` only when the host told you the time ran out.
 
 ## How to spend it
@@ -54,5 +55,5 @@ Stop at once, even mid-state. Do not start another command to "finish up". Write
 handoff with `status` `partial` (or `insufficient_evidence` if nothing is supported),
 list the exhausted limits in `budget.exhausted`, add a gap with reason
 `budget_exhausted` for what remains unchecked, and fill the resume card
-([resume.md](resume.md)) so that another run can continue. Report `budget.used` in
-every handoff, complete or not.
+([resume.md](resume.md)) so that another run can continue. `budget.used` is
+optional in every handoff: the host counts your tool calls and images itself.

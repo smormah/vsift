@@ -387,6 +387,7 @@ impl<'a> Context<'a> {
                 start_us,
                 end_us,
                 text,
+                ..
             } => fact.stated_in(text) && self.on_speech(*start_us, *end_us),
             Resolved::Audio { .. } => false,
         }
@@ -414,7 +415,11 @@ fn citations_check(handoff: Option<&Value>, input: &GradeInput<'_>) -> Check {
         );
     };
     let mut problems = Vec::new();
-    if bundle.session_id.as_deref() != handoff["session"]["session_id"].as_str() {
+    // `session` is optional (handoff v1 as revised on 2026-09-29); a session
+    // the handoff does name must be the one whose records were retained.
+    if let Some(named) = handoff["session"]["session_id"].as_str()
+        && bundle.session_id.as_deref() != Some(named)
+    {
         problems.push("the handoff's session is not the retained one".to_owned());
     }
     for citation in &cited {
@@ -814,7 +819,13 @@ fn expectation_check(
             "resume_card"
         }
         Expectation::ReuseSession => {
-            reuse_problems(handoff_value, &commands, &input.expected, &mut problems);
+            reuse_problems(
+                handoff_value,
+                &commands,
+                &input.expected,
+                input.bundle,
+                &mut problems,
+            );
             "reuse_session"
         }
         Expectation::JobResumed => {
@@ -945,10 +956,17 @@ fn resume_card_problems(handoff: &Value, policy: &CommandPolicy, problems: &mut 
     }
 }
 
+/// The later phase reuses the earlier phase's session and revision: it
+/// never ingests again, names no other session in a command, and neither a
+/// session or revision the handoff names nor the revision of a transcript
+/// segment it cites is another one. `session` is optional in the handoff,
+/// so the commands and the cited segments carry the check when it is left
+/// out.
 fn reuse_problems(
     handoff: &Value,
     commands: &[(&str, &[String])],
     expected: &Expected,
+    bundle: Option<&BundleIndex>,
     problems: &mut Vec<String>,
 ) {
     let Some(session) = expected.session_id.as_deref() else {
@@ -965,13 +983,27 @@ fn reuse_problems(
             }
         }
     }
-    if handoff["session"]["session_id"] != session {
+    if let Some(named) = handoff["session"]["session_id"].as_str()
+        && named != session
+    {
         problems.push("the handoff names another session".to_owned());
     }
-    if let Some(revision) = expected.revision_id.as_deref()
-        && handoff["session"]["revision_id"] != revision
+    let Some(revision) = expected.revision_id.as_deref() else {
+        return;
+    };
+    if let Some(named) = handoff["session"]["revision_id"].as_str()
+        && named != revision
     {
         problems.push("the handoff names another transcript revision".to_owned());
+    }
+    let other_revision = citations(Some(handoff)).iter().any(|citation| {
+        matches!(
+            bundle.and_then(|bundle| bundle.resolve(citation).ok()),
+            Some(Resolved::Transcript { revision_id, .. }) if revision_id != revision
+        )
+    });
+    if other_revision {
+        problems.push("the handoff cites a segment of another transcript revision".to_owned());
     }
 }
 

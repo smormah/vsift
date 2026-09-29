@@ -73,25 +73,50 @@ crop citation has `pixels_inspected` false, and a gap with reason
 `image_access_unavailable` says so. An observed claim is never `unsupported`: if you
 could not observe it, it is not an observation.
 
+## What the JSON must hold, and what it may
+
+The JSON states what only you know. VSift already recorded every time, revision and
+detail of the session, and whoever checks the handoff reads them from VSift's records
+through the identities you cite. So the JSON **must** hold:
+
+- `handoff_version`, `status` and `question`;
+- `capabilities.image_access`, and `image_check_code` when it is `verified`;
+- `claims`, each with `id`, `section`, `kind`, `support`, `certainty`, `statement`
+  and `citations`;
+- `citations`, each with `id`, `type` and its VSift identity (below);
+- `gaps`, each with `kind`, `reason` and `note` (the note may be null);
+- `untrusted_instructions` (an empty list when you saw none);
+- `lifecycle.action`;
+- `resume` when `status` is `partial` or a budget limit is exhausted.
+
+Everything else is **optional**: leave it out (or write null) unless it helps the
+reader. An optional value you do give is checked against VSift's records, so copy it
+exactly; a wrong one fails the handoff. Useful ones: a gap's `code` and `range`, the
+`session` ids, a frame's `requested_us`, `actual_us`, `delta_us` and `candidate_id`,
+a crop's `parent_evidence_id` and `rect`, the rest of `capabilities`, and `budget`
+(its `profile`, `overrides` when the user changed a limit, and the `exhausted`
+limits). `budget.limits` is implied by the profile: give it only to show an override.
+
 ## Citations
 
 Copy every value from the VSift result that produced it; never compute or guess one.
 
-| `type` | Members | Copied from |
-| --- | --- | --- |
-| `transcript_segment` | `revision_id`, `segment_id`, `start_us`, `end_us` | an item of `transcript get` or `search` |
-| `frame` | `evidence_id`, `candidate_id`, `requested_us`, `actual_us`, `delta_us`, `pixels_inspected` | `data.selections` and `data.items` of `frame get`, `frame neighbours` or `frame burst`; `candidate_id` from the request, else null |
-| `crop` | `evidence_id`, `parent_evidence_id`, `actual_us`, `rect`, `pixels_inspected` | `crop`: the item's `crop` (`x`, `y`, `width`, `height`) and the selection's `actual_us` |
-| `audio` | `evidence_id`, `range`, `actual_start_us` | the item of `audio` |
+| `type` | Must have | May add | Copied from |
+| --- | --- | --- | --- |
+| `transcript_segment` | `segment_id` | `revision_id`, `start_us`, `end_us` | an item of `transcript get` or `search` |
+| `frame` | `evidence_id`, `pixels_inspected` | `candidate_id`, `requested_us`, `actual_us`, `delta_us` | `data.selections` and `data.items` of `frame get`, `frame neighbours` or `frame burst`; `candidate_id` from the request |
+| `crop` | `evidence_id`, `pixels_inspected` | `parent_evidence_id`, `actual_us`, `rect` | `crop`: the item's `crop` (`x`, `y`, `width`, `height`) and the selection's `actual_us` |
+| `audio` | `evidence_id` | `range`, `actual_start_us` | the item of `audio` |
 
-Times in the prose are written `mm:ss.mmm` from the microseconds; the JSON keeps the
-microseconds. When `delta_us` is not zero, say so: the frame is from a different
-moment than the one asked for.
+`pixels_inspected` is yours alone: true only when you opened that image and read it.
+Times in the prose are written `mm:ss.mmm` from the microseconds VSift returned. When
+a frame's `delta_us` is not zero, say so: the frame is from a different moment than
+the one asked for.
 
 ## Gaps
 
-Each gap has a `kind`, the `range` it covers (or null), a `reason`, the failure `code`
-that caused it (or null) and a short `note`. Use the CLI's own reason when there is
+Each gap has a `kind`, a `reason` and a short `note` (or null); it may add the `range`
+it covers and the failure `code` that caused it. Use the CLI's own reason when there is
 one: `untranscribed_range` (from `coverage.reasons`), a candidate gap reason
 (`not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`,
 `candidate_budget_exhausted`) or a frame `partial_reason` (`frame_budget`,
@@ -118,8 +143,8 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
   value anywhere ([safety.md](safety.md)); the JSON schema refuses most of them.
 - Evidence text appears only in quotes or code blocks, with hidden characters shown
   as `<U+202E>`-style notation.
-- `budget.used`, `lifecycle` and, for a partial report, `resume` are filled;
-  `wall_time_s` there is `null` unless your client showed you the elapsed time
-  ([budgets.md](budgets.md)).
+- `lifecycle.action` is filled and, for a partial report or an exhausted limit,
+  `resume`; any `wall_time_s` you give is `null` unless your client showed you the
+  elapsed time ([budgets.md](budgets.md)).
 
 Examples: [../examples/](../examples/).

@@ -124,6 +124,7 @@ Each entry has these fields:
 | [L-078](#l-078) | The Codex trial container relaxes Docker's seccomp profile so Codex's sandbox can create user namespaces | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-079](#l-079) | The Codex trial container's own network is not limited to the model API | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-080](#l-080) | A Codex trial agent can read its client's sign-in and its own trial's harness folder | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-081](#l-081) | A handoff may leave out the times and session details VSift recorded, so reading it alone does not give them | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 
 Counts: 4 high, 23 medium, 50 low (77 entries).
 
@@ -1670,8 +1671,8 @@ Counts: 4 high, 23 medium, 50 low (77 entries).
   Claude Code dry trial (2026-09-28) the agent chained `date +%s` to its first and last
   commands to time itself, which the grader rightly failed as a non-`vsift` program.
 - **Evidence:** ADR 0022's PR 3c note; the dry trial's `grade.json` (calls 7 and 24).
-- **Impact:** the handoff reports `budget.used.wall_time_s` and
-  `resume.remaining.wall_time_s` as `null` unless the client shows elapsed time, and an
+- **Impact:** the handoff reports `resume.remaining.wall_time_s` (and
+  `budget.used.wall_time_s`, optional since 2026-09-29) as `null` unless the client shows elapsed time, and an
   agent cannot stop itself on time; the host (the client's own limits, the trial
   harness's timeout and the grader's measured wall time) stops it instead.
 - **Why:** exposing a clock only for self-timing would add a command or a result field
@@ -1757,7 +1758,8 @@ Counts: 4 high, 23 medium, 50 low (77 entries).
 - **Why:** the client cannot run without its sign-in, and `run` needs the manifest and
   scenario in the same container as the client.
 - **Mitigation:** every non-`vsift` command fails the trial (reading those files takes
-  `cat` or similar outside the skill folders); after the client exits, `run` searches
+  `cat` or similar outside the skill folders; the orientation allowed since 2026-09-29
+  lists only the names in the workspace, never the harness folder beside it); after the client exits, `run` searches
   its raw output for every value of the sign-in file (tokens and each part of a JWT,
   24 characters or more) and `grade` fails `no_canary` when one appears; the values
   are never logged, only counts (`sign_in_leak_check` in `run.json`). The network is
@@ -1767,6 +1769,32 @@ Counts: 4 high, 23 medium, 50 low (77 entries).
   sign-in and harness paths would close most of it.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
+
+### L-081
+
+**A handoff may leave out the times and session details VSift recorded, so reading it
+alone does not give them.**
+
+- **What:** since 2026-09-29 (maintainer decision, ADR 0022's PR 3f note) handoff v1
+  requires only what the agent alone knows. A citation must give its VSift identity
+  (`segment_id` or `evidence_id`) and, for a frame or crop, `pixels_inspected`;
+  its times, revision, candidate, parent, rectangle and range, the `session` block,
+  most of `capabilities` and the `budget` are optional.
+- **Evidence:** `skills/vsift/handoff.schema.json`; the guard test
+  `handoff_schema_requires_only_what_the_agent_alone_knows`.
+- **Impact:** a person or tool that reads only the handoff may not see when a cited
+  segment or frame is, or which session it came from; the prose still gives times as
+  `mm:ss.mmm`, but the JSON may not. Resolving a citation needs the session (while it
+  is open) or a retained bundle, which the grader does.
+- **Why:** agents, especially small models, failed handoffs on copied values VSift
+  already held, and a copied value adds no evidence.
+- **Mitigation:** a value the agent does give is checked against VSift's records; the
+  resume card still carries the session, revision and evidence times another run needs;
+  the skill tells agents to add the optional members when they help.
+- **Next step:** if a consumer needs self-contained handoffs, add a harness or CLI step
+  that fills the optional members from the bundle, rather than asking the agent.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** open. **Review:** pending.
 
 ### L-040
 

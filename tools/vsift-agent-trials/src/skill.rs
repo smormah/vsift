@@ -52,10 +52,11 @@ impl SkillReferences {
     pub fn load(repository: &Path) -> Result<Self, TrialError> {
         let skill = skill_directory(repository);
         let references = skill.join("references");
+        let budgets = Budgets::from_budgets_md(&read_text(&references.join("budgets.md"))?)?;
         Ok(Self {
             policy: CommandPolicy::from_commands_md(&read_text(&references.join("commands.md"))?)?,
-            budgets: Budgets::from_budgets_md(&read_text(&references.join("budgets.md"))?)?,
-            schema: HandoffSchema::new(&read_json(&skill.join("handoff.schema.json"))?)?,
+            budgets,
+            schema: HandoffSchema::new(&read_json(&skill.join("handoff.schema.json"))?, budgets)?,
         })
     }
 }

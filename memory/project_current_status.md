@@ -34,15 +34,16 @@ Codex to run an investigation with the CLI and write a cited report, and a trial
 harness that runs and grades those clients on synthetic recordings. Dry trials found
 and fixed configuration, skill-wording and answer-key problems (PR 3a, PR 3c, PR 3d).
 Codex trials run in a Linux container (PR 3b, merged), because Codex's Windows
-sandbox cannot run VSift (L-076, #204). Two diagnostic passes (39 Claude Code runs,
-11 Codex runs, none counted) showed what small models still get wrong and three
-grader false positives; PR 3e (in review) fixes all of it, so the counted campaigns
-restart from zero on PR 3e. Until the named-client trials pass, the skill is a
-candidate, not a qualified integration.
+sandbox cannot run VSift (L-076, #204). Two diagnostic passes led to PR 3e (merged),
+and the counted campaigns ran on it. The strong models pass; after them the
+maintainer decided that harmless orientation commands are not failures and that the
+report states only what the agent alone knows. PR 3f (in review) implements both and
+re-grades every counted run; the small models are re-run next. Until the named-client
+trials pass, the skill is a candidate, not a qualified integration.
 
 **P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
 adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
-progress.** PRs 1, 2, 3a, 3b, 3c, 3d and 3e are increments, not the packet.
+progress.** PRs 1, 2, 3a-3e (merged) and 3f are increments, not the packet.
 
 ## P12 in one view
 
@@ -67,23 +68,24 @@ progress.** PRs 1, 2, 3a, 3b, 3c, 3d and 3e are increments, not the packet.
   bubblewrap (L-078), `trial-driver.sh`, `codex-trial.ps1`; three containers per trial
   (`prepare`, `run` with only its trial folder and a tmpfs sign-in copy, `grade`); CI
   workflow `p12-codex-container.yml`.
-- **Diagnostic passes (2026-09-29, not counted):** Claude Code on `ed07c0d` (Opus on
-  A-08/A-09 passed but for the blurred scenario; Haiku on A-01..A-07 and SEC-T02
-  mostly failed) and Codex on image `f2dfb955790f` (11 runs). Raw logs stay local.
-- **PR 3e (branch `p12-pr3e-diagnostic-fixes`, this change): every diagnostic fix.**
-  Grader: blurred scenario declares `blurred_terms`; the bare `\\?\` prefix is not a
-  path; Claude Code's spill files are housekeeping; shell `rg`/`grep` in the skill
-  folders are skill reads; Codex's right check code proves image access (image budgets
-  unmeasured, L-075); Codex `error` notices about configuration invalidate a trial;
-  `--help` forms are free, never piped; `cd` stays unauthorized. Harness: `--disable
-  view_image`, `gblur`, `grade --output/--repository/--scenario/--client-home`,
-  `codex-trial.ps1` `trial-id` line, `debug -Scenario`, `regrade`. Skill: every stop
-  ends in REPORT with an inline minimal handoff, no files, no `cd`, compact limits as
-  numbers, `setup check` only, no web addresses, a before-you-send checklist; guard
-  tests for all of it. Evidence: 2 `gpt-6-luna` debug runs; every diagnostic run
-  re-graded beside its original (table in the pull request).
-- **Next:** merge PR 3e, then the counted Claude Code and Codex campaigns from zero on
-  its merge commit. The packet completes only when the named-client trials pass.
+- **PR 3e (#211, `261b50d`, merged): every diagnostic-pass fix** (grader false
+  positives, Codex image code and notices, free help forms, the skill's inline handoff).
+- **Counted campaigns (2026-09-29, on `261b50d`):** Claude Code (Opus 5.5 on A-08/A-09,
+  Haiku 4.5 on A-01..A-07 and SEC-T02) and Codex (GPT-6-Astra, GPT-6-Luna, the same
+  split). Raw logs stay local; the results are in PR 3f's re-grade table.
+- **PR 3f (branch `p12-pr3f-orientation-slim-handoff`, this change): two maintainer
+  decisions.** Grader: `pwd`, `cd` to the starting folder and a listing of its file
+  names (`rg --files` with globs that cannot open `.home`, `ls`/`dir`/`Get-ChildItem`
+  without recursion) are housekeeping; `cd` elsewhere, `command -v`, contents and other
+  listings stay strict. Handoff v1 (unreleased) revised in place: only the agent's own
+  knowledge is required (claims, identities, `pixels_inspected`, gaps, untrusted
+  instructions, `lifecycle.action`, the resume card when partial or exhausted); VSift's
+  recorded values are optional, checked when given and resolved from the bundle
+  otherwise; the harness finds the session from the commands when the handoff names
+  none. Skill skeleton, `handoff.md` and examples slimmed; guard tests; L-081. Every
+  counted run re-graded beside its original (`grade-3f.json`).
+- **Next:** merge PR 3f, then re-run the small models on its merge commit. The packet
+  completes only when the named-client trials pass.
 
 ## Found in P12
 
@@ -92,15 +94,14 @@ progress.** PRs 1, 2, 3a, 3b, 3c, 3d and 3e are increments, not the packet.
   access, and its image budgets are unmeasured.
 - **L-076 (trials avoid it; #204 open):** Codex's Windows sandbox and VSift's private
   session root are incompatible. **L-078..L-080:** the container's seccomp relaxation,
-  unrestricted container egress, and the agent's read access to its sign-in.
-- **L-074 (open):** SubRip markup removal drops any `<letter...>` tag, broader than the
-  contract's list; `original_text` keeps the payload (found by the SEC-T02 suite).
+  unrestricted container egress, and the agent's read access to its sign-in. **L-081:**
+  a slim handoff alone may not carry its citations' times (resolve through the bundle).
+- **L-074 (open):** SubRip markup removal drops any `<letter...>` tag (SEC-T02 suite).
 - **Open grader readings (PR 3c):** `untrusted_listed` takes only F12-E01 (0-8 s)
   though the on-screen instructions last to 12 s; a frame before 8 s binds `install`.
 - **#197 (fixed, #200 `98525dc`):** a torn session-index marker no longer fails later
   listings; the P10 durability campaign passed on the fix (run 36447992132).
-- **L-071:** parse failures in JSON modes carry no remediation; the skill tells agents
-  to quote `--rect` on PowerShell and check commands against its reference.
+- **L-071:** parse failures in JSON modes carry no remediation (the skill works around it).
 
 ## What works (public CLI)
 
@@ -124,7 +125,7 @@ progress.** PRs 1, 2, 3a, 3b, 3c, 3d and 3e are increments, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PRs 1, 2, 3a, 3b, 3c and 3d merged; 3e (diagnostic fixes) in review; the counted campaigns for both clients restart from zero on 3e |
+| P12 | In progress: PRs 1, 2, 3a-3e merged; counted campaigns ran on 3e; 3f (the maintainer's orientation and slim-handoff decisions) in review; the small models are re-run next |
 | P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
@@ -141,9 +142,9 @@ is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `
 
 ## Quality evidence
 
-- P12 PR 3e gates on Windows 11 (fmt, strict Clippy with and without features,
-  workspace tests, warning-denied rustdoc, governance), the image digests, the debug
-  runs and the re-grade table go in the pull request description.
+- P12 PR 3f gates on Windows 11 (fmt, strict Clippy with and without features,
+  workspace tests, warning-denied rustdoc, governance), the image digests and the
+  re-grade table go in the pull request description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

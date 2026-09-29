@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Two maintainer decisions after the counted agent-trial campaigns on `261b50d` (P12
+  PR 3f, ADR 0022 note of 2026-09-29). **Orientation is housekeeping:** the grader no
+  longer fails `pwd`, `cd` to the folder the client started in, or a listing of the
+  file names there (`rg --files` with only `-g`/`--glob` filters, or `ls`, `dir`,
+  `Get-ChildItem` without recursion, with no path or that folder's path), alone or in
+  a compound whose every part is allowed; they are not tool calls. `cd` anywhere else
+  (the skill folder included), `command -v`, reading contents, a listing with another
+  path, a pattern, recursion, `--hidden` or a glob that would open the session root's
+  folder stay unauthorized. **Handoff v1 is slimmed in place** (it is unreleased):
+  the agent must state only what it alone knows (claims; each citation's `id`, `type`,
+  `segment_id` or `evidence_id` and, for frames and crops, `pixels_inspected`; gaps
+  with `kind`, `reason`, `note`; untrusted instructions; `lifecycle.action`; the image
+  access and its code; the resume card when partial or a limit is exhausted).
+  Everything VSift recorded (times, revisions, candidate, parent, rectangle, range,
+  `session`, the rest of `capabilities` and `lifecycle`, gap `code` and `range`,
+  `budget`) is optional; a given value must still match the retained bundle, given
+  `budget.limits` must be the profile's unless overridden, and the grader resolves
+  missing values through each identity, so truth windows, `citations_resolve` and
+  budgets (the harness's own counts) are as strict as before. The skill's REPORT
+  skeleton, `references/handoff.md`, `budgets.md`, `lifecycle.md` and both examples
+  show the slim form; the guard checks the schema's required lists and that the
+  skeleton holds only them. Known limit L-081. Every counted run of both campaigns was
+  re-graded from its raw logs beside the original (`grade-3f.json`).
 - Fixes from two diagnostic trial passes (P12 PR 3e, ADR 0022 note of 2026-09-29):
   39 Claude Code runs on Windows and 11 Codex runs in the Linux container, none
   counted. **Grader:** A-09-f05-blurred declares its `blurred_terms` (`E-409`,

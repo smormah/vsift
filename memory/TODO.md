@@ -6,31 +6,29 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P11 are complete. P12 (agent skill) is in progress.** Merged increments: PR 1
-(#196), PR 2 (#201), PR 3a (#203), PR 3c (#207), PR 3d (#208) and PR 3b (#209,
-`3f91661`, the Codex Linux container). **PR 3e** (branch `p12-pr3e-diagnostic-fixes`,
-in review) fixes everything two diagnostic passes found, so the counted campaign runs
-on one version of the skill and grader. The maintainer approved ~80 counted runs
-(Claude Code `claude-opus-5-5`/`claude-haiku-4-5-20251001`; Codex
-`gpt-6-astra`/`gpt-6-luna`).
+**P00-P11 are complete. P12 (agent skill) is in progress.** Merged: PRs 1, 2, 3a-3e
+(3e #211, `261b50d`, where the counted campaigns ran: Opus 5.5/Haiku 4.5 in Claude
+Code, GPT-6-Astra/GPT-6-Luna in Codex; raw logs local). **PR 3f** (branch
+`p12-pr3f-orientation-slim-handoff`, in review) implements the maintainer's decisions
+of 2026-09-29: orientation in the starting folder is housekeeping, and handoff v1
+requires only what the agent alone knows (recorded values optional, checked if given).
 
-1. **Review and merge PR 3e** (an increment, not the packet). Its re-grade table shows
-   only grader changes; the skill changes need the new campaign to show.
-2. **Then the counted campaigns restart from zero on PR 3e's merge commit:** Claude
-   Code on Windows from a frozen checkout (39 runs); Codex in the container after
-   rebuilding both images at that commit (loops capture the final `trial-id` line).
-   Records go to `docs/planning/p12-agent-trials/`.
-3. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes, now including the
-   diagnostic passes), the corpus truth amendment (persistent events F04-E05, F05-E04,
-   F12-E03) and L-075 (Codex image budgets unmeasured) and L-078..L-080.
+1. **Review and merge PR 3f** (an increment, not the packet). Its table re-grades every
+   counted run (`grade-3f.json` beside `grade.json`); the skill changed too.
+2. **Then the approved re-run of the small models** (Haiku 4.5, GPT-6-Luna) on PR 3f's
+   merge commit: Claude Code from a frozen checkout, Codex after rebuilding both images
+   at that commit. Records go to `docs/planning/p12-agent-trials/`.
+3. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes, including PR 3f's
+   readings: `command -v` strict, `pixels_inspected` required, a scenario's gap `code`
+   still required), the corpus truth amendment (F04-E05, F05-E04, F12-E03), L-075,
+   L-078..L-081.
 4. **Technical debt:** SEC-T01 adversarial evidence (#188, L-068), before P14.
 
 ## Found in P12 (for the maintainer)
 
-- **Diagnostic passes (2026-09-29, fixed in PR 3e):** small models ended without a
-  handoff on a stop, used `cd`, `--limit 100` and free-form reports, Codex wrote the
-  report to a file; three grader false positives; Codex ignored `tools.view_image`;
-  the container FFmpeg lacked `boxblur`. Details: ADR 0022's 2026-09-29 note.
+- **Counted campaigns re-graded (PR 3f):** Opus 11/11 and Astra 11/11 pass both
+  results; GPT-6-Luna mechanical 5 -> 20 of 31 (left: handoff shapes, 3 partial reports
+  without a resume card, 2 `printf`); Haiku 3/28 (invents its own handoff shapes).
 - **Codex images (L-075, decided):** the right check code proves image access; its
   image budgets are unmeasured (the rollout hides views in a code-mode `exec` call).
 - **Still open (grader):** `untrusted_listed` takes only F12-E01 (0-8 s) though the
@@ -46,8 +44,8 @@ on one version of the skill and grader. The maintainer approved ~80 counted runs
 - **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial as debt (above).
 - **P13 plan:** npm launcher over per-platform packages, no install scripts; all names
   held, no announcement before P14 (open items: P13 name checklist).
-- **PR 3e decisions (supervisor):** `cd` stays unauthorized; `--help` forms are free
-  but never piped; the `\\?\` retry rule stays (#210).
+- **PR 3e (supervisor):** `--help` forms free, never piped; the `\\?\` retry stays
+  (#210). **PR 3f (maintainer):** the two decisions above; `cd` elsewhere stays strict.
 
 ## Open decisions (maintainer)
 
@@ -71,7 +69,7 @@ on one version of the skill and grader. The maintainer approved ~80 counted runs
 
 ## Other follow-ups
 
-- **Known limits:** entries to L-080, review pending (P12 added L-071..L-080).
+- **Known limits:** entries to L-081, review pending (P12 added L-071..L-081).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   `p11_durable_workspace` on Ubuntu 24.04 / ext4; `strict-linux` end to end in CI.
 - **Campaign upkeep:** bump the three `UBUNTU_IMAGE_*` values together (3 GiB images).
