@@ -47,7 +47,17 @@ pub struct CommandPolicy {
     free_forms: BTreeMap<String, Vec<String>>,
     /// Global options the skill never uses (`--session-root`, ...).
     never_options: BTreeSet<String>,
+    /// Whether `commands.md` shows the read-only help forms (`vsift --help`,
+    /// `vsift <namespace> <operation> --help`) as free.
+    help_free: bool,
 }
+
+/// The operation identifier the grader gives every help form: it runs no
+/// operation, it only prints the parser's usage text.
+pub const HELP_OPERATION: &str = "help";
+
+/// The console lines of `commands.md` that make the help forms free.
+const HELP_FORMS: [&str; 2] = ["vsift --help", "vsift <namespace> <operation> --help"];
 
 /// Why one `vsift` invocation is outside the policy.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -100,6 +110,9 @@ impl CommandPolicy {
         let mut free_forms = BTreeMap::new();
         let mut never_options = BTreeSet::new();
         let mut in_also_never = false;
+        let help_free = HELP_FORMS
+            .iter()
+            .all(|form| text.lines().any(|line| line.trim() == *form));
         for line in text.lines() {
             if line.starts_with("## ") {
                 in_also_never = false;
@@ -158,7 +171,30 @@ impl CommandPolicy {
             classes,
             free_forms,
             never_options,
+            help_free,
         })
+    }
+
+    /// Whether the arguments after `vsift` are a help form: `--help` after
+    /// nothing, a namespace or a whole operation, and nothing else. It runs
+    /// nothing and reads nothing but the parser's text, so the skill lets an
+    /// agent recover a command's flags this way (added 2026-09-29, after a
+    /// small model guessed `session retain --directory`).
+    fn is_help_form(&self, arguments: &[String]) -> bool {
+        let Some((last, words)) = arguments.split_last() else {
+            return false;
+        };
+        if last != "--help" || words.iter().any(|word| word.starts_with('-')) {
+            return false;
+        }
+        let joined = words.join(".");
+        words.is_empty()
+            || self.classes.contains_key(&joined)
+            || (words.len() == 1
+                && self
+                    .classes
+                    .keys()
+                    .any(|operation| operation.starts_with(&format!("{joined}."))))
     }
 
     /// The class of an operation identifier, if the table has it.
@@ -214,6 +250,12 @@ impl CommandPolicy {
                     option: name.to_owned(),
                 });
             }
+        }
+        if self.help_free && self.is_help_form(arguments) {
+            return Ok(AllowedCommand {
+                operation: HELP_OPERATION.to_owned(),
+                class: CommandClass::Free,
+            });
         }
         let Some(operation) = self.operation_of(arguments) else {
             return Err(PolicyViolation::UnknownOperation {
@@ -412,6 +454,11 @@ Also never, in any state:
 
 - the global options `--session-root` and `--host-isolation` (operator);
 - any executable other than `vsift`.
+
+```console
+vsift --help
+vsift <namespace> <operation> --help
+```
 ";
 
     fn words(line: &str) -> Vec<String> {
@@ -467,6 +514,43 @@ Also never, in any state:
             policy.check(&words("--version"), &none),
             Err(PolicyViolation::UnknownOperation { .. })
         ));
+        Ok(())
+    }
+
+    /// A small model (A-05, 2026-09-29) guessed `session retain --directory`,
+    /// then ran `vsift session retain --help` piped through `grep` and `head`.
+    /// The help forms alone are free; anything else stays as before.
+    #[test]
+    fn help_forms_are_free_and_nothing_else_is() -> Result<(), TrialError> {
+        let policy = CommandPolicy::from_commands_md(TABLE)?;
+        let none = BTreeSet::new();
+        for line in [
+            "--help",
+            "session retain --help",
+            "session --help",
+            "ingest --help",
+            "setup install --help",
+        ] {
+            assert_eq!(
+                policy.check(&words(line), &none),
+                Ok(AllowedCommand {
+                    operation: HELP_OPERATION.to_owned(),
+                    class: CommandClass::Free
+                }),
+                "{line}"
+            );
+        }
+        for line in [
+            "session retain ses_x --help",
+            "session retain --output b --help",
+            "nothing --help",
+            "--session-root x --help",
+            "-h",
+        ] {
+            assert!(policy.check(&words(line), &none).is_err(), "{line}");
+        }
+        let without = CommandPolicy::from_commands_md(&TABLE.replace("vsift --help", ""))?;
+        assert!(without.check(&words("--help"), &none).is_err());
         Ok(())
     }
 

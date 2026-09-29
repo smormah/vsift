@@ -194,6 +194,7 @@ pub fn build_record(
             "raw_stderr_sha256": run.stderr_sha256,
         },
         "usage": graded.usage,
+        "codex_image_views": run.codex_image_views,
         "calls": calls,
         "handoff": redactions.apply_value(&graded.handoff.clone().unwrap_or(Value::Null)),
         "mechanical": redactions.apply_value(&serde_json::to_value(&graded.mechanical).unwrap_or(Value::Null)),

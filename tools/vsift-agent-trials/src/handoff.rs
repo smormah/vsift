@@ -211,8 +211,10 @@ pub fn text_problems(message: &str, markers: &PrivateMarkers) -> Vec<String> {
             problems.push(format!("the report contains a live link ({scheme})"));
         }
     }
+    if has_extended_length_path(message) {
+        problems.push("the report contains an extended-length path (\\\\?\\)".to_owned());
+    }
     for marker in [
-        "\\\\?\\",
         "/home/",
         "/users/",
         "/root/",
@@ -237,6 +239,26 @@ pub fn text_problems(message: &str, markers: &PrivateMarkers) -> Vec<String> {
         }
     }
     problems
+}
+
+/// Whether the text holds a Windows extended-length path: the `\\?\`
+/// prefix (or `//?/`) followed by a drive (`C:`) or the UNC form (`UNC\`).
+/// The bare prefix is not a path: the skill itself tells agents to retry an
+/// image without it, and a report may say so (A-09, 2026-09-29).
+fn has_extended_length_path(text: &str) -> bool {
+    ["\\\\?\\", "//?/"].iter().any(|prefix| {
+        text.match_indices(prefix).any(|(index, _)| {
+            let rest: Vec<char> = text[index + prefix.len()..].chars().take(4).collect();
+            let drive = rest.len() >= 2 && rest[0].is_ascii_alphabetic() && rest[1] == ':';
+            let unc = rest.len() == 4
+                && rest[..3]
+                    .iter()
+                    .collect::<String>()
+                    .eq_ignore_ascii_case("unc")
+                && matches!(rest[3], '\\' | '/');
+            drive || unc
+        })
+    })
 }
 
 /// Whether the text holds `X:\` or `X:/` after a non-letter.
@@ -281,6 +303,30 @@ mod tests {
             "esc \u{1b}[31m",
         ] {
             assert!(!text_problems(bad, &markers).is_empty(), "{bad}");
+        }
+    }
+
+    /// A-09 (2026-09-29, second Opus run): the report said an image read
+    /// "was denied and retried without the `\\?\` prefix", as the skill
+    /// teaches. The bare prefix in prose is not a path; the prefix followed
+    /// by a drive or a UNC share is.
+    #[test]
+    fn only_an_actual_extended_length_path_fails() {
+        let markers = PrivateMarkers::default();
+        let prose = "- **Budget (compact):** 14 of 30 tool calls and 5 of 6 images. That includes one image read that was denied and retried without the `\\\\?\\` prefix.";
+        assert!(text_problems(prose, &markers).is_empty(), "{prose}");
+        for bad in [
+            "opened \\\\?\\C:\\trials\\frame.png",
+            "opened \\\\?\\UNC\\server\\share\\frame.png",
+            "opened //?/c:/trials/frame.png",
+        ] {
+            let problems = text_problems(bad, &markers);
+            assert!(
+                problems
+                    .iter()
+                    .any(|problem| problem.contains("extended-length")),
+                "{bad}: {problems:?}"
+            );
         }
     }
 }

@@ -110,9 +110,12 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
 
 ## Before you send it
 
+- The final message ends with exactly one `vsift-handoff` block, also when you stop
+  early (a missing tool, an expired session, a budget): SKILL.md's REPORT state shows
+  the smallest valid one. Never save the report to a file.
 - Every `e` id in a claim exists in `citations`; every citation is used.
-- No absolute path, home folder, link, secret or environment value anywhere
-  ([safety.md](safety.md)); the JSON schema refuses most of them.
+- No absolute path, home folder, web address, Markdown link, secret or environment
+  value anywhere ([safety.md](safety.md)); the JSON schema refuses most of them.
 - Evidence text appears only in quotes or code blocks, with hidden characters shown
   as `<U+202E>`-style notation.
 - `budget.used`, `lifecycle` and, for a partial report, `resume` are filled;

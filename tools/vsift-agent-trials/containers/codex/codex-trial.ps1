@@ -19,8 +19,11 @@
       build          docker build of both images at the checkout's HEAD.
       versions       tool versions and digests in the agent image.
       sandbox-check  Codex's Linux sandbox without a model call.
-      debug          one debug run (never a trial) of A-08 with -Prompt.
-      trial          one trial of -Scenario (its first phase).
+      debug          one debug run (never a trial) with -Prompt, prepared from
+                     -Scenario (default A-08-f05-local-asr).
+      trial          one trial of -Scenario (its first phase). Its last line
+                     of output is "trial-id <trial>", the folder name to pass
+                     to continue -Trial and to find the exported records.
       continue       phase -Phase of the prepared trial -Trial (A-02's second
                      phase gets only the first phase's resume card).
 
@@ -32,8 +35,12 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('build', 'versions', 'sandbox-check', 'debug', 'trial', 'continue')]
+    [ValidateSet('build', 'versions', 'sandbox-check', 'debug', 'trial', 'continue', 'regrade')]
     [string] $Action,
+
+    # For regrade: the new grade's file name, beside the original grade.
+    [ValidatePattern('^grade-[a-z0-9-]{1,32}\.json$')]
+    [string] $Output,
 
     [ValidatePattern('^[A-Za-z0-9-]{1,64}$')]
     [string] $Scenario,
@@ -196,19 +203,34 @@ switch ($Action) {
     }
     'debug' {
         if (-not $Name -or -not $Model -or -not $Prompt) { throw 'debug needs -Name, -Model and -Prompt' }
-        $relative = Invoke-Prepare @('--scenario', 'A-08-f05-local-asr', '--debug', $Name)
+        # A debug run may use another scenario's preparation (for example the
+        # images-disabled one, to check that Codex cannot view an image).
+        $debugScenario = if ($Scenario) { $Scenario } else { 'A-08-f05-local-asr' }
+        $relative = Invoke-Prepare @('--scenario', $debugScenario, '--debug', $Name)
         Invoke-Run $relative 1 @('--debug-prompt', $Prompt)
         Invoke-Grade $relative 1
+        Write-Output "trial-id $relative"
     }
     'trial' {
         if (-not $Scenario -or -not $Model) { throw 'trial needs -Scenario and -Model' }
         $relative = Invoke-Prepare @('--scenario', $Scenario)
         Invoke-Run $relative 1 @()
         Invoke-Grade $relative 1
+        # The one machine-readable line an operator's loop captures.
+        Write-Output "trial-id $relative"
     }
     'continue' {
         if (-not $Trial -or -not $Model) { throw 'continue needs -Trial and -Model' }
         Invoke-Run $Trial $Phase @()
         Invoke-Grade $Trial $Phase
+        Write-Output "trial-id $Trial"
+    }
+    'regrade' {
+        # Grading reads only the raw logs and records; no model is called.
+        if (-not $Trial -or -not $Output) { throw 'regrade needs -Trial and -Output' }
+        $gradePhase = if ($PSBoundParameters.ContainsKey('Phase')) { $Phase } else { 1 }
+        $arguments = $common + @('--mount', "type=bind,source=$Exports,target=/exports") +
+            (Get-TrialMount $Trial) + @($harnessImage, 'regrade', '--trial', $Trial, '--phase', "$gradePhase", '--output', $Output)
+        Invoke-Docker $arguments
     }
 }

@@ -73,7 +73,9 @@ the old session. Explain this cost to the user and follow the lifecycle policy t
 stated ([lifecycle.md](lifecycle.md)):
 
 - they said to reopen when needed: run `ingest` again and record the new session;
-- otherwise: stop, write a partial handoff with a `session_expired` gap, and ask.
+- otherwise: go to REPORT and write the handoff (status `partial` or
+  `insufficient_evidence`) with a `lifecycle` gap whose reason is `session_expired`,
+  and ask.
 
 An expired or closed session cannot be renewed: `vsift session renew` only extends an
 open session, and only when the user asked for it. A job whose session is closed or
