@@ -82,7 +82,11 @@ select the skill; the user can also name it.
   allowed words of every closed member beside the skeleton, and
   `references/handoff.md` lists all of them; a gap note may quote VSift's remediation
   whole (600 characters), and `references/resume.md` shows one exact resume card
-  (PR 3g). What to do per failure code is in `references/commands.md`.
+  (PR 3g). What to do per failure code is in `references/commands.md`. Transcript
+  text is quoted only from a segment's `display_text` (a speaker from
+  `display_label`), where VSift has already written every invisible or bidirectional
+  character as `<U+202E>`-style notation; `text` and `original_text` keep them raw
+  (PR 3h, ADR 0008 note of 2026-09-29).
 
 ## Keeping it in step with the CLI
 
@@ -116,6 +120,9 @@ test --workspace`) fails when the skill drifts from the CLI:
 - the vocabulary tables of `SKILL.md` (its fifteen members) and `references/handoff.md`
   (every member) list exactly the `enum` and `const` values the schema holds, and a
   gap note fits `VSift`'s longest fixed remediations with context;
+- `SKILL.md`'s "before you send" checklist, `safety.md` and `handoff.md` name
+  `display_text` and `display_label`, and `transcript-segment.schema.json` requires
+  both;
 - the image check's code appears in no text file; `SKILL.md` stays within 300 lines,
   holds only `name` and `description` in its front matter and links every reference.
 

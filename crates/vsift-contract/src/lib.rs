@@ -64,7 +64,9 @@
 //! - **Storage:** [`non_private_folder_summary`], the fixed-prose remediation
 //!   for an existing [`PrivateFolder`] that other accounts can access.
 //! - **Text:** [`sanitize_untrusted_text`], the one rule for placing untrusted
-//!   provider text in public output.
+//!   provider text in public output, and [`render_hidden_characters`], which
+//!   writes every [`is_hidden_character`] as `<U+XXXX>` for the `display_text`
+//!   of transcript segments.
 //! - **Worker requests (P11):** the strict bounded document decoder
 //!   [`decode_strict_json`]; the versioned [`WorkRequest`] decoded by
 //!   [`decode_work_request`] (and [`decode_batch_line`] for a `job batch`
@@ -191,7 +193,10 @@ pub use stream::{
     EventKind, EvidenceEventResponse, EvidenceRecordType, EvidenceStream, TranscriptEvidenceStream,
     TranscriptStreamData,
 };
-pub use text::{MAX_PROVIDER_DETAIL_BYTES, sanitize_untrusted_text};
+pub use text::{
+    HIDDEN_CHARACTER_GROWTH, HIDDEN_CHARACTER_UNICODE_VERSION, MAX_PROVIDER_DETAIL_BYTES,
+    is_hidden_character, render_hidden_characters, sanitize_untrusted_text,
+};
 pub use transcript::{
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, RetranscribeJob,
     SourceSegmentData, TranscriptPageData, TranscriptRetranscribeData, TranscriptRevisionData,

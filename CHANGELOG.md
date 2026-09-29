@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Transcript segments carry `display_text` (P12 PR 3h; ADR 0008 note of 2026-09-29,
+  maintainer decision): `text` with every hidden character written as visible
+  `<U+XXXX>` notation, in every result that returns a segment (`transcript get` and
+  `search`, `--json` and `--events jsonl`); a speaker object carries `display_label`
+  by the same rule. Hidden characters are Unicode 16.0 general category `Cf`, every
+  `Default_Ignorable_Code_Point`, U+2028 and U+2029, defined once in
+  `vsift_contract::is_hidden_character`. The fields are additive and required in
+  `transcript-segment.schema.json`; `text` and `original_text` keep their meaning and
+  bytes, rendering happens at output, and stored records, identities and digests are
+  unchanged. Literal `<U+202E>` in the source is shown as written (rendering is
+  idempotent). `search` still matches `text`, and a query in notation stays literal.
+  The skill quotes `display_text` (and `display_label`), never `text` or
+  `original_text` (`SKILL.md`, `safety.md`, `handoff.md`; guarded). Known limit L-083
+  is rewritten as an accepted residual: the raw characters stay in `text` by design.
 - The handoff's closed vocabulary is shown and its friction removed (P12 PR 3g, ADR
   0022 note of 2026-09-29), after the compact-tier runs on `b68d746` (Claude Sonnet
   5.5: 28 of 28 answers, 9 of 28 full passes, 18 failing only on the handoff; GPT-6-Luna

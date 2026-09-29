@@ -20,6 +20,7 @@
           "line": 2,
           "ordinal": 1
         },
+        "display_text": "This synthetic sidecar is aligned with\nan explicit 500 millisecond offset.",
         "end_us": 4000000,
         "language": null,
         "markup": "none",
@@ -47,6 +48,7 @@
           "line": 7,
           "ordinal": 2
         },
+        "display_text": "Dialog R-17 is displayed now.",
         "end_us": 9000000,
         "language": null,
         "markup": "none",

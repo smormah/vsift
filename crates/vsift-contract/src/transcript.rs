@@ -14,7 +14,11 @@
 //! Transcript text is untrusted. The domain already rejects control characters
 //! other than the line separator, and this module still passes every line
 //! through [`sanitize_untrusted_text`], so the rule for placing untrusted text in
-//! public output stays in one place.
+//! public output stays in one place. Each segment also carries `display_text`
+//! (and a speaker `display_label`): the same text with every hidden character
+//! written as `<U+XXXX>` by [`render_hidden_characters`], for a reader to quote
+//! (ADR 0008, note of 2026-09-29). It is rendered here, at output, so stored
+//! revisions, identities and digests never change.
 
 use serde::Serialize;
 use vsift_domain::{
@@ -24,7 +28,7 @@ use vsift_domain::{
     TranscriptWarningKind,
 };
 
-use crate::{ConfidenceResponse, sanitize_untrusted_text};
+use crate::{ConfidenceResponse, render_hidden_characters, sanitize_untrusted_text};
 
 /// Every character sanitization can replace grows from at most one byte to
 /// three (U+FFFD), so this budget never truncates a domain-bounded cue.
@@ -216,6 +220,10 @@ struct TranscriptWarningData {
 }
 
 /// One timestamped transcript segment: the published transcript evidence record.
+///
+/// `text` and `original_text` are the payload (without markup, and as
+/// written); `display_text` is `text` with every hidden character made
+/// visible, the form a report quotes.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TranscriptSegmentData {
     segment_id: String,
@@ -225,6 +233,7 @@ pub struct TranscriptSegmentData {
     start_us: u64,
     end_us: u64,
     text: String,
+    display_text: String,
     original_text: Option<String>,
     markup: &'static str,
     speaker: Option<SpeakerData>,
@@ -303,6 +312,7 @@ impl TranscriptSegmentData {
                 None,
             ),
         };
+        let text = sanitize_lines(segment.text().text());
         Self {
             segment_id: segment.id().as_str().to_owned(),
             revision_id: revision.id().as_str().to_owned(),
@@ -310,12 +320,17 @@ impl TranscriptSegmentData {
             source_segment_id: revision.source_segment().id().as_str().to_owned(),
             start_us: segment.range().start().as_micros(),
             end_us: segment.range().end().as_micros(),
-            text: sanitize_lines(segment.text().text()),
+            display_text: render_hidden_characters(&text),
+            text,
             original_text: segment.text().original().map(sanitize_lines),
             markup: segment.text().markup().identifier(),
-            speaker: segment.speaker().map(|label| SpeakerData {
-                label: sanitize_untrusted_text(label.as_str(), MAX_PRESENTED_TEXT_BYTES),
-                origin: speaker_origin(origin),
+            speaker: segment.speaker().map(|label| {
+                let label = sanitize_untrusted_text(label.as_str(), MAX_PRESENTED_TEXT_BYTES);
+                SpeakerData {
+                    display_label: render_hidden_characters(&label),
+                    label,
+                    origin: speaker_origin(origin),
+                }
             }),
             confidence: ConfidenceResponse::from(segment.confidence()),
             language: revision
@@ -387,6 +402,7 @@ impl AsrAlignmentData {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct SpeakerData {
     label: String,
+    display_label: String,
     origin: &'static str,
 }
 
