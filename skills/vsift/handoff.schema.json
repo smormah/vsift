@@ -130,6 +130,9 @@
     "safe_text_300": {
       "allOf": [{ "$ref": "#/$defs/safe_text" }, { "maxLength": 300 }]
     },
+    "safe_text_160": {
+      "allOf": [{ "$ref": "#/$defs/safe_text" }, { "maxLength": 160 }]
+    },
     "time_us": { "type": "integer", "minimum": 0, "maximum": 86400000000 },
     "remaining_count": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
     "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
@@ -458,7 +461,7 @@
       }
     },
     "resume": {
-      "description": "The resume card: enough for another run to continue without repeating work. At most 2 KiB when serialized. job_id may be left out when there is no transcription job.",
+      "description": "The resume card: enough for another run to continue without repeating work. At most 2 KiB when serialized. job_id may be left out when there is no transcription job. to_verify is optional: the findings a later run must verify again before it reports them.",
       "type": "object",
       "additionalProperties": false,
       "required": ["state", "session_id", "revision_id", "operation_ids", "evidence", "summary", "remaining", "next_command"],
@@ -504,8 +507,24 @@
           }
         },
         "summary": { "$ref": "#/$defs/safe_text_500" },
+        "to_verify": {
+          "description": "Optional (default empty): each finding the report states as supported, for a later run to verify again with one command before it reports it: the finding in the agent's own words, the identity of the transcript segment or frame that showed it, and the window of source time it holds for (a segment's start and end; for a frame, from the frame's own time to where the state is known to end). from_us is at most to_us.",
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["finding", "id", "from_us", "to_us"],
+            "properties": {
+              "finding": { "$ref": "#/$defs/safe_text_160" },
+              "id": { "type": "string", "pattern": "^(tsg|evd)_[a-z0-9]{16,64}$" },
+              "from_us": { "$ref": "#/$defs/time_us" },
+              "to_us": { "$ref": "#/$defs/time_us" }
+            }
+          }
+        },
         "remaining": {
-          "description": "What is left of the budget, as the agent counted it: images (images_total, or images, read the same), tool calls and seconds. A count the agent did not keep is null; the harness counts usage itself and never relies on these values.",
+          "description": "What is left of this run's budget, as the agent counted it: images (images_total, or images, read the same), tool calls and seconds. A count the agent did not keep is null; the harness counts usage itself and never relies on these values. It binds only the same run after a context reset: a new run starts with the budget its user names.",
           "type": "object",
           "additionalProperties": false,
           "required": ["tool_calls"],

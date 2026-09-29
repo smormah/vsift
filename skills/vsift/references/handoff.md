@@ -127,7 +127,12 @@ through the identities you cite. So the JSON **must** hold:
 - `resume` when the work was cut short and can continue: a budget limit exhausted, or
   a gap with reason `budget_exhausted` or `cancelled` (or code `CANCELLED`). A report
   that is `partial` only because a capability is missing or the session expired needs
-  none ([resume.md](resume.md)).
+  none ([resume.md](resume.md)). List in its `to_verify` the findings you state as
+  supported, with the evidence and window that showed each, so that another run can
+  verify them again with one command each.
+
+When you continue from a card another run wrote, cite only evidence this run read
+itself: verify each earlier finding again before you report it (resume.md).
 
 Everything else is **optional**: leave it out (or write null) unless it helps the
 reader. An optional value you do give is checked against VSift's records, so copy it

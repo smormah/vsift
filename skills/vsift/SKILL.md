@@ -53,8 +53,8 @@ Times are microseconds of source time (1 s = 1000000); a range includes from, no
 Before you start, know the video, the question, any transcript file and offset (all
 from the user), the budget profile and what should happen to the session afterwards
 ([references/lifecycle.md](references/lifecycle.md)). Ask only for what is missing and
-needed; the question and the video are enough to start. After a context reset, read
-[references/resume.md](references/resume.md) first and continue from the saved state.
+needed; the question and the video are enough to start. After a context reset, or given a
+resume card, read [references/resume.md](references/resume.md) first: a new run has its own budget.
 
 ## The procedure
 

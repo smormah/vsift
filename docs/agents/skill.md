@@ -128,10 +128,43 @@ test --workspace`) fails when the skill drifts from the CLI:
 
 A new command, flag or failure code therefore needs a skill update in the same change.
 
-The check image was generated once with FFmpeg's `drawtext` filter (white 360x96
-background, black bold text, greyscale PNG, metadata stripped). To replace it, choose
-a new code word, render it the same way, and update the code word held in the test;
-never write the code into any skill or documentation file.
+### The check image
+
+The first check image (P12 PR 1) printed its code in small bold type in a 360x96
+frame. In the final trial campaign GPT-6-Sol failed the image check in 5 runs, each
+time reading the code with the same letter missing, so P12 PR 3i redrew it
+(2026-09-30):
+
+- **The code** is four upper-case letters and four digits, drawn from glyphs no reader
+  confuses: never I, l, 1, O, 0, S, 5, B or 8. It is held, in two parts, only in the
+  guard (`crates/vsift-cli/src/skill_contract.rs`) and in the grader's table of check
+  images (`tools/vsift-agent-trials/src/skill.rs`), the grader's truth. A guard test
+  fails if any word of the current or a retired code is in a skill text file or in
+  the image's bytes as text, or if the joined code is in any text file of the
+  repository.
+- **The image** is a 776x168 greyscale PNG of 5,550 bytes, SHA-256
+  `cfc5c888aae502a2bb5d47bae6b66ec7e5832fab3aeaa7af255e948c1e1962a1`: black Verdana
+  Bold at 96 px on white, each glyph centred in its own 80 px cell, 56 px between the
+  letters and the digits, 40 px margins.
+- **How it was drawn** (FFmpeg 9.0, the gyan.dev full build, on Windows 11; the
+  Verdana Bold font file of Windows 11, SHA-256
+  `f3245f5f38f61bd1ceefb0f1338a5b88a21e6220832c2f43a38bbc7e1547c36f`). With `<g1>` to
+  `<g8>` the code's eight glyphs in order and `<x1>` to `<x8>` their cells' left edges
+  (40, 120, 200, 280, then 416, 496, 576, 656), one `drawtext` per glyph (shown for
+  the first; the other seven differ only in `text` and the cell edge):
+
+  ```text
+  ffmpeg -f lavfi -i "color=c=white:s=776x168:d=1" -frames:v 1 -vf "drawtext=fontfile='C\:/Windows/Fonts/verdanab.ttf':text=<g1>:fontsize=96:fontcolor=black:y_align=baseline:x=<x1>+(80-text_w)/2:y=h/2+35,...,format=gray" -map_metadata -1 -fflags +bitexact -flags +bitexact -compression_level 9 image-check.png
+  ```
+
+  Two renderings with the same FFmpeg and font gave the same bytes. Another FFmpeg or
+  font version may not, which is why the grader identifies the image by its SHA-256.
+- **To replace it:** choose a new code by the same rule, render it as above, add its
+  SHA-256 and code to the grader's table (marking the old entry retired) and put the
+  code in the guard's current code, moving the old one to its retired codes; never
+  write the code into any skill or documentation file. The grader reads the code of
+  the image each trial's workspace received, so older trials still grade against the
+  code they were shown.
 
 ## Not yet done
 

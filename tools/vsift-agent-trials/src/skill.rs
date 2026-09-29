@@ -14,17 +14,83 @@ use crate::{
     policy::{Budgets, CommandPolicy},
 };
 
-/// The code word printed in `skills/vsift/assets/image-check.png`, in two
-/// parts so a plain search of the repository for the joined word does not
-/// find it (the same convention as the CLI's `skill_contract` guard, which
-/// keeps the skill's own text free of it). The grader compares a
-/// `verified` handoff's `image_check_code` with it.
-const IMAGE_CODE_PARTS: [&str; 2] = ["OK", "API 6281"];
+/// One check image the skill has shipped as `assets/image-check.png`.
+///
+/// A trial is graded against the image its own workspace received, never
+/// against the repository's current one: re-grading an older trial after
+/// the image changed must still compare its report with the code that trial
+/// was shown. The image is identified by the SHA-256 of its bytes.
+#[derive(Clone, Copy, Debug)]
+pub struct CheckImage {
+    /// SHA-256 of the PNG, lower-case hexadecimal.
+    pub sha256: &'static str,
+    /// The code printed in it, in two parts so a plain search of the
+    /// repository for the joined code does not find it (the convention of
+    /// the CLI's `skill_contract` guard, which keeps the skill's own text
+    /// free of every part).
+    code_parts: [&'static str; 2],
+    /// When the image was replaced, or `None` for the one the skill ships.
+    pub retired: Option<&'static str>,
+}
 
-/// The check image's code word.
+impl CheckImage {
+    /// The code printed in the image.
+    #[must_use]
+    pub fn code(&self) -> String {
+        self.code_parts.concat()
+    }
+}
+
+/// Every check image the skill has shipped, oldest first; the last one is
+/// the image in `skills/vsift/assets/` (a test holds the file to it).
+///
+/// The first image (P12 PR 1) printed its code small in a 360x96 frame; one
+/// compact model misread it in 5 runs, the same letter missing each time
+/// (P12 PR 3i). Its
+/// replacement uses no easily confused glyph (I, l, 1, O, 0, S, 5, B, 8),
+/// larger type and wide spacing; `docs/agents/skill.md` records how it was
+/// drawn.
+pub const CHECK_IMAGES: [CheckImage; 2] = [
+    CheckImage {
+        sha256: "a94b7b820a57ceb6f17eccaaf4e94ad47af6078db08a72c490c9bbf5741459f0",
+        code_parts: ["OK", "API 6281"],
+        retired: Some("2026-09-30, P12 PR 3i"),
+    },
+    CheckImage {
+        sha256: "cfc5c888aae502a2bb5d47bae6b66ec7e5832fab3aeaa7af255e948c1e1962a1",
+        code_parts: ["HKR", "X 4739"],
+        retired: None,
+    },
+];
+
+/// The check image the skill ships now.
 #[must_use]
-pub fn image_code() -> String {
-    IMAGE_CODE_PARTS.concat()
+pub fn current_check_image() -> CheckImage {
+    CHECK_IMAGES[CHECK_IMAGES.len() - 1]
+}
+
+/// The check image with these bytes, if the skill ever shipped it.
+#[must_use]
+pub fn check_image_for(bytes: &[u8]) -> Option<CheckImage> {
+    let digest = sha256_hex(bytes);
+    CHECK_IMAGES
+        .iter()
+        .find(|image| image.sha256 == digest)
+        .copied()
+}
+
+/// The code of the check image a trial workspace received: the first skill
+/// copy's `assets/image-check.png` whose bytes are a known check image.
+/// `None` when no copy is readable or none is known, which fails the image
+/// check rather than guessing.
+#[must_use]
+pub fn workspace_image_code(skill_directories: &[PathBuf]) -> Option<String> {
+    skill_directories.iter().find_map(|directory| {
+        fs::read(directory.join("assets").join("image-check.png"))
+            .ok()
+            .and_then(|bytes| check_image_for(&bytes))
+            .map(|image| image.code())
+    })
 }
 
 /// The skill directory of a repository.
