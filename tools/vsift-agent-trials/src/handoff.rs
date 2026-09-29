@@ -3,8 +3,8 @@
 //! The handoff is the final message's one fenced `vsift-handoff` block,
 //! holding JSON that must follow `skills/vsift/handoff.schema.json` and the
 //! rules of `references/handoff.md` a schema cannot express (every cited
-//! reference exists, a partial report or an exhausted budget carries a
-//! resume card of at most 2 KiB, a visual claim rests on inspected pixels,
+//! reference exists, work cut short that can continue carries a resume
+//! card ([`cut_short_reason`]), a card is at most 2 KiB, a visual claim rests on inspected pixels,
 //! given budget limits are the profile's). Before any check, a closed value
 //! written in another letter case is read as the schema's spelling
 //! ([`HandoffSchema::normalize_case`]); another word is still refused. The
@@ -369,14 +369,12 @@ fn semantic_problems(handoff: &Value, findings: &mut Findings) {
         }
     }
     let problems = &mut findings.problems;
-    if handoff["status"] == "partial" && handoff["resume"].is_null() {
-        problems.push("a partial handoff has no resume card".to_owned());
-    }
-    let exhausted = handoff["budget"]["exhausted"]
-        .as_array()
-        .is_some_and(|limits| !limits.is_empty());
-    if exhausted && handoff["status"] != "partial" && handoff["resume"].is_null() {
-        problems.push("an exhausted budget needs a resume card".to_owned());
+    if handoff["resume"].is_null()
+        && let Some(reason) = cut_short_reason(handoff)
+    {
+        problems.push(format!(
+            "the work was cut short ({reason}) and can continue, but there is no resume card"
+        ));
     }
     if !handoff["resume"].is_null() {
         let size = serde_json::to_string(&handoff["resume"]).map_or(usize::MAX, |text| text.len());
@@ -384,6 +382,45 @@ fn semantic_problems(handoff: &Value, findings: &mut Findings) {
             problems.push(format!("the resume card is {size} bytes"));
         }
     }
+}
+
+/// The gap reasons that say work stopped early and another run can pick it
+/// up: the agent's budget ran out (`budget_exhausted`), or a transcription
+/// was cancelled or interrupted with its checkpoints kept (`cancelled`).
+const RESUMABLE_GAP_REASONS: [&str; 2] = ["budget_exhausted", "cancelled"];
+
+/// Why the handoff needs a resume card, if it does.
+///
+/// The card is required only when the work was cut short **and can
+/// continue**: an exhausted budget limit, or a gap saying the budget ran
+/// out or a job was cancelled or interrupted (reason `cancelled` or code
+/// `CANCELLED`). A report that is `partial` only because a capability is
+/// missing (images, speech recognition, tools) or the session expired does
+/// not need one: resuming cannot fix those (supervisor's decision,
+/// 2026-09-29, after Sonnet 5.5 left the card out of 3 of 3 A-05 runs). A
+/// card that is given is still validated in full.
+#[must_use]
+pub fn cut_short_reason(handoff: &Value) -> Option<String> {
+    if let Some(limits) = handoff["budget"]["exhausted"].as_array()
+        && !limits.is_empty()
+    {
+        let names: Vec<&str> = limits.iter().filter_map(Value::as_str).collect();
+        return Some(format!("budget limits exhausted: {}", names.join(", ")));
+    }
+    handoff["gaps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find_map(|gap| {
+            let reason = gap["reason"].as_str().unwrap_or_default();
+            if RESUMABLE_GAP_REASONS.contains(&reason) {
+                Some(format!("a gap with reason {reason}"))
+            } else if gap["code"] == "CANCELLED" {
+                Some("a gap with code CANCELLED".to_owned())
+            } else {
+                None
+            }
+        })
 }
 
 /// Characters that hide or reorder text: bidirectional controls, zero-width

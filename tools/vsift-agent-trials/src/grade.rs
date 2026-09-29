@@ -426,14 +426,18 @@ fn citations_check(handoff: Option<&Value>, input: &GradeInput<'_>) -> Check {
         return Check::new("citations_resolve", vec!["no handoff".to_owned()]);
     };
     let cited = citations(Some(handoff));
-    if cited.is_empty() {
-        return Check::new("citations_resolve", Vec::new());
-    }
+    let keeps_evidence = handoff["resume"]["evidence"]
+        .as_array()
+        .is_some_and(|items| !items.is_empty());
+    // Nothing to resolve without a bundle: no citation and no evidence kept
+    // in a resume card (a card for an expired session may keep none).
     let Some(bundle) = input.bundle else {
-        return Check::new(
-            "citations_resolve",
-            vec!["no validated bundle to resolve the citations in".to_owned()],
-        );
+        let details = if cited.is_empty() && !keeps_evidence {
+            Vec::new()
+        } else {
+            vec!["no validated bundle to resolve the citations in".to_owned()]
+        };
+        return Check::new("citations_resolve", details);
     };
     let mut problems = Vec::new();
     // `session` is optional (handoff v1 as revised on 2026-09-29); a session
@@ -448,7 +452,41 @@ fn citations_check(handoff: Option<&Value>, input: &GradeInput<'_>) -> Check {
             problems.push(problem);
         }
     }
+    resume_card_resolves(&handoff["resume"], bundle, &mut problems);
     Check::new("citations_resolve", problems)
+}
+
+/// A resume card that is given must name the retained session and keep
+/// only evidence that session holds, with the kind it holds it as; a later
+/// run relies on both. Visual candidates are not in a bundle's evidence
+/// records, so a candidate is checked only by its identity's shape (the
+/// schema). Since 2026-09-29 the card is required only when work was cut
+/// short and can continue, but one that is given is checked in full.
+fn resume_card_resolves(resume: &Value, bundle: &BundleIndex, problems: &mut Vec<String>) {
+    if !resume.is_object() {
+        return;
+    }
+    if let Some(named) = resume["session_id"].as_str()
+        && bundle.session_id.as_deref() != Some(named)
+    {
+        problems.push("the resume card's session is not the retained one".to_owned());
+    }
+    for item in resume["evidence"].as_array().into_iter().flatten() {
+        let id = item["id"].as_str().unwrap_or_default();
+        let held = match item["kind"].as_str() {
+            Some("transcript_segment") => bundle.segments.keys().any(|(_, segment)| segment == id),
+            Some("frame") => bundle.frames.contains_key(id) || bundle.selections.contains_key(id),
+            Some("crop") => bundle.crops.contains_key(id),
+            Some("audio") => bundle.clips.contains_key(id),
+            _ => true,
+        };
+        if !held {
+            problems.push(format!(
+                "the resume card keeps {id}, which the retained session does not hold as a {}",
+                item["kind"].as_str().unwrap_or("?")
+            ));
+        }
+    }
 }
 
 /// Resolves a handoff citation reference (`e1`) through the bundle.

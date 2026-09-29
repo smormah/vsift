@@ -551,7 +551,8 @@ and GPT-6-Luna (50) runs, both phases of A-02 included, grouped by cause:
 | Another word for a closed value: gap kind `evidence`, `image`, `capability`, `coverage`, `context`; section `Reproduction steps`, `Untrusted instructions observed`, `gaps` | 13 | 3 | Yes, but the skill never listed the words | The vocabulary table; still refused |
 | An `observed` claim marked `unsupported` | 3 | 1 | Yes (the schema's rule) | Rule stated beside the table |
 | A resume card in another shape (`remaining.images`, null `tool_calls`, no `job_id`) | 6 | 0 | No: it carries what resume.md needs | Schema accepts it |
-| A card that is `{}` or `{"note": ...}`, or a partial report without a card | 3 + 5 | 0 + 2 | Yes | Exact card in resume.md |
+| A card that is `{}` or `{"note": ...}` | 3 | 0 | Yes | Exact card in resume.md |
+| A partial report without a card (A-05 with images disabled, and 2 Sonnet A-07 runs whose gaps were `not_inspected` and `transcript_unavailable`) | 5 | 2 | Not when nothing can be resumed | Card required only when work can continue (below) |
 | A citation never used by a claim or instruction | 5 | 15 | No | A warning, not a failure |
 | A claim that is `supported` but cites nothing (plus its consequential "uninspected images only") | 2 + 2 | 1 + 1 | Yes: a finding about the tools or session belongs in a gap | Rule stated; one message only |
 | A `supported` claim citing only frames it did not inspect | 0 | 1 | Yes | None |
@@ -604,6 +605,17 @@ and GPT-6-Luna (50) runs, both phases of A-02 included, grouped by cause:
   `setup check` or `session status` result, which the handoff records as a gap. The
   grader no longer adds "supported on uninspected images only" when a claim cites
   nothing; the schema's `minItems` reports it once.
+- **The resume card is required only when the work can continue** (supervisor's
+  technical decision, 2026-09-29, before merging PR 3g): when a budget limit is
+  exhausted, or a gap has reason `budget_exhausted` or `cancelled` (or code
+  `CANCELLED`: a transcription cancelled or interrupted with its checkpoints kept). A
+  report that is `partial` only because a capability is missing (images, speech
+  recognition, tools) or the session expired needs none, since resuming cannot fix
+  it; Sonnet 5.5 reasonably left the card out of 3 of 3 A-05 runs. A card that is given
+  must still validate, and `citations_resolve` now also checks that it names the
+  retained session and keeps only evidence that session holds, as the kind it holds.
+  The rule is the grader's `cut_short_reason` and the guard's `cut_short`; A-02's
+  scenario still expects a card.
 - **Unused citations are warnings.** A citation that no claim or instruction uses still
   names real evidence, which `citations_resolve` checks, and misleads no reader; agents
   often list everything they opened. It now appears in the check's `warnings` and fails

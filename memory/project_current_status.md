@@ -80,9 +80,9 @@ progress.** PRs 1, 2, 3a-3f (merged) and 3g are increments, not the packet.
   of fifteen closed members beside the skeleton, `handoff.md` all of them (guard:
   exactly the schema's); `resume.md` shows one exact card; the failure-code table moved
   to `commands.md`. Schema: gap notes 600 characters; the resume card accepts
-  `remaining.images`, null counts and no `job_id`. Grader: letter case normalised with a
-  warning, synonyms still refused; unused citations are warnings. Trial settings set
-  `disableBundledSkills`. L-083 (raw hidden characters; a proposal, not implemented).
+  `remaining.images`, null counts and no `job_id`, and is required only when work can
+  continue (supervisor). Grader: letter case normalised with a warning, synonyms refused;
+  unused citations are warnings. Trial settings set `disableBundledSkills`. L-083 (raw hidden characters; a proposal, not implemented).
   Every compact-tier and review-tier run re-graded beside its original (`grade-3g.json`).
 - **Next:** merge PR 3g, then re-run the compact tier on its merge commit. The packet
   completes only when the named-client trials pass.

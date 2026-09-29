@@ -34,7 +34,11 @@ The **mechanical** result is decided by the program; model prose cannot change i
   `skills/vsift/handoff.schema.json` and the rules of `references/handoff.md`. Since
   2026-09-29 the handoff requires only what the agent alone knows (claims, evidence
   identities, `pixels_inspected`, gaps, untrusted instructions, `lifecycle.action`, the
-  resume card when partial or a limit is exhausted); everything VSift recorded is
+  resume card when the work was cut short and can continue, since PR 3g: a budget
+  limit exhausted, or a gap with reason `budget_exhausted` or `cancelled` or code
+  `CANCELLED`, not a partial report caused by a missing capability or an expired
+  session; a card that is given must name the retained session and evidence it holds,
+  checked in `citations_resolve`); everything VSift recorded is
   optional. Given `budget.limits` must be the named profile's unless
   `budget.overrides` is true. Since PR 3g, before any check reads the handoff, a closed
   value (every `enum` and `const` of the schema) written in another letter case is read

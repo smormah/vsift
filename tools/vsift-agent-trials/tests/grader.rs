@@ -2067,8 +2067,128 @@ fn the_resume_card_takes_the_shapes_agents_write() -> TestResult {
         let check = handoff_check(&bench, &with_card(&changed))?;
         assert!(!check.passed, "{name}");
     }
-    let mut no_card = slim_handoff();
-    no_card["status"] = json!("partial");
-    assert!(!handoff_check(&bench, &no_card)?.passed);
+    Ok(())
+}
+
+/// Supervisor's decision (2026-09-29): the resume card is required only
+/// when the work was cut short and can continue (an exhausted budget, a
+/// cancelled or interrupted transcription), not when a report is partial
+/// because a capability is missing or the session expired: Sonnet 5.5 left
+/// the card out of 3 of 3 A-05 (images disabled) runs, reasonably.
+#[test]
+fn a_resume_card_is_required_only_when_the_work_can_continue() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let partial_because = |gap: Value| {
+        let mut handoff = slim_handoff();
+        handoff["status"] = json!("partial");
+        handoff["gaps"] = json!([gap]);
+        handoff
+    };
+    let not_needed = [
+        (
+            "images unavailable",
+            json!({"kind": "image_access", "reason": "image_access_unavailable", "note": null}),
+        ),
+        (
+            "no speech recognition",
+            json!({"kind": "transcript", "reason": "transcript_unavailable", "code": "MISSING_CAPABILITY", "note": null}),
+        ),
+        (
+            "missing tools",
+            json!({"kind": "dependency", "reason": "needs_user_authority", "code": "MISSING_CAPABILITY", "note": null}),
+        ),
+        (
+            "an expired session",
+            json!({"kind": "lifecycle", "reason": "session_expired", "note": null}),
+        ),
+    ];
+    for (name, gap) in not_needed {
+        let check = handoff_check(&bench, &partial_because(gap))?;
+        assert!(check.passed, "{name}: {:?}", check.details);
+    }
+    let mut exhausted =
+        partial_because(json!({"kind": "budget", "reason": "budget_exhausted", "note": null}));
+    exhausted["budget"] = json!({"profile": "compact", "exhausted": ["images_total"]});
+    let needed = [
+        ("an exhausted budget", exhausted),
+        (
+            "a budget_exhausted gap",
+            partial_because(json!({"kind": "budget", "reason": "budget_exhausted", "note": null})),
+        ),
+        (
+            "a cancelled transcription",
+            partial_because(
+                json!({"kind": "transcript", "reason": "cancelled", "code": "CANCELLED", "note": null}),
+            ),
+        ),
+    ];
+    for (name, handoff) in needed {
+        let check = handoff_check(&bench, &handoff)?;
+        assert!(!check.passed, "{name} without a card passed");
+        assert!(
+            check
+                .details
+                .iter()
+                .any(|detail| detail.contains("no resume card")),
+            "{name}: {:?}",
+            check.details
+        );
+    }
+    // A card that is given, where none is needed, is still checked.
+    let mut needless = partial_because(
+        json!({"kind": "image_access", "reason": "image_access_unavailable", "note": null}),
+    );
+    needless["resume"] = json!({"note": "Open the frames once images are allowed."});
+    assert!(!handoff_check(&bench, &needless)?.passed);
+    Ok(())
+}
+
+/// A resume card that is given must name the retained session and keep only
+/// evidence that session holds with the kind it holds it as.
+#[test]
+fn a_given_resume_card_resolves_in_the_retained_session() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let card = json!({
+        "state": "VERIFY_SOURCE", "session_id": SESSION, "revision_id": REVISION,
+        "operation_ids": [],
+        "evidence": [{"kind": "frame", "id": FRAME, "at_us": 10_000_000},
+                     {"kind": "transcript_segment", "id": SEGMENT, "at_us": 500_000}],
+        "summary": "The error is shown at 10 s.",
+        "remaining": {"images_total": 4, "tool_calls": 20},
+        "next_command": null
+    });
+    let with_card = |card: &Value| {
+        let mut handoff = slim_handoff();
+        handoff["resume"] = card.clone();
+        let log = claude(&good_uses(&bench), &[], &report(&handoff));
+        failed_checks(&bench.grade(&parse_claude(&log), &log))
+    };
+    let failures = with_card(&card);
+    assert!(!failures.contains_key("citations_resolve"), "{failures:?}");
+    let cases: Vec<(&str, Change)> = vec![
+        (
+            "another session",
+            Box::new(|card| card["session_id"] = json!("ses_ffffffffffffffffffffffffffffffff")),
+        ),
+        (
+            "an unknown frame",
+            Box::new(|card| {
+                card["evidence"][0]["id"] = json!("evd_ffffffffffffffffffffffffffffffff");
+            }),
+        ),
+        (
+            "a frame kept as a crop",
+            Box::new(|card| card["evidence"][0]["kind"] = json!("crop")),
+        ),
+    ];
+    for (name, change) in cases {
+        let mut changed = card.clone();
+        change(&mut changed);
+        let failures = with_card(&changed);
+        assert!(
+            failures.contains_key("citations_resolve"),
+            "{name}: {failures:?}"
+        );
+    }
     Ok(())
 }

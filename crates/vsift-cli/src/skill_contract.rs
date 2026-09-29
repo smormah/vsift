@@ -1236,6 +1236,25 @@ fn strings(value: &Value, into: &mut Vec<String>) {
     }
 }
 
+/// Whether the work was cut short and can continue, which is when a resume
+/// card is required (supervisor's decision, 2026-09-29): a budget limit
+/// exhausted, or a gap with reason `budget_exhausted` or `cancelled`, or
+/// code `CANCELLED`. A report that is `partial` only because a capability
+/// is missing or the session expired needs no card; resuming cannot fix it.
+/// The trial grader applies the same rule (`cut_short_reason`).
+fn cut_short(handoff: &Value) -> bool {
+    let exhausted = handoff["budget"]["exhausted"]
+        .as_array()
+        .is_some_and(|limits| !limits.is_empty());
+    exhausted
+        || handoff["gaps"].as_array().into_iter().flatten().any(|gap| {
+            matches!(
+                gap["reason"].as_str(),
+                Some("budget_exhausted" | "cancelled")
+            ) || gap["code"] == "CANCELLED"
+        })
+}
+
 /// The rules of `references/handoff.md` that one schema cannot express.
 fn check_handoff_semantics(name: &str, handoff: &Value, problems: &mut Problems) {
     let citations = handoff["citations"].as_array().cloned().unwrap_or_default();
@@ -1308,15 +1327,10 @@ fn check_handoff_semantics(name: &str, handoff: &Value, problems: &mut Problems)
             problems.add(format!("{name}: citation {id} is never used"));
         }
     }
-    let partial = matches!(handoff["status"].as_str(), Some("partial"));
-    if partial && handoff["resume"].is_null() {
-        problems.add(format!("{name}: a partial handoff needs a resume card"));
-    }
-    let exhausted = handoff["budget"]["exhausted"]
-        .as_array()
-        .is_some_and(|limits| !limits.is_empty());
-    if exhausted && !partial && handoff["resume"].is_null() {
-        problems.add(format!("{name}: an exhausted budget needs a resume card"));
+    if cut_short(handoff) && handoff["resume"].is_null() {
+        problems.add(format!(
+            "{name}: work cut short that can continue needs a resume card"
+        ));
     }
     if !handoff["resume"].is_null() {
         let size = serde_json::to_string(&handoff["resume"]).map_or(usize::MAX, |text| text.len());
@@ -1809,6 +1823,78 @@ fn resume_md_shows_one_valid_resume_card() -> Result<(), String> {
         problems.add(format!(
             "resume.md's card shows {members:?}, not every member {every:?}"
         ));
+    }
+    problems.into_result()
+}
+
+/// The resume card is required only when the work was cut short and can
+/// continue (supervisor's decision, 2026-09-29), and the skill says so where
+/// an agent decides: `SKILL.md`'s REPORT, `resume.md` and `handoff.md`.
+#[test]
+fn a_resume_card_is_required_only_when_the_work_can_continue() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let example = read_json(
+        &skill_directory()
+            .join("examples")
+            .join("supplied-transcript.handoff.json"),
+    )?;
+    let partial_because = |gap: Value| -> Value {
+        let mut handoff = example.clone();
+        handoff["status"] = Value::String("partial".to_owned());
+        handoff["gaps"] = Value::Array(vec![gap]);
+        handoff
+    };
+    for (needs_card, gap) in [
+        (
+            false,
+            serde_json::json!({"kind": "image_access", "reason": "image_access_unavailable", "note": null}),
+        ),
+        (
+            false,
+            serde_json::json!({"kind": "lifecycle", "reason": "session_expired", "note": null}),
+        ),
+        (
+            true,
+            serde_json::json!({"kind": "budget", "reason": "budget_exhausted", "note": null}),
+        ),
+        (
+            true,
+            serde_json::json!({"kind": "transcript", "reason": "cancelled", "code": "CANCELLED", "note": null}),
+        ),
+    ] {
+        let mut found = Problems::default();
+        check_handoff_semantics("case", &partial_because(gap.clone()), &mut found);
+        let asked = found
+            .0
+            .iter()
+            .any(|problem| problem.contains("resume card"));
+        if asked != needs_card {
+            problems.add(format!(
+                "a partial handoff with gap {gap} {} a resume card",
+                if needs_card {
+                    "should need"
+                } else {
+                    "should not need"
+                }
+            ));
+        }
+    }
+    let flat = flattened_skill_md()?;
+    if !flat.contains("Add the card only when work was cut short and can continue") {
+        problems.add("SKILL.md does not say when the resume card is needed".to_owned());
+    }
+    let flatten = |text: String| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let resume = flatten(read_text(
+        &skill_directory().join("references").join("resume.md"),
+    )?);
+    if !resume.contains("Give it when the work was cut short and can continue") {
+        problems.add("resume.md does not say when the card is given".to_owned());
+    }
+    let handoff = flatten(read_text(
+        &skill_directory().join("references").join("handoff.md"),
+    )?);
+    if !handoff.contains("`resume` when the work was cut short and can continue") {
+        problems.add("handoff.md does not say when the card is required".to_owned());
     }
     problems.into_result()
 }

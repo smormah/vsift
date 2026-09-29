@@ -75,8 +75,8 @@ select the skill; the user can also name it.
   Markdown link or local path (added 2026-09-29 after the diagnostic passes). The
   JSON states only what the agent alone knows: its claims, the identity of each piece
   of evidence it cites, whether it looked at each image, gaps, the instructions it saw,
-  what it did with the session and, for a partial report or an exhausted limit, the
-  resume card. Times, revisions, the session's details and the budget's limits are
+  what it did with the session and, when the work was cut short and can continue (a
+  budget ran out, a transcription was cancelled or interrupted), the resume card. Times, revisions, the session's details and the budget's limits are
   optional, since VSift recorded them; a value the agent does give must be VSift's own
   (handoff v1 revised in place on 2026-09-29, before any release). `SKILL.md` lists the
   allowed words of every closed member beside the skeleton, and
@@ -110,7 +110,7 @@ test --workspace`) fails when the skill drifts from the CLI:
   reason name resolves in the v1 contract (`schemas/v1` or `docs/contracts/cli-v1.md`)
   or the handoff schema;
 - the example handoffs validate against `handoff.schema.json` and its citation,
-  image-access and resume rules (a partial report or an exhausted limit carries a card
+  image-access and resume rules (work cut short that can continue carries a card
   of at most 2 KiB); `resume.md`'s card validates, shows every member and names a free
   next command;
 - the vocabulary tables of `SKILL.md` (its fifteen members) and `references/handoff.md`

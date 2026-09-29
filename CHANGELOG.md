@@ -25,7 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   with `wall_time_s` optional. **Grader:** a closed value in another letter case is read
   as the schema's spelling and noted (a different word still fails); an unused citation
   is a warning (a new `warnings` list on each check), not a failure; a claim that cites
-  nothing is reported once. **Guard:** the vocabulary tables list exactly the schema's
+  nothing is reported once. **Resume card (supervisor's decision):** required only when
+  the work was cut short and can continue (an exhausted budget limit, or a gap with
+  reason `budget_exhausted` or `cancelled`, or code `CANCELLED`), not for a report that
+  is partial because a capability is missing or the session expired; a card that is
+  given must validate, name the retained session and keep only evidence it holds. **Guard:** the vocabulary tables list exactly the schema's
   `enum` and `const` values; `resume.md`'s card validates; a gap note fits the longest
   remediations. **Trials:** the Claude Code settings set `disableBundledSkills`
   (2.1.284 loaded sixteen bundled skills into every session). Known limit L-083 (models

@@ -27,8 +27,14 @@ fails with `IDEMPOTENCY_CONFLICT`; that means "choose the next counter", not "re
 ## The resume card
 
 The handoff's `resume` object (see [../handoff.schema.json](../handoff.schema.json)),
-at most 2 KiB of JSON. Every partial report has one; a finished one leaves it out. It
-looks exactly like this (your own values; an empty list or null where you have none):
+at most 2 KiB of JSON. Give it when the work was cut short and can continue: a budget
+limit ran out (`budget.exhausted`, a `budget_exhausted` gap), or a transcription was
+cancelled or interrupted with its finished chunks kept (a `cancelled` gap or code
+`CANCELLED`). Leave it out when the task finished, and when the report is partial only
+because a capability is missing (no image access, no speech recognition, a missing
+tool) or the session expired: another run cannot fix those by resuming. A card you do
+give is checked: it must name your session and evidence VSift holds. It looks exactly
+like this (your own values; an empty list or null where you have none):
 
 ```json
 {"state": "VERIFY_SOURCE",

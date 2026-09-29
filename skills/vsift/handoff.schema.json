@@ -108,7 +108,7 @@
     },
     "lifecycle": { "$ref": "#/$defs/lifecycle" },
     "resume": {
-      "description": "The resume card: required when status is partial or a budget limit is exhausted; optional (null or absent) when the task finished.",
+      "description": "The resume card: required only when the work was cut short and can continue (a budget limit exhausted, or a gap with reason budget_exhausted or cancelled, or code CANCELLED); optional (null or absent) otherwise, including a partial report whose cause is a missing capability or an expired session. A card that is given must validate and name the retained session and its evidence.",
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/resume" }]
     }
   },
@@ -425,7 +425,7 @@
           }
         },
         "exhausted": {
-          "description": "Optional (default empty): the limits that ran out. Any entry requires the resume card.",
+          "description": "Optional (default empty): the limits that ran out. Any entry means the work was cut short and requires the resume card.",
           "type": ["array", "null"],
           "uniqueItems": true,
           "items": {

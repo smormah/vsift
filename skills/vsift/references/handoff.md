@@ -47,7 +47,8 @@ taken". Write "None observed." when there was none.
 ## Lifecycle
 
 The session, what happened to it (left open until its expiry, closed, retained) and
-the budget used. For a partial report, the resume card's next command.
+the budget used. When the work was cut short and can continue, the resume card's next
+command.
 
 ```vsift-handoff
 { "handoff_version": "1", ... }
@@ -122,7 +123,10 @@ through the identities you cite. So the JSON **must** hold:
 - `gaps`, each with `kind`, `reason` and `note` (the note may be null);
 - `untrusted_instructions` (an empty list when you saw none);
 - `lifecycle.action`;
-- `resume` when `status` is `partial` or a budget limit is exhausted.
+- `resume` when the work was cut short and can continue: a budget limit exhausted, or
+  a gap with reason `budget_exhausted` or `cancelled` (or code `CANCELLED`). A report
+  that is `partial` only because a capability is missing or the session expired needs
+  none ([resume.md](resume.md)).
 
 Everything else is **optional**: leave it out (or write null) unless it helps the
 reader. An optional value you do give is checked against VSift's records, so copy it
@@ -166,7 +170,9 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
 - `complete`: every claim the question needs is settled (supported, contradicted or
   honestly unsupported with a gap explaining why).
 - `partial`: a budget, a failure or a gap left something the question needs open;
-  the resume card is filled.
+  the resume card is filled when another run can continue the work (a budget ran out,
+  a transcription was cancelled or interrupted), not when a capability is missing or
+  the session expired.
 - `insufficient_evidence`: nothing the question needs could be supported.
 
 ## Before you send it
@@ -182,9 +188,9 @@ own reasons are `transcript_unavailable`, `image_access_unavailable`,
   value anywhere ([safety.md](safety.md)); the JSON schema refuses most of them.
 - Evidence text appears only in quotes or code blocks, with hidden characters shown
   as `<U+202E>`-style notation.
-- `lifecycle.action` is filled and, for a partial report or an exhausted limit,
-  `resume` in the shape [resume.md](resume.md) shows (leave it out when the task
-  finished); any `wall_time_s` you give is `null` unless your client showed you the
-  elapsed time ([budgets.md](budgets.md)).
+- `lifecycle.action` is filled and, when the work was cut short and can continue,
+  `resume` in the shape [resume.md](resume.md) shows (leave it out otherwise); any
+  `wall_time_s` you give is `null` unless your client showed you the elapsed time
+  ([budgets.md](budgets.md)).
 
 Examples: [../examples/](../examples/).

@@ -25,13 +25,13 @@ maintainer's decisions of 2026-09-29: the compact tier is Sonnet 5.5 and GPT-6-L
    them; a contract change, not implemented).
 4. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes, including PR 3f's
    and PR 3g's readings: `observed` never `unsupported`, unused citations a warning,
-   `remaining.images` accepted), the corpus truth amendment, L-075, L-078..L-083.
+   `remaining.images` accepted; the resume card only when work can continue, a
+   supervisor decision), the corpus truth amendment, L-075, L-078..L-083.
 5. **Technical debt:** SEC-T01 adversarial evidence (#188, L-068), before P14.
 
 ## Found in P12 (for the maintainer)
 
-- **Compact tier on `b68d746`:** Sonnet 5.5 28/28 answers, 9/28 full passes (18 failed
-  only on the handoff); Luna 24 and 11; Haiku 6 and 2. Causes: ADR 0022's PR 3g table.
+- **Compact tier on `b68d746`:** Sonnet 28/28 answers, 9/28 full; Luna 24, 11; Haiku 6, 2.
 - **Hidden characters (L-083):** VSift's `text` keeps raw U+202E (and decodes WebVTT's
   `&#x202E;` into it); Sonnet copied one into 1 of 5 SEC-T02 reports, Haiku 4 of 5.
 - **Still open (grader):** `untrusted_listed` takes only F12-E01 (0-8 s) though the
@@ -49,7 +49,8 @@ maintainer's decisions of 2026-09-29: the compact tier is Sonnet 5.5 and GPT-6-L
 - **PR 3e (supervisor):** `--help` forms free, never piped; the `\\?\` retry stays
   (#210). **PR 3f (maintainer):** orientation is housekeeping (`cd` elsewhere strict);
   handoff v1 states only what the agent knows. **PR 3g (maintainer):** the compact tier
-  is Sonnet 5.5 and GPT-6-Luna; fix the vocabulary now, validator in P13.
+  is Sonnet 5.5 and GPT-6-Luna; fix the vocabulary now, validator in P13. **PR 3g
+  (supervisor):** resume card only when work can continue; keep `disableBundledSkills`.
 
 ## Open decisions (maintainer)
 
