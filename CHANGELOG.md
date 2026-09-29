@@ -576,6 +576,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- P12 trial grader: Claude Code's `Glob`, `Grep` and `LS` inside the skill folders count
+  as reading the skill (a listing without a path, outside them or with a pattern that
+  climbs out stays unauthorized), and the skill now says to read its files with the
+  file-reading tool rather than list folders. Found by the first counted Claude Code
+  trial, which listed the skill's `examples/`; the campaign restarted from zero.
 - `job resume` of a job whose session is closed or expired advised renewing the
   session, which the CLI refuses for an expired session; its remediation
   (`JOB_SESSION_NOT_OPEN_REMEDIATION`) and the contract's failure row now say to open

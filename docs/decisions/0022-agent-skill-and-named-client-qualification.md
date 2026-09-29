@@ -263,6 +263,26 @@ checks.
   binds `install` (stated by F12-E01's sentence), although only the speech asks for
   an install.
 
+## Implementation note: first counted Claude Code trial (2026-09-29)
+
+The first counted trial (Opus 5.5, A-08) passed every check except the command policy:
+it listed the skill's `examples/` with Claude Code's `Glob` tool, which the grader had
+counted as an unauthorized tool. The skill told agents to read its files "with your
+file tool", and `Glob` is one, so the failure was the skill's ambiguity, not the
+agent's. The campaign was stopped and restarted from zero with two changes, so every
+counted run is graded by the same rules:
+
+- **Grader:** Claude Code's `Glob`, `Grep` and `LS` count as a skill read when their
+  path lies inside the skill folders and no pattern climbs out; otherwise, or without a
+  path, they stay unauthorized (regression test
+  `listing_the_skill_folder_is_a_skill_read_and_nothing_else_is`). This extends the
+  reading allowance the maintainer accepted with this ADR; it reads nothing the skill
+  does not already hand the agent.
+- **Skill:** read the skill's files with the file-reading tool; every file needed is
+  linked from `SKILL.md`, so do not list or search folders.
+
+The runs made before the restart (one complete, one interrupted) are not counted.
+
 ## Consequences
 
 - Agents have one procedure for both clients, and its references cannot drift from

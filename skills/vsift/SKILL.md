@@ -24,8 +24,9 @@ never process media yourself and never run anything except `vsift`.
    `wc`, `ls`), and never join commands with `&&`, `||` or `;`, pipes or
    redirections. The one exception: a command with `--events jsonl` may end in
    `| tail -n 1` (in PowerShell `| Select-Object -Last 1`) so you read only its last
-   line. Read this skill's own files with your file tool; only a client without one
-   may print them with `cat` or `Get-Content`.
+   line. Read this skill's own files with your file-reading tool; every file you need
+   is linked from this document, so do not list or search folders. Only a client
+   without a file-reading tool may print them with `cat` or `Get-Content`.
 4. **Stay inside the budget.** Use the profile the user names, otherwise `compact`
    ([references/budgets.md](references/budgets.md)). Count every tool call and image.
    The host measures and enforces the wall time; you cannot and do not time yourself.

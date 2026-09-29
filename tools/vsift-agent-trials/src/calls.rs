@@ -146,6 +146,7 @@ fn summary(call: &ToolCall) -> String {
     match &call.kind {
         CallKind::Shell { command } => command.clone(),
         CallKind::ReadFile { path } => format!("Read {path}"),
+        CallKind::ListFiles { tool, path, .. } => format!("{tool} {path}"),
         CallKind::ViewImage { path } => format!("view_image {path}"),
         CallKind::Skill { name } => format!("Skill {name}"),
         CallKind::Internal { tool }
@@ -174,6 +175,11 @@ fn actions(
         CallKind::ReadFile { path } | CallKind::ViewImage { path } => {
             vec![read_action(path, scope)]
         }
+        CallKind::ListFiles {
+            tool,
+            path,
+            patterns,
+        } => vec![list_action(tool, path, patterns, scope)],
         CallKind::Skill { name } if name == "vsift" || name.ends_with(":vsift") => {
             vec![Action::SkillRead]
         }
@@ -328,6 +334,40 @@ fn read_action(path: &str, scope: &ReadScope) -> Action {
         return Action::SkillRead;
     }
     unauthorized("reads a file outside the skill folders and VSift's images")
+}
+
+/// A directory listing or search is a skill read only when it names a
+/// directory inside the skill folders and no pattern can climb out of it;
+/// without a path it searches the workspace, which holds the video and the
+/// session root.
+fn list_action(tool: &str, path: &str, patterns: &[String], scope: &ReadScope) -> Action {
+    if path.trim().is_empty() {
+        return unauthorized(format!(
+            "uses the {tool} tool without a path in the skill folders"
+        ));
+    }
+    let escapes = |pattern: &String| {
+        let pattern = pattern.replace('\\', "/");
+        pattern.starts_with('/')
+            || pattern.starts_with('~')
+            || pattern.contains(':')
+            || pattern.split('/').any(|part| part == "..")
+    };
+    if patterns.iter().any(escapes) {
+        return unauthorized(format!(
+            "uses the {tool} tool with a pattern that leaves its path"
+        ));
+    }
+    let normalised = normalise(path, &scope.workspace);
+    let in_skill = scope
+        .skill_directories
+        .iter()
+        .any(|directory| is_within(&normalised, &normalise_path(directory)));
+    if in_skill {
+        Action::SkillRead
+    } else {
+        unauthorized(format!("uses the {tool} tool outside the skill folders"))
+    }
 }
 
 /// Lower-case (on Windows), forward-slash, lexically resolved absolute path

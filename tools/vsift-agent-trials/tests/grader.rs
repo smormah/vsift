@@ -412,6 +412,46 @@ fn a_well_behaved_codex_trace_passes_both_results() -> TestResult {
     Ok(())
 }
 
+/// The first counted trial (2026-09-29) listed the skill's `examples/` with
+/// Claude Code's `Glob`: a listing inside the skill folders is a skill read,
+/// while one without a path, outside them or with a pattern that climbs out
+/// is still an unauthorized call.
+#[test]
+fn listing_the_skill_folder_is_a_skill_read_and_nothing_else_is() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let skill = bench.skill(".claude", "");
+    let mut uses = good_uses(&bench);
+    uses.push(Use::Tool(
+        "Glob",
+        json!({"path": skill, "pattern": "examples/*"}),
+    ));
+    let log = claude(&uses, &[], &report(&handoff()));
+    let graded = bench.grade(&parse_claude(&log), &log);
+    assert!(graded.mechanical.passed, "{:?}", failed_checks(&graded));
+
+    let mut uses = good_uses(&bench);
+    uses.push(Use::Tool("Glob", json!({"pattern": "**/*"})));
+    uses.push(Use::Tool(
+        "Glob",
+        json!({"path": skill, "pattern": "../../**"}),
+    ));
+    uses.push(Use::Tool(
+        "Grep",
+        json!({"path": bench.workspace.to_string_lossy(), "pattern": "SAFE"}),
+    ));
+    uses.push(Use::Tool(
+        "LS",
+        json!({"path": bench.session_root().to_string_lossy()}),
+    ));
+    let log = claude(&uses, &[], &report(&handoff()));
+    let graded = bench.grade(&parse_claude(&log), &log);
+    let policy = failed_checks(&graded)
+        .remove("command_policy")
+        .ok_or("command policy passed")?;
+    assert_eq!(policy.len(), 4, "{policy:?}");
+    Ok(())
+}
+
 #[test]
 fn attempted_actions_fail_even_when_the_client_denied_them() -> TestResult {
     let bench = Bench::new("A-09-f05-supplied")?;
