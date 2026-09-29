@@ -26,10 +26,9 @@ requires only what the agent alone knows (recorded values optional, checked if g
 
 ## Found in P12 (for the maintainer)
 
-- **Counted campaigns (2026-09-29):** the strong models pass; Haiku 4.5 invents its
-  own handoff shapes (ids, `support` values, citation members) that no slimming fixes;
-  most GPT-6-Luna failures were one orientation command or a partial report without
-  its resume card. Details and the table: PR 3f's description.
+- **Counted campaigns re-graded (PR 3f):** Opus 11/11 and Astra 11/11 pass both
+  results; GPT-6-Luna mechanical 5 -> 20 of 31 (left: handoff shapes, 3 partial reports
+  without a resume card, 2 `printf`); Haiku 3/28 (invents its own handoff shapes).
 - **Codex images (L-075, decided):** the right check code proves image access; its
   image budgets are unmeasured (the rollout hides views in a code-mode `exec` call).
 - **Still open (grader):** `untrusted_listed` takes only F12-E01 (0-8 s) though the
