@@ -1310,6 +1310,12 @@ fn check_handoff_semantics(name: &str, handoff: &Value, problems: &mut Problems)
     if partial && handoff["resume"].is_null() {
         problems.add(format!("{name}: a partial handoff needs a resume card"));
     }
+    let exhausted = handoff["budget"]["exhausted"]
+        .as_array()
+        .is_some_and(|limits| !limits.is_empty());
+    if exhausted && !partial && handoff["resume"].is_null() {
+        problems.add(format!("{name}: an exhausted budget needs a resume card"));
+    }
     if !handoff["resume"].is_null() {
         let size = serde_json::to_string(&handoff["resume"]).map_or(usize::MAX, |text| text.len());
         if size > MAX_RESUME_BYTES {
@@ -1362,6 +1368,172 @@ fn example_handoffs_validate_against_the_handoff_schema() -> Result<(), String> 
             problems.add(format!(
                 "{name}: resume next_command {identifier} is not a free command"
             ));
+        }
+    }
+    problems.into_result()
+}
+
+/// The `required` list of a schema object, sorted.
+fn required_members(schema: &Value) -> Vec<String> {
+    let mut members: Vec<String> = schema["required"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect();
+    members.sort();
+    members
+}
+
+fn sorted(members: &[&str]) -> Vec<String> {
+    let mut members: Vec<String> = members.iter().map(|member| (*member).to_owned()).collect();
+    members.sort();
+    members
+}
+
+/// Maintainer decision 2 of 2026-09-29: the handoff requires only what the
+/// agent alone knows (its findings, the evidence identities, whether it
+/// looked at each image, gaps, instructions it saw and the session's fate);
+/// everything `VSift` already recorded is optional. Handoff v1 is
+/// unreleased and was revised in place.
+#[test]
+fn handoff_schema_requires_only_what_the_agent_alone_knows() -> Result<(), String> {
+    let schema = read_json(&skill_directory().join("handoff.schema.json"))?;
+    let definitions = &schema["$defs"];
+    let mut problems = Problems::default();
+    for (name, object, expected) in [
+        (
+            "the handoff",
+            &schema,
+            sorted(&[
+                "handoff_version",
+                "status",
+                "question",
+                "capabilities",
+                "claims",
+                "citations",
+                "gaps",
+                "untrusted_instructions",
+                "lifecycle",
+            ]),
+        ),
+        (
+            "capabilities",
+            &schema["properties"]["capabilities"],
+            sorted(&["image_access"]),
+        ),
+        (
+            "a claim",
+            &definitions["claim"],
+            sorted(&[
+                "id",
+                "section",
+                "kind",
+                "support",
+                "certainty",
+                "statement",
+                "citations",
+            ]),
+        ),
+        (
+            "a segment citation",
+            &definitions["transcript_segment_citation"],
+            sorted(&["id", "type", "segment_id"]),
+        ),
+        (
+            "a frame citation",
+            &definitions["frame_citation"],
+            sorted(&["id", "type", "evidence_id", "pixels_inspected"]),
+        ),
+        (
+            "a crop citation",
+            &definitions["crop_citation"],
+            sorted(&["id", "type", "evidence_id", "pixels_inspected"]),
+        ),
+        (
+            "an audio citation",
+            &definitions["audio_citation"],
+            sorted(&["id", "type", "evidence_id"]),
+        ),
+        (
+            "a gap",
+            &definitions["gap"],
+            sorted(&["kind", "reason", "note"]),
+        ),
+        (
+            "the lifecycle",
+            &definitions["lifecycle"],
+            sorted(&["action"]),
+        ),
+        ("a budget", &definitions["budget"], sorted(&["profile"])),
+    ] {
+        let found = required_members(object);
+        if found != expected {
+            problems.add(format!("{name} requires {found:?}, not {expected:?}"));
+        }
+    }
+    let validator = jsonschema::options()
+        .build(&schema)
+        .map_err(|error| format!("handoff.schema.json is not a valid schema: {error}"))?;
+    let verified_without_code = serde_json::json!({
+        "handoff_version": "1", "status": "complete", "question": "What happens?",
+        "capabilities": {"image_access": "verified"}, "claims": [], "citations": [],
+        "gaps": [], "untrusted_instructions": [], "lifecycle": {"action": "left_open"}
+    });
+    if validator.is_valid(&verified_without_code) {
+        problems.add("a verified image access without its code validates".to_owned());
+    }
+    problems.into_result()
+}
+
+/// The REPORT state's skeleton shows the required members only, so a small
+/// model copies the slim shape; the optional ones are named beside it.
+#[test]
+fn report_skeleton_holds_only_the_required_members() -> Result<(), String> {
+    let text = read_text(&skill_directory().join("SKILL.md"))?;
+    let start = text.find("### 7. REPORT").ok_or("SKILL.md lacks REPORT")?;
+    let section = parse_markdown("REPORT".to_owned(), &text[start..]);
+    let block = section
+        .fences
+        .iter()
+        .find(|fence| fence.info == "vsift-handoff")
+        .ok_or("REPORT shows no vsift-handoff block")?;
+    let handoff: Value = serde_json::from_str(&block.lines.join("\n"))
+        .map_err(|error| format!("REPORT's vsift-handoff block is not JSON: {error}"))?;
+    let schema = read_json(&skill_directory().join("handoff.schema.json"))?;
+    let keys = |value: &Value| -> Vec<String> {
+        let mut keys: Vec<String> = value
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(key, _)| key.clone())
+            .collect();
+        keys.sort();
+        keys
+    };
+    let mut problems = Problems::default();
+    if keys(&handoff) != required_members(&schema) {
+        problems.add(format!(
+            "the skeleton's members {:?} are not the required {:?}",
+            keys(&handoff),
+            required_members(&schema)
+        ));
+    }
+    if keys(&handoff["capabilities"]) != sorted(&["image_access", "image_check_code"]) {
+        problems.add("the skeleton's capabilities hold optional members".to_owned());
+    }
+    if keys(&handoff["lifecycle"]) != sorted(&["action"]) {
+        problems.add("the skeleton's lifecycle holds optional members".to_owned());
+    }
+    let flat = flattened_skill_md()?;
+    for needle in [
+        "states only what you alone know",
+        "Add an optional member only when it helps",
+        "A value you add must be VSift's own",
+    ] {
+        if !flat.contains(needle) {
+            problems.add(format!("SKILL.md does not say {needle:?}"));
         }
     }
     problems.into_result()

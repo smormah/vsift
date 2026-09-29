@@ -10,7 +10,8 @@ promises no secure erasure. Nothing is ever deleted from the user's own video.
 ## The user's lifecycle policy
 
 Before or during the investigation, the user may say what should happen afterwards.
-Record it as `lifecycle.policy` `user_stated`; otherwise the policy is `default`.
+You may record it as `lifecycle.policy` `user_stated` (otherwise `default`); the
+member is optional.
 
 | The user said | You do at CLOSE_OR_RETAIN |
 | --- | --- |
@@ -50,5 +51,6 @@ copies made elsewhere.
 ## In the handoff
 
 `lifecycle.action` is `left_open`, `closed`, `retained`, `expired` (it expired before
-you finished) or `not_opened` (no session was created). `lifecycle.mode` and
-`lifecycle.expires_at` are copied from the last VSift result for the session.
+you finished) or `not_opened` (no session was created); it is required. The optional
+`lifecycle.mode` and `lifecycle.expires_at`, when you give them, are copied from the
+last VSift result for the session.

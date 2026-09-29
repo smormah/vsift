@@ -60,14 +60,63 @@ pub fn environment_user_names() -> Vec<String> {
         .collect()
 }
 
+/// Every session identity (`ses_` and 16 to 64 lower-case letters or
+/// digits) in a text, in order.
+fn session_identities(text: &str) -> Vec<String> {
+    text.split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+        .filter(|word| {
+            word.strip_prefix("ses_").is_some_and(|rest| {
+                (16..=64).contains(&rest.len())
+                    && rest.chars().all(|character| {
+                        character.is_ascii_lowercase() || character.is_ascii_digit()
+                    })
+            })
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The session a handoff's citations belong to. `session` is optional in
+/// handoff v1 (revised 2026-09-29), so without it the resume card's session
+/// is used, and then the last session the agent's own commands named: a
+/// citation can only come from a session the agent ran commands on. The
+/// choice is never trusted: a citation that is not in that session's
+/// retained records fails `citations_resolve`.
+fn session_of(handoff: &Value, commands: &[String]) -> Option<String> {
+    handoff["session"]["session_id"]
+        .as_str()
+        .or_else(|| handoff["resume"]["session_id"].as_str())
+        .map(str::to_owned)
+        .or_else(|| {
+            commands
+                .iter()
+                .flat_map(|command| session_identities(command))
+                .last()
+        })
+}
+
+/// The command texts of a trace's shell calls.
+fn shell_commands(trace: &Trace) -> Vec<String> {
+    trace
+        .calls
+        .iter()
+        .filter_map(|call| match &call.kind {
+            trace::CallKind::Shell { command } => Some(command.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Validates the agent's bundle, or retains the session itself when the
-/// agent did not, and reads the records.
+/// agent did not, and reads the records. `commands` are the agent's shell
+/// commands, for the session when the handoff names none.
 fn bundle_for(
     layout: &TrialLayout,
     scenario: &Scenario,
     phase: usize,
     cli: &VsiftCli,
     handoff: Option<&Value>,
+    commands: &[String],
     deviations: &mut Vec<String>,
 ) -> Option<BundleIndex> {
     let validate = |directory: &Path, deviations: &mut Vec<String>| match cli.json(&arguments(&[
@@ -102,7 +151,7 @@ fn bundle_for(
         }
         deviations.push("the agent did not retain the session as asked".to_owned());
     }
-    let session = handoff.and_then(|value| value["session"]["session_id"].as_str())?;
+    let session = handoff.and_then(|value| session_of(value, commands))?;
     let has_citations = handoff
         .and_then(|value| value["citations"].as_array())
         .is_some_and(|citations| !citations.is_empty());
@@ -261,14 +310,32 @@ pub fn grade_trace_with(
         phase,
         &cli,
         handoff.as_ref(),
+        &shell_commands(trace),
         &mut deviations,
     );
     let expected = if phase > 1 {
-        let previous = read_json(&layout.phase(phase - 1).join("grade.json"))?;
-        let session = &previous["handoff"]["session"];
+        // The earlier phase's grade of the same name when this is a
+        // re-grade that wrote one, else its original grade.
+        let earlier = layout.phase(phase - 1);
+        let previous_file = if earlier.join(file).is_file() {
+            earlier.join(file)
+        } else {
+            earlier.join(GRADE_FILE)
+        };
+        let previous = read_json(&previous_file)?;
+        let previous_handoff = &previous["handoff"];
+        let previous_commands: Vec<String> = previous["calls"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|call| call["summary"].as_str().map(str::to_owned))
+            .collect();
         Expected {
-            session_id: session["session_id"].as_str().map(str::to_owned),
-            revision_id: session["revision_id"].as_str().map(str::to_owned),
+            session_id: session_of(previous_handoff, &previous_commands),
+            revision_id: previous_handoff["session"]["revision_id"]
+                .as_str()
+                .or_else(|| previous_handoff["resume"]["revision_id"].as_str())
+                .map(str::to_owned),
             job_id: None,
             operation_id: None,
         }
@@ -351,4 +418,30 @@ pub fn grade_phase(
         },
         options,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    const NAMED: &str = "ses_0123456789abcdef0123456789abcdef";
+    const USED: &str = "ses_fedcba9876543210fedcba9876543210";
+
+    #[test]
+    fn the_session_comes_from_the_handoff_the_resume_card_or_the_commands() {
+        let commands = vec![
+            "vsift session status ses_1111111111111111 --json".to_owned(),
+            format!("vsift search {USED} --query \"E-409\" --json"),
+            "vsift search ses_TOOSHORT --json".to_owned(),
+        ];
+        let named = json!({"session": {"session_id": NAMED}});
+        assert_eq!(session_of(&named, &commands).as_deref(), Some(NAMED));
+        let resumed = json!({"resume": {"session_id": NAMED}});
+        assert_eq!(session_of(&resumed, &commands).as_deref(), Some(NAMED));
+        let slim = json!({"status": "complete"});
+        assert_eq!(session_of(&slim, &commands).as_deref(), Some(USED));
+        assert_eq!(session_of(&slim, &[]), None);
+    }
 }

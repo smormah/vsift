@@ -3,8 +3,10 @@
 //! The bundle is first validated with `vsift bundle validate` (the CLI's own
 //! strict decoding); this module then reads the validated transcript and
 //! evidence records to look up identities and times. It never trusts a
-//! handoff's copy of a value: every citation member is compared with the
-//! record `VSift` wrote.
+//! handoff's copy of a value: a citation must name an identity the bundle
+//! holds with the citation's type, every other member the handoff gives is
+//! compared with the record `VSift` wrote, and a member it leaves out is
+//! taken from that record.
 
 use std::{collections::BTreeMap, path::Path};
 
@@ -187,6 +189,8 @@ impl BundleIndex {
 pub enum Resolved {
     /// A transcript segment and its text.
     Transcript {
+        /// The revision the segment belongs to.
+        revision_id: String,
         /// The segment's range.
         start_us: u64,
         /// The segment's end.
@@ -210,34 +214,37 @@ pub enum Resolved {
     },
 }
 
+/// A citation member the handoff may leave out (handoff v1 as revised on
+/// 2026-09-29): `None` when it is absent or `null`, so it is not checked;
+/// otherwise its value, which must equal the record. A member of the wrong
+/// JSON type is given but never equal, so it fails.
+fn given(citation: &Value, key: &str) -> Option<Value> {
+    match &citation[key] {
+        Value::Null => None,
+        value => Some(value.clone()),
+    }
+}
+
+/// Whether an optional member is absent or equals `recorded`.
+fn agrees(citation: &Value, key: &str, recorded: &Value) -> bool {
+    given(citation, key).is_none_or(|value| &value == recorded)
+}
+
 impl BundleIndex {
-    /// Resolves one handoff citation, comparing every copied member with
-    /// the record.
+    /// Resolves one handoff citation through its `VSift` identity. Every
+    /// optional member the handoff gives (times, revision, candidate,
+    /// parent, rectangle, range) is compared with the record; a missing one
+    /// is taken from the record, so later checks see `VSift`'s value.
     ///
     /// # Errors
     ///
-    /// Why the citation does not resolve.
+    /// Why the citation does not resolve: the identity is not in the bundle
+    /// with the citation's type, or a given member differs from the record.
     pub fn resolve(&self, citation: &Value) -> Result<Resolved, String> {
         let text = |key: &str| citation[key].as_str().unwrap_or_default().to_owned();
-        let number = |key: &str| citation[key].as_u64();
         let id = citation["id"].as_str().unwrap_or("?");
         match citation["type"].as_str() {
-            Some("transcript_segment") => {
-                let segment = self
-                    .segments
-                    .get(&(text("revision_id"), text("segment_id")))
-                    .ok_or_else(|| format!("{id}: the segment is not in the bundle"))?;
-                if number("start_us") != Some(segment.start_us)
-                    || number("end_us") != Some(segment.end_us)
-                {
-                    return Err(format!("{id}: the segment's times differ from the record"));
-                }
-                Ok(Resolved::Transcript {
-                    start_us: segment.start_us,
-                    end_us: segment.end_us,
-                    text: segment.text.clone(),
-                })
-            }
+            Some("transcript_segment") => self.resolve_segment(id, citation),
             Some("frame") => {
                 let evidence = text("evidence_id");
                 let selections = self
@@ -245,19 +252,21 @@ impl BundleIndex {
                     .get(&evidence)
                     .ok_or_else(|| format!("{id}: the frame is not in the bundle"))?;
                 let candidate = citation["candidate_id"].as_str().map(str::to_owned);
-                let matches = selections.iter().any(|selection| {
-                    Some(selection.requested_us) == number("requested_us")
-                        && Some(selection.actual_us) == number("actual_us")
-                        && Some(selection.delta_us) == citation["delta_us"].as_i64()
-                        && (candidate.is_none() || candidate == selection.candidate_id)
-                });
-                if !matches {
-                    return Err(format!(
-                        "{id}: requested, actual, delta or candidate differ from every selection of the frame"
-                    ));
-                }
+                let selection = selections
+                    .iter()
+                    .find(|selection| {
+                        agrees(citation, "requested_us", &Value::from(selection.requested_us))
+                            && agrees(citation, "actual_us", &Value::from(selection.actual_us))
+                            && agrees(citation, "delta_us", &Value::from(selection.delta_us))
+                            && (candidate.is_none() || candidate == selection.candidate_id)
+                    })
+                    .ok_or_else(|| {
+                        format!(
+                            "{id}: requested, actual, delta or candidate differ from every selection of the frame"
+                        )
+                    })?;
                 Ok(Resolved::Visual {
-                    actual_us: number("actual_us").unwrap_or_default(),
+                    actual_us: selection.actual_us,
                     pixels_inspected: citation["pixels_inspected"] == true,
                 })
             }
@@ -266,16 +275,19 @@ impl BundleIndex {
                     .crops
                     .get(&text("evidence_id"))
                     .ok_or_else(|| format!("{id}: the crop is not in the bundle"))?;
-                let rect = &citation["rect"];
-                let cited = [
-                    rect["x"].as_u64(),
-                    rect["y"].as_u64(),
-                    rect["width"].as_u64(),
-                    rect["height"].as_u64(),
-                ];
-                if crop.parent_evidence_id != text("parent_evidence_id")
-                    || cited != crop.rect.map(Some)
-                    || number("actual_us") != Some(crop.actual_us)
+                let [x, y, width, height] = crop.rect;
+                let rect = serde_json::json!({"x": x, "y": y, "width": width, "height": height});
+                let rect_agrees = given(citation, "rect").is_none_or(|cited| {
+                    ["x", "y", "width", "height"]
+                        .iter()
+                        .all(|key| cited[key] == rect[key])
+                });
+                if !agrees(
+                    citation,
+                    "parent_evidence_id",
+                    &Value::from(crop.parent_evidence_id.as_str()),
+                ) || !rect_agrees
+                    || !agrees(citation, "actual_us", &Value::from(crop.actual_us))
                 {
                     return Err(format!("{id}: the crop's parent, rectangle or time differ"));
                 }
@@ -289,10 +301,16 @@ impl BundleIndex {
                     .clips
                     .get(&text("evidence_id"))
                     .ok_or_else(|| format!("{id}: the clip is not in the bundle"))?;
-                let range = &citation["range"];
-                if range["start_us"].as_u64() != Some(clip.start_us)
-                    || range["end_us"].as_u64() != Some(clip.end_us)
-                    || number("actual_start_us") != Some(clip.actual_start_us)
+                let range_agrees = given(citation, "range").is_none_or(|range| {
+                    range["start_us"].as_u64() == Some(clip.start_us)
+                        && range["end_us"].as_u64() == Some(clip.end_us)
+                });
+                if !range_agrees
+                    || !agrees(
+                        citation,
+                        "actual_start_us",
+                        &Value::from(clip.actual_start_us),
+                    )
                 {
                     return Err(format!("{id}: the clip's range or first sample differ"));
                 }
@@ -303,5 +321,46 @@ impl BundleIndex {
             }
             _ => Err(format!("{id}: unknown citation type")),
         }
+    }
+
+    /// A transcript segment by its identity. Segment identities are derived
+    /// from their revision, so one names one segment; the revision, when
+    /// given, must be that segment's, and the times must be its times.
+    fn resolve_segment(&self, id: &str, citation: &Value) -> Result<Resolved, String> {
+        let segment_id = citation["segment_id"].as_str().unwrap_or_default();
+        let matches: Vec<(&String, &Segment)> = self
+            .segments
+            .iter()
+            .filter(|((_, segment), _)| segment == segment_id)
+            .map(|((revision, _), segment)| (revision, segment))
+            .collect();
+        let (revision, segment) = match matches.as_slice() {
+            [] => return Err(format!("{id}: the segment is not in the bundle")),
+            [only] => *only,
+            _ => {
+                let cited = citation["revision_id"].as_str().ok_or_else(|| {
+                    format!("{id}: the segment is in several revisions; name its revision_id")
+                })?;
+                matches
+                    .iter()
+                    .find(|(revision, _)| revision.as_str() == cited)
+                    .copied()
+                    .ok_or_else(|| format!("{id}: the segment is not in the bundle"))?
+            }
+        };
+        if !agrees(citation, "revision_id", &Value::from(revision.as_str())) {
+            return Err(format!("{id}: the segment is not in the cited revision"));
+        }
+        if !agrees(citation, "start_us", &Value::from(segment.start_us))
+            || !agrees(citation, "end_us", &Value::from(segment.end_us))
+        {
+            return Err(format!("{id}: the segment's times differ from the record"));
+        }
+        Ok(Resolved::Transcript {
+            revision_id: revision.clone(),
+            start_us: segment.start_us,
+            end_us: segment.end_us,
+            text: segment.text.clone(),
+        })
     }
 }

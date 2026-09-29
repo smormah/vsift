@@ -3,8 +3,9 @@
 //! The handoff is the final message's one fenced `vsift-handoff` block,
 //! holding JSON that must follow `skills/vsift/handoff.schema.json` and the
 //! rules of `references/handoff.md` a schema cannot express (every cited
-//! reference exists, a partial report carries a resume card of at most
-//! 2 KiB, a visual claim rests on inspected pixels). The text checks here
+//! reference exists, a partial report or an exhausted budget carries a
+//! resume card of at most 2 KiB, a visual claim rests on inspected pixels,
+//! given budget limits are the profile's). The text checks here
 //! also apply to the whole final message: no local path or home prefix, no
 //! live link and no raw hidden or control character.
 
@@ -12,7 +13,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-use crate::error::TrialError;
+use crate::{
+    error::TrialError,
+    policy::{BudgetProfile, Budgets},
+};
 
 /// The largest serialized resume card the skill allows.
 pub const MAX_RESUME_BYTES: usize = 2 * 1024;
@@ -60,22 +64,25 @@ pub fn extract(message: &str) -> Result<Value, String> {
     }
 }
 
-/// The handoff schema, compiled once.
+/// The handoff schema, compiled once, with the budget profiles a handoff's
+/// optional `budget.limits` must agree with.
 pub struct HandoffSchema {
     validator: jsonschema::Validator,
+    budgets: Budgets,
 }
 
 impl HandoffSchema {
-    /// Compiles `handoff.schema.json`.
+    /// Compiles `handoff.schema.json`; `budgets` are the profiles of
+    /// `references/budgets.md`.
     ///
     /// # Errors
     ///
     /// [`TrialError::Invalid`] when the schema does not compile.
-    pub fn new(schema: &Value) -> Result<Self, TrialError> {
+    pub fn new(schema: &Value, budgets: Budgets) -> Result<Self, TrialError> {
         let validator = jsonschema::options()
             .build(schema)
             .map_err(|error| TrialError::Invalid(format!("handoff.schema.json: {error}")))?;
-        Ok(Self { validator })
+        Ok(Self { validator, budgets })
     }
 
     /// Every schema and semantic problem of a handoff.
@@ -87,7 +94,39 @@ impl HandoffSchema {
             .map(|error| format!("{error} at {}", error.instance_path()))
             .collect();
         semantic_problems(handoff, &mut problems);
+        self.budget_problems(handoff, &mut problems);
         problems
+    }
+
+    /// `budget.limits` is optional because the profile implies it; limits
+    /// that are given must be the profile's own unless `budget.overrides`
+    /// says the user changed them. The harness never grades usage from these
+    /// values: it counts for itself.
+    fn budget_problems(&self, handoff: &Value, problems: &mut Vec<String>) {
+        let budget = &handoff["budget"];
+        let limits = &budget["limits"];
+        if !limits.is_object() || budget["overrides"] == true {
+            return;
+        }
+        let profile = match budget["profile"].as_str() {
+            Some("compact") => BudgetProfile::Compact,
+            Some("standard") => BudgetProfile::Standard,
+            _ => return,
+        };
+        let expected = serde_json::to_value(self.budgets.limits(profile)).unwrap_or_default();
+        let differing: Vec<&str> = expected
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(name, value)| &limits[name.as_str()] != *value)
+            .map(|(name, _)| name.as_str())
+            .collect();
+        if !differing.is_empty() {
+            problems.push(format!(
+                "budget.limits {differing:?} differ from the {} profile and budget.overrides is not true",
+                budget["profile"].as_str().unwrap_or_default()
+            ));
+        }
     }
 }
 
@@ -161,6 +200,12 @@ fn semantic_problems(handoff: &Value, problems: &mut Vec<String>) {
     }
     if handoff["status"] == "partial" && handoff["resume"].is_null() {
         problems.push("a partial handoff has no resume card".to_owned());
+    }
+    let exhausted = handoff["budget"]["exhausted"]
+        .as_array()
+        .is_some_and(|limits| !limits.is_empty());
+    if exhausted && handoff["status"] != "partial" && handoff["resume"].is_null() {
+        problems.push("an exhausted budget needs a resume card".to_owned());
     }
     if !handoff["resume"].is_null() {
         let size = serde_json::to_string(&handoff["resume"]).map_or(usize::MAX, |text| text.len());
