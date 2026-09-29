@@ -18,7 +18,7 @@ use vsift_agent_trials::{
     bundle::{BundleIndex, Crop, Segment, Selection},
     calls::{Action, ReadScope},
     client_warnings::configuration_warnings,
-    grade::{Expected, Grade, GradeInput, grade},
+    grade::{Check, Expected, Grade, GradeInput, grade},
     handoff::PrivateMarkers,
     scenario::Scenario,
     skill::{SkillReferences, image_code},
@@ -1842,5 +1842,353 @@ fn optional_budget_members_are_checked_when_given() -> TestResult {
     let log = claude(&uses, &[], &report(&modest));
     let failures = failed_checks(&bench.grade(&parse_claude(&log), &log));
     assert!(failures.contains_key("budgets"), "{failures:?}");
+    Ok(())
+}
+
+/// The `handoff_valid` check of a handoff graded in a well-behaved trace.
+fn handoff_check(bench: &Bench, handoff: &Value) -> Result<Check, Box<dyn Error>> {
+    let log = claude(&good_uses(bench), &[], &report(handoff));
+    let graded = bench.grade(&parse_claude(&log), &log);
+    graded
+        .mechanical
+        .checks
+        .into_iter()
+        .find(|check| check.name == "handoff_valid")
+        .ok_or_else(|| "no handoff_valid check".into())
+}
+
+/// PR 3g (maintainer decision, 2026-09-29): a closed value in another letter
+/// case is read as the schema's spelling, everywhere the grader reads it, and
+/// noted; another word, even one that means the same, still fails. The
+/// compact-tier runs wrote `"Actual"` (case) and `"image"`, `"coverage"`,
+/// `"evidence"`, `"supplied"`, `"Reproduction steps"` (other words).
+#[test]
+fn closed_values_are_read_in_any_letter_case_but_never_as_other_words() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let mut mixed_case = slim_handoff();
+    mixed_case["status"] = json!("Complete");
+    mixed_case["claims"][1]["section"] = json!("Actual");
+    mixed_case["claims"][1]["support"] = json!("SUPPORTED");
+    mixed_case["citations"][1]["type"] = json!("Frame");
+    mixed_case["gaps"][0]["kind"] = json!("Visual");
+    mixed_case["gaps"][0]["code"] = json!("missing_capability");
+    mixed_case["lifecycle"]["action"] = json!("Retained");
+    let check = handoff_check(&bench, &mixed_case)?;
+    assert!(check.passed, "{:?}", check.details);
+    assert_eq!(check.warnings.len(), 7, "{:?}", check.warnings);
+    assert!(
+        check
+            .warnings
+            .iter()
+            .any(|warning| warning
+                == "claims[1].section: \"Actual\" read as \"actual\" (letter case)"),
+        "{:?}",
+        check.warnings
+    );
+    // The rest of the grader reads the normalised values: the supported
+    // claim still has to bind its key facts, and does.
+    let log = claude(&good_uses(&bench), &[], &report(&mixed_case));
+    let graded = bench.grade(&parse_claude(&log), &log);
+    assert!(graded.mechanical.passed, "{:?}", failed_checks(&graded));
+    assert!(graded.interpretation.passed, "{:?}", graded.interpretation);
+    assert_eq!(
+        graded
+            .handoff
+            .as_ref()
+            .map(|handoff| handoff["status"].clone()),
+        Some(json!("complete"))
+    );
+
+    let cases: Vec<(&str, Change)> = vec![
+        (
+            "gap kind image",
+            Box::new(|handoff| handoff["gaps"][0]["kind"] = json!("image")),
+        ),
+        (
+            "gap kind evidence",
+            Box::new(|handoff| handoff["gaps"][0]["kind"] = json!("evidence")),
+        ),
+        (
+            "section Reproduction steps",
+            Box::new(|handoff| handoff["claims"][1]["section"] = json!("Reproduction steps")),
+        ),
+        (
+            "transcript basis supplied",
+            Box::new(|handoff| handoff["capabilities"]["transcript_basis"] = json!("supplied")),
+        ),
+    ];
+    for (name, change) in cases {
+        let mut handoff = slim_handoff();
+        change(&mut handoff);
+        let check = handoff_check(&bench, &handoff)?;
+        assert!(!check.passed, "{name}");
+    }
+    Ok(())
+}
+
+/// PR 3g: a citation that no claim or instruction uses is a warning, not a
+/// failure; it must still resolve in the bundle.
+#[test]
+fn an_unused_citation_is_a_warning() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let mut handoff = slim_handoff();
+    handoff["claims"][1]["citations"] = json!(["e1"]);
+    let check = handoff_check(&bench, &handoff)?;
+    assert!(check.passed, "{:?}", check.details);
+    assert_eq!(check.warnings, vec!["citation e2 is never used".to_owned()]);
+
+    handoff["citations"][1]["evidence_id"] = json!("evd_ffffffffffffffffffffffffffffffff");
+    let log = claude(&good_uses(&bench), &[], &report(&handoff));
+    let failures = failed_checks(&bench.grade(&parse_claude(&log), &log));
+    assert!(failures.contains_key("citations_resolve"), "{failures:?}");
+    Ok(())
+}
+
+/// PR 3g: the claim rules stay. `observed` is never `unsupported` (a claim
+/// the agent could not check is `inferred`), and a claim that rests on
+/// evidence cites some, reported once by the schema rather than as a claim
+/// "on uninspected images only".
+#[test]
+fn claims_keep_their_rules() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let unchecked = json!({"id": "c3", "section": "actual", "kind": "inferred", "support": "unsupported",
+        "certainty": "low", "statement": "Whether the banner appears later was not checked.", "citations": []});
+    let mut handoff = slim_handoff();
+    handoff["claims"]
+        .as_array_mut()
+        .ok_or("claims is not an array")?
+        .push(unchecked);
+    let check = handoff_check(&bench, &handoff)?;
+    assert!(check.passed, "{:?}", check.details);
+
+    handoff["claims"][2]["kind"] = json!("observed");
+    assert!(!handoff_check(&bench, &handoff)?.passed);
+
+    let mut uncited = slim_handoff();
+    uncited["claims"][1]["citations"] = json!([]);
+    uncited["claims"][0]["citations"] = json!(["e1", "e2"]);
+    let check = handoff_check(&bench, &uncited)?;
+    assert!(!check.passed);
+    assert!(
+        check
+            .details
+            .iter()
+            .all(|detail| !detail.contains("uninspected")),
+        "{:?}",
+        check.details
+    );
+    Ok(())
+}
+
+/// PR 3g: a gap note may quote `VSift`'s longest fixed remediation (380
+/// characters) with context, up to 600 characters; the safety patterns
+/// still apply.
+#[test]
+fn a_gap_note_may_quote_a_remediation_whole() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let mut handoff = slim_handoff();
+    handoff["gaps"][0]["note"] = json!(format!("VSift says: {}", "x".repeat(588)));
+    let check = handoff_check(&bench, &handoff)?;
+    assert!(check.passed, "{:?}", check.details);
+    handoff["gaps"][0]["note"] = json!("x".repeat(601));
+    assert!(!handoff_check(&bench, &handoff)?.passed);
+    handoff["gaps"][0]["note"] = json!("Hidden \u{202E}text.");
+    assert!(!handoff_check(&bench, &handoff)?.passed);
+    Ok(())
+}
+
+/// PR 3g: the resume card takes the shapes agents write, as long as it
+/// carries what resume.md needs. `remaining` names the images
+/// `images_total` or `images`; a count the agent did not keep is null; a
+/// card without a transcription job may leave out `job_id`. A kind outside
+/// the vocabulary, an empty card or a note in place of the card still fail.
+#[test]
+fn the_resume_card_takes_the_shapes_agents_write() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let card = json!({
+        "state": "VERIFY_SOURCE",
+        "session_id": SESSION,
+        "revision_id": REVISION,
+        "operation_ids": [],
+        "evidence": [{"at_us": 4_000_000, "id": FRAME, "kind": "frame"}],
+        "summary": "The value at 4 s is 12; later frames are unread.",
+        "remaining": {"images": 3, "tool_calls": null, "wall_time_s": null},
+        "next_command": format!("vsift candidates {SESSION} --from 72500000 --limit 20 --json")
+    });
+    let with_card = |card: &Value| {
+        let mut handoff = slim_handoff();
+        handoff["status"] = json!("partial");
+        handoff["resume"] = card.clone();
+        handoff
+    };
+    let accepted: Vec<(&str, Change)> = vec![
+        ("images and nulls, no job", Box::new(|_| {})),
+        (
+            "images_total and a job",
+            Box::new(|card| {
+                card["remaining"] =
+                    json!({"images_total": 0, "tool_calls": 12, "wall_time_s": null});
+                card["job_id"] = Value::Null;
+            }),
+        ),
+        (
+            "no wall time",
+            Box::new(|card| card["remaining"] = json!({"images": 2, "tool_calls": 5})),
+        ),
+    ];
+    for (name, change) in accepted {
+        let mut changed = card.clone();
+        change(&mut changed);
+        let check = handoff_check(&bench, &with_card(&changed))?;
+        assert!(check.passed, "{name}: {:?}", check.details);
+    }
+    let refused: Vec<(&str, Change)> = vec![
+        (
+            "both image counts",
+            Box::new(|card| card["remaining"]["images_total"] = json!(3)),
+        ),
+        (
+            "no image count",
+            Box::new(|card| card["remaining"] = json!({"tool_calls": 3})),
+        ),
+        (
+            "a candidate kind outside the vocabulary",
+            Box::new(|card| card["evidence"][0]["kind"] = json!("candidate")),
+        ),
+        ("an empty card", Box::new(|card| *card = json!({}))),
+        (
+            "a note in place of the card",
+            Box::new(|card| *card = json!({"note": "Open the frames once images are allowed."})),
+        ),
+    ];
+    for (name, change) in refused {
+        let mut changed = card.clone();
+        change(&mut changed);
+        let check = handoff_check(&bench, &with_card(&changed))?;
+        assert!(!check.passed, "{name}");
+    }
+    Ok(())
+}
+
+/// Supervisor's decision (2026-09-29): the resume card is required only
+/// when the work was cut short and can continue (an exhausted budget, a
+/// cancelled or interrupted transcription), not when a report is partial
+/// because a capability is missing or the session expired: Sonnet 5.5 left
+/// the card out of 3 of 3 A-05 (images disabled) runs, reasonably.
+#[test]
+fn a_resume_card_is_required_only_when_the_work_can_continue() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let partial_because = |gap: Value| {
+        let mut handoff = slim_handoff();
+        handoff["status"] = json!("partial");
+        handoff["gaps"] = json!([gap]);
+        handoff
+    };
+    let not_needed = [
+        (
+            "images unavailable",
+            json!({"kind": "image_access", "reason": "image_access_unavailable", "note": null}),
+        ),
+        (
+            "no speech recognition",
+            json!({"kind": "transcript", "reason": "transcript_unavailable", "code": "MISSING_CAPABILITY", "note": null}),
+        ),
+        (
+            "missing tools",
+            json!({"kind": "dependency", "reason": "needs_user_authority", "code": "MISSING_CAPABILITY", "note": null}),
+        ),
+        (
+            "an expired session",
+            json!({"kind": "lifecycle", "reason": "session_expired", "note": null}),
+        ),
+    ];
+    for (name, gap) in not_needed {
+        let check = handoff_check(&bench, &partial_because(gap))?;
+        assert!(check.passed, "{name}: {:?}", check.details);
+    }
+    let mut exhausted =
+        partial_because(json!({"kind": "budget", "reason": "budget_exhausted", "note": null}));
+    exhausted["budget"] = json!({"profile": "compact", "exhausted": ["images_total"]});
+    let needed = [
+        ("an exhausted budget", exhausted),
+        (
+            "a budget_exhausted gap",
+            partial_because(json!({"kind": "budget", "reason": "budget_exhausted", "note": null})),
+        ),
+        (
+            "a cancelled transcription",
+            partial_because(
+                json!({"kind": "transcript", "reason": "cancelled", "code": "CANCELLED", "note": null}),
+            ),
+        ),
+    ];
+    for (name, handoff) in needed {
+        let check = handoff_check(&bench, &handoff)?;
+        assert!(!check.passed, "{name} without a card passed");
+        assert!(
+            check
+                .details
+                .iter()
+                .any(|detail| detail.contains("no resume card")),
+            "{name}: {:?}",
+            check.details
+        );
+    }
+    // A card that is given, where none is needed, is still checked.
+    let mut needless = partial_because(
+        json!({"kind": "image_access", "reason": "image_access_unavailable", "note": null}),
+    );
+    needless["resume"] = json!({"note": "Open the frames once images are allowed."});
+    assert!(!handoff_check(&bench, &needless)?.passed);
+    Ok(())
+}
+
+/// A resume card that is given must name the retained session and keep only
+/// evidence that session holds with the kind it holds it as.
+#[test]
+fn a_given_resume_card_resolves_in_the_retained_session() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let card = json!({
+        "state": "VERIFY_SOURCE", "session_id": SESSION, "revision_id": REVISION,
+        "operation_ids": [],
+        "evidence": [{"kind": "frame", "id": FRAME, "at_us": 10_000_000},
+                     {"kind": "transcript_segment", "id": SEGMENT, "at_us": 500_000}],
+        "summary": "The error is shown at 10 s.",
+        "remaining": {"images_total": 4, "tool_calls": 20},
+        "next_command": null
+    });
+    let with_card = |card: &Value| {
+        let mut handoff = slim_handoff();
+        handoff["resume"] = card.clone();
+        let log = claude(&good_uses(&bench), &[], &report(&handoff));
+        failed_checks(&bench.grade(&parse_claude(&log), &log))
+    };
+    let failures = with_card(&card);
+    assert!(!failures.contains_key("citations_resolve"), "{failures:?}");
+    let cases: Vec<(&str, Change)> = vec![
+        (
+            "another session",
+            Box::new(|card| card["session_id"] = json!("ses_ffffffffffffffffffffffffffffffff")),
+        ),
+        (
+            "an unknown frame",
+            Box::new(|card| {
+                card["evidence"][0]["id"] = json!("evd_ffffffffffffffffffffffffffffffff");
+            }),
+        ),
+        (
+            "a frame kept as a crop",
+            Box::new(|card| card["evidence"][0]["kind"] = json!("crop")),
+        ),
+    ];
+    for (name, change) in cases {
+        let mut changed = card.clone();
+        change(&mut changed);
+        let failures = with_card(&changed);
+        assert!(
+            failures.contains_key("citations_resolve"),
+            "{name}: {failures:?}"
+        );
+    }
     Ok(())
 }

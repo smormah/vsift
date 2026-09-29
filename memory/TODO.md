@@ -6,36 +6,37 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P11 are complete. P12 (agent skill) is in progress.** Merged: PRs 1, 2, 3a-3e
-(3e #211, `261b50d`, where the counted campaigns ran: Opus 5.5/Haiku 4.5 in Claude
-Code, GPT-6-Astra/GPT-6-Luna in Codex; raw logs local). **PR 3f** (branch
-`p12-pr3f-orientation-slim-handoff`, in review) implements the maintainer's decisions
-of 2026-09-29: orientation in the starting folder is housekeeping, and handoff v1
-requires only what the agent alone knows (recorded values optional, checked if given).
+**P00-P11 are complete. P12 (agent skill) is in progress.** Merged: PRs 1, 2, 3a-3f
+(3e #211 `261b50d`: the review tier's counted campaigns, Opus 5.5 and GPT-6-Astra;
+3f #212 `b68d746`: the compact-tier runs, Sonnet 5.5, GPT-6-Luna, Haiku 4.5; raw logs
+local). **PR 3g** (branch `p12-pr3g-handoff-vocabulary`, in review) implements the
+maintainer's decisions of 2026-09-29: the compact tier is Sonnet 5.5 and GPT-6-Luna
+(Haiku 4.5 below the line, L-082), and the handoff's vocabulary friction is fixed now
+(the validator command is P13's, #213).
 
-1. **Review and merge PR 3f** (an increment, not the packet). Its table re-grades every
-   counted run (`grade-3f.json` beside `grade.json`); the skill changed too.
-2. **Then the approved re-run of the small models** (Haiku 4.5, GPT-6-Luna) on PR 3f's
-   merge commit: Claude Code from a frozen checkout, Codex after rebuilding both images
-   at that commit. Records go to `docs/planning/p12-agent-trials/`.
-3. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes, including PR 3f's
-   readings: `command -v` strict, `pixels_inspected` required, a scenario's gap `code`
-   still required), the corpus truth amendment (F04-E05, F05-E04, F12-E03), L-075,
-   L-078..L-081.
-4. **Technical debt:** SEC-T01 adversarial evidence (#188, L-068), before P14.
+1. **Review and merge PR 3g** (an increment, not the packet). Its table re-grades every
+   compact-tier run and the review tier (`grade-3g.json` beside the originals); the
+   skill text changed too (vocabulary table, exact resume card).
+2. **Then re-run the compact tier** (Sonnet 5.5 in Claude Code 2.1.284, GPT-6-Luna in
+   Codex) on PR 3g's merge commit, images rebuilt there; check the init event lists only
+   `vsift` (`disableBundledSkills`). Records go to `docs/planning/p12-agent-trials/`.
+3. **Maintainer: decide the hidden-character proposal** (L-083; ADR 0022's PR 3g note:
+   `text` renders bidi and zero-width characters as `<U+XXXX>`, `original_text` keeps
+   them; a contract change, not implemented).
+4. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes, including PR 3f's
+   and PR 3g's readings: `observed` never `unsupported`, unused citations a warning,
+   `remaining.images` accepted; the resume card only when work can continue, a
+   supervisor decision), the corpus truth amendment, L-075, L-078..L-083.
+5. **Technical debt:** SEC-T01 adversarial evidence (#188, L-068), before P14.
 
 ## Found in P12 (for the maintainer)
 
-- **Counted campaigns re-graded (PR 3f):** Opus 11/11 and Astra 11/11 pass both
-  results; GPT-6-Luna mechanical 5 -> 20 of 31 (left: handoff shapes, 3 partial reports
-  without a resume card, 2 `printf`); Haiku 3/28 (invents its own handoff shapes).
-- **Codex images (L-075, decided):** the right check code proves image access; its
-  image budgets are unmeasured (the rollout hides views in a code-mode `exec` call).
+- **Compact tier on `b68d746`:** Sonnet 28/28 answers, 9/28 full; Luna 24, 11; Haiku 6, 2.
+- **Hidden characters (L-083):** VSift's `text` keeps raw U+202E (and decodes WebVTT's
+  `&#x202E;` into it); Sonnet copied one into 1 of 5 SEC-T02 reports, Haiku 4 of 5.
 - **Still open (grader):** `untrusted_listed` takes only F12-E01 (0-8 s) though the
-  on-screen instructions last to 12 s; the line-filter allowance (`| head` after a
-  command) is still the harness's, not the skill's.
-- **L-071 (P13):** no remediation for an unparsable line in JSON modes. **L-074
-  (open):** SubRip import removes any `<letter...>` tag. **#210:** the `\\?\` retry.
+  instructions last to 12 s; the line-filter allowance is the harness's, not the skill's.
+  L-071 (P13), L-074 (SubRip `<letter...>` tags), #210 (the `\\?\` retry) stay open.
 
 ## Decided (maintainer, 2026-09-28/29)
 
@@ -43,22 +44,23 @@ requires only what the agent alone knows (recorded values optional, checked if g
   steps, stop-then-cancel shutdown with opt-in drain, the D5 batch exit.
 - **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial as debt (above).
 - **P13 plan:** npm launcher over per-platform packages, no install scripts; all names
-  held, no announcement before P14 (open items: P13 name checklist).
+  held, no announcement before P14 (open items: P13 name checklist); a handoff
+  validator command (#213).
 - **PR 3e (supervisor):** `--help` forms free, never piped; the `\\?\` retry stays
-  (#210). **PR 3f (maintainer):** the two decisions above; `cd` elsewhere stays strict.
+  (#210). **PR 3f (maintainer):** orientation is housekeeping (`cd` elsewhere strict);
+  handoff v1 states only what the agent knows. **PR 3g (maintainer):** the compact tier
+  is Sonnet 5.5 and GPT-6-Luna; fix the vocabulary now, validator in P13. **PR 3g
+  (supervisor):** resume card only when work can continue; keep `disableBundledSkills`.
 
 ## Open decisions (maintainer)
 
 - **ADR 0022** (above); **#204** (the product side of L-076: Codex on Windows).
-- **P11 PR 4b readings to confirm:** the runbook's systemd example uses
-  `KillMode=mixed`; a host-caused permanent failure replays under its operation id, so
-  supervisors resubmit under a new id (L-069).
-- **P11 PR 4a readings to confirm:** a file of more than 1,000 lines is refused whole;
-  a line over 64 KiB is refused alone; a job-cancelled line that is the most severe
-  exits 6, told apart by `termination_reason` (L-067); the engine depends on `tokio`.
-- **P11 PR 2-3 readings** (ADR 0021 notes): continuable transient failures; pruning;
-  192 KiB records; D2; `durable_worker` for ephemeral workspace sessions; input-path
-  links refused (L-062). Also: MSRV and 0.x pre-releases; an MCP adapter after P12.
+- **P11 readings to confirm** (ADR 0021 notes): PR 4b's systemd `KillMode=mixed` and
+  resubmission under a new operation id (L-069); PR 4a's batch file and line limits and
+  exit 6 for a job-cancelled line (L-067), the engine's `tokio`; PR 2-3's continuable
+  transient failures, pruning, 192 KiB records, D2, `durable_worker` for ephemeral
+  workspace sessions, input-path links refused (L-062). Also: MSRV, 0.x pre-releases,
+  an MCP adapter after P12.
 
 ## Tracked issues
 
@@ -69,7 +71,7 @@ requires only what the agent alone knows (recorded values optional, checked if g
 
 ## Other follow-ups
 
-- **Known limits:** entries to L-081, review pending (P12 added L-071..L-081).
+- **Known limits:** entries to L-083, review pending (P12 added L-071..L-083).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   `p11_durable_workspace` on Ubuntu 24.04 / ext4; `strict-linux` end to end in CI.
 - **Campaign upkeep:** bump the three `UBUNTU_IMAGE_*` values together (3 GiB images).

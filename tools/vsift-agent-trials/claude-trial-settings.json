@@ -1,5 +1,5 @@
 {
-  "$comment": "Claude Code settings for VSift agent trials (P12, ADR 0022 decision 7). The harness copies this file into each trial workspace as .claude/settings.json, the only source of the trial's rules: run marks that workspace as trusted in the client home (Claude Code ignores a project's allow rules in an untrusted workspace) and starts Claude Code with --setting-sources project and --permission-mode dontAsk, which denies every tool use outside the allow list without prompting (commands Claude Code classes as read-only still run). Relative patterns resolve against the trial workspace, which holds the skill and VSift's session root. The grader enforces the command policy independently of these rules.",
+  "$comment": "Claude Code settings for VSift agent trials (P12, ADR 0022 decision 7). The harness copies this file into each trial workspace as .claude/settings.json, the only source of the trial's rules: run marks that workspace as trusted in the client home (Claude Code ignores a project's allow rules in an untrusted workspace) and starts Claude Code with --setting-sources project and --permission-mode dontAsk, which denies every tool use outside the allow list without prompting (commands Claude Code classes as read-only still run). Relative patterns resolve against the trial workspace, which holds the skill and VSift's session root. The grader enforces the command policy independently of these rules. disableBundledSkills removes the skills Claude Code ships with (2.1.284 loaded sixteen, such as claude-api and deep-research, into every session), so the trial's model sees only the vsift skill.",
   "permissions": {
     "defaultMode": "dontAsk",
     "allow": [
@@ -22,6 +22,7 @@
     ]
   },
   "disableAllHooks": true,
+  "disableBundledSkills": true,
   "enableAllProjectMcpServers": false,
   "includeCoAuthoredBy": false,
   "cleanupPeriodDays": 1

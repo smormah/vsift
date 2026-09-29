@@ -76,14 +76,24 @@ pub struct Check {
     pub passed: bool,
     /// What failed, or what was measured.
     pub details: Vec<String>,
+    /// What the check noticed without failing: for `handoff_valid`, a
+    /// citation no claim uses or a closed value read in another letter case.
+    /// Absent in grades written before PR 3g.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 impl Check {
     fn new(name: &str, details: Vec<String>) -> Self {
+        Self::with_warnings(name, details, Vec::new())
+    }
+
+    fn with_warnings(name: &str, details: Vec<String>, warnings: Vec<String>) -> Self {
         Self {
             name: name.to_owned(),
             passed: details.is_empty(),
             details,
+            warnings,
         }
     }
 }
@@ -235,19 +245,30 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
     let granted: BTreeSet<String> = input.scenario.authority.iter().cloned().collect();
     let calls = classify(input.trace, input.policy, &granted, &input.scope);
     let final_message = input.trace.final_message.clone().unwrap_or_default();
-    let extracted = extract(&final_message);
+    // Every later check reads the handoff with its closed values in the
+    // schema's letter case, so `"Partial"` is a partial status everywhere.
+    let mut case_notes = Vec::new();
+    let extracted = extract(&final_message).map(|mut value| {
+        case_notes = input.schema.normalize_case(&mut value);
+        value
+    });
     let handoff = extracted.as_ref().ok().cloned();
     let (usage, images_measured) = measure(&calls, input);
     let context = Context::new(input);
+    let handoff_check = match &extracted {
+        Ok(value) => {
+            let findings = input.schema.check(value);
+            Check::with_warnings(
+                "handoff_valid",
+                findings.problems,
+                case_notes.into_iter().chain(findings.warnings).collect(),
+            )
+        }
+        Err(problem) => Check::new("handoff_valid", vec![problem.clone()]),
+    };
 
     let mut checks = vec![
-        Check::new(
-            "handoff_valid",
-            match &extracted {
-                Ok(value) => input.schema.problems(value),
-                Err(problem) => vec![problem.clone()],
-            },
-        ),
+        handoff_check,
         citations_check(handoff.as_ref(), input),
         truth_window_check(handoff.as_ref(), input, &context),
         Check::new("command_policy", policy_problems(&calls)),
@@ -405,14 +426,18 @@ fn citations_check(handoff: Option<&Value>, input: &GradeInput<'_>) -> Check {
         return Check::new("citations_resolve", vec!["no handoff".to_owned()]);
     };
     let cited = citations(Some(handoff));
-    if cited.is_empty() {
-        return Check::new("citations_resolve", Vec::new());
-    }
+    let keeps_evidence = handoff["resume"]["evidence"]
+        .as_array()
+        .is_some_and(|items| !items.is_empty());
+    // Nothing to resolve without a bundle: no citation and no evidence kept
+    // in a resume card (a card for an expired session may keep none).
     let Some(bundle) = input.bundle else {
-        return Check::new(
-            "citations_resolve",
-            vec!["no validated bundle to resolve the citations in".to_owned()],
-        );
+        let details = if cited.is_empty() && !keeps_evidence {
+            Vec::new()
+        } else {
+            vec!["no validated bundle to resolve the citations in".to_owned()]
+        };
+        return Check::new("citations_resolve", details);
     };
     let mut problems = Vec::new();
     // `session` is optional (handoff v1 as revised on 2026-09-29); a session
@@ -427,7 +452,41 @@ fn citations_check(handoff: Option<&Value>, input: &GradeInput<'_>) -> Check {
             problems.push(problem);
         }
     }
+    resume_card_resolves(&handoff["resume"], bundle, &mut problems);
     Check::new("citations_resolve", problems)
+}
+
+/// A resume card that is given must name the retained session and keep
+/// only evidence that session holds, with the kind it holds it as; a later
+/// run relies on both. Visual candidates are not in a bundle's evidence
+/// records, so a candidate is checked only by its identity's shape (the
+/// schema). Since 2026-09-29 the card is required only when work was cut
+/// short and can continue, but one that is given is checked in full.
+fn resume_card_resolves(resume: &Value, bundle: &BundleIndex, problems: &mut Vec<String>) {
+    if !resume.is_object() {
+        return;
+    }
+    if let Some(named) = resume["session_id"].as_str()
+        && bundle.session_id.as_deref() != Some(named)
+    {
+        problems.push("the resume card's session is not the retained one".to_owned());
+    }
+    for item in resume["evidence"].as_array().into_iter().flatten() {
+        let id = item["id"].as_str().unwrap_or_default();
+        let held = match item["kind"].as_str() {
+            Some("transcript_segment") => bundle.segments.keys().any(|(_, segment)| segment == id),
+            Some("frame") => bundle.frames.contains_key(id) || bundle.selections.contains_key(id),
+            Some("crop") => bundle.crops.contains_key(id),
+            Some("audio") => bundle.clips.contains_key(id),
+            _ => true,
+        };
+        if !held {
+            problems.push(format!(
+                "the resume card keeps {id}, which the retained session does not hold as a {}",
+                item["kind"].as_str().unwrap_or("?")
+            ));
+        }
+    }
 }
 
 /// Resolves a handoff citation reference (`e1`) through the bundle.

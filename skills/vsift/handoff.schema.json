@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/skills/vsift/handoff.schema.json",
   "title": "VSift agent handoff v1",
-  "description": "The machine-readable part of a report written by the VSift agent skill. Owned by the skill, not by the CLI's schemas/v1. The agent must state only what it alone knows: its findings, the identities of the evidence it cites, what it looked at, gaps, instructions it saw and what it did with the session. Everything VSift already recorded (times, revisions, the session's details, the budget's limits) is optional: null or absent is allowed, and a value that is given must match VSift's records. Every identity and time is copied from VSift CLI output; no member holds a path, a link or a secret.",
+  "description": "The machine-readable part of a report written by the VSift agent skill. Owned by the skill, not by the CLI's schemas/v1. The agent must state only what it alone knows: its findings, the identities of the evidence it cites, what it looked at, gaps, instructions it saw and what it did with the session. Everything VSift already recorded (times, revisions, the session's details, the budget's limits) is optional: null or absent is allowed, and a value that is given must match VSift's records. Every identity and time is copied from VSift CLI output; no member holds a path, a link or a secret. Closed values are written exactly as listed here; a reader may accept them in another letter case (the trial harness does), never another word.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -108,23 +108,30 @@
     },
     "lifecycle": { "$ref": "#/$defs/lifecycle" },
     "resume": {
-      "description": "The resume card: required when status is partial or a budget limit is exhausted; optional (null or absent) when the task finished.",
+      "description": "The resume card: required only when the work was cut short and can continue (a budget limit exhausted, or a gap with reason budget_exhausted or cancelled, or code CANCELLED); optional (null or absent) otherwise, including a partial report whose cause is a missing capability or an expired session. A card that is given must validate and name the retained session and its evidence.",
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/resume" }]
     }
   },
   "$defs": {
-    "safe_text_500": {
+    "safe_text": {
       "description": "Prose without control, bidirectional or zero-width characters, absolute paths, home prefixes or links.",
       "type": "string",
       "minLength": 1,
-      "maxLength": 500,
       "pattern": "^[^\\u0000-\\u001F\\u007F\\u200B-\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]*$",
       "not": { "pattern": "(^|[\\s(\"'`=])(/|~[/\\\\]|\\\\)|[A-Za-z]:[\\\\/]|[A-Za-z][A-Za-z0-9+.-]*://|www[.]" }
     },
+    "safe_text_600": {
+      "description": "Safe prose of at most 600 characters: room for VSift's longest fixed remediation (380 characters) quoted whole, with a sentence of context.",
+      "allOf": [{ "$ref": "#/$defs/safe_text" }, { "maxLength": 600 }]
+    },
+    "safe_text_500": {
+      "allOf": [{ "$ref": "#/$defs/safe_text" }, { "maxLength": 500 }]
+    },
     "safe_text_300": {
-      "allOf": [{ "$ref": "#/$defs/safe_text_500" }, { "maxLength": 300 }]
+      "allOf": [{ "$ref": "#/$defs/safe_text" }, { "maxLength": 300 }]
     },
     "time_us": { "type": "integer", "minimum": 0, "maximum": 86400000000 },
+    "remaining_count": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
     "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
     "revision_id": { "type": "string", "pattern": "^trv_[a-z0-9]{16,64}$" },
     "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" },
@@ -147,7 +154,7 @@
         "id": { "type": "string", "pattern": "^c[1-9][0-9]{0,2}$" },
         "section": { "enum": ["problem", "expected", "actual", "reproduction", "context"] },
         "kind": {
-          "description": "observed: seen or read in the cited evidence; inferred: reasoned from cited evidence; reported: stated by the user, not checked in the video.",
+          "description": "observed: seen or read in the cited evidence, so never unsupported; inferred: reasoned from cited evidence, or a claim the agent could not check (then unsupported); reported: stated by the user, not checked in the video. A claim that is supported, partially_supported or contradicted cites at least one piece of evidence.",
           "enum": ["observed", "inferred", "reported"]
         },
         "support": { "enum": ["supported", "partially_supported", "unsupported", "contradicted"] },
@@ -322,7 +329,10 @@
             }
           ]
         },
-        "note": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/safe_text_300" }] }
+        "note": {
+          "description": "What the gap means for the question, or null; VSift's remediation may be quoted whole.",
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/safe_text_600" }]
+        }
       }
     },
     "cli_gap_reason": {
@@ -415,7 +425,7 @@
           }
         },
         "exhausted": {
-          "description": "Optional (default empty): the limits that ran out. Any entry requires the resume card.",
+          "description": "Optional (default empty): the limits that ran out. Any entry means the work was cut short and requires the resume card.",
           "type": ["array", "null"],
           "uniqueItems": true,
           "items": {
@@ -448,10 +458,10 @@
       }
     },
     "resume": {
-      "description": "The resume card: enough for another run to continue without repeating work. At most 2 KiB when serialized.",
+      "description": "The resume card: enough for another run to continue without repeating work. At most 2 KiB when serialized. job_id may be left out when there is no transcription job.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["state", "session_id", "revision_id", "job_id", "operation_ids", "evidence", "summary", "remaining", "next_command"],
+      "required": ["state", "session_id", "revision_id", "operation_ids", "evidence", "summary", "remaining", "next_command"],
       "properties": {
         "state": {
           "enum": [
@@ -495,15 +505,18 @@
         },
         "summary": { "$ref": "#/$defs/safe_text_500" },
         "remaining": {
+          "description": "What is left of the budget, as the agent counted it: images (images_total, or images, read the same), tool calls and seconds. A count the agent did not keep is null; the harness counts usage itself and never relies on these values.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["images_total", "tool_calls", "wall_time_s"],
+          "required": ["tool_calls"],
+          "oneOf": [{ "required": ["images_total"] }, { "required": ["images"] }],
           "properties": {
-            "images_total": { "type": "integer", "minimum": 0 },
-            "tool_calls": { "type": "integer", "minimum": 0 },
+            "images_total": { "$ref": "#/$defs/remaining_count" },
+            "images": { "$ref": "#/$defs/remaining_count" },
+            "tool_calls": { "$ref": "#/$defs/remaining_count" },
             "wall_time_s": {
-              "description": "Seconds left, or null when the time used was not measured.",
-              "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }]
+              "description": "Seconds left, or null (or absent) when the time used was not measured.",
+              "$ref": "#/$defs/remaining_count"
             }
           }
         },

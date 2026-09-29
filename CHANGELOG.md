@@ -8,6 +8,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- The handoff's closed vocabulary is shown and its friction removed (P12 PR 3g, ADR
+  0022 note of 2026-09-29), after the compact-tier runs on `b68d746` (Claude Sonnet
+  5.5: 28 of 28 answers, 9 of 28 full passes, 18 failing only on the handoff; GPT-6-Luna
+  24 and 11; Claude Haiku 4.5 6 and 2). **Maintainer decisions:** the compact tier is
+  Claude Sonnet 5.5 and GPT-6-Luna; Haiku 4.5 is below the supported line (known limit
+  L-082); a handoff validator command is P13's (#213). **Skill:** `SKILL.md`'s REPORT
+  state lists the allowed words of fifteen closed members beside the skeleton,
+  `references/handoff.md` all of them, with the rules that `observed` is never
+  `unsupported` and that a claim resting on evidence cites some; `references/resume.md`
+  shows one exact resume card; the failure-code table moved from `SKILL.md` to
+  `references/commands.md` to keep `SKILL.md` within 300 lines. **Handoff schema (v1,
+  unreleased, revised in place):** a gap `note` holds 600 characters (VSift's longest
+  fixed remediation is 380); the resume card's `job_id` may be absent, and `remaining`
+  gives `tool_calls` and one of `images_total` or `images`, each an integer or null,
+  with `wall_time_s` optional. **Grader:** a closed value in another letter case is read
+  as the schema's spelling and noted (a different word still fails); an unused citation
+  is a warning (a new `warnings` list on each check), not a failure; a claim that cites
+  nothing is reported once. **Resume card (supervisor's decision):** required only when
+  the work was cut short and can continue (an exhausted budget limit, or a gap with
+  reason `budget_exhausted` or `cancelled`, or code `CANCELLED`), not for a report that
+  is partial because a capability is missing or the session expired; a card that is
+  given must validate, name the retained session and keep only evidence it holds. **Guard:** the vocabulary tables list exactly the schema's
+  `enum` and `const` values; `resume.md`'s card validates; a gap note fits the longest
+  remediations. **Trials:** the Claude Code settings set `disableBundledSkills`
+  (2.1.284 loaded sixteen bundled skills into every session). Known limit L-083 (models
+  copy raw hidden characters from `text`; a contract proposal is in the ADR note, not
+  implemented). Every compact-tier run and the review tier's counted runs were
+  re-graded beside their originals (`grade-3g.json`).
 - Two maintainer decisions after the counted agent-trial campaigns on `261b50d` (P12
   PR 3f, ADR 0022 note of 2026-09-29). **Orientation is housekeeping:** the grader no
   longer fails `pwd`, `cd` to the folder the client started in, or a listing of the

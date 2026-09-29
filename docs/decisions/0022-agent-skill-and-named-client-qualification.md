@@ -520,6 +520,150 @@ guard checks this and that the schema's required lists are the decision's), a li
 names the optional members worth adding, `references/handoff.md` lists what must and
 may be given, and both examples are slim.
 
+## Implementation notes: the compact tier and the handoff vocabulary, PR 3g (2026-09-29)
+
+Status stays **Proposed**. After PR 3f, the small models ran on its merge commit
+`b68d746`: Claude Code 2.1.284 on Windows, and Codex in the container. 28 trials per
+model (A-01 to A-07 and SEC-T02; A-02 counts both phases):
+
+| Model | Answers correct (interpretation) | Full passes (both results, every phase) |
+| --- | --- | --- |
+| Claude Sonnet 5.5 (`claude-sonnet-5-5`) | 28 of 28 | 9 of 28 (18 failed only on `handoff_valid`) |
+| GPT-6-Luna (`gpt-6-luna`) | 24 of 28 | 11 of 28 |
+| Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) | 6 of 28 | 2 of 28 |
+
+**Maintainer decisions (2026-09-29).**
+
+1. **The compact tier is Claude Sonnet 5.5 (Claude Code) and GPT-6-Luna (Codex).**
+   Decision 7's "named compact model" is this tier; Opus 5.5 and GPT-6-Astra stay the
+   review tier. Claude Haiku 4.5 is recorded as **below the supported line** (known
+   limit L-082): it invents handoff shapes and misses most answers, which no wording
+   fix addresses.
+2. **Fix the handoff block's vocabulary friction now, in P12.** A `vsift` command that
+   validates a handoff comes later, in P13 (issue #213); it is not built here.
+
+**What the handoff errors were.** Every `handoff_valid` detail of the Sonnet 5.5 (51)
+and GPT-6-Luna (50) runs, both phases of A-02 included, grouped by cause:
+
+| Cause | Sonnet | Luna | Real defect? | PR 3g |
+| --- | --- | --- | --- | --- |
+| A closed value in another letter case (`"Actual"`, `"Problem"`, `"Expected"`) | 10 | 17 | No: the same word | Read in any case (below) |
+| Another word for a closed value: gap kind `evidence`, `image`, `capability`, `coverage`, `context`; section `Reproduction steps`, `Untrusted instructions observed`, `gaps` | 13 | 3 | Yes, but the skill never listed the words | The vocabulary table; still refused |
+| An `observed` claim marked `unsupported` | 3 | 1 | Yes (the schema's rule) | Rule stated beside the table |
+| A resume card in another shape (`remaining.images`, null `tool_calls`, no `job_id`) | 6 | 0 | No: it carries what resume.md needs | Schema accepts it |
+| A card that is `{}` or `{"note": ...}` | 3 | 0 | Yes | Exact card in resume.md |
+| A partial report without a card (A-05 with images disabled, and 2 Sonnet A-07 runs whose gaps were `not_inspected` and `transcript_unavailable`) | 5 | 2 | Not when nothing can be resumed | Card required only when work can continue (below) |
+| A citation never used by a claim or instruction | 5 | 15 | No | A warning, not a failure |
+| A claim that is `supported` but cites nothing (plus its consequential "uninspected images only") | 2 + 2 | 1 + 1 | Yes: a finding about the tools or session belongs in a gap | Rule stated; one message only |
+| A `supported` claim citing only frames it did not inspect | 0 | 1 | Yes | None |
+| A gap note over 300 characters (VSift's remediation quoted, 316) | 1 | 0 | No | 600 characters |
+| A citation of the wrong shape (`sgm_` for `tsg_`; id `e7b`) | 1 | 1 | Yes (a typo) | None |
+| Frame citations with `pixels_inspected` true while image access is unavailable | 0 | 5 | Yes | None |
+| `session_id` inside `lifecycle` | 0 | 3 | Yes (wrong place) | None |
+
+**What changed.**
+
+- **The vocabulary is shown.** `SKILL.md`'s REPORT state lists, beside the skeleton,
+  every allowed word of `status`, `capabilities.*`, the claim's `section`, `kind`,
+  `support` and `certainty`, the citation `type`, the gap `kind` and `reason`,
+  `action_taken` and `lifecycle.action` and `policy`; `references/handoff.md` lists
+  every closed member (gap `code`, `budget`, `lifecycle.mode`, `resume.state` and
+  `resume.evidence[].kind` too). `SKILL.md` stays within its 300 lines: the
+  failure-code table moved to `references/commands.md`. The guard test
+  `vocabulary_tables_list_exactly_the_schema_values` walks the schema (`$ref`, `oneOf`,
+  `anyOf`, `allOf`, `properties`, `items`) and fails when either table differs from it.
+- **Letter case is tolerated, synonyms are not.** Before any check reads a handoff, the
+  grader rewrites a closed value written in another letter case to the schema's spelling
+  and records a warning for each (`claims[1].section: "Actual" read as "actual"`); the
+  list of closed members comes from the same schema walk, so it cannot drift. `"image"`
+  stays wrong. The schema itself is unchanged in this respect: the harness normalises,
+  and the schema says a reader may.
+- **Gap notes hold 600 characters.** The longest fixed remediation in
+  `vsift-contract` is `UNPINNED_MODEL_REMEDIATION`, 380 characters (then
+  `LOCAL_ASR_TOOLS_REMEDIATION`, 331, and `EVIDENCE_BUDGET_REMEDIATION`, 316); the
+  contract bounds a remediation summary at 1,024, but no fixed text comes near that.
+  600 fits the longest quoted whole with a sentence of context; the guard test
+  `a_gap_note_holds_a_quoted_remediation` checks all three. No other prose limit bound
+  in these runs (claim statements and the resume summary 500, instruction summaries and
+  the next command 300), so they stay. The control, bidirectional, zero-width, link and
+  path checks apply to every length.
+- **The resume card takes the natural shape.** Agents wrote the schema's members
+  except for `remaining`, where Sonnet 5.5 used `images` (the skill's own prose said
+  "images, tool calls and seconds") and left counts it did not keep as null, and six
+  cards without a job left out `job_id`. The card now requires `state`, `session_id`,
+  `revision_id`, `operation_ids`, `evidence` (kind, id, time), `summary`, `remaining`
+  and `next_command`; `job_id` may be absent when there is no job; `remaining` gives
+  `tool_calls` and exactly one of `images_total` or `images` (read the same), each
+  an integer or null, and `wall_time_s` optionally. Everything `resume.md` needs is
+  still there. `resume.md` shows one exact card, which the guard validates. An
+  evidence kind `candidate` stays wrong (`visual_candidate`).
+- **Claims.** The schema's intent is plain: `observed` means "seen or read in the cited
+  evidence", so an observed claim cannot be `unsupported`. The rule stays and is stated
+  beside the table: a claim the agent could not check is `inferred` (or `reported`)
+  and `unsupported`. A claim that is `supported`, `partially_supported` or
+  `contradicted` must cite evidence: in every case seen, the uncited "support" was a
+  `setup check` or `session status` result, which the handoff records as a gap. The
+  grader no longer adds "supported on uninspected images only" when a claim cites
+  nothing; the schema's `minItems` reports it once.
+- **The resume card is required only when the work can continue** (supervisor's
+  technical decision, 2026-09-29, before merging PR 3g): when a budget limit is
+  exhausted, or a gap has reason `budget_exhausted` or `cancelled` (or code
+  `CANCELLED`: a transcription cancelled or interrupted with its checkpoints kept). A
+  report that is `partial` only because a capability is missing (images, speech
+  recognition, tools) or the session expired needs none, since resuming cannot fix
+  it; Sonnet 5.5 reasonably left the card out of 3 of 3 A-05 runs. A card that is given
+  must still validate, and `citations_resolve` now also checks that it names the
+  retained session and keeps only evidence that session holds, as the kind it holds.
+  The rule is the grader's `cut_short_reason` and the guard's `cut_short`; A-02's
+  scenario still expects a card.
+- **Unused citations are warnings.** A citation that no claim or instruction uses still
+  names real evidence, which `citations_resolve` checks, and misleads no reader; agents
+  often list everything they opened. It now appears in the check's `warnings` and fails
+  nothing. `references/handoff.md` still asks for only the citations that are used.
+
+**Re-grade.** Every compact-tier run (Sonnet 5.5, GPT-6-Luna, Haiku 4.5) and the review
+tier's counted runs on `261b50d` were graded again with PR 3g's grader beside their
+originals (`grade-3g.json`; the table is in the pull request). Those numbers show only
+what the grader changes fix: the skill text changed too (the vocabulary table, the
+exact resume card), so the compact tier needs the re-run.
+
+**Claude Code's bundled skills.** Claude Code 2.1.284 loads the sixteen skills it
+ships with (for example `claude-api` and `deep-research`) into every session, whatever
+`--setting-sources` says; no run used one. Its settings schema has
+`disableBundledSkills`, and the trial settings now set it (not yet checked on a run).
+
+### Proposal: hidden characters in `text` (not implemented)
+
+In the SEC-T02 runs Claude Sonnet 5.5 (1 of 5) and Claude Haiku 4.5 (4 of 5) copied a
+raw U+202E into their reports despite the skill's checklist; GPT-6-Luna did not (known
+limit L-083). The characters come from VSift itself: a transcript segment's `text` is
+"sanitized" of markup only, keeps bidirectional controls and zero-width characters as
+written, and for WebVTT decodes `&#x202E;` into the raw character, while
+`original_text` keeps the reference (`sec_t02_adversarial_evidence` asserts both). A
+model cannot see what it must escape.
+
+- **Proposal.** `text` renders every bidirectional control (U+200E, U+200F, U+202A to
+  U+202E, U+2066 to U+2069) and invisible character (U+200B to U+200D, U+2060 to U+2064,
+  U+FEFF) as the visible notation `<U+202E>`; `original_text` keeps the raw payload and
+  is present whenever `text` differs from it (today only when markup was removed). The
+  same rendering applies wherever transcript text reaches output (`transcript get`,
+  `search` hits, job results, events).
+- **Contract impact.** It changes what a published v1 field means: `text` becomes
+  display-safe text rather than the payload without markup. A consumer that compares
+  `text` with the source, or searches for a hidden character in it, would see a
+  difference. `search` should match against the rendered text (a query cannot contain
+  these characters usefully anyway). Stored revisions need not change if the rendering
+  happens when a record is presented, which keeps revision and segment identities and
+  retained bundles stable.
+- **Compatibility.** Either a documented v1 clarification (the field is unreleased
+  outside trials, and every current consumer, the skill, wants the safe form), or a
+  compatible addition instead (`display_text`, leaving `text` as it is) with the skill
+  switched to it. The first is simpler; the second is strictly compatible.
+- **Needed.** A contract ADR amending ADR 0008 and `docs/contracts/cli-v1.md`, the
+  transcript schemas' descriptions, the SEC-T02 suite's assertion, and a skill change
+  (quote `text`, which is then safe). It is the maintainer's decision; nothing is
+  implemented.
+
 ## Consequences
 
 - Agents have one procedure for both clients, and its references cannot drift from
