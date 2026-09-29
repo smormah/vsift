@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Fixes from two diagnostic trial passes (P12 PR 3e, ADR 0022 note of 2026-09-29):
+  39 Claude Code runs on Windows and 11 Codex runs in the Linux container, none
+  counted. **Grader:** A-09-f05-blurred declares its `blurred_terms` (`E-409`,
+  `success banner`) and fails only a fully `supported` claim of one on inspected
+  pixels; `report_text` flags a `\\?\` path, not the bare prefix in prose; Claude
+  Code's own spill files (`<client home>/projects/.../tool-results/*.txt`) are
+  housekeeping; shell `rg`/`grep` inside the skill folders count as skill reads; for
+  Codex the right image check code proves image access while its image budgets stay
+  unmeasured (L-075); a Codex `error` notice about its configuration, a setting or its
+  sandbox makes a trial invalid; `vsift --help` and `vsift <namespace> <operation>
+  --help` are free, piping them is not, and `cd` stays unauthorized. **Harness:**
+  images-disabled Codex runs pass `--disable view_image` (the old `tools.view_image`
+  setting was ignored); the blur uses `gblur`, which the container's LGPL FFmpeg has;
+  `grade --output/--repository/--scenario/--client-home` grades a trial again beside
+  its original grade; `codex-trial.ps1` prints a final `trial-id <trial>` line, runs
+  `debug -Scenario` and `regrade`. **Skill:** every stop ends in REPORT with one
+  `vsift-handoff` block (a filled-in minimal example in `SKILL.md`), the report is the
+  final message and never a file, commands run from the starting folder without `cd`,
+  the compact limits stand next to the commands, `vsift setup check` is the only
+  availability check, no web address in the report, and a "before you send"
+  checklist. The skill contract guard validates the example and accepts the help
+  forms. Regression tests rebuild each finding from the real events with synthetic
+  paths.
 - A Linux container for the Codex agent trials (P12 PR 3b, ADR 0022 note of
   2026-09-29; runbook `docs/agents/trials.md`), since Codex's Windows sandbox cannot run
   VSift (L-076, #204). `tools/vsift-agent-trials/containers/codex/` builds, from the

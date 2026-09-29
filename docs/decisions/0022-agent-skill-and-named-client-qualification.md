@@ -333,6 +333,104 @@ removes the network, which the prompt-injection scenarios (A-04, SEC-T02) need.
   `exec --json` stream has no event for viewed images, so the grader counts none (L-075,
   for the maintainer).
 
+## Implementation notes: two diagnostic passes and PR 3e (2026-09-29)
+
+Status stays **Proposed**. Before the counted campaign, two diagnostic passes ran the
+scenarios to find what the skill, grader and harness still got wrong. None of these
+runs counts. **Claude Code on Windows:** 39 runs on `ed07c0d` (Opus 5.5 on A-08 and
+A-09, Haiku 4.5 on A-01 to A-07 and SEC-T02). **Codex in the Linux container:** 11
+runs on image tag `f2dfb955790f` (GPT-6-Astra on A-09, GPT-6-Luna on A-01 to A-07 and
+SEC-T02). PR 3e fixes everything they found in one change, so the counted campaign
+runs on one version of the skill and grader. The maintainer's supervisor decided each
+point below; the raw logs stay local, and the regression tests rebuild the exact
+events and messages with synthetic paths and identities.
+
+**Grader false positives** (verified by re-grading every diagnostic run from its raw
+logs; the table is in the pull request):
+
+1. `transcript_only_support` failed every claim that stated any key fact of F05-E03
+   and cited pixels, but the blur covers only the error-banner strip, so Submit and the
+   heading stay readable. A-09-f05-blurred now declares `blurred_terms` (`E-409`,
+   `success banner`); only a claim stating one of them and marked fully `supported` on
+   inspected pixels fails. `partially_supported` with the transcript is the honest
+   form. Both Opus runs now fail only on their claim "no success banner appears"
+   (`supported`, citing frames).
+2. `report_text` failed the bare `\\?\` prefix named in prose (the skill tells agents
+   to retry without it). Only the prefix followed by a drive or `UNC\` is a path now.
+3. Claude Code saves a large tool output to its own spill file,
+   `<client home>/projects/<workspace>/<session>/tool-results/*.txt`, and reads it
+   back with `Read` (and once searched it with `Grep`). Those reads are housekeeping,
+   matched by the client-home prefix and the `tool-results` segment only. `run` now
+   records the client home; `grade --client-home` supplies it for older run records.
+4. Parity with PR 3d: a shell `rg` or `grep` is a skill read when it names paths and
+   every path lies inside the skill folders, with only flags the grader knows and no
+   file pattern that climbs out. Without a path (the Codex runs' `rg --files -g ...`),
+   with any other path or with an unknown flag (such as `rg --pre`), it stays
+   unauthorized.
+5. codex-cli 0.155's stream has no image-view event. For Codex, the right
+   `image_check_code` now proves image access, because the code exists only in the
+   pixels; a wrong code, or any code while images are disabled, still fails. Codex
+   image budgets: two debug runs without `--ephemeral` showed that the session rollout
+   holds nothing sensitive (no sign-in value; its metadata members are ids, timestamps,
+   the working directory and roots, client and provider names and the base
+   instructions; only these names and counts were kept), but it records an image view only
+   as a code-mode `exec` tool call whose input is model-written code, not as a
+   `view_image` record. Counting views would mean parsing that code, so Codex runs stay
+   `--ephemeral` and their image budgets are **unmeasured** (L-075); every Codex grade
+   says so in its deviations.
+6. Codex reported "Codex is ignoring 1 unrecognized configuration setting ...
+   `tools.view_image` is ignored" as a stream item of type `error`, and the trial
+   counted. Any Codex error notice about its configuration, a setting or its sandbox,
+   and the new phrases in either client's own notices, now make a trial invalid.
+
+**Harness defects:**
+
+7. The images-disabled switch was ignored. Codex runs of an images-disabled scenario
+   now pass `--disable view_image` (`codex features list` shows `view_image` stable
+   and on). Debug run 1 (A-05 preparation, `gpt-6-luna`, prompt: open the check image)
+   answered "I cannot view images." with no configuration notice; debug run 2 (A-08,
+   images on) read the code. `codex-trial.ps1 debug` takes `-Scenario` for this.
+8. `prepare` of A-09-f05-blurred failed in the container: BtbN's LGPL FFmpeg has no
+   `boxblur` (a GPL filter). It now uses `gblur` (LGPL, in both builds) with a sigma
+   of half the region's smaller side over six steps. Verified by preparing the scenario
+   in the container and with the Windows gyan.dev build, extracting the frame at 12 s
+   and a 2x crop of the region the Opus runs cropped (440x82 at 110,450) and looking at
+   them: the strip is an even pink smear with no glyph, while `INVOICE 4407` and
+   `SUBMIT` stay sharp.
+9. Codex on Windows prints only JSON on stdout: nothing to change.
+
+**Skill defects** (Haiku 4.5 and GPT-6-Luna; `SKILL.md` stays within its 300 lines):
+
+10. Every stop ends in REPORT: a missing tool, an expired session, an exhausted budget
+    or an unrecoverable failure ends with a handoff recording the gap and remediation.
+11. The REPORT state shows a filled-in minimal handoff (a stop at CHECK_CAPABILITIES)
+    and says the final message ends with exactly one `vsift-handoff` block; the guard
+    validates it against the schema.
+12. The report is the final message; the agent never creates, edits or saves a file
+    (Codex wrote `walkthrough-handoff.md` three times).
+13. Commands run from the folder the agent started in; never `cd`, never into the
+    skill folder (Claude Code calls it the skill's base directory). The grader stays
+    strict: `cd` is unauthorized.
+14. The compact limits stand next to the commands as numbers (30 tool calls, 6 images,
+    1 per step, `--limit 20`, `--max-frames 4`); the guard checks them against
+    `budgets.md`.
+15. No web address at all in the report: name the tool and quote the remediation.
+16. A "before you send" checklist in REPORT: evidence only in code spans or blocks,
+    hidden characters as `<U+XXXX>`, a web address from evidence only as `hxxps://...`
+    in a code span, no Markdown link, no absolute path or `/trials`, a retained bundle
+    named "the folder you named".
+17. `vsift setup check` is the only way to check that VSift is available.
+18. `vsift --help` and `vsift <namespace> <operation> --help` are `free` (listed in
+    `commands.md`; the guard accepts them though help is not a `CommandName`). Piping
+    them anywhere stays unauthorized, as does any help after other arguments.
+19. The `\\?\` retry rule stays; the product question is #210.
+
+**Campaign tooling:** 20. `codex-trial.ps1 trial` (and `continue`, `debug`) ends with a
+machine-readable `trial-id <trial>` line; `codex-trial.ps1 regrade` and
+`vsift-agent-trials grade --output <name>.json [--repository] [--scenario]
+[--client-home]` grade a finished trial again beside its original grade, reusing a
+bundle an earlier grading retained.
+
 ## Consequences
 
 - Agents have one procedure for both clients, and its references cannot drift from

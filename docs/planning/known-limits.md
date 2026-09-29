@@ -1571,16 +1571,22 @@ Counts: 4 high, 23 medium, 50 low (77 entries).
   - **Found and fixed:** Claude Code ignored the project allow list in an untrusted
     workspace (the rules came only from a duplicate `--settings` copy); codex-cli
     rejected every command as "blocked by policy" without a Windows sandbox mode.
-  - **Found, not yet fixed (2026-09-29, the first Codex dry trial in the Linux
-    container):** codex-cli 0.155.0-alpha.16's `exec --json` stream has **no event
-    for an image the model views**. The `gpt-6-astra` A-08 run reported the check
-    image's correct code and cited frames, yet its stream holds only messages and
-    `command_execution` items; the grader counted 0 images and failed `image_check`
-    ("the check image was never opened"), and Codex's image budgets cannot be counted
-    from the stream. How to grade Codex's image use is for the maintainer to decide.
-  - **Still unproven:** the `tools.view_image` switch; the Claude Code `Read` deny
-    patterns of the images-disabled scenario; Codex's stream beyond shell commands and
-    messages.
+  - **Codex's image views are unmeasured (decided 2026-09-29, PR 3e):** codex-cli
+    0.155.0-alpha.16's `exec --json` stream has **no event for an image the model
+    views**. For Codex the grader now takes the right `image_check_code` as proof of
+    image access (the code exists only in the pixels); a wrong code, or any code in an
+    images-disabled scenario, still fails. Codex's **image budgets** (images in total,
+    per step, bytes) **are not checked**: two debug runs without `--ephemeral` showed
+    that the session rollout records a view only inside a code-mode `exec` tool call
+    whose input is model-written code, so counting would mean parsing that code. Codex
+    runs stay `--ephemeral`, and every Codex grade carries a deviation saying the
+    images are unmeasured. Claude Code's image budgets are measured as before.
+  - **Found and fixed (PR 3e):** `-c tools.view_image=false` was an unknown setting
+    Codex ignored, reporting it as a stream item of type `error` that no check read;
+    images-disabled runs now pass `--disable view_image`, which a debug run showed
+    removes the image tool, and such a notice now invalidates a trial.
+  - **Still unproven:** the Claude Code `Read` deny patterns of the images-disabled
+    scenario; Codex's stream beyond shell commands, messages and error notices.
 - **Evidence:** `tools/vsift-agent-trials/src/trace.rs`, `run.rs`, `claude_trust.rs`
   and `client_warnings.rs`; ADR 0022's 2026-09-28 dry-trial note; the dry trials' raw
   logs (kept locally, not in the repository).
@@ -1591,9 +1597,12 @@ Counts: 4 high, 23 medium, 50 low (77 entries).
 - **Why:** proving the formats needs real runs, which spend the maintainer's client
   allowances.
 - **Mitigation:** fail-closed parsing; the `client_configuration` check; raw logs kept
-  locally for re-grading.
-- **Next step:** the maintainer re-runs the dry trials on PR 3a; the first
-  images-disabled and image-viewing Codex trials confirm the remaining events.
+  locally for re-grading (`grade --output`); for Codex, the check code, which a model
+  cannot know without viewing the image, and the tool-call budget, which still counts
+  every command.
+- **Next step:** revisit Codex's image budgets when a codex-cli release reports image
+  views in its stream or as a structured rollout record; the counted campaign
+  confirms the remaining events.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** open. **Review:** pending.
 

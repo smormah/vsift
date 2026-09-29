@@ -1380,12 +1380,19 @@ fn help_forms_are_free_and_cd_is_not() -> TestResult {
         "cd \"{}\" && vsift session --help 2>&1",
         bench.workspace.display()
     )));
+    uses.push(Use::Bash(
+        "vsift session retain --help 2>&1 | head -20".to_owned(),
+    ));
     let log = claude(&uses, &[], &report(&handoff()));
     let policy = failed_checks(&bench.grade(&parse_claude(&log), &log))
         .remove("command_policy")
         .ok_or("command policy passed")?;
-    assert_eq!(policy.len(), 1, "cd only; {policy:?}");
+    assert_eq!(policy.len(), 2, "cd and the piped help; {policy:?}");
     assert!(policy[0].contains("runs cd"), "{policy:?}");
+    assert!(
+        policy[1].contains("pipes the vsift help into head"),
+        "{policy:?}"
+    );
 
     // A-01 allows only the setup commands; a help form runs none.
     let bench = Bench::new("A-01-f01-missing-tools")?;

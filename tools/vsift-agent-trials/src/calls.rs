@@ -34,7 +34,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    policy::{CommandClass, CommandPolicy, PolicyViolation},
+    policy::{CommandClass, CommandPolicy, HELP_OPERATION, PolicyViolation},
     shell::{Dialect, SimpleCommand, parse_script},
     trace::{CallKind, ToolCall, Trace},
 };
@@ -317,11 +317,22 @@ fn shell_actions(
     if parsed.commands.is_empty() {
         return vec![unauthorized("an empty shell command")];
     }
-    parsed
-        .commands
-        .iter()
-        .map(|simple| simple_action(simple, policy, granted, scope))
-        .collect()
+    let mut actions: Vec<Action> = Vec::with_capacity(parsed.commands.len());
+    for simple in &parsed.commands {
+        let pipes_help = simple.piped_from_previous
+            && matches!(
+                actions.last(),
+                Some(Action::Vsift { operation, .. }) if operation == HELP_OPERATION
+            );
+        actions.push(if pipes_help {
+            // The help form is free to read whole, never to filter: a small
+            // model piped it into `grep` and `head` (A-02, 2026-09-29).
+            unauthorized(format!("pipes the vsift help into {}", simple.program()))
+        } else {
+            simple_action(simple, policy, granted, scope)
+        });
+    }
+    actions
 }
 
 fn simple_action(

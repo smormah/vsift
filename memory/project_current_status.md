@@ -32,16 +32,17 @@ Today it can:
 There is now also an **agent skill** (`skills/vsift/`) that teaches Claude Code or
 Codex to run an investigation with the CLI and write a cited report, and a trial
 harness that runs and grades those clients on synthetic recordings. Dry trials found
-and fixed configuration, skill-wording and answer-key problems (PR 3a, PR 3c, PR 3d);
-the third Claude Code dry trial passed every check. The counted Claude Code trials
-(39 runs) restart after PR 3d. Codex trials run in a Linux container (PR 3b), because
-Codex's Windows sandbox cannot run VSift (L-076, #204); its first dry trial passed all
-but the image check (L-075). Until the named-client trials pass, the skill is a
+and fixed configuration, skill-wording and answer-key problems (PR 3a, PR 3c, PR 3d).
+Codex trials run in a Linux container (PR 3b, merged), because Codex's Windows
+sandbox cannot run VSift (L-076, #204). Two diagnostic passes (39 Claude Code runs,
+11 Codex runs, none counted) showed what small models still get wrong and three
+grader false positives; PR 3e (in review) fixes all of it, so the counted campaigns
+restart from zero on PR 3e. Until the named-client trials pass, the skill is a
 candidate, not a qualified integration.
 
 **P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
 adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
-progress.** PRs 1, 2, 3a, 3c, 3d and 3b are increments, not the packet.
+progress.** PRs 1, 2, 3a, 3b, 3c, 3d and 3e are increments, not the packet.
 
 ## P12 in one view
 
@@ -56,36 +57,39 @@ progress.** PRs 1, 2, 3a, 3c, 3d and 3b are increments, not the packet.
   (unpublished): `prepare`, `run`, `grade` (mechanical and interpretation results;
   policy and budgets parsed from the skill, truth from the manifest), `record` (at most
   64 KiB); 21 scenarios; runbook `docs/agents/trials.md`; SEC-T02 suite.
-- **PR 3a (#203, `67d56c3`, merged), after the first dry trials:** Claude Code
-  workspaces trusted in the client home, one settings source; `client_configuration`
-  makes a trial invalid when a client ignored its configuration; search first.
-- **PR 3c (#207, `9791f70`, merged), after the second Claude dry trial:** nothing but
-  `vsift`, one command per call; `wall_time_s` may be `null` (L-077); operation-id
-  grammar in `SKILL.md`; corpus truth amended with `persistent` events (F04-E05,
-  F05-E04, F12-E03; reviewed in the corpus README).
-- **Third Claude dry trial (2026-09-29):** every check passed. **First counted run:**
-  it listed the skill's `examples/` with `Glob`; campaign stopped, not counted.
-- **PR 3d (#208, `ed07c0d`, merged):** `Glob`/`Grep`/`LS` inside the skill folders
-  count as a skill read; the skill says to read its files with the file-reading tool.
-- **PR 3b (branch `p12-pr3b-codex-container`, this change): Codex in Linux.**
-  `tools/vsift-agent-trials/containers/codex/`: a pinned multi-stage `Dockerfile`
-  (`agent` image: tools only; `harness` image: plus the repository), a seccomp
-  profile allowing bubblewrap's user namespaces (L-078), `trial-driver.sh` and the
-  wrapper `codex-trial.ps1`. A trial is three containers: `prepare` and `grade` in the
-  harness image, `run` in the agent image with only its trial folder, the model and a
-  tmpfs copy of `auth.json`. Harness: Linux writable root `.home`, `--debug-prompt`,
-  a sign-in value scan (`no_canary`), bubblewrap failures invalidate a trial. CI
-  workflow `p12-codex-container.yml` builds both images. Evidence: 5 `gpt-6-luna`
-  debug runs and a `gpt-6-astra` dry A-08 trial (all mechanical checks but
-  `image_check`, interpretation passed).
-- **Next:** restart the 39 counted Claude Code runs from zero; the maintainer decides
-  how to grade Codex's images (L-075), then the Codex counted runs in the container.
-  The packet completes only when the named-client trials pass.
+- **PR 3a (#203), 3c (#207), 3d (#208, `ed07c0d`), merged, after dry trials:** trusted
+  Claude Code workspaces and one settings source; `client_configuration` invalidates a
+  misconfigured trial; search first; nothing but `vsift`, one command per call;
+  `wall_time_s` may be `null` (L-077); operation-id grammar; persistent truth events
+  (F04-E05, F05-E04, F12-E03); `Glob`/`Grep`/`LS` inside the skill folders are reads.
+- **PR 3b (#209, `3f91661`, merged): Codex in Linux.** A pinned two-image `Dockerfile`
+  (`agent`: tools only; `harness`: plus the repository), a seccomp profile for
+  bubblewrap (L-078), `trial-driver.sh`, `codex-trial.ps1`; three containers per trial
+  (`prepare`, `run` with only its trial folder and a tmpfs sign-in copy, `grade`); CI
+  workflow `p12-codex-container.yml`.
+- **Diagnostic passes (2026-09-29, not counted):** Claude Code on `ed07c0d` (Opus on
+  A-08/A-09 passed but for the blurred scenario; Haiku on A-01..A-07 and SEC-T02
+  mostly failed) and Codex on image `f2dfb955790f` (11 runs). Raw logs stay local.
+- **PR 3e (branch `p12-pr3e-diagnostic-fixes`, this change): every diagnostic fix.**
+  Grader: blurred scenario declares `blurred_terms`; the bare `\\?\` prefix is not a
+  path; Claude Code's spill files are housekeeping; shell `rg`/`grep` in the skill
+  folders are skill reads; Codex's right check code proves image access (image budgets
+  unmeasured, L-075); Codex `error` notices about configuration invalidate a trial;
+  `--help` forms are free, never piped; `cd` stays unauthorized. Harness: `--disable
+  view_image`, `gblur`, `grade --output/--repository/--scenario/--client-home`,
+  `codex-trial.ps1` `trial-id` line, `debug -Scenario`, `regrade`. Skill: every stop
+  ends in REPORT with an inline minimal handoff, no files, no `cd`, compact limits as
+  numbers, `setup check` only, no web addresses, a before-you-send checklist; guard
+  tests for all of it. Evidence: 2 `gpt-6-luna` debug runs; every diagnostic run
+  re-graded beside its original (table in the pull request).
+- **Next:** merge PR 3e, then the counted Claude Code and Codex campaigns from zero on
+  its merge commit. The packet completes only when the named-client trials pass.
 
 ## Found in P12
 
-- **L-075 (open, decision):** codex-cli 0.155's `exec --json` stream has no event for
-  a viewed image, so `image_check` fails and image budgets cannot be counted.
+- **L-075 (decided 2026-09-29):** codex-cli 0.155 shows no viewed image, in its
+  stream or countably in its rollout; the right check code proves Codex's image
+  access, and its image budgets are unmeasured.
 - **L-076 (trials avoid it; #204 open):** Codex's Windows sandbox and VSift's private
   session root are incompatible. **L-078..L-080:** the container's seccomp relaxation,
   unrestricted container egress, and the agent's read access to its sign-in.
@@ -120,7 +124,7 @@ progress.** PRs 1, 2, 3a, 3c, 3d and 3b are increments, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PRs 1, 2, 3a, 3c and 3d merged, 3b (Codex Linux container) in review; counted Claude Code trials restart after 3d; Codex trials in the container after the L-075 decision |
+| P12 | In progress: PRs 1, 2, 3a, 3b, 3c and 3d merged; 3e (diagnostic fixes) in review; the counted campaigns for both clients restart from zero on 3e |
 | P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
@@ -137,9 +141,9 @@ is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `
 
 ## Quality evidence
 
-- P12 PR 3b gates on Windows 11 (fmt, strict Clippy with and without features,
-  workspace tests, warning-denied rustdoc, governance), the image build and the
-  container evidence go in the pull request description.
+- P12 PR 3e gates on Windows 11 (fmt, strict Clippy with and without features,
+  workspace tests, warning-denied rustdoc, governance), the image digests, the debug
+  runs and the re-grade table go in the pull request description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz
   harness replay, strict worker boundary, dependency policy and CodeQL; squash merges to
   protected `main`. History in git, `CHANGELOG.md` and `docs/history/`.

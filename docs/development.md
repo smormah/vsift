@@ -181,8 +181,9 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
 - Agent-trial harness (P12 PR 2, ADR 0022 decision 7): `tools/vsift-agent-trials`
   (never published) prepares, runs, grades and records named-client trials of the
   skill; `cargo test -p vsift-agent-trials` runs its grader, stand-in-client and
-  scenario tests anywhere and sends no prompt. `cargo run -p vsift-agent-trials --
-  check-scenarios` checks the scenario files against the corpus truth and the skill.
+  scenario tests anywhere and sends no prompt. `cargo run -p vsift-agent-trials --bin
+  vsift-agent-trials -- check-scenarios` checks the scenario files against the corpus
+  truth and the skill.
   Its command policy and budgets are parsed from `skills/vsift/references/`, so a
   skill change changes grading in the same commit. Operating it against real clients
   is described in the [trial runbook](agents/trials.md).
