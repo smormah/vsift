@@ -1432,6 +1432,7 @@ dependencies = [
  "flate2",
  "getrandom",
  "lzma-rust2",
+ "native-tls",
  "process-wrap",
  "reqwest",
  "rustix",
