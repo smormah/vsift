@@ -1,10 +1,12 @@
 # ADR 0022: Agent skill and named-client qualification
 
-- Status: Proposed (2026-09-28). PR 1 of P12 implements decisions 1-6; decision 7 is
-  the plan for the later qualification PR and needs maintainer acceptance first. PR 2
-  builds decision 7's harness and grader without running a model; PR 3a fixes what the
-  first dry trials showed (notes below).
-- Date: 2026-09-28
+- Status: **Accepted** (2026-09-30, maintainer, with the decisions of the
+  [P12 completion note](#p12-completion-and-the-maintainers-decisions-2026-09-30)).
+  Proposed 2026-09-28: PR 1 of P12 implemented decisions 1-6, PR 2 built decision 7's
+  harness and grader, and PRs 3a-3i fixed what the trials showed (notes below). The
+  qualification result is in the
+  [P12 qualification record](../planning/p12-agent-qualification.md).
+- Date: 2026-09-28 (accepted 2026-09-30)
 - Tracking: [P12 / issue #15](https://github.com/smormah/vsift/issues/15)
 - Refines: [ADR 0016](0016-embeddable-engine-and-evidence-contract.md) (decision 7:
   the CLI plus agent skill is the primary agent integration),
@@ -782,13 +784,85 @@ clock time `H:MM` in a term is also stated as `H.MM`. No other synonym is added
 ("submission button" for Submit stays with the human reviewer). The table is in
 `trials.md` and `truth.rs`, with tests. No counted run's result changed by it.
 
+## P12 completion and the maintainer's decisions (2026-09-30)
+
+Status: **Accepted**. The compact tier re-ran on PR 3i's merge commit `8ab976e`
+(Claude Sonnet 5.5 and GPT-6-Sol, 28 trials each). The strong tier's counted runs are
+the final campaign on `56f1e1f` (Claude Opus 5.5 and GPT-6-Astra, 11 trials each),
+graded with PR 3i's grader.
+
+**Results.**
+
+- **Strong tier:** 11 of 11 mechanical and 9 of 11 full passes on both clients.
+- **Compact tier:** 23 of 28 full passes (82%) and 25 of 28 correct answers on both
+  clients.
+- **Safety:** zero leaks, installs or injected actions, and no raw hidden character
+  in any report.
+
+The record is [p12-agent-qualification.md](../planning/p12-agent-qualification.md),
+and its bounded trial records are in `docs/planning/p12-agent-trials/`.
+
+**The maintainer's decisions during P12**, in order:
+
+1. **Trials run with the maintainer's accounts.** Both clients are signed in to the
+   maintainer's own Claude and ChatGPT accounts, in client homes under a neutral
+   trial root. The sign-in identifies the account to the provider; no other personal
+   value reaches it (runbook, "What reaches the model providers").
+2. **About 80 counted runs, later extended.** The first approval (2026-09-28) was
+   about 80 counted runs across both clients and both tiers. Each later round was
+   approved on its own:
+   - the counted campaigns on `261b50d`;
+   - the compact runs on `b68d746`;
+   - the final campaign on `56f1e1f`;
+   - the compact re-run on `8ab976e`.
+3. **Codex trials run in a Linux container** on Docker Desktop (2026-09-28; PR 3b
+   note), because Codex's Windows sandbox cannot run VSift (L-076, #204).
+4. **Orientation is housekeeping** (2026-09-29, PR 3f decision 1), **and it was
+   widened** narrowly (2026-09-30, PR 3i decision 1). The additions are `command -v`
+   or `which` of one name, `ls -l`/`-a` of named files in the starting folder, and
+   `true`.
+5. **The slim handoff** (2026-09-29, PR 3f decision 2): handoff v1 requires only what
+   the agent alone knows (L-081).
+6. **The vocabulary list** (2026-09-29, PR 3g decision 2): the skill shows every
+   closed value, and the grader reads a closed value in any letter case.
+7. **The compact tier is Claude Sonnet 5.5 and GPT-6-Sol** (2026-09-29, redefined
+   2026-09-30 after the final campaign). Claude Haiku 4.5 (L-082) and GPT-6-Luna
+   (L-084) are below the supported line. Opus 5.5 and GPT-6-Astra stay the review
+   tier.
+8. **`display_text`** (2026-09-29, the compatible addition; ADR 0008 note, PR 3h).
+9. **#210** (2026-09-29): `files[].path` gives the plain Windows form when it is
+   exact (ADR 0019 note, #215). The skill keeps its one `\\?\` retry for the long
+   paths that still need it.
+10. **The handoff validator is deferred to P13** (#213, 2026-09-29).
+11. **Close P12 on the final round's results** (2026-09-30). Anything short of target
+    is recorded as a known limit with follow-up issues. The compact tier's ≥90%
+    target is not met (82% on both clients): known limit L-085, issues #218-#221,
+    and the compact tier's re-run #222.
+
+**Still open for the maintainer** (not blocking the close):
+
+- **The review of 25 runs** under decision 7's human spot checks: every strong-tier
+  A-08 and A-09 run, and Sonnet 5.5's three resumed A-02 phases on `56f1e1f`. The
+  table and its decision cells are in the qualification record.
+- **Grader readings:**
+  - `untrusted_listed` takes only F12-E01;
+  - an `rg --files` exclude glob with a separator stays strict;
+  - the truth windows of A-02's looped clip cover only the first occurrence (#219).
+
+**Also in this change.** `vsift-agent-trials record` replaces every check image's code
+with `<check-code>`: a handoff reports the code, and no text file of the repository
+may hold it.
+
 ## Consequences
 
 - Agents have one procedure for both clients, and its references cannot drift from
   the CLI without failing CI.
 - A new public command, flag, failure code or referenced field needs a skill update in
   the same change (governance guardrail).
-- The skill is not qualified by this ADR or by PR 1: L-007 and L-039 stay open until
-  the trials of decision 7 pass.
+- The skill is qualified for the review tier (Claude Opus 5.5 in Claude Code,
+  GPT-6-Astra in Codex), subject to the maintainer's review of the flagged runs. It
+  is supported below target for the compact tier (Claude Sonnet 5.5, GPT-6-Sol:
+  82%, L-085). It is not supported for Claude Haiku 4.5 or GPT-6-Luna. L-039 ("not
+  qualified") is deleted; L-007 keeps the general prompt-injection residual.
 - Handoff v1 is a second public format, owned by the skill; changing it incompatibly
   needs a new handoff version.

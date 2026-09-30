@@ -1,0 +1,569 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 0,
+      "step": 0,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/SKILL.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 1,
+      "step": 1,
+      "summary": "/bin/bash -lc \"pwd; rg --files -g 'AGENTS.md' -g 'walkthrough*'\""
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 2,
+      "step": 2,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/safety.md .agents/skills/vsift/references/commands.md .agents/skills/vsift/references/budgets.md .agents/skills/vsift/references/handoff.md .agents/skills/vsift/references/lifecycle.md .agents/skills/vsift/handoff.schema.json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 3,
+      "step": 3,
+      "summary": "/bin/bash -lc 'vsift setup check --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--transcript-offset",
+            "0",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 4,
+      "step": 4,
+      "summary": "/bin/bash -lc 'vsift ingest walkthrough.mp4 --transcript walkthrough.srt --transcript-offset 0 --json'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 5,
+      "step": 5,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/lifecycle.md .agents/skills/vsift/references/handoff.md'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_690d2742d7cc40c9ddd95c165f1a019e",
+            "--query",
+            "invoice",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 6,
+      "step": 6,
+      "summary": "/bin/bash -lc 'vsift search ses_690d2742d7cc40c9ddd95c165f1a019e --query \"invoice\" --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "get",
+            "ses_690d2742d7cc40c9ddd95c165f1a019e",
+            "--from",
+            "0",
+            "--to",
+            "20000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 7,
+      "step": 7,
+      "summary": "/bin/bash -lc 'vsift transcript get ses_690d2742d7cc40c9ddd95c165f1a019e --from 0 --to 20000000 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_690d2742d7cc40c9ddd95c165f1a019e",
+            "--from",
+            "0",
+            "--to",
+            "20000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 8,
+      "step": 8,
+      "summary": "/bin/bash -lc 'vsift candidates ses_690d2742d7cc40c9ddd95c165f1a019e --from 0 --to 20000000 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_690d2742d7cc40c9ddd95c165f1a019e",
+            "--candidate",
+            "vcd_7a0dbf48fd63d46995df83fc13d6fe6d",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 9,
+      "step": 9,
+      "summary": "/bin/bash -lc 'vsift frame get ses_690d2742d7cc40c9ddd95c165f1a019e --candidate vcd_7a0dbf48fd63d46995df83fc13d6fe6d --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_690d2742d7cc40c9ddd95c165f1a019e",
+            "--candidate",
+            "vcd_ed1bcc364558b83572b567c668929596",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 10,
+      "step": 10,
+      "summary": "/bin/bash -lc 'vsift frame get ses_690d2742d7cc40c9ddd95c165f1a019e --candidate vcd_ed1bcc364558b83572b567c668929596 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_690d2742d7cc40c9ddd95c165f1a019e",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 11,
+      "step": 11,
+      "summary": "/bin/bash -lc 'vsift session retain ses_690d2742d7cc40c9ddd95c165f1a019e --output evidence-bundle-phase-1 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 12,
+      "step": 12,
+      "summary": "/bin/bash -lc 'vsift bundle validate evidence-bundle-phase-1 --json'"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-astra",
+      "--sandbox",
+      "workspace-write",
+      "-C",
+      "<workspace>",
+      "-c",
+      "approval_policy=\"never\"",
+      "-c",
+      "sandbox_workspace_write.network_access=false",
+      "-c",
+      "sandbox_workspace_write.writable_roots=['<home>']",
+      "-c",
+      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c",
+      "sandbox_workspace_write.exclude_slash_tmp=true",
+      "This is a QA walkthrough of submitting an invoice, walkthrough.mp4, with its transcript walkthrough.srt (offset 0). Write a bug report with the problem, expected and actual result and reproduction steps. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named evidence-bundle-phase-1 in this direct..."
+    ],
+    "environment_names": [
+      "PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CODEX_HOME"
+    ],
+    "kind": "codex",
+    "model": "gpt-6-astra",
+    "version": "codex-cli 0.155.0-alpha.16"
+  },
+  "client_setup": [],
+  "deviations": [
+    "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.srt": "058aebe86e0728471216ca74502d2783ac6a15394cc6f9f372250265da4bb55e"
+  },
+  "handoff": {
+    "budget": {
+      "exhausted": [],
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "not_run",
+      "media_tools": "available",
+      "transcript_basis": "supplied_transcript"
+    },
+    "citations": [
+      {
+        "end_us": 9775000,
+        "id": "e1",
+        "segment_id": "tsg_1b40d59dfd63f7178442605be2f537e6",
+        "start_us": 500000,
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 9000000,
+        "delta_us": 0,
+        "evidence_id": "evd_0a2777676a4677ce484d65e10ace0bc7",
+        "id": "e2",
+        "pixels_inspected": true,
+        "type": "frame"
+      },
+      {
+        "actual_us": 0,
+        "delta_us": 0,
+        "evidence_id": "evd_4f613dc247c893835e3ac8aa5d2e917a",
+        "id": "e3",
+        "pixels_inspected": true,
+        "type": "frame"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "high",
+        "citations": [
+          "e1",
+          "e2"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "problem",
+        "statement": "Submission of invoice 4407 is reported to produce E-409 instead of a success banner; the error is visually confirmed.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e1"
+        ],
+        "id": "c2",
+        "kind": "observed",
+        "section": "expected",
+        "statement": "The supplied transcript states that a success banner is expected after submission.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e1",
+          "e2"
+        ],
+        "id": "c3",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The error and Submit button are visible at nine seconds. The transcript reports that Submit remains enabled; clickability is not independently verified.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e3"
+        ],
+        "id": "c4",
+        "kind": "observed",
+        "section": "reproduction",
+        "statement": "Start on invoice 4407 with the Submit button visible, as shown at the beginning.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e1"
+        ],
+        "id": "c5",
+        "kind": "observed",
+        "section": "reproduction",
+        "statement": "Submit the invoice as described by the narrator; the exact click time is unspecified.",
+        "support": "supported"
+      }
+    ],
+    "gaps": [
+      {
+        "kind": "visual",
+        "note": "The exact click and post-error clickability were not visually verified. Submission and enabled state rely on the supplied narration.",
+        "reason": "not_inspected"
+      },
+      {
+        "code": "MISSING_CAPABILITY",
+        "kind": "dependency",
+        "note": "Local ASR was unavailable; the supplied transcript was sufficient. VSift remediation: Install or locate a trusted whisper.cpp CLI executable for local ASR, then rerun setup check. A supplied transcript can skip local ASR.",
+        "reason": "needs_user_authority"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "expires_at": null,
+      "mode": "retained",
+      "policy": "user_stated"
+    },
+    "question": "Write a bug report for the invoice submission QA walkthrough.",
+    "status": "complete",
+    "untrusted_instructions": []
+  },
+  "interpretation": {
+    "checks": [],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c1",
+          "c2"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "success banner"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "E-409"
+      },
+      {
+        "claims": [
+          "c3",
+          "c5"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "Submit"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_required",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_forbidden",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "phase": 1,
+  "record_version": 1,
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "raw_stdout_sha256": "22b5e16193adcf6170a0ab512b8bd84bd1cfdd32ad56ecb62150edb59417e886",
+    "started_unix_s": 1790698668,
+    "timed_out": false,
+    "wall_ms": 118162
+  },
+  "scenario": {
+    "id": "A-09-f05-supplied",
+    "sha256": "bd652659ca3aba040c7f788d9a89ef992c47753672b94226a4d25d2d6e3b3b75",
+    "tests": [
+      "A-09"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "skill_sha256": "f3ad0037d3a50cdd07cb2ffdde6d9ecec7e66927ecbc57a7a3e516b3b22e3585",
+  "trial_id": "a-09-f05-supplied-c9c37e35",
+  "usage": {
+    "image_bytes": 0,
+    "images_per_step": 0,
+    "images_total": 0,
+    "tool_calls": 9,
+    "wall_time_s": 118
+  },
+  "valid": true,
+  "vsift": {
+    "commit": "56f1e1f551fa8111af6af493d04063e7af069372",
+    "sha256": "6f649bceed68c672a831d8c324c15437a047e4cedf123152ca628a0c9015c672"
+  }
+}
