@@ -1,18 +1,22 @@
 # Named-client agent trials: operator runbook
 
-Status: P12 increment (PR 3i, 2026-09-30). The trial harness, its grader, the scenario
-files and the SEC-T02 tool-level suite exist. The final counted campaign ran on
-`56f1e1f` (review tier: Opus 5.5, GPT-6-Astra; compact tier: Claude Sonnet 5.5 and
-GPT-6-Sol; GPT-6-Luna also ran and is below the supported line, L-084, as is Claude
-Haiku 4.5, L-082). PR 3i fixes what that campaign showed (orientation probes, the check
-image, resumed runs) and widens the key-fact matcher; the skill and image changes need
-the compact tier's re-run (ADR 0022's note of 2026-09-30). **The skill is not yet
-qualified.**
+Status: P12 complete (2026-09-30). The trial harness, its grader, the scenario files
+and the SEC-T02 tool-level suite exist, and the counted trials have run.
+
+- **Review tier:** Claude Opus 5.5 and GPT-6-Astra, final campaign on `56f1e1f`.
+- **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol, final round on `8ab976e`: 82% of
+  trials passed fully on both clients, below the 90% target (L-085).
+- **Below the supported line:** GPT-6-Luna (L-084) and Claude Haiku 4.5 (L-082).
+
+Results: [P12 qualification record](../planning/p12-agent-qualification.md). The
+counted records are in `docs/planning/p12-agent-trials/`. The next use of this runbook
+is the compact tier's re-run (#222).
+
 Claude Code trials run on Windows; **Codex trials run in a Linux container**
 ([below](#codex-trials-in-a-linux-container)), because Codex's Windows sandbox cannot
 run VSift (known limit [L-076](../planning/known-limits.md#l-076)). Design:
 [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) decision 7
-(Proposed) and its dry-trial note. The skill itself: [skill.md](skill.md).
+(Accepted) and its notes. The skill itself: [skill.md](skill.md).
 
 ## What the harness does
 
@@ -383,7 +387,8 @@ Raw logs stay in `harness/raw/` under the trial and never enter the repository; 
 keep trials inside a checkout, use `.vsift/agent-trials/`, which is ignored. Records
 contain the calls with local paths replaced by `<workspace>`, `<session-root>`,
 `<home>`, `<trial>`, `<vsift-dir>` and `<client-home>`, the handoff, both results and
-the SHA-256 of the raw logs.
+the SHA-256 of the raw logs. Every check image's code is replaced by `<check-code>`
+(since P12's completion), because the repository must never hold it as text.
 
 ## Codex trials in a Linux container
 

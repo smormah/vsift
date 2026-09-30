@@ -239,9 +239,25 @@ are recorded below the supported line: Claude Haiku 4.5, which does not follow t
 procedure (6 of 28 answers correct, 2 of 28 full passes on `b68d746`; known limit
 [L-082](known-limits.md#l-082)), and GPT-6-Luna, the first Codex compact model (19 of
 28 answers correct, 15 of 28 full passes on `56f1e1f`; [L-084](known-limits.md#l-084)).
-The targets above apply to the named compact tier. On `56f1e1f` Sonnet 5.5 passed 25 of
-28 trials fully and GPT-6-Sol 15 (21 after PR 3i's re-grade); P12 PR 3i's skill and
-check-image changes need the tier's re-run (ADR 0022 note of 2026-09-30).
+The targets above apply to the named compact tier.
+
+**Outcome (P12, closed 2026-09-30 by maintainer decision;
+[qualification record](p12-agent-qualification.md), records in
+[p12-agent-trials/](p12-agent-trials/README.md)):**
+
+- **Review tier, final campaign on `56f1e1f` (PR 3i grader):** Claude Opus 5.5 and
+  GPT-6-Astra passed A-08 and A-09 mechanically in 11 of 11 trials each, and fully in
+  9 of 11. A-08 passed fully 5 of 5 (Opus) and 4 of 5 (Astra). The four
+  interpretation misses are under the maintainer's review.
+- **Compact tier, final round on `8ab976e`:** Claude Sonnet 5.5 and GPT-6-Sol each
+  passed 23 of 28 trials fully (82%) and answered 25 of 28 correctly. **The ≥90%
+  target is not met.** It is deferred and tracked as known limit
+  [L-085](known-limits.md#l-085), with issues #218-#222.
+- **Citation validity:** 100% in the review tier. In the compact tier 3 of 62 phases
+  missed: one frame cited after the session was retained, and two claims bound outside
+  a truth window.
+- **Adversarial set:** zero unauthorized actions in A-04 and SEC-T02, and zero canary
+  leaks, installs or raw hidden characters in all 84 counted phases.
 
 A-08 and A-09 are functional release gates, not provider endorsements. Use current
 named Codex and Claude Code clients, or document equivalent successor clients, because
@@ -254,8 +270,8 @@ Use an independent evaluator and human spot checks on critical steps. Semantic
 diagnosis may legitimately be inconclusive. Tool correctness is assessed separately
 from model interpretation so a model's confident prose cannot mask missing evidence.
 
-**Evidence mapping (P12 PR 2, 2026-09-28). Qualification is pending P12 PR 3: no row of
-this section has agent-trial evidence yet.** The harness `tools/vsift-agent-trials`
+**Evidence mapping (P12 PR 2, 2026-09-28; evidence recorded 2026-09-30 in the
+[qualification record](p12-agent-qualification.md)).** The harness `tools/vsift-agent-trials`
 ([runbook](../agents/trials.md), ADR 0022 note of 2026-09-28) grades every trial into a
 mechanical and an interpretation result; the scenario files in
 `tools/vsift-agent-trials/scenarios/` map to the rows as follows:
@@ -350,6 +366,23 @@ and A-08/A-09 prove the complete local-video-to-grounded-handoff lifecycle throu
 independent coding-agent clients. A release containing only scaffolding, transcription,
 or frame extraction does not satisfy this gate.
 Coverage percentages supplement these checks but never replace behavioral assertions.
+
+## 2026-09-30 P12 completion evidence (named-client trials, branch `p12-completion`)
+
+The whole packet, closed by the maintainer's decision of 2026-09-30 on the final
+round's results. The record is
+[p12-agent-qualification.md](p12-agent-qualification.md): scope and gates,
+environments with pinned versions and image digests, the counted results, the
+reference rounds, safety, the maintainer's review table (decisions pending) and the
+history of the fix rounds (#196, #199-#217). The 84 bounded records of the counted
+phases are in [p12-agent-trials/](p12-agent-trials/README.md).
+
+- **Strong tier:** 11 of 11 mechanical passes and 9 of 11 full passes on each client.
+- **Compact tier:** 23 of 28 full passes (82%) on each client, below target (L-085).
+- **Safety:** no leak, install, injected action or raw hidden character in any
+  counted phase.
+
+Gate commands and results are in the pull request description.
 
 ## 2026-09-28 P12 PR 2 evidence (trial harness, grader, SEC-T02 suite, branch `p12-pr2-harness`)
 

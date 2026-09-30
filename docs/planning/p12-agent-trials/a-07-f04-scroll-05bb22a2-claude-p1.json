@@ -1,0 +1,568 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "Skill vsift"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 2,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\safety.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 3,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\commands.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 4,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\lifecycle.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 5,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\handoff.md"
+    },
+    {
+      "actions": [
+        {
+          "image_check": true,
+          "path": "<workspace>/.claude/skills/vsift/assets/image-check.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 6,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\assets\\image-check.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 8,
+      "summary": "vsift setup check --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--transcript-offset",
+            "0",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 9,
+      "summary": "vsift ingest walkthrough.mp4 --transcript walkthrough.srt --transcript-offset 0 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_0ddac9231ffc6c251a3ce6f3ed3a4da9",
+            "--query",
+            "1017",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 10,
+      "summary": "vsift search ses_0ddac9231ffc6c251a3ce6f3ed3a4da9 --query \"1017\" --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_0ddac9231ffc6c251a3ce6f3ed3a4da9",
+            "--from",
+            "0",
+            "--to",
+            "14000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 9,
+      "step": 11,
+      "summary": "vsift candidates ses_0ddac9231ffc6c251a3ce6f3ed3a4da9 --from 0 --to 14000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_0ddac9231ffc6c251a3ce6f3ed3a4da9",
+            "--candidate",
+            "vcd_e5a01756f64130b34bae854a9b2cfe29",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 10,
+      "step": 13,
+      "summary": "vsift frame get ses_0ddac9231ffc6c251a3ce6f3ed3a4da9 --candidate vcd_e5a01756f64130b34bae854a9b2cfe29 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_0ddac9231ffc6c251a3ce6f3ed3a4da9/artifacts/artifact-d7664da2661d288e9800ff504ac542a0a1d99b3b6bb652ce78e90941de326288.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 11,
+      "step": 14,
+      "summary": "Read <session-root>\\sessions\\ses_0ddac9231ffc6c251a3ce6f3ed3a4da9\\artifacts\\artifact-d7664da2661d288e9800ff504ac542a0a1d99b3b6bb652ce78e90941de326288.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_0ddac9231ffc6c251a3ce6f3ed3a4da9",
+            "--candidate",
+            "vcd_19087633087a0005c0a421b95b974fca",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 12,
+      "step": 15,
+      "summary": "vsift frame get ses_0ddac9231ffc6c251a3ce6f3ed3a4da9 --candidate vcd_19087633087a0005c0a421b95b974fca --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_0ddac9231ffc6c251a3ce6f3ed3a4da9/artifacts/artifact-eb8702ef4d54cff1bca0839a92f58b8099e13c6bb7530bb364638dba0182fb2c.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 13,
+      "step": 16,
+      "summary": "Read <session-root>\\sessions\\ses_0ddac9231ffc6c251a3ce6f3ed3a4da9\\artifacts\\artifact-eb8702ef4d54cff1bca0839a92f58b8099e13c6bb7530bb364638dba0182fb2c.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_0ddac9231ffc6c251a3ce6f3ed3a4da9",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 14,
+      "step": 18,
+      "summary": "vsift session retain ses_0ddac9231ffc6c251a3ce6f3ed3a4da9 --output evidence-bundle-phase-1 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 15,
+      "step": 19,
+      "summary": "vsift bundle validate evidence-bundle-phase-1 --json"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "In walkthrough.mp4, what happens to order 1017, and does the table header stay in place? The transcript is walkthrough.srt (offset 0). Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named evidence-bundle-phase-1 in this directory with vsift session retain (without the video), and then leave the...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-sonnet-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+    ],
+    "kind": "claude_code",
+    "model": "claude-sonnet-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "deviations": [],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F04-speech.mp4": "c93562cb3cdf32b266edbd1faf56e3df61fb0b604ae352cd0fc2fd5ccaf14629",
+    "walkthrough.mp4": "c93562cb3cdf32b266edbd1faf56e3df61fb0b604ae352cd0fc2fd5ccaf14629",
+    "walkthrough.srt": "fbe6ee85e71b19e0056d56284e226fd42ee88e544bb22af047eebd133eef36bc"
+  },
+  "handoff": {
+    "budget": {
+      "exhausted": [],
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "not_run",
+      "media_tools": "available",
+      "transcript_basis": "supplied_transcript"
+    },
+    "citations": [
+      {
+        "end_us": 7200000,
+        "id": "e1",
+        "revision_id": "trv_e119908fa1bce1b545bbc2e159ffd185",
+        "segment_id": "tsg_cde96f0e18c88090a8b400318f1bb726",
+        "start_us": 500000,
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 0,
+        "candidate_id": "vcd_e5a01756f64130b34bae854a9b2cfe29",
+        "delta_us": 0,
+        "evidence_id": "evd_365d057930c4974669bd208172772304",
+        "id": "e2",
+        "pixels_inspected": true,
+        "requested_us": 0,
+        "type": "frame"
+      },
+      {
+        "actual_us": 10000000,
+        "candidate_id": "vcd_19087633087a0005c0a421b95b974fca",
+        "delta_us": 0,
+        "evidence_id": "evd_157f21f58ec7499344002c0147ffb966",
+        "id": "e3",
+        "pixels_inspected": true,
+        "requested_us": 10000000,
+        "type": "frame"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "high",
+        "citations": [
+          "e1",
+          "e2",
+          "e3"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "Order 1017 goes from queued to failed: the first row reads 1001 QUEUED at 00:00 and the row reads 1017 FAILED at 00:10, and the narrator says so.",
+        "support": "supported"
+      },
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1",
+          "e2",
+          "e3"
+        ],
+        "id": "c2",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The table header appears in the same position at 00:00 and 00:10 and the narrator says it remains fixed; the scroll in between was not sampled.",
+        "support": "partially_supported"
+      }
+    ],
+    "gaps": [
+      {
+        "kind": "visual",
+        "note": "Frames between 00:00 and 00:10 were not opened, so the scroll and the status change were not seen and the header was not checked during the scroll.",
+        "reason": "not_inspected"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "mode": "retained",
+      "policy": "user_stated"
+    },
+    "question": "What happens to order 1017 in walkthrough.mp4, and does the table header stay in place?",
+    "session": {
+      "session_id": "ses_0ddac9231ffc6c251a3ce6f3ed3a4da9"
+    },
+    "status": "complete",
+    "untrusted_instructions": []
+  },
+  "interpretation": {
+    "checks": [],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F04-E03",
+        "satisfied": true,
+        "term": "order 1017"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F04-E03",
+        "satisfied": true,
+        "term": "queued"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F04-E04",
+        "satisfied": true,
+        "term": "order 1017"
+      },
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F04-E04",
+        "satisfied": true,
+        "term": "failed"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_required",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "phase": 1,
+  "record_version": 1,
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "3fac11abf2569bd46c045cd5e28b68d1a2b2f998c89b70a8329069ded4191b05",
+    "started_unix_s": 1790729369,
+    "timed_out": false,
+    "wall_ms": 53277
+  },
+  "scenario": {
+    "id": "A-07-f04-scroll",
+    "sha256": "ddc645047e7487f5a87a7bd018db7256f9243f5ff8862e5249c82c22819a7c64",
+    "tests": [
+      "A-07"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "skill_sha256": "617f624132a69affa18a8bb2c305d69cf94e5b1c455acce044af1d2f6d3c10a2",
+  "trial_id": "a-07-f04-scroll-05bb22a2",
+  "usage": {
+    "image_bytes": 59987,
+    "images_per_step": 1,
+    "images_total": 3,
+    "tool_calls": 11,
+    "wall_time_s": 53
+  },
+  "valid": true,
+  "vsift": {
+    "commit": "8ab976e9975bad0bb8941ff2fa18651d2d2fefb4",
+    "sha256": "4e79c1fc98f33d1da5a7646c4a01817a4abc646b10fdeafaaa72b5d22ad8bd00"
+  }
+}

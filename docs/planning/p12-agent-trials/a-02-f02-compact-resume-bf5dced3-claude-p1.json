@@ -1,0 +1,726 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "Skill vsift"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 2,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\safety.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 3,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\commands.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 4,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\budgets.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 5,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\lifecycle.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 6,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\handoff.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 7,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\resume.md"
+    },
+    {
+      "actions": [
+        {
+          "image_check": true,
+          "path": "<workspace>/.claude/skills/vsift/assets/image-check.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 8,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\assets\\image-check.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 10,
+      "summary": "vsift setup check --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--transcript-offset",
+            "0",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 9,
+      "step": 11,
+      "summary": "vsift ingest walkthrough.mp4 --transcript walkthrough.srt --transcript-offset 0 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_5c596394f008c64348931100418702cb",
+            "--query",
+            "queue depth",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 10,
+      "step": 13,
+      "summary": "vsift search ses_5c596394f008c64348931100418702cb --query \"queue depth\" --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_5c596394f008c64348931100418702cb",
+            "--from",
+            "0",
+            "--to",
+            "494559875",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 11,
+      "step": 14,
+      "summary": "vsift candidates ses_5c596394f008c64348931100418702cb --from 0 --to 494559875 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "get",
+            "ses_5c596394f008c64348931100418702cb",
+            "--from",
+            "0",
+            "--to",
+            "30000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 12,
+      "step": 16,
+      "summary": "vsift transcript get ses_5c596394f008c64348931100418702cb --from 0 --to 30000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_5c596394f008c64348931100418702cb",
+            "--candidate",
+            "vcd_6ddee29cbdd810e4ce988113e3263c08",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 13,
+      "step": 17,
+      "summary": "vsift frame get ses_5c596394f008c64348931100418702cb --candidate vcd_6ddee29cbdd810e4ce988113e3263c08 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_5c596394f008c64348931100418702cb/artifacts/artifact-e4a41aa3cad4f54f4c731f02efdb98073a1c271b56dda6c3f1e9c501f52c4daf.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 14,
+      "step": 18,
+      "summary": "Read <session-root>\\sessions\\ses_5c596394f008c64348931100418702cb\\artifacts\\artifact-e4a41aa3cad4f54f4c731f02efdb98073a1c271b56dda6c3f1e9c501f52c4daf.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_5c596394f008c64348931100418702cb",
+            "--candidate",
+            "vcd_29cdaf00a154415b1384bec531b95b79",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 15,
+      "step": 20,
+      "summary": "vsift frame get ses_5c596394f008c64348931100418702cb --candidate vcd_29cdaf00a154415b1384bec531b95b79 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_5c596394f008c64348931100418702cb/artifacts/artifact-836a1b099bb8030107f30c2a45464bca42ca70f224ebfd354b9917a64b5ea5ff.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 16,
+      "step": 21,
+      "summary": "Read <session-root>\\sessions\\ses_5c596394f008c64348931100418702cb\\artifacts\\artifact-836a1b099bb8030107f30c2a45464bca42ca70f224ebfd354b9917a64b5ea5ff.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_5c596394f008c64348931100418702cb",
+            "--candidate",
+            "vcd_4adbff0ae138dfba0947375a627344dd",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 17,
+      "step": 23,
+      "summary": "vsift frame get ses_5c596394f008c64348931100418702cb --candidate vcd_4adbff0ae138dfba0947375a627344dd --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_5c596394f008c64348931100418702cb/artifacts/artifact-186529a872349a2b9dd3408f26372c0fd5d1efb9691ba365c48b682bc22bf735.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 18,
+      "step": 24,
+      "summary": "Read <session-root>\\sessions\\ses_5c596394f008c64348931100418702cb\\artifacts\\artifact-186529a872349a2b9dd3408f26372c0fd5d1efb9691ba365c48b682bc22bf735.png"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_5c596394f008c64348931100418702cb",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 19,
+      "step": 26,
+      "summary": "vsift session retain ses_5c596394f008c64348931100418702cb --output evidence-bundle-phase-1 --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 20,
+      "step": 27,
+      "summary": "vsift bundle validate evidence-bundle-phase-1 --json"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "The recording walkthrough.mp4 (with its transcript walkthrough.srt, offset 0) shows a queue-depth slide that changes many times. For every change of the queue depth in the whole recording, give the time and cite the frame that shows the new value. Use the VSift skill and the compact budget. If the budget runs out, stop and hand back what you have with a resume card. When you have written the hando...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-sonnet-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+    ],
+    "kind": "claude_code",
+    "model": "claude-sonnet-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "deviations": [],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F02-speech.mp4": "d654d6aefcdffb6e86875190a8b5b82bfcac56192b1946baff4725264046ff29",
+    "walkthrough.mp4": "98d34f30d3ad317a828b17e7a0bc047c0e2e74e72f3ecf948e309784e918e6fd",
+    "walkthrough.srt": "2ebd07d943a2d1fcc29367b4dccd1edc63ebcaa071fb06dc2ef7d38f412aec02"
+  },
+  "handoff": {
+    "budget": {
+      "exhausted": [
+        "images_total"
+      ],
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "not_run",
+      "media_tools": "available",
+      "transcript_basis": "supplied_transcript"
+    },
+    "citations": [
+      {
+        "id": "e1",
+        "segment_id": "tsg_c8081726f73656c82d057c004e7ba037",
+        "type": "transcript_segment"
+      },
+      {
+        "actual_us": 4000000,
+        "candidate_id": "vcd_6ddee29cbdd810e4ce988113e3263c08",
+        "delta_us": 0,
+        "evidence_id": "evd_3a484252ea2f149d2bfec3268fc48406",
+        "id": "e2",
+        "pixels_inspected": true,
+        "requested_us": 4000000,
+        "type": "frame"
+      },
+      {
+        "actual_us": 8000000,
+        "candidate_id": "vcd_29cdaf00a154415b1384bec531b95b79",
+        "delta_us": 0,
+        "evidence_id": "evd_099f725a7bc49a8e7cb6a9aa92a73eda",
+        "id": "e3",
+        "pixels_inspected": true,
+        "requested_us": 8000000,
+        "type": "frame"
+      },
+      {
+        "actual_us": 12063964,
+        "candidate_id": "vcd_4adbff0ae138dfba0947375a627344dd",
+        "delta_us": 0,
+        "evidence_id": "evd_bf8357c13ef58c48faffc6341553f607",
+        "id": "e4",
+        "pixels_inspected": true,
+        "requested_us": 12063964,
+        "type": "frame"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "high",
+        "citations": [
+          "e2"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "At 00:04.000 the queue depth shows 12.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e3"
+        ],
+        "id": "c2",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "At 00:08.000 the queue depth shows 0.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e4"
+        ],
+        "id": "c3",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "At 00:12.064 the queue depth is still 0, so this visual change is not a change of value.",
+        "support": "supported"
+      },
+      {
+        "certainty": "medium",
+        "citations": [
+          "e1"
+        ],
+        "id": "c4",
+        "kind": "observed",
+        "section": "context",
+        "statement": "The speaker summarises the video as empty, then twelve, then empty again.",
+        "support": "supported"
+      }
+    ],
+    "gaps": [
+      {
+        "kind": "budget",
+        "note": "The compact budget of 6 images cannot cover about 120 candidates; frames after 12.064 s are unread and candidates are listed only to 76.5 s.",
+        "reason": "budget_exhausted"
+      },
+      {
+        "kind": "transcript",
+        "note": "whisper is missing; the supplied transcript is one segment, so later changes have no spoken evidence.",
+        "reason": "transcript_unavailable"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "mode": "retained",
+      "policy": "user_stated"
+    },
+    "question": "For every change of the queue depth in the whole recording, give the time and cite the frame that shows the new value.",
+    "resume": {
+      "evidence": [
+        {
+          "at_us": 500000,
+          "id": "tsg_c8081726f73656c82d057c004e7ba037",
+          "kind": "transcript_segment"
+        },
+        {
+          "at_us": 4000000,
+          "id": "evd_3a484252ea2f149d2bfec3268fc48406",
+          "kind": "frame"
+        },
+        {
+          "at_us": 8000000,
+          "id": "evd_099f725a7bc49a8e7cb6a9aa92a73eda",
+          "kind": "frame"
+        },
+        {
+          "at_us": 12063964,
+          "id": "evd_bf8357c13ef58c48faffc6341553f607",
+          "kind": "frame"
+        }
+      ],
+      "job_id": null,
+      "next_command": "vsift candidates ses_5c596394f008c64348931100418702cb --from 12063964 --to 494559875 --limit 20 --json",
+      "operation_ids": [],
+      "remaining": {
+        "images_total": 2,
+        "tool_calls": null,
+        "wall_time_s": null
+      },
+      "revision_id": "trv_4341fda740fc6580aa7a5225bacf8dc2",
+      "session_id": "ses_5c596394f008c64348931100418702cb",
+      "state": "INSPECT_CARDS",
+      "summary": "Value 12 at 4 s, 0 at 8 s, 0 at 12.06 s (no value change there). Candidates are listed to 76.5 s; a visual change is not always a value change. Frames after 12.06 s are unread.",
+      "to_verify": [
+        {
+          "finding": "Queue depth shows 12 at 4.0 s.",
+          "from_us": 4000000,
+          "id": "evd_3a484252ea2f149d2bfec3268fc48406",
+          "to_us": 8000000
+        },
+        {
+          "finding": "Queue depth shows 0 at 8.0 s and still 0 at 12.06 s.",
+          "from_us": 8000000,
+          "id": "evd_099f725a7bc49a8e7cb6a9aa92a73eda",
+          "to_us": 16063964
+        }
+      ]
+    },
+    "status": "partial",
+    "untrusted_instructions": []
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "status",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c1"
+        ],
+        "event": "F02-E02",
+        "satisfied": true,
+        "term": "queue"
+      },
+      {
+        "claims": [
+          "c1",
+          "c4"
+        ],
+        "event": "F02-E02",
+        "satisfied": true,
+        "term": "twelve"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "resume_card",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "phase": 1,
+  "record_version": 1,
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "a70086651d34f38f4d34d6ebfa7e1e7bc0a1ded2ab701089baebb0190d0ba3a8",
+    "started_unix_s": 1790727949,
+    "timed_out": false,
+    "wall_ms": 100114
+  },
+  "scenario": {
+    "id": "A-02-f02-compact-resume",
+    "sha256": "d5d6df45a014e2212c91390dc81f4b90db57442d7bce88a6b029ba513cf68214",
+    "tests": [
+      "A-02"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "skill_sha256": "617f624132a69affa18a8bb2c305d69cf94e5b1c455acce044af1d2f6d3c10a2",
+  "trial_id": "a-02-f02-compact-resume-bf5dced3",
+  "usage": {
+    "image_bytes": 97531,
+    "images_per_step": 1,
+    "images_total": 4,
+    "tool_calls": 14,
+    "wall_time_s": 100
+  },
+  "valid": true,
+  "vsift": {
+    "commit": "8ab976e9975bad0bb8941ff2fa18651d2d2fefb4",
+    "sha256": "4e79c1fc98f33d1da5a7646c4a01817a4abc646b10fdeafaaa72b5d22ad8bd00"
+  }
+}

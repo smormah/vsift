@@ -1,9 +1,11 @@
 # The VSift agent skill
 
-Status: P12 increments (2026-09-30). The skill exists and its command and schema
-references are held to the CLI by tests; the trial harness is built
-([runbook](trials.md)); it has **not** yet been qualified with named agent clients
-(A-01..A-09, SEC-T02). Design: [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Proposed).
+Status: P12 complete (2026-09-30). The skill's command and schema references are held
+to the CLI by tests, and it has been through named-client trials (A-01..A-09 and
+SEC-T02, [runbook](trials.md)). It is **qualified for the review tier and supported
+below target for the compact tier**; see [Supported models](#supported-models). Design:
+[ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Accepted).
+Results: [P12 qualification record](../planning/p12-agent-qualification.md).
 
 The skill teaches a coding agent (Claude Code, OpenAI Codex or another client that
 reads the `SKILL.md` directory format) to investigate a local video with the `vsift`
@@ -181,12 +183,47 @@ time reading the code with the same letter missing, so P12 PR 3i redrew it
   the image each trial's workspace received, so older trials still grade against the
   code they were shown.
 
+## Supported models
+
+Qualified by the P12 trials (2026-09-30) through the same skill, prompts and compact
+budget. The full numbers are in the
+[qualification record](../planning/p12-agent-qualification.md).
+
+| Client | Model | Tier | Result | Support |
+| --- | --- | --- | --- | --- |
+| Claude Code 2.1.284 (Windows) | Claude Opus 5.5 (`claude-opus-5-5`) | review | A-08/A-09: 11 of 11 mechanical, 9 of 11 full passes (A-08 5 of 5) | **Qualified** (interpretation misses under the maintainer's review) |
+| codex-cli 0.155.0-alpha.16 (Linux) | GPT-6-Astra (`gpt-6-astra`) | review | A-08/A-09: 11 of 11 mechanical, 9 of 11 full passes (A-08 4 of 5) | **Qualified** (interpretation misses under the maintainer's review) |
+| Claude Code 2.1.284 (Windows) | Claude Sonnet 5.5 (`claude-sonnet-5-5`) | compact | A-01..A-07, SEC-T02: 23 of 28 full passes (82%), 25 of 28 answers right | **Supported, below the 90% target** ([L-085](../planning/known-limits.md#l-085)) |
+| codex-cli 0.155.0-alpha.16 (Linux) | GPT-6-Sol (`gpt-6-sol`) | compact | A-01..A-07, SEC-T02: 23 of 28 full passes (82%), 25 of 28 answers right | **Supported, below the 90% target** ([L-085](../planning/known-limits.md#l-085)) |
+| Claude Code | Claude Haiku 4.5 | below the line | 6 of 28 answers right (`b68d746`) | Not supported ([L-082](../planning/known-limits.md#l-082)) |
+| Codex | GPT-6-Luna | below the line | 19 of 28 answers right (`56f1e1f`) | Not supported ([L-084](../planning/known-limits.md#l-084)) |
+
+**What "below target" means in practice.** With a compact model, expect about one
+handoff in five to need a correction: most often a claim written in the wrong shape,
+or a finding cited outside its window. In every counted run the agent stayed within
+policy:
+
+- it installed nothing;
+- it followed no instruction found in the evidence;
+- it leaked no secret;
+- it copied no hidden character into its report.
+
+Prefer a review-tier model when the report must be right first time.
+
+**Other limits.**
+
+- **Codex on Windows:** its sandbox cannot run VSift today
+  ([L-076](../planning/known-limits.md#l-076), #204). The Codex trials ran in a Linux
+  container.
+- **Other clients and models:** they were not trialled. They may work if they can run
+  a local command and open a PNG, but they are not qualified.
+
 ## Not yet done
 
-Named-client trials (A-01..A-09 through Claude Code and Codex, the compact-model
-gates, SEC-T02 adversarial evidence) are in progress; see ADR 0022 for the protocol and
-its notes for the results so far. The compact tier is Claude Sonnet 5.5 (Claude Code)
-and GPT-6-Sol (Codex), by the maintainer's decisions after the campaigns; Claude Haiku
-4.5 and GPT-6-Luna are below the supported line (known limits L-082 and L-084). How to run the trials is in the
-[trial runbook](trials.md). Until the trials pass, the skill is a candidate, not a
-qualified integration.
+- **The compact tier's ≥90% target.** First the skill fixes (#218-#221), then the
+  re-run (#222).
+- **The maintainer's review of the flagged strong-tier runs.** The table is in the
+  qualification record.
+- **A `vsift` command that validates a handoff draft** (P13, #213).
+
+How to run the trials is in the [trial runbook](trials.md).

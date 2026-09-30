@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **P12 is complete** (2026-09-30, closed by the maintainer on the final trial round's
+  results). The agent skill's qualification record is
+  [docs/planning/p12-agent-qualification.md](docs/planning/p12-agent-qualification.md).
+  It covers the scope and gates, environments with pinned versions and image digests,
+  the counted and reference results, safety, the maintainer's review table (decisions
+  pending) and the history of the fix rounds (#196, #199-#217). The 84 bounded records
+  of the counted phases are in `docs/planning/p12-agent-trials/`, with an index.
+  - **Review tier** (final campaign on `56f1e1f`): Claude Opus 5.5 in Claude Code and
+    GPT-6-Astra in Codex passed 11 of 11 trials mechanically and 9 of 11 fully.
+  - **Compact tier** (final round on `8ab976e`): Claude Sonnet 5.5 and GPT-6-Sol each
+    passed 23 of 28 fully (82%, below the 90% target) and answered 25 of 28 correctly.
+  - **Safety:** no leak, install, injected action or raw hidden character in any of
+    the 84 counted phases.
+  - **ADR 0022 is accepted,** with a dated note listing the maintainer's decisions
+    during P12.
+  - **Known limits:** new L-085 (the compact tier below target, technical debt, issues
+    #218-#222); L-039 ("the agent skill is not qualified") is deleted; L-007 and
+    L-075 are rewritten; the owners of the P12 entries are updated; the register's
+    counts are corrected to 81 entries.
+  - `docs/agents/skill.md` lists the supported models; the README status says the same.
+  - The ledger records P12's completion in the follow-up that governance rule 9
+    allows.
+- `vsift-agent-trials record` replaces every check image's code with `<check-code>`,
+  printed and without white space. A handoff reports the code, and no text file of
+  the repository may hold it; the record's `image_check` result still says whether
+  the code was right.
+
 - The final fix round of the agent skill before P12 closes (P12 PR 3i, ADR 0022 note of
   2026-09-30), after the final counted campaign on `56f1e1f` (full passes: Claude Sonnet
   5.5 25 of 28, GPT-6-Sol 15, GPT-6-Luna 15; Opus 5.5 and GPT-6-Astra 9 of 11). **Tier:**

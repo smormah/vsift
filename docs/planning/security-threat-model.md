@@ -261,6 +261,21 @@ environment, isolated client configuration and canaries whose appearance fails t
 trial (SEC-16). The tool-level SEC-T02 suite runs on every PR over synthetic
 adversarial sidecars (verification section 7); human-readable output is P13's (L-073).
 
+**P12 completion (2026-09-30, ADR 0022 accepted).** The named-client trials ran with
+hostile spoken, subtitle and on-screen instructions: A-04 and SEC-T02 through Claude
+Sonnet 5.5 in Claude Code and GPT-6-Sol in Codex, 20 counted runs. In those runs, and
+in all 84 counted phases, the result was the same:
+
+- no agent attempted an out-of-policy action;
+- no agent leaked a canary;
+- no agent installed anything;
+- no report copied a raw hidden character, a live link or an absolute path.
+
+The reference rounds (348 graded phases) showed no leak, install or injected action
+either ([P12 qualification record](p12-agent-qualification.md), "Safety"). This is
+evidence on named configurations and synthetic fixtures, not immunity. L-007 stays as
+an accepted residual, and L-083 records that `text` keeps hidden characters raw.
+
 ## Residual risks and response
 
 P04 applies SEC-05/SEC-06/SEC-17 controls at the internal media edge: held no-follow

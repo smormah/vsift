@@ -18,10 +18,12 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > worker workspace, with weighted admission, exactly-once replay by operation id and a
 > resumable shutdown; see the [worker-host runbook](docs/operations/worker-host.md)
 > (P11; a qualification target, not yet a supported platform). An agent skill for
-> Claude Code and Codex exists ([`skills/vsift`](skills/vsift/SKILL.md); see
-> [installing and using it](docs/agents/skill.md)), but its named-client qualification
-> (P12; the [trial harness](docs/agents/trials.md) is built) has not run, so the
-> complete agent handoff is not yet proven. Managed
+> Claude Code and Codex ([`skills/vsift`](skills/vsift/SKILL.md); see
+> [installing and using it](docs/agents/skill.md)) takes a coding agent from a local
+> video to a grounded, cited handoff. P12's named-client trials qualify it for strong
+> models (Claude Opus 5.5, GPT-6-Astra). The compact models (Claude Sonnet 5.5,
+> GPT-6-Sol) are supported below target: 82% of trials passed fully, against a 90%
+> target ([qualification record](docs/planning/p12-agent-qualification.md)). Managed
 > dependency installation (P13) remains future R0 work. See the
 > [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 

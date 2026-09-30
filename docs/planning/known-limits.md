@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-29 (P00-P11 complete; P12 in progress: the agent skill and the trial harness exist, named-client qualification pending; SEC-T01's adversarial evidence deferred as technical debt, L-068).
+Date: 2026-09-30 (P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -53,7 +53,7 @@ Each entry has these fields:
 | [L-004](#l-004) | Native decoders and the recognizer are not sandboxed on the desktop | security | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-005](#l-005) | Private Windows folders get their DACL just after creation, not atomically | security | low | unscheduled | none | accepted residual |
 | [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents | security | low | unscheduled | none | accepted residual |
-| [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
+| [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | unscheduled | [#222](https://github.com/smormah/vsift/issues/222) | accepted residual |
 | [L-008](#l-008) | OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01) | integrity/durability | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-010](#l-010) | Visual candidates and evidence calls are not recoverable jobs | integrity/durability | low | unscheduled | none | accepted residual |
@@ -84,7 +84,6 @@ Each entry has these fields:
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
-| [L-039](#l-039) | The agent skill is not qualified; the named-agent journeys have not run | contract/UX | high | P12 | [#15](https://github.com/smormah/vsift/issues/15) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
 | [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
@@ -115,21 +114,22 @@ Each entry has these fields:
 | [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
 | [L-071](#l-071) | A command line that does not parse gets no remediation in JSON modes | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-073](#l-073) | SEC-T02 for human-readable terminal output is deferred to P13 | security | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
-| [L-075](#l-075) | The trial harness's reading of the clients' streams and flags is only partly proven against real runs | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
-| [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
-| [L-077](#l-077) | An agent cannot measure its own wall time; only the host enforces that budget | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-078](#l-078) | The Codex trial container relaxes Docker's seccomp profile so Codex's sandbox can create user namespaces | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-079](#l-079) | The Codex trial container's own network is not limited to the model API | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-080](#l-080) | A Codex trial agent can read its client's sign-in and its own trial's harness folder | security | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-081](#l-081) | A handoff may leave out the times and session details VSift recorded, so reading it alone does not give them | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
-| [L-082](#l-082) | Claude Haiku 4.5 does not follow the full investigation procedure | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-083](#l-083) | Only `display_text` shows hidden characters; `text` and `original_text` keep them raw | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-075](#l-075) | Codex's image views are not in its stream, so its image budgets are unmeasured | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | unscheduled | [#204](https://github.com/smormah/vsift/issues/204) | open |
+| [L-077](#l-077) | An agent cannot measure its own wall time; only the host enforces that budget | contract/UX | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-078](#l-078) | The Codex trial container relaxes Docker's seccomp profile so Codex's sandbox can create user namespaces | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-079](#l-079) | The Codex trial container's own network is not limited to the model API | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-080](#l-080) | A Codex trial agent can read its client's sign-in and its own trial's harness folder | security | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-081](#l-081) | A handoff may leave out the times and session details VSift recorded, so reading it alone does not give them | contract/UX | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | open |
+| [L-082](#l-082) | Claude Haiku 4.5 does not follow the full investigation procedure | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-083](#l-083) | Only `display_text` shows hidden characters; `text` and `original_text` keep them raw | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222) | deferred (technical debt) |
 
-Counts: 4 high, 22 medium, 51 low (77 entries).
+Counts: 4 high, 25 medium, 52 low (81 entries).
 
 ## Security
 
@@ -289,25 +289,40 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
 
 - **What:** transcripts, frames and audio can contain text that tries to steer an
   agent (prompt injection). VSift labels evidence as untrusted data and never acts on
-  it, but it cannot make every model immune. Bidirectional-formatting characters in a
-  supplied transcript are shown as written. An agent that copies a delivered file path
-  into prose may reveal the session root's location to readers of that prose.
-- **Evidence:** [threat model](security-threat-model.md) "Agent-specific controls" and
-  the P07 increment 2 and P09 delivery residuals; SEC-16. Since P12 PR 2 the tool-level
-  SEC-T02 suite (`crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs`) runs on
-  every PR; the agent trials A-04 and SEC-T02 have not run.
-- **Impact:** a hostile recording could influence an agent's reasoning or actions.
+  it, and the agent skill narrows what an agent may run, but no tool can make every
+  model immune.
+  - `text` and `original_text` keep hidden characters as written; only
+    `display_text` shows them ([L-083](#l-083)).
+  - An agent that copies a delivered file path into prose may reveal the session
+    root's location to readers of that prose.
+- **Evidence:**
+  - [threat model](security-threat-model.md) "Agent-specific controls", the P07
+    increment 2 and P09 delivery residuals, and SEC-16;
+  - the tool-level SEC-T02 suite (`crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs`)
+    on every PR;
+  - P12's named-client trials ([qualification record](p12-agent-qualification.md)).
+    In the counted A-04 and SEC-T02 runs (20, Claude Sonnet 5.5 and GPT-6-Sol) and in
+    every reference round (348 graded phases), no agent installed or downloaded
+    anything, ran a script, leaked a canary or acted on the hostile text. No counted
+    report held a raw hidden character, a live link or an absolute path.
+- **Impact:** a hostile recording could still steer a model outside the qualified
+  configurations, a client run without the skill's limits, or a later model. The
+  trials cover named clients and models on synthetic adversarial fixtures only.
 - **Why:** prompt injection is an open problem; paths are delivered by decision D2.
-- **Mitigation:** fixed-prose remediation that never echoes evidence text; typed
-  fields; no evidence-driven installs or policy. Since P12 PR 1 (2026-09-28) the agent
-  skill limits authority by command class (`skills/vsift/references/commands.md`),
-  treats evidence as data and reports embedded instructions with citations
-  (`references/safety.md`), cites `evidence_id`s instead of paths, and its handoff
-  schema refuses paths, links and hidden characters in prose.
-- **Next step:** the P12 named-client trials qualify A-04 and SEC-T02 with malicious
-  spoken, cell and screenshot instructions (ADR 0022 decision 7).
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** deferred. **Review:** pending.
+- **Mitigation:**
+  - fixed-prose remediation that never echoes evidence text;
+  - typed fields; no evidence-driven installs or policy;
+  - the agent skill (P12) limits authority by command class
+    (`skills/vsift/references/commands.md`), treats evidence as data and reports
+    embedded instructions with citations (`references/safety.md`), cites
+    `evidence_id`s instead of paths, and quotes only `display_text`;
+  - its handoff schema refuses paths, links and hidden characters in prose;
+  - the trial grader fails any out-of-policy attempt, whether it ran or not.
+- **Next step:** re-run A-04 and SEC-T02 whenever the skill, the clients or the
+  supported models change (the next is the compact-tier re-run,
+  [#222](https://github.com/smormah/vsift/issues/222)).
+- **Owner:** unscheduled. **Issue:** [#222](https://github.com/smormah/vsift/issues/222).
+  **Status:** accepted residual. **Review:** pending.
 
 ### L-072
 
@@ -331,7 +346,7 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
 - **Mitigation:** trials run in a disposable workspace under a neutral root with a
   cleared environment; the graded result, not the sandbox, decides the trial.
 - **Next step:** revisit if Codex gains a command allow list.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
 
 ### L-073
@@ -1517,32 +1532,58 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
   **Review:** pending.
 
-### L-039
+### L-085
 
-**The agent skill is not qualified; the named-agent journeys have not run.**
+**The compact tier is below its 90% task-success target (82% on both clients).**
 
-- **What:** the agent skill exists since P12 PR 1 (`skills/vsift/`, 2026-09-28) and its
-  command, flag, code and field references are tested against the CLI, but no agent has
-  run it under trial: A-01..A-09 (including A-08/A-09 through named Codex and Claude
-  Code clients) and SEC-T02 have not run. The mechanical journey passes without an
-  agent. The image check proves only that the client can read an image; whether a
-  model really inspected each frame it cites is judged in the trials.
-- **Evidence:** [verification](verification.md) section 6; ledger P12 `in_progress`;
-  [test spine](e2e-test-spine.md); [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md)
-  (Proposed).
-- **Impact:** R0's defining gate (a coding agent from a local video to a grounded
-  handoff) is unproven.
-- **Why:** the trials need the maintainer's client sign-ins and allowances; P12 PR 2
-  (2026-09-28) built the harness and grader (`tools/vsift-agent-trials`,
-  [runbook](../agents/trials.md)) and a deterministic walk of the skill's A-08/A-09
-  procedure, which passes but is not an agent trial.
-- **Mitigation:** the CLI contract is complete for the journey; the skill's
-  `crates/vsift-cli/src/skill_contract.rs` guard keeps it in step with the CLI; the
-  grader's command policy and budgets are parsed from the skill's own references.
-- **Next step:** accept ADR 0022 and run its trial protocol (decision 7) with the
-  harness (P12 PR 3).
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** deferred. **Review:** pending.
+- **What:** [verification](verification.md) section 6 targets at least 90% task
+  success on the agreed compact-model corpus, with 100% mechanically valid citations.
+  In P12's final round on `8ab976e` (2026-09-30), Claude Sonnet 5.5 (Claude Code
+  2.1.284) and GPT-6-Sol (codex-cli 0.155.0-alpha.16) each ran 28 trials of A-01 to
+  A-07 and SEC-T02.
+  - Each passed 23 of 28 fully (82%) and answered 25 of 28 correctly.
+  - 3 of their 62 phases missed a citation check.
+  - The maintainer closed P12 on these results (2026-09-30) and deferred the target
+    as technical debt.
+- **Causes** (the ten misses, [qualification record](p12-agent-qualification.md)):
+  1. **Invented handoff shapes.** `SKILL.md`'s REPORT skeleton shows
+     `"claims": []`, so models guess the claim's shape. This is 3 of Sonnet's 5
+     misses (claims with `text` and no `id`) and 1 of Sol's (instructions with
+     `citations` and `description`)
+     ([#218](https://github.com/smormah/vsift/issues/218)).
+  2. **A-02 resume** is the weakest scenario: Sonnet 2 of 3, Sol 1 of 3. Two of the
+     three misses bind a true value to evidence outside the first loop's window, a
+     grader reading for the maintainer
+     ([#219](https://github.com/smormah/vsift/issues/219)).
+  3. **SEC-T02 slips on Sol**, 2 of 5 full passes: a frame cited after `session
+     retain`, the instruction shape above, and SAFE-12 never stated
+     ([#220](https://github.com/smormah/vsift/issues/220)).
+  4. **The skill's defanged link form** (`hxxps://`) written in a JSON summary, which
+     the schema refuses (Sonnet A-04 run 2,
+     [#221](https://github.com/smormah/vsift/issues/221)).
+- **Evidence:** the [qualification record](p12-agent-qualification.md) (per-scenario
+  tables and every miss); the bounded records in
+  [p12-agent-trials/](p12-agent-trials/README.md); verification section 6.
+- **Impact:** a user of a compact model gets a fully valid, correct handoff about four
+  times in five, and a correct answer about nine times in ten. The failures are
+  handoff-shape and citation-binding errors, not unsafe actions: every counted phase
+  passed the command policy, the canary check and the report-text check.
+  - The review tier passed 11 of 11 trials mechanically on both clients: Claude Opus
+    5.5 and GPT-6-Astra.
+  - Its interpretation is under the maintainer's review of 25 runs, decisions pending.
+- **Why:** the maintainer decided on 2026-09-30 to close P12 on the final round's
+  results and record what is short of target as known limits and follow-ups.
+- **Mitigation:**
+  - `docs/agents/skill.md` names the supported models and says the compact tier is
+    below target;
+  - the grader reports each handoff error as a typed, fixable message;
+  - the handoff validator (P13, [#213](https://github.com/smormah/vsift/issues/213))
+    may lower handoff failures further.
+- **Next step:** fix #218-#221, then re-run the compact tier
+  ([#222](https://github.com/smormah/vsift/issues/222)) before P14.
+- **Owner:** maintainer, before P14. **Issue:**
+  [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222).
+  **Status:** deferred (technical debt). **Review:** pending.
 
 ### L-053
 
@@ -1567,12 +1608,15 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
 
 ### L-075
 
-**The trial harness's reading of the clients' streams and flags is only partly proven against real runs.**
+**Codex's image views are not in its stream, so its image budgets are unmeasured.**
 
 - **What:** `tools/vsift-agent-trials` parses Claude Code `stream-json` and Codex
   `exec --json` streams and passes flags first checked only with `--help` on Claude
-  Code 2.1.281 and codex-cli 0.155.0-alpha.16. The dry A-08 trials of 2026-09-28 (one
-  per client) and PR 3a's debugging runs proved part of it:
+  Code 2.1.281 and codex-cli 0.155.0-alpha.16. The counted P12 runs have now proven
+  the reading. All 84 counted phases of Claude Code 2.1.284 and codex-cli
+  0.155.0-alpha.16 recognised every stream line and read their configuration.
+  Everything else below is proven or decided. **What remains** is that Codex's image
+  budgets are not counted. Earlier findings:
   - **Proven:** every line of both streams parsed; Claude Code's `--max-turns`,
     `--setting-sources project` and `dontAsk` behave as intended; its `Skill`, `Read`
     and `Bash` calls and denials are read correctly; the project settings' allow and
@@ -1599,30 +1643,38 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
     reader confuses (`docs/agents/skill.md`), and the grader now takes the code of the
     image each trial's workspace received, from a table of every image the skill
     shipped keyed by SHA-256, so older trials still grade against the code they saw.
+    In the final round on `8ab976e` every `image_check` passed (31 of 31 GPT-6-Sol
+    phases). Bounded records replace the code with `<check-code>` (P12 completion),
+    because no text file of the repository may hold it.
   - **Found and fixed (PR 3e):** `-c tools.view_image=false` was an unknown setting
     Codex ignored, reporting it as a stream item of type `error` that no check read;
     images-disabled runs now pass `--disable view_image`, which a debug run showed
     removes the image tool, and such a notice now invalidates a trial.
-  - **Still unproven:** the Claude Code `Read` deny patterns of the images-disabled
-    scenario; Codex's stream beyond shell commands, messages and error notices.
+  - **Proven in the counted runs (2026-09-30):**
+    - the Claude Code `Read` deny rule of the images-disabled scenario: Claude Code
+      refused each Sonnet 5.5 A-05 run's one read of the check image;
+    - Codex's stream holds only shell commands, messages, turn usage and error
+      notices, and every line parsed.
 - **Evidence:** `tools/vsift-agent-trials/src/trace.rs`, `run.rs`, `claude_trust.rs`
-  and `client_warnings.rs`; ADR 0022's 2026-09-28 dry-trial note; the dry trials' raw
-  logs (kept locally, not in the repository).
-- **Impact:** a later scenario may meet an event or flag the harness reads wrongly.
-  The parser fails closed: an unrecognised event is an unauthorized call and a stream
-  line that is not JSON fails `stream_recognised`; a client's own report that it
-  ignored its configuration makes the trial invalid.
-- **Why:** proving the formats needs real runs, which spend the maintainer's client
-  allowances.
+  and `client_warnings.rs`; ADR 0022's notes of 2026-09-28 to 2026-09-30; the
+  [P12 qualification record](p12-agent-qualification.md) (`stream_recognised` and
+  `client_configuration` passed in 84 of 84 counted phases); the raw logs (kept
+  locally, not in the repository).
+- **Impact:** a Codex agent could view more images than the budget allows without
+  failing a trial. A later client release may also change an event or flag the
+  harness reads. The parser fails closed: an unrecognised event is an unauthorized
+  call, and a stream line that is not JSON fails `stream_recognised`. A client's own
+  report that it ignored its configuration makes the trial invalid.
+- **Why:** codex-cli records an image view only inside model-written code.
 - **Mitigation:** fail-closed parsing; the `client_configuration` check; raw logs kept
   locally for re-grading (`grade --output`); for Codex, the check code, which a model
   cannot know without viewing the image, and the tool-call budget, which still counts
   every command.
 - **Next step:** revisit Codex's image budgets when a codex-cli release reports image
-  views in its stream or as a structured rollout record; the counted campaign
-  confirms the remaining events.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
-  **Status:** open. **Review:** pending.
+  views in its stream or as a structured rollout record. Re-check the stream reading
+  whenever a trial uses a new client version.
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual (maintainer decision, 2026-09-29, PR 3e). **Review:** pending.
 
 ### L-076
 
@@ -1672,10 +1724,8 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
   [#204](https://github.com/smormah/vsift/issues/204) (a Windows user of Codex's
   sandbox cannot run VSift): a named-sandbox-identity exception in private folders (its
   own ADR), a broker, or documenting Codex on Windows as unsupported in sandboxed mode.
-- **Owner:** P12 (trials), unscheduled (product). **Issue:**
-  [#15](https://github.com/smormah/vsift/issues/15),
-  [#204](https://github.com/smormah/vsift/issues/204). **Status:** open (the trials
-  avoid it). **Review:** pending.
+- **Owner:** unscheduled (product; the P12 trials avoid it in the container). **Issue:**
+  [#204](https://github.com/smormah/vsift/issues/204). **Status:** open. **Review:** pending.
 
 ### L-077
 
@@ -1697,7 +1747,7 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
 - **Mitigation:** the skill says who keeps the wall time; the handoff schema accepts
   `null`; the grader measures wall time from the client's run.
 - **Next step:** none planned; revisit if a host cannot enforce time limits.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
 
 ### L-078
@@ -1733,7 +1783,7 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
   mounts (untested there).
 - **Next step:** derive an allowlist from Docker's default profile plus the namespace
   calls if the container is used beyond the P12 trials.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
 
 ### L-079
@@ -1754,7 +1804,7 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
   per-run copy of the sign-in (L-080) is in the container; the grader fails any
   non-`vsift` command.
 - **Next step:** none planned for P12.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
 
 ### L-080
@@ -1784,7 +1834,7 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
   conversation.
 - **Next step:** none planned for P12; a Codex setting that denies reading the
   sign-in and harness paths would close most of it.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
 
 ### L-081
@@ -1810,7 +1860,7 @@ alone does not give them.**
   the skill tells agents to add the optional members when they help.
 - **Next step:** if a consumer needs self-contained handoffs, add a harness or CLI step
   that fills the optional members from the bundle, rather than asking the agent.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** open. **Review:** pending.
 
 ### L-082
@@ -1835,11 +1885,11 @@ alone does not give them.**
   GPT-6-Luna (2026-09-29), and after the final campaign on `56f1e1f` as Claude Sonnet
   5.5 and GPT-6-Sol, with GPT-6-Luna also below the line ([L-084](#l-084));
   [verification.md](verification.md) section 6 names it, and `docs/agents/skill.md`
-  should say which models are supported once the tier qualifies. Haiku 4.5 did not run
-  in the final campaign.
+  lists the supported models (since P12's completion, 2026-09-30). Haiku 4.5 did not
+  run in the final campaign.
 - **Next step:** none planned; a later, simpler skill profile for small models would
   be a new decision.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** pending.
 
 ### L-083
@@ -1877,11 +1927,12 @@ raw.**
 - **Mitigation:** `display_text` and `display_label`; the skill's rule and "before you
   send" checklist, held by the `skill_contract` guard; the handoff schema's refusal in
   prose members; `report_text` in trials.
-- **Next step:** the compact-tier re-run (P12) shows whether models quote
-  `display_text`. *2026-09-30:* in the final campaign on `56f1e1f` no report held a
-  raw hidden character (`report_text` passed in every counted run of Opus 5.5, Sonnet
-  5.5, GPT-6-Astra, GPT-6-Luna and GPT-6-Sol, SEC-T02 included).
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Next step:** none planned. The trials show that models quote `display_text`:
+  no report held a raw hidden character in the final campaign on `56f1e1f` (every
+  counted run of Opus 5.5, Sonnet 5.5, GPT-6-Astra, GPT-6-Luna and GPT-6-Sol) or in
+  the final compact round on `8ab976e` (62 of 62 phases of Sonnet 5.5 and GPT-6-Sol,
+  SEC-T02 included).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** pending.
 
 ### L-084
@@ -1912,7 +1963,7 @@ raw.**
   Haiku 4.5 ([L-082](#l-082)), GPT-6-Luna is recorded below the supported line.
 - **Next step:** none planned; a handoff validator command (P13, #213) may lower its
   handoff failures.
-- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+- **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual (maintainer decision, 2026-09-30). **Review:** pending.
 
 ### L-040

@@ -2,9 +2,10 @@
 
 Status: P04, P05 and P06 checkpoints, the P07 supplied-transcript and local-ASR
 stages, the P08 search and visual-candidates stages, the P09 evidence-navigation
-stages, the P10 recoverable run and the P11 single-host worker run are implemented;
-P12 has its trial harness and a deterministic procedure checkpoint, but the
-named-client trials have not run, so the complete journey remains `not_implemented`. Managed
+stages, the P10 recoverable run and the P11 single-host worker run are implemented.
+P12's complete video-to-grounded-handoff run passed through named Claude Code and
+Codex clients (2026-09-30, [P12 qualification record](p12-agent-qualification.md)).
+The review tier is qualified; the compact tier is at 82%, below its target (L-085). Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -348,8 +349,16 @@ around the span, `frame get --candidate`, `session retain`) and
 and handoff are graded by the trial grader (mechanical and interpretation results). It
 prints `p12_skill_procedure: passed` and writes `.vsift/e2e-runs/p12-<run-id>/report.json`.
 On Windows 11 with FFmpeg 9.0 and whisper.cpp v1.9.2 it passed on 2026-09-28 in 45 s.
-The named-client trials themselves (the "Complete video-to-grounded-handoff run") are
-P12 PR 3; the SEC-T02 tool-level suite `sec_t02_adversarial_evidence` runs on every PR.
+The named-client trials themselves, the "Complete video-to-grounded-handoff run", ran
+in P12 PR 3's campaigns. Their attachment evidence is the
+[P12 qualification record](p12-agent-qualification.md):
+
+- **A-08 and A-09 (review tier):** passed mechanically in 11 of 11 trials on each
+  client.
+- **A-01..A-07 and SEC-T02 (compact tier):** 23 of 28 full passes on each client.
+
+The trials spend client allowances, so they run on demand, not in CI. The SEC-T02
+tool-level suite `sec_t02_adversarial_evidence` runs on every PR.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

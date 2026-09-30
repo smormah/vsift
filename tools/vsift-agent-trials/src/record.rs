@@ -19,6 +19,7 @@ use crate::{
     layout::{TrialLayout, TrialManifest},
     run::{RunRecord, read_manifest, read_run},
     scenario::Scenario,
+    skill::CHECK_IMAGES,
 };
 
 /// The largest record, in bytes.
@@ -76,6 +77,7 @@ impl Redactions {
         for canary in &manifest.canaries {
             pairs.push((canary.clone(), "<canary>".to_owned()));
         }
+        pairs.extend(check_code_pairs());
         pairs.sort_by_key(|pair| std::cmp::Reverse(pair.0.len()));
         Self { pairs }
     }
@@ -107,6 +109,27 @@ impl Redactions {
             other => other.clone(),
         }
     }
+}
+
+/// Replacements that keep every check image's code out of a record.
+///
+/// A handoff reports the code the agent read from the check image, and
+/// records are committed to the repository, where the code must never
+/// appear as text (the CLI's `skill_contract` guard fails on it): a model
+/// that found it there could pass the image check without seeing the image.
+/// The code is replaced as printed and without white space, the two forms
+/// the grader accepts; the record's `image_check` result still says whether
+/// the reported code was right.
+fn check_code_pairs() -> Vec<(String, String)> {
+    CHECK_IMAGES
+        .iter()
+        .flat_map(|image| {
+            let code = image.code();
+            let joined: String = code.split_whitespace().collect();
+            [code, joined]
+        })
+        .map(|code| (code, "<check-code>".to_owned()))
+        .collect()
 }
 
 fn replace_ignoring_case(text: &str, from: &str, to: &str) -> String {
@@ -286,5 +309,26 @@ mod tests {
             redactions.apply("read c:\\TRIALS\\t1\\workspace\\a.png and C:\\trials\\t1\\x"),
             "read <workspace>\\a.png and <trial>\\x"
         );
+    }
+
+    #[test]
+    fn every_check_code_is_replaced_as_printed_and_joined() {
+        let redactions = Redactions {
+            pairs: check_code_pairs(),
+        };
+        for image in CHECK_IMAGES {
+            let code = image.code();
+            let joined: String = code.split_whitespace().collect();
+            let handoff = json!({
+                "capabilities": {"image_check_code": code.to_ascii_lowercase()},
+                "note": format!("read {joined} from the image"),
+            });
+            let redacted = redactions.apply_value(&handoff);
+            assert_eq!(
+                redacted["capabilities"]["image_check_code"],
+                json!("<check-code>")
+            );
+            assert_eq!(redacted["note"], json!("read <check-code> from the image"));
+        }
     }
 }
