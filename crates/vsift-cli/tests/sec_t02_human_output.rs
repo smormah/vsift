@@ -84,11 +84,12 @@ struct OwnedRoot(PathBuf, &'static str);
 
 /// A session-root folder name that holds a right-to-left override and a
 /// zero-width space, and where the platform allows them in a name an OSC-8
-/// link, an ANSI colour, a line break and a C1 control (P13 PR 2b).
+/// link, an ANSI colour, a line break and a C1 control (P13 PR 2b). It has
+/// no `/` and no `:`, which a session root's own name may not hold.
 #[cfg(windows)]
 const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B} sessions";
 #[cfg(not(windows))]
-const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B}\u{1b}]8;;https:example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85} sessions";
+const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B}\u{1b}]8;;example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85} sessions";
 
 impl OwnedRoot {
     fn new() -> Result<Self, Box<dyn Error>> {
