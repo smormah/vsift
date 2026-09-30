@@ -135,6 +135,39 @@ const HELP_IDENTIFIER: &str = "help";
 /// The flag of the help forms; clap adds it to every command.
 const HELP_FLAG: &str = "--help";
 
+/// The heredoc delimiter of the POSIX `handoff check` form.
+const HANDOFF_DELIMITER: &str = "VSIFT_HANDOFF";
+
+/// The only two forms in which the skill passes text into a command (ADR
+/// 0023 decision G, P13 PR 5): the draft report, as a quoted heredoc in a
+/// POSIX shell, or as a single-quoted here-string piped in PowerShell. Both
+/// pass the text without expansion. `<report>` stands for the draft; the
+/// fence's info string names the shell. The trial grader recognises exactly
+/// these two forms too; nothing wider is accepted here or there.
+const HANDOFF_CHECK_FORMS: [(&str, &str); 2] = [
+    (
+        "sh",
+        "vsift handoff check --json <<'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF",
+    ),
+    (
+        "powershell",
+        "@'\n<report>\n'@ | vsift handoff check --json",
+    ),
+];
+
+/// The command both forms run, as its arguments.
+const HANDOFF_CHECK_COMMAND: &str = "vsift handoff check --json";
+
+/// Fence info strings that hold shell text other than a `console` example.
+const SHELL_FENCES: [&str; 6] = ["sh", "bash", "shell", "powershell", "pwsh", "ps1"];
+
+/// Which of [`HANDOFF_CHECK_FORMS`] `text` is, exactly, in a fence of `info`.
+fn handoff_check_form(info: &str, text: &str) -> Option<usize> {
+    HANDOFF_CHECK_FORMS
+        .iter()
+        .position(|(shell, form)| *shell == info && *form == text)
+}
+
 /// Shell syntax that joins, pipes, redirects or substitutes commands.
 const SHELL_OPERATORS: [&str; 8] = ["&&", "||", ";", "|", ">", "<", "$(", "`"];
 
@@ -725,6 +758,61 @@ fn skill_md_states_the_compact_limits_from_budgets_md() -> Result<(), String> {
     problems.into_result()
 }
 
+/// `handoff check` reads the profiles' limits from contract constants
+/// (`vsift_contract::COMPACT_BUDGET` and `STANDARD_BUDGET`, P13 PR 5); they
+/// must be the table of `budgets.md`, in the handoff's units.
+#[test]
+fn the_contracts_budget_profiles_are_budgets_md() -> Result<(), String> {
+    let budgets = read_text(&skill_directory().join("references").join("budgets.md"))?;
+    let quantity = |cell: &str| -> Option<u64> {
+        let mut parts = cell.split_whitespace();
+        let number: u64 = parts.next()?.parse().ok()?;
+        match parts.next() {
+            None => Some(number),
+            Some("MiB") => number.checked_mul(1024 * 1024),
+            Some("min") => number.checked_mul(60),
+            Some(_) => None,
+        }
+    };
+    let row = |name: &str| -> Result<(u64, u64), String> {
+        budgets
+            .lines()
+            .find_map(|line| {
+                let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+                (cells.get(1) == Some(&name))
+                    .then(|| Some((quantity(cells.get(2)?)?, quantity(cells.get(3)?)?)))
+            })
+            .flatten()
+            .ok_or_else(|| format!("budgets.md has no readable {name:?} row"))
+    };
+    let mut problems = Problems::default();
+    for (row_name, member) in [
+        ("Images per step", "images_per_step"),
+        ("Images in total", "images_total"),
+        ("Image bytes in total", "image_bytes"),
+        ("Page size", "page_limit"),
+        ("Tool calls", "tool_calls"),
+        ("Refinement depth", "refinement_depth"),
+        ("Wall time", "wall_time_s"),
+        ("Burst frames", "burst_frames"),
+    ] {
+        let (compact, standard) = row(row_name)?;
+        let constant = |limits: vsift_contract::HandoffBudgetLimits| {
+            limits
+                .members()
+                .into_iter()
+                .find(|(name, _)| *name == member)
+                .map(|(_, value)| value)
+        };
+        if constant(vsift_contract::COMPACT_BUDGET) != Some(compact)
+            || constant(vsift_contract::STANDARD_BUDGET) != Some(standard)
+        {
+            problems.add(format!("the contract's {member} differs from budgets.md"));
+        }
+    }
+    problems.into_result()
+}
+
 /// `FIND_SPOKEN_SPANS` starts with `vsift search`: its hits carry the segment
 /// identities and times a handoff cites, and A-08 requires search. In the
 /// first dry trial (2026-09-28) a strong model read a short transcript whole
@@ -868,6 +956,151 @@ fn console_examples_are_one_vsift_command_each() -> Result<(), String> {
         }
     }
     problems.into_result()
+}
+
+/// The draft forms of `handoff check` are the skill's one input exception
+/// (P13 PR 5): every shell fence of the skill is exactly one of the two
+/// forms, `commands.md` shows both and `SKILL.md`'s REPORT the POSIX one,
+/// and their command parses as the `free` operation `handoff.check`.
+#[test]
+fn the_handoff_check_forms_are_the_only_input_exception() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let policy = policy_table(&mut problems)?;
+    let arguments = split_arguments(HANDOFF_CHECK_COMMAND)?;
+    match Cli::try_parse_from(&arguments) {
+        Ok(cli) if cli.json => {}
+        _ => problems.add(format!(
+            "{HANDOFF_CHECK_COMMAND:?} does not parse with --json"
+        )),
+    }
+    match resolve_operation(&arguments) {
+        Some((identifier, _))
+            if identifier == CommandName::HandoffCheck.identifier()
+                && policy.get(&identifier) == Some(&Class::Free) => {}
+        other => problems.add(format!(
+            "the draft forms run {other:?}, not the free handoff.check",
+            other = other.map(|(identifier, _)| identifier)
+        )),
+    }
+    for (_, form) in HANDOFF_CHECK_FORMS {
+        if form.matches(HANDOFF_CHECK_COMMAND).count() != 1 {
+            problems.add(format!(
+                "{form:?} does not run {HANDOFF_CHECK_COMMAND:?} once"
+            ));
+        }
+    }
+    let mut forms_by_file: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
+    for document in markdown_files()? {
+        for fence in &document.fences {
+            let text = fence.lines.join("\n");
+            let runs_vsift = fence.lines.iter().any(|line| line.contains("vsift "));
+            let shell = SHELL_FENCES.contains(&fence.info.as_str());
+            // `console` examples have their own guard; JSON and Markdown
+            // fences are data, whatever command a value names.
+            let data =
+                ["console", "vsift-handoff", "json", "markdown"].contains(&fence.info.as_str());
+            if data || !(shell || runs_vsift) {
+                continue;
+            }
+            match handoff_check_form(&fence.info, text.trim_end()) {
+                Some(form) => {
+                    forms_by_file
+                        .entry(document.name.clone())
+                        .or_default()
+                        .insert(form);
+                }
+                None => problems.add(format!(
+                    "{}: a {:?} fence is not one of the two handoff check forms: {text:?}",
+                    document.name, fence.info
+                )),
+            }
+        }
+    }
+    let shows = |suffix: &str, form: usize| {
+        forms_by_file
+            .iter()
+            .any(|(name, forms)| name.ends_with(suffix) && forms.contains(&form))
+    };
+    if !(shows("commands.md", 0) && shows("commands.md", 1)) {
+        problems.add("commands.md does not show both handoff check forms".to_owned());
+    }
+    if !shows("SKILL.md", 0) {
+        problems.add("SKILL.md's REPORT does not show the POSIX handoff check form".to_owned());
+    }
+    let flat = flattened_skill_md()?;
+    if !flat
+        .contains("run `vsift handoff check` on your draft once, fix what it reports, then send")
+    {
+        problems.add("SKILL.md's REPORT does not say to check the draft once".to_owned());
+    }
+    problems.into_result()
+}
+
+/// Nothing wider than the two literal forms is a draft form: another
+/// command piped in, an unquoted or double-quoted heredoc, a double-quoted
+/// here-string, another delimiter, a file, a redirection or anything added.
+#[test]
+fn variants_of_the_handoff_check_forms_are_refused() {
+    for (info, variant) in [
+        (
+            "sh",
+            "vsift handoff check --json <<VSIFT_HANDOFF\n<report>\nVSIFT_HANDOFF",
+        ),
+        (
+            "sh",
+            "vsift handoff check --json <<\"VSIFT_HANDOFF\"\n<report>\nVSIFT_HANDOFF",
+        ),
+        (
+            "sh",
+            "vsift handoff check --json <<-'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF",
+        ),
+        ("sh", "vsift handoff check --json <<'EOF'\n<report>\nEOF"),
+        (
+            "sh",
+            "vsift handoff check <<'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF",
+        ),
+        (
+            "sh",
+            "vsift session close <session> --json <<'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF",
+        ),
+        (
+            "sh",
+            "vsift handoff check --json <<'VSIFT_HANDOFF' | tail -n 1\n<report>\nVSIFT_HANDOFF",
+        ),
+        (
+            "sh",
+            "vsift handoff check --json <<'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF\necho done",
+        ),
+        ("sh", "cat draft.md | vsift handoff check --json"),
+        ("sh", "vsift handoff check --json < draft.md"),
+        ("sh", "echo '<report>' | vsift handoff check --json"),
+        (
+            "powershell",
+            "@\"\n<report>\n\"@ | vsift handoff check --json",
+        ),
+        (
+            "powershell",
+            "@'\n<report>\n'@ | vsift session close <session> --json",
+        ),
+        (
+            "powershell",
+            "@'\n<report>\n'@ | vsift handoff check --json | Select-Object -Last 1",
+        ),
+        (
+            "powershell",
+            "Get-Content draft.md | vsift handoff check --json",
+        ),
+        (
+            "powershell",
+            "vsift handoff check --json <<'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF",
+        ),
+        ("sh", "@'\n<report>\n'@ | vsift handoff check --json"),
+    ] {
+        assert_eq!(handoff_check_form(info, variant), None, "{variant}");
+    }
+    for (index, (info, form)) in HANDOFF_CHECK_FORMS.iter().enumerate() {
+        assert_eq!(handoff_check_form(info, form), Some(index));
+    }
 }
 
 /// The words of `text` that start with `op_` or `op-`, cut at the first
@@ -1092,6 +1325,7 @@ fn every_failure_code_named_is_published() -> Result<(), String> {
         .map(|code| code.identifier().to_owned())
         .collect();
     allowed.extend(STATES.iter().map(|state| (*state).to_owned()));
+    allowed.insert(HANDOFF_DELIMITER.to_owned());
     for path in skill_text_files()? {
         for word in upper_snake_words(&read_text(&path)?) {
             if !allowed.contains(&word) {

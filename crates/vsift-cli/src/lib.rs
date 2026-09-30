@@ -7,6 +7,7 @@ mod candidates;
 mod command;
 mod config;
 mod evidence;
+mod handoff;
 mod human;
 mod job;
 mod json_input;
@@ -25,8 +26,8 @@ use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::
 
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{
-    BundleCommand, Cli, Command, EventFormat, ExecutionProfile, JobArguments, JobCommand,
-    SetupCommand, TranscriptCommand,
+    BundleCommand, Cli, Command, EventFormat, ExecutionProfile, HandoffCommand, JobArguments,
+    JobCommand, SetupCommand, TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use human::HumanDetail;
@@ -100,7 +101,11 @@ const fn is_long_running(command: &Command) -> bool {
                 JobCommand::Resume(_) | JobCommand::Run(_) | JobCommand::Batch(_)
             )
         }
-        Command::Setup(_) | Command::Session(_) | Command::Search(_) | Command::Bundle(_) => false,
+        Command::Setup(_)
+        | Command::Session(_)
+        | Command::Search(_)
+        | Command::Bundle(_)
+        | Command::Handoff(_) => false,
     }
 }
 
@@ -147,6 +152,7 @@ const fn operation_name(command: &Command) -> Option<CommandName> {
         Command::Crop(_) => CommandName::Crop,
         Command::Bundle(arguments) => arguments.command.operation_name(),
         Command::Job(arguments) => arguments.command.operation_name(),
+        Command::Handoff(arguments) => arguments.command.operation_name(),
     })
 }
 
@@ -501,6 +507,15 @@ where
         Command::Audio(arguments) => {
             let result = evidence::audio(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Audio, result)
+        }
+        Command::Handoff(arguments) => {
+            let operation = arguments.command.operation_name();
+            let result = match arguments.command {
+                HandoffCommand::Check(arguments) => {
+                    handoff::check(&engine, &arguments, io::stdin().lock())
+                }
+            };
+            write_session_result(&mut writer, mode, operation, result)
         }
         Command::Job(arguments) => {
             let operation = arguments.command.operation_name();

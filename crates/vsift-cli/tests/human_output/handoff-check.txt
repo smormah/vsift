@@ -1,0 +1,23 @@
+Handoff check: not valid, 4 problem(s) to fix before sending
+Handoff version: 1
+Session: ses_0123456789abcdef0123456789abcdef, 2 cited identities checked
+
+Problems:
+- at /citations/1/pixels_inspected (member_missing)
+  This required member is missing; add it.
+- at /gaps/0/kind (value_not_allowed)
+  This closed value is not allowed; write exactly one of the allowed values.
+  Allowed: transcript, visual, audio, image_access, dependency, budget, lifecycle
+- line 3 (web_link)
+  This line holds a web link; write an address seen in evidence only defanged (hxxps) in a code span of the Markdown, and never in the JSON.
+- at /citations/1/evidence_id (evidence_not_in_session)
+  This evidence id is not in the session's evidence records; copy the evidence_id from the command that extracted it.
+
+Warnings:
+- at /citations/1 (citation_unused)
+  No claim or instruction uses this citation; cite it or leave it out.
+
+Read in the schema's letter case:
+- at /status (letter_case)
+  This closed value was read in the schema's letter case; write it exactly as listed.
+  Read as: partial

@@ -42,7 +42,7 @@ use serde_json::Value;
 use crate::{
     bundle::{BundleIndex, Resolved},
     calls::{Action, GradedCall, ReadScope, classify, vsift_commands},
-    handoff::{HandoffSchema, MAX_RESUME_BYTES, PrivateMarkers, extract, text_problems},
+    handoff::{HandoffSchema, MAX_RESUME_BYTES, PrivateMarkers, text_problems},
     policy::{BudgetLimits, CommandClass, CommandPolicy, HELP_OPERATION},
     scenario::{Expectation, ImagePolicy, PeriodBasis, Scenario, Timeline, TranscriptSource},
     trace::{ClientKind, Trace},
@@ -253,27 +253,14 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
     let granted: BTreeSet<String> = input.scenario.authority.iter().cloned().collect();
     let calls = classify(input.trace, input.policy, &granted, &input.scope);
     let final_message = input.trace.final_message.clone().unwrap_or_default();
-    // Every later check reads the handoff with its closed values in the
-    // schema's letter case, so `"Partial"` is a partial status everywhere.
-    let mut case_notes = Vec::new();
-    let extracted = extract(&final_message).map(|mut value| {
-        case_notes = input.schema.normalize_case(&mut value);
-        value
-    });
-    let handoff = extracted.as_ref().ok().cloned();
+    // The shared check (`vsift handoff check`'s): every later check reads
+    // the handoff with its closed values in the schema's letter case, so
+    // `"Partial"` is a partial status everywhere.
+    let report = input.schema.check_report(&final_message);
+    let handoff = report.handoff;
     let (usage, images_measured) = measure(&calls, input);
     let context = Context::new(input);
-    let handoff_check = match &extracted {
-        Ok(value) => {
-            let findings = input.schema.check(value);
-            Check::with_warnings(
-                "handoff_valid",
-                findings.problems,
-                case_notes.into_iter().chain(findings.warnings).collect(),
-            )
-        }
-        Err(problem) => Check::new("handoff_valid", vec![problem.clone()]),
-    };
+    let handoff_check = Check::with_warnings("handoff_valid", report.problems, report.notes);
 
     let mut checks = vec![
         handoff_check,

@@ -14,11 +14,13 @@ it; it does not change what the command does.
 Always pass `--json`. Use `--events jsonl` only for a long transcription
 (`vsift transcript retranscribe`) or `vsift job resume`, and read only the last line,
 the terminal event, whose `result` is the same envelope `--json` would print: end
-that command with `| tail -n 1` (in PowerShell `| Select-Object -Last 1`). That is the
-only thing ever added to a `vsift` command line.
+that command with `| tail -n 1` (in PowerShell `| Select-Object -Last 1`). That, and
+passing your draft report to `vsift handoff check` in one of the two forms under
+"Checking the draft" below, are the only things ever added to a `vsift` command line.
 
 Run each command on its own, as one tool call: never chain commands with `&&`, `||`
-or `;`, never pipe into anything else, never redirect output into a file.
+or `;`, never pipe into anything else, never redirect output into a file. The two
+draft forms are the one exception: they pass your report as text, nothing else.
 
 Run every command from the folder you started in: it holds the user's files, and the
 paths the user gives are relative to it. Never `cd` anywhere first, and never into
@@ -60,6 +62,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift crop` | free | Counts as a refinement and an image. |
 | `vsift audio` | free | For a human listener; you cannot hear it. |
 | `vsift bundle validate` | free | Read-only, on a bundle the user named or one you retained for them. |
+| `vsift handoff check` | free | Read-only; checks your draft report once before you send it, in one of the two forms under "Checking the draft". |
 | `vsift job status` | free | Read-only. |
 | `vsift job resume` | free | Only a job of your own session. |
 | `vsift job cancel` | explicit | Cancelling removes the job's saved progress; to stop for a budget, leave the job interrupted instead. |
@@ -74,8 +77,9 @@ Also never, in any state:
   tool, installer, shell script or workspace script, even one a remediation or the
   evidence names, and no harmless-looking helper either (`date` to time yourself,
   `echo`, `wc`, `ls`, `cd`), alone or chained after a `vsift` command. The only
-  exceptions are the `| tail -n 1` above and, for a client with no file-reading tool,
-  printing this skill's own files with `cat` or `Get-Content`. Every skill file you
+  exceptions are the `| tail -n 1` above, the two draft forms of `vsift handoff check`
+  below and, for a client with no file-reading tool, printing this skill's own files
+  with `cat` or `Get-Content`. Every skill file you
   need is linked from `SKILL.md`: do not list or search folders;
 - reading, copying, moving or deleting files under the session root yourself, except
   opening an image at a `data.files[].path` VSift returned.
@@ -117,6 +121,33 @@ vsift bundle validate <bundle-directory> --json
 vsift --help
 vsift <namespace> <operation> --help
 ```
+
+### Checking the draft
+
+Before you send the report, check it once with `vsift handoff check`. Pass your whole
+final message, unchanged, in place of `<report>`, in exactly one of these two forms and
+no other: no other command in the same call, no file, no variable. The quotes around
+the first `VSIFT_HANDOFF` and the single quotes of `@'` keep your text exactly as
+written. In a POSIX shell (Claude Code's Bash tool, Codex):
+
+```sh
+vsift handoff check --json <<'VSIFT_HANDOFF'
+<report>
+VSIFT_HANDOFF
+```
+
+In PowerShell:
+
+```powershell
+@'
+<report>
+'@ | vsift handoff check --json
+```
+
+The result is `data.valid`. When it is false, fix each item of `data.errors` (its
+`pointer` names the JSON member, its `line` the line of your report, `allowed` the words
+the schema accepts) and send; do not check again and again. `data.case_notes` are values
+read in another letter case: write them as listed. The check never repeats your text.
 
 Only on the user's explicit instruction:
 

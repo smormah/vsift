@@ -89,6 +89,28 @@ impl FilesystemSessionStore {
         }
     }
 
+    /// Hands every committed transcript revision of an open session to
+    /// `visit`, newest first, each verified and decoded as by
+    /// [`Self::read_transcript`]. `handoff check --session` reads every
+    /// revision's segment identities with it, because a handoff may cite an
+    /// older revision (P13 PR 5). Nothing is renewed or written.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::read_transcript`].
+    pub fn visit_transcript_revisions(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+        mut visit: impl FnMut(&TranscriptRevision),
+    ) -> Result<(), SessionStorageError> {
+        self.read_transcript_where(session_id, now_unix_seconds, |revision| {
+            visit(revision);
+            false
+        })
+        .map(|_| ())
+    }
+
     pub(super) fn read_transcript_where(
         &self,
         session_id: &SessionId,

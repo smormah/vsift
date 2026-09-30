@@ -29,6 +29,7 @@ path = "src/bin/stub_client.rs"
 [dependencies]
 clap.workspace = true
 getrandom.workspace = true
+# Cross-checks every handoff verdict of the shared check (P13 PR 5).
 jsonschema.workspace = true
 process-wrap.workspace = true
 serde.workspace = true
@@ -39,6 +40,9 @@ serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 tokio.workspace = true
 vsift.workspace = true
+# The shared handoff check (P13 PR 5): the grader and `vsift handoff check`
+# run the same code.
+vsift-contract.workspace = true
 
 [lints]
 workspace = true

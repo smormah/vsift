@@ -2127,8 +2127,7 @@ fn closed_values_are_read_in_any_letter_case_but_never_as_other_words() -> TestR
         check
             .warnings
             .iter()
-            .any(|warning| warning
-                == "claims[1].section: \"Actual\" read as \"actual\" (letter case)"),
+            .any(|warning| warning.starts_with("/claims/1/section: letter_case (allowed: actual)")),
         "{:?}",
         check.warnings
     );
@@ -2182,7 +2181,13 @@ fn an_unused_citation_is_a_warning() -> TestResult {
     handoff["claims"][1]["citations"] = json!(["e1"]);
     let check = handoff_check(&bench, &handoff)?;
     assert!(check.passed, "{:?}", check.details);
-    assert_eq!(check.warnings, vec!["citation e2 is never used".to_owned()]);
+    // The shared check names the citation by its pointer, never its text.
+    assert_eq!(check.warnings.len(), 1, "{:?}", check.warnings);
+    assert!(
+        check.warnings[0].starts_with("/citations/1: citation_unused"),
+        "{:?}",
+        check.warnings
+    );
 
     handoff["citations"][1]["evidence_id"] = json!("evd_ffffffffffffffffffffffffffffffff");
     let log = claude(&good_uses(&bench), &[], &report(&handoff));
@@ -2376,7 +2381,7 @@ fn a_resume_card_is_required_only_when_the_work_can_continue() -> TestResult {
             check
                 .details
                 .iter()
-                .any(|detail| detail.contains("no resume card")),
+                .any(|detail| detail.contains("resume_card_missing")),
             "{name}: {:?}",
             check.details
         );
@@ -2774,6 +2779,56 @@ fn a_looped_clip_binds_a_late_copy_through_the_measured_period() -> TestResult {
         failed_checks(&wrong).contains_key("citation_times_in_truth_windows"),
         "{:?}",
         wrong.mechanical
+    );
+    Ok(())
+}
+
+/// P13 PR 5: the skill's draft form of `vsift handoff check` is a free call
+/// and keeps a well-behaved trace passing, in Claude Code's Bash tool and in
+/// Codex's double-quoted `bash -lc` wrapper; a variant piping another
+/// command's text in fails the command policy.
+#[test]
+fn the_handoff_check_draft_form_is_a_free_call() -> TestResult {
+    let bench = Bench::new("A-09-f05-supplied")?;
+    let draft = report(&handoff());
+    let form = format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF");
+    let mut uses = good_uses(&bench);
+    uses.push(Use::Bash(form.clone()));
+    let log = claude(&uses, &[], &draft);
+    let graded = bench.grade(&parse_claude(&log), &log);
+    assert!(graded.mechanical.passed, "{:?}", failed_checks(&graded));
+    assert!(graded.calls.iter().any(|call| {
+        call.actions.iter().any(|action| matches!(
+        action,
+        vsift_agent_trials::calls::Action::Vsift { operation, .. } if operation == "handoff.check"
+    ))
+    }));
+
+    let escaped = form
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
+        .replace('`', "\\`");
+    let items: Vec<(Value, &str)> = vec![(bash(&format!("\"{escaped}\"")), "completed")];
+    let log = codex(&items, &draft);
+    let graded = bench.grade(&parse_codex(&log), &log);
+    assert!(
+        !failed_checks(&graded).contains_key("command_policy"),
+        "{:?}",
+        failed_checks(&graded)
+    );
+
+    let mut uses = good_uses(&bench);
+    uses.push(Use::Bash(format!(
+        "echo '{}' | vsift handoff check --json",
+        draft.replace('\'', "")
+    )));
+    let log = claude(&uses, &[], &draft);
+    let graded = bench.grade(&parse_claude(&log), &log);
+    assert!(
+        failed_checks(&graded).contains_key("command_policy"),
+        "{:?}",
+        failed_checks(&graded)
     );
     Ok(())
 }

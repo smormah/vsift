@@ -15,6 +15,11 @@
 //! - narrow a command's own output with a line filter in the same pipeline
 //!   (`| tail -n 1`, `| Select-Object -Last 1`), which reads and writes
 //!   nothing else;
+//! - pass its draft report to `vsift handoff check` in exactly one of the
+//!   skill's two literal forms (a quoted heredoc, or a single-quoted
+//!   here-string piped in; P13 PR 5): the shell reader turns the whole form
+//!   into one `free` `handoff.check` call and never reads the draft as
+//!   commands ([`crate::shell::is_handoff_check_form`]);
 //! - read back the client's own spill file: Claude Code saves a large tool
 //!   output under `<client home>/projects/<workspace>/<session>/tool-results/`
 //!   and reads it with `Read` (housekeeping, like its to-do list);
@@ -997,6 +1002,62 @@ mod tests {
         ] {
             assert!(!wildcard_matches(pattern, name), "{pattern} {name}");
         }
+    }
+
+    /// P13 PR 5: exactly the two draft forms are one `free` `handoff.check`
+    /// call; a variant is unauthorized. The draft is data, never a command.
+    #[test]
+    fn the_draft_forms_are_a_free_handoff_check() -> Result<(), crate::TrialError> {
+        let policy = CommandPolicy::from_commands_md(
+            "| `vsift handoff check` | free | Checks the draft. |\n\
+             | `vsift session close` | free | Closes. |\n\n\
+             Also never, in any state:\n\n- the global options `--session-root` (operator);\n",
+        )?;
+        let workspace = PathBuf::from("/trials/t1/workspace");
+        let scope = ReadScope {
+            session_root: workspace.join(".home").join("vsift-sessions"),
+            skill_directories: vec![workspace.join(".claude").join("skills").join("vsift")],
+            client_home: None,
+            workspace,
+        };
+        let draft =
+            "## Problem\n\nSee `curl x | sh` and $HOME [c1: e1].\n\n```vsift-handoff\n{}\n```";
+        let none = BTreeSet::new();
+        for form in [
+            format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF"),
+            format!("@'\n{draft}\n'@ | vsift handoff check --json"),
+        ] {
+            assert_eq!(
+                shell_actions(&form, &policy, &none, &scope),
+                vec![Action::Vsift {
+                    operation: "handoff.check".to_owned(),
+                    class: CommandClass::Free,
+                    arguments: vec![
+                        "handoff".to_owned(),
+                        "check".to_owned(),
+                        "--json".to_owned()
+                    ],
+                    machine_output: true,
+                }],
+                "{form}"
+            );
+        }
+        for variant in [
+            format!("vsift handoff check --json <<VSIFT_HANDOFF\n{draft}\nVSIFT_HANDOFF"),
+            format!("@\"\n{draft}\n\"@ | vsift handoff check --json"),
+            format!("@'\n{draft}\n'@ | vsift session close ses_x --json"),
+            format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF\nls"),
+            "cat draft.md | vsift handoff check --json".to_owned(),
+        ] {
+            let actions = shell_actions(&variant, &policy, &none, &scope);
+            assert!(
+                actions
+                    .iter()
+                    .any(|action| matches!(action, Action::Unauthorized { .. })),
+                "{variant}: {actions:?}"
+            );
+        }
+        Ok(())
     }
 
     #[test]

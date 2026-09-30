@@ -461,3 +461,61 @@ the pull request that makes each one says so:
   class to `free`; until the maintainer says so they stay `never`;
 - a typed dependency selector for `setup remove` and `setup rollback`, which parse it
   as a string today.
+
+## Implementation note, 2026-09-30 (P13 PR 5, `handoff check`, #213)
+
+Delivered as section 6 says, with the details left to this pull request decided by
+the supervisor on 2026-09-30:
+
+- **The whole report is checked**, not only the block: the one `vsift-handoff` block
+  (bounded, strict JSON), then the whole text for paths, links and raw hidden or
+  control characters.
+- **Letter case:** a closed value in another letter case is read as the schema's
+  spelling and noted in `case_notes`, as the grader has done since P12 (ADR 0022
+  decision 6); any other word is refused with the allowed values.
+- **Where the check lives:** `vsift-contract::handoff` (`HandoffChecker`,
+  `HandoffCheckData`): extraction, letter case, the schema, the handoff rules, the
+  report-text rules and the session resolution. The trial grader calls it; the engine
+  reads a session's identities for `--session` read-only (`Engine::
+  handoff_session_records`, which never renews), and the CLI composes them.
+- **The schema stays the skill's.** The contract embeds
+  `skills/vsift/handoff.schema.json` with `include_str!`; a test requires the
+  embedded copy to equal the file. Because it names a file outside the crate, the
+  contract crate cannot be packaged for crates.io as it is; R0 publishes no crate
+  (decision B).
+- **Schema validation without `jsonschema`** (maintainer decision of 2026-09-30,
+  option 2 of three). Making `jsonschema` 0.56 a production dependency was measured
+  first: it added 43 crates to the release binary's graph (164 to 207, including two
+  regular-expression engines, a big-number stack, `ahash`, `parking_lot`, `zerocopy`,
+  `uuid-simd` and a second `getrandom`) and grew the Windows release `vsift.exe` from
+  6,554,112 to 12,078,080 bytes. Instead the contract has a validator of exactly the
+  JSON Schema features the handoff schema uses; compiling the schema refuses any other
+  keyword or form, so the skill cannot start using a feature the check would ignore.
+  Its verdicts are held to `jsonschema` (a development dependency only) over the
+  skill's examples, the REPORT skeleton, over 2,000 systematic mutations and 512
+  generated drafts, with error locations compared pointer by pointer
+  (`crates/vsift-contract/tests/handoff_differential.rs`). ECMA-262's `\s` is written
+  out as the class `jsonschema` uses, so the two agree on every space character.
+- **Dependency review: `regex`** (the schema's 17 patterns). Promoted from a
+  transitive development dependency to a production dependency of `vsift-contract`,
+  with `default-features = false, features = ["std"]` (no Unicode tables: the
+  patterns use explicit ranges, and `\d`, `\w`, `\b` and `.` are refused). Licence
+  MIT OR Apache-2.0; maintained by the Rust project (rust-lang/regex); already in the
+  lockfile and reviewed by `cargo deny` with development dependencies included. It
+  adds `regex`, `regex-automata` and `regex-syntax` to the release graph (164 to 167
+  crates; without the `perf` feature `aho-corasick` and `memchr`'s use are not
+  needed). With the whole check (validator, rules, embedded schema and `regex`), the
+  Windows release `vsift.exe` measured 7,400,960 bytes, against 6,554,112 before
+  (+846,848, 13%), and 12,078,080 with `jsonschema`.
+- **Contract:** the `handoff` namespace (ADR 0008 note of 2026-09-30),
+  `schemas/v1/handoff-check-data.schema.json`, `schemas/v1/examples/handoff-check.json`,
+  39 closed rules, findings bounded to 100 per list with `truncated`, and a
+  `session` object whose `gap` (`session_closed`, `session_expired`,
+  `session_not_found`) replaces a failure.
+- **Skill, guard and grader:** ADR 0022 note of 2026-09-30 ("`handoff check` in the
+  skill"). The skill's forms carry no `--session`, so they stay exactly literal.
+- **Fuzzing:** the `handoff_check` target (the 24th) runs the whole check over a
+  draft and requires it to be deterministic, bounded, its verdict its errors, and
+  every published pointer and allowed value within the grammar that keeps draft text
+  out; its seeds copy `SKILL.md` and the frozen example's draft.
+- R-13 is mapped to P13. The compact tier's re-run (#222) follows this pull request.

@@ -10,6 +10,16 @@
 //! certainty (command substitution, script blocks, encoded commands, deep
 //! nesting) is reported as opaque, and the grader treats an opaque command
 //! as unauthorized. A model that wants to pass never needs such syntax.
+//!
+//! **The one input exception** (P13 PR 5, ADR 0023 decision G): the skill
+//! passes the agent's draft report to `vsift handoff check` in exactly two
+//! literal forms, a quoted heredoc (POSIX) and a single-quoted here-string
+//! piped in (PowerShell). A script that is exactly one of them, at any
+//! wrapper depth, is that one `vsift handoff check --json` command; its body
+//! is the draft, data that is never read as commands. Anything else, however
+//! close (an unquoted heredoc, a double-quoted here-string, another command
+//! piped in, text after the closing line), is read as ordinary shell text
+//! and stays strict.
 
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +82,38 @@ pub fn program_name(path: &str) -> String {
 
 const MAX_NESTING: usize = 4;
 
+/// The first line of the POSIX draft form.
+const HEREDOC_OPENING: &str = "vsift handoff check --json <<'VSIFT_HANDOFF'";
+/// The line that ends the POSIX draft form.
+const HEREDOC_CLOSING: &str = "VSIFT_HANDOFF";
+/// The first line of the PowerShell draft form.
+const HERE_STRING_OPENING: &str = "@'";
+/// The line that ends the PowerShell draft form.
+const HERE_STRING_CLOSING: &str = "'@ | vsift handoff check --json";
+/// The command both draft forms run.
+const HANDOFF_CHECK_ARGV: [&str; 4] = ["vsift", "handoff", "check", "--json"];
+
+/// Whether `text` is exactly one of the two draft forms of `vsift handoff
+/// check`. The heredoc ends at the first line that is exactly its
+/// delimiter, and the here-string at the first line that starts with `'@`,
+/// as the shells end them; only white space may follow.
+#[must_use]
+pub fn is_handoff_check_form(text: &str) -> bool {
+    let lines: Vec<&str> = text.trim().lines().collect();
+    let Some((first, body)) = lines.split_first() else {
+        return false;
+    };
+    let end = match *first {
+        HEREDOC_OPENING => body.iter().position(|line| *line == HEREDOC_CLOSING),
+        HERE_STRING_OPENING => body
+            .iter()
+            .position(|line| line.starts_with("'@"))
+            .filter(|&index| body[index] == HERE_STRING_CLOSING),
+        _ => None,
+    };
+    end.is_some_and(|end| body[end + 1..].iter().all(|line| line.trim().is_empty()))
+}
+
 /// Analyses a command text in `dialect`, unwrapping shell wrappers.
 #[must_use]
 pub fn parse_script(text: &str, dialect: Dialect) -> ParsedScript {
@@ -83,6 +125,14 @@ pub fn parse_script(text: &str, dialect: Dialect) -> ParsedScript {
 fn parse_into(text: &str, dialect: Dialect, depth: usize, result: &mut ParsedScript) {
     if depth > MAX_NESTING {
         result.opaque = Some("shell wrappers nested too deeply".to_owned());
+        return;
+    }
+    if is_handoff_check_form(text) {
+        result.commands.push(SimpleCommand {
+            argv: HANDOFF_CHECK_ARGV.map(str::to_owned).to_vec(),
+            writes_file: false,
+            piped_from_previous: false,
+        });
         return;
     }
     let tokens = match tokenize(text, dialect) {
@@ -436,6 +486,81 @@ mod tests {
                 parse_script(script, Dialect::Posix).opaque.is_some(),
                 "{script}"
             );
+        }
+    }
+
+    const DRAFT: &str =
+        "## Problem\n\nThe dialog `R-17` costs $5 [c1: e1].\n\n```vsift-handoff\n{\"x\": 1}\n```";
+
+    fn heredoc() -> String {
+        format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{DRAFT}\nVSIFT_HANDOFF")
+    }
+
+    fn here_string() -> String {
+        format!("@'\n{DRAFT}\n'@ | vsift handoff check --json")
+    }
+
+    /// P13 PR 5: exactly the two draft forms are one `handoff check`
+    /// command, at any wrapper depth, and their body is never read as
+    /// commands (it holds backticks and `$`).
+    #[test]
+    fn the_two_draft_forms_are_one_handoff_check() {
+        let expected = vec![vec!["vsift", "handoff", "check", "--json"]];
+        // Codex reports a script with single quotes double-quoted, with
+        // `\`, `"`, `$` and backticks escaped.
+        let double_quoted = format!(
+            "/bin/bash -lc \"{}\"",
+            heredoc()
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('$', "\\$")
+                .replace('`', "\\`")
+        );
+        let single_quoted = format!("bash -lc '{}'", heredoc().replace('\'', "'\"'\"'"));
+        for (script, dialect) in [
+            (heredoc(), Dialect::Posix),
+            (heredoc().replace('\n', "\r\n"), Dialect::Posix),
+            (here_string(), Dialect::PowerShell),
+            (single_quoted, Dialect::Posix),
+            (double_quoted, Dialect::Posix),
+        ] {
+            let parsed = parse_script(&script, dialect);
+            assert_eq!(parsed.opaque, None, "{script}");
+            assert!(!parsed.expands_variables, "{script}");
+            assert_eq!(argvs(&parsed), expected, "{script}");
+        }
+    }
+
+    /// Anything wider is ordinary shell text: another command piped in, an
+    /// unquoted or double-quoted delimiter, a double-quoted here-string, an
+    /// added option or text after the closing line.
+    #[test]
+    fn variants_of_the_draft_forms_stay_shell_text() {
+        for variant in [
+            heredoc().replace("<<'VSIFT_HANDOFF'", "<<VSIFT_HANDOFF"),
+            heredoc().replace("<<'VSIFT_HANDOFF'", "<<\"VSIFT_HANDOFF\""),
+            heredoc().replace("--json <<", "--json --session ses_0123456789abcdef <<"),
+            format!("{}\necho done", heredoc()),
+            heredoc().replace(
+                "vsift handoff check --json",
+                "vsift session close ses_x --json",
+            ),
+            here_string().replace("@'", "@\"").replace("'@", "\"@"),
+            format!("{} | Select-Object -Last 1", here_string()),
+            here_string().replace(
+                "vsift handoff check --json",
+                "vsift session close ses_x --json",
+            ),
+            "cat draft.md | vsift handoff check --json".to_owned(),
+            "vsift handoff check --json < draft.md".to_owned(),
+        ] {
+            assert!(!is_handoff_check_form(&variant), "{variant}");
+            let parsed = parse_script(&variant, Dialect::Posix);
+            let one_check = parsed.opaque.is_none()
+                && !parsed.expands_variables
+                && argvs(&parsed) == vec![vec!["vsift", "handoff", "check", "--json"]]
+                && !parsed.commands.iter().any(|command| command.writes_file);
+            assert!(!one_check, "{variant}");
         }
     }
 

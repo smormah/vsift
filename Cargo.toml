@@ -38,6 +38,9 @@ predicates = "3.1"
 process-wrap = { version = "10.0", default-features = false, features = ["job-object", "kill-on-drop", "process-group", "tokio1"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls"] }
 proptest = { version = "1.11", default-features = false, features = ["std"] }
+# The 17 patterns of the skill-owned handoff schema (P13 PR 5, ADR 0023 note of
+# 2026-09-30). Without the Unicode tables: the patterns use explicit ranges only.
+regex = { version = "1.13", default-features = false, features = ["std"] }
 rustix = { version = "1.1", default-features = false, features = ["fs", "process"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

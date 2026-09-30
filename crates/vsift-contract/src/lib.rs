@@ -68,6 +68,13 @@
 //!   writes every [`is_hidden_character`] as `<U+XXXX>` for the `display_text`
 //!   of transcript segments; and [`terminal_safe_text`], both rules at once
 //!   for a host's terminal diagnostics.
+//! - **Handoff check (P13 PR 5):** [`HandoffChecker`] checks an agent's
+//!   draft report against the skill-owned `handoff.schema.json` (embedded
+//!   as [`HANDOFF_SCHEMA_JSON`] and validated by a subset validator that
+//!   refuses any schema feature it does not implement), the handoff rules
+//!   and the report-text rules; [`HandoffCheckData`] is the `handoff.check`
+//!   data, whose findings never repeat the draft. The trial grader uses the
+//!   same checker, so the command and the grader cannot disagree.
 //! - **Worker requests (P11):** the strict bounded document decoder
 //!   [`decode_strict_json`]; the versioned [`WorkRequest`] decoded by
 //!   [`decode_work_request`] (and [`decode_batch_line`] for a `job batch`
@@ -93,6 +100,7 @@ mod delivered_path;
 mod envelope;
 mod events;
 mod evidence;
+mod handoff;
 mod input;
 mod job;
 mod local_asr;
@@ -155,6 +163,16 @@ pub use envelope::{
     OperationResponse, TerminalEventResponse,
 };
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
+pub use handoff::{
+    COMPACT_BUDGET, HANDOFF_DRAFT_NOT_UTF8_REMEDIATION, HANDOFF_DRAFT_TOO_LARGE_REMEDIATION,
+    HANDOFF_FILE_REMEDIATION, HANDOFF_SCHEMA_JSON, HANDOFF_VERSION, HandoffBudgetLimits,
+    HandoffCheck, HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffFinding,
+    HandoffRule, HandoffRuleScope, HandoffSchemaError, HandoffSessionCheck, HandoffSessionGap,
+    HandoffSessionRecords, HandoffVocabulary, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES,
+    MAX_RESUME_CARD_BYTES, STANDARD_BUDGET, budget_profile, extract_handoff_block,
+    handoff_is_cut_short, handoff_pattern_has_message, handoff_report_text_findings,
+    handoff_vocabulary,
+};
 pub use job::{
     JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
     JOB_SESSION_NOT_OPEN_REMEDIATION, JobData, JobPresentation, JobResumeData, SessionJobData,

@@ -1564,6 +1564,13 @@ Counts: 4 high, 23 medium, 52 low (79 entries).
     pixels ([#224](https://github.com/smormah/vsift/issues/224)).
 - **Why:** the maintainer decided on 2026-09-30 to close P12 on the final round's
   results and record what is short of target as known limits and follow-ups.
+- **Mitigation added (P13 PR 5, 2026-09-30):** `vsift handoff check` (#213). The
+  skill now runs it once on the draft before sending and fixes what it reports: the
+  closed vocabulary, the claim and citation shapes, missing members, a missing resume
+  card, links and paths, each named by pointer or line with the allowed values. The
+  check is the grader's own, so a draft that passes it passes `handoff_valid` and
+  `report_text`. The compact-tier re-run that measures the effect (#222) is still to
+  come; the limit stays open until then.
 - **Fixes so far** (2026-09-30, ADR 0022 note "the P12 debt fixes"; no model called):
   1. **#218:** the REPORT skeleton shows one filled-in claim, a segment and a frame
      citation, and one untrusted instruction, all validated by the guard.

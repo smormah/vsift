@@ -27,7 +27,8 @@ Today it can:
 - on Ubuntu 24.04 with local ext4, keep every acknowledged result of a durable
   workspace through an OS crash or power loss;
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
-- keep every folder it creates private to the user.
+- keep every folder it creates private to the user;
+- check an agent's draft report before it is sent (`handoff check`, P13 PR 5, in review).
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an
 investigation with the CLI and write a cited report. P12's named-client trials
@@ -40,14 +41,13 @@ qualified it:
 - **Safety:** no agent leaked a secret, installed anything, acted on injected text or
   copied a hidden character into a report.
 
-Codex's trials ran in a Linux container, because its Windows sandbox cannot run VSift
-(L-076, #204).
+Codex's trials ran in a Linux container: its Windows sandbox cannot run VSift (L-076).
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a and 3 and the P12 debt
-fixes are merged; PR 2b (readable terminal text, part 2) is in review, which
-finishes human output. The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a, 2b and 3 and the P12 debt
+fixes are merged (human output is done); PR 5 (`handoff check`) is in review and PR 4 is
+in progress. The packet is not complete.
 
 ## P13 in one view
 
@@ -62,24 +62,22 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   install/list/rollback/remove/repair`); human output by default; `handoff check`.
 - **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
   `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
-- **Done:** PR 0 (#226, `dbc60f7`): ADR 0023, ledger, traceability, issue #16. PR 1
-  (#228, `88ef9bf`, L-071 closed): a rejected command line gets one typed remediation
-  (nine closed reasons, grammar names only, `vsift <command> --help`). PR 2a (#229,
-  `bffc6bb`): the `TerminalText` builder and readable text for setup, `ingest`,
-  `session`, `transcript`, `search`, `bundle validate`, every failure and rejected
-  command lines; SEC-T02 re-run over them. PR 3 (#230, `e22ee59`, installer resume
-  steps 1-2, internal only): `smoke_before_activation` smokes staged, unactivated
-  candidates (layout and format recheck, banners, the F01 media and speech verifiers,
-  final recheck; explicit paths, no shell). A failure (5 steps, 13 reasons) discards
-  every candidate; an unprovable stage is kept and reported. Hosted run 36701212028
-  passed the real pinned tools in 4.7 s.
-- **In review:** PR 2b (`p13-pr2b-human-output`, closes L-073): readable text for
-  `candidates`, the frame commands, `crop`, `audio`, the `job` commands and the worker
-  hosts (final result only; events stay JSON Lines, L-017 now that residual); each
-  delivered path whole on its own line, with a note for `\\?\` (L-016); SEC-T02 over
-  every human output. **Next:** PRs 4 and 5.
-- **Nothing is published** until P13 completes and the maintainer approves one 0.x
-  pre-release under npm's `next` tag; the npm setup is the maintainer's.
+- **Done:** PR 0 (#226): ADR 0023, ledger, issue #16. PR 1 (#228, L-071 closed): one
+  typed remediation per rejected command line. PR 2a (#229) and PR 2b (#231, `02df4eb`,
+  L-073 closed): readable text for every command through `TerminalText`, each delivered
+  path whole on its own line with a note for `\\?\` (L-016), SEC-T02 over every human
+  output; worker events stay JSON Lines (L-017 residual). PR 3 (#230, `e22ee59`): the
+  managed-install smoke executor and failure cleanup (internal until PR 4).
+- **In review: PR 5** (`handoff check`, #213). `vsift-contract::handoff` is the one
+  check the command and the trial grader share (block, letter case, the embedded
+  skill-owned schema, handoff rules, report text); `--session` resolves citations
+  read-only, a closed, expired or unknown session is a gap. Exit 0 with `data.valid`;
+  findings never quote the draft. The schema validator covers only the schema's
+  features (maintainer's option 2), held to `jsonschema` by a differential test; new
+  production dependency `regex` (3 crates; `jsonschema` would add 43 and 5.5 MB). The
+  skill checks its draft once in one of two literal forms, its one input exception.
+- **In progress:** PR 4 (install transaction). **Nothing is published** until P13
+  completes and the maintainer approves one 0.x pre-release under npm's `next` tag.
 - **Found while planning:** the clean-install agent run is P14's (H10); Linux needs OpenSSL 3.
 
 ## P12 in one view
@@ -92,8 +90,8 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 ## Found in P12 (still open)
 
 - **L-085 (debt):** the compact tier is at 82% as counted; the fixes for #218-#221 and
-  #224 are done and the grader's looped-clip period is now measured (Sol re-grades to
-  24 of 28). The re-run (#222) follows P13 PR 5.
+  #224 and the `handoff check` mitigation (PR 5) are in the skill. The re-run (#222)
+  follows PR 5's merge.
 - **Also open:** L-075 (Codex image budgets), L-076 and #204 (Codex's Windows sandbox),
   L-078 to L-080 (trial container relaxations), L-081 (slim handoff times), L-082 and
   L-084 (Haiku 4.5, GPT-6-Luna below the line), L-083 (`text` keeps hidden characters;
@@ -108,10 +106,10 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 - `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run|batch`,
   `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
 - `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
+- `handoff check` (P13 PR 5, in review): a draft report from stdin or `--file`.
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
   that does not parse names its mistake and the `--help` to read (P13 PR 1).
-- Readable terminal text without `--json` (unstable, not for parsing): PR 2a's
-  commands merged, the rest in PR 2b (in review).
+- Readable terminal text without `--json` for every command (unstable, not for parsing).
 - Still `COMMAND_NOT_IMPLEMENTED`: setup install/repair/list/rollback/remove.
 
 ## Packet status
@@ -126,7 +124,7 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1, 2a and 3 merged (#226, #228, #229, #230); PR 2b (human output, part 2) in review; distribution, installation and `handoff check` (#213) to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1, 2a, 2b and 3 merged (#226, #228-#231); PR 5 (`handoff check`, #213) in review; PR 4 in progress; distribution and installation to come |
 | P14 | Not started |
 
 ## Architecture snapshot
@@ -138,7 +136,8 @@ owns the wire types. The worker lives in the engine (`worker.rs`, `batch.rs`); t
 only presents. The agent skill (`skills/vsift/`) sits outside the crates and only
 calls the `vsift` binary; its guard is a test module of `vsift-cli` because the parser
 is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `vsift`
-(and runs the `vsift` binary for everything else).
+(and runs the `vsift` binary for everything else) and on `vsift-contract` for the shared
+handoff check.
 
 ## Quality evidence
 

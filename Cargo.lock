@@ -2105,6 +2105,7 @@ dependencies = [
  "sha2",
  "tokio",
  "vsift",
+ "vsift-contract",
 ]
 
 [[package]]
@@ -2143,6 +2144,8 @@ name = "vsift-contract"
 version = "0.1.0"
 dependencies = [
  "jsonschema",
+ "proptest",
+ "regex",
  "serde",
  "serde_json",
  "sha2",

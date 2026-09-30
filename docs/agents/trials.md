@@ -50,7 +50,12 @@ The **mechanical** result is decided by the program; model prose cannot change i
   value (every `enum` and `const` of the schema) written in another letter case is read
   as the schema's spelling (`"Actual"` as `"actual"`) and noted in the check's
   `warnings`; another word (`"image"` for a gap kind) still fails. A citation that no
-  claim or instruction uses is a warning, not a failure;
+  claim or instruction uses is a warning, not a failure. Since P13 PR 5 this check,
+  and the text rules of `report_text`, are `vsift handoff check`'s own
+  (`vsift_contract::HandoffChecker`), so the grader and the command cannot disagree; a
+  detail names a finding by its JSON pointer or line, its rule and its fixed prose,
+  never by quoting the draft, and every schema verdict is cross-checked against
+  `jsonschema` (a disagreement fails the check as a grader defect);
 - `citations_resolve`: every cited identity is in the retained bundle with the
   citation's type (a segment by `segment_id`, a frame, crop or clip by `evidence_id`),
   and every optional member the handoff gives (times, revision, requested/actual/delta,
@@ -137,6 +142,14 @@ the skill. A trial may:
   `<client home>/projects/<workspace>/<session>/tool-results/*.txt` and reads with
   `Read` (or searches with `Grep`) is housekeeping, matched by the client-home prefix
   and the `tool-results` segment only (`run` records the client home);
+- pass its draft report to `vsift handoff check` (`free`) in exactly one of the
+  skill's two literal forms, a quoted heredoc (`vsift handoff check --json
+  <<'VSIFT_HANDOFF'` ... `VSIFT_HANDOFF`) or a single-quoted here-string piped in
+  (`@'` ... `'@ | vsift handoff check --json`), also inside a client's `bash -lc` or
+  `powershell -Command` wrapper; the body is the draft and is never read as commands.
+  Anything wider (an unquoted or double-quoted delimiter, a double-quoted here-string,
+  another command or option, text after the closing line) is ordinary shell text and
+  stays strict (P13 PR 5);
 - narrow a command's own output in the same pipeline with a line filter (`head`,
   `tail`, `Select-Object`, `Out-String`). The skill itself teaches only `| tail -n 1`
   (PowerShell `| Select-Object -Last 1`) after `--events jsonl`;

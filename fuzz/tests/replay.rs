@@ -125,6 +125,20 @@ const REQUEST_EXAMPLES: &str = "crates/vsift-infrastructure/tests/data/worker-re
 const BATCH_EXAMPLE: &str = "schemas/v1/examples/job-batch.requests.jsonl";
 
 const SEEDS: &[Seed] = &[
+    // The skill's own instructions: a report with one valid handoff block,
+    // the REPORT skeleton, and every other kind of Markdown the skill uses.
+    seed(
+        Target::HandoffCheck,
+        "SKILL.md",
+        Origin::Copy("skills/vsift"),
+    ),
+    // The draft behind the frozen `handoff-check.json` example: one finding
+    // of each kind.
+    seed(
+        Target::HandoffCheck,
+        "draft-with-findings.md",
+        Origin::Copy("crates/vsift-contract/tests/data/handoff"),
+    ),
     seed(
         Target::JobRequest,
         "job-request.json",
@@ -582,6 +596,8 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::RequestRecord, "request-record.ended.json"),
         (Target::ChunkCheckpoint, "checkpoint.recognised.json"),
         (Target::ChunkCheckpoint, "checkpoint.silent.json"),
+        (Target::HandoffCheck, "SKILL.md"),
+        (Target::HandoffCheck, "draft-with-findings.md"),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
@@ -702,6 +718,10 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         Target::JobRequest => decode_work_request(data).is_ok(),
         Target::JobBatchLine => matches!(decode_batch_line(data), Ok(BatchLine::Request(_))),
         Target::JobBatchFile => batch_file_is_read_whole(data)?,
+        // Each seed has one readable handoff block.
+        Target::HandoffCheck => {
+            vsift_contract::extract_handoff_block(std::str::from_utf8(data)?).is_ok()
+        }
         Target::JobRecord => decode_job_record(
             data,
             &JobId::parse(JOB_FUZZ_JOB)?,

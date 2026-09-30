@@ -71,6 +71,8 @@ pub(crate) enum Command {
     Bundle(BundleArguments),
     /// Execute or inspect recoverable worker jobs.
     Job(JobArguments),
+    /// Check an agent's draft handoff report before it is sent.
+    Handoff(HandoffArguments),
 }
 
 /// Setup namespace arguments.
@@ -690,6 +692,44 @@ impl BundleCommand {
             Self::Validate(_) => CommandName::BundleValidate,
         }
     }
+}
+
+/// Handoff namespace arguments (P13 PR 5).
+#[derive(Args, Debug)]
+pub(crate) struct HandoffArguments {
+    #[command(subcommand)]
+    pub command: HandoffCommand,
+}
+
+/// Handoff operations.
+#[derive(Debug, Subcommand)]
+pub(crate) enum HandoffCommand {
+    /// Check a draft report and its vsift-handoff block against the skill's
+    /// handoff schema and rules; reads the draft from standard input unless
+    /// --file names it.
+    Check(HandoffCheckArguments),
+}
+
+impl HandoffCommand {
+    /// Returns the public operation identifier.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::Check(_) => CommandName::HandoffCheck,
+        }
+    }
+}
+
+/// Where the draft comes from, and the session to resolve it in.
+#[derive(Args, Debug)]
+pub(crate) struct HandoffCheckArguments {
+    /// Absolute path of a file holding the whole draft report (at most
+    /// 64 KiB of UTF-8); without it the draft is read from standard input.
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+    /// Open session whose records every cited segment and evidence id must
+    /// resolve in; read only, never renewed.
+    #[arg(long)]
+    pub session: Option<SessionId>,
 }
 
 /// Local bundle path.

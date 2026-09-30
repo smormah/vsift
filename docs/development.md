@@ -87,7 +87,13 @@ production limits and under small ones of 4 lines of 16 bytes: the count, every 
 handed out, its number and whether it was over the bound must match an independent
 split of the file at its line feeds, and each line is then decoded as `job batch`
 decodes it); its seeds copy the frozen `job-batch.requests.jsonl` and
-`job-batch.events.jsonl` in `schemas/v1/examples/`. The two
+`job-batch.events.jsonl` in `schemas/v1/examples/`. P13 PR 5 added `handoff_check`
+(a draft report through `vsift_contract::HandoffChecker::check_report`, the check of
+`vsift handoff check`: an accepted draft of at most 64 KiB of UTF-8 must check the
+same way twice, stay within its bounds, have a verdict equal to its errors and publish
+only pointers of schema member names and indices and allowed values of the schema's
+alphabet, so no draft text leaks); its seeds copy `skills/vsift/SKILL.md` and
+`crates/vsift-contract/tests/data/handoff/draft-with-findings.md`. The two
 diagnostics targets also require that indented copies of every line, as FFmpeg echoes
 source metadata, never change a result; their seeds are the real FFmpeg 9.0 output in
 `crates/vsift-infrastructure/tests/data/ffmpeg_diagnostics/`. It is a separate package with its
@@ -250,6 +256,14 @@ note of 2026-09-24.
 P02 uses `process-wrap` 10 for safe cross-platform access to Windows Job Objects and
 Unix process groups. Its enabled features, MSRV, transitive footprint and isolation
 limitations are recorded in [ADR 0003](decisions/0003-external-runtime-adapters.md).
+
+P13 PR 5 made `regex` 1.13 (MIT OR Apache-2.0, the Rust project's) a production
+dependency of `vsift-contract` for the handoff schema's patterns, without its Unicode
+tables (`default-features = false, features = ["std"]`); it adds `regex`,
+`regex-automata` and `regex-syntax` to the release graph. `jsonschema` stays a
+development dependency (and the trial grader's): as a production one it added 43
+crates and 5.5 MB to the release binary. The review is in the ADR 0023 note of
+2026-09-30 ("P13 PR 5").
 
 ## Documentation
 
