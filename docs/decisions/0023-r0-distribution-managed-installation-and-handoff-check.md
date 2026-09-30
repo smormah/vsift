@@ -938,6 +938,7 @@ job stay PR 10's. The launcher package is `vsift-cli` (the amendment of decision
   remove; `bunx --bun` there ran the command file without making it Node.js's main
   module, so the launcher is split: `bin/vsift.cjs` always calls `main()` of
   `lib/launcher.cjs` rather than testing `require.main` (L-092).
+
 ## Implementation note, 2026-09-30 (P13 PR 7, kill and power-loss tests, step 7)
 
 Section 3 step 7's kill and power-loss qualification of the managed store, and the P13
@@ -1045,3 +1046,87 @@ command changes is flushed before it returns (see "Directory flushes" below).
   whisper_model` makes a retranscription fail `MISSING_CAPABILITY`; and the same
   accepted plan reinstalls only the model. The npm and archive installs without Rust
   are PRs 9 and 11.
+
+## Implementation note, 2026-10-01 (P13 PR 10, attestation and publish wiring)
+
+Delivered from section 1 and decisions B and C: the `dry_run` input, the attest job,
+the publish job in the protected `release` environment and the lint rules that hold
+them. **Nothing is published**, and no repository, environment, ruleset or npm setting
+was changed: those are the maintainer-only actions above, listed step by step in
+[`release.md`](../operations/release.md) section 6, the maintainer's runbook. The first
+real run is the maintainer's at P13 completion
+([L-096](../planning/known-limits.md#l-096)).
+
+- **When a run publishes.** Every run is the dry run of section 1 except a
+  `workflow_dispatch` with the new boolean input `dry_run` (default `true`) cleared, in
+  `smormah/vsift`, on the tag `v<workspace version>`. No tag push or release event
+  starts the workflow (PR 8's triggers are kept); the maintainer creates the tag under
+  the tag ruleset and dispatches the workflow on it. Two independent checks decide:
+  the `attest` and `publish` jobs' conditions, and `vsift-release publish-plan`, which
+  refuses a cleared `dry_run` anywhere else (the plan job fails rather than quietly
+  dry-running) and refuses a stable version in every mode (its `latest` and release are
+  P14's). `publish` then waits for the environment's approval.
+- **`plan` (every run, `contents: read`).** After all twelve `npm-qualify` jobs:
+  requires the archives to equal `package`'s new `archive-sums` output and the tarballs
+  `npm-package`'s new `tarball-sums` output; `vsift-release publish-plan` reads each
+  archive back, re-assembles the packages and requires each tarball to be its package
+  byte for byte, then writes the plan (the job summary, `publish-plan.json`, the release
+  notes, each target's SBOM and notices as release assets, and the digest lists of the
+  assets and the attestation subjects). This is the dry-run evidence on every pull
+  request that changes an archive or npm input.
+- **`attest` (`id-token: write`, `attestations: write`).** Checks what it downloaded
+  against the earlier jobs' outputs and attests every archive, `SHA256SUMS`, SBOM,
+  notices file and npm tarball with `actions/attest-build-provenance` v4.2.2 (pinned by
+  commit), from the plan's `sha256sum`-format list. *Decided here:* it runs without the
+  environment's approval, on the maintainer's publishing dispatch only, so the approval
+  is for publishing alone; an attestation of a build that is then not published claims
+  nothing false.
+- **`publish` (`id-token: write`, `contents: write`, environment `release`).** Checks
+  every file again, then publishes exactly the tarballs the qualification installed (by
+  SHA-256, never rebuilt or repacked) with `npm publish ./npm-packages/<tarball> --tag
+  next --access public --provenance --ignore-scripts`: the three platform packages, then
+  `vsift-cli`, so the launcher never names a missing version. It uses Node.js 24.21.0
+  (npm 11.19.0): trusted publishing needs npm 11.5.1, and Node.js 22 ships npm 10. A
+  version npm already holds with the same `sha512` integrity is skipped, so a re-run
+  completes a partial publish ([L-097](../planning/known-limits.md#l-097)). It then
+  requires `vsift-cli`'s `next` to be the new version and `latest` not to be (it stays
+  the placeholder), and creates the GitHub release on the existing tag as a draft
+  (`--verify-tag --draft --prerelease --latest=false`) with the archives, `SHA256SUMS`,
+  SBOMs and notices and the plan's notes, then publishes the draft. The job checks out no
+  code and builds nothing: its commands are a few lines of shell, which a
+  `vsift-release` test holds word for word to the arguments the plan builds, so no Rust
+  is compiled where an OIDC token is available.
+- **The first publish (Maintainer-only actions).** npm configures a trusted publisher
+  only on an existing package, and the three `@vsift/…` packages do not exist yet. The
+  workflow supports both ways this ADR allows: the maintainer publishes each name first
+  with two-factor authentication (release.md path A, recommended: a `0.0.0` placeholder
+  like `vsift-cli`'s, which needs the maintainer's approval because ADR 0009's placeholder
+  exception covers only the launcher), or a short-lived granular token limited to the
+  `@vsift` scope is stored only in the `release` environment as `NPM_BOOTSTRAP_TOKEN`
+  (path B), which npm falls back to when trusted publishing is not configured; the token
+  reaches npm only through the environment and is revoked straight after.
+- **Governance lint (rule 7, `tools/vsift-governance/src/workflows/publish.rs`).** For
+  `release.yml`: only the three triggers, no tag push, the `dry_run` input as above; the
+  `plan`, `attest` and `publish` jobs exist; `attest` and `publish` need every publish
+  condition and nothing that bypasses one (`||`, `!`, `always()`, `failure()`,
+  `cancelled()`); write scopes only there (`id-token` and `attestations`, `id-token` and
+  `contents`); `publish` alone in the `release` environment and never cancelled part-way;
+  `npm publish` only in `publish`, always with `--provenance` and `--tag next`, never
+  `latest`; `gh release` only there, a pre-release on an existing tag not marked latest;
+  no `npm dist-tag`, `npm unpublish`, `npm deprecate`, `gh release delete`, `git tag` or
+  `git push` anywhere; `tarball-sums` exported and checked with `sha256sum --check
+  --strict` by `npm-qualify`, `plan`, `attest` and `publish`; the privileged jobs use
+  only their reviewed actions, download only this run's three artifacts and build, pack
+  or install nothing; no secret but `NPM_BOOTSTRAP_TOKEN`, and that only in `publish`.
+  Tests check the real workflow and a mutation of it for every rule.
+- **Found while wiring, recorded for any workflow:** GitHub compares expression values
+  loosely, turning `null` and `false` both into 0, so `inputs.dry_run == false` is true
+  on a push or pull request, which has no inputs. The conditions compare the string
+  `github.event.inputs.dry_run == 'false'` and check the event separately, and the lint
+  requires that form. Also, npm trusted publishers created after 2026-09-03 allow only
+  `npm stage publish` unless "npm publish" is ticked (release.md step 6).
+- **For the maintainer's review:** path A or B; `attest` without an approval; npm's
+  staged publishing as a second gate (not wired); GitHub release immutability; the
+  release notes' wording (`tools/vsift-release/src/publish.rs`); the Release workflow as
+  a required check; `SHA256SUMS` still lists only the archives (the SBOM and notices
+  assets and the tarballs are covered by attestations).

@@ -213,8 +213,11 @@ dependencies or disable scripts and provide an explicit recovery path.
 
 Use short-lived release credentials and trusted publishing where supported. npm's
 OIDC publishing can attach provenance; configure its trust relationship for the exact
-repository/workflow/environment. This is a proposed release control, not currently
-configured npm publishing. See [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/).
+repository/workflow/environment. Since P13 PR 10 the Release workflow's `publish` job
+uses it (repository `smormah/vsift`, workflow `release.yml`, environment `release`);
+the trust relationships themselves are the maintainer's to configure before the first
+publish ([`release.md`](../operations/release.md) section 6), so no npm publishing is
+configured yet. See [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/).
 
 Produce an SBOM covering the Rust graph, launcher, shipped runtimes and model inventory;
 retain notices and verify distribution rights for actual binaries/models. Do not
@@ -325,6 +328,24 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   registry and strips registry and token settings from every package manager's
   environment. Every action it adds (`actions/setup-node`, `oven-sh/setup-bun`) is pinned
   by commit SHA, and the tools it installs are pinned to exact versions.
+  *Evidence 2026-10-01 (PR 10):* only two jobs can write or request an OIDC token:
+  `attest` (`id-token`, `attestations`) and `publish` (`id-token`, `contents`). Both run
+  only for a manual dispatch with `dry_run` cleared, in `smormah/vsift`, on a `v*` tag
+  that the plan job accepts as `v<version>`, so pull requests, pushes and forks never
+  reach them; `dry_run` defaults to `true`, and a cleared one elsewhere fails the run.
+  `publish` runs in the `release` environment (the maintainer approves each deployment,
+  limits it to `v*` tags and protects those tags with a ruleset), uses npm trusted
+  publishing, so no long-lived npm token exists, and names only one secret,
+  `NPM_BOOTSTRAP_TOKEN`, an optional short-lived environment secret for the first
+  publish of a package without a trusted publisher. Neither privileged job checks out
+  code or builds, packs or installs anything: they run pinned actions (download,
+  `actions/attest-build-provenance`, `actions/setup-node`) and a few lines of shell over
+  this run's artifacts, checked by SHA-256 against job outputs that later jobs cannot
+  change. The governance lint's rule 7 (`workflows/publish.rs`) fails a workflow that
+  loosens any of this, with a test per rule; it also requires the dispatch input to be
+  compared as a string, because GitHub's loose comparison makes `inputs.dry_run ==
+  false` true on events with no inputs. The environment, ruleset and trusted publishers
+  are maintainer steps not yet taken ([L-096](known-limits.md#l-096)).
 - **SEC-23 (checksums from the same compromised server):** the managed trust anchor
   stays in reviewed source, never in a downloaded checksum; release archives carry
   Sigstore build provenance tied to the protected commit, npm packages carry npm
@@ -337,7 +358,15 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   launcher's tests and in every qualification job, and the check's measured cost is held
   under 50 ms (decision H5). It proves the package is the one released with this
   launcher, undamaged; it is not a defence against someone who can write to the install
-  folder ([L-093](known-limits.md#l-093)). Provenance itself is PR 10.
+  folder ([L-093](known-limits.md#l-093)). *Evidence 2026-10-01 (PR 10):* when the
+  maintainer publishes, the `attest` job creates a Sigstore build-provenance attestation
+  for every archive, `SHA256SUMS`, SBOM, notices file and npm tarball, tied to the
+  workflow, the tag and its commit; the npm packages carry npm provenance from trusted
+  publishing; and the bytes published are those the `npm-qualify` jobs installed, by
+  SHA-256 (`npm-package`'s `tarball-sums` output, checked by every later job). Anyone can
+  verify with `gh attestation verify` and `npm audit signatures` (release.md section
+  6.4). A `SHA256SUMS` from the release page stays a convenience, not proof of origin;
+  its attestation is. No attestation exists until the first publish (L-096).
 - **No install-time code (the npm packages, PR 9):** no VSift package declares a
   lifecycle script, a `gypfile` or a `binding.gyp`, so installing runs nothing and
   downloads nothing beyond the packages; the governance check refuses such a manifest

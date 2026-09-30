@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Attestation and publish wiring** (P13 PR 10; ADR 0023 section 1, decisions B and
+  C). The Release workflow gains a `dry_run` dispatch input (default `true`) and three
+  jobs. `plan` runs on every run with read-only permissions: it requires the archives and
+  tarballs to match the `package` and `npm-package` jobs' new digest outputs (which every
+  `npm-qualify` job now also checks), and the new `vsift-release publish-plan` re-checks
+  them byte for byte, decides whether the run may publish and shows the plan in the job
+  summary: the files to attest, the four `npm publish` commands in order and the GitHub
+  release. Only a manual dispatch of the tag `v<version>` of `smormah/vsift` with
+  `dry_run` cleared runs `attest` (Sigstore build provenance for every archive,
+  `SHA256SUMS`, SBOM, notices file and npm tarball) and, after the maintainer's approval
+  of the protected `release` environment, `publish`: exactly the qualified tarballs to
+  npm under `next` with npm provenance through trusted publishing, the platform packages
+  before `vsift-cli`, then a GitHub pre-release with the archives, `SHA256SUMS`, SBOMs
+  and notices; `latest` stays the `vsift-cli@0.0.0` placeholder. The governance lint
+  gains the publishing rules (triggers, conditions, write scopes, the environment,
+  provenance and `next`, qualified tarballs by digest, secrets). Nothing is published:
+  the environment, tag ruleset, trusted publishers and the first publish are the
+  maintainer's steps in `docs/operations/release.md` section 6. Known limits L-096 and
+  L-097; L-036 updated.
 - **npm packages and their qualification** (P13 PR 9; ADR 0023 section 2, decisions A,
   H5, H6 and H7). The launcher package `vsift-cli` (npm refused the unscoped `vsift` as too similar to existing names; ADR 0009 note), which installs the `vsift` command (`npm/vsift-cli/`: a plain CommonJS
   `bin/vsift.cjs` and `lib/launcher.cjs`, the agent skill and `platform-digests.json`) and the platform packages

@@ -1,14 +1,15 @@
 # Installing VSift
 
-Status: user guide, 2026-09-30 (P13 PR 9,
+Status: user guide, 2026-10-01 (P13 PRs 9 and 10,
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 **Nothing is published yet.** The npm packages described here are built and qualified
 by the Release workflow and will first be published as a 0.x pre-release under the npm
-dist-tag `next`, with the native archives on GitHub Releases, when P13 completes and the
+dist-tag `next`, with npm provenance, and with the native archives on GitHub Releases,
+each carrying a Sigstore build-provenance attestation, when P13 completes and the
 maintainer approves it. Until then the npm package `vsift-cli` holds only a placeholder
 (`vsift-cli@0.0.0` under `latest`, no code) and VSift is built from source
-([`development.md`](../development.md)). P13 PR 11 completes this guide (verifying an
-archive against its attestation, and what Windows SmartScreen and macOS Gatekeeper do
+([`development.md`](../development.md)). P13 PR 11 completes this guide (the full
+archive verification walk-through, and what Windows SmartScreen and macOS Gatekeeper do
 with an unsigned download).
 
 ## 1. What you need
@@ -139,6 +140,16 @@ manage the tools, and sessions are disposable by default.
 The native archives on GitHub Releases (`vsift-<version>-<target>.tar.gz`, with
 `SHA256SUMS`) hold the same executable, the licences, `THIRD-PARTY-NOTICES`, a CycloneDX
 SBOM and the skill ([`release.md`](release.md) section 2). Extract one and run
-`vsift --version`. Verification against the release's build-provenance attestation, and
-the prompts an unsigned download triggers on Windows and macOS, are documented here from
-P13 PR 10 and 11.
+`vsift --version`. Every file of a release (the archives, `SHA256SUMS`, each target's
+SBOM and notices) and every npm tarball has a Sigstore build-provenance attestation from
+the Release workflow, which the GitHub CLI checks:
+
+```console
+gh attestation verify vsift-<version>-<target>.tar.gz --repo smormah/vsift \
+  --signer-workflow smormah/vsift/.github/workflows/release.yml \
+  --source-ref refs/tags/v<version> --deny-self-hosted-runners
+```
+
+After an npm install, `npm audit signatures` in the project checks the packages' registry
+signatures and npm provenance. The full walk-through, and the prompts an unsigned
+download triggers on Windows and macOS, are P13 PR 11's.

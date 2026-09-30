@@ -464,11 +464,11 @@ fn platform_readme(version: &str, target: ReleaseTarget) -> String {
 /// every entry under `package/`, exactly the package's files with the same
 /// bytes, the executable bit exactly where the package has it, and a
 /// manifest without lifecycle scripts. Returns the package's name.
-pub(crate) fn verify_tarball<'a>(
-    packages: &'a [NpmPackage],
+pub(crate) fn verify_tarball(
+    packages: &[NpmPackage],
     tarball: &[u8],
     position: usize,
-) -> Result<&'a str, NpmError> {
+) -> Result<&'static str, NpmError> {
     let refuse = |package: &str, reason: String| NpmError::Tarball {
         package: package.to_owned(),
         reason,
@@ -592,7 +592,7 @@ fn read_tarball(tarball: &[u8]) -> Result<BTreeMap<String, PackageFile>, String>
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::{collections::BTreeMap, error::Error};
 
     use flate2::{Compression, GzBuilder};
@@ -673,7 +673,7 @@ mod tests {
     }
 
     /// Packs `package` the way `npm pack` does: every file under `package/`.
-    fn pack(package: &NpmPackage) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub(crate) fn pack(package: &NpmPackage) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut builder = Builder::new(GzBuilder::new().write(Vec::new(), Compression::fast()));
         for (path, file) in &package.files {
             let mut header = Header::new_ustar();

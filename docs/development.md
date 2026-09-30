@@ -317,7 +317,8 @@ note of 2026-09-30 ("P13 PR 8").
 ## Release archives
 
 `.github/workflows/release.yml` builds the native archives and `tools/vsift-release`
-packages and checks them; nothing is published until P13 PR 10. What they hold, how
+packages and checks them; nothing is published until the maintainer releases (P13 PR 10
+wired the attest and publish jobs; `operations/release.md` section 6). What they hold, how
 the build is kept reproducible and how to check a run's archives is in
 [`operations/release.md`](operations/release.md). A release build selects no feature:
 the governance check (`cargo run --locked -p vsift-governance -- check`) fails a

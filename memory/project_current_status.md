@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-09-30. Current-state document: rewrite it, don't append to it. Next
+As of 2026-10-01. Current-state document: rewrite it, don't append to it. Next
 actions and open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -32,7 +32,8 @@ Today it can:
 - check an agent's draft report before it is sent (`handoff check`, P13 PR 5);
 - build, in CI, its own release archives for the three R0 targets (P13 PR 8) and the npm
   packages made from them, and install and run those with npm, pnpm, Yarn and Bun on
-  Windows, macOS and Ubuntu from a local registry (P13 PR 9). Nothing is published yet.
+  Windows, macOS and Ubuntu from a local registry (P13 PR 9); plan, attest and publish
+  them when the maintainer releases (P13 PR 10). Nothing is published yet.
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an
 investigation with the CLI and write a cited report. P12's named-client trials
@@ -47,10 +48,11 @@ qualified it:
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0-6, 8 and 9 and the P12 debt fixes
-are merged (human output, `handoff check`, `setup install` and its lifecycle,
-`release.yml`, the workflow lint and the npm packages); PR 7 (kill and power-loss tests,
-the E2E stage) is in review. The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0-9 and the P12 debt fixes are merged
+(human output, `handoff check`, `setup install` and its lifecycle with kill and
+power-loss tests, `release.yml`, the workflow lint and the npm packages); PR 10
+(attestation and publish wiring) is done in this change; PRs 11 and 12, PR 7's two
+maintainer runs and the maintainer's first publish remain. The packet is not complete.
 
 ## P13 in one view
 
@@ -61,32 +63,32 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 
 - **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux
   x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
-  `vsift` over `@vsift/…` packages; managed installation on Ubuntu 24.04 x64 (`setup
-  install/list/rollback/remove/repair`); human output by default; `handoff check`.
-- **Names:** scope `@vsift` (owned, #237); npm refused `vsift`, so the launcher is `vsift-cli` (placeholder `0.0.0` held, `latest`; command `vsift`; ADR 0009 note).
-- **Done:** PR 0 (#226, ADR 0023); PR 1 (#228, L-071); PRs 2a, 2b (#229, #231,
-  `TerminalText`, SEC-T02, L-073); PR 3 (#230, smoke); PR 5 (#233, `handoff check`, L-086).
+  over `@vsift/…` packages; managed installation on Ubuntu 24.04 x64; human output by
+  default; `handoff check`.
+- **Names:** scope `@vsift` (owned, #237); launcher package `vsift-cli` (npm refused
+  `vsift`; placeholder `0.0.0` held, `latest`; command `vsift`; ADR 0009 note).
+- **Done:** PR 0 (#226); PR 1 (#228, L-071); PRs 2a, 2b (#229, #231, SEC-T02, L-073);
+  PR 3 (#230, smoke); PR 5 (#233, `handoff check`, L-086).
 - **PR 4 (#234):** `setup install` (download or import, SHA-256, stage, smoke, activate),
   `DOWNLOAD_FAILED`, managed lookup tier; hosted run 36734316384 activated all three.
 - **PR 8 (#236):** `release.yml` (reproducible archives, notices, SBOMs, `SHA256SUMS`,
-  `--version` with the commit; no write scope or secret); the workflow lint. L-089.
+  `--version` with the commit); the workflow lint. L-089.
 - **PR 6 (#239):** `setup list/repair` (read only, `free`), `setup rollback` (atomic,
   verified), `setup remove` (deselect first, keeps held and unprovable content, L-090).
-- **PR 9 (#240, `951226f`):** `npm/vsift-cli/` (`bin/vsift.cjs` runs `lib/launcher.cjs`), a plain CommonJS
-  launcher: finds `@vsift/<platform>`, requires its version and the executable's
-  SHA-256 (`platform-digests.json`, computed from the archives by `vsift-release npm`)
-  to match, runs it without a shell, relays signals, exits with its status; failures are
-  exit 127/126 with a readable message. The platform packages hold the executable,
-  notices and licences with `os`/`cpu`; no package has scripts or names a person
-  (governance and `npm-verify`). Release jobs `npm-package` (packed twice, verified) and
-  `npm-qualify` (12 jobs: Windows, macOS, Ubuntu x npm, pnpm, Yarn, Bun against a
-  loopback Verdaccio). L-091 to L-094. **Next:** PR 10 (attestation, provenance, the
-  protected publish job), PR 11 (docs, the qualification record).
-- **In review: PR 7** (#241, step 7): 22 `managed-*` fault points; a kill matrix and OS
-  kills leave a store repair describes exactly and a rerun completes (4 store defects
-  fixed); every changed folder is flushed, so a reported command survives a power loss
-  (Ubuntu 24.04 ext4; Windows has no flush and no managed install). Workflows `P13
-  managed power loss` and `install-e2e` (`P13 managed smoke`) not yet run.
+- **PR 9 (#240):** `npm/vsift-cli/`, a CommonJS launcher that checks the platform
+  package's version and executable SHA-256, runs it without a shell and relays signals
+  (exit 127/126 for its own failures); no package has scripts or names a person. Release
+  jobs `npm-package` and `npm-qualify` (12 jobs, loopback Verdaccio). L-091 to L-094.
+- **PR 7 (#241, `01656d6`, step 7):** 22 `managed-*` fault points; kills leave a store
+  repair describes and a rerun completes; every changed folder is flushed (a reported
+  command survives a power loss, Ubuntu 24.04 ext4). Workflows `P13 managed power loss`
+  and `install-e2e` (`P13 managed smoke`) await the maintainer's first runs.
+- **PR 10 (this change):** `dry_run` input (default `true`); `plan` on every run checks
+  archives and tarballs by digest and shows `vsift-release publish-plan`'s plan. Only a
+  dispatch of `v<version>` with `dry_run` cleared runs `attest` (Sigstore provenance for
+  every release file and tarball) and, after the `release` environment's approval,
+  `publish` (qualified tarballs to npm under `next` with provenance, then the GitHub
+  pre-release). Lint rule 7. Untested first run (L-096); re-runnable partial publish (L-097).
 - **Only the placeholder is published** until P13 ends and the maintainer approves a 0.x `next`.
 
 ## P12 in one view
@@ -123,7 +125,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified; compact tier 82%, then 93%/100% on the #222 re-run (L-085 closed); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-6, 8 and 9 merged (#226, #228-#231, #233, #234, #236, #239, #240); PR 7 (kill/power-loss tests) in review; publishing (PR 10) and docs to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-9 merged (#226-#231, #233, #234, #236, #239-#241); PR 10 (publish wiring) done in this change; docs (PR 11), the ledger (PR 12) and the maintainer's runs and first publish to come |
 | P14 | Not started |
 
 ## Architecture snapshot
@@ -134,9 +136,8 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 owns the wire types. The worker lives in the engine; the CLI only presents. The skill
 (`skills/vsift/`) only calls the `vsift` binary; its guard is a `vsift-cli` test module.
 The trial harness depends only on `vsift` and `vsift-contract` (the shared handoff check);
-`tools/vsift-release` (never shipped) packages the release archives and assembles the
-npm packages from them; `npm/` holds the launcher (no dependencies) and its
-qualification driver.
+`tools/vsift-release` (never shipped) packages the release archives, assembles the npm
+packages and plans their publication; `npm/` holds the launcher and its qualification.
 
 ## Quality evidence
 
@@ -144,6 +145,5 @@ qualification driver.
   features, workspace tests, warning-denied rustdoc and governance.
 - **CI on every PR:** Quality on Ubuntu, macOS and Windows; Documentation, Governance,
   fuzz harness replay, the strict worker boundary, dependency policy, CodeQL and the npm
-  launcher tests; the Release dry run with the npm matrix when an archive or npm input
-  changes.
+  launcher tests; the Release dry run (npm matrix, publish plan) on archive/npm changes.
 - **Merging:** squash merges to protected `main`; history in git, `CHANGELOG.md`, `docs/history/`.
