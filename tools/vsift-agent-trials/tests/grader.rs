@@ -1481,6 +1481,39 @@ fn help_forms_are_free_and_cd_elsewhere_is_not() -> TestResult {
     );
     let failures = failed_checks(&bench.grade(&parse_claude(&log), &log));
     assert!(!failures.contains_key("commands_only"), "{failures:?}");
+
+    // The skill's report check is allowed too: it reads only the draft.
+    let log = claude(
+        &[
+            Use::Skill,
+            Use::Bash("vsift setup check --json".to_owned()),
+            Use::Bash(
+                "vsift handoff check --json <<'VSIFT_HANDOFF'
+## Problem
+
+No tools.
+VSIFT_HANDOFF"
+                    .to_owned(),
+            ),
+        ],
+        &[],
+        "No handoff.",
+    );
+    let failures = failed_checks(&bench.grade(&parse_claude(&log), &log));
+    assert!(!failures.contains_key("commands_only"), "{failures:?}");
+
+    // Anything else outside the scenario's list still fails.
+    let log = claude(
+        &[
+            Use::Skill,
+            Use::Bash("vsift setup check --json".to_owned()),
+            Use::Bash("vsift session list --json".to_owned()),
+        ],
+        &[],
+        "No handoff.",
+    );
+    let failures = failed_checks(&bench.grade(&parse_claude(&log), &log));
+    assert!(failures.contains_key("commands_only"), "{failures:?}");
     Ok(())
 }
 

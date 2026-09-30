@@ -56,6 +56,13 @@ pub struct CommandPolicy {
 /// operation, it only prints the parser's usage text.
 pub const HELP_OPERATION: &str = "help";
 
+/// The operation of `vsift handoff check`, which the skill's REPORT state
+/// runs on every draft before sending it (P13 PR 5). It reads only the
+/// draft, never the video or a session's evidence, so a scenario that
+/// limits which operations an agent may run (`commands_only`) always
+/// allows it, as it allows the help forms.
+pub const HANDOFF_CHECK_OPERATION: &str = "handoff.check";
+
 /// The console lines of `commands.md` that make the help forms free.
 const HELP_FORMS: [&str; 2] = ["vsift --help", "vsift <namespace> <operation> --help"];
 

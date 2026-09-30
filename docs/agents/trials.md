@@ -133,7 +133,9 @@ the skill. A trial may:
 - run `vsift` commands that are `free`, or `explicit` ones the scenario's prompt grants
   (for example `session retain` to the named folder), and the help forms `vsift --help`
   and `vsift <namespace> <operation> --help`, which `commands.md` lists as free (never
-  piped into anything);
+  piped into anything). A scenario's `commands_only` list limits the operations a
+  trial may run, but it always allows the help forms and `handoff check`: the skill
+  runs `handoff check` on every draft, and it reads only the draft (2026-09-30, #222);
 - load and read the skill in the workspace's skill folders (Claude Code's `Skill` and
   `Read` tools; for Codex, which has no file tool, a plain reader such as `cat`,
   `type`, `Get-Content` or `sed -n` whose every path is inside a skill folder);

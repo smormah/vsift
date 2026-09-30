@@ -903,6 +903,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Trial grader: `commands_only` allows `handoff check`** (2026-09-30, #222). The
+  skill has run `vsift handoff check` on every draft report since P13 PR 5, but the
+  two A-01 scenarios' `commands_only` lists did not name it. As a result, the first runs of
+  the compact-tier re-run failed an agent for following the skill. The grader now
+  treats `handoff check` like the help forms: it reads only the draft. Any other
+  operation outside a scenario's list still fails the check.
 - **P12 debt fixes** (2026-09-30, known limit L-085, ADR 0022 note "the P12 debt
   fixes"). No model was called; the compact re-run is #222.
   - **Trial grader (#219):** a looped clip's truth windows repeat with the clip's

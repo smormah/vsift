@@ -43,7 +43,7 @@ use crate::{
     bundle::{BundleIndex, Resolved},
     calls::{Action, GradedCall, ReadScope, classify, vsift_commands},
     handoff::{HandoffSchema, MAX_RESUME_BYTES, PrivateMarkers, text_problems},
-    policy::{BudgetLimits, CommandClass, CommandPolicy, HELP_OPERATION},
+    policy::{BudgetLimits, CommandClass, CommandPolicy, HANDOFF_CHECK_OPERATION, HELP_OPERATION},
     scenario::{Expectation, ImagePolicy, PeriodBasis, Scenario, Timeline, TranscriptSource},
     trace::{ClientKind, Trace},
     truth::{CorpusTruth, Event, Fixture, KeyFact, SpeechSpan, normalize},
@@ -899,8 +899,12 @@ fn expectation_check(
     let mut problems = Vec::new();
     let name = match expectation {
         Expectation::CommandsOnly { operations } => {
-            // A help form runs no operation; it only prints usage text.
-            for operation in ran.iter().filter(|operation| **operation != HELP_OPERATION) {
+            // A help form runs no operation; it only prints usage text. The
+            // skill checks every draft report with `handoff check`, which
+            // reads only the draft (issue #222's first runs).
+            for operation in ran.iter().filter(|operation| {
+                **operation != HELP_OPERATION && **operation != HANDOFF_CHECK_OPERATION
+            }) {
                 if !operations.iter().any(|allowed| allowed == operation) {
                     problems.push(format!("ran {operation}"));
                 }
