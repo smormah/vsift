@@ -15,7 +15,8 @@
 use std::{collections::BTreeSet, error::Error, fmt, io::Cursor};
 
 use vsift_contract::{
-    BatchLine, MAX_BATCH_LINES, MAX_REQUEST_STEPS, RelativeInputPath, StepResult,
+    BatchLine, HandoffCheckData, HandoffChecker, MAX_BATCH_LINES, MAX_HANDOFF_FINDINGS,
+    MAX_HANDOFF_REPORT_BYTES, MAX_REQUEST_STEPS, RelativeInputPath, StepResult,
     WORK_REQUEST_LIMITS, WorkResult, WorkTarget, decode_batch_line, decode_work_request,
     validate_steps,
 };
@@ -157,11 +158,16 @@ pub enum Target {
     /// under small ones the fuzzer reaches quickly; every line handed out is
     /// then decoded as `job batch` decodes it. The input is the file.
     JobBatchFile,
+    /// A draft report through `vsift_contract::HandoffChecker::check_report`
+    /// (`vsift handoff check`, P13 PR 5): block extraction, letter case,
+    /// the subset schema validator, the handoff rules and the report-text
+    /// rules. The input is the draft, as the command reads it.
+    HandoffCheck,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -185,6 +191,7 @@ impl Target {
         Self::HostAttestation,
         Self::RequestRecord,
         Self::JobBatchFile,
+        Self::HandoffCheck,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -214,6 +221,7 @@ impl Target {
             Self::HostAttestation => "host_attestation",
             Self::RequestRecord => "request_record",
             Self::JobBatchFile => "job_batch_file",
+            Self::HandoffCheck => "handoff_check",
         }
     }
 
@@ -247,6 +255,7 @@ impl Target {
             Self::HostAttestation => check_host_attestation(data),
             Self::RequestRecord => check_request_record(data),
             Self::JobBatchFile => check_job_batch_file(data),
+            Self::HandoffCheck => check_handoff_check(data),
         }
     }
 }
@@ -356,6 +365,10 @@ pub enum Violation {
     /// kept one over the bound, or refused one within it), numbered lines
     /// out of order, failed on an in-memory source, or read on after its end.
     BatchFileInconsistent,
+    /// A handoff check changed when repeated, published a finding outside
+    /// its grammar (a pointer or allowed value the draft could choose), or
+    /// a verdict that disagrees with its errors or bounds.
+    HandoffCheckInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -412,6 +425,9 @@ impl fmt::Display for Violation {
             }
             Self::RequestRecordInconsistent => "an accepted request record is inconsistent",
             Self::BatchFileInconsistent => "the batch reader disagrees with the file's lines",
+            Self::HandoffCheckInconsistent => {
+                "a handoff check repeated differently or published a finding outside its grammar"
+            }
         })
     }
 }
@@ -1262,5 +1278,70 @@ fn check_chunk_checkpoint(data: &[u8]) -> Result<(), Violation> {
         Ok(())
     } else {
         Err(Violation::CheckpointRoundTripChanged)
+    }
+}
+
+/// The command reads at most 64 KiB of UTF-8; anything else is refused
+/// before the check. An accepted draft's check is deterministic, bounded,
+/// its verdict is its errors, and every published finding keeps the
+/// grammar that keeps the draft's text out of it: a pointer of schema
+/// member names (lower-case words) and indices, allowed values of the
+/// schema's own alphabet, and fixed prose.
+fn check_handoff_check(data: &[u8]) -> Result<(), Violation> {
+    if data.len() > MAX_HANDOFF_REPORT_BYTES {
+        return Ok(());
+    }
+    let Ok(report) = std::str::from_utf8(data) else {
+        return Ok(());
+    };
+    let checker = HandoffChecker::new().map_err(|_| Violation::HarnessSetup)?;
+    let first = checker.check_report(report);
+    if checker.check_report(report) != first {
+        return Err(Violation::HandoffCheckInconsistent);
+    }
+    let valid = first.is_valid();
+    let data = HandoffCheckData::new(first);
+    let value = serde_json::to_value(&data).map_err(|_| Violation::HandoffCheckInconsistent)?;
+    let findings = ["errors", "warnings", "case_notes"]
+        .iter()
+        .filter_map(|list| value[*list].as_array())
+        .flatten();
+    let mut consistent = value["valid"] == valid
+        && value["errors"]
+            .as_array()
+            .is_some_and(|errors| errors.is_empty() == valid);
+    for list in ["errors", "warnings", "case_notes"] {
+        consistent &= value[list]
+            .as_array()
+            .is_some_and(|items| items.len() <= MAX_HANDOFF_FINDINGS);
+    }
+    for finding in findings {
+        let pointer_ok = finding["pointer"].is_null()
+            || finding["pointer"].as_str().is_some_and(|pointer| {
+                pointer.split('/').skip(1).all(|segment| {
+                    !segment.is_empty()
+                        && (segment.bytes().all(|byte| byte.is_ascii_digit())
+                            || segment
+                                .bytes()
+                                .all(|byte| byte.is_ascii_lowercase() || byte == b'_'))
+                }) && (pointer.is_empty() || pointer.starts_with('/'))
+            });
+        let allowed_ok = finding["allowed"].is_null()
+            || finding["allowed"].as_array().is_some_and(|allowed| {
+                allowed.iter().all(|value| {
+                    value.as_str().is_some_and(|text| {
+                        text.len() <= 64
+                            && text.bytes().all(|byte| {
+                                byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'
+                            })
+                    })
+                })
+            });
+        consistent &= pointer_ok && allowed_ok;
+    }
+    if consistent {
+        Ok(())
+    } else {
+        Err(Violation::HandoffCheckInconsistent)
     }
 }

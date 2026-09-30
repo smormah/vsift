@@ -48,6 +48,11 @@ These files are the machine-readable public v1 boundary:
   one item per processed line, the first line not started and why the batch stopped;
 - `workspace-data.schema.json` — the `data` of `session.init-workspace` (implemented
   in P11 PR 2): the immutable policy of a worker workspace;
+- `handoff-check-data.schema.json` — the `data` of a complete `handoff.check` result
+  (P13 PR 5): `valid`, `handoff_version`, the `errors`, `warnings` and `case_notes`
+  findings (each a pointer, a line, a closed `rule`, the schema's `allowed` values and
+  fixed prose, never text from the draft), `truncated` and, with `--session`, how the
+  session was used (`resolved`, a `gap`, `identities_checked`);
 - `config.schema.json` — strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` — the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was

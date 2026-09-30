@@ -24,14 +24,15 @@ libfuzzer = ["dep:libfuzzer-sys"]
 
 [dependencies]
 libfuzzer-sys = { version = "0.4.13", optional = true }
+# The `handoff_check` target reads the published form of a check (P13 PR 5).
+serde_json = "1.0.151"
 vsift-contract = { version = "0.1.0", path = "../crates/vsift-contract" }
 vsift-domain = { version = "0.1.0", path = "../crates/vsift-domain" }
 vsift-infrastructure = { version = "0.1.0", path = "../crates/vsift-infrastructure" }
 
 [dev-dependencies]
 # Re-derive the local-ASR and visual-index record seeds in the replay tests;
-# serde_json reads the recorded visual samples the visual seeds come from.
-serde_json = "1.0.151"
+# serde_json (a dependency above) reads the recorded visual samples too.
 vsift-application = { version = "0.1.0", path = "../crates/vsift-application" }
 
 [[bin]]
@@ -213,6 +214,14 @@ required-features = ["libfuzzer"]
 [[bin]]
 name = "job_batch_file"
 path = "fuzz_targets/job_batch_file.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "handoff_check"
+path = "fuzz_targets/handoff_check.rs"
 test = false
 doc = false
 bench = false

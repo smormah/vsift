@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/handoff-check-data.schema.json",
+  "title": "VSift handoff.check data v1",
+  "description": "The data member of a complete handoff.check result (P13 PR 5, issue #213, ADR 0023 decisions G and H): whether an agent's draft report passed the skill's handoff checks. The command reads the whole report (at most 64 KiB of UTF-8 from standard input or --file), finds its one vsift-handoff block, reads closed values written in another letter case as the schema's spelling (case_notes), validates the JSON against the skill-owned handoff.schema.json and the handoff rules, and checks the whole report's text for local paths, links and raw hidden or control characters. With --session it also resolves every cited identity against that session's committed records, read-only; a closed, expired or unknown session is a gap in session, not a failure. valid is true exactly when errors is empty; the command exits 0 whenever it read the draft. No finding repeats text from the draft: pointer is an RFC 6901 pointer built from the handoff schema's own member names and array indices (an unknown member is reported at its object, with the allowed members), line is a 1-based line of the report, rule is closed, allowed lists the schema's own values where the rule has them, and message is fixed prose. Each list holds at most 100 findings; truncated says more were found.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "valid",
+    "handoff_version",
+    "errors",
+    "warnings",
+    "case_notes",
+    "truncated",
+    "session"
+  ],
+  "properties": {
+    "valid": {
+      "type": "boolean"
+    },
+    "handoff_version": {
+      "const": "1"
+    },
+    "errors": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "case_notes": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "session": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/session"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "errors": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "errors": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pointer",
+        "line",
+        "rule",
+        "allowed",
+        "message"
+      ],
+      "properties": {
+        "pointer": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^(/([a-z][a-z_]*|0|[1-9][0-9]{0,5}))*$"
+            }
+          ]
+        },
+        "line": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 1
+            }
+          ]
+        },
+        "rule": {
+          "enum": [
+            "handoff_block_missing",
+            "handoff_block_repeated",
+            "handoff_block_unclosed",
+            "handoff_json_invalid",
+            "handoff_json_too_deep",
+            "wrong_type",
+            "value_not_allowed",
+            "member_missing",
+            "member_unknown",
+            "text_too_short",
+            "text_too_long",
+            "form_mismatch",
+            "text_forbidden",
+            "value_forbidden",
+            "too_few_items",
+            "too_many_items",
+            "duplicate_items",
+            "below_minimum",
+            "above_maximum",
+            "no_matching_shape",
+            "ambiguous_shape",
+            "citation_id_repeated",
+            "citation_missing",
+            "pixels_without_image_access",
+            "uninspected_images_only",
+            "resume_card_missing",
+            "resume_card_too_large",
+            "window_reversed",
+            "budget_limit_differs",
+            "citation_unused",
+            "letter_case",
+            "hidden_character",
+            "control_character",
+            "web_link",
+            "local_path",
+            "session_mismatch",
+            "segment_not_in_session",
+            "evidence_not_in_session",
+            "evidence_kind_mismatch"
+          ]
+        },
+        "allowed": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            }
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "resolved",
+        "gap",
+        "identities_checked"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "pattern": "^ses_[a-z0-9]{16,64}$"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "gap": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "session_closed",
+                "session_expired",
+                "session_not_found"
+              ]
+            }
+          ]
+        },
+        "identities_checked": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "resolved": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "gap": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "resolved": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "gap": {
+                "type": "string"
+              },
+              "identities_checked": {
+                "const": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

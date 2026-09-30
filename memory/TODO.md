@@ -7,17 +7,18 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 ## Now
 
 **P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Merged:
-PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PR 2a (#229,
-`bffc6bb`, human output part 1) and PR 3 (#230, `e22ee59`, smoke executor and failure
-cleanup). **PR 2b (human output part 2; closes L-073) is in review** on
-`p13-pr2b-human-output`; with it, human output is done. The packet is not complete.
+PR 0 (#226), P12 debt (#227), PR 1 (#228, L-071 closed), PR 2a (#229), PR 3 (#230,
+`e22ee59`, smoke and cleanup) and PR 2b (#231, `02df4eb`, human output done, L-073
+closed). **PR 5 (`handoff check`, #213) is in review**; PR 4 is in progress. The packet
+is not complete.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
    4 install (transaction over PR 3's `smoke_before_activation`, then
    `publish_and_select`; decides what `setup install` reports of the smoke's typed
-   failures); 5 `handoff check`; 6 lifecycle and stale-stage sweep (must handle stages
-   PR 3 retains); 7 kill/power-loss, E2E; 8 `release.yml` (package only `vsift`); 9
-   npm; 10 publish wiring; 11 docs; 12 ledger. #222 re-runs after PR 5.
+   failures); 6 lifecycle and stale-stage sweep (must handle stages PR 3 retains); 7
+   kill/power-loss, E2E; 8 `release.yml` (package only `vsift`); 9 npm; 10 publish
+   wiring; 11 docs; 12 ledger. #222 re-runs once PR 5 is merged (the maintainer
+   starts it; no model was called).
 2. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; **choose the
    platform-package scope** (`@vsift` refused; `@vsift-cli`, `@vsifthq` or `@vsiftdev`),
    create its organisation, record it in an ADR 0009 note; trusted publishers; the
@@ -31,9 +32,8 @@ cleanup). **PR 2b (human output part 2; closes L-073) is in review** on
 - **Compact tier below target:** 23 of 28 (82%) each on `8ab976e`. Fixed in the
   skill, awaiting #222: claim and instruction shapes (#218), subject and value in each
   claim (#219, #220), retain last (#220), links in JSON (#221), unreadable regions (#224).
-- **Grader:** A-02's period is now measured (12.064 s, #219); the re-grade passes Sol's
-  A-02 run 2 (24 of 28). Still open: `untrusted_listed` takes only F12-E01 (0-8 s); an
-  `rg --files` exclude glob with a separator stays strict.
+- **Grader:** A-02's period is measured (#219; Sol re-grades to 24 of 28). Open readings:
+  `untrusted_listed` takes only F12-E01; an `rg --files` exclude glob with `/` is strict.
 - **Safety held in all 84 counted phases** (no canary, install, injection, hidden char).
 
 ## Decided (maintainer, 2026-09-28/30)
@@ -60,11 +60,12 @@ cleanup). **PR 2b (human output part 2; closes L-073) is in review** on
   in human mode, events stay JSON Lines (L-017 now that residual); the `\\?\` path note
   (PowerShell `Copy-Item -LiteralPath`, or a root of at most 125 characters).
 - **Also:** the npm platform-package scope (item 2 above); MSRV; an MCP adapter;
-  ADR 0023's open details (`setup list`/`repair` class, `handoff check` case, PR 5).
+  `setup list`/`repair` class (ADR 0023). PR 5 readings: schema `handoff-check-data`
+  (repo naming), a `line` beside each pointer, skill forms without `--session`.
 
 ## Tracked issues
 
-- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210. **Open:** #16, #213, #218-#222.
+- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210; #213 with PR 5. **Open:** #16, #218-#222.
 - **#170-#178:** L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045 and L-042.
 - **Others:** #159, #150 fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
 
@@ -86,8 +87,8 @@ cleanup). **PR 2b (human output part 2; closes L-073) is in review** on
   trials. P12's review tier met this; the compact target is debt (L-085).
 - **The skill** orchestrates the published CLI only: no processing logic, no tool
   grants. A new public command, flag, failure code or referenced field needs a skill
-  update in the same change (the `skill_contract` tests fail otherwise). The check
-  image's code lives only in its pixels and, split, in the guard and the grader.
+  update in the same change (`skill_contract` fails otherwise); its one input exception is
+  the two `handoff check` forms. The check code lives only in its pixels, guard and grader.
 - **New public items:** a public command, failure code, event kind or record type
   needs its `CommandName`, `FailureCode::ALL`, `EventKind::ALL` or
   `EvidenceRecordType::ALL` entry, v1 schemas and, for a command that completes, a

@@ -32,6 +32,7 @@
 
 mod evidence;
 mod failure;
+mod handoff;
 mod job;
 mod session;
 mod setup;
@@ -141,6 +142,7 @@ fn render_value(
         CommandName::JobResume => job::resume(&envelope(value)?),
         CommandName::JobRun => job::run(&envelope(value)?),
         CommandName::JobBatch => job::batch(&envelope(value)?),
+        CommandName::HandoffCheck => handoff::check(&envelope(value)?),
         // `setup check` renders from its typed report (`setup_check`), and
         // the parse and reserved setup commands only ever fail.
         CommandName::SetupCheck

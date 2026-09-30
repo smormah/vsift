@@ -78,6 +78,9 @@ pub enum CommandName {
     /// `session init-workspace` (P11): create a worker workspace with an
     /// operator policy.
     SessionInitWorkspace,
+    /// `handoff check` (P13 PR 5): check an agent's draft report against the
+    /// skill's handoff schema and rules.
+    HandoffCheck,
 }
 
 impl CommandName {
@@ -86,7 +89,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 34] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -120,6 +123,7 @@ impl CommandName {
         Self::JobResume,
         Self::JobCancel,
         Self::SessionInitWorkspace,
+        Self::HandoffCheck,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -159,6 +163,7 @@ impl CommandName {
             Self::JobResume => "job.resume",
             Self::JobCancel => "job.cancel",
             Self::SessionInitWorkspace => "session.init-workspace",
+            Self::HandoffCheck => "handoff.check",
         }
     }
 
@@ -205,6 +210,7 @@ impl CommandName {
             Self::JobResume => 30,
             Self::JobCancel => 31,
             Self::SessionInitWorkspace => 32,
+            Self::HandoffCheck => 33,
         }
     }
 }

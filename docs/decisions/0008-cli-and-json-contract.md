@@ -110,3 +110,17 @@ rather than by a new version: the setup-check `lookup` value `managed_version`, 
 remediation's `managed_install` values and the setup-plan availability
 `catalogue_accepted` (from `catalogue_accepted_install_pending`). After the first
 published artifact, v1 changes are additive only, as above.
+
+## 2026-09-30 note: the `handoff` namespace (P13 PR 5)
+
+Under ADR 0023 decision H4 (a v1 value that has never shipped may be added in place
+before the first publication), P13 PR 5 adds the `handoff` namespace and its one
+command, `handoff check` (`CommandName::HandoffCheck`, identifier `handoff.check`),
+with `schemas/v1/handoff-check-data.schema.json` and the frozen example
+`schemas/v1/examples/handoff-check.json`. No existing value changes. The command
+answers every draft it could read with `complete` and `data.valid` (exit 0); only an
+unreadable draft (over 64 KiB, not UTF-8, a relative or unreadable `--file`) is
+`INVALID_ARGUMENT`. Its findings carry a closed `rule`, an RFC 6901 pointer built from
+the handoff schema's own member names, a line number, the schema's allowed values and
+fixed prose, never text from the draft. `docs/contracts/cli-v1.md` ("P13 `handoff
+check`") is the contract.

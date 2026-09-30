@@ -63,6 +63,9 @@
 //!   record), with a deadline and a two-stage shutdown;
 //!   [`Engine::worker_readiness`] states what a worker host runs under.
 //! - **Bundles:** [`Engine::validate_bundle`].
+//! - **Handoff check (P13 PR 5):** [`Engine::handoff_session_records`] reads,
+//!   without renewing it, the identities one session holds, so a host can
+//!   resolve a draft handoff's citations with `vsift_contract::HandoffCheck`.
 //! - **Verification:** [`Engine::verify_media_tools`] and
 //!   [`Engine::identify_model`]; no CLI command calls these. Operations that
 //!   run `FFmpeg`/`FFprobe` on user media (today [`Engine::ingest`] with a
@@ -97,6 +100,7 @@ mod candidates;
 mod engine;
 mod error;
 mod evidence;
+mod handoff;
 mod isolation;
 mod jobs;
 mod local_asr_check;
@@ -125,6 +129,7 @@ pub use evidence::{
     DEFAULT_NEIGHBOUR_COUNT, EvidenceFile, EvidenceResults, FrameBurstRequest, FrameGetRequest,
     FrameNeighboursRequest, FrameTarget,
 };
+pub use handoff::HandoffSessionLookup;
 pub use isolation::{IsolationGap, IsolationGaps, IsolationProfile, attest_host_isolation};
 pub use jobs::{
     JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,

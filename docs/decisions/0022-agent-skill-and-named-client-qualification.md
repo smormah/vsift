@@ -948,3 +948,48 @@ Proposed) changes the skill in three ways; the substance is there.
 - The skill ships byte-identical inside the npm package and every native archive.
 - The new `setup` lifecycle commands stay in the `never` class unless the maintainer
   decides otherwise.
+
+## 2026-09-30 note: `handoff check` in the skill (P13 PR 5)
+
+Implemented as the P13 note above says:
+
+- `references/commands.md` classes `vsift handoff check` `free` and shows the two
+  literal forms under "Checking the draft": `vsift handoff check --json
+  <<'VSIFT_HANDOFF'` / `<report>` / `VSIFT_HANDOFF`, and `@'` / `<report>` / `'@ |
+  vsift handoff check --json`. `SKILL.md` rule 3 names them (with `| tail -n 1`) as the
+  only exceptions to "no pipes or redirections", and REPORT ends with "run `vsift
+  handoff check` on your draft once, fix what it reports, then send" and shows the
+  POSIX form (the PowerShell form is in commands.md). `SKILL.md` stays at 300 lines:
+  paragraphs were rewrapped and a few sentences shortened, no rule was dropped.
+  `references/handoff.md` lists the check first in "Before you send it". The skill
+  does not teach `--session`, so its forms stay exactly literal.
+- **Guard** (`skill_contract`): every shell fence of the skill (`sh`, `powershell`
+  and the like, or any non-data fence that runs `vsift`) must be exactly one of the
+  two forms, both appear in commands.md and the POSIX one in `SKILL.md`, and the
+  command they run parses as the `free` `handoff.check`
+  (`the_handoff_check_forms_are_the_only_input_exception`). Variants are refused
+  (`variants_of_the_handoff_check_forms_are_refused`): an unquoted, double-quoted or
+  `<<-` heredoc, another delimiter, another command, a missing `--json`, anything
+  after the closing line or piped after the form, `cat` or `Get-Content` piped in, an
+  input redirection and a double-quoted here-string. The contract's budget profiles
+  are pinned to `budgets.md` (`the_contracts_budget_profiles_are_budgets_md`).
+- **Grader**: the shell reader recognises a script that is exactly the form of the
+  shell it is read in, at any wrapper depth, as one `vsift handoff check --json` call,
+  which the policy classes `free`: the quoted heredoc only in a POSIX shell (Claude
+  Code's Bash tool, Codex's single- or double-quoted `bash -lc`), the single-quoted
+  here-string only in PowerShell (a `powershell`/`pwsh -Command` wrapper), neither in
+  `cmd`. In bash the here-string is `@` and a single-quoted string that the draft's
+  first apostrophe ends, so the rest would run as commands; the grader reads it as
+  ordinary shell text, which fails the policy (review of PR 5, regression tests
+  `each_draft_form_belongs_to_its_own_shell` and the `calls` test). The skill says the
+  same: the heredoc in bash or sh, Git Bash included, the here-string only in
+  PowerShell; the heredoc or here-string body is the draft and is never
+  read as commands (`is_handoff_check_form`). Anything wider is ordinary shell text
+  and stays strict. `handoff_valid` and `report_text` now run the production check
+  (`vsift_contract::HandoffChecker`), so the grader and the command cannot disagree;
+  the grader adds only its private markers and cross-checks every schema verdict
+  against `jsonschema` (a disagreement fails the handoff as a grader defect). Grade
+  details now name findings by pointer, rule and fixed prose instead of quoting the
+  draft.
+- The compact tier's re-run (#222) is still to come; no model was called for this
+  change.

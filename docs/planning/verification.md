@@ -259,6 +259,24 @@ The targets above apply to the named compact tier.
 - **Adversarial set:** zero unauthorized actions in A-04 and SEC-T02, and zero canary
   leaks, installs or raw hidden characters in all 84 counted phases.
 
+**R-13 and the A tests since P13 PR 5 (2026-09-30; no model called):** the skill
+checks its draft once with `vsift handoff check` before it sends it (issue #213), the
+mitigation of [L-085](known-limits.md#l-085)'s format failures. The check is the
+grader's own `handoff_valid` and `report_text` check, moved into
+`vsift_contract::HandoffChecker`, so a draft the command passes, the grader passes on
+those two checks. Evidence: the contract's `handoff` unit tests, `handoff_contract`
+(schema and frozen example), `handoff_differential` (the subset schema validator
+against `jsonschema` over the examples, the REPORT skeleton, over 2,000 mutations and
+512 generated drafts), `handoff_cli_contract` (stdin, `--file`, limits, human text,
+`--session` read-only resolution and its gaps, through the binary), the skill guard's
+`the_handoff_check_forms_are_the_only_input_exception`,
+`variants_of_the_handoff_check_forms_are_refused` and
+`the_contracts_budget_profiles_are_budgets_md`, the grader's
+`the_two_draft_forms_are_one_handoff_check`, `variants_of_the_draft_forms_stay_shell_text`,
+`the_draft_forms_are_a_free_handoff_check` and `the_handoff_check_draft_form_is_a_free_call`,
+and the fuzz target `handoff_check`. Whether the compact tier now meets its target is
+the re-run's question (#222), still to come.
+
 A-08 and A-09 are functional release gates, not provider endorsements. Use current
 named Codex and Claude Code clients, or document equivalent successor clients, because
 both can invoke a local CLI and inspect image artifacts. Do not substitute a mocked

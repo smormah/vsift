@@ -68,8 +68,10 @@ select the skill; the user can also name it.
   executable are never run by the skill, not even `date` to time itself: the host
   measures and enforces the wall time, and the handoff reports it as `null` when the
   agent could not measure it. Each `vsift` command runs alone, from the folder the
-  agent started in (never after `cd`); the only addition is `| tail -n 1` after
-  `--events jsonl`. `vsift --help` and `vsift <namespace> <operation> --help` are free,
+  agent started in (never after `cd`); the only additions are `| tail -n 1` after
+  `--events jsonl` and the two literal forms that pass the draft report to `vsift
+  handoff check` (P13 PR 5), which the agent runs once before sending and whose
+  findings it fixes. `vsift --help` and `vsift <namespace> <operation> --help` are free,
   read whole, to recover a command's flags.
 - **Reporting.** Every stop, including a missing tool, an expired session or an
   exhausted budget, ends with the handoff as the final message: one `vsift-handoff`
@@ -118,6 +120,12 @@ test --workspace`) fails when the skill drifts from the CLI:
   has the class its place requires; nothing is chained, piped or redirected except
   `| tail -n 1` after `--events jsonl`; a help form (`--help` after nothing, a
   namespace or an operation) must make the parser print its help, and is free;
+- every shell fence of the skill is exactly one of the two literal forms that pass the
+  draft report to `vsift handoff check` (a quoted heredoc, or a single-quoted
+  here-string piped in), the skill's one input exception (P13 PR 5); `commands.md`
+  shows both, `SKILL.md`'s REPORT the POSIX one, and a variant (another command, an
+  unquoted or double-quoted delimiter, a double-quoted here-string, anything added) is
+  refused; the contract's budget profiles equal `budgets.md`;
 - the REPORT state's minimal handoff validates against `handoff.schema.json` and holds
   only the members the schema requires, the schema requires exactly the members the
   agent alone knows, and the

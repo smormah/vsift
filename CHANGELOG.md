@@ -8,6 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **`vsift handoff check`** (P13 PR 5, issue #213; ADR 0023 decisions G and H). A new
+  `handoff` namespace whose one command checks an agent's draft report before it is
+  sent: the one `vsift-handoff` block, closed values in another letter case (read as
+  the schema's spelling and noted), the skill-owned `handoff.schema.json`, the rules of
+  `references/handoff.md` and the whole report's text (no path, link or raw hidden or
+  control character). The draft comes from standard input or `--file <absolute
+  path>`, at most 64 KiB of UTF-8; `--session <session>` also resolves every cited
+  segment and evidence id in that session's records, read-only, and reports a closed,
+  expired or unknown session as a gap. Every read draft is answered with `complete`,
+  `data.valid` and exit 0; each finding is a JSON pointer or line, a closed rule, the
+  schema's allowed values and fixed prose, and never repeats the draft. Schema
+  `handoff-check-data.schema.json`, example `handoff-check.json`, human text, fuzz
+  target `handoff_check`. The check lives in `vsift-contract` (`HandoffChecker`) and
+  the trial grader now uses it too, so the command and the grader cannot disagree.
+  Schema validation uses a validator of exactly the features the handoff schema uses,
+  held to `jsonschema` by a differential test; `regex` becomes a production
+  dependency of `vsift-contract` (3 crates) instead of `jsonschema` (43 crates,
+  +5.5 MB). The skill runs the check once before sending, in one of two literal forms
+  (a quoted heredoc, or a single-quoted here-string piped in), its one input exception;
+  the skill guard and the grader accept exactly those two forms, each only in its own
+  shell (the heredoc in bash or sh, the here-string in PowerShell). L-086 records that
+  `vsift-contract` embeds the skill's schema from outside its folder and so cannot be
+  packaged for crates.io until that is resolved. L-085 records the
+  mitigation; the compact-tier re-run (#222) follows.
+
 - **Readable terminal text, part 2** (P13 PR 2b; closes L-073). Without `--json` or
   `--events`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`, `job
   status/resume/cancel` and the worker hosts `job run` and `job batch` now print

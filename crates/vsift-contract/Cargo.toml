@@ -10,6 +10,9 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+# The handoff check (P13 PR 5) matches the skill-owned handoff schema's
+# patterns; reviewed in the ADR 0023 note of 2026-09-30.
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # The worker request digest (P11, ADR 0021); already used by the application.
@@ -19,6 +22,9 @@ vsift-domain.workspace = true
 
 [dev-dependencies]
 jsonschema.workspace = true
+# The handoff check's differential test generates drafts with it (P13 PR 5);
+# already a workspace development dependency.
+proptest.workspace = true
 # The evidence contract tests drive the application's extraction use cases
 # over fake extractors to build the records their frozen examples present.
 tokio.workspace = true

@@ -5,8 +5,8 @@ Status: published v1 boundary. `setup check/plan/configure/configure-model`, for
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
 `candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
 and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
-recoverable jobs), `job run` and `session init-workspace` (P11 worker host) and
-`bundle validate` are operational. Other commands below
+recoverable jobs), `job run` and `session init-workspace` (P11 worker host),
+`bundle validate` and `handoff check` (P13 PR 5) are operational. Other commands below
 remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
 command does not claim its media, provisioning, or worker behavior is implemented.
 The P11 batch contracts (batch summary and its events) are published ahead of `job
@@ -64,6 +64,7 @@ told about a Ctrl-C (only Ctrl-Break); see L-053.
 | `job status/resume/cancel` | Report, continue or cancel one recoverable job by its id | Implemented in P10 PR 3 |
 | `job run` | One versioned worker request in a worker workspace, recorded under its operation id: replay, conflict, busy and continuation; two-stage shutdown | Implemented in P11 PR 3 |
 | `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
+| `handoff check` | Check an agent's draft report against the skill's handoff schema and rules, answering `data.valid` with typed findings that never repeat the draft | Implemented in P13 PR 5 |
 
 ### P05 disposable sessions and bundles
 
@@ -1493,6 +1494,65 @@ is retained as historical v1 evidence. An abbreviated current response follows.
 }
 ```
 
+### P13 `handoff check`
+
+`vsift handoff check [--file <absolute-path>] [--session <session>]` checks an agent's
+draft report before it is sent (issue #213, [ADR
+0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+decisions G and H). The `handoff` namespace and the command are new in v1 before the
+first publication (decision H4; ADR 0008 note of 2026-09-30).
+
+- **Input.** The whole draft report, from standard input or from the file `--file`
+  names (an absolute path). At most 65,536 bytes of strict UTF-8 are read; a larger
+  draft, bytes that are not UTF-8, or a relative, missing or unreadable file is
+  `INVALID_ARGUMENT` (exit 2) with fixed-prose remediation, and nothing is checked.
+  The agent skill passes the draft in exactly two literal forms, its one pipe or
+  redirection exception: a quoted heredoc (`vsift handoff check --json
+  <<'VSIFT_HANDOFF'` ... `VSIFT_HANDOFF`) or a single-quoted here-string piped in
+  (`@'` ... `'@ | vsift handoff check --json`).
+- **What is checked**, in order: the report has exactly one closed fenced
+  `vsift-handoff` block of JSON (nesting at most 32 levels); a closed value written in
+  another letter case is read as the schema's spelling and noted (`case_notes`), any
+  other word is refused; the JSON follows `skills/vsift/handoff.schema.json`, the
+  skill-owned schema the binary embeds unchanged; the rules of
+  `skills/vsift/references/handoff.md` a schema cannot express hold (every cited `e`
+  id exists and is unique, pixels are not claimed without image access, a claim that
+  rests on evidence cites more than uninspected images, a resume card exists when the
+  work was cut short and can continue and is at most 2 KiB, a finding's window does
+  not end before it starts, given budget limits are the profile's unless
+  `budget.overrides`); and the whole report's text holds no local path, drive letter
+  or home folder, no live link and no raw hidden or control character. A citation no
+  claim or instruction uses is a warning.
+- **`--session <session>`** also resolves every cited identity in that session's
+  committed records: each citation's `segment_id` (any revision), `evidence_id` (with
+  its citation type), a crop's `parent_evidence_id`, and the resume card's evidence
+  and findings to verify; a `session.session_id` or `resume.session_id` the handoff
+  names must be this session. The session is read only: it is not renewed and nothing
+  is written. A session that is closed, expired or not found is a gap in
+  `data.session.gap` (`session_closed`, `session_expired`, `session_not_found`), not a
+  failure; the draft is still checked. A committed record that fails its integrity
+  check is `INTEGRITY_FAILURE`.
+- **Result.** Whenever the draft was read, the result is `complete` and the process
+  exits 0 (decision H1), with `data` per `schemas/v1/handoff-check-data.schema.json`:
+  `valid` (true exactly when `errors` is empty), `handoff_version` (`"1"`), `errors`,
+  `warnings` and `case_notes` (at most 100 each; `truncated` says more were found),
+  and `session` (null without `--session`; otherwise `session_id`, `resolved`, `gap`
+  and `identities_checked`). The frozen example is
+  `schemas/v1/examples/handoff-check.json`.
+- **Findings never repeat the draft** (SEC-16): each is `pointer` (an RFC 6901
+  pointer into the handoff built from the schema's own member names and array
+  indices; an object's unknown member is reported at the object, with the allowed
+  members), `line` (a 1-based line of the report, for block and report-text
+  findings), `rule` (a closed identifier, listed in the schema), `allowed` (the
+  schema's own values where the rule has them, such as a closed vocabulary, the
+  defined members or a profile's limit) and `message` (fixed prose). A value that
+  matches none of several shapes reports the shape its discriminator (a citation's
+  `type`) names, or one error listing every allowed value.
+- **The check is shared** with the trial grader (`vsift_contract::HandoffChecker`),
+  so the command and the grader cannot disagree. Its schema validator implements
+  exactly the JSON Schema features the handoff schema uses and refuses any other at
+  compile time; a differential test holds it to a general validator.
+
 ## Output protocol
 
 Human output (without `--json` or `--events`) is readable terminal text on stdout.
@@ -1569,8 +1629,10 @@ each selection's requested and actual time, then each item with its image facts 
 file), `audio` (the same for the clip), `job status` and `job cancel` (the job's state,
 range, checkpoints, result or last failure, and `job resume <job>` when it can be
 resumed) and `job resume` (the job, then its retranscription as `transcript
-retranscribe` shows it). A command that completes without a renderer is a defect and
-fails `INTERNAL`; human mode never prints the JSON document.
+retranscribe` shows it). PR 5 renders `handoff check` (the verdict, the session
+check, then each finding's pointer or line, rule, fixed prose and allowed values; a
+finding holds no draft text). A command that completes without a renderer is a defect
+and fails `INTERNAL`; human mode never prints the JSON document.
 
 **Worker hosts.** In human mode `job run` prints its job result (status, attempt,
 digest, session, controls, then each step's status, times, typed outputs, uncovered
@@ -1834,7 +1896,7 @@ against an older copy of the schema ignores it.
 | C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages, search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) and candidate pages (`candidates_cli_contract`, `engine_candidates`, the application's `visual` tests with the property `any_range_and_limit_page_without_gaps_or_duplicates`) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
-| C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`) and the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) |
+| C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
