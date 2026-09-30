@@ -45,9 +45,9 @@ Codex's trials ran in a Linux container, because its Windows sandbox cannot run 
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0, 1 and 2a and the P12 debt fixes
-are merged; PR 3 (the managed-install smoke and its failure cleanup, #230) is in
-review and PR 2b is in progress. The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a and 3 and the P12 debt
+fixes are merged; PR 2b (readable terminal text, part 2) is in review, which
+finishes human output. The packet is not complete.
 
 ## P13 in one view
 
@@ -67,19 +67,19 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   (nine closed reasons, grammar names only, `vsift <command> --help`). PR 2a (#229,
   `bffc6bb`): the `TerminalText` builder and readable text for setup, `ingest`,
   `session`, `transcript`, `search`, `bundle validate`, every failure and rejected
-  command lines; SEC-T02 re-run over them (L-017, L-073 narrowed to PR 2b).
-- **In review:** PR 3 (#230, installer resume steps 1-2, internal only).
-  `smoke_before_activation` runs `StagedCompatibilitySmoke` over staged, unactivated
-  candidates: layout recheck with native-format check, FFmpeg/FFprobe banners and a
-  clean `whisper-cli --help`, the existing F01 media and speech verifiers within the
-  policy's deadlines and bounds, then a final recheck; explicit paths, a private
-  `smoke.pending`, no shell. A failure (5 steps, 13 reasons) discards every candidate;
-  a stage it cannot prove is kept and reported. Hosted run 36701212028 passed the real
-  pinned tools in 4.7 s; a wrong banner discarded all three stages.
-- **In progress:** PR 2b (evidence and job renderers). **Next:** PRs 4 and 5.
+  command lines; SEC-T02 re-run over them. PR 3 (#230, `e22ee59`, installer resume
+  steps 1-2, internal only): `smoke_before_activation` smokes staged, unactivated
+  candidates (layout and format recheck, banners, the F01 media and speech verifiers,
+  final recheck; explicit paths, no shell). A failure (5 steps, 13 reasons) discards
+  every candidate; an unprovable stage is kept and reported. Hosted run 36701212028
+  passed the real pinned tools in 4.7 s.
+- **In review:** PR 2b (`p13-pr2b-human-output`, closes L-073): readable text for
+  `candidates`, the frame commands, `crop`, `audio`, the `job` commands and the worker
+  hosts (final result only; events stay JSON Lines, L-017 now that residual); each
+  delivered path whole on its own line, with a note for `\\?\` (L-016); SEC-T02 over
+  every human output. **Next:** PRs 4 and 5.
 - **Nothing is published** until P13 completes and the maintainer approves one 0.x
-  pre-release under npm's `next` tag; the npm organisation, trusted publishers and
-  `release` environment are the maintainer's to set up.
+  pre-release under npm's `next` tag; the npm setup is the maintainer's.
 - **Found while planning:** the clean-install agent run is P14's (H10); Linux needs OpenSSL 3.
 
 ## P12 in one view
@@ -110,8 +110,8 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 - `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
   that does not parse names its mistake and the `--help` to read (P13 PR 1).
-- Readable terminal text without `--json` (unstable, not for parsing) for the commands
-  PR 2a covers; the others print indented JSON until PR 2b.
+- Readable terminal text without `--json` (unstable, not for parsing): PR 2a's
+  commands merged, the rest in PR 2b (in review).
 - Still `COMMAND_NOT_IMPLEMENTED`: setup install/repair/list/rollback/remove.
 
 ## Packet status
@@ -126,7 +126,7 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1 and 2a merged (#226, #228, #229); PR 3 (smoke and cleanup, #230) in review; PR 2b in progress; distribution, installation and `handoff check` (#213) to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1, 2a and 3 merged (#226, #228, #229, #230); PR 2b (human output, part 2) in review; distribution, installation and `handoff check` (#213) to come |
 | P14 | Not started |
 
 ## Architecture snapshot

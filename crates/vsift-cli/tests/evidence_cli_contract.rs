@@ -38,7 +38,7 @@ use vsift_application::{
 use vsift_contract::{
     AUDIO_RANGE_REMEDIATION, BURST_RANGE_REMEDIATION, CROP_OUTSIDE_REMEDIATION,
     EVIDENCE_BUDGET_REMEDIATION, EVIDENCE_KIND_REMEDIATION, EVIDENCE_TOOLS_REMEDIATION,
-    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION,
+    UNKNOWN_CANDIDATE_REMEDIATION, UNKNOWN_EVIDENCE_REMEDIATION, is_hidden_character,
 };
 use vsift_domain::{
     AudioRange, CropRect, EvidenceMediaKind, EvidenceProfile, FrameDimensions, FrameListing,
@@ -706,8 +706,7 @@ async fn a_short_session_root_delivers_a_plain_windows_path() -> TestResult {
 async fn a_session_root_beyond_max_path_keeps_the_extended_length_form() -> TestResult {
     let padding = "p".repeat(120);
     let sessions = Path::new(&padding).join(&padding).join("private sessions");
-    let (_harness, path, bytes) =
-        delivered_frame_path(OwnedRoot::with_sessions(&sessions)?).await?;
+    let (harness, path, bytes) = delivered_frame_path(OwnedRoot::with_sessions(&sessions)?).await?;
     let plain = path
         .strip_prefix(EXTENDED_LENGTH_PREFIX)
         .ok_or("a long path lost the extended-length form")?;
@@ -717,6 +716,18 @@ async fn a_session_root_beyond_max_path_keeps_the_extended_length_form() -> Test
     );
     assert_eq!(fs::canonicalize(&path)?, PathBuf::from(&path));
     assert_eq!(fs::read(&path)?, bytes);
+
+    // L-016 (P13 PR 2b): human output shows the exact path alone on its
+    // line, followed once by the note on how to open the extended form.
+    let human = harness.run(&frame_get(&harness.session, "1025000", &[]))?;
+    assert_eq!(human.status.code(), Some(0));
+    let text = human_text(&human)?;
+    assert!(
+        text.lines().any(|line| line == format!("    {path}")),
+        "{text}"
+    );
+    assert_eq!(text.matches("extended-length form").count(), 1, "{text}");
+    assert!(text.contains("Copy-Item -LiteralPath"), "{text}");
     Ok(())
 }
 
@@ -750,13 +761,119 @@ async fn a_frame_stream_is_the_items_then_one_terminal_event() -> TestResult {
     assert_eq!(data["reused"], true);
     assert_eq!(terminal["result"]["status"], "complete");
 
-    // Without --json, the result is the same document, indented.
+    // Without --json, the result is readable text (P13 PR 2b): each item
+    // by its identity, its file's path alone on its line, and no JSON.
     let human = harness.run(&frame_get(&harness.session, "1025000", &[]))?;
     assert_eq!(human.status.code(), Some(0));
-    let text = String::from_utf8(human.stdout)?;
-    assert!(text.contains("\n  \"command\": \"frame.get\""));
-    let value: Value = serde_json::from_str(&text)?;
-    validate("frame-data.schema.json", &value["data"])?;
+    let text = human_text(&human)?;
+    assert!(!text.contains("\"command\""), "{text}");
+    for item in items {
+        let identity = item["evidence_id"].as_str().ok_or("no identity")?;
+        assert!(
+            text.lines().any(|line| line.starts_with(identity)),
+            "{text}"
+        );
+    }
+    let path = page["data"]["files"][0]["path"].as_str().ok_or("no path")?;
+    assert!(
+        text.lines().any(|line| line == format!("    {path}")),
+        "the path is not alone on its line: {text}"
+    );
+    Ok(())
+}
+
+/// Checks a successful human run: nothing on stderr, and stdout holds no
+/// control character but line breaks, no raw hidden character, no terminal
+/// link and no line longer than a diagnostic (SEC-T02's terminal rules).
+fn human_text(output: &Output) -> Built<String> {
+    assert!(
+        output.stderr.is_empty(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout.clone())?;
+    for character in text.chars() {
+        assert!(
+            character == '\n' || !character.is_control(),
+            "control U+{:04X} in {text:?}",
+            u32::from(character)
+        );
+        assert!(
+            !is_hidden_character(character),
+            "raw hidden U+{:04X} in {text:?}",
+            u32::from(character)
+        );
+    }
+    assert!(!text.contains("\u{1b}]8;"), "a terminal link: {text:?}");
+    for line in text.lines() {
+        assert!(line.len() <= 4_095, "a line of {} bytes", line.len());
+    }
+    Ok(text)
+}
+
+/// The session root of the SEC-T02 human rerun: a right-to-left override
+/// and a zero-width space everywhere, and where the platform allows them in
+/// a name an OSC-8 link, an ANSI colour, a line break and a C1 control that
+/// would forge a line of their own.
+fn hostile_sessions() -> PathBuf {
+    #[cfg(windows)]
+    let parent = "roo\u{202e}ts\u{200b}";
+    #[cfg(not(windows))]
+    let parent = "roo\u{202e}ts\u{200b}\u{1b}]8;;https://example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85}";
+    Path::new(parent).join("private sessions")
+}
+
+/// SEC-T02 over human output (P13 PR 2b; L-016, L-073): under a session
+/// root holding hidden characters (and controls where a name can hold
+/// them), `frame get`, `crop` and `audio` without `--json` keep every
+/// delivered path on its own line, inert, flagged as not shown exactly, and
+/// never let the root forge a line.
+#[tokio::test]
+async fn sec_t02_hostile_session_root_paths_stay_inert_in_human_output() -> TestResult {
+    let harness = Harness::open_in(OwnedRoot::with_sessions(&hostile_sessions())?)?;
+    harness.trust_tools()?;
+    let frame = harness.seeded_frame(1_025_000).await?;
+    harness.seed(&frame, 0)?;
+    let parent = frame.record.items().first().ok_or("no frame")?;
+    let crop = harness.seeded_crop(parent, (8, 4, 20, 10)).await?;
+    harness.seed(&crop, 0)?;
+    let audio = harness.seeded_audio().await?;
+    harness.seed(&audio, 0)?;
+    let parent = parent.id().as_str().to_owned();
+    let commands: [Vec<&str>; 3] = [
+        frame_get(&harness.session, "1025000", &[]),
+        vec!["crop", &harness.session, &parent, "--rect", "8,4,20,10"],
+        vec!["audio", &harness.session, "--from", "0", "--to", "1000000"],
+    ];
+    for arguments in commands {
+        let context = arguments.join(" ");
+        let output = harness.run(&arguments)?;
+        assert_eq!(output.status.code(), Some(0), "{context}");
+        let text = human_text(&output)?;
+        let lines: Vec<&str> = text.lines().collect();
+        let shown = lines
+            .iter()
+            .position(|line| line.contains("roo<U+202E>ts<U+200B>"))
+            .ok_or_else(|| format!("{context}: no path line: {text}"))?;
+        assert!(lines[shown].starts_with("    "), "{context}: {text}");
+        assert!(
+            lines[shown - 1].starts_with("  File ("),
+            "{context}: {text}"
+        );
+        assert!(
+            text.contains("is not shown exactly"),
+            "{context}: no note: {text}"
+        );
+        assert!(
+            !lines.iter().any(|line| line.starts_with("Forged")),
+            "{context}: a forged line: {text}"
+        );
+        #[cfg(not(windows))]
+        assert!(
+            lines[shown].contains("\u{fffd}]8;;https://example.invalid\u{fffd}x\u{fffd}[31m\u{fffd}Forged: line\u{fffd}"),
+            "{context}: {text}"
+        );
+    }
     Ok(())
 }
 

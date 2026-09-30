@@ -23,6 +23,12 @@
 //! from a result, or raw text rendered with the same rule. Evidence text is
 //! therefore always quoted in its display form, never from `text`, `label`
 //! or `original_text`.
+//!
+//! A delivered file path has its own entry, [`TerminalText::push_path_line`]
+//! (P13 PR 2b): it is not evidence, but it holds the session root the user
+//! chose, so it passes the same character rules, and it stands alone on its
+//! line so it can be copied whole. The builder reports whether the path was
+//! written exactly, so the renderer can say when it was not.
 
 use std::fmt;
 
@@ -122,6 +128,23 @@ pub(crate) enum Placement {
 /// it, so a reader can always tell quoted evidence from `VSift`'s own text.
 pub(crate) const QUOTE_PREFIX: &str = "  | ";
 
+/// What [`TerminalText::push_path_line`] wrote for a path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PathLine {
+    /// The path, character for character: it can be copied from the line.
+    Exact,
+    /// The path with a control character as U+FFFD or a hidden character as
+    /// `<U+XXXX>`: readable, but not the path itself.
+    Altered,
+    /// A fixed statement instead of a path longer than
+    /// [`MAX_UNTRUSTED_LINE_BYTES`], which a line cannot hold whole and which
+    /// is never cut.
+    TooLong,
+}
+
+/// Written instead of a path that does not fit on one line.
+const PATH_TOO_LONG: &str = "(a path longer than 4000 bytes; read it with --json)";
+
 /// The human text of one result or failure, built by [`TerminalText`].
 ///
 /// Only the builder creates one, so a writer that takes it writes nothing
@@ -214,6 +237,42 @@ impl TerminalText {
             Placement::Quoted => self.push_quoted(&text.0),
         }
         self
+    }
+
+    /// Writes a delivered file path on a line of its own, after `indent`:
+    /// the current line is ended first, and the path's line is ended after.
+    ///
+    /// The path is never cut, since a cut path names another file: one
+    /// longer than [`MAX_UNTRUSTED_LINE_BYTES`] once rendered is replaced by
+    /// a fixed statement. Its characters pass the control and
+    /// hidden-character rules; the answer says whether the line holds the
+    /// path exactly.
+    pub(crate) fn push_path_line(&mut self, indent: &'static str, path: &str) -> PathLine {
+        if self.line_start != self.text.len() {
+            self.end_line();
+        }
+        let mut rendered = String::with_capacity(path.len());
+        let mut piece = String::with_capacity(12);
+        let mut altered = false;
+        for character in path.chars() {
+            safe_piece(character, &mut piece);
+            altered |= piece.chars().ne(std::iter::once(character));
+            rendered.push_str(&piece);
+        }
+        self.push_checked(indent);
+        let written = if rendered.len() > MAX_UNTRUSTED_LINE_BYTES {
+            self.push_raw(PATH_TOO_LONG);
+            PathLine::TooLong
+        } else {
+            self.push_raw(&rendered);
+            if altered {
+                PathLine::Altered
+            } else {
+                PathLine::Exact
+            }
+        };
+        self.end_line();
+        written
     }
 
     /// Ends the current line.
@@ -331,13 +390,14 @@ fn safe_piece(character: char, piece: &mut String) {
 mod tests {
     use proptest::{
         collection,
-        prelude::{Strategy, TestCaseError, prop_assert, proptest},
+        prelude::{Strategy, TestCaseError, prop_assert, prop_assert_eq, proptest},
         sample,
     };
     use vsift_contract::is_hidden_character;
 
     use super::{
-        DisplayText, MAX_UNTRUSTED_LINE_BYTES, Placement, QUOTE_PREFIX, TerminalText, TooLarge,
+        DisplayText, MAX_UNTRUSTED_LINE_BYTES, PathLine, Placement, QUOTE_PREFIX, TerminalText,
+        TooLarge,
     };
 
     /// Characters a hostile string is built from: controls of every kind,
@@ -441,6 +501,63 @@ mod tests {
                 prop_assert!(line.starts_with(QUOTE_PREFIX), "{line:?}");
             }
         }
+
+        /// SEC-T02 (P13 PR 2b): a delivered path, whatever it holds, is
+        /// one terminal-safe line of its own after its indent, never cut;
+        /// the builder says whether that line is the path exactly.
+        #[test]
+        fn a_path_stands_alone_on_one_safe_line(
+            label in hostile_string(),
+            path in hostile_string(),
+            long in collection::vec(sample::select(HOSTILE), 0..4_200),
+        ) {
+            for path in [path, long.into_iter().collect::<String>()] {
+                let mut text = TerminalText::result();
+                text.push_fixed("File: ").push_value(&label);
+                let written = text.push_path_line("    ", &path);
+                text.push_fixed("After");
+                let rendered = text.finish().map_err(|_| TestCaseError::fail("too large"))?;
+                let output = rendered.as_str();
+                assert_terminal_safe(output);
+                let lines: Vec<&str> = output.lines().collect();
+                prop_assert_eq!(lines.len(), 3, "{:?}", output);
+                let shown = lines[1].strip_prefix("    ");
+                prop_assert!(shown.is_some(), "{:?}", lines[1]);
+                let shown = shown.unwrap_or_default();
+                prop_assert!(shown.len() <= MAX_UNTRUSTED_LINE_BYTES);
+                prop_assert_eq!(lines[2], "After");
+                let hostile = path
+                    .chars()
+                    .any(|character| character.is_control() || is_hidden_character(character));
+                match written {
+                    PathLine::Exact => {
+                        prop_assert!(!hostile);
+                        prop_assert_eq!(shown, path.as_str());
+                    }
+                    PathLine::Altered => prop_assert!(hostile),
+                    PathLine::TooLong => prop_assert_eq!(shown, super::PATH_TOO_LONG),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_path_is_exact_altered_or_too_long() -> Result<(), TooLarge> {
+        let mut text = TerminalText::result();
+        text.push_fixed("Files:");
+        let exact = text.push_path_line("  ", r"\\?\C:\root\artifact.png");
+        let altered = text.push_path_line("  ", "/root/a\u{202e}b\nc.png");
+        let long = text.push_path_line("  ", &"p".repeat(MAX_UNTRUSTED_LINE_BYTES + 1));
+        assert_eq!(
+            (exact, altered, long),
+            (PathLine::Exact, PathLine::Altered, PathLine::TooLong)
+        );
+        assert_eq!(
+            text.finish()?.as_str(),
+            "Files:\n  \\\\?\\C:\\root\\artifact.png\n  /root/a<U+202E>b\u{fffd}c.png\n  \
+             (a path longer than 4000 bytes; read it with --json)\n"
+        );
+        Ok(())
     }
 
     #[test]

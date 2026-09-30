@@ -322,6 +322,82 @@ fn a_request_runs_and_replays() -> TestResult {
     Ok(())
 }
 
+/// Asserts SEC-T02's terminal rules on one human stream: no control
+/// character but line breaks, no raw hidden character, no terminal link.
+fn assert_terminal_safe(stream: &[u8]) -> Built<String> {
+    let text = String::from_utf8(stream.to_vec())?;
+    for character in text.chars() {
+        assert!(
+            character == '\n' || !character.is_control(),
+            "control U+{:04X} in {text:?}",
+            u32::from(character)
+        );
+        assert!(
+            !vsift_contract::is_hidden_character(character),
+            "raw hidden U+{:04X} in {text:?}",
+            u32::from(character)
+        );
+    }
+    assert!(!text.contains("\u{1b}]8;"));
+    Ok(text)
+}
+
+/// Human mode (P13 PR 2b): the job result is readable text on stdout with
+/// nothing on stderr, the replay says so, and neither names a path; a
+/// refused request with hostile text in its paths writes only its fixed
+/// error, on stderr, echoing nothing (O-01, SEC-T02).
+#[test]
+fn human_output_is_readable_and_echoes_nothing() -> TestResult {
+    let layout = Layout::new()?;
+    layout.init(2)?;
+    let file = layout.request_file("request.json", &request(OPERATION, RETAIN_AND_CLOSE))?;
+
+    let output = layout.job_run(&file, &[]).output()?;
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    layout.assert_nothing_sensitive(&output);
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let text = assert_terminal_safe(&output.stdout)?;
+    assert!(text.starts_with("Worker request: complete\n"), "{text}");
+    for step in [
+        "0. ingest: complete",
+        "1. retain: complete",
+        "2. close: complete",
+    ] {
+        assert!(text.contains(step), "{step}: {text}");
+    }
+    assert!(
+        text.contains(&format!("\nOperation: {OPERATION}\n")),
+        "{text}"
+    );
+    assert!(!text.contains("\"command\""), "{text}");
+
+    let output = layout.job_run(&file, &[]).output()?;
+    assert_eq!(output.status.code(), Some(0));
+    let replayed = assert_terminal_safe(&output.stdout)?;
+    assert!(
+        replayed.starts_with("Worker request: complete (replayed"),
+        "{replayed}"
+    );
+
+    let hostile = layout.request_file(
+        "hostile.json",
+        &format!(
+            r#"{{"schema_version":"1","operation_id":"{OPERATION}","durability":"ephemeral","target":{{"ingest":{{"source":"{PATH_SENTINEL}\u202e\u200b\u001b]8;;https://example.invalid\u0007x/talk.mp4","transcript":null}}}},"steps":[]}}"#
+        ),
+    )?;
+    let output = layout.job_run(&hostile, &[]).output()?;
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    layout.assert_nothing_sensitive(&output);
+    assert!(output.stdout.is_empty(), "{output:?}");
+    let error = assert_terminal_safe(&output.stderr)?;
+    assert!(
+        error.starts_with("Error: ") && error.contains("(INVALID_ARGUMENT)"),
+        "{error}"
+    );
+    assert!(!error.contains("example.invalid"), "{error}");
+    Ok(())
+}
+
 /// The event stream of a fresh run and of a replay follow the contract:
 /// started with readiness, admitted, progress of the request's steps, the
 /// result, finished, stopped at the end of input, then the terminal event

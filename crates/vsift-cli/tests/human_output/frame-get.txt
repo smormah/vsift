@@ -1,0 +1,15 @@
+Frame of session ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070
+Requested: 00:00:01.025000, at_or_after, tolerance 1000000 us
+Extracted now (profile p09-r0-v1, source copy checked by full_hash)
+Selections (requested time -> actual time):
+  requested  00:00:01.025000 -> 00:00:01.050000 (+25000 us)  evd_98cddae2618e298443f2410c063a9067
+
+Evidence (each file is valid while the session exists; retain the session to keep it):
+
+evd_98cddae2618e298443f2410c063a9067  frame at 00:00:01.050000, 1280x720 (stream 0, pts 10752)
+  Image 1280x720, 48 bytes, sha256 4ab83ace28a6c094de282185d74651f4feb15d3b96256d6d443cb3b819523e75
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-4ab83ace28a6c094de282185d74651f4feb15d3b96256d6d443cb3b819523e75.png
+
+Lifecycle: ephemeral, expires 2026-09-27T00:00:00Z

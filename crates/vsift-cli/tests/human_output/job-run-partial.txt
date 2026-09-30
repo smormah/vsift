@@ -1,0 +1,16 @@
+Worker request: partial
+Attempt: 2
+Request digest: 47d7a0170ac5826404c84e1a3ec6b8661d8f4dc5154ee7a1f0fb5a9ec8ba10d6
+Session: ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881
+Publication: os_crash_durable
+Controls: isolation strict_linux, admission capacity 8, concurrency 2, resource limits host_cgroup, free-space reserve enforced
+Steps:
+  0. candidates: partial (9870 ms, 1250 ms waiting for admission)
+     visual index vix_5278827a5eb80d85a88983f2e69a5cba, 3 candidates, generation 4
+     Not covered (us): 60000000-120000000 (undecodable; the list is cut)
+
+Status: partial (the warnings below say what is missing)
+Operation: op_2a4c6e8f0b1d3f5a7c9e1b3d5f7a9c1e
+Lifecycle: durable_worker, expires 2026-10-05T12:00:00Z
+Warning: The request completed with a stated gap; see the coverage of each partial step.

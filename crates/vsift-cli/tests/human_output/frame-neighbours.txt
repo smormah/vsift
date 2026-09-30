@@ -1,0 +1,23 @@
+Neighbours of evd_1e9b01e96f8fd6650c4cef2d91301b8a in session ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070
+Requested: up to 2 frames on each side
+Before: stopped short at start_of_stream
+After: every frame asked for
+Extracted now (profile p09-r0-v1, source copy checked by identity)
+Selections (requested time -> actual time):
+  after  00:00:00.000000 -> 00:00:00.050000 (+50000 us)  evd_0b3ec01827ed12fc459413672f012eea
+  after  00:00:00.000000 -> 00:00:00.100000 (+100000 us)  evd_58bcf48a60b3598525c5fde2d7446def
+
+Evidence (each file is valid while the session exists; retain the session to keep it):
+
+evd_0b3ec01827ed12fc459413672f012eea  frame at 00:00:00.050000, 1280x720 (stream 0, pts 512)
+  Image 1280x720, 46 bytes, sha256 58fa017f72f14dcfde3b633c73f76b30733124eb4757af44279194c6c5253069
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-58fa017f72f14dcfde3b633c73f76b30733124eb4757af44279194c6c5253069.png
+
+evd_58bcf48a60b3598525c5fde2d7446def  frame at 00:00:00.100000, 1280x720 (stream 0, pts 1024)
+  Image 1280x720, 47 bytes, sha256 7d18cd514692465b68d8271e1b3e9c4de18c1d2ef32483a7972896bbdf29b564
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-7d18cd514692465b68d8271e1b3e9c4de18c1d2ef32483a7972896bbdf29b564.png
+
+Lifecycle: ephemeral, expires 2026-09-27T00:00:00Z

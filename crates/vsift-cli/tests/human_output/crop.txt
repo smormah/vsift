@@ -1,0 +1,16 @@
+Crop of evd_98cddae2618e298443f2410c063a9067 in session ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070
+Requested: rectangle x 150, y 235, 550x55 of the parent image
+Extracted now (profile p09-r0-v1, source copy checked by identity)
+Selections (requested time -> actual time):
+  requested  00:00:01.050000 -> 00:00:01.050000 (0 us)  evd_2b6da34a75e5a238cabe7cc2e9fa446b
+
+Evidence (each file is valid while the session exists; retain the session to keep it):
+
+evd_2b6da34a75e5a238cabe7cc2e9fa446b  crop 550x55 at x 150, y 235 of evd_98cddae2618e298443f2410c063a9067
+  From the frame at 00:00:01.050000 (x 150, y 235 there; stream 0, pts 10752)
+  Image 550x55, 47 bytes, sha256 a4446ba445df4a55e4d6af15ab745143db05c5392917f122350424eb4343db2b
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-a4446ba445df4a55e4d6af15ab745143db05c5392917f122350424eb4343db2b.png
+
+Lifecycle: ephemeral, expires 2026-09-27T00:00:00Z

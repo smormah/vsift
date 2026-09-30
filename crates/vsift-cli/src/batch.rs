@@ -17,6 +17,10 @@
 //! time is over); `stopped` with the batch's termination; then the terminal
 //! event carrying the same response `--json` prints: the summary, with the
 //! outcome of maintainer decision D5 as its status and the process exit.
+//!
+//! In human mode (P13 PR 2b) only the summary is written, as readable text,
+//! with the batch's error on stderr when it has one; the per-request results
+//! and the rest of the stream are `--events jsonl` only.
 
 use std::{
     collections::HashMap,
@@ -43,12 +47,12 @@ use vsift_contract::{
 use crate::{
     CommandFailure,
     command::JobBatchArguments,
-    failure_response,
+    failure_response, host_write_failure,
     output::{JsonLinesWriter, OutputError, OutputMode, OutputWriter, ProcessExit},
     progress::ProgressGate,
     signal::Shutdown,
     worker::{Event, item_status, write},
-    write_command_failure,
+    write_command_failure, write_human_host,
 };
 
 type Response = OperationResponse<serde_json::Value>;
@@ -546,20 +550,11 @@ where
     };
     let written = match mode {
         OutputMode::Json | OutputMode::JsonLines => writer.write_json(&*response),
-        OutputMode::Human => match serde_json::to_string_pretty(&*response) {
-            Ok(mut text) => {
-                text.push('\n');
-                writer.write_trusted_stdout(&text)
-            }
-            Err(_) => return ProcessExit::Internal,
-        },
+        OutputMode::Human => write_human_host(writer, COMMAND, &response),
     };
     match written {
         Ok(()) => exit,
-        Err(error) => {
-            writer.write_safe_diagnostic(&error.to_string());
-            ProcessExit::StorageOrIo
-        }
+        Err(error) => host_write_failure(writer, COMMAND, &error),
     }
 }
 

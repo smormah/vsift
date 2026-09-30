@@ -1,0 +1,30 @@
+Resumed job job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70 (retranscribe)
+Session: ses_0123456789abcdef0123456789abcdef
+State: succeeded, not resumable (succeeded)
+Bound to operation: op_4f0c2b8e9a1d3c5e7f60718293a4b5c6
+Range: 00:00:05.500000 to 00:00:06.000000 (--from 5500000 --to 6000000)
+Chunks checkpointed: 0 of 1
+Attempts in this epoch: 1
+Result: revision trv_4210915bdac994cd08f04a7ad5d99475, generation 3
+
+New transcript revision of session ses_0123456789abcdef0123456789abcdef
+Revision 2: trv_4210915bdac994cd08f04a7ad5d99475 (local_asr, segments in all: 1)
+Local ASR: whisper_cpp, model base, decoding r0-v1, 4 threads
+  Model sha256: 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
+  Executable sha256: 95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d
+  Chunks: 1 (0 transcribed, 1 silent, 0 without audio)
+Supersedes: trv_7936f6da2eecbf52108c4e6c9f96660e
+Replaced range: 00:00:05.500000 to 00:00:06.000000 (--from 5500000 --to 6000000)
+Segments carried from earlier revisions: 1
+Revision warning: silent_chunks_skipped (count 1, first at cue 1)
+Revision warning: no_speech_recognised (count 1, first at cue 1)
+Requested range: 00:00:05.500000 to 00:00:06.000000 (--from 5500000 --to 6000000)
+Segments recognised now: 0
+Job: job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70 (resumed, chunks reused: 1)
+Read its segments: vsift transcript get ses_0123456789abcdef0123456789abcdef --revision trv_4210915bdac994cd08f04a7ad5d99475
+
+Operation: op_4f0c2b8e9a1d3c5e7f60718293a4b5c6
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: Some audio had no audible signal and was not transcribed.
+Warning: No speech was recognised in the transcribed range; the revision records the attempt without new segments there.
+Warning: resumed_from_checkpoint: The retranscription continued an interrupted run. Chunks recognised before the interruption were taken from its private checkpoints instead of being decoded again; the revision is the one an uninterrupted run gives.

@@ -307,6 +307,47 @@ and not for parsing. SEC-T02's human-output rerun for these commands is
 and golden snapshots (for review, not a contract) in
 `crates/vsift-cli/tests/human_output/`; L-017 and L-073 stay open for PR 2b's commands.
 
+*Implementation note, 2026-09-30 (P13 PR 2b):* the remaining commands render through
+the same builder: `candidates`, `frame get/neighbours/burst`, `crop`, `audio`, `job
+status/resume/cancel` and the worker hosts `job run` and `job batch` (modules
+`human/evidence.rs` and `human/job.rs`, typed views in `human/view.rs`). Every command
+that completes now has a renderer; one without is a defect that fails `INTERNAL`, so
+human mode never prints the JSON document. Decisions taken in this PR, for the
+maintainer's review:
+
+- **Paths (L-016's display).** The builder gains one entry, `push_path_line`: a
+  delivered `files[].path` is written whole on a line of its own (after four spaces)
+  under its item and `File (<media type>):` label, never cut, with the same character
+  rules as any value; it reports whether the line is the path exactly. A path in the
+  extended-length form (`\\?\`) is followed once by a note that some programs refuse
+  it, that PowerShell's `Copy-Item -LiteralPath '<path>' <destination>` copies the file
+  out, and that a `--session-root` of at most 125 characters gives plain paths. A path
+  holding a control or hidden character (the session root is the user's choice), or
+  longer than 4,000 bytes (replaced by a statement), is flagged once with `--json`
+  named for the exact text. The JSON is unchanged. L-016 keeps only its residual.
+- **Worker hosts keep JSON Lines for their stream.** Human mode renders the final
+  response only, as it wrote only the final response before: `job run`'s job result
+  (steps, typed outputs, uncovered ranges, failures, controls) and `job batch`'s
+  summary. A `failed` or `cancelled` request or batch writes that text to stdout and
+  its error to stderr in the failure form; exit statuses are unchanged. The
+  `progress`, `lifecycle` and `result` events are not rendered: they are a supervisor's
+  interface (ADR 0021: sequence numbers, never-dropped lifecycle and result events,
+  64 KiB lines), consumed by machines, and a second, unstable human form of the stream
+  would be a protocol without a user. `cli-v1.md` says so; L-017 is rewritten as that
+  accepted residual (no progress in human mode).
+- **SEC-T02 on every human output (closes L-073).** The results PR 2b renders carry no
+  evidence text; their one untrusted text is a delivered path. The rerun covers it
+  through the binary under a session root holding a right-to-left override and a
+  zero-width space, plus off Windows an OSC-8 link, an ANSI colour, a line break and a
+  C1 control (`evidence_cli_contract`, which seeds evidence without media tools, for
+  `frame get`, `crop` and `audio`, and the Windows extended-length form); in the
+  renderers' unit tests for every frame command with hostile, extended and over-long
+  paths; in `sec_t02_human_output.rs` for every PR 2b command failing under that root;
+  and in `job_run_cli_contract` and `job_batch_cli_contract` for the worker hosts with
+  hostile request text. A second builder property test shows a path of any content is
+  one safe line. Golden snapshots of every frozen example are in
+  `crates/vsift-cli/tests/human_output/`.
+
 ### 5. Parse remediation (L-071)
 
 A command line that fails to parse gets a typed remediation (what kind of mistake,

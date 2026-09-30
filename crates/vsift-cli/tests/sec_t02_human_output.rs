@@ -1,4 +1,4 @@
-//! SEC-T02 over human-readable output (P13 PR 2a; L-073 in part).
+//! SEC-T02 over human-readable output (P13 PRs 2a and 2b; closes L-073).
 //!
 //! The adversarial sidecars `fixtures/corpus/transcripts/F12-adversarial.srt`
 //! and `.vtt` (hidden-colour and class-hidden instructions, a forged
@@ -18,6 +18,19 @@
 //! - evidence only on quoted lines (`  | `), so a cue that imitates a
 //!   result or a command can never stand on a line of its own;
 //! - no line longer than a diagnostic (4,096 bytes).
+//!
+//! P13 PR 2b adds the commands it renders. `candidates`, the frame
+//! commands, `crop`, `audio` and the `job` commands run here without
+//! `--json` under a session root whose name holds hidden characters (and,
+//! off Windows, an OSC-8 link, ANSI colour, line break and C1 control), and
+//! must fail inertly. Their results carry no evidence text; the one
+//! untrusted text they can carry, a delivered path under such a root, is
+//! re-run through the binary in `evidence_cli_contract`
+//! (`sec_t02_hostile_session_root_paths_stay_inert_in_human_output`, which
+//! can seed evidence without media tools), and for every frame command in
+//! the renderers' unit tests (`human::tests`). The worker hosts' human runs,
+//! with hostile request text, are in `job_run_cli_contract` and
+//! `job_batch_cli_contract`.
 //!
 //! The golden snapshots under `tests/human_output/` (expiry times replaced
 //! by `<TIME>`) are for readability review only: human text is not a
@@ -67,10 +80,23 @@ const SENTINEL: &str = "QXSENTINEL\u{202E}ZWREVERSED\u{200B}JOINED\u{1b}[31mESCA
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
-struct OwnedRoot(PathBuf);
+struct OwnedRoot(PathBuf, &'static str);
+
+/// A session-root folder name that holds a right-to-left override and a
+/// zero-width space, and where the platform allows them in a name an OSC-8
+/// link, an ANSI colour, a line break and a C1 control (P13 PR 2b).
+#[cfg(windows)]
+const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B} sessions";
+#[cfg(not(windows))]
+const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B}\u{1b}]8;;https://example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85} sessions";
 
 impl OwnedRoot {
     fn new() -> Result<Self, Box<dyn Error>> {
+        Self::with_sessions("private sessions")
+    }
+
+    /// An owned folder whose session root is its child `sessions`.
+    fn with_sessions(sessions: &'static str) -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let sequence = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
         let path = env::temp_dir().join(format!(
@@ -78,7 +104,7 @@ impl OwnedRoot {
             std::process::id()
         ));
         fs::create_dir(&path)?;
-        Ok(Self(path))
+        Ok(Self(path, sessions))
     }
 
     fn path(&self, child: &str) -> PathBuf {
@@ -86,7 +112,7 @@ impl OwnedRoot {
     }
 
     fn sessions(&self) -> PathBuf {
-        self.path("private sessions")
+        self.path(self.1)
     }
 
     fn write(&self, name: &str, bytes: &[u8]) -> Result<PathBuf, Box<dyn Error>> {
@@ -533,5 +559,51 @@ fn setup_commands_render_readable_text() -> TestResult {
         registered.starts_with("Registered the local ASR model"),
         "{registered}"
     );
+    Ok(())
+}
+
+/// P13 PR 2b's commands without `--json` over F12's adversarial session in
+/// a session root whose name is hostile: with no media tools they fail, and
+/// every failure is the fixed text on stderr (stdout empty), terminal-safe
+/// and without a word of the root. The session's status still reads as
+/// text. Their successful results, whose only untrusted text is a delivered
+/// path under such a root, are re-run where evidence can be seeded:
+/// `evidence_cli_contract` (`frame get`, `crop`, `audio`), and in the
+/// builder's unit tests for every frame command; `candidates` and the `job`
+/// commands carry no path and no evidence text.
+#[tokio::test]
+async fn part_two_commands_fail_inertly_under_a_hostile_session_root() -> TestResult {
+    let root = OwnedRoot::with_sessions(HOSTILE_SESSIONS)?;
+    seed_session(&root, &repository(SRT)).await?;
+    let status = human(&root, &["session", "status", SESSION])?;
+    assert!(
+        status.starts_with(&format!("Session {SESSION}\n")),
+        "{status}"
+    );
+
+    let unknown_evidence = "evd_ffffffffffffffffffffffffffffffff";
+    let unknown_job = "job_ffffffffffffffffffffffffffffffff";
+    let cases: [Vec<&str>; 9] = [
+        vec!["candidates", SESSION, "--from", "0", "--to", "12000000"],
+        vec!["frame", "get", SESSION, "--at", "0"],
+        vec!["frame", "neighbours", SESSION, unknown_evidence],
+        vec!["frame", "burst", SESSION, "--from", "0", "--to", "1000000"],
+        vec!["crop", SESSION, unknown_evidence, "--rect", "0,0,8,8"],
+        vec!["audio", SESSION, "--from", "0", "--to", "1000000"],
+        vec!["job", "status", unknown_job],
+        vec!["job", "resume", unknown_job],
+        vec!["job", "cancel", unknown_job],
+    ];
+    for arguments in cases {
+        let context = arguments.join(" ");
+        let output = vsift(&root, &arguments)?;
+        assert_ne!(output.status.code(), Some(0), "{context}");
+        assert!(output.stdout.is_empty(), "{context}: stdout written");
+        let stderr = assert_terminal_safe(&output.stderr, &context)?;
+        assert!(stderr.starts_with("Error: "), "{context}: {stderr}");
+        for fragment in ["snoisses", "example.invalid", "Forged"] {
+            assert!(!stderr.contains(fragment), "{context}: {stderr}");
+        }
+    }
     Ok(())
 }

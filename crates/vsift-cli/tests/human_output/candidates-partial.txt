@@ -1,0 +1,24 @@
+Visual candidates of session ses_0123456789abcdef0123456789abcdef
+Index: vix_5278827a5eb80d85a88983f2e69a5cba (revision 1, r0-visual-v1, video length 00:02:30.000000)
+Range: 00:00:00.000000 to 00:03:20.000000 (--from 0 --to 200000000)
+Searched: 00:00:00.000000 to 00:02:30.000000 (--from 0 --to 150000000)
+Analysed:
+  00:00:00.000000 to 00:01:00.000000 (--from 0 --to 60000000)
+Not covered (no candidates there):
+  00:01:00.000000 to 00:02:00.000000 (--from 60000000 --to 120000000): undecodable
+  00:02:00.000000 to 00:02:30.000000 (--from 120000000 --to 150000000): not_analyzed
+Candidates on this page: 2
+
+vcd_37d54074a8f7963cee1c0bc7e23eaf79  at 00:00:00.000000  first_frame
+  Span 00:00:00.000000 --> 00:00:05.000000, settled, 10 samples, 1440x900, visual hash 0000000000000028
+
+vcd_d0a47607c893a97b6e9d4893ac51daca  at 00:00:05.000000  visual_change
+  Span 00:00:05.000000 --> 00:00:09.000000, settled, 8 samples, 1440x900, visual hash 000000000000005a
+  Changed between 00:00:04.500000 and 00:00:05.000000: 144 blocks changed, the largest by 50
+
+Get a candidate's frame: vsift frame get ses_0123456789abcdef0123456789abcdef --candidate vcd_37d54074a8f7963cee1c0bc7e23eaf79
+More on the next page: repeat the command with --cursor 'v1|ses_0123456789abcdef0123456789abcdef|1|8c18b93b0fb2a8b9c5e377d0ef676dcf40a2c143e59f7e3e9dd974eaf69e2625|0-5000000|1790294400000000'
+
+Status: partial (the warnings below say what is missing)
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: Part of the requested range has no visual candidates because it is not analysed yet or could not be analysed; coverage lists each gap and its reason. Run candidates again for the same range to continue not_analyzed and deadline_exceeded parts.

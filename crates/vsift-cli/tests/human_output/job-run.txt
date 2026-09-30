@@ -1,0 +1,19 @@
+Worker request: complete
+Attempt: 1
+Request digest: 38ca75e74476daae1ec4f372a621f9c0223bbf7788ec15145bb121a7978b4160
+Session: ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881
+Publication: os_crash_durable
+Controls: isolation strict_linux, admission capacity 8, concurrency 2, resource limits host_cgroup, free-space reserve enforced
+Steps:
+  0. ingest: complete (412 ms, 0 ms waiting for admission)
+     no transcript imported, generation 1
+  1. retranscribe: complete (21530 ms, 180 ms waiting for admission), job job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70
+     revision trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978, 0 chunks reused, generation 2
+  2. candidates: complete (2940 ms, 0 ms waiting for admission)
+     visual index vix_31b0dcc02c3694707c889ba38d140c4f, 4 candidates, generation 3
+  3. retain: complete (96 ms, 0 ms waiting for admission)
+     bundle f01-review, manifest sha256 3c9a0e5f7b2d4c6e8a1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a5c, 3 artifacts
+
+Operation: op_5b1e0c7a9d2f4e6b8a3c1d0e9f7a6b5c
+Lifecycle: durable_worker, expires 2026-10-05T12:00:00Z

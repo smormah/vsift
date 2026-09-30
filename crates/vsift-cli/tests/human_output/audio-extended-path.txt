@@ -1,0 +1,17 @@
+Audio clip of session ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070
+Requested: 00:00:00.000000 to 00:00:01.000000 (--from 0 --to 1000000)
+Extracted now (profile p09-r0-v1, source copy checked by identity)
+Selections (requested time -> actual time):
+  requested  00:00:00.000000 -> 00:00:00.064000 (+64000 us)  evd_2b904387059d0b66eb69130b67f40e12
+
+Evidence (each file is valid while the session exists; retain the session to keep it):
+
+evd_2b904387059d0b66eb69130b67f40e12  audio 00:00:00.000000 to 00:00:01.000000 (--from 0 --to 1000000), first sample at 00:00:00.064000 (stream 1)
+  WAV 16000 Hz, mono, s16le, 91 bytes, sha256 b1353420280edb8eba808885917b8e07cf0f0d0392c03dba8de4f9ea85c09a66
+  File (audio/wav):
+    \\?\C:\dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\artifact.png
+
+Note: a path starting with \\?\ is in Windows' extended-length form. It is exact, but some programs refuse it: copy the file out with PowerShell's Copy-Item -LiteralPath '<path>' <destination>, or use a --session-root of at most 125 characters to get plain paths.
+
+Lifecycle: ephemeral, expires 2026-09-27T00:00:00Z

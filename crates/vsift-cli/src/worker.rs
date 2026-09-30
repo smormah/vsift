@@ -17,6 +17,10 @@
 //! request_finished`, `lifecycle stopped` (`shutdown` or `end_of_input`) and
 //! the terminal event, which carries the same response `--json` prints.
 //! Progress is gated and may be dropped (counted); nothing else is.
+//!
+//! In human mode (P13 PR 2b) only the final response is written: the job
+//! result as readable text on stdout, and, for a failed or cancelled
+//! request, its error on stderr. The event stream is `--events jsonl` only.
 
 use std::{
     fs::File,
@@ -31,11 +35,11 @@ use std::{
 use crate::{
     CommandFailure,
     command::JobRequestArguments,
-    failure_response,
+    failure_response, host_write_failure,
     output::{JsonLinesWriter, OutputError, OutputMode, OutputWriter, ProcessExit},
     progress::ProgressGate,
     signal::Shutdown,
-    write_command_failure,
+    write_command_failure, write_human_host,
 };
 use tokio::sync::mpsc;
 use vsift::{
@@ -105,20 +109,11 @@ where
     let (response, exit) = present(outcome);
     let written = match mode {
         OutputMode::Json | OutputMode::JsonLines => writer.write_json(&response),
-        OutputMode::Human => match serde_json::to_string_pretty(&response) {
-            Ok(mut text) => {
-                text.push('\n');
-                writer.write_trusted_stdout(&text)
-            }
-            Err(_) => return ProcessExit::Internal,
-        },
+        OutputMode::Human => write_human_host(writer, CommandName::JobRun, &response),
     };
     match written {
         Ok(()) => exit,
-        Err(error) => {
-            writer.write_safe_diagnostic(&error.to_string());
-            ProcessExit::StorageOrIo
-        }
+        Err(error) => host_write_failure(writer, CommandName::JobRun, &error),
     }
 }
 
