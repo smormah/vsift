@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **npm packages and their qualification** (P13 PR 9; ADR 0023 section 2, decisions A,
+  H5, H6 and H7). The launcher package `vsift-cli` (npm refused the unscoped `vsift` as too similar to existing names; ADR 0009 note), which installs the `vsift` command (`npm/vsift-cli/`: a plain CommonJS
+  `bin/vsift.cjs` and `lib/launcher.cjs`, the agent skill and `platform-digests.json`) and the platform packages
+  `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64` (the executable, its
+  notices and the licences, with `os` and `cpu`) are assembled from the release archives
+  by `vsift-release npm` and checked after `npm pack` by `vsift-release npm-verify`. The
+  launcher finds the installed platform package, requires its version to be its own and
+  the executable's size and SHA-256 to match the digests recorded by the build, runs it
+  with no shell and the same arguments and streams, relays signals, and exits with its
+  status; a failure is a readable message and exit 127 (no platform package) or 126
+  (refused or cannot start). No package has an install script or names a person; the
+  governance check enforces it for `npm/`. The Release workflow's new `npm-package` and
+  `npm-qualify` jobs pack the tarballs twice and compare them, then publish them to a
+  Verdaccio registry on the runner's loopback address and qualify npm, pnpm, Yarn and
+  Bun on Windows, macOS and Ubuntu: global (Yarn: project) and one-shot installs with
+  scripts disabled, paths with spaces and Unicode, signals and exit statuses, damaged and
+  mismatched packages, omitted optional dependencies, offline use and uninstall. CI job
+  `npm launcher` runs the launcher's tests. Nothing is published. Guide
+  `docs/operations/install.md`; runbook `docs/operations/release.md` section 5; known
+  limits L-091 to L-094.
 - **Release workflow and governance workflow lint** (P13 PR 8; ADR 0023 section 1 and
   decision D). `.github/workflows/release.yml` builds `vsift` for
   `x86_64-pc-windows-msvc` (static C runtime), `aarch64-apple-darwin` and

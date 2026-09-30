@@ -62,6 +62,15 @@ one npm scope owned by an organisation the maintainer creates: `@<scope>/win32-x
 `@<scope>/darwin-arm64` and `@<scope>/linux-x64` (written `@<scope>/…` in this ADR).
 The executable stays `vsift` (ADR 0001, ADR 0009).
 
+*Amendment, 2026-09-30 (maintainer, later the same day): the launcher package is
+`vsift-cli`.* npm refused the unscoped `vsift` at publish ("Package name too similar to
+existing packages sift, tsify", E403 on the maintainer's placeholder). The maintainer holds
+`vsift-cli` with a placeholder `0.0.0` published on 2026-09-30. The installed command stays
+`vsift` (the package's `bin` key), and the platform packages stay in the `@vsift` scope. Read
+"the unscoped `vsift` package" and "the `vsift` package" in this ADR as `vsift-cli`; the
+reasons and the lesson (a not-found lookup is not availability) are in the ADR 0009 note of
+the same date. This supersedes the unscoped launcher name of this decision.
+
 *Amendment, 2026-09-30 (maintainer): the scope is `@vsift`.* The maintainer owns the
 npm organisation `vsift`, so the packages are `@vsift/win32-x64`, `@vsift/darwin-arm64`
 and `@vsift/linux-x64`. Read `@<scope>/…` elsewhere in this ADR as `@vsift/…`. A brief
@@ -102,6 +111,11 @@ rule; the reasons are in ADR 0009's note of the same date. Nothing else is publi
 before completion. crates.io needs every workspace crate published
 and an MSRV and semver policy (ADR 0016 decision 3), none of which R0 needs.
 
+*Note, 2026-09-30 (maintainer), with the amendment of decision A:* npm refused the `vsift`
+placeholder, which was never published. The placeholder exception applies to `vsift-cli`:
+the maintainer published `vsift-cli@0.0.0` (README and `package.json` only), which stays the
+`latest` dist-tag until a stable release, while the 0.x pre-release goes under `next` and is
+installed as `vsift-cli@next`. Nothing else is published before P13 completes.
 ### C. Trust signals
 
 Release artifacts carry Sigstore build-provenance attestations
@@ -800,3 +814,127 @@ operations in `vsift/src/lifecycle.rs`.
   transaction are the same steps. No step fsyncs its directory after a rename, so PR 7's
   power-loss claim is fail-closed detection (lookup verifies every file on each open)
   plus repair, as decision H9 says.
+
+## Implementation note, 2026-09-30 (P13 PR 9, the npm packages and the Verdaccio matrix)
+
+Delivered from section 2 and decisions A, H5, H6 and H7. Nothing is published: the
+packages are built, checked and qualified inside the Release workflow's own run, against
+a registry on the runner's loopback address. Attestation, npm provenance and the publish
+job stay PR 10's. The launcher package is `vsift-cli` (the amendment of decision A); the command it installs is `vsift`, and the qualification installs `vsift-cli@next`. The runbooks are [`install.md`](../operations/install.md) (users) and
+[`release.md`](../operations/release.md) section 5 (maintainer).
+
+- **Four packages, assembled from the archives.** `tools/vsift-release npm` reads the
+  three release archives back (each must be byte-identical to a fresh packaging of its
+  own contents, so only canonical archives are used) and writes four package folders;
+  `npm pack` makes the tarballs on Ubuntu, twice, and the two must be identical;
+  `vsift-release npm-verify` then checks every tarball against a fresh assembly: only
+  `package/` entries, exactly the assembled files with the same bytes, the executable
+  bit exactly on the executable and the launcher script, and a manifest without
+  lifecycle scripts or `gypfile` and no `binding.gyp`.
+  - `vsift-cli` (the name since the amendment of decision A below): `bin/vsift.cjs` and `lib/launcher.cjs`, its `package.json` and `README.md` from `npm/vsift-cli/`, the
+    three licence files and `skills/vsift/` from the archives (decision H7: the skill ships
+    in the npm package, byte-identical to every archive's), and `platform-digests.json`.
+    H7 supersedes the 2026-09-28 launcher note's "only the launcher and its `bin` entry".
+  - `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64`: the target's
+    executable, its `THIRD-PARTY-NOTICES`, the licence files, a README and a manifest
+    written by the tool: name, version, description, `license`, `homepage`,
+    `repository` (the form npm provenance requires), `os`, `cpu`, `files`,
+    `preferUnplugged` (Yarn's Plug'n'Play keeps the executable on disk, where it can run)
+    and `publishConfig.access: public` (a scope's first publish is otherwise
+    restricted). No `libc` field: only glibc ships (launcher boundary note). The SBOM
+    stays in the archives (for the maintainer's review).
+  - **No person in any manifest.** The launcher's manifest is checked field by field
+    against a closed list (`name`, `version`, `description`, `license`, `homepage`,
+    `repository`, `bin`, `files`, `engines` with `node >=22`, and `optionalDependencies`
+    naming each platform package at the launcher's exact version); the platform manifests
+    come from a fixed template. No author, contributor, maintainer or address is written.
+- **The digest comes from the build (decision H5).** `platform-digests.json`
+  (`vsift-platform-digests/1`) records each executable's size and SHA-256, computed by the
+  tool from the archives; nothing is maintained by hand. The launcher compares the size,
+  then the SHA-256 of the whole file. Measured cost of the launcher's checks (version and
+  digest, median of seven in one process): 38.7 ms for the 9,716,736-byte Windows release
+  executable on a workstation without SHA extensions (Node.js 22.16). The matrix measures
+  it on every hosted runner and fails above 50 ms, so the check stays within H5's budget
+  or the run says otherwise. Measured on the hosted runners (Release run 36772356382):
+  median 4.6 to 5.2 ms on macOS 15 arm64, 8.4 to 9.7 ms on Ubuntu 24.04 and 10.5 to
+  10.8 ms on Windows Server 2025, under Node.js and Bun alike.
+- **The launcher (`npm/vsift-cli/lib/launcher.cjs`, run by the three-line `bin/vsift.cjs`).** Plain CommonJS with `node:` built-ins
+  only, about 250 lines. It maps `process.platform` and `process.arch` to the three
+  targets, resolves `@vsift/<target>/package.json` with `require.resolve` from itself (so
+  npm, pnpm's links, Yarn's Plug'n'Play and Bun resolve alike), requires the platform
+  package's version to equal its own, checks the digest, and spawns the executable with
+  `shell: false`, the arguments unchanged and the three standard streams inherited.
+  *Decided here:* a launcher failure is one readable message on stderr and exit **127**
+  when no usable platform package exists (an unsupported platform, optional dependencies
+  omitted) or **126** when the package is refused or cannot start (another version, a
+  digest or size mismatch, a damaged digest file, a start error, with the glibc 2.35 and
+  OpenSSL 3 requirement named on Linux and Windows' 260-character path limit named when
+  the path reaches it, [L-094](../planning/known-limits.md#l-094)): the shell's "not
+  found" and "cannot execute".
+  `vsift` itself never exits with either (`cli-v1.md`, exit taxonomy). Messages name the
+  expected package, the version and the supported targets, never a stack trace.
+- **Signals (decided here).** On Windows a console Ctrl-C or Ctrl-Break reaches every
+  process of the console, so the launcher relays nothing and only stays alive (handlers
+  for `SIGINT`, `SIGBREAK` and `SIGHUP`) until vsift has ended, then exits with its
+  status. Elsewhere the launcher relays `SIGTERM` and `SIGHUP` once, and `SIGINT` unless
+  one of its standard streams is a terminal: a terminal's Ctrl-C goes to the whole
+  foreground process group, so vsift already has it, and relaying it would be vsift's
+  second interruption, which escalates (ADR 0020 section 5). When vsift ends by a signal,
+  the launcher removes its handlers and re-raises the same signal, so a shell sees 128
+  plus its number. A signal sent to a whole process group that is not a terminal's (a
+  supervisor, a tree kill) reaches vsift twice: [L-091](../planning/known-limits.md#l-091).
+- **Governance.** `vsift-governance check` fails any `package.json` under `npm/` that
+  declares `scripts`, `gypfile`, `author`, `contributors` or `maintainers`, any
+  `binding.gyp` there, and a launcher manifest whose optional dependencies are not at its
+  own exact version or that declares another kind of dependency; `npm-verify` holds the
+  packed tarballs to the same rule.
+- **The Verdaccio matrix (`release.yml`, jobs `npm-package` and `npm-qualify`).** The
+  qualification runs in the Release workflow, so the tarballs it qualifies are the ones
+  PR 10 will publish. Twelve jobs: `windows-2025`, `macos-15` and `ubuntu-24.04`, each
+  with npm, pnpm, Yarn and Bun, on Node.js 22.23.3 and Bun 1.2.23 (the minimum runtimes of
+  decision H6), the npm that Node.js ships, pnpm 12.8.1, Yarn 4.18.1 and Verdaccio 6.10.4,
+  all pinned in the workflow. `npm/qualification/qualify.cjs` starts Verdaccio on
+  `127.0.0.1:4873` with no uplink, no audit middleware and no web interface, creates a
+  throwaway local user and writes its token only into a scratch npmrc scoped to that
+  address, publishes the four tarballs with `npm publish --tag next --ignore-scripts`,
+  removes every `npm_config_`, `YARN_`, `BUN_CONFIG_`, `PNPM_` and token variable from
+  the environment of every package manager, and refuses any other registry. Checks per
+  job: a global install (Yarn 4 has none, so a project install) with scripts disabled
+  under a folder whose name has spaces, accents and CJK letters; `--version` prints the
+  build's line naming the commit; `setup check --json`; `handoff check --file` with a
+  path of spaces and Unicode through each installed command (`vsift.cmd` and `vsift.ps1`
+  on Windows through PowerShell, the `bin` link elsewhere); exit statuses equal to
+  vsift's own (2, 2 and 7); standard input; the cost of the launcher's checks; signals
+  (POSIX: `SIGTERM` and `SIGINT` sent to the launcher alone end vsift and the launcher by
+  that signal, with no process left holding the output pipes; Windows: a console
+  Ctrl-Break ends both with `STATUS_CONTROL_C_EXIT` and leaves no orphan); a changed
+  byte, a replaced executable, a mismatched platform-package version and (POSIX) a
+  non-executable binary each refused readably, and the restored install running again;
+  the one-shot runner (`npx`, `pnpm dlx`, `yarn dlx`, `bunx`, and `bunx --bun` on the Bun
+  runtime); optional dependencies omitted (`--omit=optional`, `--no-optional`, Bun's
+  `--omit optional`, and for Yarn, which cannot omit them, `supportedArchitectures` for
+  another platform) giving exit 127 and a message naming the package without a stack
+  trace; running with the registry stopped; and a clean uninstall (no launcher, platform
+  package or command left; Bun 1.2 leaves the platform package, L-092). The launcher's own tests (`npm/test/launcher.test.cjs`, CI
+  job `npm launcher` on three operating systems) cover selection, every refusal for every
+  target, arguments with spaces, Unicode and shell metacharacters, streams, exit statuses,
+  and signals with a stand-in executable (a targeted and a process-group interruption on
+  POSIX, and on Windows a console Ctrl-Break that a launcher without its handler fails).
+- **For the maintainer's review:** exits 126 and 127; the signal rules above; the SBOM
+  left out of the platform packages; the Release workflow running twelve more jobs on
+  every pull request that touches an archive or npm input; Yarn qualified through a
+  project install and without the launcher-level signal checks (Plug'n'Play runs the
+  launcher from a zip archive only `yarn` can open); only the minimum runtimes in the
+  matrix ([L-092](../planning/known-limits.md#l-092)); the digest check's reach
+  ([L-093](../planning/known-limits.md#l-093)).
+- **Found while qualifying, for PR 10 and the release checklist:** Yarn 4.18 quarantines
+  a version for a day after it is published (`npmMinimalAgeGate`, default one day), so a
+  fresh `vsift-cli@next` cannot be installed with Yarn for its first day unless the user
+  waits or preapproves `vsift-cli` and `@vsift/*` (`install.md`; the matrix sets the gate to
+  zero because it installs seconds after publishing). On Windows an executable path of
+  260 characters or more cannot be started (L-094); a deep pnpm global store under a long
+  home folder reaches it. On Windows, Bun 1.2.23 fails a global install into a folder
+  with non-ASCII letters ("InvalidWtf8") and leaves its `vsift.exe` shim after a global
+  remove; `bunx --bun` there ran the command file without making it Node.js's main
+  module, so the launcher is split: `bin/vsift.cjs` always calls `main()` of
+  `lib/launcher.cjs` rather than testing `require.main` (L-092).

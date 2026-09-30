@@ -1,0 +1,31 @@
+{
+  "name": "vsift-cli",
+  "version": "0.1.0",
+  "description": "Local, source-grounded video evidence for AI coding agents: the vsift command-line tool.",
+  "license": "MIT OR Apache-2.0",
+  "homepage": "https://github.com/smormah/vsift",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smormah/vsift.git"
+  },
+  "bin": {
+    "vsift": "bin/vsift.cjs"
+  },
+  "files": [
+    "bin/vsift.cjs",
+    "lib/launcher.cjs",
+    "platform-digests.json",
+    "skills/",
+    "LICENSE",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "optionalDependencies": {
+    "@vsift/darwin-arm64": "0.1.0",
+    "@vsift/linux-x64": "0.1.0",
+    "@vsift/win32-x64": "0.1.0"
+  }
+}

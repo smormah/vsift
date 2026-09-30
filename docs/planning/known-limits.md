@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-09-30 (P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -81,7 +81,7 @@ Each entry has these fields:
 | [L-033](#l-033) | A supplied transcript is assumed to cover the whole video | contract/UX | low | unscheduled | none | accepted residual |
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
-| [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-036](#l-036) | Nothing is published yet: no native release, npm package, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its kill and power-loss qualification is still to come | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
@@ -131,8 +131,12 @@ Each entry has these fields:
 | [L-088](#l-088) | Proxy authentication in an HTTPS tunnel is recognised by a dependency's error text | process/CI | low | unscheduled | none | monitoring |
 | [L-089](#l-089) | A release SBOM's `bom-ref` values name the build machine's checkout path | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-090](#l-090) | Content in the managed folder that VSift cannot prove its own is left for the user to delete, and no output names the folder's path | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-091](#l-091) | The npm launcher relays signals by a rule that can repeat or miss one, and cannot stop vsift if the launcher itself is killed | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-092](#l-092) | The npm qualification covers the minimum runtimes, one pnpm and one Yarn version, and Yarn only through a project install | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-093](#l-093) | The launcher's digest check finds damaged or mismatched packages, not a local attacker who can write to the install | security | low | unscheduled | none | accepted residual |
+| [L-094](#l-094) | On Windows, vsift cannot start from an install whose executable path is 260 characters or longer | platform/distribution | low | unscheduled | none | accepted residual |
 
-Counts: 3 high, 24 medium, 56 low (83 entries).
+Counts: 3 high, 24 medium, 60 low (87 entries).
 
 ## Security
 
@@ -429,6 +433,30 @@ Counts: 3 high, 24 medium, 56 low (83 entries).
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
+
+### L-093
+
+**The launcher's digest check finds damaged or mismatched packages, not a local attacker who can write to the install.**
+
+- **What:** before it runs the executable, the npm launcher checks that the platform
+  package has its own version and that the executable's size and SHA-256 match
+  `platform-digests.json`, written into the launcher package by the release build
+  (ADR 0023 decision H5). Anyone who can write to the install folder can also change the
+  launcher and its digest file, and the file is read by path again when it is started,
+  after the check, so the check is not a defence against a local attacker. It proves the
+  platform package is the one this launcher was released with, undamaged.
+- **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 9 note; `npm/vsift-cli/lib/launcher.cjs`; the refusals in `npm/test/launcher.test.cjs` and
+  in every `npm-qualify` job.
+- **Impact:** none beyond what write access to the install folder already gives.
+- **Why:** a user-writable install folder is the norm for npm, pnpm, Yarn and Bun; the
+  registry's integrity check and npm provenance (PR 10) cover the path from the release
+  to the machine.
+- **Mitigation:** npm verifies each tarball's integrity on install, and `npm audit
+  signatures` checks provenance once PR 10 publishes with it.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
 
 ## Integrity and durability
 
@@ -1473,22 +1501,26 @@ Counts: 3 high, 24 medium, 56 low (83 entries).
 
 ### L-036
 
-**No native packages, npm launcher, SBOM, signing or provenance.**
+**Nothing is published yet: no native release, npm package, signing or provenance.**
 
 - **What:** VSift can only be installed by building it from source with Rust. No native
-  release artifact is published, and there is no npm launcher, no signing or
+  release artifact or npm package is published, and there is no signing or
   notarization, no provenance and no trusted publishing. Since P13 PR 8,
   `.github/workflows/release.yml` builds, checks and packages the three native archives
-  with notices, an SBOM each and `SHA256SUMS`, but keeps them as run artifacts only.
-  The platform packages' scope is recorded in ADR 0009's notes; no crate is
-  published in R0 (ADR 0023).
+  with notices, an SBOM each and `SHA256SUMS`; since PR 9 it also assembles the npm
+  launcher `vsift-cli` (the `vsift` command) and the three `@vsift/…` platform packages from those archives and
+  qualifies them with npm, pnpm, Yarn and Bun on three operating systems against a
+  loopback registry. All of it stays in the run's artifacts. No crate is published in
+  R0 (ADR 0023).
 - **Evidence:** [ADR 0009](../decisions/0009-package-identity-and-distribution.md);
   [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) decision 1;
   threat model "Installation and distribution policy"; baseline B-11.
 - **Impact:** R-14 is an R0 release gate.
 - **Why:** scheduled in P13.
 - **Mitigation:** none needed before release.
-- **Next step:** P13 PRs 9 and 10, following its launcher pattern and name checklist in
+- **Next step:** P13 PR 10 (attestation, npm provenance and the protected publish job;
+  the maintainer publishes the 0.x pre-release under `next`), following its launcher
+  pattern and name checklist in
   [`implementation-work-packets.md`](implementation-work-packets.md) and
   [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md):
   Sigstore and npm provenance, no Authenticode or notarization in R0.
@@ -1715,6 +1747,100 @@ it cannot be packaged for crates.io as it is.**
   runner, whose checkout path is fixed.
 - **Next step:** none planned; revisit if a cargo-cyclonedx release relativises path
   package ids, or if SBOMs must be reproduced off GitHub.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-091
+
+**The npm launcher relays signals by a rule that can repeat or miss one, and cannot stop vsift if the launcher itself is killed.**
+
+- **What:** installed through npm, `vsift` runs as a child of the launcher. On Linux and
+  macOS the launcher relays `SIGTERM` and `SIGHUP` to vsift, and `SIGINT` unless one of
+  its standard streams is a terminal (a terminal's Ctrl-C already reaches vsift, which is
+  in the same foreground process group). So a signal sent to a whole process group that
+  is not a terminal's (a supervisor or a "kill the tree" tool) reaches vsift twice, which
+  vsift reads as an interruption and an escalation (ADR 0020 section 5: providers are
+  stopped without the graceful wait); and a `SIGINT` sent to the launcher alone while a
+  standard stream is a terminal is not relayed. If the launcher itself is killed
+  (`SIGKILL`, Windows `TerminateProcess`, `taskkill /F` on the Node.js process), vsift
+  keeps running until its command ends: nothing links its life to the launcher's.
+- **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 9 note; `npm/vsift-cli/lib/launcher.cjs` (`relaySignals`); `npm/test/launcher.test.cjs`
+  (targeted and process-group interruptions); the Release workflow's `npm-qualify` jobs.
+- **Impact:** an escalated interruption still ends the command with its documented result
+  and never leaves a provider running (SEC-04); it only skips the providers' graceful
+  stop. An orphaned vsift finishes or fails its one command and exits.
+- **Why:** Node.js does not say where a signal came from, so the launcher cannot tell a
+  terminal's Ctrl-C (already delivered) from one sent to it alone; a parent-death link
+  needs native code on each platform, and the launcher is plain JavaScript by decision.
+- **Mitigation:** supervisors signal the launcher's process (or vsift's) rather than the
+  group; the native archive runs vsift with no launcher at all; a second interruption
+  was already vsift's documented way to stop faster.
+- **Next step:** none planned for R0; revisit if a supervisor needs exactly-once
+  delivery through the launcher.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-092
+
+**The npm qualification covers the minimum runtimes, one pnpm and one Yarn version, and Yarn only through a project install.**
+
+- **What:** the Release workflow's matrix runs Node.js 22.23.3 and Bun 1.2.23 (the
+  minimums of ADR 0023 decision H6), the npm Node.js ships, pnpm 12.8.1 and Yarn 4.18.1.
+  Newer runtimes, older pnpm majors and Yarn 1 are not run. Yarn 4 has no global install,
+  so Yarn is qualified through a project install and `yarn dlx`; the launcher-level
+  checks of standard input through the runtime, the checks' cost and signals are made
+  with npm, pnpm and Bun, because Plug'n'Play keeps the launcher inside a zip archive
+  only `yarn` can open (standard input is checked through `yarn vsift`). Arguments with
+  `cmd.exe` metacharacters (`%`, `!`, `^`, `"`) through npm's and pnpm's `vsift.cmd` shims
+  are subject to `cmd.exe`'s rules; the matrix passes paths with spaces and Unicode
+  through them, and the launcher's own tests pass metacharacters to the executable
+  directly. Linux with musl libc is not a target: the launcher installs there but reports
+  that the executable cannot start. Yarn 4.18 quarantines a version for a day after it is
+  published (`npmMinimalAgeGate`, default `1d`); the qualification turns the gate off,
+  because it publishes seconds before it installs, so for a day after each real release
+  Yarn users must wait or preapprove `vsift-cli` and `@vsift/*` (`install.md`). Bun 1.2's
+  `bun remove --global vsift-cli` removes the launcher and the command but leaves the
+  platform package in Bun's global folder, where nothing runs it, and on Windows also its
+  `vsift.exe` shim, which then fails without running vsift (the matrix records both).
+  Bun 1.2.23 on Windows fails `bun add --global` with "InvalidWtf8" when its install or
+  cache folder has non-ASCII letters (found by the matrix on 2026-09-30, a Bun defect),
+  so the Windows Bun job keeps its own folders to ASCII with spaces; the arguments vsift
+  receives still carry non-ASCII paths there.
+- **Evidence:** `.github/workflows/release.yml` (the pinned versions); the ADR 0023 PR 9
+  note; `npm/qualification/qualify.cjs`.
+- **Impact:** a regression specific to a newer runtime or another package-manager major
+  would first be seen by users.
+- **Why:** twelve jobs already run on every pull request that touches an archive or npm
+  input; the minimum runtimes are the supported floor.
+- **Mitigation:** the launcher uses only long-stable `node:` APIs; the package managers'
+  handling of `optionalDependencies`, `os` and `cpu` is long-standing behaviour.
+- **Next step:** P14's release qualification may widen the matrix.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-094
+
+**On Windows, vsift cannot start from an install whose executable path is 260 characters or longer.**
+
+- **What:** Windows starts a program only from a path shorter than `MAX_PATH` (260
+  characters). Package managers nest the platform package deeply (pnpm's global store,
+  for example `…\global\v11\<hash>\node_modules\.pnpm\@vsift+win32-x64@0.1.0\node_modules\@vsift\win32-x64\vsift.exe`),
+  so a long prefix or home folder can push the executable's path over the limit. The
+  launcher's checks still pass (Node.js reads long paths), then starting fails; the
+  launcher says so with exit 126, the path's length and the advice to install in a
+  folder with a shorter path.
+- **Evidence:** found while qualifying pnpm locally (2026-09-30): a pnpm global install
+  under a 180-character work folder gave a 300-character executable path and `ENOENT`;
+  `npm/test/launcher.test.cjs` checks the message.
+- **Impact:** users with very long home, prefix or `PNPM_HOME` paths must choose a shorter
+  one.
+- **Why:** `CreateProcess` refuses longer executable paths; the launcher has no native code
+  to work around it and must not change the working directory vsift sees.
+- **Mitigation:** the default locations of npm, pnpm, Yarn and Bun give paths well under
+  the limit (about 190 characters for pnpm on the hosted runners); the native archive can
+  be extracted anywhere.
+- **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
 

@@ -1934,6 +1934,13 @@ against `operation-response.schema.json`; evidence events validate against
 | 6 | cancellation | `CANCELLED` |
 | 7 | storage, output I/O or integrity failure, or a managed download that did not complete | `STORAGE_IO`, `INTEGRITY_FAILURE`, `DOWNLOAD_FAILED` |
 
+`vsift` itself never exits with 126 or 127. When it is installed through npm (P13 PR 9,
+[`install.md`](../operations/install.md)), the launcher that starts it exits with 127
+when no platform package for the machine is installed and with 126 when the platform
+package is refused (another version, an executable that does not match its recorded
+digest) or cannot start, having written a readable message on stderr (starting
+`vsift (npm launcher):`) and nothing on stdout, in every output mode; vsift did not run. Every other status comes from vsift.
+
 Every machine error includes a stable code, safe message, retryability, optional retry
 delay, affected identifiers, and structured remediation. Evidence or provider text is
 not interpolated into the public message. A remediation command (since P10 PR 3:

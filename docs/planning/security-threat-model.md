@@ -307,12 +307,34 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   violated a rule. `release.yml` builds and packages with `permissions: {}` and
   `contents: read`, no OIDC token, no secret and no cache, and cannot publish; its
   builds select no feature, which the lint enforces. The `release` environment and
-  trusted publishing are PR 10.
+  trusted publishing are PR 10. *Evidence 2026-09-30 (PR 9):* the npm packages are
+  assembled, packed and qualified in the same workflow with the same limits
+  (`contents: read`, no OIDC token, no secret); the only registry any job writes to is a
+  Verdaccio on the runner's loopback address with no uplink, whose throwaway token lives
+  in a scratch npmrc scoped to that address; the qualification driver refuses any other
+  registry and strips registry and token settings from every package manager's
+  environment. Every action it adds (`actions/setup-node`, `oven-sh/setup-bun`) is pinned
+  by commit SHA, and the tools it installs are pinned to exact versions.
 - **SEC-23 (checksums from the same compromised server):** the managed trust anchor
   stays in reviewed source, never in a downloaded checksum; release archives carry
   Sigstore build provenance tied to the protected commit, npm packages carry npm
   provenance, and the launcher checks its platform package's version and, if cheap
-  enough, its digest (R-SEC02).
+  enough, its digest (R-SEC02). *Evidence 2026-09-30 (PR 9):* the launcher requires the
+  platform package's version to equal its own and the executable's size and SHA-256 to
+  match `platform-digests.json`, which the release tool computes from the archives the
+  build produced (never by hand), before it starts anything; a changed byte, a replaced
+  executable, another version and a damaged digest file are refused with exit 126 in the
+  launcher's tests and in every qualification job, and the check's measured cost is held
+  under 50 ms (decision H5). It proves the package is the one released with this
+  launcher, undamaged; it is not a defence against someone who can write to the install
+  folder ([L-093](known-limits.md#l-093)). Provenance itself is PR 10.
+- **No install-time code (the npm packages, PR 9):** no VSift package declares a
+  lifecycle script, a `gypfile` or a `binding.gyp`, so installing runs nothing and
+  downloads nothing beyond the packages; the governance check refuses such a manifest
+  under `npm/`, `vsift-release npm-verify` refuses it in a packed tarball, and every
+  qualification job installs with scripts disabled. The launcher starts only the
+  platform executable, by explicit path and argument list with `shell: false`; no
+  manifest names a person.
 
 Human-readable output (SEC-T02) and `handoff check`'s untrusted input (a draft
 that may carry evidence text) belong with the agent-specific controls below: both

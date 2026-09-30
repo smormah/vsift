@@ -12,6 +12,7 @@ use std::{
 
 use serde::Deserialize;
 
+mod npm_packages;
 mod workflows;
 
 const DEFAULT_LEDGER: &str = "docs/planning/delivery-ledger.json";
@@ -290,6 +291,7 @@ fn validate(
     validate_handoff_files(&mut messages, repository_root);
     validate_fault_injection_features(&mut messages, repository_root);
     workflows::validate_workflows(&mut messages, repository_root);
+    npm_packages::validate_npm_packages(&mut messages, repository_root);
 
     messages
 }

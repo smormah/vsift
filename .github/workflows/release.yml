@@ -11,6 +11,14 @@ name: Release
 #   package    one deterministic vsift-<version>-<target>.tar.gz per target,
 #              each read back and checked, packaged twice and compared, and
 #              SHA256SUMS over the three archives.
+#   npm-package  the four npm packages (the `vsift-cli` launcher and
+#              @vsift/{win32-x64,darwin-arm64,linux-x64}) assembled from the
+#              archives, packed twice with `npm pack` and compared, and each
+#              tarball checked against the assembly (P13 PR 9).
+#   npm-qualify  per runner and package manager (npm, pnpm, Yarn, Bun): the
+#              tarballs published to a Verdaccio registry on 127.0.0.1 with
+#              no uplink, installed and run (npm/qualification/qualify.cjs).
+#              Nothing is published to any public registry.
 #
 # This workflow cannot publish. It has no job with a write scope or an OIDC
 # token, uses no secret, and runs on pull requests, pushes to main and manual
@@ -24,9 +32,11 @@ name: Release
 # lint (tools/vsift-governance, workflows.rs) enforces that for this file.
 #
 # The pull-request and push triggers name every path whose change can alter an
-# archive: the crates compiled into `vsift`, the skill, the licences, the
-# toolchain and lockfile, the packaging tool and this workflow. A change
-# elsewhere (documentation, the fixture corpus, other tools) cannot.
+# archive or an npm package: the crates compiled into `vsift`, the skill, the
+# licences, the toolchain and lockfile, the packaging tool, the launcher and
+# its qualification (npm/, and the console-event helper it uses on Windows)
+# and this workflow. A change elsewhere (documentation, the fixture corpus,
+# other tools) cannot.
 on:
   pull_request:
     branches:
@@ -35,6 +45,8 @@ on:
       - .github/workflows/release.yml
       - crates/**
       - tools/vsift-release/**
+      - tools/send-console-ctrl.ps1
+      - npm/**
       - skills/vsift/**
       - Cargo.toml
       - Cargo.lock
@@ -49,6 +61,8 @@ on:
       - .github/workflows/release.yml
       - crates/**
       - tools/vsift-release/**
+      - tools/send-console-ctrl.ps1
+      - npm/**
       - skills/vsift/**
       - Cargo.toml
       - Cargo.lock
@@ -74,6 +88,14 @@ env:
   # cargo-cyclonedx 0.5.9, both built from crates.io with their own lockfiles.
   CARGO_ABOUT_VERSION: "=0.9.2"
   CARGO_CYCLONEDX_VERSION: "=0.5.9"
+  # The npm qualification's pinned tools (P13 PR 9, reviewed 2026-09-30):
+  # the minimum runtimes ADR 0023 decision H6 supports (Node.js 22, Bun 1.2),
+  # the current pnpm and Yarn, and the local registry.
+  NODE_VERSION: "22.23.3"
+  BUN_VERSION: "1.2.23"
+  PNPM_VERSION: "12.8.1"
+  YARN_VERSION: "4.18.1"
+  VERDACCIO_VERSION: "6.10.4"
 
 jobs:
   inventory:
@@ -303,3 +325,140 @@ jobs:
           path: dist
           if-no-files-found: error
           retention-days: 7
+
+  npm-package:
+    name: npm packages
+    needs:
+      - package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      npm_config_update_notifier: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js (npm packs the tarballs)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Fetch the archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dry-run
+          path: dist
+
+      - name: Assemble, pack twice and verify the npm packages
+        run: |
+          set -euo pipefail
+          archives=()
+          for archive in dist/*.tar.gz; do
+            archives+=(--archive "${archive}")
+          done
+          mkdir -p npm-dist/packages npm-dist/tarballs npm-dist/second
+          cargo run --quiet --locked -p vsift-release -- npm "${archives[@]}" --out-dir npm-dist/packages
+          for package in vsift-cli vsift-darwin-arm64 vsift-linux-x64 vsift-win32-x64; do
+            (cd "npm-dist/packages/${package}" && npm pack --ignore-scripts --pack-destination ../../tarballs \
+              && npm pack --ignore-scripts --pack-destination ../../second)
+          done
+          tarballs=()
+          for tarball in npm-dist/tarballs/*.tgz; do
+            cmp "${tarball}" "npm-dist/second/$(basename "${tarball}")"
+            tarballs+=(--tarball "${tarball}")
+            tar -tzvf "${tarball}"
+          done
+          cargo run --quiet --locked -p vsift-release -- npm-verify "${archives[@]}" "${tarballs[@]}"
+          (cd npm-dist/tarballs && sha256sum ./*.tgz)
+
+      - name: Keep the npm tarballs with this run
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-packages
+          path: npm-dist/tarballs
+          if-no-files-found: error
+          retention-days: 7
+
+  npm-qualify:
+    name: npm qualification (${{ matrix.os }}, ${{ matrix.manager }})
+    needs:
+      - npm-package
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - macos-15
+          - ubuntu-24.04
+        manager:
+          - npm
+          - pnpm
+          - yarn
+          - bun
+    env:
+      MANAGER: ${{ matrix.manager }}
+      npm_config_update_notifier: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Set up the pinned Bun
+        if: matrix.manager == 'bun'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+          no-cache: true
+
+      # From the public registry, read-only and without credentials: the
+      # runner holds no npm token. Verdaccio's own dependencies install with
+      # scripts disabled; pnpm needs its install script to link its executable.
+      # The package manager goes into a prefix of its own, ahead of any copy
+      # the runner image carries (Windows images ship Yarn 1 in npm's prefix).
+      - name: Install the pinned registry and package manager
+        run: |
+          set -euo pipefail
+          npm install --prefix "${RUNNER_TEMP}/tools" --ignore-scripts --no-audit --no-fund "verdaccio@${VERDACCIO_VERSION}"
+          case "${MANAGER}" in
+            pnpm) npm install --prefix "${RUNNER_TEMP}/manager" --no-audit --no-fund "pnpm@${PNPM_VERSION}" ;;
+            yarn) npm install --prefix "${RUNNER_TEMP}/manager" --ignore-scripts --no-audit --no-fund "@yarnpkg/cli-dist@${YARN_VERSION}" ;;
+          esac
+          if [ -d "${RUNNER_TEMP}/manager/node_modules/.bin" ]; then
+            echo "${RUNNER_TEMP}/manager/node_modules/.bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Fetch the npm tarballs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-packages
+          path: ${{ runner.temp }}/npm-packages
+
+      - name: Qualify the packages from a loopback registry
+        run: |
+          set -euo pipefail
+          # The launcher manifest's version, which the release tool holds to
+          # the workspace version; the build job's line names the commit.
+          version="$(node -p "require('./npm/vsift-cli/package.json').version")"
+          commit="$(git rev-parse HEAD)"
+          node npm/qualification/qualify.cjs \
+            --manager "${MANAGER}" \
+            --packages "${RUNNER_TEMP}/npm-packages" \
+            --verdaccio "${RUNNER_TEMP}/tools/node_modules/verdaccio/bin/verdaccio" \
+            --version-line "vsift ${version} (${commit:0:12})" \
+            --work "${RUNNER_TEMP}/qualification"
