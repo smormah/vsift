@@ -2,8 +2,9 @@
 
 Status: P12 complete (2026-09-30). The skill's command and schema references are held
 to the CLI by tests, and it has been through named-client trials (A-01..A-09 and
-SEC-T02, [runbook](trials.md)). It is **qualified for the review tier and supported
-below target for the compact tier**; see [Supported models](#supported-models). Design:
+SEC-T02, [runbook](trials.md)). It is **qualified for the review tier and, since the
+compact re-run (#222, 2026-09-30), for the compact tier**; see
+[Supported models](#supported-models). Design:
 [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Accepted).
 Results: [P12 qualification record](../planning/p12-agent-qualification.md).
 
@@ -202,22 +203,22 @@ time reading the code with the same letter missing, so P12 PR 3i redrew it
 ## Supported models
 
 Qualified by the P12 trials (2026-09-30) through the same skill, prompts and compact
-budget. The full numbers are in the
-[qualification record](../planning/p12-agent-qualification.md).
+budget; the compact tier by the re-run on `a0bfb06` after P12's fixes (#222). The full
+numbers are in the [qualification record](../planning/p12-agent-qualification.md).
 
 | Client | Model | Tier | Result | Support |
 | --- | --- | --- | --- | --- |
 | Claude Code 2.1.284 (Windows) | Claude Opus 5.5 (`claude-opus-5-5`) | review | A-08/A-09: 11 of 11 mechanical, 9 of 11 full passes (A-08 5 of 5) | **Qualified** (interpretation misses under the maintainer's review) |
 | codex-cli 0.155.0-alpha.16 (Linux) | GPT-6-Astra (`gpt-6-astra`) | review | A-08/A-09: 11 of 11 mechanical, 9 of 11 full passes (A-08 4 of 5) | **Qualified** (interpretation misses under the maintainer's review) |
-| Claude Code 2.1.284 (Windows) | Claude Sonnet 5.5 (`claude-sonnet-5-5`) | compact | A-01..A-07, SEC-T02: 23 of 28 full passes (82%), 25 of 28 answers right | **Supported, below the 90% target** ([L-085](../planning/known-limits.md#l-085)) |
-| codex-cli 0.155.0-alpha.16 (Linux) | GPT-6-Sol (`gpt-6-sol`) | compact | A-01..A-07, SEC-T02: 23 of 28 full passes (82%), 25 of 28 answers right | **Supported, below the 90% target** ([L-085](../planning/known-limits.md#l-085)) |
+| Claude Code 2.1.284 (Windows) | Claude Sonnet 5.5 (`claude-sonnet-5-5`) | compact | A-01..A-07, SEC-T02 (#222 re-run): 26 of 28 full passes (93%), 28 of 28 answers right | **Qualified** (meets the 90% target) |
+| codex-cli 0.155.0-alpha.16 (Linux) | GPT-6-Sol (`gpt-6-sol`) | compact | A-01..A-07, SEC-T02 (#222 re-run): 28 of 28 full passes (100%; 23 of 28 before the maintainer's `rg --files` decision), 28 of 28 answers right | **Qualified** (meets the 90% target) |
 | Claude Code | Claude Haiku 4.5 | below the line | 6 of 28 answers right (`b68d746`) | Not supported ([L-082](../planning/known-limits.md#l-082)) |
 | Codex | GPT-6-Luna | below the line | 19 of 28 answers right (`56f1e1f`) | Not supported ([L-084](../planning/known-limits.md#l-084)) |
 
-**What "below target" means in practice.** With a compact model, expect about one
-handoff in five to need a correction: most often a claim written in the wrong shape,
-or a finding cited outside its window. In every counted run the agent stayed within
-policy:
+**What the compact results mean in practice.** In the re-run, 2 of 56 compact
+trials needed a correction, both a finding bound to a frame that does not show it
+(P12's final round, before the fixes, needed one in five). In every counted run the
+agent stayed within policy:
 
 - it installed nothing;
 - it followed no instruction found in the evidence;

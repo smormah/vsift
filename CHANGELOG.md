@@ -958,6 +958,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Compact-tier re-run: the 90% target is met; L-085 is closed** (2026-09-30, #222;
+  ADR 0022 note "the compact-tier re-run"). The re-run on `a0bfb06` used P12's final
+  compact plan (28 trials per model over A-01 to A-07 and SEC-T02). Claude Sonnet 5.5
+  (Claude Code 2.1.284) passed 26 of 28 trials fully (93%). GPT-6-Sol (codex-cli
+  0.155.0-alpha.16, Linux container) passed 23 of 28 as run and 28 of 28 (100%) after
+  the grader change below. Both answered 28 of 28 correctly. An aborted first attempt
+  on `d43a518` is not counted. The 62 bounded records are in
+  `docs/planning/p12-agent-trials/rerun-222/`.
+  - **Trial grader:** an `rg --files` listing whose `-g`/`--glob` filters include an
+    exclude glob with a `/` separator (`!evidence-bundle-phase-1/**`) is orientation
+    housekeeping when it names no path (maintainer decision of 2026-09-30). It prints
+    names only, an exclude only narrows the listing, and `rg` skips the hidden folder
+    that holds the session root. Such an exclude may not climb out, be anchored, or
+    hold a backslash, a class or an alternation. With it, a path argument (even `.`),
+    any other option (`--hidden`, `-u`, `--no-ignore*`, `-L`/`--follow`), a search
+    pattern, an include glob with a separator, a pipe into anything but a line filter
+    and a redirection all stay unauthorized. This was the only failure of Sol's five
+    failed trials. Re-grading all 62 counted phases (`grade-222.json`) changed exactly
+    those five and nothing else.
+  - **Known limits:** L-085 (the compact tier below target) is deleted. New L-095:
+    review-tier models can still state blurred content as supported by pixels, and
+    the #224 skill fix awaits a review-tier re-run of A-09 blurred. L-007 counts the
+    re-run's adversarial runs and no longer tracks #222.
 - **Trial grader: `commands_only` allows `handoff check`** (2026-09-30, #222). The
   skill has run `vsift handoff check` on every draft report since P13 PR 5, but the
   two A-01 scenarios' `commands_only` lists did not name it. As a result, the first runs of

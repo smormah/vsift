@@ -250,18 +250,25 @@ The targets above apply to the named compact tier.
   9 of 11. A-08 passed fully 5 of 5 (Opus) and 4 of 5 (Astra). The four
   interpretation misses are under the maintainer's review.
 - **Compact tier, final round on `8ab976e`:** Claude Sonnet 5.5 and GPT-6-Sol each
-  passed 23 of 28 trials fully (82%) and answered 25 of 28 correctly. **The ≥90%
-  target is not met.** It is deferred and tracked as known limit
-  [L-085](known-limits.md#l-085), with issues #218-#222.
-- **Citation validity:** 100% in the review tier. In the compact tier 3 of 62 phases
-  missed: one frame cited after the session was retained, and two claims bound outside
-  a truth window.
+  passed 23 of 28 trials fully (82%) and answered 25 of 28 correctly. The ≥90% target
+  was not met; P12 closed with it as debt (L-085, issues #218-#222).
+- **Compact tier, re-run on `a0bfb06` (#222, 2026-09-30), after the debt fixes and
+  `vsift handoff check`: the ≥90% target is met.** Sonnet 5.5 passed 26 of 28 trials
+  fully (93%). GPT-6-Sol passed 28 of 28 (100%) after the maintainer's decision that an
+  `rg --files` listing with an exclude glob and no path is orientation (23 of 28 as
+  run; the five failures were that listing alone). Both answered 28 of 28 correctly.
+  L-085 is closed.
+- **Citation validity:** 100% in the review tier. In the compact tier's final round 3
+  of 62 phases missed: one frame cited after the session was retained, and two claims
+  bound outside a truth window. On the re-run 2 of 62 missed, both Sonnet's claims
+  bound to a frame that does not show the value; still short of 100%, recorded in the
+  qualification record.
 - **Adversarial set:** zero unauthorized actions in A-04 and SEC-T02, and zero canary
   leaks, installs or raw hidden characters in all 84 counted phases.
 
 **R-13 and the A tests since P13 PR 5 (2026-09-30; no model called):** the skill
 checks its draft once with `vsift handoff check` before it sends it (issue #213), the
-mitigation of [L-085](known-limits.md#l-085)'s format failures. The check is the
+mitigation of L-085's format failures (since closed). The check is the
 grader's own `handoff_valid` and `report_text` check, moved into
 `vsift_contract::HandoffChecker`, so a draft the command passes, the grader passes on
 those two checks. Evidence: the contract's `handoff` unit tests, `handoff_contract`
@@ -274,8 +281,8 @@ against `jsonschema` over the examples, the REPORT skeleton, over 2,000 mutation
 `the_contracts_budget_profiles_are_budgets_md`, the grader's
 `the_two_draft_forms_are_one_handoff_check`, `variants_of_the_draft_forms_stay_shell_text`,
 `the_draft_forms_are_a_free_handoff_check` and `the_handoff_check_draft_form_is_a_free_call`,
-and the fuzz target `handoff_check`. Whether the compact tier now meets its target is
-the re-run's question (#222), still to come.
+and the fuzz target `handoff_check`. The compact re-run (#222) then met the target
+(above).
 
 A-08 and A-09 are functional release gates, not provider endorsements. Use current
 named Codex and Claude Code clients, or document equivalent successor clients, because
@@ -438,6 +445,8 @@ phases are in [p12-agent-trials/](p12-agent-trials/README.md).
 
 - **Strong tier:** 11 of 11 mechanical passes and 9 of 11 full passes on each client.
 - **Compact tier:** 23 of 28 full passes (82%) on each client, below target (L-085).
+  The re-run of 2026-09-30 (#222) met the target (93% and 100%) and closed L-085; its
+  62 records are in [p12-agent-trials/rerun-222/](p12-agent-trials/rerun-222/README.md).
 - **Safety:** no leak, install, injected action or raw hidden character in any
   counted phase.
 

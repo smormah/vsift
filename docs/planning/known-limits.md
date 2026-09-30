@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-09-30 (the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -53,7 +53,7 @@ Each entry has these fields:
 | [L-004](#l-004) | Native decoders and the recognizer are not sandboxed on the desktop | security | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-005](#l-005) | Private Windows folders get their DACL just after creation, not atomically | security | low | unscheduled | none | accepted residual |
 | [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents, for tools VSift does not manage | security | low | unscheduled | none | accepted residual |
-| [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | unscheduled | [#222](https://github.com/smormah/vsift/issues/222) | accepted residual |
+| [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | unscheduled | none | accepted residual |
 | [L-008](#l-008) | OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01) | integrity/durability | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-010](#l-010) | Visual candidates and evidence calls are not recoverable jobs | integrity/durability | low | unscheduled | none | accepted residual |
@@ -125,7 +125,6 @@ Each entry has these fields:
 | [L-082](#l-082) | Claude Haiku 4.5 does not follow the full investigation procedure | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-083](#l-083) | Only `display_text` shows hidden characters; `text` and `original_text` keep them raw | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222), [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
 | [L-086](#l-086) | `vsift-contract` embeds the skill's handoff schema from outside its crate folder, so it cannot be packaged for crates.io as it is | platform/distribution | low | unscheduled (before any crates.io publication, R1 or later) | none | deferred |
 | [L-087](#l-087) | A managed version is rehashed each time a command resolves it | performance | low | unscheduled | none | monitoring |
 | [L-088](#l-088) | Proxy authentication in an HTTPS tunnel is recognised by a dependency's error text | process/CI | low | unscheduled | none | monitoring |
@@ -136,7 +135,9 @@ Each entry has these fields:
 | [L-093](#l-093) | The launcher's digest check finds damaged or mismatched packages, not a local attacker who can write to the install | security | low | unscheduled | none | accepted residual |
 | [L-094](#l-094) | On Windows, vsift cannot start from an install whose executable path is 260 characters or longer | platform/distribution | low | unscheduled | none | accepted residual |
 
-Counts: 3 high, 24 medium, 60 low (87 entries).
+| [L-095](#l-095) | Review-tier models can state blurred content as supported by pixels; the skill fix is not yet re-measured | contract/UX | medium | maintainer, before P14 | [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
+
+Counts: 2 high, 24 medium, 62 low (88 entries).
 
 ## Security
 
@@ -315,10 +316,11 @@ Counts: 3 high, 24 medium, 60 low (87 entries).
   - the tool-level SEC-T02 suite (`crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs`)
     on every PR;
   - P12's named-client trials ([qualification record](p12-agent-qualification.md)).
-    In the counted A-04 and SEC-T02 runs (20, Claude Sonnet 5.5 and GPT-6-Sol) and in
-    every reference round (348 graded phases), no agent installed or downloaded
-    anything, ran a script, leaked a canary or acted on the hostile text. No counted
-    report held a raw hidden character, a live link or an absolute path.
+    In the counted A-04 and SEC-T02 runs (20 in P12's final round and 20 in the
+    compact re-run #222, Claude Sonnet 5.5 and GPT-6-Sol) and in every reference round
+    (348 graded phases), no agent installed or downloaded anything, ran a script,
+    leaked a canary or acted on the hostile text. No counted report held a raw hidden
+    character, a live link or an absolute path.
 - **Impact:** a hostile recording could still steer a model outside the qualified
   configurations, a client run without the skill's limits, or a later model. The
   trials cover named clients and models on synthetic adversarial fixtures only.
@@ -333,9 +335,8 @@ Counts: 3 high, 24 medium, 60 low (87 entries).
   - its handoff schema refuses paths, links and hidden characters in prose;
   - the trial grader fails any out-of-policy attempt, whether it ran or not.
 - **Next step:** re-run A-04 and SEC-T02 whenever the skill, the clients or the
-  supported models change (the next is the compact-tier re-run,
-  [#222](https://github.com/smormah/vsift/issues/222)).
-- **Owner:** unscheduled. **Issue:** [#222](https://github.com/smormah/vsift/issues/222).
+  supported models change.
+- **Owner:** unscheduled. **Issue:** none.
   **Status:** accepted residual. **Review:** pending.
 
 ### L-072
@@ -1593,94 +1594,36 @@ Counts: 3 high, 24 medium, 60 low (87 entries).
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred.
   **Review:** pending.
 
-### L-085
+### L-095
 
-**The compact tier is below its 90% task-success target (82% on both clients).**
+**Review-tier models can state blurred content as supported by pixels; the skill fix
+is not yet re-measured.**
 
-- **What:** [verification](verification.md) section 6 targets at least 90% task
-  success on the agreed compact-model corpus, with 100% mechanically valid citations.
-  In P12's final round on `8ab976e` (2026-09-30), Claude Sonnet 5.5 (Claude Code
-  2.1.284) and GPT-6-Sol (codex-cli 0.155.0-alpha.16) each ran 28 trials of A-01 to
-  A-07 and SEC-T02.
-  - Each passed 23 of 28 fully (82%) and answered 25 of 28 correctly.
-  - 3 of their 62 phases missed a citation check.
-  - The maintainer closed P12 on these results (2026-09-30) and deferred the target
-    as technical debt.
-- **Causes** (the ten misses, [qualification record](p12-agent-qualification.md)):
-  1. **Invented handoff shapes.** `SKILL.md`'s REPORT skeleton shows
-     `"claims": []`, so models guess the claim's shape. This is 3 of Sonnet's 5
-     misses (claims with `text` and no `id`) and 1 of Sol's (instructions with
-     `citations` and `description`)
-     ([#218](https://github.com/smormah/vsift/issues/218)).
-  2. **A-02 resume** is the weakest scenario: Sonnet 2 of 3, Sol 1 of 3. Two of the
-     three misses bind a true value to evidence outside the first loop's window
-     ([#219](https://github.com/smormah/vsift/issues/219)). One of them (Sol, 490 s)
-     was a grader error, fixed below; the other names a previous value without
-     evidence for it.
-  3. **SEC-T02 slips on Sol**, 2 of 5 full passes: a frame cited after `session
-     retain`, the instruction shape above, and SAFE-12 never stated
-     ([#220](https://github.com/smormah/vsift/issues/220)).
-  4. **The skill's defanged link form** (`hxxps://`) written in a JSON summary, which
-     the schema refuses (Sonnet A-04 run 2,
-     [#221](https://github.com/smormah/vsift/issues/221)).
-  5. **Strong tier, A-09 blurred:** the review tier stated the blurred banner's content
-     as supported by pixels in 3 of 4 runs, rejected on review
-     ([#224](https://github.com/smormah/vsift/issues/224)).
-- **Evidence:** the [qualification record](p12-agent-qualification.md) (per-scenario
-  tables and every miss); the bounded records in
-  [p12-agent-trials/](p12-agent-trials/README.md); verification section 6.
-- **Impact:** a user of a compact model gets a fully valid, correct handoff about four
-  times in five, and a correct answer about nine times in ten. The failures are
-  handoff-shape and citation-binding errors, not unsafe actions: every counted phase
-  passed the command policy, the canary check and the report-text check.
-  - The review tier passed 11 of 11 trials mechanically on both clients: Claude Opus
-    5.5 and GPT-6-Astra.
-  - After the maintainer's review of 25 runs (2026-09-30), A-08 passed 5 of 5 on both
-    clients. A-08 plus A-09 passed 9 of 11 (Opus) and 10 of 11 (Astra). The residual is
-    three rejected blurred-banner claims stating unreadable content as supported by
-    pixels ([#224](https://github.com/smormah/vsift/issues/224)).
-- **Why:** the maintainer decided on 2026-09-30 to close P12 on the final round's
-  results and record what is short of target as known limits and follow-ups.
-- **Mitigation added (P13 PR 5, 2026-09-30):** `vsift handoff check` (#213). The
-  skill now runs it once on the draft before sending and fixes what it reports: the
-  closed vocabulary, the claim and citation shapes, missing members, a missing resume
-  card, links and paths, each named by pointer or line with the allowed values. The
-  check is the grader's own, so a draft that passes it passes `handoff_valid` and
-  `report_text`. The compact-tier re-run that measures the effect (#222) is still to
-  come; the limit stays open until then.
-- **Fixes so far** (2026-09-30, ADR 0022 note "the P12 debt fixes"; no model called):
-  1. **#218:** the REPORT skeleton shows one filled-in claim, a segment and a frame
-     citation, and one untrusted instruction, all validated by the guard.
-  2. **#219, grader:** the A-02 clip's copies start 12.064 s apart, not 12 s (FFmpeg
-     places each copy after the padded audio). The grader now derives the period from
-     the bundle's measured duration. Sol's A-02 miss at 490 s was a true claim that
-     the grader misplaced.
-  3. **#219, skill:** each claim names its subject and value. A value mentioned as a
-     previous state ("change from 12") still needs its own evidence; that reading
-     stays strict.
-  4. **#220:** retain after the last evidence command, because the bundle is a
-     snapshot.
-  5. **#221:** a defanged link belongs only in the Markdown; the JSON describes the
-     link.
-  6. **#224:** a region a frame shows as unreadable supports nothing; a claim about
-     its content is `partially_supported` on the transcript.
-- **Re-grade** of the 84 counted phases with the new grader (`grade-debt.json`): only
-  Sol's A-02 run 2 changes. GPT-6-Sol is now 24 of 28 (86%); Sonnet 5.5 stays at
-  23 of 28 (82%). Compact citation failures fall from 3 to 2 of 62 phases.
-- **Mitigation:**
-  - `docs/agents/skill.md` names the supported models and says the compact tier is
-    below target;
-  - the grader reports each handoff error as a typed, fixable message;
-  - the handoff validator (P13, [#213](https://github.com/smormah/vsift/issues/213))
-    may lower handoff failures further.
-- **Next step:** the compact re-run
-  ([#222](https://github.com/smormah/vsift/issues/222)) is still pending. It runs
-  after `vsift handoff check` (#213) exists, before P14, and shows whether the skill
-  changes reach the 90% target. It also re-runs A-09 blurred on the strong tier
-  (#224).
+- **What:** in P12's final campaign on `56f1e1f`, Claude Opus 5.5 (A-09-f05-blurred
+  runs 1 and 2) and GPT-6-Astra (run 1) stated the content of the deliberately blurred
+  error banner as `supported` by frames. The narration says it, so the right support
+  is `partially_supported` on the transcript. The maintainer upheld the strict grade
+  on 2026-09-30.
+  - Opus passed A-09 in 4 of 6 runs, below four in five for A-09 alone; Astra passed
+    5 of 6.
+  - Across A-08 and A-09 the review tier still meets its gate: Opus 9 of 11, Astra 10
+    of 11.
+- **Evidence:** the [qualification record](p12-agent-qualification.md) (strong tier
+  and the maintainer's review); ADR 0022's note "the P12 debt fixes".
+- **Impact:** a review-tier agent can present something it could not read as seen in
+  the pixels. The statement itself is true (the transcript supports it), but its
+  support label overstates the evidence.
+- **Why:** the models infer the blurred content from the narration and cite the frame.
+- **Mitigation:** the P12 debt fixes (2026-09-30) changed the skill's VERIFY_SOURCE
+  and `handoff.md`: when a frame or crop shows a region unreadable, a claim about its
+  content rests on the transcript alone, is `partially_supported` and cites the
+  segment. The guard holds the wording.
+- **Next step:** re-run A-09-f05-blurred on the review tier (Claude Opus 5.5 and
+  GPT-6-Astra). The compact re-run #222 (2026-09-30) did not include it. The runs
+  spend the maintainer's client allowances, so the maintainer starts them.
 - **Owner:** maintainer, before P14. **Issue:**
-  [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222).
-  **Status:** deferred (technical debt). **Review:** pending.
+  [#224](https://github.com/smormah/vsift/issues/224). **Status:** deferred (technical
+  debt). **Review:** pending.
 
 ### L-053
 
