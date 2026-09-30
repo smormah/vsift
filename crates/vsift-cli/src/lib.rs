@@ -10,6 +10,7 @@ mod evidence;
 mod job;
 mod json_input;
 mod output;
+mod parse_failure;
 mod progress;
 mod search;
 mod session;
@@ -167,7 +168,7 @@ where
     let arguments: Vec<OsString> = arguments.into_iter().map(Into::into).collect();
     let requested_mode = detect_requested_mode(&arguments);
     let mut writer = OutputWriter::new(standard_output, standard_error);
-    let cli = match Cli::try_parse_from(arguments) {
+    let cli = match Cli::try_parse_from(&arguments) {
         Ok(cli) => cli,
         Err(error)
             if matches!(
@@ -178,29 +179,37 @@ where
             return write_help_or_version(&mut writer, &error.to_string());
         }
         Err(error) => {
-            let detail = error.to_string();
-            return write_failure(
+            // Human mode keeps the parser's own explanation, which quotes
+            // the argument: it goes to stderr through the terminal-safe
+            // diagnostic rule. JSON modes carry the typed remediation, which
+            // never repeats argument text (L-071).
+            if requested_mode == OutputMode::Human {
+                let detail = error.to_string();
+                return write_failure(
+                    &mut writer,
+                    requested_mode,
+                    CommandName::Parse,
+                    FailureCode::InvalidArgument,
+                    Some(&detail),
+                );
+            }
+            return write_command_failure(
                 &mut writer,
                 requested_mode,
                 CommandName::Parse,
-                FailureCode::InvalidArgument,
-                Some(&detail),
+                parse_failure::parse_failure(&error, &arguments),
             );
         }
     };
 
     let json_lines = cli.events == Some(EventFormat::Jsonl);
-    let mode = match OutputMode::resolve(cli.json, json_lines) {
-        Ok(mode) => mode,
-        Err(code) => {
-            return write_failure(
-                &mut writer,
-                OutputMode::Json,
-                CommandName::Parse,
-                code,
-                None,
-            );
-        }
+    let Ok(mode) = OutputMode::resolve(cli.json, json_lines) else {
+        return write_command_failure(
+            &mut writer,
+            OutputMode::Json,
+            CommandName::Parse,
+            parse_failure::output_mode_conflict(&arguments),
+        );
     };
 
     let Some(command) = cli.command else {
@@ -604,6 +613,30 @@ impl CommandFailure {
             affected_ids: Vec::new(),
             suggested_command: Vec::new(),
         }
+    }
+}
+
+impl CommandFailure {
+    /// A failure whose fixed-prose remediation also suggests one `vsift`
+    /// command, given as fixed words and validated identifiers only.
+    pub(crate) const fn with_suggested_command(
+        code: FailureCode,
+        summary: String,
+        suggested_command: Vec<String>,
+    ) -> Self {
+        Self {
+            code,
+            remediation: Some(summary),
+            retry_after_ms: None,
+            affected_ids: Vec::new(),
+            suggested_command,
+        }
+    }
+
+    /// The remediation summary, for tests of the failures built here.
+    #[cfg(test)]
+    pub(crate) fn summary(&self) -> Option<&str> {
+        self.remediation.as_deref()
     }
 }
 

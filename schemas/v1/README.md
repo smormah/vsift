@@ -182,6 +182,12 @@ byte for byte by `vsift-contract`'s `evidence_stream_contract`) and
 `bundle-transcript-record.json` (the stored record of the whole revision, checked
 by `vsift-infrastructure`'s `transcript_store` tests, which also validate a real
 retained bundle's record).
+`parse-failure.json` (P13 PR 1, L-071) is the failure of a rejected command line,
+`vsift crop <session> <evidence> --rect 10 --json`: `command` `parse`,
+`INVALID_ARGUMENT` and one remediation whose summary carries the rejection
+(`invalid_value`) and names only the grammar's `--rect` and `crop`, with the help
+`vsift crop --help` as its `command`; the CLI's `schema_contract` checks it against the
+binary's output.
 `media-tool-verification-failed.json` is the `ingest` failure an agent receives when
 the automatic media-tool preflight fails (here FFmpeg selected as FFprobe, stopped at
 the probe check); it is checked by `vsift-contract`'s `media_tool_preflight_contract`.

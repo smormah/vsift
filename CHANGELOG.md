@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Typed remediation for a rejected command line** (P13 PR 1, closes L-071). In
+  `--json` and `--events jsonl` modes a `parse` failure now carries one remediation
+  instead of none: the summary `The command line was rejected (<reason>). ...; read
+  its help.` with one of nine reasons (`unknown_argument`, `missing_required`,
+  `invalid_value`, `unexpected_value`, `argument_conflict`, `missing_subcommand`,
+  `unknown_subcommand`, `invalid_utf8`, `unclassified`), the deepest command reached
+  and the blamed argument in the grammar's own spelling, a PowerShell quoting note for
+  `crop --rect`, and the suggested command `vsift <command> --help` with no authority
+  required. Argument text is never repeated, so hostile text from evidence cannot
+  reach a machine result (tested with a bidi, zero-width, escape and line-break
+  sentinel in `parse_cli_contract`). The envelope and schemas are unchanged; the new
+  frozen example is `schemas/v1/examples/parse-failure.json`. Human diagnostics on
+  stderr now also show hidden characters as `<U+XXXX>` (new
+  `vsift_contract::terminal_safe_text`). The skill's failure-code table tells agents
+  to run the suggested `--help`. Known limit L-071 is deleted (80 entries).
+
 - **P13 has started** (2026-09-30, distribution, managed installation, human-readable
   output and `handoff check`). PR 0 adds
   [ADR 0023](docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)

@@ -45,8 +45,9 @@ Codex's trials ran in a Linux container, because its Windows sandbox cannot run 
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). Its kickoff increment (PR 0, #226) is
-merged; the packet is not complete and no P13 code exists yet.
+**P13 is in progress** (started 2026-09-30). PR 0 (kickoff, #226) and the P12 debt
+fixes (#227) are merged; PR 1, the typed parse remediation, is in review. The packet
+is not complete.
 
 ## P13 in one view
 
@@ -58,12 +59,17 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 - **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux
   x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
   `vsift` over `@<scope>/…` packages; managed installation on Ubuntu 24.04 x64 (`setup
-  install/list/rollback/remove/repair`); human output by default; L-071; `handoff check`.
+  install/list/rollback/remove/repair`); human output by default; `handoff check`.
 - **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
   `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
 - **Done:** PR 0 (#226, `dbc60f7`): ADR 0023 and notes, ledger, traceability,
-  threat-model plan, issue #16. **Next:** PRs 1, 2a/2b and 3; PR 5 waits for the P12
-  debt PRs (same skill, guard and grader).
+  threat-model plan, issue #16.
+- **In review:** PR 1 (`p13-pr1-parse-remediation`, closes L-071): a rejected command
+  line in JSON modes gets one remediation with a closed reason (`unknown_argument`,
+  `missing_required`, `invalid_value`, `unexpected_value`, `argument_conflict`,
+  `missing_subcommand`, `unknown_subcommand`, `invalid_utf8`, `unclassified`) in the
+  summary, grammar names only, and `vsift <command> --help`; human stderr shows hidden
+  characters as `<U+XXXX>`. **Next:** PRs 2a/2b and 3; then PR 5 (P12 debt merged, #227).
 - **Nothing is published** until P13 completes and the maintainer approves one 0.x
   pre-release under npm's `next` tag; the npm organisation, trusted publishers and
   `release` environment are the maintainer's to set up.
@@ -92,8 +98,7 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
   not carry its citations' times.
 - **L-082, L-084:** Haiku 4.5 and GPT-6-Luna are below the line. **L-083:** `text`
   keeps hidden characters raw; the skill quotes only `display_text`.
-- **L-074:** SubRip markup removal drops any `<letter...>` tag. **L-071:** parse
-  failures in JSON modes carry no remediation (P13 PR 1).
+- **L-074:** SubRip markup removal drops any `<letter...>` tag.
 - **Grader readings for the maintainer:** `untrusted_listed` takes only F12-E01; an
   `rg --files` exclude glob with a separator stays strict.
 
@@ -104,7 +109,8 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 - `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run|batch`,
   `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
 - `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
-- Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`.
+- Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
+  that does not parse names its mistake and the `--help` to read (P13 PR 1, in review).
 - Still `COMMAND_NOT_IMPLEMENTED`: setup install/repair/list/rollback/remove.
   Human-readable terminal output is P13's.
 
@@ -120,7 +126,7 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PR 0 kickoff merged (#226); distribution, managed installation, human-readable output, L-071 and `handoff check` (#213) to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PR 0 merged (#226), PR 1 (L-071) in review; distribution, managed installation, human-readable output and `handoff check` (#213) to come |
 | P14 | Not started |
 
 ## Architecture snapshot

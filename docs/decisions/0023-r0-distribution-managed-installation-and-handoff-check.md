@@ -239,6 +239,26 @@ A command line that fails to parse gets a typed remediation (what kind of mistak
 and which defined argument when the parser knows it) that never echoes the text the
 user supplied.
 
+*Implementation note, 2026-09-30 (P13 PR 1):* the parser's error kind maps to a closed
+set of nine reasons: `unknown_argument`, `missing_required`, `invalid_value`,
+`unexpected_value`, `argument_conflict`, `missing_subcommand`, `unknown_subcommand`,
+`invalid_utf8` and `unclassified` (a kind VSift does not classify, so a parser upgrade
+cannot add an unlisted value; no command line of today's grammar produces it). In
+`--json` and `--events jsonl` modes the `parse` failure carries one remediation: the
+summary `The command line was rejected (<reason>). <what is wrong>; read its help.`,
+naming the deepest command reached and the blamed argument only when the parser's
+report resolves to the grammar's own definitions; a PowerShell quoting note when that
+command takes a comma-separated value (`crop --rect`); and the suggested `command`
+`vsift <command words> --help`, `required_authority` `none`. `--json` together with
+`--events` is `argument_conflict` too. The reason sits in the summary in the form the
+search query's rejection already uses, so the envelope and schemas are unchanged and
+no additive field (or ADR 0008 note under decision H4) was needed; a structured reason
+field stays possible later as an additive change. Human mode keeps the parser's own
+explanation on stderr, now through `vsift_contract::terminal_safe_text`, which
+replaces controls and writes hidden characters as `<U+XXXX>` (`display_text`'s rule).
+The contract is in `docs/contracts/cli-v1.md` ("Rejected command lines"), the frozen
+example is `schemas/v1/examples/parse-failure.json`, and L-071 is closed.
+
 ### 6. `vsift handoff check` (#213)
 
 - The schema and rule checks of the grader's handoff module move into production as

@@ -1512,7 +1512,10 @@ Output limits apply before writing:
 - provider detail shown by `setup check`: 240 bytes.
 
 ANSI, OSC, newlines, and other control characters from untrusted providers are
-replaced in human diagnostics. A closed stdout is an I/O failure with exit 7; a
+replaced in human diagnostics, and since P13 PR 1 hidden characters (the set of
+`display_text`, such as bidirectional controls and zero-width characters) are shown as
+`<U+XXXX>` notation there, so a diagnostic that repeats supplied text is one visible
+line. A closed stdout is an I/O failure with exit 7; a
 closed stderr cannot make an otherwise complete result fail.
 
 The setup-check response preserves its existing v1 fields and adds lookup,
@@ -1637,8 +1640,52 @@ against `operation-response.schema.json`; evidence events validate against
 Every machine error includes a stable code, safe message, retryability, optional retry
 delay, affected identifiers, and structured remediation. Evidence or provider text is
 not interpolated into the public message. A remediation command (since P10 PR 3:
-`vsift job resume <job>` after an interruption) is an executable plus argument array
-of fixed words and validated identifiers, never shell text, and needs no authority.
+`vsift job resume <job>` after an interruption; since P13 PR 1: a command's help after
+a rejected command line) is an executable plus argument array of fixed words and
+validated identifiers, never shell text, and needs no authority.
+
+### Rejected command lines (P13 PR 1)
+
+A command line the parser rejects is `INVALID_ARGUMENT` (exit 2) with `command`
+`parse`, before anything is read or run. In `--json` mode (and in `--events jsonl`
+mode, as its one terminal event) the error carries exactly one remediation
+(`required_authority: "none"`, closing L-071):
+
+- **`summary`**: `The command line was rejected (<reason>). <what is wrong>; read its
+  help.` `<reason>` is one of the identifiers below. `<what is wrong>` is fixed prose
+  that names the deepest command the line reached (`crop`, `transcript get`, or
+  `vsift` for the root) and, when the parser blames a defined argument, that argument
+  as the grammar spells it (`--rect`, `<SESSION>`). When the command takes an option
+  whose value is a comma-separated list (today only `crop --rect`), the summary ends
+  with a note to quote that value on PowerShell, which otherwise splits it at the
+  commas into several arguments.
+- **`command`**: `vsift`, the deepest command's words, then `--help` (for example
+  `["crop", "--help"]`, or `["--help"]` at the root): the help that shows its flags.
+
+| Reason | What happened | Argument named |
+| --- | --- | --- |
+| `unknown_argument` | an argument the command does not define, or one too many (on PowerShell an unquoted `--rect 10,20,300,80` fails this way) | never |
+| `missing_required` | a required argument is missing | the argument, unless it is one of a group (`frame get` needs `--at` or `--candidate`) |
+| `invalid_value` | a value is missing or not in the form its argument takes (a malformed identity, a number out of range, `--rect 10`) | the argument |
+| `unexpected_value` | a value given to a flag that takes none (`--dry-run=yes`) | the flag |
+| `argument_conflict` | two arguments that exclude each other (`--at` and `--candidate`, `--json` and `--events`), or one argument given twice | both, or the repeated one |
+| `missing_subcommand` | a namespace without its operation (`vsift session`) | never |
+| `unknown_subcommand` | a word where a command or operation was expected | never |
+| `invalid_utf8` | an argument that is not valid Unicode where the command takes text | never |
+| `unclassified` | a rejection the parser reports in a way VSift does not classify (kept so the set stays closed) | never |
+
+**Nothing the user typed is repeated.** Argument text can come from evidence, so the
+remediation names only the grammar's own subcommands and arguments, found by exact
+comparison with the parser's definitions; an unknown flag, an invalid value or an
+unknown command word is never echoed. The reason is carried inside `summary`, in the
+form the search query's rejection already uses, so the envelope and the schemas are
+unchanged. The frozen example is
+[`parse-failure.json`](../../schemas/v1/examples/parse-failure.json) (`vsift crop
+<session> <evidence> --rect 10 --json`).
+
+In human mode (no `--json` or `--events`), stdout stays empty and stderr carries the
+parser's own explanation as one bounded diagnostic line: it may quote the argument,
+with control characters replaced and hidden characters shown as `<U+XXXX>`.
 
 ## Identifiers, time, geometry, and confidence
 
@@ -1712,7 +1759,7 @@ against an older copy of the schema ignores it.
 
 | Test ID | Executable evidence |
 | --- | --- |
-| C-01 | CLI hierarchy, help/version, parse errors, reserved-command failure; `session init-workspace` creation, idempotence, policy refusal, durable fail-closed and strict-isolation refusal before work (`workspace_cli_contract`) |
+| C-01 | CLI hierarchy, help/version, parse errors and their typed remediation, with hostile argument text never echoed (`parse_cli_contract`), reserved-command failure; `session init-workspace` creation, idempotence, policy refusal, durable fail-closed and strict-isolation refusal before work (`workspace_cli_contract`) |
 | C-02 | deterministic ready/degraded/blocked setup and terminal response states |
 | C-03 | page bounds and cursor scope/expiry/round trips, including transcript pages, search pages (`search_cli_contract`, `engine_search`, the application's `search` tests with a no-gap/no-duplicate property) and candidate pages (`candidates_cli_contract`, `engine_candidates`, the application's `visual` tests with the property `any_range_and_limit_page_without_gaps_or_duplicates`) |
 | C-04 | opaque identifier rejection of path, option, Unicode/control payloads |

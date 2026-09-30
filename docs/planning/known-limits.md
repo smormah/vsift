@@ -113,7 +113,6 @@ Each entry has these fields:
 | [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
 | [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
-| [L-071](#l-071) | A command line that does not parse gets no remediation in JSON modes | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-073](#l-073) | SEC-T02 for human-readable terminal output is deferred to P13 | security | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
@@ -129,7 +128,7 @@ Each entry has these fields:
 | [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222), [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
 
-Counts: 4 high, 25 medium, 52 low (81 entries).
+Counts: 4 high, 25 medium, 51 low (80 entries).
 
 ## Security
 
@@ -940,27 +939,6 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 - **Next step:** none planned; revisit if operators need a host-side retry class.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
-
-### L-071
-
-**A command line that does not parse gets no remediation in JSON modes.**
-
-- **What:** with `--json` or `--events jsonl`, a command line the parser rejects (an
-  unknown flag, a missing value, a malformed identity) answers `INVALID_ARGUMENT` with
-  `command` `parse`, the generic message and an empty `remediation`; the parser's own
-  explanation is not carried. On PowerShell an unquoted `--rect 10,20,300,80` becomes
-  several arguments and fails this way.
-- **Evidence:** observed with `crop` while writing the P12 skill (2026-09-28); the
-  envelope in `docs/contracts/cli-v1.md` "Output protocol".
-- **Impact:** an agent must find the mistake itself; the skill points it at its
-  command reference and tells it to quote the rectangle on PowerShell.
-- **Why:** parse errors are presented as fixed prose so that no argument text is
-  echoed into a machine result.
-- **Mitigation:** the skill's command forms are all tested against the parser.
-- **Next step:** P13 PR 1: a typed parse remediation that never echoes argument text
-  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
-  **Status:** deferred. **Review:** pending.
 
 ### L-074
 

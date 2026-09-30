@@ -41,6 +41,10 @@ fn every_published_example_validates_against_its_schema() -> Result<(), Box<dyn 
             "examples/operation-error.json",
         ),
         (
+            "operation-response.schema.json",
+            "examples/parse-failure.json",
+        ),
+        (
             "setup-plan-unqualified.schema.json",
             "examples/setup-plan.unqualified.json",
         ),
@@ -70,6 +74,10 @@ fn strict_schemas_reject_unknown_fields() -> Result<(), Box<dyn std::error::Erro
         (
             "operation-response.schema.json",
             "examples/operation-error.json",
+        ),
+        (
+            "operation-response.schema.json",
+            "examples/parse-failure.json",
         ),
         (
             "setup-plan-unqualified.schema.json",
@@ -189,6 +197,30 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         );
         assert!(plan_value["data"]["plan_digest"].is_null());
     }
+    Ok(())
+}
+
+/// L-071 (P13 PR 1): a rejected command line in JSON mode carries its
+/// typed remediation and the help of the command it reached, exactly as the
+/// frozen example shows.
+#[test]
+fn emitted_parse_failure_matches_its_frozen_example() -> Result<(), Box<dyn std::error::Error>> {
+    let parse = Command::cargo_bin("vsift")?
+        .args([
+            "crop",
+            "ses_0123456789abcdef0123456789abcdef",
+            "evd_0123456789abcdef0123456789abcdef",
+            "--rect",
+            "10",
+            "--json",
+        ])
+        .output()?;
+    assert_eq!(parse.status.code(), Some(2));
+    assert!(parse.stderr.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&parse.stdout)?,
+        load("examples/parse-failure.json")?
+    );
     Ok(())
 }
 
