@@ -138,3 +138,52 @@ fn the_shipped_check_image_is_the_current_known_one() -> TestResult {
     std::fs::remove_dir_all(&workspace)?;
     Ok(())
 }
+
+/// Issue #219: `-stream_loop` with stream copy starts each copy of F02
+/// (12 s) 12.064 s after the one before, so the A-02 clip of 41 copies
+/// lasts 494.559875 s, not 492 s. The period is derived from `VSift`'s
+/// measurement of the clip; the nominal period drifts 2.56 s by the last
+/// copy and would place a frame showing 12 in the window of 0.
+#[test]
+fn a_looped_clip_repeats_its_truth_with_the_measured_period() -> TestResult {
+    use vsift_agent_trials::scenario::PeriodBasis;
+    let truth = CorpusTruth::load(&repository().join("fixtures/corpus"))?;
+    let looped = Scenario::load(
+        &repository().join("tools/vsift-agent-trials/scenarios/A-02-f02-compact-resume.json"),
+    )?;
+    let measured = looped.timeline(&truth, Some(494_559_875))?;
+    assert_eq!(measured.basis, PeriodBasis::Measured);
+    assert_eq!(measured.period_us, 12_063_996);
+    assert_eq!(measured.total_us, 494_559_875);
+    // GPT-6-Sol's A-02 run 2 phase 2 cited this frame for "depth 12": in
+    // the clip it lies 7.45 s into the 41st copy, inside F02-E02 (4-8 s).
+    assert!((4_000_000..8_000_000).contains(&measured.phase(490_009_863)));
+    // The second copy's first frame (12.063964 s) lies a rounding error
+    // before the derived start, and its 4 s frame (16.063964 s) 32 µs
+    // before the window: both land at their own fixture time.
+    assert!(measured.phase(12_063_964) < 50_000);
+    assert!((4_000_000..8_000_000).contains(&measured.phase(16_063_964)));
+    // The frames just before and at the next change stay in their windows.
+    assert!(measured.phase(12_063_964 + 3_950_000) < 4_000_000);
+    assert!(measured.phase(12_063_964 + 8_000_000) >= 8_000_000);
+
+    let nominal = looped.timeline(&truth, None)?;
+    assert_eq!(nominal.basis, PeriodBasis::Nominal);
+    assert_eq!(
+        (nominal.period_us, nominal.total_us),
+        (12_000_000, 492_000_000)
+    );
+    assert!((8_000_000..12_000_000).contains(&nominal.phase(490_009_863)));
+
+    // A measurement more than 2% from the nominal period is not trusted.
+    let off = looped.timeline(&truth, Some(600_000_000))?;
+    assert_eq!(off.basis, PeriodBasis::Nominal);
+
+    let single = Scenario::load(
+        &repository().join("tools/vsift-agent-trials/scenarios/A-03-f05-supplied.json"),
+    )?;
+    let timeline = single.timeline(&truth, Some(20_100_000))?;
+    assert_eq!(timeline.basis, PeriodBasis::NotLooped);
+    assert_eq!(timeline.period_us, timeline.fixture_us);
+    Ok(())
+}

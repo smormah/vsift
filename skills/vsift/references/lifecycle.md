@@ -17,7 +17,7 @@ member is optional.
 | --- | --- |
 | Nothing (`default`) | Leave the session open so the user can check your citations; report `lifecycle.expires_at` and how to close it. |
 | "Close it" / "clean up when done" | `vsift session close <session> --json` on your own session. |
-| "Keep the evidence" / "save a bundle to D" | `vsift session retain <session> --output <new-directory> --json` with the new directory the user named; `--include-source` only if they asked for the video to be included. Then `vsift bundle validate <bundle-directory> --json`. |
+| "Keep the evidence" / "save a bundle to D" | After your last evidence command, `vsift session retain <session> --output <new-directory> --json` with the new directory the user named; `--include-source` only if they asked for the video to be included. Then `vsift bundle validate <bundle-directory> --json`. The bundle holds the session as it was when you retained it: cite nothing you extract later. |
 | "Keep it open longer" | `vsift session renew <session> --json` while the session is still open; an expired session cannot be renewed. |
 | "Reopen if it expires" | As stated in [resume.md](resume.md). |
 

@@ -72,7 +72,7 @@ pub struct FixtureSpec {
 pub enum ClipBuild {
     /// The fixture followed by `extra_copies` more copies, without
     /// re-encoding (the P10 checkpoint's loop). Truth windows repeat with
-    /// the fixture's duration as the period.
+    /// every copy; [`Scenario::timeline`] gives the period.
     Loop {
         /// Copies after the first.
         extra_copies: u32,
@@ -378,18 +378,106 @@ impl Scenario {
         }
     }
 
-    /// The loop period of the video (the fixture's duration) and its total
-    /// length.
+    /// The video's timeline: its loop period and total length.
+    ///
+    /// A looped clip is built with `-stream_loop` and stream copy, and
+    /// `FFmpeg` starts each copy after the longest stream of the one before,
+    /// padded audio included, not after the fixture's nominal duration. F02
+    /// (12 s) repeats every 12.064 s in the A-02 clip, so by the 41st copy
+    /// the nominal period is 2.56 s off (issue #219). When `VSift` measured
+    /// the clip (`measured_us`, the visual index's `duration_us`), the period
+    /// is derived from it: the last copy lasts the fixture's duration, every
+    /// earlier copy one period. A measurement more than 2% from the nominal
+    /// period is not trusted, and the nominal period stays.
     ///
     /// # Errors
     ///
     /// As [`CorpusTruth::fixture`].
-    pub fn timeline(&self, truth: &CorpusTruth) -> Result<(u64, u64), TrialError> {
-        let period = truth.fixture(&self.fixture.id)?.duration_us;
-        let copies = match self.fixture.build {
-            Some(ClipBuild::Loop { extra_copies }) => u64::from(extra_copies) + 1,
-            _ => 1,
+    pub fn timeline(
+        &self,
+        truth: &CorpusTruth,
+        measured_us: Option<u64>,
+    ) -> Result<Timeline, TrialError> {
+        let fixture_us = truth.fixture(&self.fixture.id)?.duration_us.max(1);
+        let extra_copies = match self.fixture.build {
+            Some(ClipBuild::Loop { extra_copies }) => u64::from(extra_copies),
+            _ => 0,
         };
-        Ok((period, period * copies))
+        let nominal = Timeline {
+            fixture_us,
+            period_us: fixture_us,
+            total_us: fixture_us * (extra_copies + 1),
+            basis: if extra_copies == 0 {
+                PeriodBasis::NotLooped
+            } else {
+                PeriodBasis::Nominal
+            },
+        };
+        let (Some(measured), true) = (measured_us, extra_copies > 0) else {
+            return Ok(nominal);
+        };
+        let period_us = measured.saturating_sub(fixture_us) / extra_copies;
+        if period_us.abs_diff(fixture_us) > fixture_us / 50 {
+            return Ok(nominal);
+        }
+        Ok(Timeline {
+            fixture_us,
+            period_us,
+            total_us: measured,
+            basis: PeriodBasis::Measured,
+        })
+    }
+}
+
+/// Where a video's truth windows lie: the fixture's events repeat once per
+/// period, each copy starting one period after the one before.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Timeline {
+    /// The fixture's own duration: the events' timeline.
+    pub fixture_us: u64,
+    /// How far apart the copies of a looped clip start.
+    pub period_us: u64,
+    /// The whole video's length.
+    pub total_us: u64,
+    /// Where the period comes from.
+    pub basis: PeriodBasis,
+}
+
+/// Where a [`Timeline`]'s period comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PeriodBasis {
+    /// The clip is the fixture itself.
+    NotLooped,
+    /// A looped clip whose period is the fixture's nominal duration, because
+    /// no usable measurement of the clip was available.
+    Nominal,
+    /// A looped clip whose period is derived from `VSift`'s measurement.
+    Measured,
+}
+
+/// How far a measured period may place a frame of a looped clip before its
+/// own fixture time. The derived period is an average: in the A-02 clip it
+/// places every frame within 96 µs of its copy's real start, and the
+/// container's time base puts a copy's frames up to 1 µs early (the second
+/// copy's 4 s frame is at 16.063964 s, 3.999999 s after its copy began).
+/// A frame is therefore placed 1 ms later before its window is looked up.
+/// Frames are at least 4 ms apart below 240 frames per second, so no frame
+/// moves into the place of the next one.
+pub const LOOP_ALIGNMENT_US: u64 = 1_000;
+
+impl Timeline {
+    /// Where a frame at `time` falls in the fixture's own timeline. With a
+    /// measured period the frame is first moved [`LOOP_ALIGNMENT_US`]
+    /// later, so a frame a rounding error early lands at its own time. A
+    /// time between the fixture's end and the next copy's start holds no
+    /// frame of its own; it is placed at the next copy's start.
+    #[must_use]
+    pub fn phase(&self, time: u64) -> u64 {
+        let alignment = match self.basis {
+            PeriodBasis::Measured => LOOP_ALIGNMENT_US,
+            PeriodBasis::NotLooped | PeriodBasis::Nominal => 0,
+        };
+        let phase = time.saturating_add(alignment) % self.period_us.max(1);
+        if phase >= self.fixture_us { 0 } else { phase }
     }
 }
