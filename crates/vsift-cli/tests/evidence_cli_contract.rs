@@ -814,12 +814,14 @@ fn human_text(output: &Output) -> Built<String> {
 /// The session root of the SEC-T02 human rerun: a right-to-left override
 /// and a zero-width space everywhere, and where the platform allows them in
 /// a name an OSC-8 link, an ANSI colour, a line break and a C1 control that
-/// would forge a line of their own.
+/// would forge a line of their own. The link's target has no `/`, so the
+/// hostile part stays one folder name.
 fn hostile_sessions() -> PathBuf {
     #[cfg(windows)]
     let parent = "roo\u{202e}ts\u{200b}";
     #[cfg(not(windows))]
-    let parent = "roo\u{202e}ts\u{200b}\u{1b}]8;;https://example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85}";
+    let parent =
+        "roo\u{202e}ts\u{200b}\u{1b}]8;;https:example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85}";
     Path::new(parent).join("private sessions")
 }
 
@@ -870,7 +872,9 @@ async fn sec_t02_hostile_session_root_paths_stay_inert_in_human_output() -> Test
         );
         #[cfg(not(windows))]
         assert!(
-            lines[shown].contains("\u{fffd}]8;;https://example.invalid\u{fffd}x\u{fffd}[31m\u{fffd}Forged: line\u{fffd}"),
+            lines[shown].contains(
+                "\u{fffd}]8;;https:example.invalid\u{fffd}x\u{fffd}[31m\u{fffd}Forged: line\u{fffd}"
+            ),
             "{context}: {text}"
         );
     }

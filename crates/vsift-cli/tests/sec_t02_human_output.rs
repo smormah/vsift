@@ -88,7 +88,7 @@ struct OwnedRoot(PathBuf, &'static str);
 #[cfg(windows)]
 const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B} sessions";
 #[cfg(not(windows))]
-const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B}\u{1b}]8;;https://example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85} sessions";
+const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B}\u{1b}]8;;https:example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85} sessions";
 
 impl OwnedRoot {
     fn new() -> Result<Self, Box<dyn Error>> {
