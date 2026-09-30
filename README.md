@@ -23,9 +23,10 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > video to a grounded, cited handoff. P12's named-client trials qualify it for strong
 > models (Claude Opus 5.5, GPT-6-Astra). The compact models (Claude Sonnet 5.5,
 > GPT-6-Sol) are supported below target: 82% of trials passed fully, against a 90%
-> target ([qualification record](docs/planning/p12-agent-qualification.md)). Managed
-> dependency installation, native and npm distribution and readable terminal output
-> are P13's work, in progress since 2026-09-30
+> target ([qualification record](docs/planning/p12-agent-qualification.md)). Every
+> command now prints readable terminal text without `--json` (P13). Managed
+> dependency installation and native and npm distribution are P13's remaining work,
+> in progress since 2026-09-30
 > ([ADR 0023](docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
 > Proposed); nothing is published yet. See the
 > [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).

@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068).
+Date: 2026-09-30 (P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -61,8 +61,8 @@ Each entry has these fields:
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
 | [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
 | [L-015](#l-015) | Bursts over more than 20 s of 60 fps video are refused | contract/UX | low | unscheduled | [#172](https://github.com/smormah/vsift/issues/172) | open |
-| [L-016](#l-016) | Delivered file paths die with the session; very long Windows paths keep the `\\?\` form | contract/UX | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | accepted residual |
-| [L-017](#l-017) | Human-readable output is still pretty-printed JSON for the evidence and job commands | contract/UX | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-016](#l-016) | Delivered file paths die with the session; very long Windows paths keep the `\\?\` form | contract/UX | low | unscheduled | none | accepted residual |
+| [L-017](#l-017) | Human mode shows no progress; the worker hosts' event stream is JSON Lines only | contract/UX | low | unscheduled | none | accepted residual |
 | [L-018](#l-018) | Tiny text is measured on synthetic glyphs only; crops are never upscaled | visual detection | low | unscheduled | [#173](https://github.com/smormah/vsift/issues/173) | open |
 | [L-019](#l-019) | A seek that lands past the requested frame reports "not found" | contract/UX | low | unscheduled | none | accepted residual |
 | [L-020](#l-020) | Noisy speech: `base` word error rate 61.5% on F08, not gated | accuracy/ASR | medium | unscheduled | [#150](https://github.com/smormah/vsift/issues/150) | deferred |
@@ -114,7 +114,6 @@ Each entry has these fields:
 | [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
 | [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-073](#l-073) | SEC-T02 over human-readable output covers P13 PR 2a's commands only | security | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
 | [L-075](#l-075) | Codex's image views are not in its stream, so its image budgets are unmeasured | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-076](#l-076) | Codex's Windows sandbox cannot run VSift trials as configured | process/CI | medium | unscheduled | [#204](https://github.com/smormah/vsift/issues/204) | open |
@@ -128,7 +127,7 @@ Each entry has these fields:
 | [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222), [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
 
-Counts: 4 high, 25 medium, 51 low (80 entries).
+Counts: 4 high, 23 medium, 52 low (79 entries).
 
 ## Security
 
@@ -347,33 +346,6 @@ Counts: 4 high, 25 medium, 51 low (80 entries).
 - **Next step:** revisit if Codex gains a command allow list.
 - **Owner:** unscheduled (recorded in P12). **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual. **Review:** pending.
-
-### L-073
-
-**SEC-T02 over human-readable output covers P13 PR 2a's commands only.**
-
-- **What:** partly addressed by P13 PR 2a (2026-09-30). SEC-T02 now also runs over
-  human output for `transcript get`, `search`, `session status` and rejected command
-  lines (`crates/vsift-cli/tests/sec_t02_human_output.rs`: no ESC, CSI, OSC, C0 or C1
-  control, no terminal link, no raw hidden character, evidence only on quoted lines,
-  bounded lines), with a property test of the `TerminalText` builder every human
-  renderer writes through. The commands that still print indented JSON (`candidates`,
-  the frame commands, `crop`, `audio`, the `job` commands, the worker hosts) are not
-  re-run: their JSON escapes control characters, but a hidden character of evidence
-  text is raw in `text` there.
-- **Evidence:** `crates/vsift-cli/tests/sec_t02_human_output.rs`,
-  `crates/vsift-cli/tests/sec_t02_adversarial_evidence.rs`;
-  [verification](verification.md) section 7 (SEC-T02).
-- **Impact:** a person reading those commands' human output of hostile evidence is not
-  yet protected by a tested rule; agents use the JSON modes.
-- **Why:** their renderers are P13 PR 2b's.
-- **Mitigation:** the JSON escapes every control character; `display_text` is in the
-  same result; the importer rejects control characters in supplied transcripts.
-- **Next step:** P13 PR 2b renders the remaining commands through the builder and
-  extends the rerun to them
-  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
-  **Status:** deferred. **Review:** pending.
 
 ### L-049
 
@@ -1050,31 +1022,40 @@ Counts: 4 high, 25 medium, 51 low (80 entries).
   never hold paths.
 - **Mitigation:** keep the session root short: the session folders and artifact name
   add 134 characters, so a root of at most 125 characters gets plain paths; the skill
-  retries once without the prefix; hosts may display the path as they wish.
-- **Next step:** friendlier display in P13's human output (PR 2b, which renders the frame,
-  crop and audio commands; each path on its own line, ADR 0023); the JSON path form stays.
-- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
+  retries once without the prefix. Human output (P13 PR 2b) writes each path whole on
+  a line of its own under its item, and after an extended-length path says once how
+  to open it (PowerShell's `Copy-Item -LiteralPath`) or avoid it (a root of at most
+  125 characters); a path with control or hidden characters is shown inert and
+  flagged, with `--json` named for the exact text. The JSON path form is unchanged.
+- **Next step:** none planned; the extended-length form stays the exact fallback.
+- **Owner:** unscheduled. **Issue:** none.
   **Status:** accepted residual. **Review:** pending.
 
 ### L-017
 
-**Human-readable output is still pretty-printed JSON for the evidence and job commands.**
+**Human mode shows no progress; the worker hosts' event stream is JSON Lines only.**
 
-- **What:** partly closed by P13 PR 2a (2026-09-30): setup, `ingest`, the `session`
-  commands, `transcript get/retranscribe`, `search`, `bundle validate` and every
-  failure now print readable text. Without `--json`, `candidates`, `frame
-  get/neighbours/burst`, `crop`, `audio`, `job status/resume/cancel`, `job run` and
-  `job batch` still print the indented JSON result.
+- **What:** since P13 PR 2b every command prints readable text without `--json`. Long
+  commands (`transcript retranscribe`, `job resume`, `job run`, `job batch`) print
+  only their final result in human mode: their `progress` events, and the worker
+  hosts' `lifecycle` and per-request `result` events, exist only in `--events jsonl`,
+  which stays one versioned JSON value per line. `job batch`'s human summary lists
+  each line's outcome, not its full job result.
 - **Evidence:** [CLI contract](../contracts/cli-v1.md) ("Human-readable text" under
-  "Output protocol"); ADR 0019 (assigned to P13 on 2026-09-26); ADR 0023's PR 2a note.
-- **Impact:** people running those commands by hand get machine output; agents are
+  "Output protocol"); [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 2b note.
+- **Impact:** a person running a long command by hand sees nothing until it ends; an
+  operator watching a worker host reads JSON Lines. Agents and supervisors are
   unaffected.
-- **Why:** agent contract first (ADR 0008).
-- **Mitigation:** the JSON is complete and stable.
-- **Next step:** P13 PR 2b renders the remaining commands through the same builder
-  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
-  **Status:** deferred. **Review:** pending.
+- **Why:** the event stream is a supervisor's interface (sequence numbers, never-dropped
+  lifecycle and result events, 64 KiB lines, ADR 0021); a second, unstable human form
+  of it would add a protocol without a user.
+- **Mitigation:** `--events jsonl` for live progress; `job status` for a recoverable
+  job at any time; `session status` for a session's jobs.
+- **Next step:** none planned; a progress line on stderr in human mode is possible
+  later without changing any contract.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
 
 ### L-018
 
@@ -2099,9 +2080,8 @@ raw.**
 
 - **What:** found while compiling this register (2026-09-27):
   - `README.md` "Project status" says P09 is "pending review and merge", "Current
-    behavior" says frame and audio retrieval return `COMMAND_NOT_IMPLEMENTED`, the setup
-    text names `ingest --transcript` as today's first media operation, and "Principles"
-    promises readable terminal output ([L-017](#l-017)).
+    behavior" says frame and audio retrieval return `COMMAND_NOT_IMPLEMENTED`, and the
+    setup text names `ingest --transcript` as today's first media operation.
   - [CLI contract](../contracts/cli-v1.md): its command table still marks `setup
     configure`, `configure-model` and `plan` "Partial P06".
   - [Architecture and contracts](architecture-and-contracts.md) says it is implemented

@@ -15,18 +15,24 @@
 //! - a failure is its fixed message and code, then each remediation's
 //!   summary and suggested command (fixed words and validated identifiers),
 //!   on stderr;
-//! - a file path, when a later renderer shows one, goes on its own line.
+//! - a delivered file path goes on a line of its own, through the builder's
+//!   path entry, never cut (L-016);
+//! - a worker host (`job run`, `job batch`) renders its final result; its
+//!   event stream is `--events jsonl` only.
 //!
 //! Human text is unstable and not for parsing (`docs/contracts/cli-v1.md`);
 //! agents use `--json`.
 //!
-//! **Split of the work.** This part (PR 2a) renders setup, session, ingest,
-//! transcript, search and bundle results, every failure, and rejected
-//! command lines. `candidates`, the frame commands, `crop`, `audio`, the
-//! `job` commands and the worker hosts still print the indented JSON result
-//! until PR 2b; [`result`] answers `None` for them.
+//! PR 2a rendered setup, session, ingest, transcript, search and bundle
+//! results, every failure and rejected command lines; PR 2b renders
+//! `candidates`, the frame commands, `crop`, `audio`, the `job` commands and
+//! the worker hosts. Every command that completes has a renderer: [`result`]
+//! answers `None` only for `setup check` (rendered from its typed report by
+//! [`setup_check`]) and the commands that only ever fail.
 
+mod evidence;
 mod failure;
+mod job;
 mod session;
 mod setup;
 mod text;
@@ -44,8 +50,50 @@ pub(crate) use text::{DisplayText, RenderedText};
 
 use crate::output::OutputError;
 
-/// Renders a completed result of `command` as human text, or `None` when
-/// the command still prints its indented JSON result (until P13 PR 2b).
+/// The human text of a worker host's final response.
+#[derive(Debug)]
+pub(crate) struct HostText {
+    /// The job result or batch summary, for stdout; a failed or cancelled
+    /// request has one too.
+    pub(crate) result: Option<RenderedText>,
+    /// The error, for stderr, when the response has one.
+    pub(crate) failure: Option<RenderedText>,
+}
+
+/// Renders a worker host's final response (`job run`, `job batch`): its
+/// data as a result, also when the request failed or was cancelled, and its
+/// error as a failure. Either may be absent (a refusal before the request
+/// ran has no data).
+///
+/// # Errors
+///
+/// As [`result`] and [`failure`].
+pub(crate) fn host(
+    command: CommandName,
+    response: &OperationResponse<serde_json::Value>,
+) -> Result<HostText, OutputError> {
+    let value = serde_json::to_value(response).map_err(OutputError::Serialization)?;
+    render_host(command, &value)
+}
+
+/// [`host`] over the published JSON form of a response.
+fn render_host(command: CommandName, value: &serde_json::Value) -> Result<HostText, OutputError> {
+    let present = |member: &str| value.get(member).is_some_and(|inner| !inner.is_null());
+    let result = if present("data") {
+        render_value(command, value)?
+    } else {
+        None
+    };
+    let failure = if present("error") {
+        Some(failure::render_failure(value, None)?)
+    } else {
+        None
+    };
+    Ok(HostText { result, failure })
+}
+
+/// Renders a completed result of `command` as human text, or `None` for
+/// `setup check` (see [`setup_check`]) and the commands that only fail.
 ///
 /// # Errors
 ///
@@ -82,6 +130,17 @@ fn render_value(
         CommandName::TranscriptGet => transcript::page(&envelope(value)?),
         CommandName::TranscriptRetranscribe => transcript::retranscription(&envelope(value)?),
         CommandName::Search => transcript::search(&envelope(value)?),
+        CommandName::Candidates => evidence::candidates(&envelope(value)?),
+        CommandName::FrameGet
+        | CommandName::FrameNeighbours
+        | CommandName::FrameBurst
+        | CommandName::Crop => evidence::frames(&envelope(value)?),
+        CommandName::Audio => evidence::audio(&envelope(value)?),
+        CommandName::JobStatus => job::status("Job ", &envelope(value)?),
+        CommandName::JobCancel => job::status("Cancel requested for job ", &envelope(value)?),
+        CommandName::JobResume => job::resume(&envelope(value)?),
+        CommandName::JobRun => job::run(&envelope(value)?),
+        CommandName::JobBatch => job::batch(&envelope(value)?),
         // `setup check` renders from its typed report (`setup_check`), and
         // the parse and reserved setup commands only ever fail.
         CommandName::SetupCheck
@@ -90,19 +149,7 @@ fn render_value(
         | CommandName::SetupRepair
         | CommandName::SetupList
         | CommandName::SetupRemove
-        | CommandName::SetupRollback
-        // P13 PR 2b.
-        | CommandName::Candidates
-        | CommandName::FrameGet
-        | CommandName::FrameNeighbours
-        | CommandName::FrameBurst
-        | CommandName::Audio
-        | CommandName::Crop
-        | CommandName::JobRun
-        | CommandName::JobBatch
-        | CommandName::JobStatus
-        | CommandName::JobResume
-        | CommandName::JobCancel => return Ok(None),
+        | CommandName::SetupRollback => return Ok(None),
     };
     rendered.map(Some).map_err(|_| OutputError::TooLarge)
 }

@@ -771,17 +771,10 @@ where
         OutputMode::JsonLines => writer.write_json(&TerminalEventResponse::new(response)),
         OutputMode::Human => match human::result(command, &response) {
             Ok(Some(text)) => writer.write_rendered_stdout(&text),
-            // Until P13 PR 2b, the commands without a renderer print the
-            // indented JSON result.
-            Ok(None) => match serde_json::to_string_pretty(&response) {
-                Ok(mut text) => {
-                    text.push('\n');
-                    writer.write_trusted_stdout(&text)
-                }
-                Err(_) => return write_failure(writer, mode, command, FailureCode::Internal, None),
-            },
-            // A result that does not have its published shape is a defect.
-            Err(OutputError::Serialization(_)) => {
+            // Every command that completes has a renderer since P13 PR 2b;
+            // a result without one, or without its published shape, is a
+            // defect, and is never printed as raw JSON.
+            Ok(None) | Err(OutputError::Serialization(_)) => {
                 return write_failure(writer, mode, command, FailureCode::Internal, None);
             }
             Err(error) => Err(error),
@@ -790,6 +783,64 @@ where
     match write {
         Ok(()) => ProcessExit::Success,
         Err(error) => {
+            writer.write_safe_diagnostic(&error.to_string());
+            ProcessExit::StorageOrIo
+        }
+    }
+}
+
+/// Writes a worker host's final response in human mode (P13 PR 2b): its job
+/// result or batch summary on stdout, also for a failed or cancelled
+/// request, then its error on stderr as every human failure is written.
+/// The host's exit status is its own; this answers only whether the text
+/// was written.
+///
+/// # Errors
+///
+/// [`OutputError::Serialization`] when the response does not have its
+/// published shape (a defect), [`OutputError::TooLarge`] when its text
+/// exceeds the result budget, and [`OutputError::Io`] when stdout fails.
+fn write_human_host<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    command: CommandName,
+    response: &OperationResponse<serde_json::Value>,
+) -> Result<(), OutputError>
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    let text = human::host(command, response)?;
+    if let Some(result) = &text.result {
+        writer.write_rendered_stdout(result)?;
+    }
+    if let Some(failure) = &text.failure {
+        writer.write_rendered_stderr(failure);
+    }
+    Ok(())
+}
+
+/// The exit of a worker host whose final response could not be written. A
+/// response without its published shape is a defect: the `INTERNAL` failure
+/// is written instead (never the decoder's message, which may quote the
+/// response), exit 1. Anything else is an output failure, exit 7.
+fn host_write_failure<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    command: CommandName,
+    error: &OutputError,
+) -> ProcessExit
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    match error {
+        OutputError::Serialization(_) => write_failure(
+            writer,
+            OutputMode::Human,
+            command,
+            FailureCode::Internal,
+            None,
+        ),
+        OutputError::TooLarge | OutputError::Io(_) => {
             writer.write_safe_diagnostic(&error.to_string());
             ProcessExit::StorageOrIo
         }

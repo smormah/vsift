@@ -1,0 +1,37 @@
+Burst of frames in session ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070
+Requested: up to 12 frames over 00:00:04.000000 to 00:00:08.000000 (--from 4000000 --to 8000000)
+Planned: 12 targets over 00:00:04.000000 to 00:00:06.000000 (--from 4000000 --to 6000000) (clipped_at_end_of_stream), 12 distinct frames
+Extracted now (profile p09-r0-v1, source copy checked by identity)
+Stopped early: session_evidence_budget (the items below are committed evidence)
+Selections (requested time -> actual time):
+  target  00:00:04.000000 -> 00:00:04.000000 (0 us)  evd_e45fcaeaf14d22b7aaa668afdb780d11
+  target  00:00:04.166666 -> 00:00:04.200000 (+33334 us)  evd_59bbe04202082d3cc0996b2261b6c9d7
+  target  00:00:04.333333 -> 00:00:04.350000 (+16667 us)  evd_d209db21eb39e615c44ca4bbcc138354
+  target  00:00:04.500000 -> 00:00:04.500000 (0 us)  evd_8582ea182a3dc3b00a9d1369801d9ca1
+
+Evidence (each file is valid while the session exists; retain the session to keep it):
+
+evd_e45fcaeaf14d22b7aaa668afdb780d11  frame at 00:00:04.000000, 1280x720 (stream 0, pts 40960)
+  Image 1280x720, 48 bytes, sha256 ebce2bd56f2e70d100e3259dcd9d0541355fc7c3eaee68d29b7d81d483ae1151
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ebce2bd56f2e70d100e3259dcd9d0541355fc7c3eaee68d29b7d81d483ae1151.png
+
+evd_59bbe04202082d3cc0996b2261b6c9d7  frame at 00:00:04.200000, 1280x720 (stream 0, pts 43008)
+  Image 1280x720, 48 bytes, sha256 1ad4a84ac04fad6d66604f764324238f1fa1bab0738c752ba18638bc001857f4
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-1ad4a84ac04fad6d66604f764324238f1fa1bab0738c752ba18638bc001857f4.png
+
+evd_d209db21eb39e615c44ca4bbcc138354  frame at 00:00:04.350000, 1280x720 (stream 0, pts 44544)
+  Image 1280x720, 48 bytes, sha256 ccf0cf726ff782f91e3af8ea1f8133c8aca8244e11ac214586c3bc8ace65d27e
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ccf0cf726ff782f91e3af8ea1f8133c8aca8244e11ac214586c3bc8ace65d27e.png
+
+evd_8582ea182a3dc3b00a9d1369801d9ca1  frame at 00:00:04.500000, 1280x720 (stream 0, pts 46080)
+  Image 1280x720, 48 bytes, sha256 ddb83d8687efbf97021ebd7dbd9721ec34857d11d4c877e4d27c277886e1671c
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ddb83d8687efbf97021ebd7dbd9721ec34857d11d4c877e4d27c277886e1671c.png
+
+Status: partial (the warnings below say what is missing)
+Lifecycle: ephemeral, expires 2026-09-27T00:00:00Z
+Warning: The session's 384 evidence artifacts are used up; the items returned are committed evidence. Keep them with session retain, then open a new session to continue.

@@ -714,7 +714,9 @@ step waits, `draining` (`reason` `shutdown`) when a shutdown begins, the `result
 (`line` `null`), `request_finished` (status, code, rejection, dropped progress),
 `stopped` (`reason` `end_of_input`, or `shutdown`) and the terminal event, whose result
 is the `--json` response. A failure before the request is read or the workspace is
-opened is the one terminal event.
+opened is the one terminal event. Without `--json` or `--events`, only the final job
+result is written, as readable text, with a failure's error on stderr; the events
+stay JSON Lines only (P13 PR 2b, "Human-readable text" under "Output protocol").
 
 ### P11 `job batch`
 
@@ -759,7 +761,8 @@ end; `draining` (`shutdown`) when a shutdown begins and `draining` (`drain_timeo
 if requests still run when the drain time ends; `stopped` with the termination reason;
 then the terminal event, whose result is the `--json` response. Progress of a request
 always precedes its result. A failure before the workspace is opened, or a concurrency
-above the capacity, is the one terminal event. `--json` prints the summary alone.
+above the capacity, is the one terminal event. `--json` prints the summary alone, and
+human mode prints it as readable text (P13 PR 2b).
 
 **Result and exit (D5).** The `data` of every outcome is the batch summary (below).
 Every request complete: `complete`, exit 0; some partial: `partial` with the warning
@@ -1300,8 +1303,8 @@ video. `STORAGE_IO` when a delivered path is not valid UTF-8 (remediation: use a
 `--session-root` whose path is). `DEADLINE_EXCEEDED`, `BUSY` or `CANCELLED` only when
 nothing was extracted.
 
-Human output is the indented JSON result until P13 PR 2b renders these commands as
-readable text ("Human-readable text" under "Output protocol").
+Without `--json` these commands print readable text since P13 PR 2b, each delivered
+path whole on its own line ("Human-readable text" under "Output protocol").
 
 ### P09 crops and audio clips
 
@@ -1521,9 +1524,10 @@ replaced in human diagnostics, and since P13 PR 1 hidden characters (the set of
 `<U+XXXX>` notation there. A closed stdout is an I/O failure with exit 7; a
 closed stderr cannot make an otherwise complete result fail.
 
-### Human-readable text (P13 PR 2a)
+### Human-readable text (P13 PRs 2a and 2b)
 
-Every human result and failure is written through one builder
+Without `--json` or `--events`, every command prints readable text (unstable and not
+for parsing, above). Every human result and failure is written through one builder
 (`crates/vsift-cli/src/human/`, `TerminalText`), whose rules hold for every command:
 
 - **No control character** but the line breaks it writes itself: any other (C0, `ESC`,
@@ -1537,21 +1541,47 @@ Every human result and failure is written through one builder
 - **Evidence is labelled untrusted** and quoted only from `display_text` and
   `display_label`, each line after the prefix `  | `, which no other line has. Raw
   `text`, `original_text`, a speaker's `label` and the query's terms are never printed
-  (the query's terms are counted). A path, where a later command shows one, stands on
-  its own line.
+  (the query's terms are counted).
+- **A delivered path stands alone.** Each `files[].path` of `frame get`, `frame
+  neighbours`, `frame burst`, `crop` and `audio` is written whole, never cut, on a line
+  of its own (after four spaces) under its item and its `File (<media type>):` label,
+  so it can be copied. A path in Windows' extended-length form (`\\?\C:\...`, L-016) is
+  followed once by a note: some programs refuse the form, PowerShell's `Copy-Item
+  -LiteralPath '<path>' <destination>` copies the file out, and a `--session-root` of
+  at most 125 characters gives plain paths. A path holding a control or hidden
+  character (the session root is the user's choice) is shown with the same
+  replacements as any value and flagged, and one longer than 4,000 bytes is replaced
+  by a statement; both notes name `--json` for the exact text. The JSON form of every
+  path is unchanged.
 - **A failure** goes to stderr, stdout staying empty: `Error: <message> (<CODE>)`,
   then for each remediation `Fix: <summary>` and, when it suggests one, `Run: vsift
   <arguments>` (fixed words and validated identifiers), then `Affected: <ids>` and
   `Retry after: <ms> ms` when present. The same facts as the `--json` error, in the
   same order.
 
-Since PR 2a, `setup check`, `setup plan`, `setup configure`, `setup configure-model`,
+PR 2a rendered `setup check`, `setup plan`, `setup configure`, `setup configure-model`,
 `ingest`, `session list/status/renew/close/retain/clean/init-workspace`, `transcript
-get`, `transcript retranscribe`, `search` and `bundle validate` print readable text, as
-does every failure. **Until P13 PR 2b**, `candidates`, `frame get/neighbours/burst`,
-`crop`, `audio`, `job status/resume/cancel` and the worker hosts `job run` and `job
-batch` still print their indented JSON result (the `--json` document, pretty-printed),
-in which a hidden character of evidence text is raw in `text` (L-017, L-073).
+get`, `transcript retranscribe`, `search`, `bundle validate`, every failure and
+rejected command lines. PR 2b renders `candidates` (the index, the analysed ranges and
+typed gaps, then each candidate's time, span, reasons and change), `frame
+get/neighbours/burst` and `crop` (the request, the burst plan or the neighbours' stops,
+each selection's requested and actual time, then each item with its image facts and
+file), `audio` (the same for the clip), `job status` and `job cancel` (the job's state,
+range, checkpoints, result or last failure, and `job resume <job>` when it can be
+resumed) and `job resume` (the job, then its retranscription as `transcript
+retranscribe` shows it). A command that completes without a renderer is a defect and
+fails `INTERNAL`; human mode never prints the JSON document.
+
+**Worker hosts.** In human mode `job run` prints its job result (status, attempt,
+digest, session, controls, then each step's status, times, typed outputs, uncovered
+ranges and failure) and `job batch` its summary (the termination reason, the counts
+and each processed line's operation, status, code and rejection). A `failed` or
+`cancelled` request or batch writes that text to stdout and its error to stderr, in the
+failure form above; the exit status is unchanged. Their `progress`, `lifecycle` and
+`result` events are **not** rendered: the event stream is a supervisor's interface
+(ADR 0021: sequence numbers, never-dropped lifecycle and result events, 64 KiB lines),
+so it stays JSON Lines under `--events jsonl`, and human mode writes the final result
+only, as it did before P13 (L-017). Neither form names a path or carries evidence text.
 
 The setup-check response preserves its existing v1 fields and adds lookup,
 verification and typed remediation metadata. The complete frozen example is

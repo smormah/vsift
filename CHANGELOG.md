@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Readable terminal text, part 2** (P13 PR 2b; closes L-073). Without `--json` or
+  `--events`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`, `job
+  status/resume/cancel` and the worker hosts `job run` and `job batch` now print
+  readable text, so every command does; a command that completes without a renderer
+  fails `INTERNAL` rather than printing JSON. Each delivered `files[].path` is written
+  whole on a line of its own under its item (L-016); an extended-length Windows path
+  (`\\?\`) is followed once by a note on opening it (PowerShell's `Copy-Item
+  -LiteralPath`, or a `--session-root` of at most 125 characters), and a path with
+  control or hidden characters is shown inert and flagged, naming `--json` for the
+  exact text. The worker hosts render their final job result or batch summary only
+  (a failed or cancelled request adds its error on stderr); their `progress`,
+  `lifecycle` and `result` events stay JSON Lines under `--events jsonl`, the
+  supervisor's interface. JSON output is unchanged. SEC-T02 now covers every human
+  output: hostile session roots (a right-to-left override and zero-width space, plus
+  off Windows an OSC-8 link, ANSI colour, line break and C1 control) through the binary
+  for `frame get`, `crop` and `audio` and for every PR 2b command's failures, hostile
+  request text for the worker hosts, hostile paths in the renderers' unit tests, and a
+  second builder property test for paths. Golden snapshots for every new command are in
+  `crates/vsift-cli/tests/human_output/`. Known limits: L-073 deleted; L-017 rewritten
+  as an accepted residual (no progress in human mode; the event stream is JSON Lines
+  only); L-016's display part done.
+
 - **Managed-install compatibility smoke and failure cleanup** (P13 PR 3, installer
   resume steps 1 and 2; internal only, `setup install` is unchanged until PR 4). A
   staged, unactivated runtime's executables now run before any activation, by explicit

@@ -261,11 +261,12 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   provenance, and the launcher checks its platform package's version and, if cheap
   enough, its digest (R-SEC02).
 
-Human-readable output (SEC-T02, L-073) and `handoff check`'s untrusted input (a draft
+Human-readable output (SEC-T02) and `handoff check`'s untrusted input (a draft
 that may carry evidence text) belong with the agent-specific controls below: both
-escape control and hidden characters and never echo input into a result. Since P13 PR
-2a, human output is written through one builder that enforces this, re-tested by
-SEC-T02 for the commands it renders so far (verification section 7).
+escape control and hidden characters and never echo input into a result. Since P13 PRs
+2a and 2b, every human output is written through one builder that enforces this,
+delivered paths included (each whole on its own line, a hostile one inert and
+flagged), and SEC-T02 is re-run over all of it (verification section 7).
 
 ## Agent-specific controls
 
@@ -303,7 +304,8 @@ command table; Codex's permissions are graded rather than configured (L-072). Tr
 run under a neutral root so delivered paths carry no user name (SEC-18), with a cleared
 environment, isolated client configuration and canaries whose appearance fails the
 trial (SEC-16). The tool-level SEC-T02 suite runs on every PR over synthetic
-adversarial sidecars (verification section 7); human-readable output is P13's (L-073).
+adversarial sidecars (verification section 7); P13 PRs 2a and 2b re-ran it over
+human-readable output.
 
 **P12 completion (2026-09-30, ADR 0022 accepted).** The named-client trials ran with
 hostile spoken, subtitle and on-screen instructions: A-04 and SEC-T02 through Claude

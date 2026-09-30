@@ -10,7 +10,9 @@
 //! **No view has a field for raw untrusted text.** Segments are read with
 //! `display_text` and speakers with `display_label`, as [`DisplayText`];
 //! `text`, `original_text`, `label` and search terms have no field here, so
-//! a renderer cannot quote them.
+//! a renderer cannot quote them. The one other text a user or the host can
+//! influence is a delivered file's `path` (it holds the session root), which
+//! renderers write only through the builder's path entry.
 
 use serde::Deserialize;
 
@@ -437,4 +439,423 @@ pub(crate) struct PlanFile {
     pub(crate) name: String,
     pub(crate) bytes: u64,
     pub(crate) mode: String,
+}
+
+/// One delivered file of an evidence result (`files[]`): the absolute path
+/// of the committed artifact, valid while the session exists.
+#[derive(Debug, Deserialize)]
+pub(crate) struct DeliveredFile {
+    pub(crate) evidence_id: String,
+    pub(crate) media_type: String,
+    pub(crate) path: String,
+}
+
+/// Which item a requested time resolved to.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Selection {
+    pub(crate) role: String,
+    pub(crate) evidence_id: String,
+    pub(crate) requested_us: u64,
+    pub(crate) actual_us: u64,
+    pub(crate) delta_us: i64,
+}
+
+/// The request of a frame or crop result: the members of every
+/// operation's request shape, each present only for its operations.
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct FrameRequest {
+    #[serde(default)]
+    pub(crate) at_us: Option<u64>,
+    #[serde(default)]
+    pub(crate) policy: Option<String>,
+    #[serde(default)]
+    pub(crate) tolerance_us: Option<u64>,
+    #[serde(default)]
+    pub(crate) candidate_id: Option<String>,
+    #[serde(default)]
+    pub(crate) anchor_evidence_id: Option<String>,
+    #[serde(default)]
+    pub(crate) count: Option<u64>,
+    #[serde(default)]
+    pub(crate) from_us: Option<u64>,
+    #[serde(default)]
+    pub(crate) to_us: Option<u64>,
+    #[serde(default)]
+    pub(crate) max_frames: Option<u64>,
+    #[serde(default)]
+    pub(crate) parent_evidence_id: Option<String>,
+    #[serde(default)]
+    pub(crate) rect: Option<Rectangle>,
+}
+
+/// A crop rectangle in the parent image's displayed pixels.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub(crate) struct Rectangle {
+    pub(crate) x: u64,
+    pub(crate) y: u64,
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+}
+
+/// Why each side of `frame neighbours` stopped short, if it did.
+#[derive(Debug, Deserialize)]
+pub(crate) struct NeighbourStops {
+    pub(crate) before_stop: Option<String>,
+    pub(crate) after_stop: Option<String>,
+}
+
+/// The plan of `frame burst`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BurstPlan {
+    pub(crate) planned: SpanRange,
+    pub(crate) extent: String,
+    pub(crate) targets: u64,
+    pub(crate) distinct: u64,
+}
+
+/// A half-open range written with `start_us` and `end_us`.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub(crate) struct SpanRange {
+    pub(crate) start_us: u64,
+    pub(crate) end_us: u64,
+}
+
+impl From<SpanRange> for Range {
+    fn from(span: SpanRange) -> Self {
+        Self {
+            from_us: span.start_us,
+            to_us: span.end_us,
+        }
+    }
+}
+
+/// One frame or crop evidence record (`frame-evidence.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct FrameEvidence {
+    pub(crate) evidence_id: String,
+    pub(crate) stream_index: u64,
+    pub(crate) frame: FrameTime,
+    pub(crate) crop: Option<CropGeometry>,
+    pub(crate) image: ImageFacts,
+}
+
+/// The decoded frame an item was taken from.
+#[derive(Debug, Deserialize)]
+pub(crate) struct FrameTime {
+    pub(crate) pts: i64,
+    pub(crate) time_us: u64,
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+}
+
+/// Where a crop lies in its parent image and in the frame.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CropGeometry {
+    pub(crate) parent_evidence_id: String,
+    pub(crate) x: u64,
+    pub(crate) y: u64,
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+    pub(crate) frame_x: u64,
+    pub(crate) frame_y: u64,
+}
+
+/// The delivered image of a frame or crop.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ImageFacts {
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+    pub(crate) sha256: String,
+    pub(crate) bytes: u64,
+}
+
+/// `frame.get`, `frame.neighbours`, `frame.burst` and `crop` data
+/// (`frame-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct FrameData {
+    pub(crate) session_id: String,
+    pub(crate) source_id: String,
+    pub(crate) request: FrameRequest,
+    pub(crate) reused: bool,
+    pub(crate) profile: String,
+    pub(crate) source_check: String,
+    pub(crate) selections: Vec<Selection>,
+    pub(crate) neighbours: Option<NeighbourStops>,
+    pub(crate) burst: Option<BurstPlan>,
+    pub(crate) items: Vec<FrameEvidence>,
+    pub(crate) files: Vec<DeliveredFile>,
+    pub(crate) partial_reason: Option<String>,
+}
+
+/// One audio evidence record (`audio-evidence.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct AudioEvidence {
+    pub(crate) evidence_id: String,
+    pub(crate) stream_index: u64,
+    pub(crate) range: SpanRange,
+    pub(crate) actual_start_us: u64,
+    pub(crate) audio: AudioFacts,
+}
+
+/// The delivered clip of an audio item.
+#[derive(Debug, Deserialize)]
+pub(crate) struct AudioFacts {
+    pub(crate) sample_rate: u64,
+    pub(crate) channels: u64,
+    pub(crate) sample_format: String,
+    pub(crate) sha256: String,
+    pub(crate) bytes: u64,
+}
+
+/// `audio` data (`audio-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct AudioData {
+    pub(crate) session_id: String,
+    pub(crate) source_id: String,
+    pub(crate) request: Range,
+    pub(crate) reused: bool,
+    pub(crate) profile: String,
+    pub(crate) source_check: String,
+    pub(crate) selections: Vec<Selection>,
+    pub(crate) range_clipped: bool,
+    pub(crate) items: Vec<AudioEvidence>,
+    pub(crate) files: Vec<DeliveredFile>,
+    pub(crate) partial_reason: Option<String>,
+}
+
+/// `candidates` data (`candidates-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct CandidatesPage {
+    pub(crate) session_id: String,
+    pub(crate) range: Range,
+    pub(crate) index: VisualIndex,
+    pub(crate) coverage: CandidatesCoverage,
+    pub(crate) items: Vec<VisualCandidate>,
+    pub(crate) next_cursor: Option<String>,
+}
+
+/// The visual-index revision a candidates page was read from.
+#[derive(Debug, Deserialize)]
+pub(crate) struct VisualIndex {
+    pub(crate) index_id: String,
+    pub(crate) number: u64,
+    pub(crate) profile: String,
+    pub(crate) duration_us: u64,
+}
+
+/// What part of the range a candidates page could analyse.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CandidatesCoverage {
+    pub(crate) searched_range: Range,
+    pub(crate) analyzed: Vec<Range>,
+    pub(crate) gaps: Vec<CandidatesGap>,
+    pub(crate) ranges_truncated: bool,
+}
+
+/// One typed gap of a candidates page's coverage.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CandidatesGap {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+    pub(crate) reason: String,
+    pub(crate) dropped_candidates: u64,
+}
+
+/// One visual candidate (`visual-candidate.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct VisualCandidate {
+    pub(crate) candidate_id: String,
+    pub(crate) representative_us: u64,
+    pub(crate) span: Range,
+    pub(crate) change_window: Option<Range>,
+    pub(crate) reasons: Vec<String>,
+    pub(crate) stability: String,
+    pub(crate) change: Option<VisualChange>,
+    pub(crate) visual_hash: String,
+    pub(crate) sample_count: u64,
+    pub(crate) displayed_dimensions: Dimensions,
+}
+
+/// How much a change candidate's frame changed.
+#[derive(Debug, Deserialize)]
+pub(crate) struct VisualChange {
+    pub(crate) changed_blocks: u64,
+    pub(crate) max_block_delta: u64,
+}
+
+/// Displayed width and height in pixels.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub(crate) struct Dimensions {
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+}
+
+/// A recoverable job (`job-data.schema.json`): `job status`, `job cancel`
+/// and the job of `job resume`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct RecoverableJob {
+    pub(crate) job_id: String,
+    pub(crate) session_id: String,
+    pub(crate) kind: String,
+    pub(crate) state: String,
+    pub(crate) live_owner: bool,
+    pub(crate) resumable: bool,
+    pub(crate) resumable_reason: String,
+    pub(crate) operation_id: Option<String>,
+    pub(crate) request: JobRequest,
+    pub(crate) progress: JobProgress,
+    pub(crate) attempts: u64,
+    pub(crate) result: Option<JobResult>,
+    pub(crate) failure: Option<JobFailure>,
+}
+
+/// What a job was asked to do.
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobRequest {
+    pub(crate) range: Option<Range>,
+}
+
+/// How far a job has come.
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobProgress {
+    pub(crate) chunks_total: Option<u64>,
+    pub(crate) chunks_checkpointed: u64,
+}
+
+/// What a succeeded job committed.
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobResult {
+    pub(crate) revision_id: String,
+    pub(crate) generation: u64,
+}
+
+/// The failure that ended a job's last attempt.
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobFailure {
+    pub(crate) code: String,
+    pub(crate) retryable: bool,
+}
+
+/// `job.resume` data (`job-resume-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct JobResume {
+    pub(crate) job: RecoverableJob,
+    pub(crate) outcome: Retranscription,
+}
+
+/// A worker request's result (`job-result.schema.json`), the data of
+/// `job run`. Its operation id and lifecycle are the envelope's too, and are
+/// written from there.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WorkResult {
+    pub(crate) request_digest: String,
+    pub(crate) status: String,
+    pub(crate) replayed: bool,
+    pub(crate) attempt: u64,
+    pub(crate) session_id: Option<String>,
+    pub(crate) source_id: Option<String>,
+    pub(crate) publication: Option<String>,
+    pub(crate) steps: Vec<WorkStep>,
+    pub(crate) failure: Option<WorkFailure>,
+    pub(crate) controls: WorkControls,
+}
+
+/// One step of a worker request.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WorkStep {
+    pub(crate) kind: String,
+    pub(crate) status: String,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) admission_wait_ms: u64,
+    pub(crate) job_id: Option<String>,
+    pub(crate) outputs: Option<StepOutputs>,
+    pub(crate) coverage: Option<StepCoverage>,
+    pub(crate) failure: Option<StepFailure>,
+}
+
+/// A step's typed outputs: the members of every step kind's outputs, each
+/// present only for its kind.
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct StepOutputs {
+    #[serde(default)]
+    pub(crate) generation: Option<u64>,
+    #[serde(default)]
+    pub(crate) revision_id: Option<String>,
+    #[serde(default)]
+    pub(crate) chunks_reused: Option<u64>,
+    #[serde(default)]
+    pub(crate) visual_index_id: Option<String>,
+    #[serde(default)]
+    pub(crate) candidate_count: Option<u64>,
+    #[serde(default)]
+    pub(crate) bundle_name: Option<String>,
+    #[serde(default)]
+    pub(crate) bundle_sha256: Option<String>,
+    #[serde(default)]
+    pub(crate) artifact_count: Option<u64>,
+}
+
+/// What part of a step's range stayed uncovered.
+#[derive(Debug, Deserialize)]
+pub(crate) struct StepCoverage {
+    pub(crate) truncated: bool,
+    pub(crate) gaps: Vec<String>,
+    pub(crate) reasons: Vec<String>,
+}
+
+/// The failure of one step.
+#[derive(Debug, Deserialize)]
+pub(crate) struct StepFailure {
+    pub(crate) code: String,
+    pub(crate) retryable: bool,
+    pub(crate) retry_after_ms: Option<u64>,
+}
+
+/// The failure that ended a worker request.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WorkFailure {
+    pub(crate) code: String,
+    pub(crate) retryable: bool,
+    pub(crate) retry_after_ms: Option<u64>,
+    pub(crate) step: Option<u64>,
+    pub(crate) rejection: Option<String>,
+}
+
+/// The controls a worker request ran under.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WorkControls {
+    pub(crate) isolation: String,
+    pub(crate) admission_capacity: u64,
+    pub(crate) concurrency: u64,
+    pub(crate) resource_limits: String,
+    pub(crate) free_space_reserve: String,
+}
+
+/// `job.batch` data (`job-batch-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct BatchSummary {
+    pub(crate) counts: BatchCounts,
+    pub(crate) items: Vec<BatchItem>,
+    pub(crate) not_started_from_line: Option<u64>,
+    pub(crate) termination_reason: String,
+}
+
+/// How many lines of a batch ended each way.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BatchCounts {
+    pub(crate) complete: u64,
+    pub(crate) partial: u64,
+    pub(crate) failed: u64,
+    pub(crate) cancelled: u64,
+    pub(crate) rejected: u64,
+}
+
+/// One processed line of a batch.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BatchItem {
+    pub(crate) line: u64,
+    pub(crate) operation_id: Option<String>,
+    pub(crate) status: String,
+    pub(crate) code: Option<String>,
+    pub(crate) rejection: Option<String>,
 }

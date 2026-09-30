@@ -40,15 +40,22 @@ pub(super) fn page(envelope: &Envelope<TranscriptPage>) -> Result<RenderedText, 
 pub(super) fn retranscription(
     envelope: &Envelope<Retranscription>,
 ) -> Result<RenderedText, TooLarge> {
-    let data = &envelope.data;
     let mut text = TerminalText::result();
+    push_retranscription(&mut text, &envelope.data);
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes a retranscription: its heading, the new revision, the job behind
+/// it and how to read it. `job resume` writes its outcome the same way.
+pub(super) fn push_retranscription(text: &mut TerminalText, data: &Retranscription) {
     text.push_fixed("New transcript revision of session ")
         .push_value(&data.session_id)
         .end_line();
-    push_revision(&mut text, &data.revision);
+    push_revision(text, &data.revision);
     text.push_fixed("Requested range: ");
     match data.requested_range {
-        Some(range) => push_range(&mut text, range),
+        Some(range) => push_range(text, range),
         None => {
             text.push_fixed("the whole source");
         }
@@ -79,8 +86,6 @@ pub(super) fn retranscription(
         .push_fixed(" --revision ")
         .push_value(&data.revision.revision_id)
         .end_line();
-    push_outcome(&mut text, envelope);
-    text.finish()
 }
 
 /// `search`: the matching segments of one page and what was searched.
@@ -286,7 +291,11 @@ fn push_segment_details(text: &mut TerminalText, segment: &TranscriptSegment) {
 }
 
 /// Writes a labelled list of ranges, or nothing when it is empty.
-fn push_ranges(text: &mut TerminalText, label: &'static str, ranges: &[super::view::Range]) {
+pub(super) fn push_ranges(
+    text: &mut TerminalText,
+    label: &'static str,
+    ranges: &[super::view::Range],
+) {
     if ranges.is_empty() {
         return;
     }
@@ -299,7 +308,7 @@ fn push_ranges(text: &mut TerminalText, label: &'static str, ranges: &[super::vi
 }
 
 /// Says how to read the next page, when there is one.
-fn push_next_page(text: &mut TerminalText, cursor: Option<&str>) {
+pub(super) fn push_next_page(text: &mut TerminalText, cursor: Option<&str>) {
     if let Some(cursor) = cursor {
         // The cursor is opaque and holds `|`, which a shell reads as a
         // pipe: it is shown in single quotes, which POSIX shells and
@@ -312,6 +321,6 @@ fn push_next_page(text: &mut TerminalText, cursor: Option<&str>) {
 }
 
 /// A length as the `u64` the builder writes.
-fn count(length: usize) -> u64 {
+pub(super) fn count(length: usize) -> u64 {
     u64::try_from(length).unwrap_or(u64::MAX)
 }

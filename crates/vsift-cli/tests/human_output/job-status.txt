@@ -1,0 +1,9 @@
+Job job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70 (retranscribe)
+Session: ses_0123456789abcdef0123456789abcdef
+State: interrupted, resumable (interrupted)
+Bound to operation: op_4f0c2b8e9a1d3c5e7f60718293a4b5c6
+Range: 00:00:05.500000 to 00:00:06.000000 (--from 5500000 --to 6000000)
+Chunks checkpointed: 0 of 1
+Attempts in this epoch: 1
+Last failure: CANCELLED (not retryable)
+Resume it: vsift job resume job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70

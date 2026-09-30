@@ -321,15 +321,25 @@ an agent trial.
   which search hits carry too (a query in that notation never matches one); forged records, links and commands stay text with VSift's own
   identities; `--events jsonl` stays one JSON value per line; `search` is literal. The
   agent trial (`SEC-T02-f12-webvtt`) is pending P12 PR 3; human-readable output is P13's
-  (known limit L-073).*
+  (the former known limit L-073).*
   *P13 PR 2a (2026-09-30): `crates/vsift-cli/tests/sec_t02_human_output.rs` re-runs it
   over human output for `transcript get`, `search`, `session status` and rejected
   command lines with hostile arguments (F12's SubRip and WebVTT imports and a voice
   name with hidden characters): stdout and stderr hold no ESC, CSI, OSC, C0 or C1
   control and no terminal link, hidden characters only as `<U+XXXX>`, evidence only on
   quoted lines and no line over 4,095 bytes; a property test shows the `TerminalText`
-  builder never writes a control or hidden character. The commands PR 2b renders are
-  still to be re-run (L-073).*
+  builder never writes a control or hidden character.*
+  *P13 PR 2b (2026-09-30), closing L-073: the rerun covers every human output. The
+  commands PR 2b renders carry no evidence text; their one untrusted text, a delivered
+  path, is re-run through the binary under a session root holding a right-to-left
+  override and a zero-width space (off Windows also an OSC-8 link, an ANSI colour, a
+  line break and a C1 control): `frame get`, `crop` and `audio` succeed with each path
+  inert, alone on its line and flagged (`evidence_cli_contract`), and every PR 2b
+  command fails inertly (`sec_t02_human_output.rs`). The renderers' unit tests add
+  hostile, extended-length and over-long paths for every frame command; the worker
+  hosts run in human mode with hostile request text (`job_run_cli_contract`,
+  `job_batch_cli_contract`); a second property test shows a path of any content is one
+  safe line.*
 - SEC-T03: before any multi-tenant host ships, cross-tenant lookup/export/delete,
   authorization bypass, quota abuse and credentials isolation suite. R0 must not
   advertise multi-tenant isolation before this host exists and passes.

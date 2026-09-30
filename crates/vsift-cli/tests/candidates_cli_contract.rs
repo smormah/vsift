@@ -560,17 +560,34 @@ async fn candidates_reject_bad_requests_and_sessions() -> TestResult {
     Ok(())
 }
 
-/// Without `--json`, the result is the same document, indented.
+/// Without `--json`, the page is readable text (P13 PR 2b): every candidate
+/// of the `--json` page by its whole identity, each on its own line, and no
+/// JSON.
 #[tokio::test]
-async fn human_output_is_the_indented_result() -> TestResult {
+async fn human_output_is_readable_text() -> TestResult {
     let root = OwnedRoot::new()?;
     let session = open_session(&root)?;
     seed_index(&root, &session)?;
+    let page = json(&vsift(
+        &root,
+        &candidates(&session, "0", "60000000", &["--json"]),
+    )?)?;
     let output = vsift(&root, &candidates(&session, "0", "60000000", &[]))?;
     assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
     let text = String::from_utf8(output.stdout)?;
-    assert!(text.contains("\n  \"command\": \"candidates\""));
-    let value: Value = serde_json::from_str(&text)?;
-    validate("candidates-data.schema.json", &value["data"])?;
+    assert!(
+        text.starts_with(&format!("Visual candidates of session {session}\n")),
+        "{text}"
+    );
+    assert!(!text.contains("\"command\""), "{text}");
+    let identities = ids(&page)?;
+    assert!(!identities.is_empty());
+    for identity in identities {
+        assert!(
+            text.lines().any(|line| line.starts_with(&identity)),
+            "{identity} missing: {text}"
+        );
+    }
     Ok(())
 }

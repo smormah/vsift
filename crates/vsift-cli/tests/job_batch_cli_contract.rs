@@ -445,6 +445,63 @@ fn a_mixed_batch_streams_the_contract() -> TestResult {
     Ok(())
 }
 
+/// Asserts SEC-T02's terminal rules on one human stream: no control
+/// character but line breaks, no raw hidden character, no terminal link.
+fn assert_terminal_safe(stream: &[u8]) -> Built<String> {
+    let text = String::from_utf8(stream.to_vec())?;
+    for character in text.chars() {
+        assert!(
+            character == '\n' || !character.is_control(),
+            "control U+{:04X} in {text:?}",
+            u32::from(character)
+        );
+        assert!(
+            !vsift_contract::is_hidden_character(character),
+            "raw hidden U+{:04X} in {text:?}",
+            u32::from(character)
+        );
+    }
+    assert!(!text.contains("\u{1b}]8;"));
+    Ok(text)
+}
+
+/// Human mode (P13 PR 2b): the batch summary is readable text on stdout,
+/// and a batch that ends in a failure adds its error on stderr. A refused
+/// line with hostile text is counted and named by its line only: nothing
+/// of it is echoed (O-01, SEC-T02).
+#[test]
+fn human_output_summarises_the_batch_and_echoes_nothing() -> TestResult {
+    let layout = Layout::new()?;
+    layout.init(2)?;
+    let hostile = format!(
+        r#"{{"schema_version":"1","operation_id":"op_cli{PATH_SENTINEL}","\u202e\u001b]8;;https://example.invalid\u0007":1}}"#
+    );
+    layout.write_batch(&[close_only(1), close_only(2), hostile])?;
+    let output = layout.job_batch(&[]).output()?;
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    layout.assert_nothing_sensitive(&output.stdout, &output.stderr);
+    let summary = assert_terminal_safe(&output.stdout)?;
+    assert!(
+        summary.starts_with("Worker batch ended: end_of_input\n"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("Requests: 2 complete, 0 partial, 0 failed, 0 cancelled, 1 rejected"),
+        "{summary}"
+    );
+    for line in 1..=3 {
+        assert!(summary.contains(&format!("  line {line}  ")), "{summary}");
+    }
+    assert!(!summary.contains("example.invalid") && !summary.contains("\"command\""));
+    let error = assert_terminal_safe(&output.stderr)?;
+    assert!(
+        error.starts_with("Error: ") && error.contains("(INVALID_ARGUMENT)"),
+        "{error}"
+    );
+    assert!(!error.contains("example.invalid"), "{error}");
+    Ok(())
+}
+
 /// A batch whose every request completes exits 0 with status `complete`.
 #[test]
 fn a_complete_batch_succeeds() -> TestResult {

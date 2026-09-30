@@ -15,7 +15,9 @@ use vsift_contract::{
     is_hidden_character,
 };
 
-use super::{HumanDetail, failure::render_failure, render_value, result, text::DisplayText};
+use super::{
+    HumanDetail, failure::render_failure, render_host, render_value, result, text::DisplayText,
+};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -282,24 +284,195 @@ fn hostile_display_fields_and_identifiers_stay_inert() -> TestResult {
     Ok(())
 }
 
-/// Commands left for P13 PR 2b print their indented JSON result.
+/// Every frozen example of a PR 2b command renders; its snapshot is the
+/// text a person reads.
 #[test]
-fn part_two_commands_have_no_renderer_yet() -> TestResult {
+fn part_two_examples_render_as_readable_text() -> TestResult {
+    for (command, file, snapshot) in [
+        (CommandName::Candidates, "candidates.json", "candidates"),
+        (
+            CommandName::Candidates,
+            "candidates.partial.json",
+            "candidates-partial",
+        ),
+        (CommandName::FrameGet, "frame-get.json", "frame-get"),
+        (
+            CommandName::FrameNeighbours,
+            "frame-neighbours.json",
+            "frame-neighbours",
+        ),
+        (
+            CommandName::FrameBurst,
+            "frame-burst.partial.json",
+            "frame-burst-partial",
+        ),
+        (CommandName::Crop, "crop.json", "crop"),
+        (CommandName::Audio, "audio.json", "audio"),
+        (CommandName::JobStatus, "job-status.json", "job-status"),
+        (CommandName::JobResume, "job-resume.json", "job-resume"),
+        (CommandName::JobCancel, "job-cancel.json", "job-cancel"),
+        (CommandName::JobRun, "job-run.json", "job-run"),
+        (
+            CommandName::JobRun,
+            "job-run.partial.json",
+            "job-run-partial",
+        ),
+        (
+            CommandName::JobRun,
+            "job-run.replayed.json",
+            "job-run-replayed",
+        ),
+        (CommandName::JobBatch, "job-batch.json", "job-batch"),
+    ] {
+        let text = render(command, &example(file)?)?;
+        check_snapshot(snapshot, &text)?;
+    }
+    Ok(())
+}
+
+/// Every command that completes has a renderer: `result` answers `None`
+/// only for `setup check`, rendered from its typed report, and for the
+/// commands that only ever fail.
+#[test]
+fn only_setup_check_and_failing_commands_have_no_result_renderer() -> TestResult {
     for command in [
-        CommandName::Candidates,
-        CommandName::FrameGet,
-        CommandName::FrameNeighbours,
-        CommandName::FrameBurst,
-        CommandName::Crop,
-        CommandName::Audio,
-        CommandName::JobStatus,
-        CommandName::JobResume,
-        CommandName::JobCancel,
-        CommandName::JobRun,
-        CommandName::JobBatch,
+        CommandName::SetupCheck,
+        CommandName::Parse,
+        CommandName::SetupInstall,
+        CommandName::SetupRepair,
+        CommandName::SetupList,
+        CommandName::SetupRemove,
+        CommandName::SetupRollback,
     ] {
         assert!(render_value(command, &json!({}))?.is_none(), "{command:?}");
     }
+    for command in [
+        CommandName::Candidates,
+        CommandName::FrameGet,
+        CommandName::Crop,
+        CommandName::Audio,
+        CommandName::JobStatus,
+        CommandName::JobRun,
+        CommandName::JobBatch,
+    ] {
+        assert!(render_value(command, &json!({})).is_err(), "{command:?}");
+    }
+    Ok(())
+}
+
+/// L-016 and SEC-T02 (P13 PR 2b): a delivered path stands alone on its
+/// line under its file's label. An exact path is the line itself; a path
+/// with controls or hidden characters (the session root is the user's
+/// choice) reaches the terminal inert and is flagged; the extended-length
+/// form gets its note once.
+#[test]
+fn delivered_paths_stand_alone_and_stay_inert() -> TestResult {
+    let hostile = "/root/a\u{202e}gnp.exe\u{200b}/\u{1b}]8;;https://example.invalid\u{7}x\u{1b}\\\n\
+                   Forged: line\u{2028}\u{85}/artifact.png";
+    let extended = r"\\?\C:\Users\someone\AppData\Local\vsift\sessions\ses_0123456789abcdef0123456789abcdef\artifacts\artifact-4ab8.png";
+    for (command, file) in [
+        (CommandName::FrameGet, "frame-get.json"),
+        (CommandName::FrameNeighbours, "frame-neighbours.json"),
+        (CommandName::FrameBurst, "frame-burst.partial.json"),
+        (CommandName::Crop, "crop.json"),
+        (CommandName::Audio, "audio.json"),
+    ] {
+        let mut value = example(file)?;
+        value["data"]["files"][0]["path"] = json!(hostile);
+        if value["data"]["files"][1].is_object() {
+            value["data"]["files"][1]["path"] = json!(extended);
+        }
+        let text = render(command, &value)?;
+        assert!(!text.contains("\u{1b}]8;") && !text.contains('\u{2028}'));
+        let lines: Vec<&str> = text.lines().collect();
+        let shown = lines
+            .iter()
+            .position(|line| line.contains("<U+202E>gnp.exe<U+200B>"))
+            .ok_or("the hostile path is missing")?;
+        assert!(lines[shown].starts_with("    /root/a<U+202E>"), "{text}");
+        assert!(
+            lines[shown].ends_with("\u{fffd}Forged: line<U+2028>\u{fffd}/artifact.png"),
+            "{text}"
+        );
+        assert!(lines[shown - 1].starts_with("  File ("), "{text}");
+        assert!(!lines.iter().any(|line| line.starts_with("Forged")));
+        assert_eq!(text.matches("is not shown exactly").count(), 1, "{text}");
+        if value["data"]["files"][1].is_object() {
+            assert!(
+                lines.contains(&format!("    {extended}").as_str()),
+                "{text}"
+            );
+            assert_eq!(text.matches("extended-length form").count(), 1, "{text}");
+        } else {
+            assert!(!text.contains("extended-length form"), "{text}");
+        }
+    }
+    Ok(())
+}
+
+/// A path longer than a line is replaced by a statement, never cut; an
+/// exact extended-length path is its own line, as `--json` gives it.
+#[test]
+fn a_long_or_extended_path_is_never_cut() -> TestResult {
+    let long = format!("/{}", "p".repeat(4_200));
+    let mut value = example("frame-get.json")?;
+    value["data"]["files"][0]["path"] = json!(long);
+    let text = render(CommandName::FrameGet, &value)?;
+    assert!(!text.contains(&"p".repeat(100)), "a path was cut");
+    assert!(text.contains("\n    (a path longer than 4000 bytes; read it with --json)\n"));
+    assert!(text.contains("is not shown exactly"));
+
+    let extended = format!(r"\\?\C:\{}\artifact.png", "d".repeat(300));
+    let mut value = example("audio.json")?;
+    value["data"]["files"][0]["path"] = json!(extended);
+    let text = render(CommandName::Audio, &value)?;
+    check_snapshot("audio-extended-path", &text)?;
+    assert!(text.lines().any(|line| line == format!("    {extended}")));
+    Ok(())
+}
+
+/// A failed worker request renders its job result for stdout and its error
+/// for stderr; a refusal before the request ran has an error only.
+#[test]
+fn a_failed_worker_request_renders_its_result_and_its_error() -> TestResult {
+    let mut failed = example("job-run.json")?;
+    failed["status"] = json!("failed");
+    failed["data"]["status"] = json!("failed");
+    failed["data"]["steps"][1]["status"] = json!("failed");
+    failed["data"]["steps"][1]["outputs"] = json!(null);
+    failed["data"]["steps"][1]["failure"] =
+        json!({"code": "BUSY", "retryable": true, "retry_after_ms": 2000});
+    failed["data"]["steps"][2]["status"] = json!("not_started");
+    failed["data"]["steps"][2]["outputs"] = json!(null);
+    failed["data"]["steps"][2]["coverage"] = json!(null);
+    failed["data"]["steps"][3]["status"] = json!("not_started");
+    failed["data"]["steps"][3]["outputs"] = json!(null);
+    failed["data"]["failure"] = json!({
+        "code": "BUSY", "retryable": true, "retry_after_ms": 2000, "step": 1, "rejection": null
+    });
+    failed["error"] = json!({
+        "code": "BUSY",
+        "message": "The resource is busy.",
+        "retryable": true,
+        "retry_after_ms": 2000,
+        "affected_ids": ["ses_0123456789abcdef0123456789abcdef"],
+        "remediation": [{"summary": "Deliver the same request again after the retry hint.", "command": null, "required_authority": "none"}]
+    });
+    let text = render_host(CommandName::JobRun, &failed)?;
+    let result = text.result.ok_or("no result")?;
+    let error = text.failure.ok_or("no error")?;
+    assert_terminal_safe(result.as_str());
+    check_snapshot("job-run-failed", result.as_str())?;
+    check_snapshot("job-run-failed-stderr", error.as_str())?;
+
+    let text = render_host(CommandName::JobRun, &example("operation-error.json")?)?;
+    assert!(text.result.is_none());
+    assert!(
+        text.failure
+            .ok_or("no error")?
+            .as_str()
+            .starts_with("Error: ")
+    );
     Ok(())
 }
 

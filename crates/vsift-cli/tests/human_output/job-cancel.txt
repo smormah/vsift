@@ -1,0 +1,10 @@
+Cancel requested for job job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70 (retranscribe)
+Session: ses_0123456789abcdef0123456789abcdef
+State: succeeded, not resumable (succeeded)
+Bound to operation: op_4f0c2b8e9a1d3c5e7f60718293a4b5c6
+Range: 00:00:05.500000 to 00:00:06.000000 (--from 5500000 --to 6000000)
+Chunks checkpointed: 0 of 1
+Attempts in this epoch: 1
+Result: revision trv_4210915bdac994cd08f04a7ad5d99475, generation 3
+
+Warning: cancellation_too_late: The job was already committing or had committed when cancellation was requested, so its result stands and nothing was cancelled.
