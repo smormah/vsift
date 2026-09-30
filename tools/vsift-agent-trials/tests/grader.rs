@@ -2673,3 +2673,107 @@ fn a_resume_cards_findings_to_verify_resolve_inside_their_windows() -> TestResul
     }
     Ok(())
 }
+
+const F02_FRAME_LAST_COPY: &str = "evd_000000000000000000000000000a0490";
+
+/// Issue #219, GPT-6-Sol's A-02 run 2 phase 2 (final compact round): "depth
+/// 12 at about 8 minutes 10 seconds" cites the frame at 490.009863 s. The
+/// clip's copies start 12.064 s apart, so that frame lies 7.45 s into the
+/// last copy and shows 12 (F02-E02). With the period derived from the
+/// bundle's measurement the claim binds; without one the grade keeps the
+/// nominal period, notes it, and still fails the claim. A claim of 12 on a
+/// frame that really shows 0 fails either way: the check is not weakened.
+#[test]
+fn a_looped_clip_binds_a_late_copy_through_the_measured_period() -> TestResult {
+    let mut bench = resumed_bench()?;
+    bench.bundle.selections.insert(
+        F02_FRAME_LAST_COPY.to_owned(),
+        vec![Selection {
+            requested_us: 490_000_000,
+            actual_us: 490_009_863,
+            delta_us: 9_863,
+            candidate_id: None,
+        }],
+    );
+    bench
+        .bundle
+        .frames
+        .insert(F02_FRAME_LAST_COPY.to_owned(), 490_009_863);
+    let uses = [
+        Use::Skill,
+        Use::Bash(format!("vsift session status {SESSION} --json")),
+        Use::Read(bench.skill(".claude", "assets/image-check.png")),
+        Use::Bash(format!("vsift frame get {SESSION} --at 490000000 --json")),
+        Use::Read(
+            bench
+                .session_root()
+                .join(SESSION)
+                .join("late.png")
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        Use::Bash(format!(
+            "vsift session retain {SESSION} --output evidence-bundle-phase-2 --json"
+        )),
+    ];
+    let graded_with = |bench: &Bench, statement: &str| {
+        let claims = json!([{"id": "c1", "section": "actual", "kind": "observed",
+            "support": "supported", "certainty": "high", "citations": ["e3"],
+            "statement": statement}]);
+        let mut handoff = resumed_handoff(&claims, false);
+        handoff["citations"][2]["evidence_id"] = json!(F02_FRAME_LAST_COPY);
+        let log = claude(&uses, &[], &report(&handoff));
+        bench.grade(&parse_claude(&log), &log)
+    };
+    let twelve = "At 490.010 s the frame shows queue depth 12.";
+
+    bench.bundle.source_duration_us = Some(494_559_875);
+    let measured = graded_with(&bench, twelve);
+    let failed = failed_checks(&measured);
+    assert!(
+        !failed.contains_key("citation_times_in_truth_windows"),
+        "{failed:?}"
+    );
+    assert!(
+        !measured
+            .deviations
+            .iter()
+            .any(|deviation| deviation.contains("nominal duration")),
+        "{:?}",
+        measured.deviations
+    );
+
+    bench.bundle.source_duration_us = None;
+    let nominal = graded_with(&bench, twelve);
+    assert!(
+        failed_checks(&nominal).contains_key("citation_times_in_truth_windows"),
+        "{:?}",
+        nominal.mechanical
+    );
+    assert!(
+        nominal
+            .deviations
+            .iter()
+            .any(|deviation| deviation.contains("nominal duration")),
+        "{:?}",
+        nominal.deviations
+    );
+
+    // The frame at 494 s lies 11.44 s into the last copy, where the truth
+    // is 0 (F02-E03): a claim of 12 on it still fails.
+    bench.bundle.source_duration_us = Some(494_559_875);
+    if let Some(selections) = bench.bundle.selections.get_mut(F02_FRAME_LAST_COPY) {
+        for selection in selections.iter_mut() {
+            selection.actual_us = 494_000_000;
+            selection.requested_us = 494_000_000;
+            selection.delta_us = 0;
+        }
+    }
+    let wrong = graded_with(&bench, "At 494 s the frame shows queue depth 12.");
+    assert!(
+        failed_checks(&wrong).contains_key("citation_times_in_truth_windows"),
+        "{:?}",
+        wrong.mechanical
+    );
+    Ok(())
+}

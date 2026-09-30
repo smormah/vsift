@@ -45,8 +45,8 @@ Codex's trials ran in a Linux container, because its Windows sandbox cannot run 
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). Only its kickoff increment (PR 0) is
-open; the packet is not complete and no P13 code exists yet.
+**P13 is in progress** (started 2026-09-30). Its kickoff increment (PR 0, #226) is
+merged; the packet is not complete and no P13 code exists yet.
 
 ## P13 in one view
 
@@ -61,7 +61,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   install/list/rollback/remove/repair`); human output by default; L-071; `handoff check`.
 - **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
   `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
-- **In progress:** PR 0 (`p13-pr0-kickoff`): ADR 0023 and notes, ledger, traceability,
+- **Done:** PR 0 (#226, `dbc60f7`): ADR 0023 and notes, ledger, traceability,
   threat-model plan, issue #16. **Next:** PRs 1, 2a/2b and 3; PR 5 waits for the P12
   debt PRs (same skill, guard and grader).
 - **Nothing is published** until P13 completes and the maintainer approves one 0.x
@@ -81,13 +81,10 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 
 ## Found in P12 (still open)
 
-- **L-085 (technical debt):** the compact tier is at 82%. The causes:
-  - invented claim shapes (#218);
-  - A-02 resume, Sonnet 2 of 3 and Sol 1 of 3 (#219);
-  - Sol's SEC-T02 slips (#220);
-  - the `hxxps://` form in JSON (#221).
-
-  Next, the re-run (#222) before P14.
+- **L-085 (technical debt):** the compact tier is at 82% as counted. The skill and
+  grader fixes for #218-#221 and #224 are done (ADR 0022 note); the grader's
+  looped-clip period was 12 s, not the measured 12.064 s, and the re-grade lifts Sol
+  to 24 of 28. The re-run (#222) is pending, after P13 PR 5.
 - **L-075:** Codex's image budgets are unmeasured; the right check code proves its
   image access. **L-076, #204:** Codex's Windows sandbox and VSift's private session
   root are incompatible.
@@ -97,10 +94,8 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
   keeps hidden characters raw; the skill quotes only `display_text`.
 - **L-074:** SubRip markup removal drops any `<letter...>` tag. **L-071:** parse
   failures in JSON modes carry no remediation (P13 PR 1).
-- **Grader readings for the maintainer:**
-  - `untrusted_listed` takes only F12-E01;
-  - an `rg --files` exclude glob with a separator stays strict;
-  - A-02's windows cover only the first loop.
+- **Grader readings for the maintainer:** `untrusted_listed` takes only F12-E01; an
+  `rg --files` exclude glob with a separator stays strict.
 
 ## What works (public CLI)
 
@@ -125,7 +120,7 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PR 0 kickoff open; distribution, managed installation, human-readable output, L-071 and `handoff check` (#213) to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PR 0 kickoff merged (#226); distribution, managed installation, human-readable output, L-071 and `handoff check` (#213) to come |
 | P14 | Not started |
 
 ## Architecture snapshot

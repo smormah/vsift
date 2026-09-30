@@ -637,7 +637,9 @@ fn flattened_skill_md() -> Result<String, String> {
 /// and every stop ends there. In the diagnostic passes (2026-09-29) small
 /// models ended without a handoff when a tool was missing ("explain the
 /// remediation and stop"), wrote free-form reports or blocks with invented
-/// schemas, and one wrote the report to a file.
+/// schemas, and one wrote the report to a file. Since issue #218 the
+/// skeleton holds one example claim, citation and instruction, all
+/// validated here against `handoff.schema.json` and the handoff rules.
 #[test]
 fn skill_md_report_state_shows_a_valid_minimal_handoff() -> Result<(), String> {
     let text = read_text(&skill_directory().join("SKILL.md"))?;
@@ -1576,6 +1578,207 @@ fn report_skeleton_holds_only_the_required_members() -> Result<(), String> {
     ] {
         if !flat.contains(needle) {
             problems.add(format!("SKILL.md does not say {needle:?}"));
+        }
+    }
+    problems.into_result()
+}
+
+/// The REPORT skeleton of `SKILL.md`, parsed.
+fn report_skeleton() -> Result<Value, String> {
+    let text = read_text(&skill_directory().join("SKILL.md"))?;
+    let start = text.find("### 7. REPORT").ok_or("SKILL.md lacks REPORT")?;
+    let section = parse_markdown("REPORT".to_owned(), &text[start..]);
+    let block = section
+        .fences
+        .iter()
+        .find(|fence| fence.info == "vsift-handoff")
+        .ok_or("REPORT shows no vsift-handoff block")?;
+    serde_json::from_str(&block.lines.join("\n"))
+        .map_err(|error| format!("REPORT's vsift-handoff block is not JSON: {error}"))
+}
+
+/// The prose of one `SKILL.md` state, flattened: from its heading to the
+/// next state's (or the end of the procedure).
+fn flattened_state(heading: &str, next: &str) -> Result<String, String> {
+    let flat = flattened_skill_md()?;
+    let start = flat
+        .find(heading)
+        .ok_or_else(|| format!("SKILL.md lacks {heading:?}"))?;
+    let end = flat[start..]
+        .find(next)
+        .map_or(flat.len(), |length| start + length);
+    Ok(flat[start..end].to_owned())
+}
+
+/// Issue #218: the skeleton used to show `"claims": []`, and in P12's final
+/// compact round three of Claude Sonnet 5.5's five misses (A-04 run 4,
+/// A-05 runs 1 and 3) wrote claims with `text` and no `id`, while GPT-6-Sol
+/// (SEC-T02 run 3) wrote instructions with `citations` and `description`.
+/// The skeleton now shows one filled-in claim, a citation of each common
+/// type and one untrusted instruction; the schema test above validates it.
+#[test]
+fn report_skeleton_shows_a_filled_in_claim_citation_and_instruction() -> Result<(), String> {
+    let handoff = report_skeleton()?;
+    let mut problems = Problems::default();
+    let claims = handoff["claims"].as_array().cloned().unwrap_or_default();
+    let full_claim = claims.iter().any(|claim| {
+        claim["id"].is_string()
+            && claim["statement"].is_string()
+            && claim["citations"]
+                .as_array()
+                .is_some_and(|references| !references.is_empty())
+    });
+    if !full_claim {
+        problems
+            .add("the skeleton shows no claim with an id, a statement and citations".to_owned());
+    }
+    let citations = handoff["citations"].as_array().cloned().unwrap_or_default();
+    let identified = |kind: &str, identity: &str| {
+        citations
+            .iter()
+            .any(|citation| citation["type"] == kind && citation[identity].is_string())
+    };
+    if !identified("transcript_segment", "segment_id") {
+        problems
+            .add("the skeleton shows no transcript segment citation by its segment_id".to_owned());
+    }
+    if !identified("frame", "evidence_id") {
+        problems.add("the skeleton shows no frame citation by its evidence_id".to_owned());
+    }
+    let instruction = handoff["untrusted_instructions"]
+        .as_array()
+        .and_then(|items| items.first())
+        .cloned()
+        .unwrap_or(Value::Null);
+    let mut members: Vec<&str> = instruction
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(key, _)| key.as_str())
+        .collect();
+    members.sort_unstable();
+    if members != ["action_taken", "citation", "summary"] || !instruction["citation"].is_string() {
+        problems.add(format!(
+            "the skeleton's untrusted instruction must hold one citation, a summary and action_taken, found {members:?}"
+        ));
+    }
+    let flat = flattened_skill_md()?;
+    for needle in [
+        "Copy this shape with your own values",
+        "A stop before any evidence (a missing tool) has `\"claims\": []`, `\"citations\": []`, status `insufficient_evidence` and lifecycle `not_opened`",
+        "**Each claim states its subject and its value in full**",
+    ] {
+        if !flat.contains(needle) {
+            problems.add(format!("SKILL.md does not say {needle:?}"));
+        }
+    }
+    problems.into_result()
+}
+
+/// Issue #224: in P12's final campaign the strong models stated the content
+/// of a deliberately blurred banner as `supported` on the frames that show
+/// it unreadable (Opus 5.5 A-09 blurred runs 1 and 2, GPT-6-Astra run 1;
+/// rejected on review). `VERIFY_SOURCE` says the content then rests on the
+/// transcript alone, and `handoff.md` repeats it.
+#[test]
+fn verify_source_rests_unreadable_content_on_the_transcript() -> Result<(), String> {
+    let state = flattened_state("### 5. VERIFY_SOURCE", "### 6. REFINE_OR_STOP")?;
+    let mut problems = Problems::default();
+    for needle in [
+        "**If a frame or crop shows the region is unreadable**",
+        "any claim about its content rests on the transcript alone: mark it `partially_supported`, cite the transcript segment that says it, and do not cite those pixels as support",
+    ] {
+        if !state.contains(needle) {
+            problems.add(format!("VERIFY_SOURCE does not say {needle:?}"));
+        }
+    }
+    let handoff = read_text(&skill_directory().join("references").join("handoff.md"))?
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !handoff.contains("that claim rests on the transcript alone. Mark it `partially_supported`")
+    {
+        problems.add("handoff.md does not rest unreadable content on the transcript".to_owned());
+    }
+    problems.into_result()
+}
+
+/// Issue #220: GPT-6-Sol (SEC-T02 run 2) retained the session, then took
+/// one more frame and cited it; a retained bundle is a snapshot (the output
+/// directory must be new), so the citation could not resolve in it. The
+/// skill says to retain after the last evidence command.
+#[test]
+fn close_or_retain_retains_after_the_last_evidence_command() -> Result<(), String> {
+    let state = flattened_state("### 8. CLOSE_OR_RETAIN", "## Reading results and errors")?;
+    let mut problems = Problems::default();
+    if !state.contains("retain after your last evidence command")
+        || !state.contains("never cite evidence you extract after it")
+    {
+        problems.add(
+            "CLOSE_OR_RETAIN does not say to retain after the last evidence command".to_owned(),
+        );
+    }
+    for reference in ["handoff.md", "lifecycle.md"] {
+        let text = read_text(&skill_directory().join("references").join(reference))?
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !text.contains("fter your last evidence command") {
+            problems.add(format!(
+                "references/{reference} does not say when to retain"
+            ));
+        }
+    }
+    problems.into_result()
+}
+
+/// Issue #221: Claude Sonnet 5.5 (A-04 run 2) wrote a defanged `hxxps://`
+/// link into an untrusted-instruction summary, which the schema refuses:
+/// the skill taught the defanged form without saying it is for the
+/// Markdown only. The wording and the schema must agree: the schema refuses
+/// the defanged address in a JSON member and accepts the description the
+/// skill asks for, and `SKILL.md` and `safety.md` say which goes where.
+#[test]
+fn links_are_defanged_in_the_markdown_and_described_in_the_json() -> Result<(), String> {
+    let schema = read_json(&skill_directory().join("handoff.schema.json"))?;
+    let validator = jsonschema::options()
+        .build(&schema)
+        .map_err(|error| format!("handoff.schema.json is not a valid schema: {error}"))?;
+    let mut problems = Problems::default();
+    let with_summary = |summary: &str| -> Result<Value, String> {
+        let mut handoff = report_skeleton()?;
+        handoff["untrusted_instructions"][0]["summary"] = Value::String(summary.to_owned());
+        Ok(handoff)
+    };
+    if validator.is_valid(&with_summary(
+        "A cue offers a download link (hxxps://example.invalid/fix.sh).",
+    )?) {
+        problems.add("the schema accepts a defanged address in a JSON summary".to_owned());
+    }
+    if !validator.is_valid(&with_summary(
+        "A cue offers a download link to a shell script.",
+    )?) {
+        problems.add("the schema refuses a summary that describes a link".to_owned());
+    }
+    let flat = flattened_skill_md()?;
+    for needle in [
+        "appears only in the Markdown, as `hxxps://...` inside a code span",
+        "the JSON never holds an address, not even a defanged one",
+    ] {
+        if !flat.contains(needle) {
+            problems.add(format!("SKILL.md's checklist does not say {needle:?}"));
+        }
+    }
+    let safety = read_text(&skill_directory().join("references").join("safety.md"))?
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for needle in [
+        "**the Markdown report:** write a web address seen in evidence only inside a code span",
+        "**the JSON handoff:** never write an address, broken or not",
+    ] {
+        if !safety.contains(needle) {
+            problems.add(format!("safety.md does not say {needle:?}"));
         }
     }
     problems.into_result()

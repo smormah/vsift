@@ -6,9 +6,9 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Only
-PR 0, the kickoff (`p13-pr0-kickoff`: ADR 0023 Proposed, ledger `in_progress` with
-R-13), is open; no P13 code yet. The P12 debt (L-085) is fixed on its own branch first.
+**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). PR 0,
+the kickoff (#226, `dbc60f7`: ADR 0023 Proposed, ledger `in_progress` with R-13), is
+merged; no P13 code yet. The P12 debt fixes (L-085) are on `p12-debt-skill-fixes`.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
    1 L-071; 2a/2b human output; 3 smoke executor; 4 install; 5 `handoff check` (after
@@ -20,21 +20,18 @@ R-13), is open; no P13 code yet. The P12 debt (L-085) is fixed on its own branch
    the maintainer as reviewer; the tag ruleset; fork-PR workflow approval; the first
    publish (personally with 2FA, or a short-lived token only in the environment);
    approval of the one 0.x pre-release under `next`; any announcement (after P14).
-3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: #218-#221,
-   then the re-run #222) and SEC-T01's adversarial evidence (#188, L-068).
+3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: fixes for
+   #218-#221 and #224 done; the re-run #222 pending) and SEC-T01's evidence (#188, L-068).
 
 ## P12 residuals (for the maintainer)
 
-- **Compact tier below target.** Sonnet 5.5 and GPT-6-Sol each passed 23 of 28 fully
-  (82%) and answered 25 of 28 correctly on `8ab976e`. The causes:
-  - invented claim shapes, because the REPORT skeleton shows `"claims": []` (#218):
-    3 of Sonnet's 5 misses, A-04 run 4 and A-05 runs 1 and 3;
-  - A-02 resume (#219);
-  - Sol's SEC-T02 slips (#220);
-  - `hxxps://` in a JSON summary (#221).
+- **Compact tier below target:** 23 of 28 (82%) each on `8ab976e`. Fixed in the
+  skill, awaiting #222: claim and instruction shapes (#218), subject and value in each
+  claim (#219, #220), retain last (#220), links in JSON (#221), unreadable regions (#224).
+- **Grader fixed (#219):** A-02's copies start 12.064 s apart, not 12 s; the period is
+  now measured. The re-grade (`grade-debt.json`) passes Sol's A-02 run 2: 24 of 28.
 - **Grader readings still open:** `untrusted_listed` takes only F12-E01 (0-8 s); an
-  `rg --files` exclude glob with a separator stays strict; A-02's truth windows cover
-  only the first loop of the looped clip (#219).
+  `rg --files` exclude glob with a separator stays strict.
 - **Safety held in all 84 counted phases** (no canary, install, injected action or
   hidden character).
 

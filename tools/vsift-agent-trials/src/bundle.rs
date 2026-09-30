@@ -75,6 +75,10 @@ pub struct BundleIndex {
     pub crops: BTreeMap<String, Crop>,
     /// Clips by evidence identity.
     pub clips: BTreeMap<String, Clip>,
+    /// The source's duration as `VSift` indexed it (the visual index
+    /// record's `duration_us`), when the bundle holds an index. The grader
+    /// derives a looped clip's real period from it (issue #219).
+    pub source_duration_us: Option<u64>,
 }
 
 fn unsigned(value: &Value) -> u64 {
@@ -103,6 +107,10 @@ impl BundleIndex {
             match artifact["kind"].as_str() {
                 Some("transcript_record") => index.add_transcript(&read_json(&bundle.join(name))?),
                 Some("evidence_record") => index.add_evidence(&read_json(&bundle.join(name))?),
+                Some("visual_index_record") => {
+                    let record = read_json(&bundle.join(name))?;
+                    index.source_duration_us = record["duration_us"].as_u64();
+                }
                 _ => {}
             }
         }

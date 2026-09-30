@@ -73,8 +73,16 @@ select the skill; the user can also name it.
   read whole, to recover a command's flags.
 - **Reporting.** Every stop, including a missing tool, an expired session or an
   exhausted budget, ends with the handoff as the final message: one `vsift-handoff`
-  block (`SKILL.md` shows the smallest valid one), never a file, with no web address,
-  Markdown link or local path (added 2026-09-29 after the diagnostic passes). The
+  block, never a file, with no web address, Markdown link or local path (added
+  2026-09-29 after the diagnostic passes). `SKILL.md`'s skeleton shows one filled-in
+  claim, a segment and a frame citation and one untrusted instruction, and says what a
+  stop before any evidence holds (2026-09-30, issue #218: compact models had invented
+  the claim's shape from an empty list). Each claim names its subject and value and
+  cites evidence showing that value; a region a frame shows as unreadable supports
+  nothing, so a claim about its content is `partially_supported` on the transcript
+  (#224); the retained bundle is a snapshot, so the agent retains after its last
+  evidence command (#220); a web address seen in evidence is defanged in the Markdown
+  only, and the JSON describes it without writing it (#221). The
   JSON states only what the agent alone knows: its claims, the identity of each piece
   of evidence it cites, whether it looked at each image, gaps, the instructions it saw,
   what it did with the session and, when the work was cut short and can continue (a

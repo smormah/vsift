@@ -432,3 +432,22 @@ or unmerged diagnostics.
 - **Records:** 84 bounded records in [p12-agent-trials/](p12-agent-trials/README.md).
   The raw logs stay local. `record` now replaces every check image's code with
   `<check-code>` (this change), so no committed file holds a code.
+
+## Addendum: re-grade after the debt fixes (2026-09-30)
+
+The counted results above stand as P12 closed on them. After P12, the debt fixes
+(ADR 0022 note "the P12 debt fixes") corrected one grader reading. The truth windows of
+a looped clip did repeat, but with the fixture's nominal 12 s period. The A-02 clip's
+copies really start 12.064 s apart, so by the last copy the windows were 2.56 s off.
+All 84 counted phases were re-graded (`grade-debt.json`, kept locally), and one
+changed:
+
+- **GPT-6-Sol, A-02 run 2, phase 2:** the frame at 490 s shows 12 (F02-E02 of the
+  41st copy), and the claim now passes. Sol's total is 24 of 28 full passes (86%).
+- **Everything else is unchanged:** Sonnet 5.5 23 of 28, Opus 5.5 and GPT-6-Astra 9
+  of 11.
+- **Compact citation failures:** 2 of 62 phases, down from 3.
+
+The other open A-02 reading stays strict: a claim that names a previous value binds
+it only with evidence that shows it. The skill changes of the same fixes (#218, #220,
+#221, #224) need the compact re-run (#222).

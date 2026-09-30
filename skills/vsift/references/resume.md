@@ -109,6 +109,11 @@ vsift frame get <session> --at <us> --json
    `pixels_inspected` true. Never report an earlier finding as `unsupported`,
    `reported` or "per the card" because this run has not seen it: verify it with one
    command, or leave it out of the claims and record a `not_inspected` gap.
+
+   Write each verified finding as its own claim that names its subject and its value
+   (as the card's `finding` does) and cites the evidence you just read, at the time
+   the card names. A value you mention as the state before or after ("changed from
+   5") needs its own claim and its own evidence.
 4. If the session is `open`, continue from the card's `state` and `next_command`
    with the saved identities. Do not repeat searches or extractions you have:
    identical frame requests are answered from the session (`reused`), but they still

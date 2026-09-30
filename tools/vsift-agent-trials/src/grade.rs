@@ -44,7 +44,7 @@ use crate::{
     calls::{Action, GradedCall, ReadScope, classify, vsift_commands},
     handoff::{HandoffSchema, MAX_RESUME_BYTES, PrivateMarkers, extract, text_problems},
     policy::{BudgetLimits, CommandClass, CommandPolicy, HELP_OPERATION},
-    scenario::{Expectation, ImagePolicy, Scenario, TranscriptSource},
+    scenario::{Expectation, ImagePolicy, PeriodBasis, Scenario, Timeline, TranscriptSource},
     trace::{ClientKind, Trace},
     truth::{CorpusTruth, Event, Fixture, KeyFact, SpeechSpan, normalize},
 };
@@ -52,6 +52,12 @@ use crate::{
 /// The deviation a Codex grade carries: codex-cli 0.155 shows no image view
 /// in its event stream or in a countable form in its session rollout.
 pub const CODEX_IMAGES_UNMEASURED: &str = "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)";
+
+/// The deviation a looped clip's grade carries when the retained bundle
+/// gives no usable measurement of the clip: its truth windows then repeat
+/// with the fixture's nominal duration, which drifts from the real copies
+/// (issue #219), so a citation in a late copy may be misplaced.
+pub const LOOP_PERIOD_NOMINAL: &str = "the looped clip's truth windows repeat with the fixture's nominal duration: the retained bundle holds no usable measurement of the clip (no visual index, or one more than 2% off), so citations in late copies may be misplaced (issue #219)";
 
 /// Local speech recognition places segments within this much of the
 /// generator's speech span (the P07-P10 checkpoints' tolerance).
@@ -331,6 +337,10 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
             .iter()
             .cloned()
             .chain((!images_measured).then(|| CODEX_IMAGES_UNMEASURED.to_owned()))
+            .chain(
+                (context.timeline.basis == PeriodBasis::Nominal)
+                    .then(|| LOOP_PERIOD_NOMINAL.to_owned()),
+            )
             .chain(input.client_warnings.iter().map(|warning| {
                 format!("invalid trial: the client ignored its configuration ({warning})")
             }))
@@ -342,8 +352,7 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
 /// Facts derived once from the scenario and the truth.
 struct Context<'a> {
     fixture: Option<&'a Fixture>,
-    period: u64,
-    total: u64,
+    timeline: Timeline,
     speech: Option<SpeechSpan>,
     tolerance: u64,
 }
@@ -351,7 +360,16 @@ struct Context<'a> {
 impl<'a> Context<'a> {
     fn new(input: &GradeInput<'a>) -> Self {
         let fixture = input.truth.fixture(&input.scenario.fixture.id).ok();
-        let (period, total) = input.scenario.timeline(input.truth).unwrap_or((1, 1));
+        let measured = input.bundle.and_then(|bundle| bundle.source_duration_us);
+        let timeline = input
+            .scenario
+            .timeline(input.truth, measured)
+            .unwrap_or(Timeline {
+                fixture_us: 1,
+                period_us: 1,
+                total_us: 1,
+                basis: PeriodBasis::NotLooped,
+            });
         let (speech, tolerance) = match &input.scenario.transcript {
             Some(spec) => match spec.source {
                 TranscriptSource::FromScript => {
@@ -366,8 +384,7 @@ impl<'a> Context<'a> {
         };
         Self {
             fixture,
-            period: period.max(1),
-            total,
+            timeline,
             speech,
             tolerance,
         }
@@ -376,16 +393,19 @@ impl<'a> Context<'a> {
     /// Whether `[start, end)` intersects the window `[from, to)` in any
     /// repetition of the looped video.
     fn intersects(&self, start: u64, end: u64, from: u64, to: u64) -> bool {
-        let first = start / self.period;
-        let last = end / self.period + 1;
+        let period = self.timeline.period_us.max(1);
+        let first = start / period;
+        let last = end / period + 1;
         (first..=last).any(|copy| {
-            let offset = copy * self.period;
+            let offset = copy * period;
             start < offset + to && end > offset + from
         })
     }
 
+    /// Whether a frame at `time` shows the fixture's moment in `[from, to)`,
+    /// in whichever copy of a looped clip it lies.
     fn at(&self, time: u64, from: u64, to: u64) -> bool {
-        (from..to).contains(&(time % self.period))
+        (from..to).contains(&self.timeline.phase(time))
     }
 
     fn on_speech(&self, start: u64, end: u64) -> bool {
@@ -603,10 +623,10 @@ fn truth_window_check(
             }) if !context.on_speech(start_us, end_us) => {
                 problems.push(format!("{id}: the segment lies outside every speech span"));
             }
-            Some(Resolved::Visual { actual_us, .. }) if actual_us >= context.total => {
+            Some(Resolved::Visual { actual_us, .. }) if actual_us >= context.timeline.total_us => {
                 problems.push(format!("{id}: the frame lies after the video"));
             }
-            Some(Resolved::Audio { start_us, .. }) if start_us >= context.total => {
+            Some(Resolved::Audio { start_us, .. }) if start_us >= context.timeline.total_us => {
                 problems.push(format!("{id}: the clip lies after the video"));
             }
             _ => {}
