@@ -44,7 +44,7 @@ Codex's trials ran in a Linux container, because its Windows sandbox cannot run 
 (L-076, #204).
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
-final round's results. The ledger follow-up with the merge commit is still to come.
+final round's results (#223, `1284e54`); the ledger marks it `complete`.
 **P13 is next;** the maintainer starts it.
 
 ## P12 in one view
@@ -73,7 +73,6 @@ bounded trial records are in `docs/planning/p12-agent-trials/`.
   - the maintainer's review (2026-09-30): 19 accepted, 6 rejected;
   - `record` now replaces every check image's code with `<check-code>`.
 - **Open:**
-  - the ledger follow-up;
   - the compact tier's debt (L-085).
 
 ## Found in P12 (still open)
@@ -121,7 +120,7 @@ bounded trial records are in `docs/planning/p12-agent-trials/`.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085). Ledger follow-up with the merge commit pending |
+| P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
 | P13 | Next, not started: distribution, managed installation, human-readable output, the handoff validator (#213); npm launcher pattern and name checklist planned (2026-09-28) |
 | P14 | Not started |
 
