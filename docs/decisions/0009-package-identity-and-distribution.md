@@ -89,3 +89,26 @@ organisation already owns them.
 The rest of this ADR is unchanged. Nothing else is published during P13, and the first
 real release is ADR 0023's 0.x pre-release under `next`. The placeholder stays the
 `latest` dist-tag until a stable release replaces it, and its README says so.
+
+## 2026-09-30 note: npm refused `vsift`; the launcher package is `vsift-cli`
+
+**npm refused the unscoped name.** When the maintainer published the placeholder
+`vsift@0.0.0` of the previous note, npm answered E403, "Package name too similar to
+existing packages sift, tsify". That placeholder was never published, so the unscoped
+`vsift` is not held and will not be used.
+
+**The launcher package is `vsift-cli`, held by the maintainer's placeholder since
+2026-09-30.** The maintainer published `vsift-cli@0.0.0` (README and `package.json` only;
+no code, binaries or install scripts), and npm accepted it; an anonymous `npm view
+vsift-cli` shows `0.0.0` as `latest`. It stays `latest` until a stable release replaces
+it, and the 0.x pre-release goes under `next` (ADR 0023 decision B), so users install
+`vsift-cli@next` until then. **The executable stays `vsift`**: the package's `bin` entry
+is `vsift`, so people type `npm install --global vsift-cli` or `npx vsift-cli` and then
+run `vsift`. **The scope stays `@vsift`**, with `@vsift/win32-x64`, `@vsift/darwin-arm64`
+and `@vsift/linux-x64` unchanged. This supersedes the unscoped `vsift` launcher of ADR 0023
+decision A and the `vsift` placeholder of the note above; ADR 0023 carries the amendment.
+
+**Lesson.** An anonymous not-found from `npm view` (2026-09-10 and 2026-09-30) was not
+availability: npm checks a new name's similarity to existing packages only when it is
+published, so the only proof that a name can be used is a successful publish. Future name
+decisions are settled by a placeholder publish, not by a lookup.

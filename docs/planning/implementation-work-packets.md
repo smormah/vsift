@@ -196,7 +196,7 @@ esbuild and Biome use.
   above. The native binaries stay downloadable from GitHub Releases for users with no
   JavaScript runtime.
 
-2026-09-30 (P13 PR 9): implemented as the ADR 0023 PR 9 note records. The `vsift`
+2026-09-30 (P13 PR 9): implemented as the ADR 0023 PR 9 note records. The `vsift-cli`
 package also carries the skill (decision H7) and `platform-digests.json` (H5) beside the
 launcher; a launcher failure exits 127 (no platform package) or 126 (refused or cannot
 start); the qualification is the Release workflow's `npm-qualify` matrix, with Yarn
@@ -215,12 +215,18 @@ choice of `@shongo` is withdrawn), and the maintainer
 personally publishes a placeholder `vsift@0.0.0` to hold the launcher name
 (ADR 0009 note, ADR 0023 decisions A and B amendments).
 
+2026-09-30 (maintainer, later the same day): npm refused the unscoped `vsift` as too
+similar to `sift` and `tsify`, so the launcher package is `vsift-cli`, held by the
+maintainer's placeholder `vsift-cli@0.0.0`; the command stays `vsift` and the scope stays
+`@vsift` (ADR 0009 note, ADR 0023 decision A amendment). Read "the `vsift` package" in the
+launcher boundary above as `vsift-cli`.
 2026-09-30 (maintainer, ADR 0023 decisions A and B): the names are chosen, crates.io
 and native installers are not in R0, and the state column is updated.
 
 | Channel | Name(s) | State on 2026-09-30 | Note |
 | --- | --- | --- | --- |
-| npm package | `vsift` | Not found by an anonymous `npm view` on 2026-09-10 and 2026-09-30; to be held by the maintainer's placeholder `0.0.0` | ADR 0009 2026-09-30 note; a maintainer-approved scoped name is the fallback |
+| npm package | `vsift` | **Refused by npm** (2026-09-30): E403 "Package name too similar to existing packages sift, tsify" on the maintainer's placeholder publish; never published. Anonymous `npm view` had found it free on 2026-09-10 and 2026-09-30 | Not used. ADR 0009 note "npm refused `vsift`": a not-found lookup is not availability |
+| npm package (launcher) | `vsift-cli` | **Held** since 2026-09-30 by the maintainer's placeholder `vsift-cli@0.0.0` (`latest`); the 0.x pre-release goes under `next` | Installs the `vsift` command; ADR 0023 decision A amendment and ADR 0009 note of 2026-09-30 |
 | npm scope | `@vsift` (maintainer, 2026-09-30) | Held: the maintainer owns the organisation `vsift`. The earlier "not available" came from a repeated submission after the first one had created it | Holds the per-platform packages; ADR 0009 2026-09-30 note |
 | npm platform packages | `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64` | Held through the `vsift` organisation; first published by the 0.x pre-release | One per R0 target (ADR 0023 decision D) |
 | crates.io | `vsift`, `vsift-contract` | Not in R0 | Names confirmed in ADR 0016; no crate is published in R0 (ADR 0023 decision B) |

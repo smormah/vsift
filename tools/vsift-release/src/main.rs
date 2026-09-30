@@ -678,7 +678,7 @@ mod tests {
             &root,
         )?;
         for directory in [
-            "vsift",
+            "vsift-cli",
             "vsift-darwin-arm64",
             "vsift-linux-x64",
             "vsift-win32-x64",
@@ -689,11 +689,11 @@ mod tests {
             );
         }
         assert_eq!(
-            fs::read(out.join("vsift/bin/vsift.cjs"))?,
-            fs::read(root.join("npm/vsift/bin/vsift.cjs"))?
+            fs::read(out.join("vsift-cli/bin/vsift.cjs"))?,
+            fs::read(root.join("npm/vsift-cli/bin/vsift.cjs"))?
         );
         assert_eq!(
-            fs::read(out.join("vsift/skills/vsift/SKILL.md"))?,
+            fs::read(out.join("vsift-cli/skills/vsift/SKILL.md"))?,
             fs::read(root.join("skills/vsift/SKILL.md"))?
         );
         assert!(out.join("vsift-win32-x64/vsift.exe").is_file());

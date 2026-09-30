@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - **npm packages and their qualification** (P13 PR 9; ADR 0023 section 2, decisions A,
-  H5, H6 and H7). The launcher package `vsift` (`npm/vsift/`: a plain CommonJS
+  H5, H6 and H7). The launcher package `vsift-cli` (npm refused the unscoped `vsift` as too similar to existing names; ADR 0009 note), which installs the `vsift` command (`npm/vsift-cli/`: a plain CommonJS
   `bin/vsift.cjs` and `lib/launcher.cjs`, the agent skill and `platform-digests.json`) and the platform packages
   `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64` (the executable, its
   notices and the licences, with `os` and `cpu`) are assembled from the release archives

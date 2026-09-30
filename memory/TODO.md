@@ -1,7 +1,6 @@
 # VSift work record
 
-Current-state handoff, rewritten in every change within the governance size limit.
-History lives in git, `CHANGELOG.md`, the qualification records and `docs/history/`.
+Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, `docs/history/`.
 
 ## Now
 
@@ -11,18 +10,19 @@ PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PRs 2a
 `setup install`), PR 5 (#233, `handoff check`, L-086), PR 8 (#236, `772ead2`,
 `release.yml`, the workflow lint) and PR 6 (#239, `02a8f76`, `setup list/rollback/
 remove/repair`, cleanup and the stale-stage sweep, L-090). **PR 9 (npm packages and the
-Verdaccio matrix) is done** (#240, `p13-pr9-npm`): the `vsift` launcher and three `@vsift/…`
+Verdaccio matrix) is done** (#240, `p13-pr9-npm`): the `vsift-cli` launcher and three `@vsift/…`
 packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
 (L-091 to L-094); PR 7 runs in parallel. The packet is not complete.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
    7 kill/power-loss tests of the managed store and the install E2E stage (in progress);
    10 `attest`/`publish` jobs (the lint's only `id-token` jobs), npm provenance and
-   `dry_run`, publishing exactly the tarballs `npm-package` builds after `npm-qualify`;
+   `dry_run`, publishing exactly the tarballs `npm-package` builds after `npm-qualify`,
+   `--tag next` (`latest` stays 0.0.0; notes name Yarn's one-day hold, release.md §5);
    11 docs (`install.md`'s archive verification, SmartScreen/Gatekeeper; the record
    `p13-distribution.md`); 12 ledger. #222 is due.
-2. **Maintainer-only, before PR 10's publish step:** the placeholder `vsift@0.0.0` (ADR
-   0009 note); trusted publishers for `vsift` and the three `@vsift/…` packages; the
+2. **Maintainer-only, before PR 10's publish step** (`vsift-cli@0.0.0` placeholder held,
+   `latest`): trusted publishers for `vsift-cli` and the three `@vsift/…` packages; the
    `release` environment (maintainer as reviewer); tag ruleset; fork-PR approval; the
    first publish (2FA, or a short-lived environment token); the 0.x `next` pre-release.
 3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: 23 of 28, 82%,
@@ -32,8 +32,8 @@ packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
 ## Decided (maintainer, 2026-09-28/30)
 
 - **P11 D1-D5** (ADR 0021); **P12** closed on its final round (ADR 0022 note).
-- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift` over `@vsift/{win32-x64,
-  darwin-arm64,linux-x64}`; only the `vsift@0.0.0` placeholder during P13, then one 0.x
+- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift-cli` (npm refused `vsift`; command `vsift`) over `@vsift/{win32-x64,
+  darwin-arm64,linux-x64}`; only the `vsift-cli@0.0.0` placeholder in P13, then one 0.x
   pre-release under `next`; no crates.io in R0; Sigstore and npm provenance only; managed
   install on Ubuntu 24.04 x64 only; human output by default; `DOWNLOAD_FAILED`; `handoff
   check` input on stdin (heredoc / here-string) or `--file`; no agent re-run in P13.
@@ -76,7 +76,7 @@ packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
   the P13 managed smoke and real install (Ubuntu). Linux-only code is linted in CI. The
   install tests need `install-test-hooks` (a workspace run enables it).
 - **npm:** `node --test npm/test/launcher.test.cjs` when `npm/` changes; a workspace
-  version bump also bumps `npm/vsift/package.json` and its three optional dependencies.
+  version bump also bumps `npm/vsift-cli/package.json` and its three optional dependencies.
 - **Campaigns:** crash campaign never on disks that matter (L-056, L-057); bump the three
   `UBUNTU_IMAGE_*` together; trial records never hold the check code.
 

@@ -1,18 +1,20 @@
-# vsift
+# vsift-cli
 
 `vsift` gives AI coding agents local, source-grounded access to the evidence in a
 video: timestamped transcripts, search, the moments the screen changed, and exact
-frames, crops and audio clips, all processed on your machine. This package installs
+frames, crops and audio clips, all processed on your machine. This package (`vsift-cli`) installs
 the `vsift` command and the agent skill that teaches Claude Code or Codex to use it.
 
 ```console
-npm install --global vsift@next
+npm install --global vsift-cli@next
 vsift --version
 vsift setup check
 ```
 
-One-shot use works too: `npx vsift@next`, `pnpm dlx vsift@next`, `yarn dlx --package vsift@next vsift`
-or `bunx vsift@next`. Node.js 22 or later, or Bun 1.2 or later, runs the launcher.
+One-shot use works too: `npx vsift-cli@next`, `pnpm dlx vsift-cli@next`,
+`yarn dlx --package vsift-cli@next vsift` or `bunx vsift-cli@next`. Node.js 22 or later,
+or Bun 1.2 or later, runs the launcher. The pre-release is published under the dist-tag
+`next`; `latest` stays a `0.0.0` placeholder until the first stable release.
 
 ## What gets installed
 
@@ -35,7 +37,7 @@ exits with its status.
 If the launcher cannot run the executable it says why on stderr and exits with 127
 (no platform package for this machine, for example because optional dependencies were
 omitted) or 126 (the platform package has another version, or the executable does not
-match its recorded digest or cannot be started). Reinstall `vsift` with optional
+match its recorded digest or cannot be started). Reinstall `vsift-cli` with optional
 dependencies included; `vsift` itself never exits with either status.
 
 The install guide, including the native archives for machines without a JavaScript

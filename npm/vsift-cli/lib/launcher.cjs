@@ -1,4 +1,6 @@
-// The `vsift` npm launcher (P13 PR 9, ADR 0023 section 2 and decision H5).
+// The `vsift-cli` npm launcher, which provides the `vsift` command (P13 PR 9,
+// ADR 0023 section 2 and decision H5; the package name since the 2026-09-30
+// amendment of decision A).
 // `bin/vsift.cjs` runs `main`; the tests call the rest.
 //
 // It only selects and runs the native `vsift` executable: it finds the
@@ -74,7 +76,7 @@ function readJson(file, what) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch (error) {
-    throw new LauncherFailure(EXIT_REFUSED, `${what} could not be read (${describe(error)}). Reinstall vsift.`);
+    throw new LauncherFailure(EXIT_REFUSED, `${what} could not be read (${describe(error)}). Reinstall vsift-cli.`);
   }
 }
 
@@ -97,7 +99,7 @@ function readLauncherRecords(launcherRoot, target) {
     typeof entry.sha256 === 'string' &&
     /^[0-9a-f]{64}$/.test(entry.sha256);
   if (!valid) {
-    throw new LauncherFailure(EXIT_REFUSED, 'The vsift package is incomplete or damaged (platform-digests.json). Reinstall vsift.');
+    throw new LauncherFailure(EXIT_REFUSED, 'The vsift-cli package is incomplete or damaged (platform-digests.json). Reinstall vsift-cli.');
   }
   return { version, expected: entry };
 }
@@ -111,9 +113,9 @@ function findPlatformPackage(target, version, resolve) {
     throw new LauncherFailure(
       EXIT_NOT_INSTALLED,
       `The native package ${target.packageName}@${version} is not installed.\n` +
-        'It is an optional dependency of vsift. It is missing when optional dependencies were omitted ' +
+        'It is an optional dependency of vsift-cli. It is missing when optional dependencies were omitted ' +
         '(for example --omit=optional or --no-optional) or the lockfile was made on another platform.\n' +
-        `Reinstall vsift@${version} with optional dependencies included. The supported targets are:\n` +
+        `Reinstall vsift-cli@${version} with optional dependencies included. The supported targets are:\n` +
         `${supportedTargets()}\nSee ${INSTALL_GUIDE}`,
     );
   }
@@ -123,7 +125,7 @@ function findPlatformPackage(target, version, resolve) {
     throw new LauncherFailure(
       EXIT_REFUSED,
       `${target.packageName} is ${found}, but this vsift launcher is ${version}; both must be the same version.\n` +
-        `Reinstall vsift@${version}.`,
+        `Reinstall vsift-cli@${version}.`,
     );
   }
   return path.dirname(manifestPath);
@@ -142,7 +144,7 @@ function checkExecutable(executablePath, expected, target, version) {
     throw new LauncherFailure(
       EXIT_REFUSED,
       `The native executable in ${target.packageName} is missing or does not match the digest recorded ` +
-        `for vsift ${version}; it may be damaged or replaced.\nReinstall vsift@${version}.`,
+        `for vsift ${version}; it may be damaged or replaced.\nReinstall vsift-cli@${version}.`,
     );
   }
 }
@@ -222,7 +224,7 @@ function run(executablePath, target, args) {
     } else if (notStarted && process.platform === 'win32' && executablePath.length >= WINDOWS_MAX_PATH) {
       hint =
         ` Its path is ${executablePath.length} characters long, and Windows starts programs only from paths ` +
-        `shorter than ${WINDOWS_MAX_PATH}; install vsift in a folder with a shorter path.`;
+        `shorter than ${WINDOWS_MAX_PATH}; install vsift-cli in a folder with a shorter path.`;
     }
     process.stderr.write(`vsift (npm launcher): could not start ${executablePath} (${describe(error)}).${hint}\n`);
     process.exit(EXIT_REFUSED);

@@ -5,8 +5,8 @@ Status: user guide, 2026-09-30 (P13 PR 9,
 **Nothing is published yet.** The npm packages described here are built and qualified
 by the Release workflow and will first be published as a 0.x pre-release under the npm
 dist-tag `next`, with the native archives on GitHub Releases, when P13 completes and the
-maintainer approves it. Until then `npm install vsift` finds only a placeholder
-(`vsift@0.0.0`, no code) and VSift is built from source
+maintainer approves it. Until then the npm package `vsift-cli` holds only a placeholder
+(`vsift-cli@0.0.0` under `latest`, no code) and VSift is built from source
 ([`development.md`](../development.md)). P13 PR 11 completes this guide (verifying an
 archive against its attestation, and what Windows SmartScreen and macOS Gatekeeper do
 with an unsigned download).
@@ -25,39 +25,42 @@ Alpine and other musl Linux) are not supported in R0.
 
 ## 2. Install with a package manager
 
-Install globally, so the `vsift` command is on your `PATH`:
+The npm package is `vsift-cli`; the command it installs is `vsift`. The pre-release is
+published under the dist-tag `next`, so ask for `vsift-cli@next`: `latest` stays the
+`0.0.0` placeholder until the first stable release. Install globally, so the `vsift`
+command is on your `PATH`:
 
 ```console
-npm install --global vsift@next
-pnpm add --global vsift@next
-bun add --global vsift@next
+npm install --global vsift-cli@next
+pnpm add --global vsift-cli@next
+bun add --global vsift-cli@next
 ```
 
 Yarn 4 has no global install; add VSift to a project and run it through Yarn:
 
 ```console
-yarn add vsift@next
+yarn add vsift-cli@next
 yarn vsift --version
 ```
 
 Recent Yarn 4 releases (4.18.1 checked) hold back any version published less than a day
 ago (`npmMinimalAgeGate`, default one day), so for the first day after a release Yarn
-reports that the versions of `vsift` or `@vsift/…` "are quarantined". Wait a day, or
+reports that the versions of `vsift-cli` or `@vsift/…` "are quarantined". Wait a day, or
 exempt VSift in the project's `.yarnrc.yml`:
 
 ```yaml
 npmPreapprovedPackages:
-  - vsift
+  - vsift-cli
   - "@vsift/*"
 ```
 
 Or run it once without installing:
 
 ```console
-npx vsift@next --version
-pnpm dlx vsift@next --version
-yarn dlx --quiet --package vsift@next vsift --version
-bunx vsift@next --version
+npx vsift-cli@next --version
+pnpm dlx vsift-cli@next --version
+yarn dlx --quiet --package vsift-cli@next vsift --version
+bunx vsift-cli@next --version
 ```
 
 Then check your setup:
@@ -67,7 +70,7 @@ vsift --version        # vsift 0.1.0 (<the first 12 digits of the source commit>
 vsift setup check
 ```
 
-**What is installed.** The `vsift` package holds a small launcher (`bin/vsift.cjs` and `lib/launcher.cjs`)
+**What is installed.** The `vsift-cli` package holds a small launcher (`bin/vsift.cjs` and `lib/launcher.cjs`)
 and the agent skill (`skills/vsift/`, the folder to give Claude Code or Codex). It lists
 the three platform packages as optional dependencies at its own exact version; your
 package manager installs only the one whose `os` and `cpu` match your machine. No
@@ -78,9 +81,9 @@ model are separate: `vsift setup check` says what is missing, and on Ubuntu 24.0
 `vsift setup install` can install them ([`cli-v1.md`](../contracts/cli-v1.md)).
 
 **Where the skill is.** Under the global package folder: `npm root --global` (or `pnpm
-root --global`) names the folder that holds `vsift/skills/vsift/`.
+root --global`) names the folder that holds `vsift-cli/skills/vsift/`.
 
-**Corporate registries.** A registry mirror must serve both `vsift` and the `@vsift`
+**Corporate registries.** A registry mirror must serve both `vsift-cli` and the `@vsift`
 scope. **Lockfiles.** If an install from a lockfile made on another kind of machine
 leaves this machine's platform package out (some package-manager versions record only
 the platform they ran on), the launcher says so (exit 127); update the lockfile on a
@@ -100,8 +103,8 @@ If the launcher cannot run vsift it prints one message on stderr, starting with
 
 | Exit | Meaning | What to do |
 | ---: | --- | --- |
-| 127 | No platform package for this machine: optional dependencies were omitted (`--omit=optional`, `--no-optional`), the lockfile was made without it, or the machine is not supported | Reinstall `vsift` with optional dependencies included, on a supported machine |
-| 126 | The platform package is refused or cannot start: another version, an executable that does not match its recorded digest (damaged or replaced), a damaged launcher package, or a start error (on Linux, glibc or OpenSSL 3 missing; on Windows, an executable path of 260 characters or more) | Reinstall `vsift`; on Windows with a very long install path, install in a folder with a shorter path |
+| 127 | No platform package for this machine: optional dependencies were omitted (`--omit=optional`, `--no-optional`), the lockfile was made without it, or the machine is not supported | Reinstall `vsift-cli` with optional dependencies included, on a supported machine |
+| 126 | The platform package is refused or cannot start: another version, an executable that does not match its recorded digest (damaged or replaced), a damaged launcher package, or a start error (on Linux, glibc or OpenSSL 3 missing; on Windows, an executable path of 260 characters or more) | Reinstall `vsift-cli`; on Windows with a very long install path, install in a folder with a shorter path |
 
 The message names the package it expected, the version and the supported targets.
 
@@ -116,10 +119,10 @@ process group, which would deliver the signal twice ([L-091](../planning/known-l
 ## 5. Uninstall
 
 ```console
-npm uninstall --global vsift
-pnpm remove --global vsift
-bun remove --global vsift
-yarn remove vsift            # in the project
+npm uninstall --global vsift-cli
+pnpm remove --global vsift-cli
+bun remove --global vsift-cli
+yarn remove vsift-cli        # in the project
 ```
 
 This removes the launcher, the platform package and the command (Bun 1.2 leaves the

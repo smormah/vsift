@@ -446,7 +446,7 @@ Counts: 3 high, 24 medium, 60 low (87 entries).
   after the check, so the check is not a defence against a local attacker. It proves the
   platform package is the one this launcher was released with, undamaged.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 9 note; `npm/vsift/lib/launcher.cjs`; the refusals in `npm/test/launcher.test.cjs` and
+  PR 9 note; `npm/vsift-cli/lib/launcher.cjs`; the refusals in `npm/test/launcher.test.cjs` and
   in every `npm-qualify` job.
 - **Impact:** none beyond what write access to the install folder already gives.
 - **Why:** a user-writable install folder is the norm for npm, pnpm, Yarn and Bun; the
@@ -1508,7 +1508,7 @@ Counts: 3 high, 24 medium, 60 low (87 entries).
   notarization, no provenance and no trusted publishing. Since P13 PR 8,
   `.github/workflows/release.yml` builds, checks and packages the three native archives
   with notices, an SBOM each and `SHA256SUMS`; since PR 9 it also assembles the npm
-  launcher `vsift` and the three `@vsift/…` platform packages from those archives and
+  launcher `vsift-cli` (the `vsift` command) and the three `@vsift/…` platform packages from those archives and
   qualifies them with npm, pnpm, Yarn and Bun on three operating systems against a
   loopback registry. All of it stays in the run's artifacts. No crate is published in
   R0 (ADR 0023).
@@ -1765,7 +1765,7 @@ it cannot be packaged for crates.io as it is.**
   (`SIGKILL`, Windows `TerminateProcess`, `taskkill /F` on the Node.js process), vsift
   keeps running until its command ends: nothing links its life to the launcher's.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 9 note; `npm/vsift/lib/launcher.cjs` (`relaySignals`); `npm/test/launcher.test.cjs`
+  PR 9 note; `npm/vsift-cli/lib/launcher.cjs` (`relaySignals`); `npm/test/launcher.test.cjs`
   (targeted and process-group interruptions); the Release workflow's `npm-qualify` jobs.
 - **Impact:** an escalated interruption still ends the command with its documented result
   and never leaves a provider running (SEC-04); it only skips the providers' graceful
@@ -1799,8 +1799,8 @@ it cannot be packaged for crates.io as it is.**
   that the executable cannot start. Yarn 4.18 quarantines a version for a day after it is
   published (`npmMinimalAgeGate`, default `1d`); the qualification turns the gate off,
   because it publishes seconds before it installs, so for a day after each real release
-  Yarn users must wait or preapprove `vsift` and `@vsift/*` (`install.md`). Bun 1.2's
-  `bun remove --global vsift` removes the launcher and the command but leaves the
+  Yarn users must wait or preapprove `vsift-cli` and `@vsift/*` (`install.md`). Bun 1.2's
+  `bun remove --global vsift-cli` removes the launcher and the command but leaves the
   platform package in Bun's global folder, where nothing runs it, and on Windows also its
   `vsift.exe` shim, which then fails without running vsift (the matrix records both).
   Bun 1.2.23 on Windows fails `bun add --global` with "InvalidWtf8" when its install or

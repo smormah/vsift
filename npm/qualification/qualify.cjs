@@ -213,7 +213,7 @@ async function startRegistry(verdaccioEntry, work) {
       '    max_users: 1',
       'uplinks: {}',
       'packages:',
-      "  'vsift':",
+      "  'vsift-cli':",
       '    access: $all',
       '    publish: $authenticated',
       "  '@vsift/*':",
@@ -343,11 +343,11 @@ function managerProfile(manager, work, env) {
       return {
         installRoot,
         env: { ...env, npm_config_prefix: installRoot },
-        install: ['npm', ['install', '--global', '--ignore-scripts', 'vsift@next']],
+        install: ['npm', ['install', '--global', '--ignore-scripts', 'vsift-cli@next']],
         shims: shimNames.map((name) => (windows ? path.join(installRoot, name) : path.join(installRoot, 'bin', name))),
-        oneShot: ['npx', ['--yes', 'vsift@next']],
-        omitOptional: ['npm', ['install', '--ignore-scripts', '--omit=optional', 'vsift@next']],
-        uninstall: ['npm', ['uninstall', '--global', 'vsift']],
+        oneShot: ['npx', ['--yes', 'vsift-cli@next']],
+        omitOptional: ['npm', ['install', '--ignore-scripts', '--omit=optional', 'vsift-cli@next']],
+        uninstall: ['npm', ['uninstall', '--global', 'vsift-cli']],
       };
     case 'pnpm': {
       // pnpm 12 puts global commands in $PNPM_HOME/bin and refuses to install
@@ -356,12 +356,12 @@ function managerProfile(manager, work, env) {
       return {
         installRoot,
         env: { ...env, PNPM_HOME: installRoot, PATH: `${bin}${path.delimiter}${installRoot}${path.delimiter}${env.PATH}` },
-        install: ['pnpm', ['add', '--global', '--ignore-scripts', 'vsift@next']],
+        install: ['pnpm', ['add', '--global', '--ignore-scripts', 'vsift-cli@next']],
         shims: shimNames.map((name) => path.join(bin, name)),
-        oneShot: ['pnpm', ['dlx', 'vsift@next']],
+        oneShot: ['pnpm', ['dlx', 'vsift-cli@next']],
         omitOptional: ['pnpm', ['install', '--ignore-scripts', '--no-optional']],
-        omitOptionalManifest: { dependencies: { vsift: 'next' } },
-        uninstall: ['pnpm', ['remove', '--global', 'vsift']],
+        omitOptionalManifest: { dependencies: { 'vsift-cli': 'next' } },
+        uninstall: ['pnpm', ['remove', '--global', 'vsift-cli']],
       };
     }
     case 'yarn':
@@ -370,16 +370,16 @@ function managerProfile(manager, work, env) {
         installRoot,
         project: true,
         env,
-        install: ['yarn', ['add', 'vsift@next']],
+        install: ['yarn', ['add', 'vsift-cli@next']],
         shims: [],
         runInstalled: ['yarn', ['vsift']],
-        oneShot: ['yarn', ['dlx', '--quiet', '--package', 'vsift@next', 'vsift']],
-        omitOptional: ['yarn', ['add', 'vsift@next']],
+        oneShot: ['yarn', ['dlx', '--quiet', '--package', 'vsift-cli@next', 'vsift']],
+        omitOptional: ['yarn', ['add', 'vsift-cli@next']],
         // Yarn cannot omit optional dependencies; installing for another
         // platform leaves this one's package out in the same way.
         omitOptionalFiles: { '.yarnrc.yml': 'supportedArchitectures:\n  os:\n    - aix\n  cpu:\n    - ppc64\n' },
         omitOptionalRun: ['yarn', ['vsift']],
-        uninstall: ['yarn', ['remove', 'vsift']],
+        uninstall: ['yarn', ['remove', 'vsift-cli']],
       };
     case 'bun': {
       const bin = path.join(installRoot, 'bin');
@@ -391,13 +391,13 @@ function managerProfile(manager, work, env) {
           BUN_INSTALL_BIN: bin,
           PATH: `${bin}${path.delimiter}${env.PATH}`,
         },
-        install: ['bun', ['add', '--global', '--ignore-scripts', '--registry', REGISTRY, 'vsift@next']],
+        install: ['bun', ['add', '--global', '--ignore-scripts', '--registry', REGISTRY, 'vsift-cli@next']],
         shims: [path.join(bin, windows ? 'vsift.exe' : 'vsift')],
-        oneShot: ['bunx', ['vsift@next']],
-        oneShotOnBun: ['bunx', ['--bun', 'vsift@next']],
+        oneShot: ['bunx', ['vsift-cli@next']],
+        oneShotOnBun: ['bunx', ['--bun', 'vsift-cli@next']],
         omitOptional: ['bun', ['install', '--ignore-scripts', '--omit', 'optional', '--registry', REGISTRY]],
-        omitOptionalManifest: { dependencies: { vsift: 'next' } },
-        uninstall: ['bun', ['remove', '--global', 'vsift']],
+        omitOptionalManifest: { dependencies: { 'vsift-cli': 'next' } },
+        uninstall: ['bun', ['remove', '--global', 'vsift-cli']],
       };
     }
     default:
@@ -517,7 +517,7 @@ async function qualify({ options, manager, target, work, tarballs, env, profile,
     const publishConfig = path.join(work, 'publish.npmrc');
     // Scoped to the loopback registry: npm sends this token nowhere else.
     writeFile(publishConfig, `registry=${REGISTRY}\n//${REGISTRY_HOST}/:_authToken=${token}\n`);
-    const ordered = [...tarballs].sort((left, right) => Number(path.basename(left).startsWith('vsift-0')) - Number(path.basename(right).startsWith('vsift-0')));
+    const ordered = [...tarballs].sort((left, right) => Number(path.basename(left).startsWith('vsift-cli-')) - Number(path.basename(right).startsWith('vsift-cli-')));
     for (const tarball of ordered) {
       succeed('npm', ['publish', tarball, '--tag', 'next', '--ignore-scripts', '--registry', REGISTRY, '--userconfig', publishConfig], env);
     }
@@ -549,7 +549,7 @@ async function qualify({ options, manager, target, work, tarballs, env, profile,
   writeFile(draft, '# Report\n\nNo handoff block yet.\n');
 
   const platformPackages = () => findPackage(profile.installRoot, target.packageName);
-  const launcherPackages = () => findPackage(profile.installRoot, 'vsift');
+  const launcherPackages = () => findPackage(profile.installRoot, 'vsift-cli');
 
   if (installed) {
     for (const invocation of invocations) {

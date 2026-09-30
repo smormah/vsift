@@ -25,7 +25,10 @@ use serde_json::Value;
 pub(crate) const NPM_DIRECTORY: &str = "npm";
 
 /// The launcher's manifest, which must exist so the rule is never vacuous.
-const LAUNCHER_MANIFEST: &str = "npm/vsift/package.json";
+const LAUNCHER_MANIFEST: &str = "npm/vsift-cli/package.json";
+
+/// The launcher package's npm name; the command it installs stays `vsift`.
+const LAUNCHER_PACKAGE: &str = "vsift-cli";
 
 /// Manifest fields no `VSift` package may declare.
 const FORBIDDEN_FIELDS: [&str; 5] = [
@@ -117,6 +120,13 @@ pub(crate) fn check_manifest(messages: &mut Vec<String>, relative_path: &str, te
     if relative_path != LAUNCHER_MANIFEST {
         return;
     }
+    // ADR 0023 decision A as amended on 2026-09-30: npm refused the unscoped
+    // `vsift`, and the maintainer holds `vsift-cli`.
+    if fields.get("name").and_then(Value::as_str) != Some(LAUNCHER_PACKAGE) {
+        messages.push(format!(
+            "{relative_path} must name the package `{LAUNCHER_PACKAGE}` (ADR 0023 decision A)"
+        ));
+    }
     let version = fields.get("version").and_then(Value::as_str);
     match fields.get("optionalDependencies") {
         Some(Value::Object(dependencies)) if !dependencies.is_empty() => {
@@ -157,7 +167,7 @@ mod tests {
         messages
     }
 
-    const LAUNCHER: &str = r#"{"name": "vsift", "version": "0.1.0",
+    const LAUNCHER: &str = r#"{"name": "vsift-cli", "version": "0.1.0",
         "optionalDependencies": {"@vsift/linux-x64": "0.1.0", "@vsift/win32-x64": "0.1.0"}}"#;
 
     #[test]
@@ -202,7 +212,8 @@ mod tests {
                 1,
             ),
             LAUNCHER.replacen("optionalDependencies", "dependencies", 1),
-            String::from(r#"{"name": "vsift", "version": "0.1.0"}"#),
+            String::from(r#"{"name": "vsift-cli", "version": "0.1.0"}"#),
+            LAUNCHER.replacen(r#""name": "vsift-cli""#, r#""name": "vsift""#, 1),
             String::from("[]"),
         ] {
             assert!(

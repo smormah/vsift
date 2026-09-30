@@ -152,17 +152,17 @@ address and is gone when the job ends.
 
 | Package | Holds |
 | --- | --- |
-| `vsift` | `bin/vsift.cjs`, `lib/launcher.cjs`, `package.json` and `README.md` from `npm/vsift/`; `platform-digests.json` (each executable's size and SHA-256, computed from the archives); `LICENSE`, `LICENSE-APACHE`, `LICENSE-MIT`; `skills/vsift/` |
+| `vsift-cli` (the `vsift` command) | `bin/vsift.cjs`, `lib/launcher.cjs`, `package.json` and `README.md` from `npm/vsift-cli/`; `platform-digests.json` (each executable's size and SHA-256, computed from the archives); `LICENSE`, `LICENSE-APACHE`, `LICENSE-MIT`; `skills/vsift/` |
 | `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64` | the target's `vsift` or `vsift.exe` (mode 0755), its `THIRD-PARTY-NOTICES`, the licence files, a README and a manifest with `os`, `cpu`, `preferUnplugged` and `publishConfig.access: public` |
 
 The launcher lists the platform packages as `optionalDependencies` at its own exact
 version. No package has a lifecycle script, a `gypfile` or a `binding.gyp`, and no
 manifest names a person: `vsift-governance check` holds every `package.json` under `npm/`
 to that, and `npm-verify` holds the packed tarballs to it too. The version of every
-package is the workspace version; `npm/vsift/package.json` must carry it, with each
+package is the workspace version; `npm/vsift-cli/package.json` must carry it, with each
 optional dependency at the same version (a release-tool test and the governance check
 fail otherwise). To release a new version, change the workspace version and those four
-places in `npm/vsift/package.json` together.
+places in `npm/vsift-cli/package.json` together.
 
 **Pinned tools** (workflow `env`): Node.js 22.23.3 (with the npm it ships), Bun 1.2.23,
 pnpm 12.8.1, Yarn 4.18.1, Verdaccio 6.10.4. Update them in one reviewed change.
@@ -174,7 +174,7 @@ modes exist), with the three archives of one run in `dist/`:
 mkdir -p npm-dist/packages npm-dist/tarballs
 cargo run --locked -p vsift-release -- npm --archive dist/<archive> --archive dist/<archive> \
   --archive dist/<archive> --out-dir npm-dist/packages
-(cd npm-dist/packages/vsift && npm pack --ignore-scripts --pack-destination ../../tarballs)
+(cd npm-dist/packages/vsift-cli && npm pack --ignore-scripts --pack-destination ../../tarballs)
 # ... and the same for vsift-darwin-arm64, vsift-linux-x64 and vsift-win32-x64
 cargo run --locked -p vsift-release -- npm-verify --archive ... --tarball npm-dist/tarballs/<tarball> ...
 npm install --prefix /tmp/tools --ignore-scripts verdaccio@6.10.4
@@ -189,3 +189,13 @@ package manager, and uses a throwaway Verdaccio user whose token is written only
 scratch npmrc scoped to that address. Never point it at a real registry, and never add
 `npm login`, `npm adduser` or a publish to the public registry to this workflow: PR 10's
 protected `publish` job is the only publishing path.
+
+**Names and dist-tags, for PR 10's publish step and release notes.** The launcher package
+is `vsift-cli` (npm refused the unscoped `vsift` as too similar to `sift` and `tsify`;
+ADR 0009 note of 2026-09-30); the command it installs is `vsift`; the platform packages
+are `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64`. `vsift-cli@0.0.0`,
+the maintainer's placeholder, is `latest` and stays `latest` until a stable release; the
+0.x pre-release is published with `--tag next`, so release notes tell users to install
+`vsift-cli@next`. Yarn 4.18 holds every new version back for a day
+(`npmMinimalAgeGate`), for `vsift-cli` and `@vsift/*` alike: say so in the release notes,
+with the `npmPreapprovedPackages` workaround of `install.md`.

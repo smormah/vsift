@@ -16,7 +16,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const launcherSource = path.join(__dirname, '..', 'vsift');
+const launcherSource = path.join(__dirname, '..', 'vsift-cli');
 const launcher = require(path.join(launcherSource, 'lib', 'launcher.cjs'));
 const fakeScript = path.join(__dirname, 'fixtures', 'fake-vsift.cjs');
 const sendConsoleControl = path.join(__dirname, '..', '..', 'tools', 'send-console-ctrl.ps1');
@@ -39,7 +39,7 @@ function sha256(bytes) {
 function makeLayout(t, { target, executable, platformVersion = VERSION, editDigests = (digests) => digests }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vsift launcher ü 日本 '));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const launcherRoot = path.join(root, 'node_modules', 'vsift');
+  const launcherRoot = path.join(root, 'node_modules', 'vsift-cli');
   fs.mkdirSync(path.join(launcherRoot, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(launcherRoot, 'lib'), { recursive: true });
   for (const file of ['package.json', path.join('bin', 'vsift.cjs'), path.join('lib', 'launcher.cjs')]) {
@@ -130,7 +130,7 @@ for (const target of Object.values(launcher.TARGETS)) {
       launcher.EXIT_NOT_INSTALLED,
       `${target.packageName}@${VERSION} is not installed`,
       '--omit=optional',
-      `Reinstall vsift@${VERSION}`,
+      `Reinstall vsift-cli@${VERSION}`,
     );
   });
 
@@ -167,7 +167,7 @@ test('a damaged digest file is refused', (t) => {
   ];
   for (const editDigests of edits) {
     const layout = makeLayout(t, { target, executable: Buffer.from('native executable'), editDigests });
-    assertFailure(() => prepareFor(layout, target), launcher.EXIT_REFUSED, 'Reinstall vsift');
+    assertFailure(() => prepareFor(layout, target), launcher.EXIT_REFUSED, 'Reinstall vsift-cli');
   }
   const layout = makeLayout(t, { target, executable: Buffer.from('native executable') });
   fs.writeFileSync(path.join(layout.launcherRoot, 'platform-digests.json'), '{ not json');
@@ -251,7 +251,7 @@ test('Windows: an executable path past MAX_PATH is named as the reason it cannot
   }
   fs.mkdirSync(deep, { recursive: true });
   fs.renameSync(path.join(layout.root, 'node_modules'), path.join(deep, 'node_modules'));
-  const script = path.join(deep, 'node_modules', 'vsift', 'bin', 'vsift.cjs');
+  const script = path.join(deep, 'node_modules', 'vsift-cli', 'bin', 'vsift.cjs');
   const result = childProcess.spawnSync(process.execPath, [script, fakeScript, 'args'], { encoding: 'utf8', timeout: 60_000 });
   assert.equal(result.status, launcher.EXIT_REFUSED, result.stderr);
   assert.match(result.stderr, /Windows starts programs only from paths shorter than 260/);

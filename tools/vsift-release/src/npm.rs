@@ -3,8 +3,8 @@
 //!
 //! Four packages, each a directory `npm pack` turns into a tarball:
 //!
-//! - `vsift`: the launcher `bin/vsift.cjs` and `lib/launcher.cjs`, its manifest and README from
-//!   `npm/vsift/` in the repository, `platform-digests.json` (the size and
+//! - `vsift-cli`: the launcher `bin/vsift.cjs` and `lib/launcher.cjs`, its manifest and README from
+//!   `npm/vsift-cli/` in the repository, `platform-digests.json` (the size and
 //!   SHA-256 of each target's executable, computed here from the archives, so
 //!   the digest the launcher checks comes from the build), the three licence
 //!   files and the agent skill under `skills/vsift/`, all from the archives;
@@ -36,7 +36,10 @@ use crate::{
 };
 
 /// Where the launcher's sources live in the repository.
-pub(crate) const LAUNCHER_DIRECTORY: &str = "npm/vsift";
+pub(crate) const LAUNCHER_DIRECTORY: &str = "npm/vsift-cli";
+/// The launcher package's npm name (ADR 0023 decision A, amended 2026-09-30: npm
+/// refused the unscoped `vsift` as too similar to existing names).
+pub(crate) const LAUNCHER_PACKAGE: &str = "vsift-cli";
 
 /// The launcher's files taken from [`LAUNCHER_DIRECTORY`] as they are.
 pub(crate) const LAUNCHER_MANIFEST: &str = "package.json";
@@ -239,8 +242,8 @@ pub(crate) fn assemble(
         );
     }
     packages.push(NpmPackage {
-        name: "vsift",
-        directory: "vsift",
+        name: LAUNCHER_PACKAGE,
+        directory: LAUNCHER_PACKAGE,
         files: launcher_files,
     });
 
@@ -336,7 +339,7 @@ fn check_launcher_manifest(manifest: &[u8], version: &str) -> Result<(), NpmErro
         .map(|target| (target.npm_package_name().to_owned(), json!(version)))
         .collect();
     let expectations = [
-        ("name", json!("vsift")),
+        ("name", json!(LAUNCHER_PACKAGE)),
         ("version", json!(version)),
         ("license", json!(LICENCE)),
         ("homepage", json!(HOMEPAGE)),
@@ -411,7 +414,7 @@ fn platform_manifest(version: &str, target: ReleaseTarget) -> String {
         r#"{{
   "name": "{name}",
   "version": "{version}",
-  "description": "The vsift executable for {label}. The vsift package installs and runs it; install vsift, not this package.",
+  "description": "The vsift executable for {label}. The vsift-cli package installs it and runs it as the vsift command; install vsift-cli, not this package.",
   "license": "{LICENCE}",
   "homepage": "{HOMEPAGE}",
   "repository": {{
@@ -446,9 +449,9 @@ fn platform_manifest(version: &str, target: ReleaseTarget) -> String {
 fn platform_readme(version: &str, target: ReleaseTarget) -> String {
     format!(
         "# {name}\n\nThe `vsift` executable, version {version}, for {label}.\n\n\
-         The [`vsift`](https://www.npmjs.com/package/vsift) package lists this package as an \
+         The [`vsift-cli`](https://www.npmjs.com/package/vsift-cli) package lists this package as an \
          optional dependency, installs it on {label} only, checks the executable's version and \
-         SHA-256, and runs it. Install `vsift`, not this package.\n\n\
+         SHA-256, and runs it as the `vsift` command. Install `vsift-cli`, not this package.\n\n\
          Licensed under MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`); \
          `{NOTICES_NAME}` lists the licences of the code compiled into the executable. \
          Source, build provenance and documentation: {HOMEPAGE}\n",
@@ -619,7 +622,7 @@ mod tests {
     fn launcher_manifest(version: &str) -> String {
         format!(
             r#"{{
-  "name": "vsift",
+  "name": "vsift-cli",
   "version": "{version}",
   "description": "The vsift command-line tool.",
   "license": "MIT OR Apache-2.0",
@@ -689,7 +692,7 @@ mod tests {
     #[test]
     fn the_repository_launcher_manifest_is_the_reviewed_one() -> Result<(), Box<dyn Error>> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let manifest = std::fs::read(root.join("npm/vsift/package.json"))?;
+        let manifest = std::fs::read(root.join("npm/vsift-cli/package.json"))?;
         super::check_launcher_manifest(&manifest, env!("CARGO_PKG_VERSION"))?;
         Ok(())
     }
@@ -701,7 +704,7 @@ mod tests {
         assert_eq!(
             names,
             [
-                "vsift",
+                "vsift-cli",
                 "@vsift/darwin-arm64",
                 "@vsift/win32-x64",
                 "@vsift/linux-x64"

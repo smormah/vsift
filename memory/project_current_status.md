@@ -63,7 +63,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
   `vsift` over `@vsift/…` packages; managed installation on Ubuntu 24.04 x64 (`setup
   install/list/rollback/remove/repair`); human output by default; `handoff check`.
-- **Names (#237):** scope `@vsift` (owned); the placeholder `vsift@0.0.0` (ADR 0009 note).
+- **Names:** scope `@vsift` (owned, #237); npm refused `vsift`, so the launcher is `vsift-cli` (placeholder `0.0.0` held, `latest`; command `vsift`; ADR 0009 note).
 - **Done:** PR 0 (#226, ADR 0023); PR 1 (#228, L-071); PRs 2a, 2b (#229, #231,
   `TerminalText`, SEC-T02, L-073); PR 3 (#230, smoke); PR 5 (#233, `handoff check`, L-086).
 - **PR 4 (#234, `d43a518`):** `setup install --plan --accept-plan [--artifact-dir]`
@@ -78,7 +78,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   `setup rollback` selects a verified earlier version in one atomic rename (pointer v2);
   `setup remove` deselects first, keeps held versions (`BUSY`) and unprovable content
   (L-090); every accepted install sweeps abandoned stages and keeps two versions.
-- **PR 9 (#240, this change):** `npm/vsift/` (`bin/vsift.cjs` runs `lib/launcher.cjs`), a plain CommonJS
+- **PR 9 (#240, this change):** `npm/vsift-cli/` (`bin/vsift.cjs` runs `lib/launcher.cjs`), a plain CommonJS
   launcher: finds `@vsift/<platform>`, requires its version and the executable's
   SHA-256 (`platform-digests.json`, computed from the archives by `vsift-release npm`)
   to match, runs it without a shell, relays signals, exits with its status; failures are

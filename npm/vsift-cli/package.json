@@ -1,5 +1,5 @@
 {
-  "name": "vsift",
+  "name": "vsift-cli",
   "version": "0.1.0",
   "description": "Local, source-grounded video evidence for AI coding agents: the vsift command-line tool.",
   "license": "MIT OR Apache-2.0",

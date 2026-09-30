@@ -310,7 +310,7 @@ prints the version alone.
 
 ## npm packages
 
-`npm/vsift/` holds the npm launcher's sources: `bin/vsift.cjs`, which runs `lib/launcher.cjs` (plain CommonJS, `node:`
+`npm/vsift-cli/` holds the npm launcher's sources: `bin/vsift.cjs`, which runs `lib/launcher.cjs` (plain CommonJS, `node:`
 built-ins only, no dependencies), `package.json` and `README.md`. The platform packages
 are generated from the release archives by `vsift-release npm`
 ([`operations/release.md`](operations/release.md) section 5). If you change the launcher,
@@ -325,7 +325,7 @@ They copy the Node.js executable into fake package layouts as a stand-in for `vs
 (about 100 MB each, in the temporary folder) and, on Windows, send a console
 Ctrl-Break with `tools/send-console-ctrl.ps1`. No package may have `scripts`, a
 `gypfile`, a `binding.gyp` or a person in its manifest; the governance check fails
-otherwise. Bumping the workspace version means changing `npm/vsift/package.json`'s
+otherwise. Bumping the workspace version means changing `npm/vsift-cli/package.json`'s
 `version` and its three optional dependencies with it. The full qualification with npm,
 pnpm, Yarn and Bun against a loopback Verdaccio runs in the Release workflow; to run it
 yourself, see the same runbook section. It never publishes to a public registry, and

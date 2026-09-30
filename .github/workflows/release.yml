@@ -11,7 +11,7 @@ name: Release
 #   package    one deterministic vsift-<version>-<target>.tar.gz per target,
 #              each read back and checked, packaged twice and compared, and
 #              SHA256SUMS over the three archives.
-#   npm-package  the four npm packages (the `vsift` launcher and
+#   npm-package  the four npm packages (the `vsift-cli` launcher and
 #              @vsift/{win32-x64,darwin-arm64,linux-x64}) assembled from the
 #              archives, packed twice with `npm pack` and compared, and each
 #              tarball checked against the assembly (P13 PR 9).
@@ -363,7 +363,7 @@ jobs:
           done
           mkdir -p npm-dist/packages npm-dist/tarballs npm-dist/second
           cargo run --quiet --locked -p vsift-release -- npm "${archives[@]}" --out-dir npm-dist/packages
-          for package in vsift vsift-darwin-arm64 vsift-linux-x64 vsift-win32-x64; do
+          for package in vsift-cli vsift-darwin-arm64 vsift-linux-x64 vsift-win32-x64; do
             (cd "npm-dist/packages/${package}" && npm pack --ignore-scripts --pack-destination ../../tarballs \
               && npm pack --ignore-scripts --pack-destination ../../second)
           done
@@ -454,7 +454,7 @@ jobs:
           set -euo pipefail
           # The launcher manifest's version, which the release tool holds to
           # the workspace version; the build job's line names the commit.
-          version="$(node -p "require('./npm/vsift/package.json').version")"
+          version="$(node -p "require('./npm/vsift-cli/package.json').version")"
           commit="$(git rev-parse HEAD)"
           node npm/qualification/qualify.cjs \
             --manager "${MANAGER}" \
