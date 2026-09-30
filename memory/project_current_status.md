@@ -58,10 +58,10 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 
 - **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux
   x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
-  `vsift` over `@<scope>/…` packages; managed installation on Ubuntu 24.04 x64 (`setup
+  `vsift` over `@shongo/vsift-…` packages; managed installation on Ubuntu 24.04 x64 (`setup
   install/list/rollback/remove/repair`); human output by default; `handoff check`.
-- **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
-  `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
+- **Names (2026-09-30, #235):** scope `@shongo` (organisation created by the maintainer);
+  the placeholder `vsift@0.0.0` holds the launcher name (ADR 0009 note).
 - **Done:** PR 0 (#226): ADR 0023, ledger, #16. PR 1 (#228, L-071): parse remediation.
   PR 2a (#229), 2b (#231, `02df4eb`, L-073): readable text through `TerminalText`,
   SEC-T02 over it. PR 3 (#230, `e22ee59`): smoke of staged candidates, failure cleanup;
@@ -83,7 +83,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   Tests use local HTTP, TLS and proxy servers (`install-test-hooks`); a debug build
   resolves no publisher host. The real install (`P13 managed smoke`) runs after merge.
   **Next:** PR 6 (list/rollback/remove/repair, cleanup, sweep).
-- **Nothing is published** until P13 completes and the maintainer approves a 0.x `next` release.
+- **Only the placeholder is published** until P13 ends and the maintainer approves a 0.x `next`.
 - **Found while planning:** the clean-install agent run is P14's (H10); Linux needs OpenSSL 3.
 
 ## P12 in one view
