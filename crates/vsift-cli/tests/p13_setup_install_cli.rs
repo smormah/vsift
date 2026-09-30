@@ -543,7 +543,7 @@ fn plan_now(base: &Base) -> Result<Value, Box<dyn Error>> {
     assert!(output.status.success(), "setup plan failed");
     let value = json(&output)?;
     validate("operation-response.schema.json", &value)?;
-    validate("setup-plan.schema.json", &value["data"])?;
+    validate("setup-plan.schema.json", &value)?;
     Ok(value)
 }
 
