@@ -223,6 +223,42 @@ library contents and hashes. Release artifacts must map to a protected source co
 and a tag alone must not bypass tests or release approval. Document signing/notarization
 availability and avoid claiming publisher trust for unsigned artifacts.
 
+### P13 notes
+
+**2026-09-30, P13 started ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
+Proposed).** The controls P13 will implement, per threat. This is a plan; the
+evidence is added as each pull request lands, and none of it is claimed yet.
+
+- **SEC-12 (malicious provider or runtime update):** only the reviewed Ubuntu 24.04
+  catalogue revision can enter a plan; the transaction downloads from the publisher
+  over HTTPS, checks exact size and SHA-256, smokes the candidate before
+  `publish_and_select`, and never updates a runtime during work (D-02, D-03, D-05).
+- **SEC-13 (archive traversal, bombs, substitution):** the existing bounded archive
+  readers and flat private staging, plus a smoke of the staged runtime before
+  activation and cleanup of every stage after a failure (D-04, D-06).
+- **SEC-14 (changed resume, redirects, proxy credentials):** no resume, a restart at
+  byte zero and a whole-artifact hash; the reviewed redirect policy; `DOWNLOAD_FAILED`
+  reasons that never render a signed URL or a proxy credential (D-03, D-07).
+- **SEC-15 (rollback or removal under running jobs):** per-version use locks, removal
+  only of unselected unheld versions, cleanup bounded to the current and one previous
+  version, a stale-stage sweep limited to positively marked stages, BYO files never
+  addressed; kill and power-loss qualification that claims fail-closed detection plus
+  repair (D-05, D-08).
+- **SEC-22 (CI steals secrets or replaces a binary):** the governance workflow lint
+  (actions pinned by commit SHA, no `pull_request_target`, minimal permissions,
+  `id-token` only in the attest and publish jobs); publication only from the protected
+  `release` environment with the maintainer as reviewer; npm trusted publishing
+  without a long-lived token; `dry_run` by default (R-SEC01).
+- **SEC-23 (checksums from the same compromised server):** the managed trust anchor
+  stays in reviewed source, never in a downloaded checksum; release archives carry
+  Sigstore build provenance tied to the protected commit, npm packages carry npm
+  provenance, and the launcher checks its platform package's version and, if cheap
+  enough, its digest (R-SEC02).
+
+Human-readable output (SEC-T02, L-073) and `handoff check`'s untrusted input (a draft
+that may carry evidence text) belong with the agent-specific controls below: both will
+escape control and hidden characters and never echo input into a result.
+
 ## Agent-specific controls
 
 The tool cannot make every downstream model immune to prompt injection. Evidence

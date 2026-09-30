@@ -17,7 +17,7 @@ Status: accepted scope mapping. The machine-readable source is
 | R-10 durable worker workspace | P03, P10, P11 | X-01..X-11 | F01, F05, F11 |
 | R-11 resource budgets | P02, P04, P11 | P-03..P-08, M-02..M-03, X-07..X-09 | F06, F11 |
 | R-12 headless observability | P01, P11 | C, O | F01, F05, F11 |
-| R-13 agent skill/handoff | P12 | A-01..A-09, SEC-T02 | F01, F03-F10, F12 |
+| R-13 agent skill/handoff | P12, P13 (`handoff check`, #213; since 2026-09-30) | A-01..A-09, SEC-T02 | F01, F03-F10, F12 |
 | R-14 distribution/provenance | P13, P14 | D, R-SEC01..03 | F01 |
 
 The ledger also records decision status, packet dependencies, issue/PR evidence and

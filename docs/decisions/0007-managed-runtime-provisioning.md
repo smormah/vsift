@@ -314,3 +314,15 @@ fails closed when those limits are absent or outside the reviewed bounds. The
 canonical plan digest includes every policy value, making a policy revision a
 new acceptance decision even when artifact identities are unchanged. This note
 accepts the policy only; no candidate is executed or activated yet.
+
+## 2026-09-30 note: P13 delivers the transaction
+
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
+Proposed) resumes this work in the order recorded when P06 was parked: smoke
+executor, failure cleanup, the guarded per-component transaction (download or
+`--artifact-dir` import, stage, smoke, `publish_and_select`), the managed tier in
+lookup (explicit, then managed, then `PATH`, as decided above), the public lifecycle
+commands, cleanup that keeps the current and one previous version, a stale-stage
+sweep, and kill and power-loss qualification that claims fail-closed detection plus
+repair. Managed installation is qualified on Ubuntu 24.04 x86-64 only. `setup repair`
+is read-only and emits a plan, so repair adds no second path that changes the store.

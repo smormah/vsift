@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **P13 has started** (2026-09-30, distribution, managed installation, human-readable
+  output and `handoff check`). PR 0 adds
+  [ADR 0023](docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  (Proposed) with the maintainer's decisions A-H, dated notes in ADRs 0007, 0008, 0009,
+  0014 and 0022, and the P13 scope and pull-request plan in
+  `docs/planning/implementation-work-packets.md`. The ledger marks P13 `in_progress`
+  and maps R-13 to it (`handoff check`, #213); the threat model lists the planned
+  controls; the name checklist records that npm refused the organisation name `vsift`,
+  so the platform packages' scope awaits the maintainer's choice. No code changes.
+
 - **P12 is complete** (2026-09-30, closed by the maintainer on the final trial round's
   results). The agent skill's qualification record is
   [docs/planning/p12-agent-qualification.md](docs/planning/p12-agent-qualification.md).
