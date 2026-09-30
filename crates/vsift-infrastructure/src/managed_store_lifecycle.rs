@@ -39,15 +39,17 @@ use vsift_domain::ManagedComponent;
 use crate::{
     ManagedArtifactError, ManagedArtifactStore, ManagedInstallGuard, ManagedRuntimeIdentity,
     ManagedRuntimePublicationError, ManagedVersionRemovalOutcome,
+    fault_point::{FaultPlan, FaultPoint, ManagedFolder, ManagedStep, ManagedTrace},
     file_lock::HeldFileLock,
     managed_artifact_store::{
         ARTIFACT, CURRENT, CURRENT_IDENTITY, ContentCheck, DIRECTORY_MARKER, INSTALL_LOCK,
         MAX_VERSION_METADATA_BYTES, PAYLOAD, ROOT_MARKER, RUNTIME, SMOKE, STAGE_IDENTITY,
         STAGE_MARKER, VERSION_MANIFEST, VERSION_REMOVING, VERSIONS, VERSIONS_IDENTITY,
-        canonical_managed_key, check_marker, open_managed_directory, open_version_use_lock,
-        parse_version_manifest, read_current_pointer, read_private_regular_file,
-        remove_known_regular_file_if_present, sha256_hex, validate_install_guard,
-        validate_owned_regular_file, validate_private_regular_metadata, validate_version_contents,
+        canonical_managed_key, check_marker, flush_directory, open_readable_managed_directory,
+        open_version_use_lock, parse_version_manifest, partial_marker, read_current_pointer,
+        read_private_regular_file, remove_known_regular_file_if_present, sha256_hex,
+        validate_install_guard, validate_owned_regular_file, validate_private_regular_metadata,
+        validate_version_contents,
     },
     private_user_root::{validate_private_root, validate_same_held_directory},
 };
@@ -121,24 +123,40 @@ impl ManagedArtifactStore {
             };
             match name {
                 ROOT_MARKER | INSTALL_LOCK => {}
+                // A folder whose creation a killed install left unfinished
+                // holds nothing yet; the next install finishes it (P13 PR 7).
                 VERSIONS => {
-                    let versions = open_managed_directory(
+                    if let Some(versions) = open_readable_managed_directory(
                         &root,
                         self.root_path(),
                         VERSIONS,
                         VERSIONS_IDENTITY,
                     )
-                    .map_err(|error| store_fault(&error))?;
-                    self.inspect_versions(&versions, &mut inventory)?;
+                    .map_err(|error| store_fault(&error))?
+                    {
+                        self.inspect_versions(&versions, &mut inventory)?;
+                    }
                 }
                 CURRENT => {
-                    let current =
-                        open_managed_directory(&root, self.root_path(), CURRENT, CURRENT_IDENTITY)
-                            .map_err(|error| store_fault(&error))?;
-                    inspect_selections(&current, &mut inventory)?;
+                    if let Some(current) = open_readable_managed_directory(
+                        &root,
+                        self.root_path(),
+                        CURRENT,
+                        CURRENT_IDENTITY,
+                    )
+                    .map_err(|error| store_fault(&error))?
+                    {
+                        inspect_selections(&current, &mut inventory)?;
+                    }
                 }
                 stage if is_stage_name(stage) => {
-                    match sweep_stage(&root, self.root_path(), stage, SweepAction::Inspect) {
+                    match sweep_stage(
+                        &root,
+                        self.root_path(),
+                        stage,
+                        SweepAction::Inspect,
+                        self.faults(),
+                    ) {
                         Ok(()) => inventory.stale_stages += 1,
                         Err(reason) => inventory.retained_stages.push(reason),
                     }
@@ -216,16 +234,22 @@ impl ManagedArtifactStore {
             return Ok(false);
         };
         validate_install_guard(guard, &root, self.root_path())?;
-        if !root
-            .try_exists(CURRENT)
+        // No selection folder, or an unfinished one, selects nothing.
+        let Some(current) =
+            open_readable_managed_directory(&root, self.root_path(), CURRENT, CURRENT_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?
+        else {
+            return Ok(false);
+        };
+        let pending = format!("{component}.pending");
+        if current
+            .try_exists(&pending)
             .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
         {
-            return Ok(false);
+            remove_known_regular_file_if_present(&current, &pending)
+                .map_err(ManagedRuntimePublicationError::Storage)?;
+            self.pointer_removed(&current)?;
         }
-        let current = open_managed_directory(&root, self.root_path(), CURRENT, CURRENT_IDENTITY)
-            .map_err(ManagedRuntimePublicationError::Storage)?;
-        remove_known_regular_file_if_present(&current, &format!("{component}.pending"))
-            .map_err(ManagedRuntimePublicationError::Storage)?;
         let name = format!("{component}.current");
         match current.symlink_metadata(&name) {
             Ok(metadata) => {
@@ -234,6 +258,7 @@ impl ManagedArtifactStore {
                 current.remove_file(&name).map_err(|_| {
                     ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io)
                 })?;
+                self.pointer_removed(&current)?;
                 Ok(true)
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -283,21 +308,21 @@ impl ManagedArtifactStore {
             }
         }
         stages.sort();
+        let faults = self.faults();
         for stage in &stages {
-            let outcome = sweep_stage(&root, self.root_path(), stage, SweepAction::Inspect)
-                .and_then(|()| sweep_stage(&root, self.root_path(), stage, SweepAction::Remove));
+            let outcome = sweep_stage(&root, self.root_path(), stage, SweepAction::Inspect, faults)
+                .and_then(|()| {
+                    sweep_stage(&root, self.root_path(), stage, SweepAction::Remove, faults)
+                });
             match outcome {
                 Ok(()) => sweep.removed += 1,
                 Err(reason) => sweep.retained.push(reason),
             }
         }
-        if root
-            .try_exists(CURRENT)
-            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
+        if let Some(current) =
+            open_readable_managed_directory(&root, self.root_path(), CURRENT, CURRENT_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?
         {
-            let current =
-                open_managed_directory(&root, self.root_path(), CURRENT, CURRENT_IDENTITY)
-                    .map_err(ManagedRuntimePublicationError::Storage)?;
             let mut pending = Vec::new();
             for entry in current
                 .entries()
@@ -319,10 +344,21 @@ impl ManagedArtifactStore {
                 // left for the user, and repair keeps reporting it.
                 if remove_known_regular_file_if_present(&current, &name).is_ok() {
                     sweep.interrupted_selections_removed += 1;
+                    self.pointer_removed(&current)?;
                 }
             }
         }
         Ok(sweep)
+    }
+
+    /// After a selection pointer (or a pending one) is removed: flushes the
+    /// selection folder, so the removal survives a power loss.
+    fn pointer_removed(&self, current: &Dir) -> Result<(), ManagedRuntimePublicationError> {
+        self.faults().reach(FaultPoint::ManagedPointerRemoved);
+        self.faults()
+            .trace(ManagedTrace::Step(ManagedStep::PointerRemoved));
+        flush_directory(current, ManagedFolder::Current, self.faults())
+            .map_err(ManagedRuntimePublicationError::Storage)
     }
 }
 
@@ -409,6 +445,17 @@ fn version_state(
     match directory.try_exists(VERSION_MANIFEST) {
         Ok(true) => {}
         Ok(false) if removing => return ManagedVersionState::RemovalInterrupted,
+        // A publication renames a complete folder into place, so an empty
+        // version folder is what a removal killed after its tombstone and
+        // before the folder leaves (P13 PR 7); `setup remove --version`
+        // finishes it.
+        Ok(false)
+            if directory
+                .entries()
+                .is_ok_and(|mut entries| entries.next().is_none()) =>
+        {
+            return ManagedVersionState::RemovalInterrupted;
+        }
         Ok(false) => return unverified(MissingManifest),
         Err(_) => return unverified(Unreadable),
     }
@@ -479,6 +526,7 @@ fn sweep_stage(
     root_path: &Path,
     name: &str,
     action: SweepAction,
+    faults: &FaultPlan,
 ) -> Result<(), StageRetentionReason> {
     let unproved = StageRetentionReason::OwnershipUnproved;
     let unexpected = StageRetentionReason::UnexpectedContent;
@@ -491,7 +539,7 @@ fn sweep_stage(
     let stage_path = root_path.join(name);
     validate_private_root(&stage_path, &stage).map_err(|_| unproved)?;
     if check_marker(&stage, STAGE_MARKER, STAGE_IDENTITY).is_err() {
-        return sweep_unmarked_stage(root, name, stage, action);
+        return sweep_unmarked_stage(root, name, stage, action, faults);
     }
     let mut folders = Vec::new();
     for entry in stage.entries().map_err(|_| storage)? {
@@ -513,7 +561,7 @@ fn sweep_stage(
         }
     }
     for folder in &folders {
-        sweep_stage_folder(&stage, &stage_path, folder, action)?;
+        sweep_stage_folder(&stage, &stage_path, folder, action, faults)?;
     }
     if action == SweepAction::Inspect {
         return Ok(());
@@ -522,14 +570,29 @@ fn sweep_stage(
         Ok(metadata) => {
             validate_owned_regular_file(&metadata).map_err(|_| unexpected)?;
             stage.remove_file(ARTIFACT).map_err(|_| storage)?;
+            faults.reach(FaultPoint::ManagedStageArtifactRemoved);
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(_) => return Err(storage),
     }
     // The marker last: until it goes, the stage is still recognisably ours.
     stage.remove_file(STAGE_MARKER).map_err(|_| storage)?;
+    faults.reach(FaultPoint::ManagedStageMarkerRemoved);
     drop(stage);
-    root.remove_dir(name).map_err(|_| storage)
+    remove_stage_folder(root, name, faults)
+}
+
+/// Removes an emptied stage folder and flushes the root, so a reported
+/// sweep survives a power loss.
+fn remove_stage_folder(
+    root: &Dir,
+    name: &str,
+    faults: &FaultPlan,
+) -> Result<(), StageRetentionReason> {
+    let storage = StageRetentionReason::StorageFailure;
+    root.remove_dir(name).map_err(|_| storage)?;
+    faults.trace(ManagedTrace::Step(ManagedStep::StageRemoved));
+    flush_directory(root, ManagedFolder::Root, faults).map_err(|_| storage)
 }
 
 /// One flat folder of a stage: every entry a single-link regular file.
@@ -538,6 +601,7 @@ fn sweep_stage_folder(
     stage_path: &Path,
     folder: &str,
     action: SweepAction,
+    faults: &FaultPlan,
 ) -> Result<(), StageRetentionReason> {
     let unexpected = StageRetentionReason::UnexpectedContent;
     let storage = StageRetentionReason::StorageFailure;
@@ -559,12 +623,15 @@ fn sweep_stage_folder(
         let metadata = held.symlink_metadata(entry_name).map_err(|_| unexpected)?;
         validate_owned_regular_file(&metadata).map_err(|_| unexpected)?;
         held.remove_file(entry_name).map_err(|_| storage)?;
+        faults.reach(FaultPoint::ManagedStageFileRemoved);
     }
     let at_name = stage.open_dir_nofollow(folder).map_err(|_| unexpected)?;
     validate_same_held_directory(&at_name, &held).map_err(|_| unexpected)?;
     drop(at_name);
     drop(held);
-    stage.remove_dir(folder).map_err(|_| unexpected)
+    stage.remove_dir(folder).map_err(|_| unexpected)?;
+    faults.reach(FaultPoint::ManagedStageFolderRemoved);
+    Ok(())
 }
 
 /// A stage whose marker is missing or incomplete.
@@ -573,6 +640,7 @@ fn sweep_unmarked_stage(
     name: &str,
     stage: Dir,
     action: SweepAction,
+    faults: &FaultPlan,
 ) -> Result<(), StageRetentionReason> {
     let unproved = StageRetentionReason::OwnershipUnproved;
     let storage = StageRetentionReason::StorageFailure;
@@ -588,25 +656,18 @@ fn sweep_unmarked_stage(
         }
     };
     drop(entries);
-    if marker_only {
-        let metadata = stage.symlink_metadata(STAGE_MARKER).map_err(|_| unproved)?;
-        validate_owned_regular_file(&metadata).map_err(|_| unproved)?;
-        let partial = read_private_regular_file(&stage, STAGE_MARKER, STAGE_IDENTITY.len() as u64)
-            .map_or(metadata.len() == 0, |bytes| {
-                bytes.len() < STAGE_IDENTITY.len() && STAGE_IDENTITY.starts_with(&bytes)
-            });
-        if !partial {
-            return Err(unproved);
-        }
+    if marker_only && !partial_marker(&stage, STAGE_MARKER, STAGE_IDENTITY) {
+        return Err(unproved);
     }
     if action == SweepAction::Inspect {
         return Ok(());
     }
     if marker_only {
         stage.remove_file(STAGE_MARKER).map_err(|_| storage)?;
+        faults.reach(FaultPoint::ManagedStageMarkerRemoved);
     }
     drop(stage);
-    root.remove_dir(name).map_err(|_| storage)
+    remove_stage_folder(root, name, faults)
 }
 
 /// The application's read port over a managed root: inspection only, with

@@ -27,6 +27,10 @@ use crate::{
     ReviewedArchiveFile, TarInventoryError, XzTarInventoryError,
     archive_inventory::safe_archive_path,
     bounded_tar_inventory::safe_staging_name,
+    fault_point::{
+        FaultPlan, FaultPoint, ManagedFolder, ManagedStep, ManagedTrace, SharedFaultPlan,
+        shared_plan_from_environment,
+    },
     private_user_root::{
         PrivateRootError, open_private_root_with_creation, validate_private_root,
         validate_same_held_directory,
@@ -281,6 +285,9 @@ pub struct ManagedArtifactStore {
     /// are written, as a full disk would (the D-03 disk-full case).
     #[cfg(any(test, feature = "install-test-hooks"))]
     stage_write_limit: Option<u64>,
+    /// The managed fault points this handle, its clones and its stages
+    /// share (P13 PR 7); empty unless a development build selected one.
+    faults: SharedFaultPlan,
 }
 
 /// Exclusive root-wide authority for one managed installation transaction.
@@ -341,6 +348,7 @@ impl ManagedArtifactStore {
             root_path,
             #[cfg(any(test, feature = "install-test-hooks"))]
             stage_write_limit: None,
+            faults: shared_plan_from_environment(),
         })
     }
 
@@ -348,6 +356,11 @@ impl ManagedArtifactStore {
     #[must_use]
     pub fn root_path(&self) -> &Path {
         &self.root_path
+    }
+
+    /// The fault plan this handle shares with its clones and stages.
+    pub(crate) fn faults(&self) -> &FaultPlan {
+        &self.faults
     }
 
     /// Makes every streamed stage write fail with an I/O error once `bytes`
@@ -444,24 +457,15 @@ impl ManagedArtifactStore {
         else {
             return Ok(None);
         };
-        let versions_exists = root
-            .try_exists(VERSIONS)
-            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
-        let current_exists = root
-            .try_exists(CURRENT)
-            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
-        if !versions_exists && !current_exists {
+        // No selection folder, or one whose creation a killed install left
+        // unfinished, selects nothing: the first publication creates
+        // `versions-v1` before `current-v1` (P13 PR 7).
+        let Some(current) =
+            open_readable_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?
+        else {
             return Ok(None);
-        }
-        if !versions_exists || !current_exists {
-            return Err(ManagedRuntimePublicationError::Storage(
-                ManagedArtifactError::UnsafeStorage,
-            ));
-        }
-        let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
-            .map_err(ManagedRuntimePublicationError::Storage)?;
-        let current = open_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
-            .map_err(ManagedRuntimePublicationError::Storage)?;
+        };
         let current_name = format!("{component}.current");
         if !current
             .try_exists(&current_name)
@@ -469,6 +473,13 @@ impl ManagedArtifactStore {
         {
             return Ok(None);
         }
+        // A pointer names a published version, so its folder must exist.
+        let versions =
+            open_readable_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?
+                .ok_or(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage,
+                ))?;
         let pointer = read_current_pointer(&current, &current_name)?;
         if pointer.identity.component() != component {
             return Err(ManagedRuntimePublicationError::Storage(
@@ -559,8 +570,6 @@ impl ManagedArtifactStore {
         validate_install_guard(guard, &root, &self.root_path)?;
         let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
             .map_err(ManagedRuntimePublicationError::Storage)?;
-        let current = open_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
-            .map_err(ManagedRuntimePublicationError::Storage)?;
         let published = open_published_runtime_from_manifest(
             &self.root_path,
             &versions,
@@ -573,7 +582,17 @@ impl ManagedArtifactStore {
             MAX_VERSION_METADATA_BYTES,
         )
         .map_err(ManagedRuntimePublicationError::Storage)?;
-        write_current_pointer(&current, identity, &manifest, fault)?;
+        // Under the guard a selection may create the selection folder, or
+        // finish one a killed first install left without its marker.
+        let current = open_or_create_managed_directory(
+            &root,
+            &self.root_path,
+            CURRENT,
+            CURRENT_IDENTITY,
+            &self.faults,
+        )
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+        write_current_pointer(&current, identity, &manifest, fault, &self.faults)?;
         Ok(published)
     }
 
@@ -610,13 +629,16 @@ impl ManagedArtifactStore {
         validate_install_guard(guard, &root, &self.root_path)?;
         let versions = open_managed_directory(&root, &self.root_path, VERSIONS, VERSIONS_IDENTITY)
             .map_err(ManagedRuntimePublicationError::Storage)?;
-        let current = open_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
-            .map_err(ManagedRuntimePublicationError::Storage)?;
+        // No selection folder (or an unfinished one) selects nothing.
+        let current =
+            open_readable_managed_directory(&root, &self.root_path, CURRENT, CURRENT_IDENTITY)
+                .map_err(ManagedRuntimePublicationError::Storage)?;
         let current_name = identity.current_name();
-        if current
-            .try_exists(&current_name)
-            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
-            && read_current_pointer(&current, &current_name)?.identity == *identity
+        if let Some(current) = &current
+            && current
+                .try_exists(&current_name)
+                .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?
+            && read_current_pointer(current, &current_name)?.identity == *identity
         {
             return Ok(ManagedVersionRemovalOutcome::Selected);
         }
@@ -642,14 +664,11 @@ impl ManagedArtifactStore {
         )
         .map_err(map_private_error)
         .map_err(ManagedRuntimePublicationError::Storage)?;
-        if finish_manifestless_removal(&directory)
+        if finish_manifestless_removal(&directory, &self.faults)
             .map_err(ManagedRuntimePublicationError::Storage)?
         {
             drop(directory);
-            versions
-                .remove_dir(&version_name)
-                .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
-            return Ok(ManagedVersionRemovalOutcome::Removed);
+            return remove_version_folder(&versions, &version_name, &self.faults);
         }
         let manifest =
             read_private_regular_file(&directory, VERSION_MANIFEST, MAX_VERSION_METADATA_BYTES)
@@ -663,6 +682,9 @@ impl ManagedArtifactStore {
         let removing = directory
             .try_exists(VERSION_REMOVING)
             .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+        if removing {
+            finish_partial_tombstone(&directory, &self.faults)?;
+        }
         // Ownership, not integrity: every entry must be a name the manifest
         // or the version's metadata gives, a single-link regular file. A
         // file whose bytes or mode changed is still VSift's own file in its
@@ -678,19 +700,15 @@ impl ManagedArtifactStore {
             check_marker(&directory, VERSION_REMOVING, REMOVING_IDENTITY)
                 .map_err(ManagedRuntimePublicationError::Storage)?;
         } else {
-            write_marker(&directory, VERSION_REMOVING, REMOVING_IDENTITY)
-                .map_err(ManagedRuntimePublicationError::Storage)?;
+            write_tombstone(&directory, &self.faults)?;
         }
         drop(use_lock);
         validate_version_contents(&directory, &files, true, ContentCheck::Ownership)
             .map_err(ManagedRuntimePublicationError::Storage)?;
-        remove_managed_version_files(&directory, &files, fault)
+        remove_managed_version_files(&directory, &files, fault, &self.faults)
             .map_err(ManagedRuntimePublicationError::Storage)?;
         drop(directory);
-        versions
-            .remove_dir(&version_name)
-            .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
-        Ok(ManagedVersionRemovalOutcome::Removed)
+        remove_version_folder(&versions, &version_name, &self.faults)
     }
 
     /// Imports exact reviewed bytes into a new, private, unactivated directory.
@@ -721,6 +739,7 @@ impl ManagedArtifactStore {
             staged.discard()?;
             return Err(error);
         }
+        self.faults.reach(FaultPoint::ManagedArtifactWritten);
         Ok(staged)
     }
 
@@ -757,6 +776,7 @@ impl ManagedArtifactStore {
         builder.mode(0o700);
         root.create_dir_with(Path::new(&stage_name), &builder)
             .map_err(|_| ManagedArtifactError::Io)?;
+        self.faults.reach(FaultPoint::ManagedDirectoryCreated);
         let stage = root
             .open_dir_nofollow(&stage_name)
             .map_err(|_| ManagedArtifactError::Io)?;
@@ -766,9 +786,10 @@ impl ManagedArtifactStore {
                 .map_err(|_| ManagedArtifactError::Io)?;
             return Err(map_private_error(error));
         }
-        if let Err(error) = write_marker(&stage, STAGE_MARKER, STAGE_IDENTITY) {
+        if let Err(error) = write_marker(&stage, STAGE_MARKER, STAGE_IDENTITY, &self.faults) {
             drop(stage);
-            // A partial marker is an ambiguous directory; leave it for explicit repair.
+            // A stage with a partial marker is left for the stale-stage
+            // sweep, which recognises exactly that shape.
             return Err(error);
         }
         let stage_path = self.root_path.join(&stage_name);
@@ -778,6 +799,7 @@ impl ManagedArtifactStore {
             stage_name,
             stage_path,
             integrity,
+            faults: SharedFaultPlan::clone(&self.faults),
         };
         Ok(staged)
     }
@@ -787,13 +809,43 @@ impl ManagedArtifactStore {
             .map_err(map_private_error)?
             .ok_or(ManagedArtifactError::Unavailable)?;
         if created {
-            write_marker(&root, ROOT_MARKER, ROOT_IDENTITY)?;
-        } else {
-            check_marker(&root, ROOT_MARKER, ROOT_IDENTITY)?;
+            self.faults.reach(FaultPoint::ManagedDirectoryCreated);
+            self.faults
+                .trace(ManagedTrace::Step(ManagedStep::RootCreated));
+            self.flush_root_ancestors()?;
+            write_marker(&root, ROOT_MARKER, ROOT_IDENTITY, &self.faults)?;
+            flush_directory(&root, ManagedFolder::Root, &self.faults)?;
+        } else if check_marker(&root, ROOT_MARKER, ROOT_IDENTITY).is_err() {
+            // A first install killed after creating the private root and
+            // before its marker was complete left the root empty, or holding
+            // only the start of the marker (P13 PR 7). Nothing else creates
+            // that shape, so it is finished; any other content stays unowned.
+            if !interrupted_creation(&root, ROOT_MARKER, ROOT_IDENTITY)? {
+                return Err(ManagedArtifactError::UnsafeStorage);
+            }
+            finish_interrupted_creation(&root, ROOT_MARKER, ROOT_IDENTITY, &self.faults)?;
+            self.flush_root_ancestors()?;
+            flush_directory(&root, ManagedFolder::Root, &self.faults)?;
         }
         Ok(root)
     }
 
+    /// Flushes the folder that holds the managed root and the one above it,
+    /// the folders a first install creates (`vsift/` and, on a new account,
+    /// the data folder), so the new root's entry survives a power loss.
+    fn flush_root_ancestors(&self) -> Result<(), ManagedArtifactError> {
+        for ancestor in self.root_path.ancestors().skip(1).take(2) {
+            let Ok(parent) = Dir::open_ambient_dir(ancestor, cap_std::ambient_authority()) else {
+                continue;
+            };
+            flush_directory(&parent, ManagedFolder::Parent, &self.faults)?;
+        }
+        Ok(())
+    }
+
+    /// The managed root when this user has one; `None` when there is none,
+    /// or only a root whose creation was interrupted before its marker was
+    /// complete, which holds nothing yet.
     pub(crate) fn open_existing_root(&self) -> Result<Option<Dir>, ManagedArtifactError> {
         let Some((root, created)) =
             open_private_root_with_creation(&self.root_path, false).map_err(map_private_error)?
@@ -803,7 +855,13 @@ impl ManagedArtifactStore {
         if created {
             return Err(ManagedArtifactError::UnsafeStorage);
         }
-        check_marker(&root, ROOT_MARKER, ROOT_IDENTITY)?;
+        if let Err(error) = check_marker(&root, ROOT_MARKER, ROOT_IDENTITY) {
+            return if interrupted_creation(&root, ROOT_MARKER, ROOT_IDENTITY)? {
+                Ok(None)
+            } else {
+                Err(error)
+            };
+        }
         Ok(Some(root))
     }
 }
@@ -831,7 +889,17 @@ impl StreamingManagedArtifact {
             .write_all(chunk)
             .await
             .map_err(|_| ManagedArtifactError::Io)?;
+        let first = self.written == 0 && written > 0;
         self.written = written;
+        if first {
+            // The kill of an interrupted download: the bytes so far are
+            // handed to the kernel before the process stops.
+            self.file
+                .flush()
+                .await
+                .map_err(|_| ManagedArtifactError::Io)?;
+            self.staged.faults.reach(FaultPoint::ManagedArtifactPartial);
+        }
         Ok(())
     }
 
@@ -842,7 +910,9 @@ impl StreamingManagedArtifact {
         self.file
             .sync_all()
             .await
-            .map_err(|_| ManagedArtifactError::Io)
+            .map_err(|_| ManagedArtifactError::Io)?;
+        self.staged.faults.reach(FaultPoint::ManagedArtifactWritten);
+        Ok(())
     }
 
     pub(crate) fn complete(self) -> StagedManagedArtifact {
@@ -874,6 +944,8 @@ pub struct StagedManagedArtifact {
     stage_name: String,
     stage_path: PathBuf,
     integrity: ArtifactIntegrity,
+    /// The fault plan of the store handle that created this stage.
+    faults: SharedFaultPlan,
 }
 
 impl StagedManagedArtifact {
@@ -953,6 +1025,7 @@ impl StagedManagedArtifact {
             selected.discard().map_err(ManagedPayloadError::Storage)?;
             return Err(error);
         }
+        self.faults.reach(FaultPoint::ManagedPayloadStaged);
         Ok(selected)
     }
 
@@ -1033,6 +1106,7 @@ impl StagedManagedArtifact {
                 integrity: file.integrity,
             });
         }
+        self.faults.reach(FaultPoint::ManagedPayloadStaged);
         Ok(StagedManagedPayload {
             artifact: self,
             payload,
@@ -1095,7 +1169,9 @@ impl StagedManagedArtifact {
         drop(payload);
         self.stage
             .remove_dir(name)
-            .map_err(|_| ManagedArtifactError::Io)
+            .map_err(|_| ManagedArtifactError::Io)?;
+        self.faults.reach(FaultPoint::ManagedStageFolderRemoved);
+        Ok(())
     }
 
     fn remove_reviewed_runtime(
@@ -1130,9 +1206,12 @@ impl StagedManagedArtifact {
         }
         for name in reviewed_names {
             match runtime.symlink_metadata(name) {
-                Ok(metadata) if metadata.is_file() && metadata.nlink() == 1 => runtime
-                    .remove_file(name)
-                    .map_err(|_| ManagedArtifactError::Io)?,
+                Ok(metadata) if metadata.is_file() && metadata.nlink() == 1 => {
+                    runtime
+                        .remove_file(name)
+                        .map_err(|_| ManagedArtifactError::Io)?;
+                    self.faults.reach(FaultPoint::ManagedStageFileRemoved);
+                }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 _ => return Err(ManagedArtifactError::UnsafeStorage),
             }
@@ -1164,6 +1243,7 @@ impl StagedManagedArtifact {
             stage_name,
             stage_path: _,
             integrity: _,
+            faults,
         } = self;
         check_marker(&root, ROOT_MARKER, ROOT_IDENTITY)?;
         check_marker(&stage, STAGE_MARKER, STAGE_IDENTITY)?;
@@ -1186,6 +1266,7 @@ impl StagedManagedArtifact {
                 stage
                     .remove_file(ARTIFACT)
                     .map_err(|_| ManagedArtifactError::Io)?;
+                faults.reach(FaultPoint::ManagedStageArtifactRemoved);
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             _ => return Err(ManagedArtifactError::UnsafeStorage),
@@ -1193,6 +1274,7 @@ impl StagedManagedArtifact {
         stage
             .remove_file(STAGE_MARKER)
             .map_err(|_| ManagedArtifactError::Io)?;
+        faults.reach(FaultPoint::ManagedStageMarkerRemoved);
         drop(stage);
         root.remove_dir(&stage_name)
             .map_err(|_| ManagedArtifactError::Io)
@@ -1346,9 +1428,11 @@ impl StagedManagedPayload<'_> {
                 created.push(file.name.clone());
                 transfer_verified(&mut source, &mut output, file.integrity)
                     .map_err(ManagedRuntimeLayoutError::Transfer)?;
-                output
-                    .sync_all()
-                    .map_err(|_| ManagedRuntimeLayoutError::Storage(ManagedArtifactError::Io))?;
+                if !managed_negative_control() {
+                    output.sync_all().map_err(|_| {
+                        ManagedRuntimeLayoutError::Storage(ManagedArtifactError::Io)
+                    })?;
+                }
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -1373,6 +1457,9 @@ impl StagedManagedPayload<'_> {
                 .map_err(ManagedRuntimeLayoutError::Storage)?;
             return Err(error);
         }
+        self.artifact
+            .faults
+            .reach(FaultPoint::ManagedRuntimePrepared);
         Ok(PreparedManagedRuntime {
             payload: self,
             runtime: Some(runtime),
@@ -1487,9 +1574,12 @@ impl StagedManagedPayload<'_> {
         }
         for file in &selected {
             match payload.symlink_metadata(&file.name) {
-                Ok(metadata) if metadata.is_file() && metadata.nlink() == 1 => payload
-                    .remove_file(&file.name)
-                    .map_err(|_| ManagedArtifactError::Io)?,
+                Ok(metadata) if metadata.is_file() && metadata.nlink() == 1 => {
+                    payload
+                        .remove_file(&file.name)
+                        .map_err(|_| ManagedArtifactError::Io)?;
+                    artifact.faults.reach(FaultPoint::ManagedStageFileRemoved);
+                }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 _ => return Err(ManagedArtifactError::UnsafeStorage),
             }
@@ -1642,16 +1732,23 @@ impl PreparedManagedRuntime<'_, '_> {
                 ManagedArtifactError::UnsafeStorage,
             ));
         }
+        let faults: &FaultPlan = &artifact.faults;
         let versions = open_or_create_managed_directory(
             &artifact.root,
             root_path,
             VERSIONS,
             VERSIONS_IDENTITY,
+            faults,
         )
         .map_err(ManagedRuntimePublicationError::Storage)?;
-        let current =
-            open_or_create_managed_directory(&artifact.root, root_path, CURRENT, CURRENT_IDENTITY)
-                .map_err(ManagedRuntimePublicationError::Storage)?;
+        let current = open_or_create_managed_directory(
+            &artifact.root,
+            root_path,
+            CURRENT,
+            CURRENT_IDENTITY,
+            faults,
+        )
+        .map_err(ManagedRuntimePublicationError::Storage)?;
         let manifest = version_manifest(identity, &self.files);
         let runtime = self
             .runtime
@@ -1659,7 +1756,7 @@ impl PreparedManagedRuntime<'_, '_> {
             .ok_or(ManagedRuntimePublicationError::Storage(
                 ManagedArtifactError::UnsafeStorage,
             ))?;
-        prepare_version_metadata(runtime, &manifest)?;
+        prepare_version_metadata(runtime, &manifest, faults)?;
 
         let version_name = identity.version_directory_name();
         let version_exists = versions
@@ -1684,8 +1781,11 @@ impl PreparedManagedRuntime<'_, '_> {
             artifact
                 .remove_reviewed_runtime(candidate, &reviewed_names)
                 .map_err(ManagedRuntimePublicationError::Storage)?;
+            // Published by an earlier run: its entry is flushed again
+            // before a pointer names it.
+            version_published(&versions, faults)?;
             inject_publication_fault(fault, ManagedPublicationBoundary::VersionPublished)?;
-            write_current_pointer(&current, identity, &manifest, fault)?;
+            write_current_pointer(&current, identity, &manifest, fault, faults)?;
             return Ok(existing);
         }
 
@@ -1714,8 +1814,9 @@ impl PreparedManagedRuntime<'_, '_> {
             .map_err(ManagedRuntimePublicationError::Storage)?;
         let published =
             open_published_runtime(root_path, &versions, identity, &manifest, &self.files)?;
+        version_published(&versions, faults)?;
         inject_publication_fault(fault, ManagedPublicationBoundary::VersionPublished)?;
-        write_current_pointer(&current, identity, &manifest, fault)?;
+        write_current_pointer(&current, identity, &manifest, fault, faults)?;
         Ok(published)
     }
 
@@ -2113,6 +2214,7 @@ impl StagedManagedCandidate {
     pub(crate) fn create_smoke_directory(&self) -> Result<(Dir, PathBuf), ManagedArtifactError> {
         self.prove_ownership()?;
         let directory = self.artifact.create_private_child(SMOKE)?;
+        self.artifact.faults.reach(FaultPoint::ManagedSmokeStarted);
         Ok((directory, self.artifact.stage_path.join(SMOKE)))
     }
 
@@ -2199,6 +2301,8 @@ impl StagedManagedCandidate {
         Result<PublishedManagedRuntime, ManagedRuntimePublicationError>,
         StageDisposal,
     ) {
+        // Only a candidate whose smoke passed is published.
+        self.artifact.faults.reach(FaultPoint::ManagedSmokePassed);
         let Self {
             artifact,
             component,
@@ -2484,12 +2588,21 @@ pub(crate) fn validate_install_guard(
         .map_err(ManagedRuntimePublicationError::Storage)
 }
 
+/// Opens one of the store's own folders (`versions-v1`, `current-v1`) under
+/// the install guard, creating it when it is absent and finishing it when a
+/// killed install left it without a complete marker (P13 PR 7).
 fn open_or_create_managed_directory(
     root: &Dir,
     root_path: &Path,
     name: &str,
     identity: &[u8],
+    faults: &FaultPlan,
 ) -> Result<Dir, ManagedArtifactError> {
+    let folder = if name == VERSIONS {
+        ManagedFolder::Versions
+    } else {
+        ManagedFolder::Current
+    };
     let exists = root
         .try_exists(name)
         .map_err(|_| ManagedArtifactError::Io)?;
@@ -2500,16 +2613,152 @@ fn open_or_create_managed_directory(
         builder.mode(0o700);
         root.create_dir_with(name, &builder)
             .map_err(|_| ManagedArtifactError::Io)?;
+        faults.reach(FaultPoint::ManagedDirectoryCreated);
+        faults.trace(ManagedTrace::Step(ManagedStep::FolderCreated(folder)));
+        flush_directory(root, ManagedFolder::Root, faults)?;
     }
+    let directory = root
+        .open_dir_nofollow(name)
+        .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+    validate_private_root(&root_path.join(name), &directory).map_err(map_private_error)?;
     if !exists {
-        let directory = root
-            .open_dir_nofollow(name)
-            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
-        validate_private_root(&root_path.join(name), &directory).map_err(map_private_error)?;
-        write_marker(&directory, DIRECTORY_MARKER, identity)?;
+        write_marker(&directory, DIRECTORY_MARKER, identity, faults)?;
+        flush_directory(&directory, folder, faults)?;
+    } else if check_marker(&directory, DIRECTORY_MARKER, identity).is_err()
+        && interrupted_creation(&directory, DIRECTORY_MARKER, identity)?
+    {
+        finish_interrupted_creation(&directory, DIRECTORY_MARKER, identity, faults)?;
+        flush_directory(&directory, folder, faults)?;
     }
+    drop(directory);
     open_managed_directory(root, root_path, name, identity)
 }
+
+/// Opens one of the store's own folders for reading: `None` when it is
+/// absent, or when its creation was interrupted before its marker was
+/// complete (it holds nothing yet); otherwise it must be the private folder
+/// its marker proves.
+pub(crate) fn open_readable_managed_directory(
+    root: &Dir,
+    root_path: &Path,
+    name: &str,
+    identity: &[u8],
+) -> Result<Option<Dir>, ManagedArtifactError> {
+    if !root
+        .try_exists(name)
+        .map_err(|_| ManagedArtifactError::Io)?
+    {
+        return Ok(None);
+    }
+    match open_managed_directory(root, root_path, name, identity) {
+        Ok(directory) => Ok(Some(directory)),
+        Err(error) => {
+            let Ok(directory) = root.open_dir_nofollow(name) else {
+                return Err(error);
+            };
+            if validate_private_root(&root_path.join(name), &directory).is_ok()
+                && interrupted_creation(&directory, DIRECTORY_MARKER, identity)?
+            {
+                Ok(None)
+            } else {
+                Err(error)
+            }
+        }
+    }
+}
+
+/// Whether `directory` is exactly what a creation killed before its marker
+/// was complete leaves: no entry at all, or only `marker`, a single-link
+/// regular file holding a strict prefix of `identity` (possibly nothing).
+///
+/// Every store folder is created, then its marker is created and written
+/// and flushed, before anything else goes into it; so this shape proves the
+/// folder is `VSift`'s own and empty, and nothing else is ever treated so.
+pub(crate) fn interrupted_creation(
+    directory: &Dir,
+    marker: &str,
+    identity: &[u8],
+) -> Result<bool, ManagedArtifactError> {
+    let mut entries = directory.entries().map_err(|_| ManagedArtifactError::Io)?;
+    let Some(entry) = entries.next() else {
+        return Ok(true);
+    };
+    let entry = entry.map_err(|_| ManagedArtifactError::Io)?;
+    if entry.file_name() != marker || entries.next().is_some() {
+        return Ok(false);
+    }
+    drop(entries);
+    Ok(partial_marker(directory, marker, identity))
+}
+
+/// Whether `name` in `directory` is a single-link regular file holding a
+/// strict prefix of `identity` (possibly nothing): a marker whose writing
+/// was interrupted.
+pub(crate) fn partial_marker(directory: &Dir, name: &str, identity: &[u8]) -> bool {
+    let Ok(metadata) = directory.symlink_metadata(name) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.nlink() != 1 || metadata.len() >= identity.len() as u64 {
+        return false;
+    }
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let Ok(file) = directory.open_with(name, &options) else {
+        return false;
+    };
+    let mut bytes = Vec::with_capacity(identity.len());
+    if file
+        .take(identity.len() as u64)
+        .read_to_end(&mut bytes)
+        .is_err()
+    {
+        return false;
+    }
+    bytes.len() < identity.len() && identity.starts_with(&bytes)
+}
+
+/// Finishes a folder whose creation was interrupted: removes its partial
+/// marker, if any, and writes the whole marker.
+fn finish_interrupted_creation(
+    directory: &Dir,
+    marker: &str,
+    identity: &[u8],
+    faults: &FaultPlan,
+) -> Result<(), ManagedArtifactError> {
+    match directory.symlink_metadata(marker) {
+        Ok(metadata) => {
+            validate_owned_regular_file(&metadata)?;
+            directory
+                .remove_file(marker)
+                .map_err(|_| ManagedArtifactError::Io)?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(ManagedArtifactError::UnsafeStorage),
+    }
+    write_marker(directory, marker, identity, faults)
+}
+
+/// Whether the crash campaign's negative control is on: a
+/// `durability-campaign` build with `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1`
+/// skips every folder flush and the flush of each runtime file before
+/// publication, so a power loss can undo a reported command and leave a
+/// published version with missing bytes, which the campaign must see (P13
+/// PR 7). Never true in any other build.
+fn managed_negative_control() -> bool {
+    #[cfg(feature = "durability-campaign")]
+    {
+        std::env::var_os(MANAGED_NEGATIVE_CONTROL_VARIABLE).is_some_and(|value| value == "1")
+    }
+    #[cfg(not(feature = "durability-campaign"))]
+    {
+        false
+    }
+}
+
+/// The session store's negative-control switch, read here too so one
+/// campaign variable controls both stores.
+#[cfg(feature = "durability-campaign")]
+const MANAGED_NEGATIVE_CONTROL_VARIABLE: &str = "VSIFT_CAMPAIGN_NEGATIVE_CONTROL";
 
 pub(crate) fn open_managed_directory(
     root: &Dir,
@@ -2550,19 +2799,36 @@ fn version_manifest(identity: &ManagedRuntimeIdentity, files: &[PlannedRuntimeFi
     manifest.into_bytes()
 }
 
+/// After a version is renamed into `versions-v1` (or found there): flushes
+/// `versions-v1`, so the version survives a power loss before a pointer
+/// names it.
+fn version_published(
+    versions: &Dir,
+    faults: &FaultPlan,
+) -> Result<(), ManagedRuntimePublicationError> {
+    faults.reach(FaultPoint::ManagedVersionPublished);
+    faults.trace(ManagedTrace::Step(ManagedStep::VersionPublished));
+    flush_directory(versions, ManagedFolder::Versions, faults)
+        .map_err(ManagedRuntimePublicationError::Storage)
+}
+
+/// Writes a runtime's manifest and use lock, then flushes the runtime
+/// folder, so every entry of the version is durable before it is published.
 fn prepare_version_metadata(
     runtime: &Dir,
     manifest: &[u8],
+    faults: &FaultPlan,
 ) -> Result<(), ManagedRuntimePublicationError> {
-    write_marker(runtime, VERSION_MANIFEST, manifest)
+    write_marker(runtime, VERSION_MANIFEST, manifest, faults)
         .map_err(ManagedRuntimePublicationError::Storage)?;
-    if let Err(error) = write_marker(runtime, VERSION_USE_LOCK, USE_LOCK_IDENTITY) {
+    if let Err(error) = write_marker(runtime, VERSION_USE_LOCK, USE_LOCK_IDENTITY, faults) {
         runtime
             .remove_file(VERSION_MANIFEST)
             .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
         return Err(ManagedRuntimePublicationError::Storage(error));
     }
-    Ok(())
+    flush_directory(runtime, ManagedFolder::Runtime, faults)
+        .map_err(ManagedRuntimePublicationError::Storage)
 }
 
 fn remove_version_metadata(runtime: &Dir) -> Result<(), ManagedRuntimePublicationError> {
@@ -2849,6 +3115,7 @@ fn remove_managed_version_files(
     directory: &Dir,
     files: &[PublishedRuntimeFile],
     fault: Option<ManagedRemovalBoundary>,
+    faults: &FaultPlan,
 ) -> Result<(), ManagedArtifactError> {
     for file in files {
         match directory.symlink_metadata(&file.name) {
@@ -2857,6 +3124,7 @@ fn remove_managed_version_files(
                 directory
                     .remove_file(&file.name)
                     .map_err(|_| ManagedArtifactError::Io)?;
+                faults.reach(FaultPoint::ManagedVersionFileRemoved);
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => return Err(ManagedArtifactError::UnsafeStorage),
@@ -2866,14 +3134,17 @@ fn remove_managed_version_files(
         return Err(ManagedArtifactError::Io);
     }
     remove_known_regular_file_if_present(directory, VERSION_USE_LOCK)?;
+    faults.reach(FaultPoint::ManagedUseLockRemoved);
     if fault == Some(ManagedRemovalBoundary::UseLock) {
         return Err(ManagedArtifactError::Io);
     }
     remove_known_regular_file_if_present(directory, VERSION_MANIFEST)?;
+    faults.reach(FaultPoint::ManagedManifestRemoved);
     if fault == Some(ManagedRemovalBoundary::VersionManifest) {
         return Err(ManagedArtifactError::Io);
     }
     remove_known_regular_file_if_present(directory, VERSION_REMOVING)?;
+    faults.reach(FaultPoint::ManagedTombstoneRemoved);
     if directory
         .entries()
         .map_err(|_| ManagedArtifactError::Io)?
@@ -2901,7 +3172,99 @@ pub(crate) fn remove_known_regular_file_if_present(
     }
 }
 
-fn finish_manifestless_removal(directory: &Dir) -> Result<bool, ManagedArtifactError> {
+/// Finishes a tombstone a removal killed between creating it and writing it
+/// left holding only the start of its bytes (P13 PR 7). It was created
+/// under the exclusive use lock, and since then every opener has refused the
+/// version, so nothing can hold it; a whole tombstone is left as it is.
+fn finish_partial_tombstone(
+    directory: &Dir,
+    faults: &FaultPlan,
+) -> Result<(), ManagedRuntimePublicationError> {
+    if !partial_marker(directory, VERSION_REMOVING, REMOVING_IDENTITY) {
+        return Ok(());
+    }
+    directory
+        .remove_file(VERSION_REMOVING)
+        .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+    write_tombstone(directory, faults)
+}
+
+/// Writes a version's removal tombstone and flushes the version's folder,
+/// so the tombstone is durable before any of its files is removed.
+fn write_tombstone(
+    directory: &Dir,
+    faults: &FaultPlan,
+) -> Result<(), ManagedRuntimePublicationError> {
+    write_marker(directory, VERSION_REMOVING, REMOVING_IDENTITY, faults)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+    faults.reach(FaultPoint::ManagedTombstoneWritten);
+    faults.trace(ManagedTrace::Step(ManagedStep::TombstoneWritten));
+    flush_directory(directory, ManagedFolder::Version, faults)
+        .map_err(ManagedRuntimePublicationError::Storage)
+}
+
+/// Removes an emptied version folder and flushes `versions-v1`, so a
+/// reported removal survives a power loss.
+fn remove_version_folder(
+    versions: &Dir,
+    version_name: &str,
+    faults: &FaultPlan,
+) -> Result<ManagedVersionRemovalOutcome, ManagedRuntimePublicationError> {
+    versions
+        .remove_dir(version_name)
+        .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+    faults.reach(FaultPoint::ManagedVersionRemoved);
+    faults.trace(ManagedTrace::Step(ManagedStep::VersionRemoved));
+    flush_directory(versions, ManagedFolder::Versions, faults)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
+    Ok(ManagedVersionRemovalOutcome::Removed)
+}
+
+/// Flushes a store folder's entries, so a rename, creation or removal in it
+/// survives a power loss once the command reports success (P13 PR 7).
+///
+/// On Unix the folder is reopened relative to its capability handle (on
+/// Linux that handle can be an `O_PATH` descriptor, which cannot be flushed)
+/// and `fsync`ed, the session store's durable-commit discipline (ADR 0020).
+/// Windows offers no directory flush through a safe standard handle: NTFS
+/// journals the change but gives no flush point here, and managed
+/// installation is not available there (ADR 0023 decision E), so this is a
+/// no-op. The durability claim is qualified on Ubuntu 24.04 with ext4 only.
+/// The crash campaign's negative control skips every flush.
+#[cfg_attr(
+    not(unix),
+    allow(
+        clippy::unnecessary_wraps,
+        reason = "only Unix can fail to flush a folder"
+    )
+)]
+pub(crate) fn flush_directory(
+    directory: &Dir,
+    folder: ManagedFolder,
+    faults: &FaultPlan,
+) -> Result<(), ManagedArtifactError> {
+    faults.trace(ManagedTrace::Flushed(folder));
+    if managed_negative_control() {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    {
+        directory
+            .open(".")
+            .and_then(|handle| handle.sync_all())
+            .map_err(|_| ManagedArtifactError::Io)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = directory;
+        Ok(())
+    }
+}
+
+fn finish_manifestless_removal(
+    directory: &Dir,
+    faults: &FaultPlan,
+) -> Result<bool, ManagedArtifactError> {
     if directory
         .try_exists(VERSION_MANIFEST)
         .map_err(|_| ManagedArtifactError::Io)?
@@ -2925,6 +3288,7 @@ fn finish_manifestless_removal(directory: &Dir) -> Result<bool, ManagedArtifactE
     directory
         .remove_file(VERSION_REMOVING)
         .map_err(|_| ManagedArtifactError::Io)?;
+    faults.reach(FaultPoint::ManagedTombstoneRemoved);
     Ok(true)
 }
 
@@ -2966,6 +3330,7 @@ fn write_current_pointer(
     identity: &ManagedRuntimeIdentity,
     manifest: &[u8],
     fault: Option<ManagedPublicationBoundary>,
+    faults: &FaultPlan,
 ) -> Result<(), ManagedRuntimePublicationError> {
     let pending_name = identity.pending_name();
     if current
@@ -2995,12 +3360,17 @@ fn write_current_pointer(
         pointer.push_str(&previous.manifest_sha256);
         pointer.push('\n');
     }
-    write_marker(current, &pending_name, pointer.as_bytes())
+    write_marker(current, &pending_name, pointer.as_bytes(), faults)
         .map_err(ManagedRuntimePublicationError::Storage)?;
+    faults.reach(FaultPoint::ManagedPointerPrepared);
     inject_publication_fault(fault, ManagedPublicationBoundary::PointerPrepared)?;
     current
         .rename(&pending_name, current, identity.current_name())
         .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
+    faults.reach(FaultPoint::ManagedPointerReplaced);
+    faults.trace(ManagedTrace::Step(ManagedStep::PointerReplaced));
+    flush_directory(current, ManagedFolder::Current, faults)
+        .map_err(ManagedRuntimePublicationError::Storage)?;
     inject_publication_fault(fault, ManagedPublicationBoundary::PointerReplaced)
 }
 
@@ -3171,7 +3541,15 @@ fn validate_runtime_file(
     Ok(())
 }
 
-fn write_marker(directory: &Dir, name: &str, expected: &[u8]) -> Result<(), ManagedArtifactError> {
+/// Creates `name` and writes and flushes `expected` into it. A kill between
+/// the creation and the write leaves an empty file, which every reader of a
+/// marker treats as an interrupted creation (P13 PR 7).
+fn write_marker(
+    directory: &Dir,
+    name: &str,
+    expected: &[u8],
+    faults: &FaultPlan,
+) -> Result<(), ManagedArtifactError> {
     let mut options = OpenOptions::new();
     options
         .write(true)
@@ -3182,6 +3560,7 @@ fn write_marker(directory: &Dir, name: &str, expected: &[u8]) -> Result<(), Mana
     let mut file = directory
         .open_with(name, &options)
         .map_err(|_| ManagedArtifactError::Io)?;
+    faults.reach(FaultPoint::ManagedMarkerCreated);
     file.write_all(expected)
         .and_then(|()| file.sync_all())
         .map_err(|_| ManagedArtifactError::Io)

@@ -938,3 +938,110 @@ job stay PR 10's. The launcher package is `vsift-cli` (the amendment of decision
   remove; `bunx --bun` there ran the command file without making it Node.js's main
   module, so the launcher is split: `bin/vsift.cjs` always calls `main()` of
   `lib/launcher.cjs` rather than testing `require.main` (L-092).
+## Implementation note, 2026-09-30 (P13 PR 7, kill and power-loss tests, step 7)
+
+Section 3 step 7's kill and power-loss qualification of the managed store, and the P13
+stage of the end-to-end spine. The claim is decision H9's, **a crash is detected and
+repaired**, strengthened on review (maintainer, 2026-09-30): **a command that reported
+success survives a power loss** on Ubuntu 24.04 with ext4, because every folder a
+command changes is flushed before it returns (see "Directory flushes" below).
+
+- **Fault points.** The `fault-injection` feature (no new feature; the workflow lint
+  and the crate already refuse it in a release) gains 22 managed points
+  (`FaultPoint::MANAGED`, `vsift-infrastructure/src/fault_point.rs`): a store folder
+  or a marker created but not yet complete; an artifact partly and wholly written; a
+  payload and a runtime staged; the smoke started and passed; a version published; a
+  pointer prepared, replaced and removed; the tombstone written, each file, the use
+  lock, the manifest and the tombstone removed, and the version folder removed; and
+  each file, folder, artifact and marker removed from a stage. A store handle and its
+  clones and stages share one count, so `VSIFT_FAULT_POINT=<name>:<n>` names the `n`-th
+  arrival in a whole command. These cover every crash point of the PR 6 note.
+- **Kill tests** (`vsift-infrastructure/tests/p13_install_transaction/kill.rs`, every
+  CI OS). A child runs one command on a prepared root: `setup install` as the engine
+  composes it (the sweep, the transaction over the local publisher and the real smoke,
+  the bounded cleanup, under one guard), `setup rollback --version`, `setup remove
+  --version`, `setup remove <component>` and `setup remove --stale-stages`, through the
+  use cases the engine calls. It stops at every arrival of every point the command
+  reaches (on Linux; elsewhere the first arrival of each, because managed installation
+  is qualified on Ubuntu only and a smoke there costs seconds;
+  `VSIFT_P13_KILL_EVERY_ARRIVAL=1` runs every arrival anywhere). After each stop the
+  store must be inspectable; each component's selection must be the one before or after
+  the command, and open (which re-hashes it); `setup repair`'s findings must equal what
+  an independent walk of the folder finds (abandoned stages, half-written pointers,
+  interrupted removals), each with an existing command and none `manual`; the install
+  guard must be free; the same command, run again, must complete; and the store must
+  then be healthy once repair's commands ran. Each scenario fails unless every point it
+  names was reached, and the scenarios together reach all 22. Two tests kill the child
+  through the operating system (`SIGKILL`, `TerminateProcess`): once while a download
+  stalls (one abandoned stage, which the next install sweeps) and eight times at spread
+  moments of a whole install. A kill during a smoke can leave its provider finishing
+  for a moment (L-055 on Unix; on Windows the job object ends it, but its image can
+  still be mapped), so the next sweep may keep that stage once; repair then names it,
+  and the tests require exactly that.
+- **Defects the kill tests found, fixed here.** Before this pull request, a first
+  install killed between creating the managed root, `versions-v1` or `current-v1` and
+  completing its marker left a folder no command would open again (`STORAGE_IO`, a
+  manual deletion); a removal killed between creating its tombstone and writing it left
+  a version no `setup remove` could finish; a removal killed after its tombstone and
+  before the folder left an empty folder that `setup repair` called `missing_manifest`
+  and told the user to delete by hand. (Lookup also called a store with `versions-v1`
+  but no `current-v1` unsafe; every caller already treated that as nothing selected.)
+  Now: a folder that holds nothing, or only
+  the start of its marker, is an interrupted creation (every store folder gets its
+  marker, written and flushed, before anything else), which readers treat as absent and
+  guarded writers finish; a partial tombstone is rewritten (it was created under the
+  exclusive use lock, and every opener has refused the version since); an empty version
+  folder is `removal_interrupted` with the fix `setup remove --version`; and a store
+  with no selection folder selects nothing. A rerun of `setup rollback <component>`
+  without `--version` after a rollback killed at its very end returns again, as a
+  second rollback does by design; `setup list` shows which is selected.
+- **Power loss** (`tools/p10-crash-campaign`, `--store managed`; workflow `P13
+  managed power loss`). Layer A of the P10 campaign on a disposable hosted Ubuntu
+  24.04 runner: a fresh ext4 on a dm-log-writes device, a workload of installs with
+  bounded cleanup, reinstalls, rollbacks, version and component removals, abandoned
+  stages and sweeps on one-file stand-in versions, and a replay that rebuilds the
+  device after every flush. At every point: the store is inspectable; a lookup either
+  refuses its selection or returns a version whose file holds exactly the published
+  bytes (read without the store's code); repair names an existing command for every
+  finding and never `manual`, and following it leaves a healthy store; and reinstalling
+  each component's last acknowledged selection completes. An acknowledged command a
+  power loss undid fails the run: the pass rule is zero undone acknowledgements, no
+  damage and a clean `e2fsck`. The negative control (the campaign build's
+  `VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1` skips every folder flush and each runtime file's
+  flush) must lose acknowledgements and still show no damage, or the campaign could not
+  see what it claims to prevent. Between flushes the argument for ext4 is the kill
+  tests': every file the store renames or relies on is flushed before the rename, and
+  ext4's journal commits metadata in order, so a power loss mid-command leaves a state
+  some earlier moment of the command left, which the kill tests prove consistent.
+- **Directory flushes (decided on review, 2026-09-30; supersedes the PR 6 note's "no
+  step fsyncs its directory").** After every rename, removal or creation that commits a
+  state change, the store flushes the folder whose entries changed before it continues
+  or returns (`flush_directory`, the session store's durable-commit discipline of ADR
+  0020: reopen `.` relative to the capability handle, then `fsync`): the runtime folder
+  before its publication rename, then `versions-v1`; `current-v1` after a pointer is
+  replaced (selection, rollback) or removed (deselection, the sweep's pending
+  pointers); a version folder after its tombstone is written, then `versions-v1` after
+  the folder is removed; the root after the sweep removes a stage; and on creation the
+  root's two parent folders and the root, and the root and each of `versions-v1` and
+  `current-v1` with its marker. A flush that fails is `STORAGE_IO`, so success is never
+  reported for a change that may not be durable. Staging, the smoke and a stage's
+  discard after a publication are not flushed: they commit nothing a later command
+  relies on, and a stage a power loss brings back is swept. **Windows:** a directory
+  cannot be flushed through a safe standard handle, so there the flush is a no-op;
+  NTFS journals the change but VSift gives no flush point, and managed installation is
+  not available on Windows (decision E). The durability claim is scoped to Ubuntu
+  24.04 with ext4 (like L-008 and L-056); macOS runs the same `fsync`, unqualified. A
+  unit test (`every_commit_step_is_flushed_before_the_next`,
+  `managed_store_lifecycle/tests.rs`) records every commit step and flush and fails if
+  any step is not followed by its folder's flush before the next step (checked by
+  removing one flush); on Unix the flushes really run in every test. Whether a flush
+  reaches the disk is what only the power-loss campaign can show.
+- **The P13 E2E stage** (`vsift-cli/tests/p13_install_e2e.rs`, `--release`, opt-in,
+  manual workflow `P13 managed smoke`, job `install-e2e`): from a fresh base with an
+  empty `PATH` and nothing configured, the accepted `setup install` is killed by
+  `SIGKILL` during a download and again during a smoke, with `setup repair` and `setup
+  list` checked after each kill; the rerun completes and sweeps the abandoned stages;
+  the A-08 local-ASR journey runs on the managed tools alone; `setup remove
+  whisper_model` makes a retranscription fail `MISSING_CAPABILITY`; and the same
+  accepted plan reinstalls only the model. The npm and archive installs without Rust
+  are PRs 9 and 11.

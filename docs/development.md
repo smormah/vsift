@@ -173,6 +173,15 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   is set (exit status 91, a `VSIFT_FAULT_POINT_REACHED=<name>` line on standard error).
   The feature cannot be compiled without debug assertions and the governance check
   refuses it outside development dependencies; never enable it in a release build.
+  Since P13 PR 7 the managed store has 22 more points (`FaultPoint::MANAGED`,
+  `managed-directory-created` to `managed-stage-marker-removed`); their count spans one
+  store handle, its clones and stages, so `<name>:<n>` is the `n`-th arrival in a whole
+  command. The kill tests of the managed store live in
+  `vsift-infrastructure/tests/p13_install_transaction/kill.rs`, a module of that test
+  compiled when `fault-injection` is on too: `cargo test -p vsift-infrastructure
+  --features fault-injection,install-test-hooks --test p13_install_transaction kill::`.
+  On Linux they try every arrival of every point; elsewhere the first of each, unless
+  `VSIFT_P13_KILL_EVERY_ARRIVAL=1` (about ten minutes on Windows).
 
 - Managed-install transport and transaction (P13 PR 4): the development-only
   `install-test-hooks` feature of `vsift-infrastructure` adds a loopback publisher
@@ -192,6 +201,11 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   (`VSIFT_P13_REAL_INSTALL=1`, `p13_managed_install_real` in `vsift-cli`) runs only on
   Ubuntu 24.04 x86-64, through the manual workflow `P13 managed smoke` (job
   `managed-install`), in a fresh per-user base; it downloads the three pinned artifacts.
+  The P13 stage of the end-to-end spine (`VSIFT_P13_INSTALL_E2E=1`, `p13_install_e2e`
+  in `vsift-cli`, P13 PR 7) runs the same way (job `install-e2e`): it kills the real
+  install with `SIGKILL` twice, reruns it, runs the local-ASR journey on the managed
+  tools and removes and reinstalls the model, downloading the artifacts up to four
+  times.
 
 - Durable-publication crash campaign (P10 PR 4, ADR 0020 section 7): the
   `vsift-crash-campaign` tool in `tools/p10-crash-campaign/` (a workload, a verifier,
@@ -210,6 +224,13 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   retires the pinned cloud-image release, bump `UBUNTU_IMAGE_URL`,
   `UBUNTU_IMAGE_SHA256` and `UBUNTU_IMAGE_BYTES` together from the new release's
   `SHA256SUMS`.
+  Since P13 PR 7 the same tool qualifies the managed store: `--store managed` on
+  `workload` and `replay`, and `layer-a.sh`'s seventh argument `managed`, run the
+  managed workload (stand-in versions, no tools) and hold every replayed flush to
+  zero undone acknowledgements and no damage (ADR 0023 PR 7 note). The manual workflow
+  `P13 managed power loss` runs its positive run and negative control on hosted
+  `ubuntu-24.04` runners; its negative control skips every managed folder flush and
+  each runtime file's flush, and must lose acknowledgements.
 
 - Agent-trial harness (P12 PR 2, ADR 0022 decision 7): `tools/vsift-agent-trials`
   (never published) prepares, runs, grades and records named-client trials of the

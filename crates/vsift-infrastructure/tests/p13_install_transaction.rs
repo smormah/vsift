@@ -55,6 +55,13 @@ use vsift_infrastructure::{
     managed_executable_name, reviewed_compatibility_policy,
 };
 
+// P13 PR 7: the kill tests of the managed store reuse this file's fixture
+// catalogue, local publisher and smoke doubles, and need the development
+// fault points as well (a workspace test run enables both features).
+#[cfg(feature = "fault-injection")]
+#[path = "p13_install_transaction/kill.rs"]
+mod kill;
+
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 const FIXTURE_TOOL: &str = env!("CARGO_BIN_EXE_vsift-smoke-fixture");

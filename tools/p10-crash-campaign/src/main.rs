@@ -10,12 +10,17 @@
 //! - `replay` rebuilds the device at every flush of a dm-log-writes log and
 //!   verifies each point (layer A).
 //!
+//! With `--store managed` (P13 PR 7) the workload and the replay work on the
+//! private managed store instead (`managed`): the power-loss qualification
+//! of ADR 0023 decision H9.
+//!
 //! Exit status: 0 when the step ran and found nothing wrong, 1 when it found
 //! lost acknowledgements or damage, 2 when the harness itself failed.
 
 mod assess;
 mod error;
 mod logwrites;
+mod managed;
 mod protocol;
 mod replay;
 mod rng;
@@ -23,12 +28,19 @@ mod standins;
 mod verify;
 mod workload;
 
-use std::{fs::OpenOptions, io::Write as _, path::PathBuf, process::ExitCode, time::Duration};
+use std::{
+    fs::OpenOptions,
+    io::Write as _,
+    path::{Path, PathBuf},
+    process::ExitCode,
+    time::Duration,
+};
 
 use clap::{Parser, Subcommand};
 
 use crate::{
     error::CampaignError,
+    managed::{CampaignStore, ManagedWorkloadConfig, run_managed_workload},
     protocol::parse_events,
     replay::ReplayConfig,
     workload::{MAX_ACK_BYTES, Mix, WorkloadConfig, read_text, unix_seconds},
@@ -94,6 +106,10 @@ enum Step {
         /// Which operations to draw from.
         #[arg(long, value_enum, default_value_t = Mix::All)]
         mix: Mix,
+        /// Which store to run on; with `managed`, `--root` is the managed root
+        /// and the session settings (sources, jobs, sessions) do not apply.
+        #[arg(long, value_enum, default_value_t = CampaignStore::Session)]
+        store: CampaignStore,
     },
     /// Verifies a session root against acknowledgements.
     Verify {
@@ -136,6 +152,9 @@ enum Step {
         /// Check every n-th point.
         #[arg(long, default_value_t = 1)]
         stride: usize,
+        /// Which store the workload ran on.
+        #[arg(long, value_enum, default_value_t = CampaignStore::Session)]
+        store: CampaignStore,
     },
     /// Assesses one write-error round (layer C).
     Assess {
@@ -160,6 +179,26 @@ fn run(arguments: Arguments) -> Result<bool, CampaignError> {
     match arguments.step {
         Step::Workload {
             root,
+            ack_out,
+            mark_device,
+            dmsetup,
+            first_seq,
+            max_ops,
+            seed,
+            store: CampaignStore::Managed,
+            ..
+        } => run_managed_workload(&ManagedWorkloadConfig {
+            root,
+            ack_out,
+            mark_device,
+            dmsetup,
+            first_seq,
+            max_ops,
+            seed,
+        })
+        .map(|_| true),
+        Step::Workload {
+            root,
             scratch,
             ack_out,
             drain,
@@ -175,6 +214,7 @@ fn run(arguments: Arguments) -> Result<bool, CampaignError> {
             source_min_kib,
             source_max_kib,
             mix,
+            store: CampaignStore::Session,
         } => {
             let config = WorkloadConfig {
                 root,
@@ -205,24 +245,7 @@ fn run(arguments: Arguments) -> Result<bool, CampaignError> {
             acks,
             out,
             prefix,
-        } => {
-            let events = parse_events(&read_text(&acks, MAX_ACK_BYTES)?);
-            if !events.malformed.is_empty() {
-                return Err(CampaignError::MalformedAcks(events.malformed));
-            }
-            let findings = verify::verify(&root, &events.acks, unix_seconds()?);
-            let mut text = findings.lines(&prefix).join("\n");
-            text.push('\n');
-            print!("{text}");
-            if let Some(path) = out {
-                OpenOptions::new()
-                    .append(true)
-                    .open(&path)
-                    .and_then(|mut file| file.write_all(text.as_bytes()))
-                    .map_err(CampaignError::io("writing the verification report", &path))?;
-            }
-            Ok(findings.clean())
-        }
+        } => verify_step(&root, &acks, out.as_deref(), &prefix),
         Step::Replay {
             log,
             base,
@@ -232,27 +255,54 @@ fn run(arguments: Arguments) -> Result<bool, CampaignError> {
             root_in_filesystem,
             report,
             stride,
-        } => {
-            let summary = replay::replay(&ReplayConfig {
-                log,
-                base,
-                work,
-                acks,
-                mount_point,
-                root_in_filesystem,
-                report,
-                stride,
-            })?;
-            println!("{}", summary.line(0));
-            Ok(summary.lost_points == 0
-                && summary.damaged_points == 0
-                && summary.fsck_failures == 0
-                && summary.mount_failures == 0)
-        }
+            store,
+        } => replay_step(&ReplayConfig {
+            log,
+            base,
+            work,
+            acks,
+            mount_point,
+            root_in_filesystem,
+            report,
+            stride,
+            store,
+        }),
         Step::Assess { log } => {
             let assessment = assess::assess(&read_text(&log, MAX_ACK_BYTES)?);
             println!("{}", assessment.line());
             Ok(assessment.passed())
         }
     }
+}
+
+/// The `replay` step: whether every replayed point passed for its store.
+fn replay_step(config: &ReplayConfig) -> Result<bool, CampaignError> {
+    let summary = replay::replay(config)?;
+    println!("{}", summary.line(0));
+    Ok(summary.passed())
+}
+
+/// The `verify` step: holds a session root to its acknowledgements.
+fn verify_step(
+    root: &Path,
+    acks: &Path,
+    out: Option<&Path>,
+    prefix: &str,
+) -> Result<bool, CampaignError> {
+    let events = parse_events(&read_text(acks, MAX_ACK_BYTES)?);
+    if !events.malformed.is_empty() {
+        return Err(CampaignError::MalformedAcks(events.malformed));
+    }
+    let findings = verify::verify(root, &events.acks, unix_seconds()?);
+    let mut text = findings.lines(prefix).join("\n");
+    text.push('\n');
+    print!("{text}");
+    if let Some(path) = out {
+        OpenOptions::new()
+            .append(true)
+            .open(path)
+            .and_then(|mut file| file.write_all(text.as_bytes()))
+            .map_err(CampaignError::io("writing the verification report", path))?;
+    }
+    Ok(findings.clean())
 }

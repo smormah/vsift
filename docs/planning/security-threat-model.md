@@ -293,8 +293,18 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   only read. Tests: `vsift-infrastructure/src/managed_store_lifecycle/tests.rs` (planted
   links and junction-like directory links, unknown files, corrupted and interrupted
   versions, held versions, a changed root marker), `vsift/tests/engine_managed_lifecycle.rs`,
-  `vsift-cli/tests/p13_setup_lifecycle_cli.rs` (D-05, D-08). Kill and power-loss tests
-  remain PR 7.
+  `vsift-cli/tests/p13_setup_lifecycle_cli.rs` (D-05, D-08). *PR 7 (2026-09-30):* a
+  process killed at any of the 22 managed fault points, or by the operating system,
+  leaves a store every command can read and `setup repair` describes; one decision
+  widens what the store treats as its own: a folder at the root's, `versions-v1`'s or
+  `current-v1`'s fixed name that is private and holds nothing, or only the start of
+  its marker, is what a killed creation leaves, and an install finishes it (readers
+  treat it as empty). A private, empty folder at `managed-v1` that the user created
+  would be adopted the same way; any other content keeps the folder unowned. Every
+  folder a command changes is flushed before it returns, so on Ubuntu 24.04 with ext4 a
+  reported command survives a power loss, and nothing unverified is ever run. Tests:
+  `vsift-infrastructure/tests/p13_install_transaction/kill.rs` and
+  `every_commit_step_is_flushed_before_the_next`.
 - **SEC-22 (CI steals secrets or replaces a binary):** the governance workflow lint
   (actions pinned by commit SHA, no `pull_request_target`, minimal permissions,
   `id-token` only in the attest and publish jobs); publication only from the protected

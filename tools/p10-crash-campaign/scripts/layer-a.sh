@@ -9,12 +9,20 @@
 # mounts it (ext4 replays its journal as after a power loss), verifies every
 # acknowledgement made before that point and runs `e2fsck -fn`.
 #
-# Usage (as root): layer-a.sh <binary> <work dir> <operations> <seed> <positive|negative> <out dir>
+# Usage (as root): layer-a.sh <binary> <work dir> <operations> <seed> <positive|negative> <out dir> [session|managed]
 #
 # In the negative control the binary must be a `campaign` build and
 # VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1 removes the session directory
 # synchronisation after every pointer rename; the replay must then find lost
 # acknowledgements, or the campaign cannot see what it claims to test.
+#
+# With `managed` (P13 PR 7, ADR 0023 decision H9) the workload runs the
+# managed store's install, rollback, removal, abandoned-stage and sweep
+# commands on stand-in versions, and every point must keep every
+# acknowledged command and show no damage (fail-closed detection plus
+# repair for what is half done). Its negative control skips every folder
+# flush and each runtime file's flush; it passes only when acknowledgements
+# were lost and nothing was damaged.
 set -euo pipefail
 
 binary=$1
@@ -23,12 +31,14 @@ operations=$3
 seed=$4
 mode=$5
 out=$6
+store=${7:-session}
 
 case "$operations" in '' | *[!0-9]*) echo "operations must be a number" >&2; exit 2 ;; esac
 case "$seed" in '' | *[!0-9]*) echo "seed must be a number" >&2; exit 2 ;; esac
 case "$mode" in positive | negative) ;; *) echo "mode must be positive or negative" >&2; exit 2 ;; esac
+case "$store" in session | managed) ;; *) echo "store must be session or managed" >&2; exit 2 ;; esac
 
-device=vsift-logwrites-$mode
+device=vsift-logwrites-$store-$mode
 data=$work/data.img
 log=$work/log.img
 base=$work/base.img
@@ -67,7 +77,7 @@ started=$(date +%s)
 if [ "$mode" = negative ]; then
   export VSIFT_CAMPAIGN_NEGATIVE_CONTROL=1
 fi
-"$binary" workload --root "$mountpoint/root" --scratch "$work/scratch" \
+"$binary" workload --store "$store" --root "$mountpoint/root" --scratch "$work/scratch" \
   --ack-out "$out/acks.log" --mark-device "$device" \
   --max-ops "$operations" --seed "$seed" --recognizer-delay-ms 0
 unset VSIFT_CAMPAIGN_NEGATIVE_CONTROL
@@ -81,11 +91,21 @@ echo "log_allocated_bytes=$(du -B1 "$log" | cut -f1)" >> "$out/environment.txt"
 
 started=$(date +%s)
 status=0
-"$binary" replay --log "$log" --base "$base" --work "$work" --acks "$out/acks.log" \
+"$binary" replay --store "$store" --log "$log" --base "$base" --work "$work" --acks "$out/acks.log" \
   --mount-point "$mountpoint" --report "$out/replay-report.txt" || status=$?
 replay_seconds=$(( $(date +%s) - started ))
 summary=$(grep '^SUMMARY ' "$out/replay-report.txt" || true)
-echo "RESULT mode=$mode status=$status workload_seconds=$workload_seconds replay_seconds=$replay_seconds $summary" | tee "$out/result.txt"
+echo "RESULT store=$store mode=$mode status=$status workload_seconds=$workload_seconds replay_seconds=$replay_seconds $summary" | tee "$out/result.txt"
+
+if [ "$store" = managed ] && [ "$mode:$status" = negative:1 ]; then
+  # Without the flushes acknowledgements must be lost, and still nothing may
+  # be damaged: lookup refuses what is torn and repair fixes what is left.
+  damaged=$(sed -n 's/.* damaged_points=\([0-9]*\).*/\1/p' <<< "$summary")
+  if [ "${damaged:-1}" != 0 ]; then
+    echo "negative control damaged the managed store" >&2
+    exit 1
+  fi
+fi
 
 case "$mode:$status" in
   positive:0) exit 0 ;;
