@@ -57,16 +57,25 @@ What the code has today (checked on `main` at `c644645`):
 
 ### A. Names
 
-The npm launcher is the unscoped `vsift` package. The per-platform packages are
-`@vsift/cli-win32-x64`, `@vsift/cli-darwin-arm64` and `@vsift/cli-linux-x64`. The
-maintainer creates the npm organisation `vsift`, which owns the scope. The
-executable stays `vsift` (ADR 0001, ADR 0009).
+The npm launcher is the unscoped `vsift` package. The per-platform packages live in
+one npm scope owned by an organisation the maintainer creates: `@<scope>/win32-x64`,
+`@<scope>/darwin-arm64` and `@<scope>/linux-x64` (written `@<scope>/…` in this ADR).
+**The scope is pending the maintainer's choice.** The executable stays `vsift` (ADR
+0001, ADR 0009).
+
+*Correction, 2026-09-30 (maintainer):* the plan named the scope `@vsift` with an
+organisation `vsift`, but npm refused that organisation name ("not available"): npm
+organisation names share the user-name namespace, which an anonymous `npm view` of
+package names cannot see. The candidates, in the maintainer's order of preference, are
+`@vsift-cli` (packages `@vsift-cli/win32-x64`, `@vsift-cli/darwin-arm64`,
+`@vsift-cli/linux-x64`), then `@vsifthq`, then `@vsiftdev`. The chosen scope is
+recorded in an ADR 0009 note, which forbids a silent rename, and then here.
 
 *Why:* the unscoped name is what people type; a scope keeps the platform packages
 under one owner and makes a look-alike package visibly foreign. An anonymous
 `npm view` (empty user and global configuration, no credentials) returned not-found
-for all four names on 2026-09-30; that is an observation, not a reservation (ADR
-0009).
+for `vsift` on 2026-09-30, rechecked by the maintainer the same day; that is an
+observation, not a reservation (ADR 0009).
 
 ### B. What is published, and when
 
@@ -279,7 +288,8 @@ GitHub Releases; native installers are later work.
 ## Maintainer-only actions
 
 Never automated, and never done by an agent: the npm account and its two-factor
-authentication; creating the `vsift` organisation; configuring the trusted publishers;
+authentication; choosing the platform-package scope and creating its organisation;
+configuring the trusted publishers;
 the GitHub `release` environment and its reviewer; the tag ruleset; approving fork
 pull-request workflows; the first publish (done personally with two-factor
 authentication, or with a short-lived token stored only in the `release`

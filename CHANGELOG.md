@@ -15,7 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   0014 and 0022, and the P13 scope and pull-request plan in
   `docs/planning/implementation-work-packets.md`. The ledger marks P13 `in_progress`
   and maps R-13 to it (`handoff check`, #213); the threat model lists the planned
-  controls; the name checklist records an anonymous npm observation. No code changes.
+  controls; the name checklist records that npm refused the organisation name `vsift`,
+  so the platform packages' scope awaits the maintainer's choice. No code changes.
 
 - **P12 is complete** (2026-09-30, closed by the maintainer on the final trial round's
   results). The agent skill's qualification record is

@@ -57,17 +57,17 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 
 - **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux
   x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
-  `vsift` over `@vsift/cli-*` packages; managed installation on Ubuntu 24.04 x64
-  (`setup install/list/rollback/remove/repair`); human-readable output by default;
-  L-071's parse remediation; `vsift handoff check` (#213).
+  `vsift` over `@<scope>/…` packages; managed installation on Ubuntu 24.04 x64 (`setup
+  install/list/rollback/remove/repair`); human output by default; L-071; `handoff check`.
+- **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
+  `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
 - **In progress:** PR 0 (`p13-pr0-kickoff`): ADR 0023 and notes, ledger, traceability,
   threat-model plan, issue #16. **Next:** PRs 1, 2a/2b and 3; PR 5 waits for the P12
   debt PRs (same skill, guard and grader).
 - **Nothing is published** until P13 completes and the maintainer approves one 0.x
   pre-release under npm's `next` tag; the npm organisation, trusted publishers and
   `release` environment are the maintainer's to set up.
-- **Found while planning:** the agent run from a clean install moved to P14 (H10);
-  the Linux binary needs OpenSSL 3.
+- **Found while planning:** the clean-install agent run is P14's (H10); Linux needs OpenSSL 3.
 
 ## P12 in one view
 

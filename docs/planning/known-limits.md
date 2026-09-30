@@ -1474,8 +1474,10 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 
 - **What:** VSift can only be built from source with Rust. There are no native release
   artifacts, no npm launcher, no SBOM/notices, no signing or notarization and no trusted
-  publishing. The npm names `vsift` and `@vsift/cli-*` were merely observed free
-  (2026-09-10 and 2026-09-30), not reserved; no crate is published in R0 (ADR 0023).
+  publishing. The npm name `vsift` was merely observed free (2026-09-10 and
+  2026-09-30), not reserved; the scope for the platform packages is pending the
+  maintainer's choice, because `@vsift` is unavailable; no crate is published in R0
+  (ADR 0023).
 - **Evidence:** [ADR 0009](../decisions/0009-package-identity-and-distribution.md);
   [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) decision 1;
   threat model "Installation and distribution policy"; baseline B-11.

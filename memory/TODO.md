@@ -6,18 +6,17 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P12 are complete; P13 is in progress** (started by the maintainer 2026-09-30,
-every plan recommendation accepted). Only PR 0, the kickoff (branch `p13-pr0-kickoff`:
-ADR 0023 Proposed, ledger `in_progress` with R-13), is open; no P13 code exists yet.
-The P12 debt (L-085, #218-#221, #224) is being fixed on its own branch first.
+**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Only
+PR 0, the kickoff (`p13-pr0-kickoff`: ADR 0023 Proposed, ledger `in_progress` with
+R-13), is open; no P13 code yet. The P12 debt (L-085) is fixed on its own branch first.
 
-1. **Next P13 PRs** (plan: `implementation-work-packets.md` "P13 scope and pull
-   requests"): 1 L-071; 2a/2b human output; 3 smoke executor; 4 install transaction;
-   5 `handoff check` (after the P12 debt PRs); 6 lifecycle commands; 7 kill/power-loss
-   and install E2E; 8 `release.yml` and workflow lint; 9 npm and Verdaccio; 10
-   attest/publish; 11 docs and record; 12 ledger follow-up. #222 re-runs after PR 5.
-2. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; create the
-   npm organisation `vsift`; trusted publishers; the GitHub `release` environment with
+1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
+   1 L-071; 2a/2b human output; 3 smoke executor; 4 install; 5 `handoff check` (after
+   the P12 debt); 6 lifecycle; 7 kill/power-loss, E2E; 8 `release.yml`; 9 npm; 10
+   publish wiring; 11 docs; 12 ledger. #222 re-runs after PR 5.
+2. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; **choose the
+   platform-package scope** (`@vsift` refused by npm; `@vsift-cli`, `@vsifthq` or
+   `@vsiftdev`), create its organisation and record it in an ADR 0009 note; trusted publishers; the GitHub `release` environment with
    the maintainer as reviewer; the tag ruleset; fork-PR workflow approval; the first
    publish (personally with 2FA, or a short-lived token only in the environment);
    approval of the one 0.x pre-release under `next`; any announcement (after P14).
@@ -45,9 +44,9 @@ The P12 debt (L-085, #218-#221, #224) is being fixed on its own branch first.
 - **P12** (ADR 0022 completion note): maintainer accounts; Codex in Linux; orientation
   as housekeeping; slim handoff and vocabulary; compact tier Sonnet 5.5 and GPT-6-Sol
   (Haiku 4.5, Luna below: L-082, L-084); `display_text`; #210; closed on the final round.
-- **P13 (ADR 0023 A-H, 2026-09-30):** names `vsift` and `@vsift/cli-{win32-x64,
-  darwin-arm64,linux-x64}`; nothing published during P13, then one 0.x pre-release
-  under `next`; no crates.io in R0; Sigstore and npm provenance only; managed install
+- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift` over `@<scope>/{win32-x64,
+  darwin-arm64,linux-x64}` (scope open); nothing published during P13, then one 0.x
+  pre-release under `next`; no crates.io in R0; Sigstore and npm provenance only; managed install
   on Ubuntu 24.04 x64 only; human output by default; `DOWNLOAD_FAILED`; `handoff
   check` input on stdin (heredoc / here-string) or `--file`; no agent re-run in P13.
 
@@ -59,8 +58,8 @@ The P12 debt (L-085, #218-#221, #224) is being fixed on its own branch first.
   job-cancelled line (L-067); the engine's `tokio`; PR 2-3's continuable transient
   failures, pruning, 192 KiB records and D2; `durable_worker` for ephemeral workspace
   sessions; input-path links refused (L-062).
-- **Also:** MSRV; an MCP adapter; ADR 0023's open details (`setup list`/`repair` stay
-  `never` in the skill unless changed; `handoff check` case handling, PR 5).
+- **Also:** the npm platform-package scope (item 2 above); MSRV; an MCP adapter;
+  ADR 0023's open details (`setup list`/`repair` class, `handoff check` case, PR 5).
 
 ## Tracked issues
 

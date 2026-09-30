@@ -209,8 +209,8 @@ and native installers are not in R0, and the state column is updated.
 | Channel | Name(s) | State on 2026-09-30 | Note |
 | --- | --- | --- | --- |
 | npm package | `vsift` | Not found by an anonymous `npm view` on 2026-09-10 and 2026-09-30; not held | ADR 0009; a maintainer-approved scoped name is the fallback |
-| npm scope | `@vsift` (organisation `vsift`) | Not created; the maintainer creates it | Holds the per-platform packages, and the fallback package name |
-| npm platform packages | `@vsift/cli-win32-x64`, `@vsift/cli-darwin-arm64`, `@vsift/cli-linux-x64` | Not found by an anonymous `npm view` on 2026-09-30; not held | One per R0 target (ADR 0023 decision D) |
+| npm scope | `@<scope>`: to be confirmed by the maintainer; candidates `@vsift-cli`, then `@vsifthq`, then `@vsiftdev` | `@vsift` unavailable: npm refused the organisation name `vsift` on 2026-09-30 (organisation and user names share one namespace) | Holds the per-platform packages; the choice is recorded in an ADR 0009 note |
+| npm platform packages | `@<scope>/win32-x64`, `@<scope>/darwin-arm64`, `@<scope>/linux-x64` | Not held; checked once the scope is chosen | One per R0 target (ADR 0023 decision D) |
 | crates.io | `vsift`, `vsift-contract` | Not in R0 | Names confirmed in ADR 0016; no crate is published in R0 (ADR 0023 decision B) |
 | crates.io | `vsift-domain`, `vsift-application`, `vsift-infrastructure` | Not in R0 | crates.io needs every dependency of a published crate published too |
 | crates.io | `vsift-cli` | Not in R0 | Only if `cargo install` is offered; maintainer decision |
