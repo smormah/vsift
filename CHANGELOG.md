@@ -748,6 +748,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **P12 debt fixes** (2026-09-30, known limit L-085, ADR 0022 note "the P12 debt
+  fixes"). No model was called; the compact re-run is #222.
+  - **Trial grader (#219):** a looped clip's truth windows repeat with the clip's
+    measured period, from the retained bundle's visual index. Before, they used the
+    fixture's nominal duration. The A-02 clip's copies start 12.064 s apart, not 12 s,
+    so by the last copy the windows were 2.56 s off. A bundle without an index keeps
+    the nominal period and says so in the grade's `deviations`.
+    - The 84 counted P12 phases were re-graded (`grade-debt.json`), and one changed:
+      GPT-6-Sol's A-02 run 2 now passes, 24 of 28 full passes (86%).
+  - **Agent skill:**
+    - **#218:** the REPORT skeleton in `SKILL.md` shows one filled-in claim, a segment
+      and a frame citation, and one untrusted instruction.
+    - **#219 and #220:** each claim states its subject and its value in full.
+    - **#220:** retain after the last evidence command, because the bundle is a
+      snapshot.
+    - **#221:** a defanged link belongs only in the Markdown report; the JSON
+      describes the link without an address.
+    - **#224:** a claim about a region a frame shows as unreadable is
+      `partially_supported` on the transcript, not supported by the pixels.
+    - `skill_contract` guards each rule, including that the schema refuses a
+      defanged address in a summary.
 - Windows evidence paths (#210, ADR 0019 note of 2026-09-29): `data.files[].path` of
   `frame`, `crop` and `audio` results is now the plain absolute form `C:\...` whenever
   that form names the same file (shorter than `MAX_PATH`, and no component that Win32

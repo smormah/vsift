@@ -853,6 +853,74 @@ and its bounded trial records are in `docs/planning/p12-agent-trials/`.
 with `<check-code>`: a handoff reports the code, and no text file of the repository
 may hold it.
 
+## Note: the P12 debt fixes before P13 (2026-09-30)
+
+The maintainer chose to fix the skill and grader debt recorded under L-085 before
+P13's validator work. This note records the fixes for issues #218-#221 and #224. No
+model was called; the compact re-run is #222, after `vsift handoff check` (#213).
+
+**Grader: a looped clip repeats with its measured period (#219).** The grader already
+repeated truth windows with every copy of a looped clip, but used the fixture's
+nominal duration as the period. The A-02 clip (`-stream_loop 40`, stream copy) was
+measured with ffprobe:
+
+- 9,840 video frames (41 copies of 240), 494.559863 s of video;
+- each copy starts 12.063964 to 12.064063 s after the one before, because FFmpeg
+  places the next copy after the padded audio;
+- so the nominal 12 s period is off by 2.56 s by the last copy.
+
+GPT-6-Sol's A-02 run 2 phase 2 cited the frame at 490.009863 s for "depth 12". That
+frame lies 7.45 s into the 41st copy, inside F02-E02: the claim was true, and the
+grader misplaced it.
+
+The grader now derives the period from `VSift`'s own measurement: the bundle's visual
+index `duration_us`, as (duration − fixture) ÷ extra copies = 12.063996 s. A frame is
+placed 1 ms later before its window is looked up (`LOOP_ALIGNMENT_US`), because the
+derived period is an average and the container rounds frame times. With that, every
+one of the clip's 9,840 frames lands in its true window, at most 1.2 ms from its
+fixture time; with the nominal period the error reached 11.9 s. When a bundle has no
+usable index (none, or one more than 2% from nominal), the nominal period stays and
+the grade says so in `deviations`.
+
+The other reading in #219 stays strict. Sonnet's A-02 run 3 phase 1 ("0 (change from
+12)" on the 8 s frame) names 12 without evidence at a time that shows 12. The skill
+now asks for that value as a claim of its own.
+
+**Skill** (all guarded by `skill_contract`):
+
+- **#218:** the REPORT skeleton shows one filled-in claim, a transcript-segment and a
+  frame citation, and one untrusted instruction. A sentence says what a stop before
+  any evidence holds, and `handoff.md` has a section on the instruction's three
+  members.
+- **#219 and #220:** each claim states its subject and its value in full, never "the
+  same code" or "the previous value", and cites evidence that shows that value.
+  `resume.md` says the same for verified findings.
+- **#220:** CLOSE_OR_RETAIN, `handoff.md` and `lifecycle.md` say to retain after the
+  last evidence command. `session retain` writes a snapshot to a new directory, so a
+  later extraction is not in the bundle. The grader's reading, that a citation must
+  resolve in the retained bundle, is unchanged.
+- **#221:** the checklist and `safety.md` rule 6 split the link rule. The Markdown
+  report holds `hxxps://...` in a code span; the JSON never holds an address and
+  describes the link instead. A guard test checks that the schema refuses the
+  defanged address in a summary and accepts the description.
+- **#224:** VERIFY_SOURCE and `handoff.md` say that when a frame or crop shows a region
+  unreadable, a claim about its content rests on the transcript alone. It is marked
+  `partially_supported` and cites the segment, not the pixels.
+
+`SKILL.md` stays at 300 lines: the old citation bullet and some wording were
+condensed.
+
+**Re-grade** of every counted phase (84), written as `grade-debt.json` beside the
+originals:
+
+- exactly one phase changes: Sol's A-02 run 2 phase 2 now passes
+  `citation_times_in_truth_windows`;
+- GPT-6-Sol goes from 23 to 24 of 28 full passes (86%);
+- Sonnet 5.5 stays at 23 of 28, and Opus 5.5 and GPT-6-Astra at 9 of 11;
+- compact citation failures fall from 3 to 2 of 62 phases.
+
+The skill text changes need the re-run (#222) to show an effect.
+
 ## Consequences
 
 - Agents have one procedure for both clients, and its references cannot drift from

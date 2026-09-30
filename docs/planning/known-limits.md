@@ -1561,9 +1561,10 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
      `citations` and `description`)
      ([#218](https://github.com/smormah/vsift/issues/218)).
   2. **A-02 resume** is the weakest scenario: Sonnet 2 of 3, Sol 1 of 3. Two of the
-     three misses bind a true value to evidence outside the first loop's window, a
-     grader reading for the maintainer
-     ([#219](https://github.com/smormah/vsift/issues/219)).
+     three misses bind a true value to evidence outside the first loop's window
+     ([#219](https://github.com/smormah/vsift/issues/219)). One of them (Sol, 490 s)
+     was a grader error, fixed below; the other names a previous value without
+     evidence for it.
   3. **SEC-T02 slips on Sol**, 2 of 5 full passes: a frame cited after `session
      retain`, the instruction shape above, and SAFE-12 never stated
      ([#220](https://github.com/smormah/vsift/issues/220)).
@@ -1588,14 +1589,36 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
     pixels ([#224](https://github.com/smormah/vsift/issues/224)).
 - **Why:** the maintainer decided on 2026-09-30 to close P12 on the final round's
   results and record what is short of target as known limits and follow-ups.
+- **Fixes so far** (2026-09-30, ADR 0022 note "the P12 debt fixes"; no model called):
+  1. **#218:** the REPORT skeleton shows one filled-in claim, a segment and a frame
+     citation, and one untrusted instruction, all validated by the guard.
+  2. **#219, grader:** the A-02 clip's copies start 12.064 s apart, not 12 s (FFmpeg
+     places each copy after the padded audio). The grader now derives the period from
+     the bundle's measured duration. Sol's A-02 miss at 490 s was a true claim that
+     the grader misplaced.
+  3. **#219, skill:** each claim names its subject and value. A value mentioned as a
+     previous state ("change from 12") still needs its own evidence; that reading
+     stays strict.
+  4. **#220:** retain after the last evidence command, because the bundle is a
+     snapshot.
+  5. **#221:** a defanged link belongs only in the Markdown; the JSON describes the
+     link.
+  6. **#224:** a region a frame shows as unreadable supports nothing; a claim about
+     its content is `partially_supported` on the transcript.
+- **Re-grade** of the 84 counted phases with the new grader (`grade-debt.json`): only
+  Sol's A-02 run 2 changes. GPT-6-Sol is now 24 of 28 (86%); Sonnet 5.5 stays at
+  23 of 28 (82%). Compact citation failures fall from 3 to 2 of 62 phases.
 - **Mitigation:**
   - `docs/agents/skill.md` names the supported models and says the compact tier is
     below target;
   - the grader reports each handoff error as a typed, fixable message;
   - the handoff validator (P13, [#213](https://github.com/smormah/vsift/issues/213))
     may lower handoff failures further.
-- **Next step:** fix #218-#221, then re-run the compact tier
-  ([#222](https://github.com/smormah/vsift/issues/222)) before P14.
+- **Next step:** the compact re-run
+  ([#222](https://github.com/smormah/vsift/issues/222)) is still pending. It runs
+  after `vsift handoff check` (#213) exists, before P14, and shows whether the skill
+  changes reach the 90% target. It also re-runs A-09 blurred on the strong tier
+  (#224).
 - **Owner:** maintainer, before P14. **Issue:**
   [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222).
   **Status:** deferred (technical debt). **Review:** pending.
