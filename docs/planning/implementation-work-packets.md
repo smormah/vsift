@@ -204,7 +204,8 @@ availability observation is not a reservation (ADR 0009), and no placeholder pac
 is published, so a name is held only once the release workflow publishes to it.
 
 2026-09-30 (maintainer, superseding the placeholder rule above for `vsift` only): the
-scope is `@shongo` (the organisation was created on 2026-09-30), and the maintainer
+scope is `@vsift` (the maintainer owns the organisation `vsift`; a brief same-day
+choice of `@shongo` is withdrawn), and the maintainer
 personally publishes a placeholder `vsift@0.0.0` to hold the launcher name
 (ADR 0009 note, ADR 0023 decisions A and B amendments).
 
@@ -214,8 +215,8 @@ and native installers are not in R0, and the state column is updated.
 | Channel | Name(s) | State on 2026-09-30 | Note |
 | --- | --- | --- | --- |
 | npm package | `vsift` | Not found by an anonymous `npm view` on 2026-09-10 and 2026-09-30; to be held by the maintainer's placeholder `0.0.0` | ADR 0009 2026-09-30 note; a maintainer-approved scoped name is the fallback |
-| npm scope | `@shongo` (maintainer, 2026-09-30) | Held: organisation `shongo` created by the maintainer on 2026-09-30. `@vsift` was unavailable, because npm refused the organisation name `vsift` (organisation and user names share one namespace) | Holds the per-platform packages; ADR 0009 2026-09-30 note |
-| npm platform packages | `@shongo/vsift-win32-x64`, `@shongo/vsift-darwin-arm64`, `@shongo/vsift-linux-x64` | Held through the `@shongo` organisation; first published by the 0.x pre-release | One per R0 target (ADR 0023 decision D) |
+| npm scope | `@vsift` (maintainer, 2026-09-30) | Held: the maintainer owns the organisation `vsift`. The earlier "not available" came from a repeated submission after the first one had created it | Holds the per-platform packages; ADR 0009 2026-09-30 note |
+| npm platform packages | `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64` | Held through the `vsift` organisation; first published by the 0.x pre-release | One per R0 target (ADR 0023 decision D) |
 | crates.io | `vsift`, `vsift-contract` | Not in R0 | Names confirmed in ADR 0016; no crate is published in R0 (ADR 0023 decision B) |
 | crates.io | `vsift-domain`, `vsift-application`, `vsift-infrastructure` | Not in R0 | crates.io needs every dependency of a published crate published too |
 | crates.io | `vsift-cli` | Not in R0 | Only if `cargo install` is offered; maintainer decision |

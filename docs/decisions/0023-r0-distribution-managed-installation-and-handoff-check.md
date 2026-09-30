@@ -62,13 +62,15 @@ one npm scope owned by an organisation the maintainer creates: `@<scope>/win32-x
 `@<scope>/darwin-arm64` and `@<scope>/linux-x64` (written `@<scope>/…` in this ADR).
 The executable stays `vsift` (ADR 0001, ADR 0009).
 
-*Amendment, 2026-09-30 (maintainer): the scope is `@shongo`.* The maintainer created the
-npm organisation `shongo`. Because it is a company scope, the package names carry the
-project name: `@shongo/vsift-win32-x64`, `@shongo/vsift-darwin-arm64` and
-`@shongo/vsift-linux-x64`. Read `@<scope>/…` elsewhere in this ADR as `@shongo/vsift-…`.
-The reasons and consequences are in the ADR 0009 note of the same date.
+*Amendment, 2026-09-30 (maintainer): the scope is `@vsift`.* The maintainer owns the
+npm organisation `vsift`, so the packages are `@vsift/win32-x64`, `@vsift/darwin-arm64`
+and `@vsift/linux-x64`. Read `@<scope>/…` elsewhere in this ADR as `@vsift/…`. A brief
+same-day choice of `@shongo` (#235) is withdrawn. The reasons are in the ADR 0009 note of
+the same date.
 
-*Correction, 2026-09-30 (maintainer):* the plan named the scope `@vsift` with an
+*Correction, 2026-09-30 (maintainer), itself corrected by the amendment above (the
+maintainer's first submission had created `vsift`; the message came from a repeated
+submission):* the plan named the scope `@vsift` with an
 organisation `vsift`, but npm refused that organisation name ("not available"): npm
 organisation names share the user-name namespace, which an anonymous `npm view` of
 package names cannot see. The candidates, in the maintainer's order of preference, are
