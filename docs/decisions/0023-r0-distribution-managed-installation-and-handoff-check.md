@@ -60,8 +60,13 @@ What the code has today (checked on `main` at `c644645`):
 The npm launcher is the unscoped `vsift` package. The per-platform packages live in
 one npm scope owned by an organisation the maintainer creates: `@<scope>/win32-x64`,
 `@<scope>/darwin-arm64` and `@<scope>/linux-x64` (written `@<scope>/…` in this ADR).
-**The scope is pending the maintainer's choice.** The executable stays `vsift` (ADR
-0001, ADR 0009).
+The executable stays `vsift` (ADR 0001, ADR 0009).
+
+*Amendment, 2026-09-30 (maintainer): the scope is `@shongo`.* The maintainer created the
+npm organisation `shongo`. Because it is a company scope, the package names carry the
+project name: `@shongo/vsift-win32-x64`, `@shongo/vsift-darwin-arm64` and
+`@shongo/vsift-linux-x64`. Read `@<scope>/…` elsewhere in this ADR as `@shongo/vsift-…`.
+The reasons and consequences are in the ADR 0009 note of the same date.
 
 *Correction, 2026-09-30 (maintainer):* the plan named the scope `@vsift` with an
 organisation `vsift`, but npm refused that organisation name ("not available"): npm
@@ -86,7 +91,13 @@ for P14. No crate is published to crates.io in R0.
 
 *Why:* a name is held only once the release publishes to it (ADR 0009), and the
 pre-release proves the real publishing path before P14 depends on it; `next` keeps it
-out of a plain `npm install vsift`. crates.io needs every workspace crate published
+out of a plain `npm install vsift`.
+
+*Amendment, 2026-09-30 (maintainer):* one exception. The maintainer personally publishes a
+placeholder `vsift@0.0.0` (README and `package.json` only; no code, binaries or install
+scripts) to hold the unscoped name during P13. This supersedes ADR 0009's no-placeholder
+rule; the reasons are in ADR 0009's note of the same date. Nothing else is published
+before completion. crates.io needs every workspace crate published
 and an MSRV and semver policy (ADR 0016 decision 3), none of which R0 needs.
 
 ### C. Trust signals

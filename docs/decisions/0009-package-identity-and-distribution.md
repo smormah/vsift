@@ -51,6 +51,35 @@ free on 2026-09-30, which is still not a reservation.
 **The preferred scope `@vsift` is unavailable** (2026-09-30): npm refused the
 organisation name `vsift`, because organisation names share the user-name namespace.
 The fallback scope is the maintainer's choice, in this order of preference:
-`@vsift-cli`, `@vsifthq`, `@vsiftdev`. It will be recorded here once chosen; this
+`@vsift-cli`, `@vsifthq`, `@vsiftdev`. It will be recorded here once chosen (it is
+`@shongo`: see the next note); this
 decision forbids a silent rename, so no package is published under a scope this ADR
 does not name.
+
+## 2026-09-30 note: the scope is `@shongo`, and `vsift` is held by a placeholder
+
+**Scope.** The maintainer chose the company scope `@shongo` and created the npm
+organisation `shongo` on 2026-09-30. Because the scope is a company's rather than the
+project's, every package in it names the project, so the platform packages are
+`@shongo/vsift-win32-x64`, `@shongo/vsift-darwin-arm64` and `@shongo/vsift-linux-x64`
+(Sentry's `@sentry/cli-<platform>` packages follow the same pattern). Nobody types these
+names: people install `vsift`, which pulls in the matching platform package, so the
+scope appears only in lockfiles and `npm ls`. A scope cannot be renamed. If VSift later
+moves to another owner, the platform packages are republished under a new scope and the
+launcher's lookup changes. Users keep typing `vsift`.
+
+**Placeholder. This supersedes the rule above** ("no placeholder package is published
+during implementation", reaffirmed in the 2026-09-28 note). On 2026-09-30 the maintainer
+decided to hold the unscoped `vsift` name now with a placeholder: version `0.0.0`,
+holding only a README and `package.json`, with no code, no binaries and no install
+scripts. The maintainer publishes it personally, with two-factor authentication.
+
+*Why:* npm reserves a name only when something is published under it. The repository is
+public, so the name is visible for the whole of P13. A publish also shows now, rather
+than on release day, whether npm's similar-name check accepts `vsift` next to the
+existing `sift` package. The scoped platform names need no placeholder: the `shongo`
+organisation already owns them.
+
+The rest of this ADR is unchanged. Nothing else is published during P13, and the first
+real release is ADR 0023's 0.x pre-release under `next`. The placeholder stays the
+`latest` dist-tag until a stable release replaces it, and its README says so.

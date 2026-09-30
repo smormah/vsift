@@ -19,9 +19,9 @@ is not complete.
    kill/power-loss, E2E; 8 `release.yml` (package only `vsift`); 9 npm; 10 publish
    wiring; 11 docs; 12 ledger. #222 re-runs once PR 5 is merged (the maintainer
    starts it; no model was called).
-2. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; **choose the
-   platform-package scope** (`@vsift` refused; `@vsift-cli`, `@vsifthq` or `@vsiftdev`),
-   create its organisation, record it in an ADR 0009 note; trusted publishers; the
+2. **Maintainer-only, before PR 10's publish step:** scope `@shongo` chosen and its
+   organisation created (2026-09-30); the placeholder `vsift@0.0.0` (ADR 0009 note,
+   published by the maintainer); trusted publishers; the
    `release` environment (maintainer as reviewer); tag ruleset; fork-PR approval; the
    first publish (2FA, or a short-lived environment token); the 0.x `next` pre-release.
 3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: fixes for
@@ -42,8 +42,8 @@ is not complete.
 - **P12** (ADR 0022 completion note): maintainer accounts; Codex in Linux; orientation
   as housekeeping; slim handoff and vocabulary; compact tier Sonnet 5.5 and GPT-6-Sol
   (Haiku 4.5, Luna below: L-082, L-084); `display_text`; #210; closed on the final round.
-- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift` over `@<scope>/{win32-x64,
-  darwin-arm64,linux-x64}` (scope open); nothing published during P13, then one 0.x
+- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift` over `@shongo/vsift-{win32-x64,
+  darwin-arm64,linux-x64}`; only the `vsift@0.0.0` placeholder during P13, then one 0.x
   pre-release under `next`; no crates.io in R0; Sigstore and npm provenance only; managed
   install on Ubuntu 24.04 x64 only; human output by default; `DOWNLOAD_FAILED`; `handoff
   check` input on stdin (heredoc / here-string) or `--file`; no agent re-run in P13.
@@ -59,7 +59,7 @@ is not complete.
 - **P13 PR 2b readings** (ADR 0023 note): worker hosts render only their final result
   in human mode, events stay JSON Lines (L-017 now that residual); the `\\?\` path note
   (PowerShell `Copy-Item -LiteralPath`, or a root of at most 125 characters).
-- **Also:** the npm platform-package scope (item 2 above); MSRV; an MCP adapter;
+- **Also:** MSRV; an MCP adapter;
   `setup list`/`repair` class (ADR 0023). PR 5 readings: schema `handoff-check-data`
   (repo naming), a `line` beside each pointer, skill forms without `--session`.
 
