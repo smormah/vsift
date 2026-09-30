@@ -21,7 +21,7 @@
 //!
 //! P13 PR 2b adds the commands it renders. `candidates`, the frame
 //! commands, `crop`, `audio` and the `job` commands run here without
-//! `--json` under a session root whose name holds hidden characters (and,
+//! `--json` under a session root whose path holds hidden characters (and,
 //! off Windows, an OSC-8 link, ANSI colour, line break and C1 control), and
 //! must fail inertly. Their results carry no evidence text; the one
 //! untrusted text they can carry, a delivered path under such a root, is
@@ -80,24 +80,27 @@ const SENTINEL: &str = "QXSENTINEL\u{202E}ZWREVERSED\u{200B}JOINED\u{1b}[31mESCA
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
+/// An owned folder, and the folder below it that holds the session root
+/// `private sessions`.
 struct OwnedRoot(PathBuf, &'static str);
 
-/// A session-root folder name that holds a right-to-left override and a
-/// zero-width space, and where the platform allows them in a name an OSC-8
-/// link, an ANSI colour, a line break and a C1 control (P13 PR 2b). It has
-/// no `/` and no `:`, which a session root's own name may not hold.
+/// The name of the folder that holds a hostile session root: a
+/// right-to-left override and a zero-width space, and where the platform
+/// allows them in a name an OSC-8 link, an ANSI colour, a line break and a
+/// C1 control (P13 PR 2b). It has no `/`, so it stays one folder.
 #[cfg(windows)]
-const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B} sessions";
+const HOSTILE_PARENT: &str = "hostile\u{202E}snoisses\u{200B}";
 #[cfg(not(windows))]
-const HOSTILE_SESSIONS: &str = "private\u{202E}snoisses\u{200B}\u{1b}]8;;example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85} sessions";
+const HOSTILE_PARENT: &str = "hostile\u{202E}snoisses\u{200B}\u{1b}]8;;https:example.invalid\u{7}x\u{1b}[31m\nForged: line\u{85}";
 
 impl OwnedRoot {
     fn new() -> Result<Self, Box<dyn Error>> {
-        Self::with_sessions("private sessions")
+        Self::with_parent("")
     }
 
-    /// An owned folder whose session root is its child `sessions`.
-    fn with_sessions(sessions: &'static str) -> Result<Self, Box<dyn Error>> {
+    /// An owned folder whose session root is `<parent>/private sessions`
+    /// below it (directly below it when `parent` is empty).
+    fn with_parent(parent: &'static str) -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let sequence = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
         let path = env::temp_dir().join(format!(
@@ -105,7 +108,10 @@ impl OwnedRoot {
             std::process::id()
         ));
         fs::create_dir(&path)?;
-        Ok(Self(path, sessions))
+        if !parent.is_empty() {
+            fs::create_dir(path.join(parent))?;
+        }
+        Ok(Self(path, parent))
     }
 
     fn path(&self, child: &str) -> PathBuf {
@@ -113,7 +119,7 @@ impl OwnedRoot {
     }
 
     fn sessions(&self) -> PathBuf {
-        self.path(self.1)
+        self.path(self.1).join("private sessions")
     }
 
     fn write(&self, name: &str, bytes: &[u8]) -> Result<PathBuf, Box<dyn Error>> {
@@ -564,7 +570,7 @@ fn setup_commands_render_readable_text() -> TestResult {
 }
 
 /// P13 PR 2b's commands without `--json` over F12's adversarial session in
-/// a session root whose name is hostile: with no media tools they fail, and
+/// a session root whose path is hostile: with no media tools they fail, and
 /// every failure is the fixed text on stderr (stdout empty), terminal-safe
 /// and without a word of the root. The session's status still reads as
 /// text. Their successful results, whose only untrusted text is a delivered
@@ -574,7 +580,7 @@ fn setup_commands_render_readable_text() -> TestResult {
 /// commands carry no path and no evidence text.
 #[tokio::test]
 async fn part_two_commands_fail_inertly_under_a_hostile_session_root() -> TestResult {
-    let root = OwnedRoot::with_sessions(HOSTILE_SESSIONS)?;
+    let root = OwnedRoot::with_parent(HOSTILE_PARENT)?;
     seed_session(&root, &repository(SRT)).await?;
     let status = human(&root, &["session", "status", SESSION])?;
     assert!(
