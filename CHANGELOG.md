@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- The final fix round of the agent skill before P12 closes (P12 PR 3i, ADR 0022 note of
+  2026-09-30), after the final counted campaign on `56f1e1f` (full passes: Claude Sonnet
+  5.5 25 of 28, GPT-6-Sol 15, GPT-6-Luna 15; Opus 5.5 and GPT-6-Astra 9 of 11). **Tier:**
+  the compact tier is Claude Sonnet 5.5 and GPT-6-Sol; GPT-6-Luna is below the line
+  (new known limit L-084), beside Haiku 4.5 (L-082). **Maintainer decisions of
+  2026-09-30:** (1) the grader counts `command -v <name>` and `which <name>` for one
+  plain program name, `ls` with `-l`/`-a` of named files in the starting folder, and
+  `true` and `:` as harmless orientation, and a compound with orientation passes only
+  when every other part is orientation, a skill read or a `free` vsift command; `type`,
+  other `command` forms, hidden names, folders, patterns and recursion stay strict; (2)
+  the check image is redrawn (larger, spaced glyphs, none of I, l, 1, O, 0, S, 5, B or
+  8; the reproducible `drawtext` command and digests in `docs/agents/skill.md`), the
+  grader grades each trial against the image its workspace received (a table of every
+  shipped image by SHA-256) and compares glyphs without white space, and a guard test
+  keeps both the current and the retired code out of every text file; (3) resumed runs:
+  `resume.md` says a new run has its own budget (the card's `remaining` binds only the
+  same run), repeats the image check and verifies each earlier finding again with one
+  command before reporting it, and the resume card may list `to_verify` findings (the
+  finding, the segment or frame, the window), which the grader resolves inside their
+  windows; (4) the key-fact matcher reads cardinal numbers written in words up to
+  999,999 and a clock time `H:MM` written `H.MM` (grader only; no other synonyms).
+  Every counted run of the final campaign was re-graded beside its original
+  (`grade-3i.json`): GPT-6-Sol 15 to 21 full passes, GPT-6-Luna 15 to 16, the others
+  unchanged; the skill and image changes need the compact tier's re-run.
 - Transcript segments carry `display_text` (P12 PR 3h; ADR 0008 note of 2026-09-29,
   maintainer decision): `text` with every hidden character written as visible
   `<U+XXXX>` notation, in every result that returns a segment (`transcript get` and

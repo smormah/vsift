@@ -382,6 +382,19 @@ fn semantic_problems(handoff: &Value, findings: &mut Findings) {
             problems.push(format!("the resume card is {size} bytes"));
         }
     }
+    // P12 PR 3i: a finding to verify again names the window it holds for.
+    for item in handoff["resume"]["to_verify"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        if item["from_us"].as_u64() > item["to_us"].as_u64() {
+            problems.push(format!(
+                "the resume card's finding on {} ends before it starts",
+                item["id"]
+            ));
+        }
+    }
 }
 
 /// The gap reasons that say work stopped early and another run can pick it

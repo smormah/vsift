@@ -25,7 +25,7 @@ use crate::{
     layout::TrialLayout,
     run::{raw_output, read_manifest, read_run},
     scenario::Scenario,
-    skill::{SkillReferences, image_code},
+    skill::{SkillReferences, workspace_image_code},
     trace::{self, ClientKind, Trace},
     truth::CorpusTruth,
     vsift_cli::{VsiftCli, arguments},
@@ -347,7 +347,9 @@ pub fn grade_trace_with(
             operation_id: manifest.prepared.operation_id.clone(),
         }
     };
-    let code = image_code();
+    // The code of the image this trial's workspace received, so a re-grade
+    // after the skill's image changed still grades against what was shown.
+    let code = workspace_image_code(&layout.skill_directories());
     let graded = grade(&GradeInput {
         client: findings.client.unwrap_or(ClientKind::ProcedureWalker),
         scenario: &scenario,
@@ -367,7 +369,7 @@ pub fn grade_trace_with(
         canaries: &manifest.canaries,
         markers: private_markers(layout, user_names),
         bundle: bundle.as_ref(),
-        image_code: &code,
+        image_code: code.as_deref(),
         wall_time_s,
         expected,
         deviations,

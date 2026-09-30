@@ -223,8 +223,10 @@ pub struct GradeInput<'a> {
     pub markers: PrivateMarkers,
     /// The validated bundle, when there is one.
     pub bundle: Option<&'a BundleIndex>,
-    /// The check image's code.
-    pub image_code: &'a str,
+    /// The code of the check image the trial's workspace received
+    /// ([`crate::skill::workspace_image_code`]); `None` when that image is
+    /// not one the skill ever shipped, which fails the image check.
+    pub image_code: Option<&'a str>,
     /// Wall time measured by the harness.
     pub wall_time_s: Option<u64>,
     /// Identities a reusing phase must use.
@@ -484,6 +486,42 @@ fn resume_card_resolves(resume: &Value, bundle: &BundleIndex, problems: &mut Vec
             problems.push(format!(
                 "the resume card keeps {id}, which the retained session does not hold as a {}",
                 item["kind"].as_str().unwrap_or("?")
+            ));
+        }
+    }
+    // P12 PR 3i: each finding to verify again names evidence the session
+    // holds, inside the window the card gives for it, so that the next run's
+    // one command finds it there.
+    for item in resume["to_verify"].as_array().into_iter().flatten() {
+        let id = item["id"].as_str().unwrap_or_default();
+        let (Some(from), Some(to)) = (item["from_us"].as_u64(), item["to_us"].as_u64()) else {
+            continue;
+        };
+        let inside = if let Some((_, segment)) = bundle
+            .segments
+            .iter()
+            .find(|((_, segment), _)| segment == id)
+        {
+            segment.start_us <= to && segment.end_us >= from
+        } else if let Some(at) = bundle.frames.get(id).copied().or_else(|| {
+            bundle
+                .selections
+                .get(id)
+                .and_then(|selections| selections.first())
+                .map(|selection| selection.actual_us)
+        }) {
+            (from..=to).contains(&at)
+        } else if let Some(crop) = bundle.crops.get(id) {
+            (from..=to).contains(&crop.actual_us)
+        } else {
+            problems.push(format!(
+                "the resume card asks to verify {id}, which the retained session does not hold"
+            ));
+            continue;
+        };
+        if !inside {
+            problems.push(format!(
+                "the resume card asks to verify {id} in a window that does not hold it"
             ));
         }
     }
@@ -752,10 +790,14 @@ fn budget_problems(
     problems
 }
 
+/// A check code as compared: without any white space and in upper case.
+/// Since P12 PR 3i the image draws each glyph in its own wide cell, so a
+/// reader may report the glyphs spaced out; the glyphs themselves must
+/// still all be right.
 fn normalised_code(code: &str) -> String {
-    code.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    code.chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>()
         .to_ascii_uppercase()
 }
 
@@ -780,8 +822,15 @@ fn image_check_problems(
     let reported = handoff["capabilities"]["image_check_code"]
         .as_str()
         .unwrap_or_default();
-    let right = normalised_code(reported) == normalised_code(input.image_code);
-    if !right {
+    let right = input
+        .image_code
+        .is_some_and(|code| normalised_code(reported) == normalised_code(code));
+    if input.image_code.is_none() {
+        problems.push(
+            "the trial's check image is not one the skill shipped, so its code is unknown"
+                .to_owned(),
+        );
+    } else if !right {
         problems.push("the reported image check code is wrong".to_owned());
     }
     let opened = calls.iter().flat_map(|call| &call.actions).any(|action| {

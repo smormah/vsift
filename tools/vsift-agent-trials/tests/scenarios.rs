@@ -9,7 +9,10 @@ use std::{
 
 use vsift_agent_trials::{
     scenario::Scenario,
-    skill::{SkillReferences, files_below, image_code},
+    skill::{
+        CHECK_IMAGES, SkillReferences, check_image_for, current_check_image, files_below,
+        workspace_image_code,
+    },
     truth::{CorpusTruth, normalize},
 };
 
@@ -59,7 +62,10 @@ fn every_scenario_validates_against_the_truth_and_the_skill() -> TestResult {
 #[test]
 fn prompts_never_carry_truth_or_the_image_code() -> TestResult {
     let truth = CorpusTruth::load(&repository().join("fixtures/corpus"))?;
-    let code = image_code().to_ascii_lowercase();
+    let codes: Vec<String> = CHECK_IMAGES
+        .iter()
+        .map(|image| image.code().to_ascii_lowercase())
+        .collect();
     for (_, scenario) in scenarios()? {
         let fixture = truth.fixture(&scenario.fixture.id)?;
         let mut forbidden: Vec<String> = fixture
@@ -70,11 +76,13 @@ fn prompts_never_carry_truth_or_the_image_code() -> TestResult {
         forbidden.push(fixture.audio.script.clone());
         for phase in &scenario.phases {
             let prompt = normalize(&phase.prompt).join(" ");
-            assert!(
-                !phase.prompt.to_ascii_lowercase().contains(&code),
-                "{}",
-                scenario.id
-            );
+            for code in &codes {
+                assert!(
+                    !phase.prompt.to_ascii_lowercase().contains(code.as_str()),
+                    "{}",
+                    scenario.id
+                );
+            }
             for sentence in &forbidden {
                 let words = normalize(sentence).join(" ");
                 assert!(
@@ -85,5 +93,48 @@ fn prompts_never_carry_truth_or_the_image_code() -> TestResult {
             }
         }
     }
+    Ok(())
+}
+
+/// The skill's check image is the table's current one, so the grader's
+/// truth and the pixels cannot drift apart, and every image the skill ever
+/// shipped stays known, so an older trial can still be graded again.
+#[test]
+fn the_shipped_check_image_is_the_current_known_one() -> TestResult {
+    let bytes = std::fs::read(repository().join("skills/vsift/assets/image-check.png"))?;
+    let shipped =
+        check_image_for(&bytes).ok_or("the skill's check image is not in CHECK_IMAGES")?;
+    assert_eq!(shipped.sha256, current_check_image().sha256);
+    assert!(current_check_image().retired.is_none());
+    let retired = CHECK_IMAGES.len() - 1;
+    assert!(
+        CHECK_IMAGES
+            .iter()
+            .take(retired)
+            .all(|image| image.retired.is_some()),
+        "only the last image is current"
+    );
+    let mut digests: Vec<&str> = CHECK_IMAGES.iter().map(|image| image.sha256).collect();
+    digests.sort_unstable();
+    digests.dedup();
+    assert_eq!(digests.len(), CHECK_IMAGES.len());
+
+    // A workspace's skill copy names its own image; an unknown one names none.
+    let workspace = std::env::temp_dir().join(format!(
+        "vsift-check-image-{}",
+        vsift_agent_trials::skill::random_hex(8)?
+    ));
+    let claude = workspace.join(".claude/skills/vsift");
+    let codex = workspace.join(".agents/skills/vsift");
+    std::fs::create_dir_all(codex.join("assets"))?;
+    std::fs::write(codex.join("assets/image-check.png"), &bytes)?;
+    let directories = [claude.clone(), codex.clone()];
+    assert_eq!(
+        workspace_image_code(&directories),
+        Some(current_check_image().code())
+    );
+    std::fs::write(codex.join("assets/image-check.png"), b"not the image")?;
+    assert_eq!(workspace_image_code(&directories), None);
+    std::fs::remove_dir_all(&workspace)?;
     Ok(())
 }

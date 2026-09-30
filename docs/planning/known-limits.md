@@ -127,6 +127,7 @@ Each entry has these fields:
 | [L-081](#l-081) | A handoff may leave out the times and session details VSift recorded, so reading it alone does not give them | contract/UX | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | open |
 | [L-082](#l-082) | Claude Haiku 4.5 does not follow the full investigation procedure | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-083](#l-083) | Only `display_text` shows hidden characters; `text` and `original_text` keep them raw | security | low | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
+| [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | P12 | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 
 Counts: 4 high, 22 medium, 51 low (77 entries).
 
@@ -1592,6 +1593,12 @@ Counts: 4 high, 22 medium, 51 low (77 entries).
     whose input is model-written code, so counting would mean parsing that code. Codex
     runs stay `--ephemeral`, and every Codex grade carries a deviation saying the
     images are unmeasured. Claude Code's image budgets are measured as before.
+  - **The check image (PR 3i, 2026-09-30):** GPT-6-Sol failed `image_check` in 5
+    runs of the final campaign, each time reading the first image's code with the
+    same letter missing. The image was redrawn with larger, spaced glyphs that no
+    reader confuses (`docs/agents/skill.md`), and the grader now takes the code of the
+    image each trial's workspace received, from a table of every image the skill
+    shipped keyed by SHA-256, so older trials still grade against the code they saw.
   - **Found and fixed (PR 3e):** `-c tools.view_image=false` was an unknown setting
     Codex ignored, reporting it as a stream item of type `error` that no check read;
     images-disabled runs now pass `--disable view_image`, which a debug run showed
@@ -1825,8 +1832,11 @@ alone does not give them.**
 - **Why:** the procedure (eight states, budgets, a typed handoff) is more than this
   model follows from the skill alone; the vocabulary fix of PR 3g does not change that.
 - **Mitigation:** the maintainer redefined the compact tier as Claude Sonnet 5.5 and
-  GPT-6-Luna (2026-09-29); [verification.md](verification.md) section 6 names it, and
-  `docs/agents/skill.md` should say which models are supported once the tier qualifies.
+  GPT-6-Luna (2026-09-29), and after the final campaign on `56f1e1f` as Claude Sonnet
+  5.5 and GPT-6-Sol, with GPT-6-Luna also below the line ([L-084](#l-084));
+  [verification.md](verification.md) section 6 names it, and `docs/agents/skill.md`
+  should say which models are supported once the tier qualifies. Haiku 4.5 did not run
+  in the final campaign.
 - **Next step:** none planned; a later, simpler skill profile for small models would
   be a new decision.
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
@@ -1868,9 +1878,42 @@ raw.**
   send" checklist, held by the `skill_contract` guard; the handoff schema's refusal in
   prose members; `report_text` in trials.
 - **Next step:** the compact-tier re-run (P12) shows whether models quote
-  `display_text`.
+  `display_text`. *2026-09-30:* in the final campaign on `56f1e1f` no report held a
+  raw hidden character (`report_text` passed in every counted run of Opus 5.5, Sonnet
+  5.5, GPT-6-Astra, GPT-6-Luna and GPT-6-Sol, SEC-T02 included).
 - **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
   **Status:** accepted residual (maintainer decision, 2026-09-29). **Review:** pending.
+
+### L-084
+
+**GPT-6-Luna is below the compact-tier line.**
+
+- **What:** in the final counted campaign on `56f1e1f` (2026-09-29, Codex in the Linux
+  container, 28 trials of A-01 to A-07 and SEC-T02, A-02 counting both phases as one
+  trial), GPT-6-Luna answered 19 of 28 questions correctly and passed both results in
+  15 of 28 (GPT-6-Sol: 25 and 15; Claude Sonnet 5.5: 25 and 25). Its failures: 8
+  handoffs that do not validate (claims written with `text` in place of `statement`,
+  instructions with `citations` in place of `citation`, frames marked inspected
+  without image access), 4 command-policy failures (a `cat` of a folder outside the
+  skill, a `command -v` probe, an `rg --files` exclude glob with a separator), 3
+  images-disabled A-05 answers that leave out the chart's time, 2 A-07 answers that
+  miss the order's status change and 2 A-02 resumed phases. PR 3i's re-grade removes
+  its `command -v` failure only (the table is in the PR).
+- **Evidence:** the local campaign summary and grades (raw logs stay local); ADR
+  0022's note of 2026-09-30.
+- **Impact:** a Codex user who picks GPT-6-Luna gets a correct answer about two times
+  in three and a valid handoff about three times in four. The skill is not qualified
+  for it.
+- **Why:** the model follows the procedure but writes the handoff's shape and the
+  answer's details less reliably than the tier needs; no single skill fix covers the
+  mix.
+- **Mitigation:** the compact tier is Claude Sonnet 5.5 and GPT-6-Sol (maintainer,
+  after the final campaign; [verification.md](verification.md) section 6); like Claude
+  Haiku 4.5 ([L-082](#l-082)), GPT-6-Luna is recorded below the supported line.
+- **Next step:** none planned; a handoff validator command (P13, #213) may lower its
+  handoff failures.
+- **Owner:** P12. **Issue:** [#15](https://github.com/smormah/vsift/issues/15).
+  **Status:** accepted residual (maintainer decision, 2026-09-30). **Review:** pending.
 
 ### L-040
 

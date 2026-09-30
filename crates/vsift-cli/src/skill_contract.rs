@@ -37,11 +37,18 @@ const STATES: [&str; 8] = [
     "CLOSE_OR_RETAIN",
 ];
 
-/// The code word printed in `assets/image-check.png`, kept in two parts so a
-/// plain search of the repository for the joined word does not find it. An
+/// The code printed in `assets/image-check.png`, kept in two parts so a
+/// plain search of the repository for the joined code does not find it. An
 /// agent must read it from the pixels; if any skill text contained it, a
-/// model could "pass" the image check without seeing the image.
-const IMAGE_CODE_PARTS: [&str; 2] = ["OK", "API 6281"];
+/// model could "pass" the image check without seeing the image. Redrawn in
+/// P12 PR 3i with glyphs no reader confuses (no I, l, 1, O, 0, S, 5, B or
+/// 8); the trial grader keeps the same code in its table of check images.
+const IMAGE_CODE_PARTS: [&str; 2] = ["HKR", "X 4739"];
+
+/// Codes of check images the skill no longer ships, in the same two-part
+/// form. None of their words may come back into the skill: an agent that
+/// remembered one must not find it confirmed there.
+const RETIRED_IMAGE_CODE_PARTS: [[&str; 2]; 1] = [["OK", "API 6281"]];
 
 /// Upper bound on `SKILL.md`, which every client loads whole into its context.
 const MAX_SKILL_LINES: usize = 300;
@@ -1255,6 +1262,24 @@ fn cut_short(handoff: &Value) -> bool {
         })
 }
 
+/// A resume card's findings to verify again (P12 PR 3i) each name a window
+/// that does not end before it starts; the trial grader applies the same
+/// rule and also checks the window against `VSift`'s records.
+fn check_resume_windows(name: &str, handoff: &Value, problems: &mut Problems) {
+    for item in handoff["resume"]["to_verify"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        if item["from_us"].as_u64() > item["to_us"].as_u64() {
+            problems.add(format!(
+                "{name}: the resume card's finding on {} ends before it starts",
+                item["id"]
+            ));
+        }
+    }
+}
+
 /// The rules of `references/handoff.md` that one schema cannot express.
 fn check_handoff_semantics(name: &str, handoff: &Value, problems: &mut Problems) {
     let citations = handoff["citations"].as_array().cloned().unwrap_or_default();
@@ -1338,6 +1363,7 @@ fn check_handoff_semantics(name: &str, handoff: &Value, problems: &mut Problems)
             problems.add(format!("{name}: resume card is {size} bytes"));
         }
     }
+    check_resume_windows(name, handoff, problems);
     let mut texts = Vec::new();
     strings(handoff, &mut texts);
     for text in texts {
@@ -1827,6 +1853,73 @@ fn resume_md_shows_one_valid_resume_card() -> Result<(), String> {
     problems.into_result()
 }
 
+/// P12 PR 3i: in the final campaign every resumed A-02 run (Sonnet 5.5,
+/// GPT-6-Sol and GPT-6-Luna, 9 of 9) took the card's `remaining` as its own
+/// budget and reported the earlier run's findings unverified. The skill
+/// says, where a resuming agent reads, that a new run has its own budget and
+/// verifies each earlier finding again with one command; and `resume.md`'s
+/// card lists its findings in `to_verify` with evidence it also keeps.
+#[test]
+fn a_new_run_has_its_own_budget_and_verifies_the_card_again() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let flatten = |text: String| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let resume = flatten(read_text(
+        &skill_directory().join("references").join("resume.md"),
+    )?);
+    for phrase in [
+        "your budget is the profile the user names for this run, counted from zero",
+        "do the image check of CHECK_CAPABILITIES again",
+        "Verify every earlier finding again before you report it.",
+        "Never report an earlier finding as `unsupported`",
+        "It binds only you, after a context reset in this same run",
+    ] {
+        if !resume.contains(phrase) {
+            problems.add(format!("resume.md does not say {phrase:?}"));
+        }
+    }
+    let skill = flattened_skill_md()?;
+    if !skill.contains("a new run has its own budget") {
+        problems.add("SKILL.md does not send a resuming agent to resume.md's budget".to_owned());
+    }
+    let handoff = flatten(read_text(
+        &skill_directory().join("references").join("handoff.md"),
+    )?);
+    if !handoff.contains("verify each earlier finding again before you report it") {
+        problems.add("handoff.md does not say to verify an earlier finding again".to_owned());
+    }
+    let document = parse_markdown(
+        "resume.md".to_owned(),
+        &read_text(&skill_directory().join("references").join("resume.md"))?,
+    );
+    let card: Value = document
+        .fences
+        .iter()
+        .find(|fence| fence.info == "json")
+        .map(|fence| serde_json::from_str(&fence.lines.join("\n")))
+        .transpose()
+        .map_err(|error| format!("resume.md's card is not JSON: {error}"))?
+        .ok_or("resume.md shows no card")?;
+    let kept: BTreeSet<&str> = card["evidence"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item["id"].as_str())
+        .collect();
+    let findings = card["to_verify"].as_array().cloned().unwrap_or_default();
+    if findings.is_empty() {
+        problems.add("resume.md's card lists no finding to verify".to_owned());
+    }
+    for item in &findings {
+        let id = item["id"].as_str().unwrap_or_default();
+        if !kept.contains(id) {
+            problems.add(format!(
+                "resume.md's card verifies {id}, which its evidence does not keep"
+            ));
+        }
+    }
+    problems.into_result()
+}
+
 /// The resume card is required only when the work was cut short and can
 /// continue (supervisor's decision, 2026-09-29), and the skill says so where
 /// an agent decides: `SKILL.md`'s REPORT, `resume.md` and `handoff.md`.
@@ -2070,17 +2163,89 @@ fn handoff_template_has_every_section_in_order() -> Result<(), String> {
     problems.into_result()
 }
 
+/// The words of the current and every retired check code, lower case.
+fn check_code_words() -> Vec<String> {
+    std::iter::once(IMAGE_CODE_PARTS)
+        .chain(RETIRED_IMAGE_CODE_PARTS)
+        .flat_map(|parts| {
+            parts
+                .concat()
+                .split(' ')
+                .map(str::to_ascii_lowercase)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Every text file of the repository: each UTF-8 file below the root,
+/// except build output, version-control data and hidden folders other than
+/// `.github` (a main checkout keeps its agents' worktrees under `.claude`).
+fn repository_text_files() -> Result<Vec<(PathBuf, String)>, String> {
+    let mut pending = vec![repository()];
+    let mut found = Vec::new();
+    while let Some(directory) = pending.pop() {
+        let entries = fs::read_dir(&directory)
+            .map_err(|error| format!("{}: {error}", directory.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("{}: {error}", directory.display()))?;
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let kind = entry
+                .file_type()
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+            if kind.is_dir() {
+                let skipped = name == "target" || (name.starts_with('.') && name != ".github");
+                if !skipped {
+                    pending.push(path);
+                }
+            } else if kind.is_file() {
+                let bytes =
+                    fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+                if let Ok(text) = String::from_utf8(bytes) {
+                    found.push((path, text));
+                }
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// The joined code of the current check image, and of every retired one,
+/// is in no text file of the repository: the code lives only in the pixels
+/// and, split, in this guard and the trial grader.
+#[test]
+fn no_text_file_of_the_repository_holds_a_joined_check_code() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let codes: Vec<String> = std::iter::once(IMAGE_CODE_PARTS)
+        .chain(RETIRED_IMAGE_CODE_PARTS)
+        .map(|parts| parts.concat().to_ascii_lowercase())
+        .collect();
+    let files = repository_text_files()?;
+    if files.len() < 100 {
+        problems.add(format!(
+            "only {} text files found below the repository root",
+            files.len()
+        ));
+    }
+    for (path, text) in files {
+        let lowered = text.to_ascii_lowercase();
+        if codes.iter().any(|code| lowered.contains(code.as_str())) {
+            problems.add(format!("{} holds a joined check code", path.display()));
+        }
+    }
+    problems.into_result()
+}
+
 #[test]
 fn image_check_code_appears_only_in_the_pixels() -> Result<(), String> {
     let mut problems = Problems::default();
-    let code = IMAGE_CODE_PARTS.concat();
-    let parts: Vec<String> = code.split(' ').map(str::to_ascii_lowercase).collect();
+    let parts = check_code_words();
     for path in skill_text_files()? {
         let text = read_text(&path)?.to_ascii_lowercase();
         for part in &parts {
             if text.contains(part.as_str()) {
                 problems.add(format!(
-                    "{} contains part of the image check code",
+                    "{} contains part of a current or retired image check code",
                     path.display()
                 ));
             }
