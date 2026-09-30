@@ -1799,7 +1799,13 @@ it cannot be packaged for crates.io as it is.**
   that the executable cannot start. Yarn 4.18 quarantines a version for a day after it is
   published (`npmMinimalAgeGate`, default `1d`); the qualification turns the gate off,
   because it publishes seconds before it installs, so for a day after each real release
-  Yarn users must wait or preapprove `vsift` and `@vsift/*` (`install.md`).
+  Yarn users must wait or preapprove `vsift` and `@vsift/*` (`install.md`). Bun 1.2's
+  `bun remove --global vsift` removes the launcher and the command but leaves the
+  platform package in Bun's global folder, where nothing runs it (the matrix records it).
+  Bun 1.2.23 on Windows fails `bun add --global` with "InvalidWtf8" when its install or
+  cache folder has non-ASCII letters (found by the matrix on 2026-09-30, a Bun defect),
+  so the Windows Bun job keeps its own folders to ASCII with spaces; the arguments vsift
+  receives still carry non-ASCII paths there.
 - **Evidence:** `.github/workflows/release.yml` (the pinned versions); the ADR 0023 PR 9
   note; `npm/qualification/qualify.cjs`.
 - **Impact:** a regression specific to a newer runtime or another package-manager major

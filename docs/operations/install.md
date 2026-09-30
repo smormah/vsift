@@ -122,7 +122,9 @@ bun remove --global vsift
 yarn remove vsift            # in the project
 ```
 
-This removes the launcher, the platform package and the command. Package caches keep
+This removes the launcher, the platform package and the command (Bun 1.2 leaves the
+platform package in its global folder, `~/.bun/install/global/node_modules/@vsift/`,
+where nothing runs it; delete that folder to reclaim the space). Package caches keep
 the downloaded tarballs until you clean them (`npm cache clean --force`, `pnpm store
 prune`, `yarn cache clean`, `bun pm cache rm`). VSift's own data (sessions, the
 configuration, managed tools) is not touched; `vsift setup list` and `vsift setup remove`

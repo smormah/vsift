@@ -899,7 +899,7 @@ job stay PR 10's. The runbooks are [`install.md`](../operations/install.md) (use
   `--omit optional`, and for Yarn, which cannot omit them, `supportedArchitectures` for
   another platform) giving exit 127 and a message naming the package without a stack
   trace; running with the registry stopped; and a clean uninstall (no launcher, platform
-  package or command left). The launcher's own tests (`npm/test/launcher.test.cjs`, CI
+  package or command left; Bun 1.2 leaves the platform package, L-092). The launcher's own tests (`npm/test/launcher.test.cjs`, CI
   job `npm launcher` on three operating systems) cover selection, every refusal for every
   target, arguments with spaces, Unicode and shell metacharacters, streams, exit statuses,
   and signals with a stand-in executable (a targeted and a process-group interruption on

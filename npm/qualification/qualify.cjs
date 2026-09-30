@@ -50,6 +50,11 @@ const DIGEST_BUDGET_MS = 50;
 // A folder name with spaces, accents and CJK letters: every install, project
 // and argument path below it must survive every package manager and shim.
 const AWKWARD = 'vsift qualification ü 日本';
+// The folders the package manager itself uses carry the same name, except for
+// Bun on Windows: Bun 1.2.23 fails there with "InvalidWtf8" on a non-ASCII
+// install or cache folder (L-092), so its folders keep only the spaces. The
+// arguments vsift receives keep the non-ASCII name on every job.
+let folderLabel = AWKWARD;
 
 class QualificationError extends Error {
   constructor(message) {
@@ -146,6 +151,11 @@ function run(command, args, env, options = {}) {
   const result = direct
     ? childProcess.spawnSync(command, args, spawnOptions)
     : childProcess.spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', INVOKE, command, ...args], spawnOptions);
+  if (result.error && result.error.code === 'ETIMEDOUT') {
+    throw new QualificationError(
+      `${command} ${args.join(' ')} did not finish within ${spawnOptions.timeout / 1000} s: ${(result.stderr || '').slice(-1000)}`,
+    );
+  }
   if (result.error) {
     throw new QualificationError(`${command} could not be started: ${result.error.code || result.error.message}`);
   }
@@ -326,7 +336,7 @@ function findPackage(root, name) {
  * dependencies and uninstall.
  */
 function managerProfile(manager, work, env) {
-  const installRoot = path.join(work, `${manager} install ${AWKWARD}`);
+  const installRoot = path.join(work, `${manager} install ${folderLabel}`);
   const shimNames = windows ? ['vsift.cmd', 'vsift.ps1'] : ['vsift'];
   switch (manager) {
     case 'npm':
@@ -411,16 +421,16 @@ function baseEnvironment(work) {
     npm_config_registry: REGISTRY,
     NPM_CONFIG_REGISTRY: REGISTRY,
     npm_config_userconfig: userConfig,
-    npm_config_cache: path.join(work, `npm cache ${AWKWARD}`),
+    npm_config_cache: path.join(work, `npm cache ${folderLabel}`),
     npm_config_update_notifier: 'false',
     npm_config_audit: 'false',
     npm_config_fund: 'false',
     // pnpm's store and metadata cache in this run's folder, so no earlier run's
     // metadata for the same version can stand in for this one's.
-    npm_config_store_dir: path.join(work, `pnpm store ${AWKWARD}`),
-    pnpm_config_store_dir: path.join(work, `pnpm store ${AWKWARD}`),
-    npm_config_cache_dir: path.join(work, `pnpm cache ${AWKWARD}`),
-    pnpm_config_cache_dir: path.join(work, `pnpm cache ${AWKWARD}`),
+    npm_config_store_dir: path.join(work, `pnpm store ${folderLabel}`),
+    pnpm_config_store_dir: path.join(work, `pnpm store ${folderLabel}`),
+    npm_config_cache_dir: path.join(work, `pnpm cache ${folderLabel}`),
+    pnpm_config_cache_dir: path.join(work, `pnpm cache ${folderLabel}`),
     YARN_NPM_REGISTRY_SERVER: REGISTRY.slice(0, -1),
     YARN_UNSAFE_HTTP_WHITELIST: '127.0.0.1',
     YARN_ENABLE_TELEMETRY: '0',
@@ -431,16 +441,16 @@ function baseEnvironment(work) {
     // Users meet the gate after a real release (install.md, L-092).
     YARN_NPM_MINIMAL_AGE_GATE: '0',
     YARN_ENABLE_GLOBAL_CACHE: 'false',
-    YARN_CACHE_FOLDER: path.join(work, `yarn cache ${AWKWARD}`),
-    YARN_GLOBAL_FOLDER: path.join(work, `yarn global ${AWKWARD}`),
+    YARN_CACHE_FOLDER: path.join(work, `yarn cache ${folderLabel}`),
+    YARN_GLOBAL_FOLDER: path.join(work, `yarn global ${folderLabel}`),
     BUN_CONFIG_REGISTRY: REGISTRY,
-    BUN_INSTALL_CACHE_DIR: path.join(work, `bun cache ${AWKWARD}`),
+    BUN_INSTALL_CACHE_DIR: path.join(work, `bun cache ${folderLabel}`),
     DO_NOT_TRACK: '1',
   };
 }
 
 function newProject(work, name, files = {}, manifest = {}) {
-  const directory = path.join(work, `${name} ${AWKWARD}`);
+  const directory = path.join(work, `${name} ${folderLabel}`);
   fs.mkdirSync(directory, { recursive: true });
   writeFile(
     path.join(directory, 'package.json'),
@@ -459,7 +469,10 @@ async function main() {
   const manager = options.manager;
   const target = TARGETS[`${process.platform} ${process.arch}`];
   expect(target !== undefined, `no VSift target for ${process.platform} ${process.arch}`);
-  const work = path.join(path.resolve(options.work), AWKWARD, manager);
+  if (windows && manager === 'bun') {
+    folderLabel = 'vsift qualification';
+  }
+  const work = path.join(path.resolve(options.work), folderLabel, manager);
   fs.rmSync(work, { recursive: true, force: true });
   fs.mkdirSync(work, { recursive: true });
   const tarballs = fs
@@ -547,11 +560,23 @@ async function qualify({ options, manager, target, work, tarballs, env, profile,
         return result.stdout.trim();
       });
       await check(`${invocation.label} setup check --json`, () => {
+        // The runner may lack the media tools, so the report may be `blocked`
+        // (exit 2); the launcher must give exactly what vsift gives.
+        const [directory] = platformPackages();
+        expect(directory !== undefined, `${target.packageName} not found`);
+        const direct = childProcess.spawnSync(path.join(directory, target.executable), ['setup', 'check', '--json'], {
+          env: profile.env,
+          encoding: 'utf8',
+          timeout: 120_000,
+        });
         const result = runInstalled(invocation, ['setup', 'check', '--json']);
         const document = parseJson(result);
         expect(document.command === 'setup.check', `command ${document.command}`);
-        expect(document.status === 'failed' ? result.status !== 0 : result.status === 0, describeStatus(result));
-        return `${describeStatus(result)}, status ${document.status}`;
+        expect(
+          result.status === direct.status && document.status === parseJson(direct).status,
+          `${describeStatus(result)} status ${document.status}; vsift itself ${describeStatus(direct)}`,
+        );
+        return `${describeStatus(result)}, status ${document.status}, as vsift itself`;
       });
       await check(`${invocation.label}: a path argument with spaces and Unicode`, () => {
         const result = runInstalled(invocation, ['handoff', 'check', '--file', draft, '--json']);
@@ -610,16 +635,16 @@ async function qualify({ options, manager, target, work, tarballs, env, profile,
   await check(`one-shot: ${profile.oneShot[0]} ${profile.oneShot[1].join(' ')}`, () => {
     const [command, args] = profile.oneShot;
     const oneShotDirectory = newProject(work, 'one-shot');
-    const version = run(command, [...args, '--version'], profile.env, { cwd: oneShotDirectory });
+    const version = run(command, [...args, '--version'], profile.env, { cwd: oneShotDirectory, timeout: 240_000 });
     expect(version.status === 0 && version.stdout.trim() === expectedVersion, `${describeStatus(version)}: ${version.stdout} ${version.stderr}`);
-    const setup = run(command, [...args, 'setup', 'check', '--json'], profile.env, { cwd: oneShotDirectory });
+    const setup = run(command, [...args, 'setup', 'check', '--json'], profile.env, { cwd: oneShotDirectory, timeout: 240_000 });
     expect(parseJson(setup).command === 'setup.check', setup.stdout.slice(0, 300));
     return `${version.stdout.trim()}; setup check ${describeStatus(setup)}`;
   });
   if (profile.oneShotOnBun) {
     await check(`one-shot on the Bun runtime: ${profile.oneShotOnBun[0]} ${profile.oneShotOnBun[1].join(' ')}`, () => {
       const [command, args] = profile.oneShotOnBun;
-      const result = run(command, [...args, '--version'], profile.env, { cwd: work });
+      const result = run(command, [...args, '--version'], profile.env, { cwd: work, timeout: 240_000 });
       expect(result.status === 0 && result.stdout.trim() === expectedVersion, `${describeStatus(result)}: ${result.stdout} ${result.stderr}`);
       return result.stdout.trim();
     });
@@ -653,8 +678,17 @@ async function qualify({ options, manager, target, work, tarballs, env, profile,
     await check('clean uninstall', () => {
       const [command, args] = profile.uninstall;
       succeed(command, args, profile.env, { cwd: projectDirectory || work });
-      const left = [...launcherPackages(), ...findDirectories(profile.installRoot, (directory) => path.basename(directory) === '@vsift' && fs.readdirSync(directory).length > 0)];
-      expect(left.length === 0, `left behind: ${left.join(', ')}`);
+      const launchers = launcherPackages();
+      expect(launchers.length === 0, `the launcher is left behind: ${launchers.join(', ')}`);
+      const platforms = findPackage(profile.installRoot, target.packageName);
+      let note = '';
+      if (manager === 'bun' && platforms.length > 0) {
+        // Bun 1.2's global remove leaves the removed package's optional
+        // dependency in its global folder; no command reaches it (L-092).
+        note = `; Bun left ${target.packageName} in its global folder (${platforms.length} copy), with no command`;
+      } else {
+        expect(platforms.length === 0, `left behind: ${platforms.join(', ')}`);
+      }
       for (const shim of profile.shims) {
         expect(!fs.existsSync(shim), `${shim} is still there`);
       }
@@ -664,7 +698,7 @@ async function qualify({ options, manager, target, work, tarballs, env, profile,
         const pnp = path.join(profile.installRoot, '.pnp.cjs');
         expect(!fs.existsSync(pnp) || !fs.readFileSync(pnp, 'utf8').includes('@vsift/'), '.pnp.cjs still names @vsift');
       }
-      return `${command} ${args.join(' ')}`;
+      return `${command} ${args.join(' ')}${note}`;
     });
   }
 }
