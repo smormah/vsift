@@ -168,6 +168,7 @@ fn vsift(base: &Path) -> Result<Command, StageStop> {
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
+        .env("XDG_DATA_HOME", base.join("data"))
         .env("HOME", base)
         .timeout(CLI_DEADLINE);
     Ok(command)
@@ -474,9 +475,10 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
 
     let plan_file = root.0.join("saved-plan.json");
     fs::write(&plan_file, serde_json::to_vec(&plan)?)?;
-    let digest = data["plan_digest"]
-        .as_str()
-        .map_or_else(|| "0".repeat(64), str::to_owned);
+    // The plan's own digest would start a real managed install on a
+    // qualified host (P13 PR 4); this stage proves only that acceptance is
+    // revalidated, so it offers a digest that is not the plan's.
+    let digest = "0".repeat(64);
     let (code, install) = run_json(
         vsift(&base)?
             .args(["setup", "install", "--plan"])
@@ -487,11 +489,7 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
     ensure(code == Some(2), "setup install did not exit 2")?;
     ensure_eq(
         &install["error"]["code"],
-        if qualified {
-            "COMMAND_NOT_IMPLEMENTED"
-        } else {
-            "INVALID_ARGUMENT"
-        },
+        "INVALID_ARGUMENT",
         "install outcome",
     )?;
     ensure(
@@ -500,7 +498,7 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
     )?;
     Ok(json!({
         "target": data["target"],
-        "branch": if qualified { "qualified_install_reserved" } else { "unqualified_manual_guidance" },
+        "branch": if qualified { "qualified_acceptance_refused" } else { "unqualified_manual_guidance" },
         "managed_install": data["managed_install"],
         "install_outcome": install["error"]["code"],
     }))
