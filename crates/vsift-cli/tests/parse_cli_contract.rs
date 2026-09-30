@@ -358,9 +358,12 @@ fn hostile_argument_text_never_reaches_a_machine_result() -> TestResult {
     Ok(())
 }
 
-/// Human mode keeps the parser's explanation on stderr, which quotes the
-/// argument; it is one line with controls replaced and hidden characters
-/// shown as notation, and stdout stays empty.
+/// Human mode (P13 PR 2a) writes the fixed message, the parser's
+/// explanation, which quotes the argument, and the same typed remediation
+/// and help command as the JSON modes, on stderr; stdout stays empty. The
+/// explanation is quoted line by line after `  | `, with controls replaced
+/// and hidden characters shown as notation, so a line break in the argument
+/// only starts another quoted line.
 #[test]
 fn human_mode_shows_the_parser_detail_in_terminal_safe_form() -> TestResult {
     for words in hostile_lines() {
@@ -372,18 +375,42 @@ fn human_mode_shows_the_parser_detail_in_terminal_safe_form() -> TestResult {
         for raw in ['\u{202E}', '\u{200B}', '\u{1b}'] {
             assert!(!stderr.contains(raw), "{context}: raw character in stderr");
         }
-        assert_eq!(stderr.matches('\n').count(), 1, "{context}: {stderr}");
         assert!(stderr.ends_with('\n'), "{context}");
-        // Where the detail quotes the text, the hidden characters are
-        // notation and the line break is U+FFFD. (The parser itself drops
-        // the escape sequence; either way no escape reaches the terminal.)
+        let lines: Vec<&str> = stderr.lines().collect();
+        assert_eq!(
+            lines.first().copied(),
+            Some("Error: The command line arguments are invalid. (INVALID_ARGUMENT)"),
+            "{context}: {stderr}"
+        );
+        let fixes: Vec<&&str> = lines
+            .iter()
+            .filter(|line| line.starts_with("Fix: The command line was rejected ("))
+            .collect();
+        assert_eq!(fixes.len(), 1, "{context}: {stderr}");
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|line| line.starts_with("Run: vsift ") && line.ends_with(" --help"))
+                .count(),
+            1,
+            "{context}: {stderr}"
+        );
+        // Where the detail quotes the text, it is on quoted lines, the
+        // hidden characters are notation and the line break starts the
+        // next quoted line. (The parser itself drops the escape sequence;
+        // either way no escape reaches the terminal.)
+        for line in &lines {
+            if SENTINEL_WORDS.iter().any(|word| line.contains(word)) {
+                assert!(line.starts_with("  | "), "{context}: {line}");
+            }
+        }
         if stderr.contains("ZWREVERSED") {
             assert!(
                 stderr.contains("QXSENTINEL<U+202E>ZWREVERSED<U+200B>JOINED"),
                 "{context}: {stderr}"
             );
             assert!(
-                stderr.contains("ESCAPED\u{fffd}INJECTED"),
+                stderr.contains("ESCAPED\n  | INJECTED"),
                 "{context}: {stderr}"
             );
         }

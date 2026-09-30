@@ -45,9 +45,8 @@ Codex's trials ran in a Linux container, because its Windows sandbox cannot run 
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PR 0 (kickoff, #226) and the P12 debt
-fixes (#227) are merged; PR 1, the typed parse remediation, is in review. The packet
-is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0 and 1 and the P12 debt fixes are
+merged; PR 2a (readable terminal text, part 1) is in review. The packet is not complete.
 
 ## P13 in one view
 
@@ -62,14 +61,14 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   install/list/rollback/remove/repair`); human output by default; `handoff check`.
 - **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
   `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
-- **Done:** PR 0 (#226, `dbc60f7`): ADR 0023 and notes, ledger, traceability,
-  threat-model plan, issue #16.
-- **In review:** PR 1 (`p13-pr1-parse-remediation`, closes L-071): a rejected command
-  line in JSON modes gets one remediation with a closed reason (`unknown_argument`,
-  `missing_required`, `invalid_value`, `unexpected_value`, `argument_conflict`,
-  `missing_subcommand`, `unknown_subcommand`, `invalid_utf8`, `unclassified`) in the
-  summary, grammar names only, and `vsift <command> --help`; human stderr shows hidden
-  characters as `<U+XXXX>`. **Next:** PRs 2a/2b and 3; then PR 5 (P12 debt merged, #227).
+- **Done:** PR 0 (#226, `dbc60f7`): ADR 0023, ledger, traceability, issue #16. PR 1
+  (#228, `88ef9bf`, closes L-071): a rejected command line gets a typed remediation
+  (nine closed reasons, grammar names only) and `vsift <command> --help`.
+- **In review:** PR 2a (`p13-pr2a-human-output`): the `TerminalText` builder and
+  readable text for setup, `ingest`, `session`, `transcript`, `search`, `bundle
+  validate`, every failure and rejected command lines; SEC-T02 re-run over them. The
+  evidence and job commands keep indented JSON until PR 2b (L-017, L-073 narrowed).
+  **Next:** PR 2b; PR 3 (in progress in parallel); then PRs 4 and 5.
 - **Nothing is published** until P13 completes and the maintainer approves one 0.x
   pre-release under npm's `next` tag; the npm organisation, trusted publishers and
   `release` environment are the maintainer's to set up.
@@ -110,9 +109,10 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
   `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
 - `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
-  that does not parse names its mistake and the `--help` to read (P13 PR 1, in review).
+  that does not parse names its mistake and the `--help` to read (P13 PR 1).
+- Readable terminal text without `--json` (unstable, not for parsing) for the commands
+  PR 2a covers (in review); the others print indented JSON until PR 2b.
 - Still `COMMAND_NOT_IMPLEMENTED`: setup install/repair/list/rollback/remove.
-  Human-readable terminal output is P13's.
 
 ## Packet status
 
@@ -126,7 +126,7 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PR 0 merged (#226), PR 1 (L-071) in review; distribution, managed installation, human-readable output and `handoff check` (#213) to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0 (#226) and 1 (#228, L-071) merged, PR 2a (human output, part 1) in review; distribution, managed installation, the rest of human output and `handoff check` (#213) to come |
 | P14 | Not started |
 
 ## Architecture snapshot

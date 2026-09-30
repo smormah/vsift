@@ -1,0 +1,3 @@
+Session cleanup, dry run: nothing was removed.
+  ses_5ec7020000000000000000000000f12a  ineligible
+More on the next page: repeat the command with --cursor 7

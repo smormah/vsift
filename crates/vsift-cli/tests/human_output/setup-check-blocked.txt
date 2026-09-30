@@ -1,0 +1,13 @@
+VSift setup check
+Profile: desktop
+Status: blocked
+[missing] FFmpeg (media_processing): not found on PATH [filtered PATH]
+  Install or locate this trusted tool, then rerun setup check with its absolute path using --ffmpeg. Managed installation is not yet qualified for this target.
+[missing] FFprobe (media_processing): not found on PATH [filtered PATH]
+  Install or locate this trusted tool, then rerun setup check with its absolute path using --ffprobe. Managed installation is not yet qualified for this target.
+[missing] Whisper (transcription): not found on PATH [filtered PATH]
+  Install or locate this trusted tool, then rerun setup check with its absolute path using --whisper. Managed installation is not yet qualified for this target.
+Media executable probes are blocked until FFmpeg and FFprobe respond.
+Local ASR model: not registered (setup configure-model --file <path>)
+Local ASR check: not run: FFmpeg and FFprobe are needed and must pass their own check
+Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.

@@ -1,0 +1,3 @@
+Error: The command line arguments are invalid. (INVALID_ARGUMENT)
+Fix: The command line was rejected (invalid_value). The value of `--rect` is missing or not valid for `crop`; read its help. On PowerShell, quote the value of `--rect` (for example '10,20,300,80'): unquoted, PowerShell splits it at the commas into several arguments.
+Run: vsift crop --help

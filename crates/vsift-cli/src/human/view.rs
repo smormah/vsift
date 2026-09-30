@@ -1,0 +1,440 @@
+//! Typed views of the v1 results the human renderers read.
+//!
+//! The contract's data types keep their fields private: their one published
+//! form is the v1 JSON, fixed by the schemas in `schemas/v1`. A renderer
+//! therefore reads a result back from that form into the views below, each
+//! a typed subset of one published shape. Field names are checked by the
+//! decoder, so a result that does not match its schema fails to render
+//! (as an internal serialization failure) instead of printing half of it.
+//!
+//! **No view has a field for raw untrusted text.** Segments are read with
+//! `display_text` and speakers with `display_label`, as [`DisplayText`];
+//! `text`, `original_text`, `label` and search terms have no field here, so
+//! a renderer cannot quote them.
+
+use serde::Deserialize;
+
+use super::text::DisplayText;
+
+/// The envelope of a result, with its `data` as `D`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Envelope<D> {
+    pub(crate) status: Status,
+    pub(crate) operation_id: Option<String>,
+    pub(crate) data: D,
+    pub(crate) warnings: Vec<String>,
+    pub(crate) lifecycle: Option<Lifecycle>,
+}
+
+/// The envelope's `status`.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Status {
+    Complete,
+    Partial,
+    Failed,
+    Cancelled,
+}
+
+/// The envelope's `lifecycle`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Lifecycle {
+    pub(crate) mode: String,
+    pub(crate) expires_at: Option<String>,
+}
+
+/// A failed result: its `error` only.
+#[derive(Debug, Deserialize)]
+pub(crate) struct FailureEnvelope {
+    pub(crate) error: Error,
+}
+
+/// The envelope's `error`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Error {
+    pub(crate) code: String,
+    pub(crate) message: String,
+    pub(crate) retry_after_ms: Option<u64>,
+    pub(crate) affected_ids: Vec<String>,
+    pub(crate) remediation: Vec<Remediation>,
+}
+
+/// One remediation of an error.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Remediation {
+    pub(crate) summary: String,
+    pub(crate) command: Option<SuggestedCommand>,
+}
+
+/// A remediation's suggested command: fixed words and validated identifiers.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SuggestedCommand {
+    pub(crate) executable: String,
+    pub(crate) arguments: Vec<String>,
+}
+
+/// A half-open source range in microseconds.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub(crate) struct Range {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+}
+
+/// A transcript revision summary (`transcript-revision.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct TranscriptRevision {
+    pub(crate) revision_id: String,
+    pub(crate) revision: u32,
+    pub(crate) alignment: RevisionAlignment,
+    pub(crate) sidecar: Option<Sidecar>,
+    pub(crate) language: Option<String>,
+    pub(crate) segment_count: u64,
+    pub(crate) warnings: Vec<RevisionWarning>,
+    #[serde(default)]
+    pub(crate) local_asr: Option<LocalAsrRun>,
+    #[serde(default)]
+    pub(crate) supersedes: Option<String>,
+    #[serde(default)]
+    pub(crate) replaced_range: Option<Range>,
+    #[serde(default)]
+    pub(crate) carried_segment_count: Option<u64>,
+}
+
+/// How a revision is aligned to the source.
+#[derive(Debug, Deserialize)]
+pub(crate) struct RevisionAlignment {
+    pub(crate) origin: String,
+    #[serde(default)]
+    pub(crate) offset_us: Option<i64>,
+}
+
+/// The supplied file an imported revision came from.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Sidecar {
+    pub(crate) format: String,
+    pub(crate) sha256: String,
+    pub(crate) bytes: u64,
+}
+
+/// A typed warning of a revision.
+#[derive(Debug, Deserialize)]
+pub(crate) struct RevisionWarning {
+    pub(crate) code: String,
+    pub(crate) count: u64,
+    pub(crate) first_cue: u64,
+}
+
+/// What a local-ASR run was.
+#[derive(Debug, Deserialize)]
+pub(crate) struct LocalAsrRun {
+    pub(crate) provider: String,
+    pub(crate) model_profile: String,
+    pub(crate) model_sha256: String,
+    pub(crate) executable_sha256: String,
+    pub(crate) decoding_profile: String,
+    pub(crate) threads: u64,
+    pub(crate) chunk_count: u64,
+    pub(crate) transcribed_chunks: u64,
+    pub(crate) silent_chunks: u64,
+    pub(crate) no_audio_chunks: u64,
+}
+
+/// One transcript segment, without its raw text.
+#[derive(Debug, Deserialize)]
+pub(crate) struct TranscriptSegment {
+    pub(crate) segment_id: String,
+    pub(crate) start_us: u64,
+    pub(crate) end_us: u64,
+    pub(crate) display_text: DisplayText,
+    pub(crate) markup: Markup,
+    pub(crate) speaker: Option<Speaker>,
+    pub(crate) confidence: Confidence,
+    pub(crate) language: Option<String>,
+    pub(crate) cue: Option<Cue>,
+    #[serde(default)]
+    pub(crate) carried_from: Option<CarriedFrom>,
+}
+
+/// Whether markup was removed from a segment's text.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Markup {
+    None,
+    Removed,
+}
+
+/// A segment's speaker, without its raw label.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Speaker {
+    pub(crate) display_label: DisplayText,
+    pub(crate) origin: String,
+}
+
+/// A segment's confidence.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Confidence {
+    pub(crate) value_basis_points: Option<u16>,
+}
+
+/// The cue an imported segment came from.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Cue {
+    pub(crate) ordinal: u64,
+    pub(crate) line: u64,
+}
+
+/// Where a carried segment was first produced.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CarriedFrom {
+    pub(crate) revision_id: String,
+}
+
+/// `transcript.get` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct TranscriptPage {
+    pub(crate) session_id: String,
+    pub(crate) revision: TranscriptRevision,
+    pub(crate) range: Range,
+    pub(crate) items: Vec<TranscriptSegment>,
+    pub(crate) next_cursor: Option<String>,
+}
+
+/// `transcript.retranscribe` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Retranscription {
+    pub(crate) session_id: String,
+    pub(crate) requested_range: Option<Range>,
+    pub(crate) revision: TranscriptRevision,
+    pub(crate) recognised_segment_count: u64,
+    pub(crate) job: RetranscriptionJob,
+}
+
+/// The job behind a retranscription.
+#[derive(Debug, Deserialize)]
+pub(crate) struct RetranscriptionJob {
+    pub(crate) job_id: String,
+    pub(crate) resumed: bool,
+    pub(crate) chunks_reused: u64,
+    pub(crate) replayed: bool,
+}
+
+/// `search` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Search {
+    pub(crate) session_id: String,
+    pub(crate) revision: TranscriptRevision,
+    pub(crate) query: SearchQuery,
+    pub(crate) range: Option<Range>,
+    pub(crate) items: Vec<TranscriptSegment>,
+    pub(crate) hits: Vec<SearchHit>,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) transcript_coverage: TranscriptCoverage,
+}
+
+/// The normalised query; only how many terms it has is shown, because the
+/// terms are the caller's own text.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SearchQuery {
+    pub(crate) terms: Vec<serde::de::IgnoredAny>,
+}
+
+/// One search hit.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SearchHit {
+    pub(crate) segment_id: String,
+    #[serde(rename = "match")]
+    pub(crate) tier: String,
+}
+
+/// What part of the source a search could read.
+#[derive(Debug, Deserialize)]
+pub(crate) struct TranscriptCoverage {
+    pub(crate) basis: String,
+    pub(crate) searched_range: Option<Range>,
+    pub(crate) untranscribed_ranges: Vec<Range>,
+    pub(crate) no_speech_ranges: Vec<Range>,
+    pub(crate) ranges_truncated: bool,
+}
+
+/// `ingest` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Opened {
+    pub(crate) session_id: String,
+    pub(crate) source_id: String,
+    pub(crate) source_bytes: u64,
+    pub(crate) generation: u64,
+    pub(crate) publication: String,
+    #[serde(default)]
+    pub(crate) transcript: Option<TranscriptRevision>,
+}
+
+/// A session's committed status (`session status`, `renew`, `close`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct SessionStatus {
+    pub(crate) session_id: String,
+    pub(crate) state: String,
+    pub(crate) source_id: String,
+    pub(crate) source_bytes: u64,
+    pub(crate) artifact_count: u64,
+    pub(crate) artifact_bytes: u64,
+    pub(crate) generation: u64,
+    pub(crate) expires_at: String,
+    /// Only `session status` lists jobs.
+    #[serde(default)]
+    pub(crate) jobs: Option<Vec<SessionJob>>,
+    #[serde(default)]
+    pub(crate) jobs_truncated: bool,
+}
+
+/// One job of `session status`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SessionJob {
+    pub(crate) job_id: String,
+    pub(crate) kind: String,
+    pub(crate) state: String,
+    pub(crate) live_owner: bool,
+    pub(crate) resumable: bool,
+    pub(crate) resumable_reason: String,
+}
+
+/// `session.list` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SessionPage {
+    pub(crate) items: Vec<ListedSession>,
+    pub(crate) next_cursor: Option<u16>,
+}
+
+/// One `session list` item.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListedSession {
+    pub(crate) session_id: String,
+    pub(crate) state: String,
+    pub(crate) status: Option<SessionStatus>,
+    pub(crate) error_code: Option<String>,
+}
+
+/// `session.clean` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CleanPage {
+    pub(crate) items: Vec<CleanItem>,
+    pub(crate) next_cursor: Option<u16>,
+    pub(crate) dry_run: bool,
+}
+
+/// One `session clean` item.
+#[derive(Debug, Deserialize)]
+pub(crate) struct CleanItem {
+    pub(crate) session_id: String,
+    pub(crate) outcome: String,
+    pub(crate) error_code: Option<String>,
+}
+
+/// `session.retain` and `bundle.validate` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Bundle {
+    pub(crate) session_id: String,
+    pub(crate) source_id: String,
+    pub(crate) source_bytes: u64,
+    pub(crate) source_included: bool,
+    pub(crate) artifact_count: u64,
+    pub(crate) artifact_bytes: u64,
+    pub(crate) publication: String,
+}
+
+/// `session.init-workspace` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Workspace {
+    pub(crate) profile: String,
+    pub(crate) durability: String,
+    pub(crate) publication: String,
+    pub(crate) admission_capacity: u64,
+    pub(crate) session_retention_seconds: u64,
+    pub(crate) outcome: String,
+}
+
+/// `setup.configure` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ConfiguredSelection {
+    pub(crate) dependency: String,
+    pub(crate) source: String,
+    pub(crate) validation: String,
+    pub(crate) next_step: String,
+}
+
+/// `setup.configure-model` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ConfiguredModel {
+    pub(crate) source: String,
+    pub(crate) validation: String,
+    pub(crate) next_step: String,
+}
+
+/// `setup.plan` data, in both published forms (`setup-plan.schema.json`
+/// and `setup-plan-unqualified.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetupPlan {
+    pub(crate) profile: String,
+    pub(crate) readiness: String,
+    pub(crate) verification_scope: String,
+    #[serde(default)]
+    pub(crate) target: Option<String>,
+    pub(crate) local_asr_model: PlanModel,
+    pub(crate) managed_install: String,
+    #[serde(default)]
+    pub(crate) catalogue_revision: Option<String>,
+    #[serde(default)]
+    pub(crate) stop_new_plans_at: Option<String>,
+    pub(crate) plan_digest: Option<String>,
+    pub(crate) actions: Vec<PlanAction>,
+    pub(crate) dependencies: Vec<PlanDependency>,
+}
+
+/// The plan's local-ASR model: a summary identifier in the unqualified
+/// form, a planned step in the reviewed form.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum PlanModel {
+    Summary(String),
+    Step(PlanStep),
+}
+
+/// A dependency's planned step.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PlanStep {
+    pub(crate) status: String,
+    pub(crate) disposition: String,
+    pub(crate) required_authority: Option<String>,
+    pub(crate) next_step: String,
+}
+
+/// One dependency of the plan.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PlanDependency {
+    pub(crate) dependency: String,
+    #[serde(flatten)]
+    pub(crate) step: PlanStep,
+}
+
+/// One reviewed managed action of the plan.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PlanAction {
+    pub(crate) id: String,
+    pub(crate) component: String,
+    pub(crate) version: String,
+    pub(crate) publisher: String,
+    pub(crate) source_url: String,
+    pub(crate) bytes: u64,
+    pub(crate) sha256: String,
+    pub(crate) licence: String,
+    pub(crate) notice_url: String,
+    pub(crate) trust_limit: String,
+    pub(crate) files: Vec<PlanFile>,
+}
+
+/// One file an action installs.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PlanFile {
+    pub(crate) name: String,
+    pub(crate) bytes: u64,
+    pub(crate) mode: String,
+}

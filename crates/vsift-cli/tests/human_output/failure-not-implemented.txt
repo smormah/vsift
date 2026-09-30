@@ -1,0 +1,1 @@
+Error: This reserved R0 command is not implemented in the current build. (COMMAND_NOT_IMPLEMENTED)

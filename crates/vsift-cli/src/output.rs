@@ -8,6 +8,8 @@ use std::{error::Error, fmt, io, io::Write};
 
 use serde::Serialize;
 use vsift::{FailureClass, FailureCode, RuntimeReadiness};
+
+use crate::human::RenderedText;
 use vsift_contract::{
     MAX_EVENT_LINE_BYTES, OperationResponse, TerminalEventResponse, terminal_safe_text,
 };
@@ -141,6 +143,20 @@ where
         self.standard_output
             .write_all(value.as_bytes())
             .map_err(OutputError::Io)
+    }
+
+    /// Writes a human result built by the `TerminalText` builder, whose
+    /// rules already bound it and made it terminal-safe.
+    pub(crate) fn write_rendered_stdout(&mut self, text: &RenderedText) -> Result<(), OutputError> {
+        self.standard_output
+            .write_all(text.as_str().as_bytes())
+            .map_err(OutputError::Io)
+    }
+
+    /// Writes a human failure built by the `TerminalText` builder to
+    /// stderr, best effort: a closed stderr never fails a command.
+    pub(crate) fn write_rendered_stderr(&mut self, text: &RenderedText) {
+        let _ignored = self.standard_error.write_all(text.as_str().as_bytes());
     }
 
     /// Best-effort bounded diagnostic output; stderr failure never panics.

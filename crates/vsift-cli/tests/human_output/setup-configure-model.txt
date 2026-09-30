@@ -1,0 +1,2 @@
+Registered the local ASR model as a configured_user_path (canonical_nonempty_file_only)
+Next: Model format and provider compatibility remain unverified; setup check still probes executables only.

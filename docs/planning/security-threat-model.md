@@ -256,8 +256,10 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   enough, its digest (R-SEC02).
 
 Human-readable output (SEC-T02, L-073) and `handoff check`'s untrusted input (a draft
-that may carry evidence text) belong with the agent-specific controls below: both will
-escape control and hidden characters and never echo input into a result.
+that may carry evidence text) belong with the agent-specific controls below: both
+escape control and hidden characters and never echo input into a result. Since P13 PR
+2a, human output is written through one builder that enforces this, re-tested by
+SEC-T02 for the commands it renders so far (verification section 7).
 
 ## Agent-specific controls
 

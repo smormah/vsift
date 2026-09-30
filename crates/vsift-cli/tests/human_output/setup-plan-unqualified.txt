@@ -1,0 +1,14 @@
+VSift setup plan (read-only; nothing was changed)
+Profile: desktop
+Readiness: blocked
+Verification: executable_probe_only
+Managed installation: unavailable_unqualified
+Plan digest: none (nothing to install from this plan)
+
+ffmpeg: missing, manual_selection_required (needs user authority)
+  Next: Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check.
+ffprobe: missing, manual_selection_required (needs user authority)
+  Next: Install or locate trusted FFprobe, then run setup configure ffprobe --executable <absolute-path> and setup check.
+whisper: missing, manual_selection_required (needs user authority)
+  Next: For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR.
+Local ASR model: not_checked

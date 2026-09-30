@@ -1,0 +1,3 @@
+Sessions:
+  ses_5ec7020000000000000000000000f12a  open  expires <TIME>
+More on the next page: repeat the command with --cursor 7

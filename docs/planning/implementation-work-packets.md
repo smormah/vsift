@@ -263,8 +263,8 @@ maintainer's approval at completion.
 | --- | --- | --- |
 | 0 | ADR 0023 and the kickoff (ledger, traceability, issue #16, notes) | P12 complete |
 | 1 | L-071 typed parse remediation | 0 |
-| 2a | `crates/vsift-cli/src/human/`, the `TerminalText` builder and the first command renderers | 0 |
-| 2b | The remaining renderers and the SEC-T02 human-output rerun | 2a |
+| 2a | `crates/vsift-cli/src/human/`, the `TerminalText` builder and the first command renderers (setup, `ingest`, `session`, `transcript`, `search`, `bundle validate`, failures), with SEC-T02's rerun over them | 0 |
+| 2b | The remaining renderers (`candidates`, frames, `crop`, `audio`, `job`, the worker hosts) and their SEC-T02 rerun | 2a |
 | 3 | The production smoke executor and its failure cleanup | 0 |
 | 4 | The guarded install transaction, managed lookup tier, `setup install`, `--artifact-dir`, `DOWNLOAD_FAILED` and the in-place contract values | 2a, 3 |
 | 5 | `handoff check`, `vsift-contract::handoff`, the skill's two input forms | 2a and the P12 debt pull requests (skill, guard and grader overlap) |

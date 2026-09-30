@@ -7,6 +7,7 @@ mod candidates;
 mod command;
 mod config;
 mod evidence;
+mod human;
 mod job;
 mod json_input;
 mod output;
@@ -28,7 +29,8 @@ use command::{
     SetupCommand, TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
-use output::{JsonLines, OutputMode, OutputWriter, ProcessExit};
+use human::HumanDetail;
+use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
     Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
     EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, IsolationProfile,
@@ -179,25 +181,18 @@ where
             return write_help_or_version(&mut writer, &error.to_string());
         }
         Err(error) => {
-            // Human mode keeps the parser's own explanation, which quotes
-            // the argument: it goes to stderr through the terminal-safe
-            // diagnostic rule. JSON modes carry the typed remediation, which
-            // never repeats argument text (L-071).
-            if requested_mode == OutputMode::Human {
-                let detail = error.to_string();
-                return write_failure(
-                    &mut writer,
-                    requested_mode,
-                    CommandName::Parse,
-                    FailureCode::InvalidArgument,
-                    Some(&detail),
-                );
-            }
-            return write_command_failure(
+            // Every mode carries the typed remediation, which never repeats
+            // argument text (L-071). Human mode also keeps the parser's own
+            // explanation, which quotes the argument: it is quoted on
+            // stderr in its display form, labelled untrusted.
+            let failure = parse_failure::parse_failure(&error, &arguments);
+            let explanation = parse_failure::parser_explanation(&error);
+            return write_failure_with_detail(
                 &mut writer,
                 requested_mode,
                 CommandName::Parse,
-                parse_failure::parse_failure(&error, &arguments),
+                failure,
+                Some(HumanDetail::Parser(&explanation)),
             );
         }
     };
@@ -274,13 +269,12 @@ where
                 ) {
                     Ok(config) => config,
                     Err(error) => {
-                        let detail = error.to_string();
-                        return write_failure(
+                        return write_failure_with_detail(
                             &mut writer,
                             mode,
                             CommandName::SetupCheck,
-                            FailureCode::InvalidArgument,
-                            Some(&detail),
+                            CommandFailure::from(FailureCode::InvalidArgument),
+                            Some(HumanDetail::Reason(error.reason())),
                         );
                     }
                 };
@@ -775,12 +769,22 @@ where
     let write = match mode {
         OutputMode::Json => writer.write_json(&response),
         OutputMode::JsonLines => writer.write_json(&TerminalEventResponse::new(response)),
-        OutputMode::Human => match serde_json::to_string_pretty(&response) {
-            Ok(mut text) => {
-                text.push('\n');
-                writer.write_trusted_stdout(&text)
+        OutputMode::Human => match human::result(command, &response) {
+            Ok(Some(text)) => writer.write_rendered_stdout(&text),
+            // Until P13 PR 2b, the commands without a renderer print the
+            // indented JSON result.
+            Ok(None) => match serde_json::to_string_pretty(&response) {
+                Ok(mut text) => {
+                    text.push('\n');
+                    writer.write_trusted_stdout(&text)
+                }
+                Err(_) => return write_failure(writer, mode, command, FailureCode::Internal, None),
+            },
+            // A result that does not have its published shape is a defect.
+            Err(OutputError::Serialization(_)) => {
+                return write_failure(writer, mode, command, FailureCode::Internal, None);
             }
-            Err(_) => return write_failure(writer, mode, command, FailureCode::Internal, None),
+            Err(error) => Err(error),
         },
     };
     match write {
@@ -900,19 +904,33 @@ where
     StandardOutput: Write,
     StandardError: Write,
 {
-    if failure.remediation.is_none()
-        && failure.retry_after_ms.is_none()
-        && failure.affected_ids.is_empty()
-    {
-        return write_failure(writer, mode, command, failure.code, None);
-    }
+    write_failure_with_detail(writer, mode, command, failure, None)
+}
+
+/// Writes a failure; in human mode with `detail` after its message.
+///
+/// The JSON modes write the one failure result (or its terminal event);
+/// human mode renders the same facts on stderr through [`human::failure`].
+/// Should that text not fit its budget, the fixed message alone is written
+/// instead.
+fn write_failure_with_detail<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    mode: OutputMode,
+    command: CommandName,
+    failure: CommandFailure,
+    detail: Option<HumanDetail<'_>>,
+) -> ProcessExit
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
     let code = failure.code;
     let response = failure_response(command, failure);
     let result = match mode {
         OutputMode::Human => {
-            writer.write_safe_diagnostic(response.error_message());
-            for summary in response.remediation_summaries() {
-                writer.write_safe_diagnostic(summary);
+            match human::failure(&response, detail) {
+                Ok(text) => writer.write_rendered_stderr(&text),
+                Err(_) => writer.write_safe_diagnostic(response.error_message()),
             }
             Ok(())
         }
@@ -960,37 +978,19 @@ fn failure_response(
     response
 }
 
+/// Writes a failure that is its code alone.
 fn write_failure<StandardOutput, StandardError>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     mode: OutputMode,
     command: CommandName,
     code: FailureCode,
-    human_detail: Option<&str>,
+    detail: Option<HumanDetail<'_>>,
 ) -> ProcessExit
 where
     StandardOutput: Write,
     StandardError: Write,
 {
-    let response = OperationResponse::failure(command.identifier(), code);
-    let result = match mode {
-        OutputMode::Human => {
-            let message = match human_detail {
-                Some(detail) => detail,
-                None => response.error_message(),
-            };
-            writer.write_safe_diagnostic(message);
-            Ok(())
-        }
-        OutputMode::Json => writer.write_json(&response),
-        OutputMode::JsonLines => writer.write_json(&TerminalEventResponse::new(response)),
-    };
-
-    if let Err(error) = result {
-        writer.write_safe_diagnostic(&error.to_string());
-        ProcessExit::StorageOrIo
-    } else {
-        ProcessExit::from(code.class())
-    }
+    write_failure_with_detail(writer, mode, command, CommandFailure::from(code), detail)
 }
 
 #[cfg(test)]

@@ -1,0 +1,5 @@
+Worker workspace: created
+Profile: durable_workspace
+Durability: durable (os_crash_durable)
+Admission slots: 8
+Session retention: 604800 s (168 h)
