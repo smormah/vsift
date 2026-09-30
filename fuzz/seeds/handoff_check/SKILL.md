@@ -262,7 +262,7 @@ vsift frame burst <session> --from <from-us> --to <to-us> --max-frames <n> --jso
   - no absolute path, drive letter, `\\?\` path or home folder: cite
     evidence ids, and call a retained bundle "the folder you named (`<name>`)".
 - **Then run `vsift handoff check` on your draft once, fix what it reports, then send**:
-  your whole final message in place of `<report>`, in exactly this form (PowerShell: commands.md):
+  your whole message as `<report>`, in bash or sh exactly so (Git Bash too; PowerShell: commands.md):
 
 ```sh
 vsift handoff check --json <<'VSIFT_HANDOFF'

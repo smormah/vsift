@@ -27,7 +27,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   dependency of `vsift-contract` (3 crates) instead of `jsonschema` (43 crates,
   +5.5 MB). The skill runs the check once before sending, in one of two literal forms
   (a quoted heredoc, or a single-quoted here-string piped in), its one input exception;
-  the skill guard and the grader accept exactly those two forms. L-085 records the
+  the skill guard and the grader accept exactly those two forms, each only in its own
+  shell (the heredoc in bash or sh, the here-string in PowerShell). L-086 records that
+  `vsift-contract` embeds the skill's schema from outside its folder and so cannot be
+  packaged for crates.io until that is resolved. L-085 records the
   mitigation; the compact-tier re-run (#222) follows.
 
 - **Readable terminal text, part 2** (P13 PR 2b; closes L-073). Without `--json` or

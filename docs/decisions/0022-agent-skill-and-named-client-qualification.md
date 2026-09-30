@@ -973,10 +973,17 @@ Implemented as the P13 note above says:
   after the closing line or piped after the form, `cat` or `Get-Content` piped in, an
   input redirection and a double-quoted here-string. The contract's budget profiles
   are pinned to `budgets.md` (`the_contracts_budget_profiles_are_budgets_md`).
-- **Grader**: the shell reader recognises a script that is exactly one of the two
-  forms, at any wrapper depth (Claude Code's Bash tool, Codex's single- or
-  double-quoted `bash -lc`), as one `vsift handoff check --json` call, which the
-  policy classes `free`; the heredoc or here-string body is the draft and is never
+- **Grader**: the shell reader recognises a script that is exactly the form of the
+  shell it is read in, at any wrapper depth, as one `vsift handoff check --json` call,
+  which the policy classes `free`: the quoted heredoc only in a POSIX shell (Claude
+  Code's Bash tool, Codex's single- or double-quoted `bash -lc`), the single-quoted
+  here-string only in PowerShell (a `powershell`/`pwsh -Command` wrapper), neither in
+  `cmd`. In bash the here-string is `@` and a single-quoted string that the draft's
+  first apostrophe ends, so the rest would run as commands; the grader reads it as
+  ordinary shell text, which fails the policy (review of PR 5, regression tests
+  `each_draft_form_belongs_to_its_own_shell` and the `calls` test). The skill says the
+  same: the heredoc in bash or sh, Git Bash included, the here-string only in
+  PowerShell; the heredoc or here-string body is the draft and is never
   read as commands (`is_handoff_check_form`). Anything wider is ordinary shell text
   and stays strict. `handoff_valid` and `report_text` now run the production check
   (`vsift_contract::HandoffChecker`), so the grader and the command cannot disagree;

@@ -126,8 +126,9 @@ Each entry has these fields:
 | [L-083](#l-083) | Only `display_text` shows hidden characters; `text` and `original_text` keep them raw | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222), [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
+| [L-086](#l-086) | `vsift-contract` embeds the skill's handoff schema from outside its crate folder, so it cannot be packaged for crates.io as it is | platform/distribution | low | unscheduled (before any crates.io publication, R1 or later) | none | deferred |
 
-Counts: 4 high, 23 medium, 52 low (79 entries).
+Counts: 4 high, 23 medium, 53 low (80 entries).
 
 ## Security
 
@@ -1623,6 +1624,32 @@ Counts: 4 high, 23 medium, 52 low (79 entries).
 - **Next step:** none planned; revisit if an agent host is found that needs Ctrl-C.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
+
+### L-086
+
+**`vsift-contract` embeds the skill's handoff schema from outside its crate folder, so
+it cannot be packaged for crates.io as it is.**
+
+- **What:** `handoff check` (P13 PR 5) validates drafts against
+  `skills/vsift/handoff.schema.json`, which the skill owns. `vsift-contract` embeds that
+  file with `include_str!("../../../../skills/vsift/handoff.schema.json")`, a path
+  outside the crate's own folder. `cargo package` copies only the crate's folder, so a
+  packaged `vsift-contract` would not build.
+- **Evidence:** `crates/vsift-contract/src/handoff/mod.rs` (`HANDOFF_SCHEMA_JSON`); the
+  test `the_embedded_schema_is_the_skills_file`; the ADR 0023 implementation note of
+  2026-09-30 (P13 PR 5).
+- **Impact:** none for R0, which publishes no crate (ADR 0023 decision B); the binary
+  and the npm package embed the schema at build time. A crates.io release of the
+  engine crates would fail to package.
+- **Why:** the skill must stay the single owner of its schema (ADR 0022 decision 6),
+  and embedding the file keeps the command and the skill from drifting.
+- **Mitigation:** a test requires the embedded copy to equal the skill's file.
+- **Next step:** before any crates.io publication (R1 or later): a build script that
+  copies the schema into the package, a checked-in copy inside the crate guarded by the
+  same equality test, or moving the schema's owner file into the crate with the skill
+  pointing to it.
+- **Owner:** unscheduled, before any crates.io publication. **Issue:** none.
+  **Status:** deferred. **Review:** pending.
 
 ## Process and CI
 

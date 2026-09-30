@@ -145,8 +145,11 @@ the skill. A trial may:
 - pass its draft report to `vsift handoff check` (`free`) in exactly one of the
   skill's two literal forms, a quoted heredoc (`vsift handoff check --json
   <<'VSIFT_HANDOFF'` ... `VSIFT_HANDOFF`) or a single-quoted here-string piped in
-  (`@'` ... `'@ | vsift handoff check --json`), also inside a client's `bash -lc` or
-  `powershell -Command` wrapper; the body is the draft and is never read as commands.
+  (`@'` ... `'@ | vsift handoff check --json`), each only in its own shell: the heredoc
+  in a POSIX shell (also inside `bash -lc`), the here-string in PowerShell (inside
+  `powershell`/`pwsh -Command`); the body is the draft and is never read as commands.
+  In bash the here-string is not one (the draft's first apostrophe ends the quoting),
+  so it is read as ordinary shell text.
   Anything wider (an unquoted or double-quoted delimiter, a double-quoted here-string,
   another command or option, text after the closing line) is ordinary shell text and
   stays strict (P13 PR 5);

@@ -128,7 +128,8 @@ Before you send the report, check it once with `vsift handoff check`. Pass your 
 final message, unchanged, in place of `<report>`, in exactly one of these two forms and
 no other: no other command in the same call, no file, no variable. The quotes around
 the first `VSIFT_HANDOFF` and the single quotes of `@'` keep your text exactly as
-written. In a POSIX shell (Claude Code's Bash tool, Codex):
+written. Each form belongs to one shell; never use the other shell's form. In bash or
+sh (Claude Code's Bash tool, Codex, and Git Bash on Windows):
 
 ```sh
 vsift handoff check --json <<'VSIFT_HANDOFF'
@@ -136,7 +137,8 @@ vsift handoff check --json <<'VSIFT_HANDOFF'
 VSIFT_HANDOFF
 ```
 
-In PowerShell:
+Only in PowerShell itself (in bash, `@'` is no here-string: the first apostrophe in your
+report would end the quoting and the rest would run as commands):
 
 ```powershell
 @'

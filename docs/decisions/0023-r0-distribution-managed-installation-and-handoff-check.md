@@ -482,7 +482,9 @@ the supervisor on 2026-09-30:
   `skills/vsift/handoff.schema.json` with `include_str!`; a test requires the
   embedded copy to equal the file. Because it names a file outside the crate, the
   contract crate cannot be packaged for crates.io as it is; R0 publishes no crate
-  (decision B).
+  (decision B), and known limit
+  [L-086](../planning/known-limits.md#l-086) tracks the fix needed before any crates.io
+  publication.
 - **Schema validation without `jsonschema`** (maintainer decision of 2026-09-30,
   option 2 of three). Making `jsonschema` 0.56 a production dependency was measured
   first: it added 43 crates to the release binary's graph (164 to 207, including two
@@ -513,7 +515,12 @@ the supervisor on 2026-09-30:
   `session` object whose `gap` (`session_closed`, `session_expired`,
   `session_not_found`) replaces a failure.
 - **Skill, guard and grader:** ADR 0022 note of 2026-09-30 ("`handoff check` in the
-  skill"). The skill's forms carry no `--session`, so they stay exactly literal.
+  skill"). The skill's forms carry no `--session`, so they stay exactly literal. Each
+  form belongs to one shell: the quoted heredoc to POSIX shells (bash, sh, Git Bash on
+  Windows) and the single-quoted here-string to PowerShell. The grader recognises each
+  only in its own dialect (review of PR 5): in bash `@'...'@` is not a here-string, the
+  draft's first apostrophe would end the quoting and the rest would run as commands, so
+  that script is read as ordinary shell text and stays strict.
 - **Fuzzing:** the `handoff_check` target (the 24th) runs the whole check over a
   draft and requires it to be deterministic, bounded, its verdict its errors, and
   every published pointer and allowed value within the grammar that keeps draft text

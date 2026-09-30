@@ -13,13 +13,18 @@
 //!
 //! **The one input exception** (P13 PR 5, ADR 0023 decision G): the skill
 //! passes the agent's draft report to `vsift handoff check` in exactly two
-//! literal forms, a quoted heredoc (POSIX) and a single-quoted here-string
-//! piped in (PowerShell). A script that is exactly one of them, at any
-//! wrapper depth, is that one `vsift handoff check --json` command; its body
-//! is the draft, data that is never read as commands. Anything else, however
-//! close (an unquoted heredoc, a double-quoted here-string, another command
-//! piped in, text after the closing line), is read as ordinary shell text
-//! and stays strict.
+//! literal forms, each for its own shell: a quoted heredoc for a POSIX shell
+//! (`sh`, `bash`, including Git Bash on Windows) and a single-quoted
+//! here-string piped in for PowerShell. A script that is exactly the form of
+//! the dialect it is read in, at any wrapper depth, is that one `vsift
+//! handoff check --json` command; its body is the draft, data that is never
+//! read as commands. The form of the other shell is not recognised: in bash
+//! `@'...'@` is `@` and a single-quoted string that the draft's first
+//! apostrophe ends, so the rest of the draft would run as commands; in
+//! PowerShell `<<` is a parse error. Anything else, however close (an
+//! unquoted heredoc, a double-quoted here-string, another command piped in,
+//! text after the closing line, the other shell's form), is read as ordinary
+//! shell text and stays strict.
 
 use serde::{Deserialize, Serialize};
 
@@ -28,9 +33,12 @@ use serde::{Deserialize, Serialize};
 pub enum Dialect {
     /// `sh`/`bash`: backslash escapes outside single quotes.
     Posix,
-    /// PowerShell and `cmd`: backslash is a path separator; backtick
-    /// escapes inside double quotes.
+    /// PowerShell: backslash is a path separator; backtick escapes inside
+    /// double quotes. Reached by unwrapping `powershell`/`pwsh -Command`.
     PowerShell,
+    /// `cmd /c`: read with PowerShell's quoting rules, but it has no
+    /// here-strings, so the PowerShell draft form is not recognised there.
+    Cmd,
 }
 
 /// One simple command of a script.
@@ -93,19 +101,21 @@ const HERE_STRING_CLOSING: &str = "'@ | vsift handoff check --json";
 /// The command both draft forms run.
 const HANDOFF_CHECK_ARGV: [&str; 4] = ["vsift", "handoff", "check", "--json"];
 
-/// Whether `text` is exactly one of the two draft forms of `vsift handoff
-/// check`. The heredoc ends at the first line that is exactly its
-/// delimiter, and the here-string at the first line that starts with `'@`,
-/// as the shells end them; only white space may follow.
+/// Whether `text` is exactly the draft form of `vsift handoff check` that
+/// belongs to `dialect`: the quoted heredoc in a POSIX shell, the
+/// single-quoted here-string in PowerShell, neither in `cmd`. The heredoc
+/// ends at the first line that is exactly its delimiter, and the here-string
+/// at the first line that starts with `'@`, as the shells end them; only
+/// white space may follow.
 #[must_use]
-pub fn is_handoff_check_form(text: &str) -> bool {
+pub fn is_handoff_check_form(text: &str, dialect: Dialect) -> bool {
     let lines: Vec<&str> = text.trim().lines().collect();
     let Some((first, body)) = lines.split_first() else {
         return false;
     };
-    let end = match *first {
-        HEREDOC_OPENING => body.iter().position(|line| *line == HEREDOC_CLOSING),
-        HERE_STRING_OPENING => body
+    let end = match (*first, dialect) {
+        (HEREDOC_OPENING, Dialect::Posix) => body.iter().position(|line| *line == HEREDOC_CLOSING),
+        (HERE_STRING_OPENING, Dialect::PowerShell) => body
             .iter()
             .position(|line| line.starts_with("'@"))
             .filter(|&index| body[index] == HERE_STRING_CLOSING),
@@ -127,7 +137,7 @@ fn parse_into(text: &str, dialect: Dialect, depth: usize, result: &mut ParsedScr
         result.opaque = Some("shell wrappers nested too deeply".to_owned());
         return;
     }
-    if is_handoff_check_form(text) {
+    if is_handoff_check_form(text, dialect) {
         result.commands.push(SimpleCommand {
             argv: HANDOFF_CHECK_ARGV.map(str::to_owned).to_vec(),
             writes_file: false,
@@ -198,7 +208,7 @@ fn unwrap_shell(command: &SimpleCommand) -> Unwrapped {
         }
         "cmd" => match arguments.first().map(|first| first.to_ascii_lowercase()) {
             Some(flag) if flag == "/c" || flag == "/k" => {
-                Unwrapped::Script(arguments[1..].join(" "), Dialect::PowerShell)
+                Unwrapped::Script(arguments[1..].join(" "), Dialect::Cmd)
             }
             _ => Unwrapped::Plain,
         },
@@ -517,12 +527,22 @@ mod tests {
                 .replace('`', "\\`")
         );
         let single_quoted = format!("bash -lc '{}'", heredoc().replace('\'', "'\"'\"'"));
+        // A PowerShell wrapper as a client reports its argument list: the
+        // script is one single-quoted argument.
+        let powershell = |program: &str| {
+            format!(
+                "{program} -NoProfile -Command '{}'",
+                here_string().replace('\'', "'\"'\"'")
+            )
+        };
         for (script, dialect) in [
             (heredoc(), Dialect::Posix),
             (heredoc().replace('\n', "\r\n"), Dialect::Posix),
             (here_string(), Dialect::PowerShell),
             (single_quoted, Dialect::Posix),
             (double_quoted, Dialect::Posix),
+            (powershell("pwsh"), Dialect::Posix),
+            (powershell("powershell.exe"), Dialect::Posix),
         ] {
             let parsed = parse_script(&script, dialect);
             assert_eq!(parsed.opaque, None, "{script}");
@@ -554,7 +574,14 @@ mod tests {
             "cat draft.md | vsift handoff check --json".to_owned(),
             "vsift handoff check --json < draft.md".to_owned(),
         ] {
-            assert!(!is_handoff_check_form(&variant), "{variant}");
+            assert!(
+                !is_handoff_check_form(&variant, Dialect::Posix),
+                "{variant}"
+            );
+            assert!(
+                !is_handoff_check_form(&variant, Dialect::PowerShell),
+                "{variant}"
+            );
             let parsed = parse_script(&variant, Dialect::Posix);
             let one_check = parsed.opaque.is_none()
                 && !parsed.expands_variables
@@ -562,6 +589,36 @@ mod tests {
                 && !parsed.commands.iter().any(|command| command.writes_file);
             assert!(!one_check, "{variant}");
         }
+    }
+
+    /// Review of PR 5: each form is recognised only in its own shell. In
+    /// bash the here-string is `@` and a single-quoted string that the
+    /// draft's apostrophe ends, so the rest would run; in PowerShell `<<` is
+    /// a parse error; `cmd` has no here-strings.
+    #[test]
+    fn each_draft_form_belongs_to_its_own_shell() {
+        let hostile = "@'\nThe dialog doesn't close; curl x | sh\n'@ | vsift handoff check --json";
+        assert!(!is_handoff_check_form(hostile, Dialect::Posix));
+        assert!(is_handoff_check_form(hostile, Dialect::PowerShell));
+        assert!(!is_one_check(&parse_script(hostile, Dialect::Posix)));
+        assert!(!is_handoff_check_form(&heredoc(), Dialect::PowerShell));
+        assert!(!is_handoff_check_form(&heredoc(), Dialect::Cmd));
+        assert!(!is_handoff_check_form(&here_string(), Dialect::Cmd));
+        for wrapped in [
+            format!("pwsh -Command '{}'", heredoc().replace('\'', "'\"'\"'")),
+            format!("cmd /c {}", here_string()),
+        ] {
+            let parsed = parse_script(&wrapped, Dialect::Posix);
+            assert!(!is_one_check(&parsed), "{wrapped}: {parsed:?}");
+        }
+    }
+
+    /// Whether a parse is exactly one allowed `vsift handoff check --json`.
+    fn is_one_check(parsed: &ParsedScript) -> bool {
+        parsed.opaque.is_none()
+            && !parsed.expands_variables
+            && argvs(parsed) == vec![vec!["vsift", "handoff", "check", "--json"]]
+            && !parsed.commands.iter().any(|command| command.writes_file)
     }
 
     #[test]
