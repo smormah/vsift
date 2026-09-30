@@ -12,6 +12,8 @@ use std::{
 
 use serde::Deserialize;
 
+mod workflows;
+
 const DEFAULT_LEDGER: &str = "docs/planning/delivery-ledger.json";
 const OBJECTIVE: &str = "Deliver an agent-operated local video evidence tool with a production-quality single-host worker core.";
 const EXPECTED_DECISIONS: usize = 13;
@@ -287,6 +289,7 @@ fn validate(
     validate_corpus(&mut messages, corpus);
     validate_handoff_files(&mut messages, repository_root);
     validate_fault_injection_features(&mut messages, repository_root);
+    workflows::validate_workflows(&mut messages, repository_root);
 
     messages
 }

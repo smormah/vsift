@@ -279,7 +279,15 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   (actions pinned by commit SHA, no `pull_request_target`, minimal permissions,
   `id-token` only in the attest and publish jobs); publication only from the protected
   `release` environment with the maintainer as reviewer; npm trusted publishing
-  without a long-lived token; `dry_run` by default (R-SEC01).
+  without a long-lived token; `dry_run` by default (R-SEC01). *Evidence 2026-09-30
+  (PR 8):* the governance checker parses every workflow and fails an unpinned action,
+  `pull_request_target`, missing or writable top-level `permissions`, `id-token:
+  write` outside the release workflow's `attest` and `publish` jobs, and a `run`
+  script that interpolates an expression an outsider can choose; no existing workflow
+  violated a rule. `release.yml` builds and packages with `permissions: {}` and
+  `contents: read`, no OIDC token, no secret and no cache, and cannot publish; its
+  builds select no feature, which the lint enforces. The `release` environment and
+  trusted publishing are PR 10.
 - **SEC-23 (checksums from the same compromised server):** the managed trust anchor
   stays in reviewed source, never in a downloaded checksum; release archives carry
   Sigstore build provenance tied to the protected commit, npm packages carry npm

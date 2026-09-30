@@ -3,6 +3,8 @@
 #![forbid(unsafe_code)]
 
 mod batch;
+#[cfg(test)]
+mod build_identity;
 mod candidates;
 mod command;
 mod config;

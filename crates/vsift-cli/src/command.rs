@@ -14,7 +14,9 @@ use vsift_contract::CommandName;
 #[derive(Debug, Parser)]
 #[command(
     name = "vsift",
-    version,
+    // The package version, and in a release build its source commit
+    // (build.rs, ADR 0023).
+    version = env!("VSIFT_VERSION_TEXT"),
     about = "Sift technical video into agent-ready evidence",
     disable_help_subcommand = true
 )]

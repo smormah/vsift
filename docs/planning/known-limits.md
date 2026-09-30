@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (P13 PR 4: managed installation; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-09-30 (P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -129,8 +129,9 @@ Each entry has these fields:
 | [L-086](#l-086) | `vsift-contract` embeds the skill's handoff schema from outside its crate folder, so it cannot be packaged for crates.io as it is | platform/distribution | low | unscheduled (before any crates.io publication, R1 or later) | none | deferred |
 | [L-087](#l-087) | A managed version is rehashed each time a command resolves it | performance | low | unscheduled | none | monitoring |
 | [L-088](#l-088) | Proxy authentication in an HTTPS tunnel is recognised by a dependency's error text | process/CI | low | unscheduled | none | monitoring |
+| [L-089](#l-089) | A release SBOM's `bom-ref` values name the build machine's checkout path | platform/distribution | low | unscheduled | none | accepted residual |
 
-Counts: 3 high, 24 medium, 55 low (82 entries).
+Counts: 3 high, 24 medium, 56 low (83 entries).
 
 ## Security
 
@@ -1472,19 +1473,20 @@ Counts: 3 high, 24 medium, 55 low (82 entries).
 
 **No native packages, npm launcher, SBOM, signing or provenance.**
 
-- **What:** VSift can only be built from source with Rust. There are no native release
-  artifacts, no npm launcher, no SBOM/notices, no signing or notarization and no trusted
-  publishing. The npm name `vsift` was merely observed free (2026-09-10 and
-  2026-09-30), not reserved; the scope for the platform packages is pending the
-  maintainer's choice, because `@vsift` is unavailable; no crate is published in R0
-  (ADR 0023).
+- **What:** VSift can only be installed by building it from source with Rust. No native
+  release artifact is published, and there is no npm launcher, no signing or
+  notarization, no provenance and no trusted publishing. Since P13 PR 8,
+  `.github/workflows/release.yml` builds, checks and packages the three native archives
+  with notices, an SBOM each and `SHA256SUMS`, but keeps them as run artifacts only.
+  The platform packages' scope is recorded in ADR 0009's notes; no crate is
+  published in R0 (ADR 0023).
 - **Evidence:** [ADR 0009](../decisions/0009-package-identity-and-distribution.md);
   [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) decision 1;
   threat model "Installation and distribution policy"; baseline B-11.
 - **Impact:** R-14 is an R0 release gate.
 - **Why:** scheduled in P13.
 - **Mitigation:** none needed before release.
-- **Next step:** P13 PRs 8-10, following its launcher pattern and name checklist in
+- **Next step:** P13 PRs 9 and 10, following its launcher pattern and name checklist in
   [`implementation-work-packets.md`](implementation-work-packets.md) and
   [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md):
   Sigstore and npm provenance, no Authenticode or notarization in R0.
@@ -1684,6 +1686,29 @@ it cannot be packaged for crates.io as it is.**
   pointing to it.
 - **Owner:** unscheduled, before any crates.io publication. **Issue:** none.
   **Status:** deferred. **Review:** pending.
+
+### L-089
+
+**A release SBOM's `bom-ref` values name the build machine's checkout path.**
+
+- **What:** cargo-cyclonedx 0.5.9 identifies each workspace crate in the SBOM
+  (`vsift.cdx.json` in every release archive, P13 PR 8) by Cargo's package id, which
+  for a path dependency is the absolute checkout path, for example
+  `path+file:///home/runner/work/vsift/vsift/crates/vsift-cli#0.1.0`. The `purl` values
+  are relative and the component names and versions are exact.
+- **Evidence:** a local SBOM for `x86_64-pc-windows-msvc` held 25 `file:///` references,
+  all to workspace crates (2026-09-30); `.github/workflows/release.yml`, job
+  `inventory`.
+- **Impact:** an SBOM made from a checkout elsewhere differs in those values, so SBOMs
+  are reproducible only on the same runner layout; the path names the CI runner's
+  workspace, not a person.
+- **Why:** the tool writes Cargo's package id unchanged and has no option to rewrite it.
+- **Mitigation:** the SBOM is generated only by the release workflow on a GitHub-hosted
+  runner, whose checkout path is fixed.
+- **Next step:** none planned; revisit if a cargo-cyclonedx release relativises path
+  package ids, or if SBOMs must be reproduced off GitHub.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
 
 ## Process and CI
 

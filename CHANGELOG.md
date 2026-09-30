@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Release workflow and governance workflow lint** (P13 PR 8; ADR 0023 section 1 and
+  decision D). `.github/workflows/release.yml` builds `vsift` for
+  `x86_64-pc-windows-msvc` (static C runtime), `aarch64-apple-darwin` and
+  `x86_64-unknown-linux-gnu` (on Ubuntu 22.04), twice per runner, and requires
+  identical executables; generates each target's `THIRD-PARTY-NOTICES` (cargo-about,
+  offline) and CycloneDX SBOM (cargo-cyclonedx); and packages deterministic
+  `vsift-<version>-<target>.tar.gz` archives (the executable, the licences, the
+  notices, the SBOM and the skill) with `SHA256SUMS`, through the new unpublished tool
+  `tools/vsift-release`, which refuses any executable but `vsift` for its target. The
+  archives stay the run's artifacts: the workflow has no write scope, OIDC token or
+  secret and cannot publish; attestation and publishing are PR 10. A release build
+  prints `vsift <version> (<commit>)` for `--version`. The governance checker now
+  lints every workflow (new development-tool dependency `yaml-rust2`): actions pinned
+  by commit SHA, no `pull_request_target`, read-only top-level `permissions`,
+  `id-token: write` only in the release workflow's `attest` and `publish` jobs, no
+  untrusted `${{ }}` expression in a `run` script, and in `release.yml` no feature,
+  profile override or test binary. Runbook `docs/operations/release.md`; L-089 records
+  that an SBOM names the runner's checkout path.
+
 - **`vsift handoff check`** (P13 PR 5, issue #213; ADR 0023 decisions G and H). A new
   `handoff` namespace whose one command checks an agent's draft report before it is
   sent: the one `vsift-handoff` block, closed values in another letter case (read as

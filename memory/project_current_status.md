@@ -30,7 +30,9 @@ Today it can:
   workspace through an OS crash or power loss;
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
 - keep every folder it creates private to the user;
-- check an agent's draft report before it is sent (`handoff check`, P13 PR 5).
+- check an agent's draft report before it is sent (`handoff check`, P13 PR 5);
+- install its media tools and speech model itself on Ubuntu 24.04 x86-64 (P13 PR 4);
+- build, in CI, its own release archives for the three R0 targets (P13 PR 8; unpublished).
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an
 investigation with the CLI and write a cited report. P12's named-client trials
@@ -45,9 +47,9 @@ qualified it:
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a, 2b, 3 and 5 and the P12 debt
-fixes are merged (human output and `handoff check` are done); PR 4 (`setup install` and
-the managed lookup tier) is in review. The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a, 2b, 3, 4 and 5 and the P12
+debt fixes are merged; PR 8 (`release.yml`, the workflow lint) is done in its pull
+request (#236). The packet is not complete.
 
 ## P13 in one view
 
@@ -68,30 +70,27 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   hosted run 36701212028 passed the real tools. PR 5 (#233, `1a9d027`): `handoff check`
   shared with the trial grader, findings never quote the draft; `regex` in production;
   L-086 (contract crate not packageable for crates.io).
-- **In review: PR 4** (`p13-pr4-install`, resume steps 3-4). `setup install --plan
-  --accept-plan [--artifact-dir]` takes the install guard without waiting (`BUSY`),
-  rebuilds and revalidates the plan, then installs media tools, whisper.cpp CLI and model
-  in order: HTTPS download (or `--artifact-dir` import) with exact size and SHA-256,
-  stage, smoke, `publish_and_select`. `already_current` skips a selected version; the
-  first failure stops it (`blocked` after) and a rerun continues. No resume or `Range`.
-  `DOWNLOAD_FAILED` (exit 7: `tls`, `redirect_policy`, `http_status`, `proxy_auth`,
-  `offline`, `size`); digest mismatch `INTEGRITY_FAILURE`; failed smoke
-  `MISSING_CAPABILITY`. Every lookup: per call, configured, managed, `PATH`; a managed
-  version runs only after its manifest digests match (L-006 closed for it) and a job holds
-  it. `setup plan` shows observed state (`install_needed`, each action `pending` or
-  `current`) beside the digested intent, so an accepted plan survives its own install.
-  Tests use local HTTP, TLS and proxy servers (`install-test-hooks`); a debug build
-  resolves no publisher host. The real install (`P13 managed smoke`) runs after merge.
-  **Next:** PR 6 (list/rollback/remove/repair, cleanup, sweep).
+- **PR 4 (#234, `d43a518`):** `setup install --plan --accept-plan [--artifact-dir]`:
+  HTTPS download or import with exact size and SHA-256, stage, smoke,
+  `publish_and_select`, per component; `DOWNLOAD_FAILED` (exit 7); lookup order per
+  call, configured, managed, `PATH`; `setup plan` shows observed state beside the
+  digested intent. The real install (`P13 managed smoke`) is dispatched after merge.
+- **PR 8 (#236, done in its PR):** `release.yml` builds `vsift` per target twice and
+  requires identical bytes (Windows needs `/Brepro`), requires `--version` to name the
+  commit, makes notices (cargo-about) and a CycloneDX SBOM per target, and packages
+  deterministic `vsift-<version>-<target>.tar.gz` archives and `SHA256SUMS` with
+  `tools/vsift-release` (only `vsift` can be packaged). Run artifacts only: no write
+  scope, OIDC token or secret. The governance checker lints every workflow (pinned
+  SHAs, no `pull_request_target`, read-only top-level permissions, `id-token` only in
+  PR 10's jobs, no untrusted `${{ }}` in `run`, no feature in release builds; tool
+  dependency `yaml-rust2`). L-089: SBOM `bom-ref`s name the runner's path. **Next:** PR 6.
 - **Only the placeholder is published** until P13 ends and the maintainer approves a 0.x `next`.
-- **Found while planning:** the clean-install agent run is P14's (H10); Linux needs OpenSSL 3.
 
 ## P12 in one view
 
-[ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md) is
-**Accepted**; record [p12-agent-qualification.md](../docs/planning/p12-agent-qualification.md)
-with 84 trial records. Built: the skill and `skill_contract` guard (#196), the harness
-`tools/vsift-agent-trials` (#201), fix rounds #203-#217; review 19 accepted, 6 rejected.
+[ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md)
+**Accepted**; record `docs/planning/p12-agent-qualification.md` (84 trial records): the
+skill and guard (#196), harness `tools/vsift-agent-trials` (#201), fixes #203-#217.
 
 ## Found in P12 (still open)
 
@@ -102,12 +101,13 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 ## What works (public CLI)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`;
-  `setup install` on Ubuntu 24.04 x86-64 (PR 4, in review).
+  `setup install` on Ubuntu 24.04 x86-64 (PR 4).
 - `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`.
 - `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run|batch`,
   `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
 - `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
-- `handoff check` (P13 PR 5): a draft report from stdin or `--file`.
+- `handoff check` (P13 PR 5): a draft from stdin or `--file`. A release build's
+  `--version` names its source commit (`vsift 0.1.0 (<12 hex>)`, P13 PR 8).
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
   that does not parse names its mistake and the `--help` to read (P13 PR 1).
 - Readable terminal text without `--json` for every command (unstable, not for parsing).
@@ -125,7 +125,7 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1, 2a, 2b, 3 and 5 merged (#226, #228-#231, #233); PR 4 (`setup install`) in review; lifecycle commands and distribution to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-5 merged (#226, #228-#231, #233, #234); PR 8 (release workflow, lint) in its PR #236; lifecycle, npm and publishing to come |
 | P14 | Not started |
 
 ## Architecture snapshot
@@ -138,13 +138,13 @@ only presents. The agent skill (`skills/vsift/`) sits outside the crates and onl
 calls the `vsift` binary; its guard is a test module of `vsift-cli` because the parser
 is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `vsift`
 (and runs the `vsift` binary for everything else) and on `vsift-contract` for the shared
-handoff check.
+handoff check. `tools/vsift-release` (never shipped) packages the release archives.
 
 ## Quality evidence
 
 - **Local gates** (in each PR description): fmt, strict Clippy with and without
   features, workspace tests, warning-denied rustdoc and governance.
 - **CI on every PR:** Quality on Ubuntu, macOS and Windows; Documentation, Governance,
-  fuzz harness replay, the strict worker boundary, dependency policy and CodeQL.
-- **Merging:** squash merges to protected `main`; history in git, `CHANGELOG.md` and
-  `docs/history/`.
+  fuzz harness replay, the strict worker boundary, dependency policy and CodeQL; the
+  Release dry run when an archive input changes.
+- **Merging:** squash merges to protected `main`; history in git, `CHANGELOG.md`, `docs/history/`.
