@@ -52,21 +52,27 @@ free on 2026-09-30, which is still not a reservation.
 organisation name `vsift`, because organisation names share the user-name namespace.
 The fallback scope is the maintainer's choice, in this order of preference:
 `@vsift-cli`, `@vsifthq`, `@vsiftdev`. It will be recorded here once chosen (it is
-`@shongo`: see the next note); this
+`@vsift` after all: see the next note); this
 decision forbids a silent rename, so no package is published under a scope this ADR
 does not name.
 
-## 2026-09-30 note: the scope is `@shongo`, and `vsift` is held by a placeholder
+## 2026-09-30 note: the scope is `@vsift`, and `vsift` is held by a placeholder
 
-**Scope.** The maintainer chose the company scope `@shongo` and created the npm
-organisation `shongo` on 2026-09-30. Because the scope is a company's rather than the
-project's, every package in it names the project, so the platform packages are
-`@shongo/vsift-win32-x64`, `@shongo/vsift-darwin-arm64` and `@shongo/vsift-linux-x64`
-(Sentry's `@sentry/cli-<platform>` packages follow the same pattern). Nobody types these
-names: people install `vsift`, which pulls in the matching platform package, so the
-scope appears only in lockfiles and `npm ls`. A scope cannot be renamed. If VSift later
-moves to another owner, the platform packages are republished under a new scope and the
-launcher's lookup changes. Users keep typing `vsift`.
+**Scope: `@vsift`, owned by the maintainer.** The "not available" message above was
+not a refusal. The maintainer's first submission created the organisation `vsift`, and
+a repeated submission then reported the name as taken. The maintainer's npm account
+lists the organisation `vsift` as its own (2026-09-30). The platform packages are
+therefore the originally planned `@vsift/win32-x64`, `@vsift/darwin-arm64` and
+`@vsift/linux-x64`.
+
+*Correction history, same day:* before the maintainer saw that `vsift` was theirs,
+they chose the company scope `@shongo` and created that organisation, and #235
+recorded it with packages `@shongo/vsift-…`. The maintainer then chose `@vsift`
+instead. It is the project's own name, so handing the project to another owner means
+handing over one organisation and republishing nothing. `@shongo` stays a company
+organisation and holds no VSift package. Nobody types a platform package name: people
+install `vsift`, which pulls in the matching platform package, so the scope appears
+only in lockfiles and `npm ls`.
 
 **Placeholder. This supersedes the rule above** ("no placeholder package is published
 during implementation", reaffirmed in the 2026-09-28 note). On 2026-09-30 the maintainer
@@ -77,7 +83,7 @@ scripts. The maintainer publishes it personally, with two-factor authentication.
 *Why:* npm reserves a name only when something is published under it. The repository is
 public, so the name is visible for the whole of P13. A publish also shows now, rather
 than on release day, whether npm's similar-name check accepts `vsift` next to the
-existing `sift` package. The scoped platform names need no placeholder: the `shongo`
+existing `sift` package. The scoped platform names need no placeholder: the `vsift`
 organisation already owns them.
 
 The rest of this ADR is unchanged. Nothing else is published during P13, and the first

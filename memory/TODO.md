@@ -20,8 +20,8 @@ packet is not complete.
 2. **After PR 4 merges (maintainer):** dispatch `P13 managed smoke` on `main` (both jobs,
    no credentials); record the run in D-02/D-03/D-06/D-07 and L-037, its `L-087` timing
    lines in L-087.
-3. **Maintainer-only, before PR 10's publish step:** scope `@shongo` chosen and its
-   organisation created (2026-09-30, #235); the placeholder `vsift@0.0.0` (ADR 0009 note,
+3. **Maintainer-only, before PR 10's publish step:** scope `@vsift` (the maintainer
+   owns the organisation; 2026-09-30, #237); the placeholder `vsift@0.0.0` (ADR 0009 note,
    published by the maintainer); trusted publishers; the
    `release` environment (maintainer as reviewer); tag ruleset; fork-PR approval; the
    first publish (2FA, or a short-lived environment token); the 0.x `next` pre-release.
@@ -38,7 +38,7 @@ packet is not complete.
 
 - **P11 D1-D5** (ADR 0021); **P12** closed on its final round (ADR 0022 completion
   note: Codex in Linux, slim handoff, compact tier Sonnet 5.5 and GPT-6-Sol).
-- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift` over `@shongo/vsift-{win32-x64,
+- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift` over `@vsift/{win32-x64,
   darwin-arm64,linux-x64}`; only the `vsift@0.0.0` placeholder during P13, then one 0.x
   pre-release under `next`; no crates.io in R0; Sigstore and npm provenance only; managed
   install on Ubuntu 24.04 x64 only; human output by default; `DOWNLOAD_FAILED`; `handoff

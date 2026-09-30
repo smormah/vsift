@@ -58,9 +58,9 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 
 - **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux
   x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
-  `vsift` over `@shongo/vsift-…` packages; managed installation on Ubuntu 24.04 x64 (`setup
+  `vsift` over `@vsift/…` packages; managed installation on Ubuntu 24.04 x64 (`setup
   install/list/rollback/remove/repair`); human output by default; `handoff check`.
-- **Names (2026-09-30, #235):** scope `@shongo` (organisation created by the maintainer);
+- **Names (2026-09-30, #237):** scope `@vsift` (the maintainer owns the organisation);
   the placeholder `vsift@0.0.0` holds the launcher name (ADR 0009 note).
 - **Done:** PR 0 (#226): ADR 0023, ledger, #16. PR 1 (#228, L-071): parse remediation.
   PR 2a (#229), 2b (#231, `02df4eb`, L-073): readable text through `TerminalText`,
