@@ -1,6 +1,6 @@
 //! Deterministic setup planning over a reviewed managed-artifact catalogue.
 
-use std::fmt::Write as _;
+use std::{fmt::Write as _, future::Future};
 
 use sha2::{Digest, Sha256};
 use vsift_domain::{
@@ -324,6 +324,238 @@ impl ManagedSetupPlan {
             Err(PlanAcceptanceError::DigestMismatch)
         }
     }
+}
+
+/// The step of a compatibility smoke that stopped it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompatibilitySmokeCheck {
+    /// The staged files, their executable format and their reviewed modes,
+    /// checked before any process runs.
+    Layout,
+    /// Each staged executable's reviewed build banner or startup response.
+    Banner,
+    /// The reviewed media fixture through the media tools.
+    MediaFixture,
+    /// The reviewed speech fixture through the recognizer and model.
+    SpeechFixture,
+    /// The staged files rechecked, and the private smoke directory removed,
+    /// after every process ended.
+    Recheck,
+}
+
+impl CompatibilitySmokeCheck {
+    /// Stable machine-readable identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Layout => "layout",
+            Self::Banner => "banner",
+            Self::MediaFixture => "media_fixture",
+            Self::SpeechFixture => "speech_fixture",
+            Self::Recheck => "recheck",
+        }
+    }
+}
+
+/// Why a compatibility smoke did not pass.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompatibilitySmokeFailureReason {
+    /// A required executable or model file is not in the staged runtime and
+    /// no already selected provider supplies it.
+    MissingExecutable,
+    /// An executable is built for another machine or operating system.
+    WrongArchitecture,
+    /// A file that must run is not reviewed as executable, is not in any
+    /// executable format, or the operating system refused to run it.
+    NotExecutable,
+    /// A build banner differs from the reviewed prefix.
+    BannerMismatch,
+    /// A process wrote, or a check generated, more than a reviewed bound.
+    OutputOverBound,
+    /// A process or check exceeded its reviewed deadline.
+    DeadlineExceeded,
+    /// The staged runtime or the smoke directory holds an entry the review
+    /// does not name.
+    UnexpectedExtraFile,
+    /// A staged file's bytes, links or permissions differ from the review.
+    ChangedContent,
+    /// A provider could not start, crashed, exited unsuccessfully or rejected
+    /// the fixture.
+    ProviderFailed,
+    /// A provider ran, but its results differ from the fixture's recorded
+    /// truth.
+    FixtureMismatch,
+    /// `VSift`'s own smoke directory or embedded fixture could not be
+    /// prepared; the candidate is not at fault.
+    Preparation,
+    /// The request named no candidate, or the same component twice.
+    InvalidRequest,
+    /// The caller cancelled the smoke.
+    Cancelled,
+}
+
+impl CompatibilitySmokeFailureReason {
+    /// Stable machine-readable identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::MissingExecutable => "missing_executable",
+            Self::WrongArchitecture => "wrong_architecture",
+            Self::NotExecutable => "not_executable",
+            Self::BannerMismatch => "banner_mismatch",
+            Self::OutputOverBound => "output_over_bound",
+            Self::DeadlineExceeded => "deadline_exceeded",
+            Self::UnexpectedExtraFile => "unexpected_extra_file",
+            Self::ChangedContent => "changed_content",
+            Self::ProviderFailed => "provider_failed",
+            Self::FixtureMismatch => "fixture_mismatch",
+            Self::Preparation => "preparation",
+            Self::InvalidRequest => "invalid_request",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+/// The first step that failed and why.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompatibilitySmokeFailure {
+    /// Step that did not pass; later steps did not run.
+    pub check: CompatibilitySmokeCheck,
+    /// Why it did not pass.
+    pub reason: CompatibilitySmokeFailureReason,
+}
+
+/// Outcome of running the reviewed compatibility smoke over staged components.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompatibilitySmokeVerdict {
+    /// Every check passed and the staged files are unchanged afterwards.
+    Passed,
+    /// A check failed.
+    Failed(CompatibilitySmokeFailure),
+}
+
+/// Why a staged component was left in place instead of being removed.
+///
+/// Cleanup removes only content it can positively identify as `VSift`'s own
+/// staging (AGENTS.md); anything it cannot prove is kept for explicit repair
+/// and reported.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StageRetentionReason {
+    /// The stage's ownership marker, private owner or held identity could not
+    /// be proved, so nothing in it was touched.
+    OwnershipUnproved,
+    /// The stage holds an entry the review does not name, or a linked or
+    /// changed one, so that entry and its directory were kept.
+    UnexpectedContent,
+    /// Storage failed while removing positively identified content.
+    StorageFailure,
+}
+
+impl StageRetentionReason {
+    /// Stable machine-readable identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::OwnershipUnproved => "ownership_unproved",
+            Self::UnexpectedContent => "unexpected_content",
+            Self::StorageFailure => "storage_failure",
+        }
+    }
+}
+
+/// What cleanup did with one staged component.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StageDisposal {
+    /// Every positively identified file and directory of the stage was removed.
+    Discarded,
+    /// The stage, or part of it, was kept and is reported.
+    Retained(StageRetentionReason),
+}
+
+/// One reviewed component staged privately and not activated.
+///
+/// Infrastructure owns the files; the application only sees which component
+/// it is and can discard it. Nothing on this port activates a component, so
+/// a candidate that fails its smoke is consumed by cleanup and can never be
+/// published.
+pub trait StagedManagedComponent: Send + Sync {
+    /// The reviewed component this stage holds.
+    fn component(&self) -> ManagedComponent;
+
+    /// Removes the stage if its ownership and every entry can be proved
+    /// `VSift`'s own; otherwise keeps what it cannot prove and reports why.
+    fn discard(self) -> StageDisposal
+    where
+        Self: Sized;
+}
+
+/// Port that runs the reviewed compatibility smoke over staged components
+/// before any of them is activated.
+///
+/// Implementations run the staged executables explicitly, never through a
+/// shell, under the digest-bound [`ReviewedCompatibilityPolicy`], and never
+/// publish, select or remove anything.
+pub trait CompatibilitySmoke<C: StagedManagedComponent>: Send + Sync {
+    /// Checks `candidates` together: a component that needs another (the
+    /// recognizer needs media tools and a model) uses the staged one when
+    /// present.
+    fn smoke(&self, candidates: &[C]) -> impl Future<Output = CompatibilitySmokeVerdict> + Send;
+}
+
+/// The result of smoking staged components before activation.
+#[derive(Debug, Eq, PartialEq)]
+pub enum SmokeStageOutcome<C> {
+    /// The smoke passed. The candidates come back unchanged and still
+    /// unactivated; publication is a separate, guarded step.
+    Passed(Vec<C>),
+    /// The smoke failed, and every candidate was handed to cleanup.
+    Failed {
+        /// First failing step and its reason.
+        failure: CompatibilitySmokeFailure,
+        /// What cleanup did with each candidate, in request order.
+        stages: Vec<(ManagedComponent, StageDisposal)>,
+    },
+}
+
+/// Runs the compatibility smoke and discards every candidate when it fails.
+///
+/// No candidate is published here, whatever the verdict. A failed smoke
+/// cannot say which of several candidates is at fault, and none may be
+/// published without a passing smoke, so all of them are discarded; a stage
+/// whose ownership or content cannot be proved is retained and reported
+/// rather than deleted.
+pub async fn smoke_before_activation<C, S>(smoke: &S, candidates: Vec<C>) -> SmokeStageOutcome<C>
+where
+    C: StagedManagedComponent,
+    S: CompatibilitySmoke<C>,
+{
+    let verdict = if candidates.is_empty() || has_duplicate_component(&candidates) {
+        CompatibilitySmokeVerdict::Failed(CompatibilitySmokeFailure {
+            check: CompatibilitySmokeCheck::Layout,
+            reason: CompatibilitySmokeFailureReason::InvalidRequest,
+        })
+    } else {
+        smoke.smoke(&candidates).await
+    };
+    match verdict {
+        CompatibilitySmokeVerdict::Passed => SmokeStageOutcome::Passed(candidates),
+        CompatibilitySmokeVerdict::Failed(failure) => SmokeStageOutcome::Failed {
+            failure,
+            stages: candidates
+                .into_iter()
+                .map(|candidate| (candidate.component(), candidate.discard()))
+                .collect(),
+        },
+    }
+}
+
+fn has_duplicate_component<C: StagedManagedComponent>(candidates: &[C]) -> bool {
+    candidates.iter().enumerate().any(|(index, candidate)| {
+        candidates
+            .iter()
+            .skip(index + 1)
+            .any(|other| other.component() == candidate.component())
+    })
 }
 
 /// Builds a deterministic, non-mutating plan from current observations.

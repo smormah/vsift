@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Managed-install compatibility smoke and failure cleanup** (P13 PR 3, installer
+  resume steps 1 and 2; internal only, `setup install` is unchanged until PR 4). A
+  staged, unactivated runtime's executables now run before any activation, by explicit
+  path from the private stage with a private smoke directory beside them, through the
+  process supervisor and never a shell, under the digest-bound compatibility policy:
+  a layout recheck (exact files, bytes and modes; executables in the host's native
+  format), the reviewed `FFmpeg`/`FFprobe` banner prefixes and a clean `whisper-cli`
+  start, the existing F01 media verifier and the existing speech-fixture verifier
+  within the policy's deadlines and bounds, and a final recheck that the smoke left
+  nothing behind. A failed smoke has a typed step and reason and discards every staged
+  candidate; a stage whose ownership or content cannot be proved is kept untouched and
+  reported. New application ports `CompatibilitySmoke` and `StagedManagedComponent`
+  with the use case `smoke_before_activation`; D-06 tests through the port with fakes
+  and on real staging with a small fixture executable
+  (`crates/vsift-infrastructure/testbin/`); an opt-in real-tool smoke on Ubuntu 24.04
+  (`p13_managed_smoke_real_tools`, manual workflow `P13 managed smoke`). L-037 records
+  the progress.
+
 - **Readable terminal text, part 1** (P13 PR 2a). Without `--json` or `--events`,
   `setup check/plan/configure/configure-model`, `ingest`, `session
   list/status/renew/close/retain/clean/init-workspace`, `transcript get`, `transcript

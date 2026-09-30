@@ -36,6 +36,7 @@ mod input_root;
 mod local_asr_verification;
 mod managed_artifact_store;
 mod managed_catalogue;
+mod managed_smoke;
 mod media_tool_verification;
 mod media_tool_verification_cache;
 mod private_user_root;
@@ -127,16 +128,20 @@ pub use local_asr_verification::{
     local_asr_fixture_sha256, run_within_budget,
 };
 pub use managed_artifact_store::{
-    ManagedArtifactError, ManagedArtifactStore, ManagedInstallGuard, ManagedPayloadError,
-    ManagedRuntimeIdentity, ManagedRuntimeLayoutError, ManagedRuntimePublicationError,
-    ManagedVersionRemovalOutcome, PreparedManagedRuntime, PublishedManagedRuntime,
-    ReviewedPayloadArchive, ReviewedRuntimeAlias, ReviewedRuntimeLayout, StagedManagedArtifact,
-    StagedManagedPayload,
+    ManagedArtifactError, ManagedArtifactStore, ManagedCandidateError, ManagedCandidateFailure,
+    ManagedInstallGuard, ManagedPayloadError, ManagedRuntimeIdentity, ManagedRuntimeLayoutError,
+    ManagedRuntimePublicationError, ManagedRuntimeRole, ManagedVersionRemovalOutcome,
+    PreparedManagedRuntime, PublishedManagedRuntime, ReviewedPayloadArchive, ReviewedRuntimeAlias,
+    ReviewedRuntimeLayout, StagedManagedArtifact, StagedManagedCandidate, StagedManagedPayload,
 };
 pub use managed_catalogue::{
     ManagedCatalogueError, ReviewedActionStageError, ReviewedUbuntuAction, ReviewedWhisperModel,
     accepted_ubuntu_catalogue, detect_managed_target, pinned_whisper_model,
     reviewed_compatibility_policy, reviewed_whisper_models, whisper_model_profile,
+};
+pub use managed_smoke::{
+    MediaSmokeRequest, ReviewedFixtureVerifiers, SmokeCompanions, SmokeFixtureVerifiers,
+    SpeechSmokeRequest, StagedCompatibilitySmoke,
 };
 pub use media_tool_verification::{
     FixtureMediaToolVerifier, identify_whisper_model_file, verify_model_file,

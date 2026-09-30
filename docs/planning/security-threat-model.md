@@ -235,7 +235,13 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   `publish_and_select`, and never updates a runtime during work (D-02, D-03, D-05).
 - **SEC-13 (archive traversal, bombs, substitution):** the existing bounded archive
   readers and flat private staging, plus a smoke of the staged runtime before
-  activation and cleanup of every stage after a failure (D-04, D-06).
+  activation and cleanup of every stage after a failure (D-04, D-06). *Evidence
+  2026-09-30 (PR 3):* the smoke and cleanup exist and are tested (D-06): executables
+  run only by explicit path from the unactivated stage, never through a shell; a
+  foreign-format or non-executable file is refused before it runs; a provider that
+  writes into its own installation or leaves a file behind fails; cleanup proves
+  ownership first and never deletes an entry it did not create. Activation after a
+  pass is PR 4.
 - **SEC-14 (changed resume, redirects, proxy credentials):** no resume, a restart at
   byte zero and a whole-artifact hash; the reviewed redirect policy; `DOWNLOAD_FAILED`
   reasons that never render a signed URL or a proxy credential (D-03, D-07).

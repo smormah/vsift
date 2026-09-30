@@ -1495,8 +1495,15 @@ Counts: 4 high, 25 medium, 51 low (80 entries).
   qualified managed target.
 - **Why:** moved from P06 to P13 by ADR 0015.
 - **Mitigation:** detection, bring-your-own selection, verification and typed guidance.
-- **Next step:** P13 PRs 3-7, in the recorded resume order, on Ubuntu 24.04 x86-64 only;
-  Windows and macOS keep manual guidance
+- **Progress (2026-09-30, P13 PR 3):** resume steps 1 and 2 are implemented as an
+  internal capability: the compatibility smoke runs a staged, unactivated runtime's
+  executables under the digest-bound policy, and a failed smoke discards the stage or,
+  when its ownership or content cannot be proved, keeps it and reports why (ADR 0023
+  implementation note; D-06 in [verification](verification.md)). No command uses it
+  yet, so the limit is unchanged for users.
+- **Next step:** P13 PRs 4-7 (transaction and `setup install`, lifecycle commands,
+  cleanup and sweep, kill and power-loss tests), on Ubuntu 24.04 x86-64 only; Windows
+  and macOS keep manual guidance
   ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.

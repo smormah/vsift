@@ -17,7 +17,8 @@ use sha2::{Digest, Sha256};
 
 use crate::file_lock::HeldFileLock;
 use tokio::io::AsyncWriteExt;
-use vsift_domain::ArtifactIntegrity;
+use vsift_application::{StageDisposal, StageRetentionReason, StagedManagedComponent};
+use vsift_domain::{ArtifactIntegrity, ManagedComponent};
 
 use crate::{
     ArchiveInventoryBounds, ArtifactTransferError, GzipTarInventoryError, ReviewedArchiveAlias,
@@ -38,6 +39,7 @@ const STAGE_MARKER: &str = "stage-v1";
 const ARTIFACT: &str = "artifact.pending";
 const PAYLOAD: &str = "payload.pending";
 const RUNTIME: &str = "runtime.pending";
+const SMOKE: &str = "smoke.pending";
 const INSTALL_LOCK: &str = "install.lock";
 const VERSIONS: &str = "versions-v1";
 const CURRENT: &str = "current-v1";
@@ -1631,6 +1633,522 @@ impl PreparedManagedRuntime<'_, '_> {
         self.payload
             .artifact
             .remove_reviewed_runtime(runtime, &reviewed_names)
+    }
+
+    /// Releases the held runtime directory and its review so an owned
+    /// candidate can outlive this borrowed view.
+    pub(crate) fn into_parts(mut self) -> RuntimeParts {
+        RuntimeParts {
+            directory: self.runtime.take(),
+            files: std::mem::take(&mut self.files),
+        }
+    }
+}
+
+impl StagedManagedPayload<'_> {
+    /// Releases the held payload directory and its selection so an owned
+    /// candidate can outlive this borrowed view.
+    pub(crate) fn into_parts(self) -> PayloadParts {
+        PayloadParts {
+            directory: self.payload,
+            selected: self.selected,
+        }
+    }
+}
+
+impl StagedManagedArtifact {
+    /// Discards this stage like [`Self::discard`], but never fails: it reports
+    /// whether the stage was removed or kept, and why.
+    ///
+    /// Ownership is proved first (both markers and the held stage identity);
+    /// when it cannot be, nothing is touched.
+    #[must_use]
+    pub fn dispose(self) -> StageDisposal {
+        if self.prove_ownership().is_err() {
+            return StageDisposal::Retained(StageRetentionReason::OwnershipUnproved);
+        }
+        match self.discard() {
+            Ok(()) => StageDisposal::Discarded,
+            Err(error) => StageDisposal::Retained(retention_reason(&error)),
+        }
+    }
+
+    fn prove_ownership(&self) -> Result<(), ManagedArtifactError> {
+        check_marker(&self.root, ROOT_MARKER, ROOT_IDENTITY)?;
+        check_marker(&self.stage, STAGE_MARKER, STAGE_IDENTITY)?;
+        self.validate_stage_at_name()
+    }
+
+    /// Proves `held` is still the private child `name` of this stage.
+    fn prove_child(&self, name: &str, held: &Dir) -> Result<(), ManagedArtifactError> {
+        let at_name = self
+            .stage
+            .open_dir_nofollow(name)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        validate_same_held_directory(&at_name, held).map_err(map_private_error)?;
+        validate_private_root(&self.stage_path.join(name), held).map_err(map_private_error)
+    }
+
+    /// Removes the smoke directory when it is an empty private directory.
+    fn remove_smoke_directory_if_empty(&self) -> Result<(), ManagedArtifactError> {
+        match self.stage.symlink_metadata(SMOKE) {
+            Ok(metadata) if metadata.is_dir() => {}
+            Ok(_) => return Err(ManagedArtifactError::UnsafeStorage),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) => return Err(ManagedArtifactError::Io),
+        }
+        let smoke = self
+            .stage
+            .open_dir_nofollow(SMOKE)
+            .map_err(|_| ManagedArtifactError::UnsafeStorage)?;
+        validate_private_root(&self.stage_path.join(SMOKE), &smoke).map_err(map_private_error)?;
+        self.remove_empty_child(SMOKE, smoke)
+    }
+}
+
+fn retention_reason(error: &ManagedArtifactError) -> StageRetentionReason {
+    match error {
+        ManagedArtifactError::UnsafeStorage | ManagedArtifactError::Transfer(_) => {
+            StageRetentionReason::UnexpectedContent
+        }
+        ManagedArtifactError::Unavailable
+        | ManagedArtifactError::Busy
+        | ManagedArtifactError::Io => StageRetentionReason::StorageFailure,
+    }
+}
+
+/// A payload directory and its selection, released from a borrowed view.
+pub(crate) struct PayloadParts {
+    directory: Dir,
+    selected: Vec<SelectedPayloadFile>,
+}
+
+/// A runtime directory and its review, released from a borrowed view.
+pub(crate) struct RuntimeParts {
+    directory: Option<Dir>,
+    files: Vec<PlannedRuntimeFile>,
+}
+
+/// The file of a staged runtime that plays one part in the compatibility smoke.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ManagedRuntimeRole {
+    /// The `FFmpeg` executable.
+    Ffmpeg,
+    /// The `FFprobe` executable.
+    Ffprobe,
+    /// The whisper.cpp command-line executable.
+    WhisperCli,
+    /// The speech-recognition model file.
+    SpeechModel,
+}
+
+/// Why a staged artifact could not become an owned smoke candidate.
+#[derive(Debug)]
+pub enum ManagedCandidateFailure {
+    /// The role list is invalid: a name that is not a flat file name, or a
+    /// role given twice.
+    InvalidReview,
+    /// The staged bytes were verified against a different reviewed artifact.
+    IntegrityMismatch,
+    /// The reviewed raw-file or archive payload could not be staged.
+    Payload(ManagedPayloadError),
+    /// The reviewed runtime layout could not be prepared.
+    Runtime(ManagedRuntimeLayoutError),
+}
+
+/// A staged artifact that could not become a candidate, and what cleanup did
+/// with its stage.
+#[derive(Debug)]
+pub struct ManagedCandidateError {
+    /// Why preparation failed.
+    pub failure: ManagedCandidateFailure,
+    /// Whether the stage was removed or kept, and why.
+    pub stage: StageDisposal,
+}
+
+impl fmt::Display for ManagedCandidateError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self.failure {
+            ManagedCandidateFailure::InvalidReview => "managed smoke roles are invalid",
+            ManagedCandidateFailure::IntegrityMismatch => {
+                "staged artifact differs from the accepted action"
+            }
+            ManagedCandidateFailure::Payload(_) => "reviewed managed payload could not be staged",
+            ManagedCandidateFailure::Runtime(_) => "reviewed runtime layout could not be prepared",
+        })
+    }
+}
+
+impl Error for ManagedCandidateError {}
+
+/// A staged file fault found when a candidate is inspected or opened.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimeFault {
+    /// Stage or runtime ownership could not be proved.
+    Ownership,
+    /// The runtime holds an entry the review does not name.
+    ExtraEntry,
+    /// A reviewed file is absent, linked, re-permissioned or has other bytes.
+    Changed,
+    /// The requested file is not part of the reviewed runtime, or is absent.
+    Missing,
+    /// Storage could not be read.
+    Io,
+}
+
+/// A reviewed runtime file opened for the smoke after a full recheck.
+pub(crate) struct RuntimeRoleFile {
+    /// Absolute path inside the unactivated runtime directory.
+    pub(crate) path: PathBuf,
+    /// Held handle at offset zero, rehashed against the review.
+    pub(crate) file: fs::File,
+    /// Whether the review grants the file owner execution.
+    pub(crate) executable: bool,
+}
+
+/// One reviewed component staged, prepared and unactivated, owned as a single
+/// value so it can be smoked, then published or discarded.
+///
+/// It holds the staged artifact with its payload and runtime directories.
+/// Nothing in it is selected or published; its executables run only from the
+/// private stage, and only through the smoke executor.
+pub struct StagedManagedCandidate {
+    artifact: StagedManagedArtifact,
+    component: ManagedComponent,
+    roles: Vec<(ManagedRuntimeRole, String)>,
+    payload: Option<Dir>,
+    selected: Vec<SelectedPayloadFile>,
+    runtime: Option<Dir>,
+    files: Vec<PlannedRuntimeFile>,
+}
+
+impl StagedManagedCandidate {
+    /// Stages an exact reviewed archive selection and runtime layout from
+    /// verified artifact bytes as one owned candidate.
+    ///
+    /// `roles` names the runtime file that plays each smoke role; a role
+    /// naming a file the runtime lacks is reported by the smoke, not here.
+    ///
+    /// # Errors
+    ///
+    /// Returns the typed staging failure together with what cleanup did with
+    /// the stage: removed when every entry is positively identified, kept and
+    /// reported otherwise.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "each value is a separately reviewed part of the archive review"
+    )]
+    pub fn prepare_archive(
+        staged: StagedManagedArtifact,
+        component: ManagedComponent,
+        roles: &[(ManagedRuntimeRole, &str)],
+        archive: ReviewedPayloadArchive,
+        bounds: ArchiveInventoryBounds,
+        reviewed_aliases: &[ReviewedArchiveAlias<'_>],
+        selected_files: &[ReviewedArchiveFile<'_>],
+        layout: ReviewedRuntimeLayout<'_>,
+    ) -> Result<Self, ManagedCandidateError> {
+        Self::assemble(staged, component, roles, |artifact| {
+            let payload = artifact
+                .stage_reviewed_payload(archive, bounds, reviewed_aliases, selected_files)
+                .map_err(ManagedCandidateFailure::Payload)?;
+            prepare_parts(payload, layout)
+        })
+    }
+
+    /// Stages one exact reviewed raw file (a model) as an owned candidate.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::prepare_archive`].
+    pub fn prepare_raw_file(
+        staged: StagedManagedArtifact,
+        component: ManagedComponent,
+        roles: &[(ManagedRuntimeRole, &str)],
+        name: &str,
+    ) -> Result<Self, ManagedCandidateError> {
+        let integrity = staged.integrity();
+        Self::assemble(staged, component, roles, |artifact| {
+            let payload = artifact
+                .stage_reviewed_raw_file(name, integrity)
+                .map_err(ManagedCandidateFailure::Payload)?;
+            prepare_parts(
+                payload,
+                ReviewedRuntimeLayout {
+                    max_bytes: integrity.bytes(),
+                    aliases: &[],
+                    executables: &[],
+                },
+            )
+        })
+    }
+
+    /// Builds a candidate from a caller-supplied preparation of `staged`.
+    ///
+    /// On failure the stage is disposed of and its disposal returned.
+    pub(crate) fn assemble(
+        staged: StagedManagedArtifact,
+        component: ManagedComponent,
+        roles: &[(ManagedRuntimeRole, &str)],
+        prepare: impl FnOnce(
+            &StagedManagedArtifact,
+        ) -> Result<(PayloadParts, RuntimeParts), ManagedCandidateFailure>,
+    ) -> Result<Self, ManagedCandidateError> {
+        let roles = match review_roles(roles) {
+            Ok(roles) => roles,
+            Err(failure) => {
+                return Err(ManagedCandidateError {
+                    failure,
+                    stage: staged.dispose(),
+                });
+            }
+        };
+        match prepare(&staged) {
+            Ok((payload, runtime)) => Ok(Self {
+                artifact: staged,
+                component,
+                roles,
+                payload: Some(payload.directory),
+                selected: payload.selected,
+                runtime: runtime.directory,
+                files: runtime.files,
+            }),
+            Err(failure) => Err(ManagedCandidateError {
+                failure,
+                stage: staged.dispose(),
+            }),
+        }
+    }
+
+    /// The reviewed component this candidate holds.
+    #[must_use]
+    pub const fn component(&self) -> ManagedComponent {
+        self.component
+    }
+
+    /// Exact flat filenames in the unactivated runtime directory.
+    #[must_use]
+    pub fn reviewed_names(&self) -> Vec<&str> {
+        self.files.iter().map(|file| file.name.as_str()).collect()
+    }
+
+    /// The runtime file named for `role`, if this candidate plays it.
+    #[must_use]
+    pub fn role_file(&self, role: ManagedRuntimeRole) -> Option<&str> {
+        self.roles
+            .iter()
+            .find(|(candidate, _)| *candidate == role)
+            .map(|(_, name)| name.as_str())
+    }
+
+    fn prove_ownership(&self) -> Result<(), ManagedArtifactError> {
+        self.artifact.prove_ownership()?;
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or(ManagedArtifactError::UnsafeStorage)?;
+        self.artifact.prove_child(RUNTIME, runtime)?;
+        let payload = self
+            .payload
+            .as_ref()
+            .ok_or(ManagedArtifactError::UnsafeStorage)?;
+        self.artifact.prove_child(PAYLOAD, payload)
+    }
+
+    /// Rechecks the whole runtime: ownership, exactly the reviewed names, no
+    /// links, the reviewed modes, and every file's size and SHA-256.
+    pub(crate) fn inspect_runtime(&self) -> Result<(), RuntimeFault> {
+        self.prove_ownership()
+            .map_err(|error| ownership_fault(&error))?;
+        let runtime = self.runtime.as_ref().ok_or(RuntimeFault::Ownership)?;
+        let mut observed = HashSet::with_capacity(self.files.len());
+        for entry in runtime.entries().map_err(|_| RuntimeFault::Io)? {
+            let entry = entry.map_err(|_| RuntimeFault::Io)?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                return Err(RuntimeFault::ExtraEntry);
+            };
+            let Some(reviewed) = self.files.iter().find(|file| file.name == name) else {
+                return Err(RuntimeFault::ExtraEntry);
+            };
+            observed.insert(name.to_owned());
+            let metadata = runtime
+                .symlink_metadata(name)
+                .map_err(|_| RuntimeFault::Changed)?;
+            validate_runtime_file(&metadata, reviewed.mode).map_err(|_| RuntimeFault::Changed)?;
+        }
+        if observed.len() != self.files.len() {
+            return Err(RuntimeFault::Changed);
+        }
+        for reviewed in &self.files {
+            open_reviewed_runtime_file(runtime, reviewed)?;
+        }
+        Ok(())
+    }
+
+    /// Opens one reviewed runtime file for the smoke, after proving ownership
+    /// and rehashing it.
+    pub(crate) fn open_role_file(&self, name: &str) -> Result<RuntimeRoleFile, RuntimeFault> {
+        let reviewed = self
+            .files
+            .iter()
+            .find(|file| file.name == name)
+            .ok_or(RuntimeFault::Missing)?;
+        self.prove_ownership()
+            .map_err(|error| ownership_fault(&error))?;
+        let runtime = self.runtime.as_ref().ok_or(RuntimeFault::Ownership)?;
+        let file = open_reviewed_runtime_file(runtime, reviewed)?;
+        Ok(RuntimeRoleFile {
+            path: self.artifact.stage_path.join(RUNTIME).join(name),
+            file,
+            executable: reviewed.mode == RuntimeFileMode::OwnerExecutable,
+        })
+    }
+
+    /// Creates the private, empty smoke directory inside this stage and
+    /// returns it with its absolute path.
+    pub(crate) fn create_smoke_directory(&self) -> Result<(Dir, PathBuf), ManagedArtifactError> {
+        self.prove_ownership()?;
+        let directory = self.artifact.create_private_child(SMOKE)?;
+        Ok((directory, self.artifact.stage_path.join(SMOKE)))
+    }
+
+    /// Removes the smoke directory; it must be the same held directory and
+    /// empty, so anything a provider left behind is kept and reported.
+    pub(crate) fn remove_smoke_directory(
+        &self,
+        directory: Dir,
+    ) -> Result<(), ManagedArtifactError> {
+        self.artifact.remove_empty_child(SMOKE, directory)
+    }
+
+    /// Removes this candidate's stage when its ownership and every entry are
+    /// proved; otherwise keeps what cannot be proved and reports why.
+    ///
+    /// Only the reviewed runtime files, the selected payload files, an empty
+    /// smoke directory, the verified artifact and the stage marker are ever
+    /// removed, each after checking it is a single-link regular file (or the
+    /// same held private directory) with the reviewed name.
+    #[must_use]
+    pub fn discard(self) -> StageDisposal {
+        let Self {
+            artifact,
+            component: _,
+            roles: _,
+            payload,
+            selected,
+            runtime,
+            files,
+        } = self;
+        if artifact.prove_ownership().is_err() {
+            return StageDisposal::Retained(StageRetentionReason::OwnershipUnproved);
+        }
+        if let Some(runtime) = runtime {
+            if artifact.prove_child(RUNTIME, &runtime).is_err() {
+                return StageDisposal::Retained(StageRetentionReason::OwnershipUnproved);
+            }
+            let names = files
+                .iter()
+                .map(|file| file.name.clone())
+                .collect::<Vec<_>>();
+            if let Err(error) = artifact.remove_reviewed_runtime(runtime, &names) {
+                return StageDisposal::Retained(retention_reason(&error));
+            }
+        }
+        if let Err(error) = artifact.remove_smoke_directory_if_empty() {
+            return StageDisposal::Retained(retention_reason(&error));
+        }
+        if let Some(payload) = payload {
+            if artifact.prove_child(PAYLOAD, &payload).is_err() {
+                return StageDisposal::Retained(StageRetentionReason::OwnershipUnproved);
+            }
+            let view = StagedManagedPayload {
+                artifact: &artifact,
+                payload,
+                selected,
+            };
+            if let Err(error) = view.discard() {
+                return StageDisposal::Retained(retention_reason(&error));
+            }
+        }
+        artifact.dispose()
+    }
+}
+
+impl StagedManagedComponent for StagedManagedCandidate {
+    fn component(&self) -> ManagedComponent {
+        self.component
+    }
+
+    fn discard(self) -> StageDisposal {
+        Self::discard(self)
+    }
+}
+
+fn prepare_parts(
+    payload: StagedManagedPayload<'_>,
+    layout: ReviewedRuntimeLayout<'_>,
+) -> Result<(PayloadParts, RuntimeParts), ManagedCandidateFailure> {
+    match payload.prepare_reviewed_runtime(layout) {
+        Ok(runtime) => {
+            let runtime = runtime.into_parts();
+            Ok((payload.into_parts(), runtime))
+        }
+        Err(error) => {
+            // A payload that cannot be cleaned stays for the stage disposal to
+            // report; the layout failure is what the caller needs to see.
+            let _ = payload.discard();
+            Err(ManagedCandidateFailure::Runtime(error))
+        }
+    }
+}
+
+fn review_roles(
+    roles: &[(ManagedRuntimeRole, &str)],
+) -> Result<Vec<(ManagedRuntimeRole, String)>, ManagedCandidateFailure> {
+    let mut reviewed: Vec<(ManagedRuntimeRole, String)> = Vec::with_capacity(roles.len());
+    for (role, name) in roles {
+        if !portable_runtime_name(name) || reviewed.iter().any(|(seen, _)| seen == role) {
+            return Err(ManagedCandidateFailure::InvalidReview);
+        }
+        reviewed.push((*role, (*name).to_owned()));
+    }
+    Ok(reviewed)
+}
+
+fn open_reviewed_runtime_file(
+    runtime: &Dir,
+    reviewed: &PlannedRuntimeFile,
+) -> Result<fs::File, RuntimeFault> {
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let file = runtime
+        .open_with(&reviewed.name, &options)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                RuntimeFault::Missing
+            } else {
+                RuntimeFault::Changed
+            }
+        })?;
+    let metadata = file.metadata().map_err(|_| RuntimeFault::Io)?;
+    validate_runtime_file(&metadata, reviewed.mode).map_err(|_| RuntimeFault::Changed)?;
+    let mut file = file.into_std();
+    transfer_verified(&mut file, std::io::sink(), reviewed.integrity)
+        .map_err(|_| RuntimeFault::Changed)?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|_| RuntimeFault::Io)?;
+    Ok(file)
+}
+
+fn ownership_fault(error: &ManagedArtifactError) -> RuntimeFault {
+    match error {
+        ManagedArtifactError::Io
+        | ManagedArtifactError::Busy
+        | ManagedArtifactError::Unavailable => RuntimeFault::Io,
+        ManagedArtifactError::UnsafeStorage | ManagedArtifactError::Transfer(_) => {
+            RuntimeFault::Ownership
+        }
     }
 }
 

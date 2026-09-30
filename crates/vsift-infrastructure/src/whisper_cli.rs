@@ -333,6 +333,7 @@ pub struct WhisperCli {
     model: PathBuf,
     threads: NonZeroU16,
     host_isolation: HostIsolation,
+    output_limits: WhisperOutputLimits,
 }
 
 impl WhisperCli {
@@ -361,7 +362,25 @@ impl WhisperCli {
             model,
             threads,
             host_isolation,
+            output_limits: WhisperOutputLimits::R0,
         })
+    }
+
+    /// The same recognizer with tighter bounds on each chunk's JSON output.
+    ///
+    /// A bound can only be lowered: each value is the smaller of `limits` and
+    /// [`WhisperOutputLimits::R0`]. The managed-install compatibility smoke
+    /// uses it to apply the reviewed policy's transcript-file limit.
+    #[must_use]
+    pub fn with_output_limits(mut self, limits: WhisperOutputLimits) -> Self {
+        self.output_limits = WhisperOutputLimits {
+            max_bytes: limits.max_bytes.min(WhisperOutputLimits::R0.max_bytes),
+            max_segments: limits
+                .max_segments
+                .min(WhisperOutputLimits::R0.max_segments),
+            max_tokens: limits.max_tokens.min(WhisperOutputLimits::R0.max_tokens),
+        };
+        self
     }
 
     /// The closed argument list for one chunk (decoding profile `r0-v1`).
@@ -465,8 +484,8 @@ impl WhisperCli {
             TerminationReason::Cancelled => return Err(WhisperError::Cancelled),
             TerminationReason::OutputLimit(_) => return Err(WhisperError::OutputLimit),
         }
-        let bytes = read_bounded_output(directory, json_name, WhisperOutputLimits::R0.max_bytes)?;
-        parse_whisper_full_json(&bytes, WhisperOutputLimits::R0).map_err(WhisperError::Output)
+        let bytes = read_bounded_output(directory, json_name, self.output_limits.max_bytes)?;
+        parse_whisper_full_json(&bytes, self.output_limits).map_err(WhisperError::Output)
     }
 
     /// Canonical path of the selected model.
