@@ -213,10 +213,13 @@ function run(executablePath, target, args) {
   const stopRelay = relaySignals(child);
   child.once('error', (error) => {
     stopRelay();
+    // The executable was just read, so "not found" means the system could not
+    // start it: a missing loader or library on Linux, or too long a path on Windows.
+    const notStarted = describe(error) === 'ENOENT';
     let hint = '';
-    if (target.packageName === '@vsift/linux-x64') {
+    if (notStarted && target.packageName === '@vsift/linux-x64') {
       hint = ' The Linux build needs glibc 2.35 or later and OpenSSL 3 (libssl.so.3).';
-    } else if (process.platform === 'win32' && executablePath.length >= WINDOWS_MAX_PATH) {
+    } else if (notStarted && process.platform === 'win32' && executablePath.length >= WINDOWS_MAX_PATH) {
       hint =
         ` Its path is ${executablePath.length} characters long, and Windows starts programs only from paths ` +
         `shorter than ${WINDOWS_MAX_PATH}; install vsift in a folder with a shorter path.`;
