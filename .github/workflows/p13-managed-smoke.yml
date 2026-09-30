@@ -67,3 +67,42 @@ jobs:
         run: >-
           cargo test --release --locked -p vsift-cli
           --test p13_managed_install_real -- --ignored --exact --nocapture
+
+  # P13 PR 7: the P13 stage of the end-to-end spine. From a fresh per-user
+  # base with an empty PATH it kills the accepted install (SIGKILL) during a
+  # download and during a smoke, checks setup repair and setup list after
+  # each kill, reruns it to completion, runs the A-08 local-ASR journey on
+  # the managed tools alone, then removes and reinstalls the model. Its
+  # report is uploaded; it holds no personal detail.
+  install-e2e:
+    name: Install E2E stage (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          cat /etc/os-release
+          uname -m
+          nproc
+
+      - name: Kill, rerun, use, remove and reinstall the managed tools
+        env:
+          VSIFT_P13_INSTALL_E2E: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_install_e2e -- --ignored --exact --nocapture
+
+      - name: Upload the checkpoint report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p13-install-e2e-report
+          path: .vsift/e2e-runs/
+          retention-days: 90
+          if-no-files-found: warn

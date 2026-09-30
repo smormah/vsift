@@ -4,18 +4,16 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now
 
-**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Merged:
-PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PRs 2a and 2b
-(#229, #231; human output done, L-073 closed), PR 3 (#230), PR 4 (#234, `d43a518`,
-`setup install`), PR 5 (#233, `handoff check`, L-086), PR 8 (#236, `772ead2`,
-`release.yml`, the workflow lint) and PR 6 (#239, `02a8f76`, `setup list/rollback/
-remove/repair`, cleanup and the stale-stage sweep, L-090). **PR 9 (npm packages and the
-Verdaccio matrix) is done** (#240, `p13-pr9-npm`): the `vsift-cli` launcher and three `@vsift/…`
-packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
-(L-091 to L-094); PR 7 runs in parallel. The packet is not complete.
+**P00-P12 are complete; P13 is in progress** (started 2026-09-30). Merged: PRs 0-6, 8
+and 9 (#226, #228-#231, #233, #234, #236, #239, #240 `951226f`; the P12 debt fixes #227):
+human output, `handoff check`, `setup install` and the lifecycle, `release.yml` and the
+lint, the `vsift-cli` npm launcher over `@vsift/…` (L-091 to L-094). **PR 7 is in
+review** (#241): 22 managed fault points, a kill matrix (4 store defects fixed), every
+changed managed folder flushed (a reported command survives a power loss, Ubuntu ext4),
+the campaign's `--store managed` (`P13 managed power loss`) and the E2E stage (`P13
+managed smoke`, job `install-e2e`); both runs are the maintainer's after merge.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
-   7 kill/power-loss tests of the managed store and the install E2E stage (in progress);
    10 `attest`/`publish` jobs (the lint's only `id-token` jobs), npm provenance and
    `dry_run`, publishing exactly the tarballs `npm-package` builds after `npm-qualify`,
    `--tag next` (`latest` stays 0.0.0; notes name Yarn's one-day hold, release.md §5);
@@ -56,6 +54,7 @@ packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
   Release (now also the npm matrix) a required check?
 - **PR 6** (ADR 0023 note): removal proves ownership, not integrity; `setup list`/`repair`
   `free`; `repair` drops `--profile`; pointer v2; sweep in every accepted install; L-090.
+- **PR 7** (ADR 0023 note, reviewed): directory flushes; empty store folder adopted.
 - **PR 9** (ADR 0023 note): launcher exits 126/127; the signal rules (POSIX relays
   `SIGINT` only when no standard stream is a terminal; Windows relays nothing, L-091);
   no SBOM in the platform packages; twelve more Release jobs per archive/npm PR; Yarn
@@ -73,11 +72,12 @@ packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
 
 - **Opt-in real-tool paths** (`--ignored`): the P07-P11 E2E tests, the `*_tools` engine
   tests, the Windows console-interrupt tests, the external-delivery simulation (L-042) and
-  the P13 managed smoke and real install (Ubuntu). Linux-only code is linted in CI. The
-  install tests need `install-test-hooks` (a workspace run enables it).
+  the P13 managed smoke, real install and E2E stage (Ubuntu). Linux-only code is linted
+  in CI. The install and kill tests need `install-test-hooks` and `fault-injection`.
 - **npm:** `node --test npm/test/launcher.test.cjs` when `npm/` changes; a workspace
   version bump also bumps `npm/vsift-cli/package.json` and its three optional dependencies.
-- **Campaigns:** crash campaign never on disks that matter (L-056, L-057); bump the three
+- **Campaigns:** crash campaign (also `--store managed`) never on disks that matter
+  (L-056, L-057); bump the three
   `UBUNTU_IMAGE_*` together; trial records never hold the check code.
 
 ## Guardrails

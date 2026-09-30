@@ -140,13 +140,13 @@ struct ActiveSession {
 }
 
 /// The acknowledgement channel.
-struct Channel {
+pub(crate) struct Channel {
     file: File,
     drain: bool,
 }
 
 impl Channel {
-    fn open(path: &Path, drain: bool) -> Result<Self, CampaignError> {
+    pub(crate) fn open(path: &Path, drain: bool) -> Result<Self, CampaignError> {
         let file = OpenOptions::new()
             .append(true)
             .create(!drain)
@@ -159,7 +159,7 @@ impl Channel {
     }
 
     /// Writes one line and, on a serial port, waits until it has left.
-    fn line(&mut self, text: &str) -> Result<(), CampaignError> {
+    pub(crate) fn line(&mut self, text: &str) -> Result<(), CampaignError> {
         let mut bytes = text.as_bytes().to_vec();
         bytes.push(b'\n');
         self.file
@@ -197,7 +197,7 @@ pub(crate) fn unix_seconds() -> Result<u64, CampaignError> {
         .as_secs())
 }
 
-fn unix_nanos() -> Result<u128, CampaignError> {
+pub(crate) fn unix_nanos() -> Result<u128, CampaignError> {
     Ok(SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| CampaignError::Clock)?
@@ -368,7 +368,7 @@ fn ensure_workspace(engine: &Engine, config: &WorkloadConfig) -> Result<(), Camp
 
 /// Records a dm-log-writes mark, so the replay knows where in the write
 /// stream the acknowledgement happened.
-fn mark(dmsetup: &Path, device: &str, text: &str) -> Result<(), CampaignError> {
+pub(crate) fn mark(dmsetup: &Path, device: &str, text: &str) -> Result<(), CampaignError> {
     let status = Command::new(dmsetup)
         .args(["message", device, "0", "mark", text])
         .status()

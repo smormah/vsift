@@ -28,6 +28,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `npm launcher` runs the launcher's tests. Nothing is published. Guide
   `docs/operations/install.md`; runbook `docs/operations/release.md` section 5; known
   limits L-091 to L-094.
+- **Kill and power-loss tests of the managed store, and the P13 install E2E stage**
+  (P13 PR 7; ADR 0023 §3 step 7, decision H9). The development-only `fault-injection`
+  feature gains 22 managed-store fault points (`managed-directory-created` to
+  `managed-stage-marker-removed`). A kill matrix (`vsift-infrastructure`
+  `tests/p13_install_transaction/kill.rs`, every CI OS) stops `setup install`, `setup
+  rollback`, `setup remove` and the stale-stage sweep at every arrival of every point
+  (the first of each off Linux), and kills installs through the operating system; after
+  every stop the store is inspectable, each selection is the one before or after and
+  verifies, `setup repair` reports exactly what is left with an existing command, and
+  the rerun completes. The P10 crash campaign gains `--store managed` and a manual
+  workflow, `P13 managed power loss`, which replays every flush of a managed workload on
+  ext4 and holds each point to fail-closed detection plus repair. The opt-in P13 E2E
+  stage (`vsift-cli` `tests/p13_install_e2e.rs`, workflow `P13 managed smoke`, job
+  `install-e2e`) kills a real install twice, reruns it, runs the local-ASR journey on
+  the managed tools alone, and removes and reinstalls the model.
+- **A reported managed command survives a power loss** (P13 PR 7, on review). The
+  managed store now flushes every folder a command changes before it returns: the
+  runtime before a publication and `versions-v1` after it, `current-v1` after a pointer
+  is replaced or removed, a version folder after its tombstone and `versions-v1` after
+  its removal, the root after the sweep removes a stage, and the root and its folders
+  when they are created. The guarantee is qualified on Ubuntu 24.04 with ext4; Windows
+  has no directory flush and no managed install. The `P13 managed power loss` workflow
+  now fails on any undone acknowledgement, and its negative control (no flushes) must
+  lose some.
+
 - **Release workflow and governance workflow lint** (P13 PR 8; ADR 0023 section 1 and
   decision D). `.github/workflows/release.yml` builds `vsift` for
   `x86_64-pc-windows-msvc` (static C runtime), `aarch64-apple-darwin` and
@@ -981,6 +1006,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     review-tier models can still state blurred content as supported by pixels, and
     the #224 skill fix awaits a review-tier re-run of A-09 blurred. L-007 counts the
     re-run's adversarial runs and no longer tracks #222.
+- **The managed store recovers from kills it could not recover from before** (P13 PR
+  7). A first `setup install` killed between creating the managed folder,
+  `versions-v1` or `current-v1` and finishing its marker no longer leaves a folder every
+  later command refuses (`STORAGE_IO`, deletion by hand): a folder holding nothing but
+  the start of its marker is finished by the next install and read as empty meanwhile. A
+  `setup remove` killed while creating its tombstone no longer leaves a version that
+  cannot be removed, and one killed just before removing the empty version folder is now
+  reported `removal_interrupted` with `setup remove --version` instead of a
+  `missing_manifest` version to delete by hand.
+
 - **Trial grader: `commands_only` allows `handoff check`** (2026-09-30, #222). The
   skill has run `vsift handoff check` on every draft report since P13 PR 5, but the
   two A-01 scenarios' `commands_only` lists did not name it. As a result, the first runs of

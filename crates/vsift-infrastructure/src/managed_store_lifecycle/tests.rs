@@ -813,3 +813,114 @@ fn a_changed_root_marker_fails_inspection_closed() -> TestResult {
     ));
     Ok(())
 }
+
+/// The flushes one commit step needs: of the folders whose entries must be
+/// durable before it, and of those it changed, after it and before the
+/// next step or the command's end.
+fn required_flushes(
+    step: crate::fault_point::ManagedStep,
+) -> (
+    &'static [crate::fault_point::ManagedFolder],
+    &'static [crate::fault_point::ManagedFolder],
+) {
+    use crate::fault_point::{ManagedFolder as F, ManagedStep as S};
+    match step {
+        S::RootCreated => (&[], &[F::Parent, F::Root]),
+        S::FolderCreated(F::Versions) => (&[], &[F::Root, F::Versions]),
+        S::FolderCreated(_) => (&[], &[F::Root, F::Current]),
+        S::VersionPublished => (&[F::Runtime], &[F::Versions]),
+        S::PointerReplaced | S::PointerRemoved => (&[], &[F::Current]),
+        S::TombstoneWritten => (&[], &[F::Version]),
+        S::VersionRemoved => (&[], &[F::Versions]),
+        S::StageRemoved => (&[], &[F::Root]),
+    }
+}
+
+/// P13 PR 7: every step that commits a state change (the root and its two
+/// folders created, a version published, a pointer replaced or removed, a
+/// tombstone written, a version and a stage removed) is followed by the
+/// flush of the folder whose entries it changed before the next step, and a
+/// publication is preceded by the flush of the runtime it renames. A
+/// missing or misplaced flush fails here on every OS; on Unix the flushes
+/// really run.
+#[test]
+fn every_commit_step_is_flushed_before_the_next() -> TestResult {
+    use crate::fault_point::{ManagedFolder, ManagedStep, ManagedTrace};
+    let fixture = Fixture::new()?;
+    let store = fixture.store()?;
+    let guard = store.try_install_guard()?;
+    drop(publish(&store, &guard, "1.0.0")?);
+    drop(publish(&store, &guard, "1.1.0")?);
+    let maintainer = GuardedManagedStore::new(&store, &guard);
+    roll_back_component(&maintainer, CLI, None)?;
+    let archive = tool_archive(b"abandoned")?;
+    drop(store.import_verified(&archive[..], integrity_of(&archive)?)?);
+    private_file(
+        &fixture
+            .root()
+            .join("current-v1")
+            .join("whisper_cli.pending"),
+        b"VSIFT-MANAGED-POINTER-v2\n",
+    )?;
+    let sweep = maintainer.sweep_stages()?;
+    assert_eq!(
+        (sweep.removed, sweep.interrupted_selections_removed),
+        (1, 1)
+    );
+    remove_managed(&maintainer, &ManagedRemovalTarget::Component(CLI))?;
+
+    let trace = store.faults().take_trace();
+    let mut seen = Vec::new();
+    let mut since_step: Vec<ManagedFolder> = Vec::new();
+    let mut pending: Option<(ManagedStep, Vec<ManagedFolder>)> = None;
+    for entry in trace
+        .iter()
+        .copied()
+        .chain([ManagedTrace::Step(ManagedStep::RootCreated)])
+    {
+        match entry {
+            ManagedTrace::Flushed(folder) => {
+                since_step.push(folder);
+                if let Some((_, missing)) = &mut pending {
+                    missing.retain(|needed| *needed != folder);
+                }
+            }
+            ManagedTrace::Step(step) => {
+                if let Some((previous, missing)) = pending.take() {
+                    assert!(
+                        missing.is_empty(),
+                        "{previous:?} left {missing:?} unflushed"
+                    );
+                }
+                let (before, after) = required_flushes(step);
+                for needed in before {
+                    assert!(
+                        since_step.contains(needed),
+                        "{step:?} without {needed:?} first"
+                    );
+                }
+                seen.push(step);
+                since_step.clear();
+                pending = Some((step, after.to_vec()));
+            }
+        }
+    }
+    seen.pop();
+    for expected in [
+        ManagedStep::RootCreated,
+        ManagedStep::FolderCreated(ManagedFolder::Versions),
+        ManagedStep::FolderCreated(ManagedFolder::Current),
+        ManagedStep::VersionPublished,
+        ManagedStep::PointerReplaced,
+        ManagedStep::PointerRemoved,
+        ManagedStep::TombstoneWritten,
+        ManagedStep::VersionRemoved,
+        ManagedStep::StageRemoved,
+    ] {
+        assert!(
+            seen.contains(&expected),
+            "{expected:?} never happened: {seen:?}"
+        );
+    }
+    Ok(())
+}

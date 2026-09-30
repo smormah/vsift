@@ -47,10 +47,10 @@ qualified it:
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0-6, PR 8 and the P12 debt fixes are
-merged (human output, `handoff check`, `setup install` and its lifecycle, `release.yml`
-and the workflow lint are done); PR 9 (npm packages) is done in this change; PR 7 (kill
-and power-loss tests) is in progress. The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0-6, 8 and 9 and the P12 debt fixes
+are merged (human output, `handoff check`, `setup install` and its lifecycle,
+`release.yml`, the workflow lint and the npm packages); PR 7 (kill and power-loss tests,
+the E2E stage) is in review. The packet is not complete.
 
 ## P13 in one view
 
@@ -66,19 +66,13 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 - **Names:** scope `@vsift` (owned, #237); npm refused `vsift`, so the launcher is `vsift-cli` (placeholder `0.0.0` held, `latest`; command `vsift`; ADR 0009 note).
 - **Done:** PR 0 (#226, ADR 0023); PR 1 (#228, L-071); PRs 2a, 2b (#229, #231,
   `TerminalText`, SEC-T02, L-073); PR 3 (#230, smoke); PR 5 (#233, `handoff check`, L-086).
-- **PR 4 (#234, `d43a518`):** `setup install --plan --accept-plan [--artifact-dir]`
-  (download or import, exact size and SHA-256, stage, smoke, `publish_and_select`);
-  `DOWNLOAD_FAILED` (exit 7); lookup per call, configured, managed, `PATH`. Hosted run
-  36734316384 (Ubuntu 24.04) activated all three components; the negative control none.
-- **PR 8 (#236, `772ead2`):** `release.yml` builds `vsift` per target twice (identical
-  bytes), `--version` names the commit, notices and a CycloneDX SBOM per target,
-  deterministic `.tar.gz` archives and `SHA256SUMS` (`tools/vsift-release`); no write
-  scope, OIDC token or secret. The governance checker lints every workflow. L-089.
-- **PR 6 (#239, `02a8f76`):** `setup list`/`repair` only read (skill class `free`);
-  `setup rollback` selects a verified earlier version in one atomic rename (pointer v2);
-  `setup remove` deselects first, keeps held versions (`BUSY`) and unprovable content
-  (L-090); every accepted install sweeps abandoned stages and keeps two versions.
-- **PR 9 (#240, this change):** `npm/vsift-cli/` (`bin/vsift.cjs` runs `lib/launcher.cjs`), a plain CommonJS
+- **PR 4 (#234):** `setup install` (download or import, SHA-256, stage, smoke, activate),
+  `DOWNLOAD_FAILED`, managed lookup tier; hosted run 36734316384 activated all three.
+- **PR 8 (#236):** `release.yml` (reproducible archives, notices, SBOMs, `SHA256SUMS`,
+  `--version` with the commit; no write scope or secret); the workflow lint. L-089.
+- **PR 6 (#239):** `setup list/repair` (read only, `free`), `setup rollback` (atomic,
+  verified), `setup remove` (deselect first, keeps held and unprovable content, L-090).
+- **PR 9 (#240, `951226f`):** `npm/vsift-cli/` (`bin/vsift.cjs` runs `lib/launcher.cjs`), a plain CommonJS
   launcher: finds `@vsift/<platform>`, requires its version and the executable's
   SHA-256 (`platform-digests.json`, computed from the archives by `vsift-release npm`)
   to match, runs it without a shell, relays signals, exits with its status; failures are
@@ -86,8 +80,13 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   notices and licences with `os`/`cpu`; no package has scripts or names a person
   (governance and `npm-verify`). Release jobs `npm-package` (packed twice, verified) and
   `npm-qualify` (12 jobs: Windows, macOS, Ubuntu x npm, pnpm, Yarn, Bun against a
-  loopback Verdaccio). L-091 to L-094. **Next:** PR 7 (in progress), PR 10 (attestation,
-  provenance, the protected publish job), PR 11 (docs, the qualification record).
+  loopback Verdaccio). L-091 to L-094. **Next:** PR 10 (attestation, provenance, the
+  protected publish job), PR 11 (docs, the qualification record).
+- **In review: PR 7** (#241, step 7): 22 `managed-*` fault points; a kill matrix and OS
+  kills leave a store repair describes exactly and a rerun completes (4 store defects
+  fixed); every changed folder is flushed, so a reported command survives a power loss
+  (Ubuntu 24.04 ext4; Windows has no flush and no managed install). Workflows `P13
+  managed power loss` and `install-e2e` (`P13 managed smoke`) not yet run.
 - **Only the placeholder is published** until P13 ends and the maintainer approves a 0.x `next`.
 
 ## P12 in one view
@@ -124,7 +123,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified; compact tier 82%, then 93%/100% on the #222 re-run (L-085 closed); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-6 and 8 merged (#226, #228-#231, #233, #234, #236, #239); PR 9 (npm packages) done in this change; kill/power-loss tests (PR 7), publishing (PR 10) and docs to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-6, 8 and 9 merged (#226, #228-#231, #233, #234, #236, #239, #240); PR 7 (kill/power-loss tests) in review; publishing (PR 10) and docs to come |
 | P14 | Not started |
 
 ## Architecture snapshot

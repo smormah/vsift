@@ -6,7 +6,9 @@ stages, the P10 recoverable run and the P11 single-host worker run are implement
 P12's complete video-to-grounded-handoff run passed through named Claude Code and
 Codex clients (2026-09-30, [P12 qualification record](p12-agent-qualification.md)).
 The review tier is qualified; the compact tier met its 90% target on the re-run after P12's
-fixes (#222, 2026-09-30: 93% and 100%). Managed
+fixes (#222, 2026-09-30: 93% and 100%). P13's managed-dependency stage is implemented
+(P13 PR 7, not yet run); its clean native and npm install belongs to P13 PRs 9 and 11.
+Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 
@@ -360,6 +362,37 @@ in P12 PR 3's campaigns. Their attachment evidence is the
 
 The trials spend client allowances, so they run on demand, not in CI. The SEC-T02
 tool-level suite `sec_t02_adversarial_evidence` runs on every PR.
+
+P13 PR 7 adds the **managed-dependency stage** of the "Installed-user and
+managed-dependency run" (ADR 0023 §3 step 7):
+
+```console
+VSIFT_P13_INSTALL_E2E=1 cargo test --release --locked -p vsift-cli   --test p13_install_e2e -- --ignored --exact --nocapture
+```
+
+It runs only on Ubuntu 24.04 x86-64 and only as a release build (a development build
+reaches no publisher); the manual workflow `P13 managed smoke`, job `install-e2e`, runs
+it on a hosted runner and uploads its report. From a fresh per-user base with an empty
+`PATH` and nothing configured, so no FFmpeg, whisper.cpp, model or Rust toolchain is
+reachable: `p13_clean_host` (`setup check` not ready, `setup list` and `setup repair`
+report no managed folder and create none); `p13_install_killed_in_download` (the
+accepted `setup install` killed by `SIGKILL` once its first download holds 1 MiB, then
+`setup repair` names the one abandoned stage with its command, every selection that
+exists verifies and the guard is free); `p13_install_killed_in_smoke` (the rerun killed
+while a compatibility smoke runs, the same checks); `p13_install_rerun_completes` (the
+same accepted command completes and sweeps the abandoned stages, repair reports
+healthy, `setup check` resolves every tool as `managed_version` and verifies local ASR);
+`p13_managed_journey` (the A-08 journey on the managed tools alone: plain `ingest` of
+F05's speech variant, `transcript retranscribe` cited against the speech window and its
+words, `search`, `candidates`, `frame get --candidate`, `audio`, `session retain` and
+`bundle validate`); and `p13_uninstall_and_reinstall` (`setup remove whisper_model`,
+a retranscription then fails `MISSING_CAPABILITY`, and the same accepted plan
+reinstalls only the model). It prints `p13_install: passed` and writes
+`.vsift/e2e-runs/p13-<run-id>/report.json`. The kill and power-loss qualification of the
+store itself is not this stage: it is the kill matrix in
+`vsift-infrastructure/tests/p13_install_transaction/kill.rs` (every CI OS) and the
+workflow `P13 managed power loss` ([verification](verification.md) "P13 PR 7
+evidence"). The clean native-archive and npm installs without Rust are P13 PRs 9 and 11.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on

@@ -18,10 +18,55 @@ use std::{
 use crate::{
     error::CampaignError,
     logwrites::{WriteLog, plan},
+    managed::{CampaignStore, ManagedAck, parse_managed_events, verify_managed},
     protocol::{Ack, parse_events},
     verify::{probe_writes, verify},
     workload::{MAX_ACK_BYTES, read_text, unix_seconds},
 };
+
+/// The acknowledgements a replay holds its store to.
+enum Acknowledgements {
+    /// The session store's.
+    Session(Vec<Ack>),
+    /// The managed store's (P13 PR 7).
+    Managed(Vec<ManagedAck>),
+}
+
+impl Acknowledgements {
+    fn read(path: &Path, store: CampaignStore) -> Result<Self, CampaignError> {
+        let text = read_text(path, MAX_ACK_BYTES)?;
+        match store {
+            CampaignStore::Session => {
+                let events = parse_events(&text);
+                if !events.malformed.is_empty() {
+                    return Err(CampaignError::MalformedAcks(events.malformed));
+                }
+                Ok(Self::Session(events.acks))
+            }
+            CampaignStore::Managed => {
+                let events = parse_managed_events(&text);
+                if !events.malformed.is_empty() {
+                    return Err(CampaignError::MalformedAcks(events.malformed));
+                }
+                Ok(Self::Managed(events.acks))
+            }
+        }
+    }
+
+    fn sequence(&self) -> Vec<u64> {
+        match self {
+            Self::Session(acks) => acks.iter().map(|ack| ack.seq).collect(),
+            Self::Managed(acks) => acks.iter().map(|ack| ack.seq).collect(),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Session(acks) => acks.len(),
+            Self::Managed(acks) => acks.len(),
+        }
+    }
+}
 
 /// Where the replay runs and what it checks.
 #[derive(Clone, Debug)]
@@ -42,6 +87,8 @@ pub struct ReplayConfig {
     pub report: PathBuf,
     /// Check only every `stride`-th point (1: every point).
     pub stride: usize,
+    /// Which store the workload ran on.
+    pub store: CampaignStore,
 }
 
 /// What the replay found.
@@ -63,6 +110,9 @@ pub struct ReplaySummary {
     pub fsck_failures: usize,
     /// Points where the copy could not be mounted.
     pub mount_failures: usize,
+    /// Managed store only: points where lookup refused a selection whose
+    /// file was torn (fail closed at work; the negative control needs some).
+    pub torn_points: usize,
 }
 
 impl ReplaySummary {
@@ -71,7 +121,7 @@ impl ReplaySummary {
     pub fn line(&self, seconds: u64) -> String {
         format!(
             "SUMMARY entries={} points={} acks={} lost_points={} lost_acks={} damaged_points={} \
-             fsck_failures={} mount_failures={} seconds={seconds}",
+             fsck_failures={} mount_failures={} torn_points={} seconds={seconds}",
             self.entries,
             self.points,
             self.acks,
@@ -79,8 +129,20 @@ impl ReplaySummary {
             self.lost_acks,
             self.damaged_points,
             self.fsck_failures,
-            self.mount_failures
+            self.mount_failures,
+            self.torn_points
         )
+    }
+
+    /// Whether the replay passed: nothing lost or damaged, and every copy
+    /// mounted and checked clean. Both stores are held to the same rule
+    /// (the managed store since P13 PR 7 flushes every folder it changes).
+    #[must_use]
+    pub const fn passed(&self) -> bool {
+        self.lost_points == 0
+            && self.damaged_points == 0
+            && self.fsck_failures == 0
+            && self.mount_failures == 0
     }
 }
 
@@ -127,18 +189,14 @@ fn require(
 /// and the report.
 pub fn replay(config: &ReplayConfig) -> Result<ReplaySummary, CampaignError> {
     let started = Instant::now();
-    let events = parse_events(&read_text(&config.acks, MAX_ACK_BYTES)?);
-    if !events.malformed.is_empty() {
-        return Err(CampaignError::MalformedAcks(events.malformed));
-    }
-    let acks: Vec<Ack> = events.acks;
+    let acks = Acknowledgements::read(&config.acks, config.store)?;
     let mut log_file =
         File::open(&config.log).map_err(CampaignError::io("opening the write log", &config.log))?;
     let length = log_file
         .seek(SeekFrom::End(0))
         .map_err(CampaignError::io("sizing the write log", &config.log))?;
     let log = WriteLog::read(&mut log_file, length)?;
-    let sequence: Vec<u64> = acks.iter().map(|ack| ack.seq).collect();
+    let sequence = acks.sequence();
     let points = plan(&log, &sequence).map_err(CampaignError::MissingMark)?;
     let image = config.work.join("replay.img");
     let copy = config.work.join("point.img");
@@ -176,8 +234,15 @@ pub fn replay(config: &ReplayConfig) -> Result<ReplaySummary, CampaignError> {
             .flush()
             .map_err(CampaignError::io("flushing the replay image", &image))?;
         summary.points += 1;
-        let required = acks.get(..point.required).unwrap_or(&acks);
-        let line = check_point(config, &image, &copy, required, &mut summary, &mut lost)?;
+        let line = check_point(
+            config,
+            &image,
+            &copy,
+            &acks,
+            point.required,
+            &mut summary,
+            &mut lost,
+        )?;
         if let Some(line) = line {
             writeln!(
                 report,
@@ -193,13 +258,60 @@ pub fn replay(config: &ReplayConfig) -> Result<ReplaySummary, CampaignError> {
     Ok(summary)
 }
 
+/// What one point's verifier found, whichever store it held.
+struct PointFindings {
+    lost: Vec<u64>,
+    damaged: bool,
+    torn: bool,
+    clean: bool,
+    lines: Vec<String>,
+}
+
+/// Verifies the mounted root against the acknowledgements `required`
+/// counts.
+fn verify_point(
+    root: &Path,
+    acks: &Acknowledgements,
+    required: usize,
+) -> Result<PointFindings, CampaignError> {
+    match acks {
+        Acknowledgements::Session(acks) => {
+            let required = acks.get(..required).unwrap_or(acks);
+            let now = unix_seconds()?;
+            let mut findings = verify(root, required, now);
+            if findings.clean() {
+                probe_writes(root, required, now, &mut findings);
+            }
+            Ok(PointFindings {
+                lost: findings.lost.iter().map(|(seq, _)| *seq).collect(),
+                damaged: !findings.damage.is_empty(),
+                torn: false,
+                clean: findings.clean(),
+                lines: findings.lines("VERIFY"),
+            })
+        }
+        Acknowledgements::Managed(acks) => {
+            let required = acks.get(..required).unwrap_or(acks);
+            let findings = verify_managed(root, required);
+            Ok(PointFindings {
+                lost: findings.lost.iter().map(|(seq, _)| *seq).collect(),
+                damaged: !findings.clean(),
+                torn: findings.torn_refused > 0,
+                clean: findings.clean(),
+                lines: findings.lines("VERIFY"),
+            })
+        }
+    }
+}
+
 /// Mounts a copy of the image as it is now, verifies it, unmounts it and
 /// checks it; returns a report line when anything is wrong.
 fn check_point(
     config: &ReplayConfig,
     image: &Path,
     copy: &Path,
-    required: &[Ack],
+    acks: &Acknowledgements,
+    required: usize,
     summary: &mut ReplaySummary,
     lost: &mut std::collections::BTreeSet<u64>,
 ) -> Result<Option<String>, CampaignError> {
@@ -229,11 +341,7 @@ fn check_point(
         return Ok(Some(format!("mount-failed status={mounted}")));
     }
     let root = config.mount_point.join(&config.root_in_filesystem);
-    let now = unix_seconds()?;
-    let mut findings = verify(&root, required, now);
-    if findings.clean() {
-        probe_writes(&root, required, now, &mut findings);
-    }
+    let findings = verify_point(&root, acks, required)?;
     require(
         "umount",
         "/usr/bin/umount",
@@ -249,14 +357,17 @@ fn check_point(
     }
     if !findings.lost.is_empty() {
         summary.lost_points += 1;
-        lost.extend(findings.lost.iter().map(|(seq, _)| *seq));
+        lost.extend(findings.lost.iter().copied());
     }
-    if !findings.damage.is_empty() {
+    if findings.damaged {
         summary.damaged_points += 1;
     }
-    if findings.clean() && fsck == 0 {
+    if findings.torn {
+        summary.torn_points += 1;
+    }
+    if findings.clean && findings.lost.is_empty() && fsck == 0 {
         return Ok(None);
     }
-    let details: Vec<String> = findings.lines("VERIFY").into_iter().take(8).collect();
+    let details: Vec<String> = findings.lines.into_iter().take(8).collect();
     Ok(Some(format!("fsck={fsck} {}", details.join(" | "))))
 }

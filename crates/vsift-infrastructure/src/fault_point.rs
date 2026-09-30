@@ -22,6 +22,16 @@
 //! one boundary of a session's registration in the index: its marker staged
 //! but not yet written, and the marker renamed into its bucket.
 //!
+//! Each managed point ([`FaultPoint::MANAGED`], P13 PR 7) marks one
+//! boundary of the private managed store: a folder or a marker created but
+//! not yet complete, an artifact partly and wholly written, a payload and a
+//! runtime staged, the smoke started and passed, a version published, a
+//! selection pointer prepared, replaced and removed, each step of a
+//! version's removal, and each removal inside a stage. The count of a
+//! managed point spans one store handle and its clones, so `<name>:<n>`
+//! names the `n`-th arrival in a whole command (an install reaches
+//! `managed-marker-created` once per marker it writes).
+//!
 //! Stopping the process is compiled only into this crate's unit tests and
 //! into builds with the `fault-injection` feature, which must never be
 //! enabled in a release build (the crate refuses to compile it without debug
@@ -104,6 +114,53 @@ pub enum FaultPoint {
     /// A session's index marker was renamed into its bucket, before the
     /// registration holds it.
     RegistrationMarkerRename,
+    /// A managed-store folder (the root, `versions-v1`, `current-v1` or a
+    /// stage) was created, before its marker.
+    ManagedDirectoryCreated,
+    /// A managed-store marker, manifest, use lock, tombstone or pending
+    /// pointer was created empty, before its bytes are written.
+    ManagedMarkerCreated,
+    /// The first bytes of a download were written to the stage's artifact.
+    ManagedArtifactPartial,
+    /// The stage's artifact is complete, verified and flushed.
+    ManagedArtifactWritten,
+    /// The artifact's reviewed payload files are staged.
+    ManagedPayloadStaged,
+    /// The unactivated runtime copy is prepared.
+    ManagedRuntimePrepared,
+    /// The smoke folder was created, before the first smoke step.
+    ManagedSmokeStarted,
+    /// The smoke passed, before the candidate is published.
+    ManagedSmokePassed,
+    /// The runtime was renamed into `versions-v1` (or found there), before
+    /// the selection pointer.
+    ManagedVersionPublished,
+    /// A pending selection pointer was written, before its rename.
+    ManagedPointerPrepared,
+    /// A selection pointer was renamed into place.
+    ManagedPointerReplaced,
+    /// A selection pointer, or a pending one, was removed.
+    ManagedPointerRemoved,
+    /// A version's removal tombstone was written.
+    ManagedTombstoneWritten,
+    /// One file of a version being removed was removed.
+    ManagedVersionFileRemoved,
+    /// The use lock of a version being removed was removed.
+    ManagedUseLockRemoved,
+    /// The manifest of a version being removed was removed.
+    ManagedManifestRemoved,
+    /// The tombstone was removed, before the version's folder.
+    ManagedTombstoneRemoved,
+    /// A version's folder was removed.
+    ManagedVersionRemoved,
+    /// One file in a stage folder (payload, runtime or smoke) was removed.
+    ManagedStageFileRemoved,
+    /// One stage folder was removed.
+    ManagedStageFolderRemoved,
+    /// A stage's artifact was removed.
+    ManagedStageArtifactRemoved,
+    /// A stage's marker was removed, before the stage folder.
+    ManagedStageMarkerRemoved,
 }
 
 impl FaultPoint {
@@ -153,10 +210,38 @@ impl FaultPoint {
         Self::RegistrationMarkerRename,
     ];
 
-    /// Every point: the commit points, the job points, the request points,
-    /// then the registration points.
+    /// Every managed-store point, in the order an install, a rollback, a
+    /// removal and a stage sweep reach them.
     #[cfg(any(test, feature = "fault-injection"))]
-    pub const ALL: [Self; 25] = [
+    pub const MANAGED: [Self; 22] = [
+        Self::ManagedDirectoryCreated,
+        Self::ManagedMarkerCreated,
+        Self::ManagedArtifactPartial,
+        Self::ManagedArtifactWritten,
+        Self::ManagedPayloadStaged,
+        Self::ManagedRuntimePrepared,
+        Self::ManagedSmokeStarted,
+        Self::ManagedSmokePassed,
+        Self::ManagedVersionPublished,
+        Self::ManagedPointerPrepared,
+        Self::ManagedPointerReplaced,
+        Self::ManagedPointerRemoved,
+        Self::ManagedTombstoneWritten,
+        Self::ManagedVersionFileRemoved,
+        Self::ManagedUseLockRemoved,
+        Self::ManagedManifestRemoved,
+        Self::ManagedTombstoneRemoved,
+        Self::ManagedVersionRemoved,
+        Self::ManagedStageFileRemoved,
+        Self::ManagedStageFolderRemoved,
+        Self::ManagedStageArtifactRemoved,
+        Self::ManagedStageMarkerRemoved,
+    ];
+
+    /// Every point: the commit points, the job points, the request points,
+    /// the registration points, then the managed points.
+    #[cfg(any(test, feature = "fault-injection"))]
+    pub const ALL: [Self; 47] = [
         Self::ArtifactInstall,
         Self::ArtifactDirectorySync,
         Self::ManifestWrite,
@@ -182,6 +267,28 @@ impl FaultPoint {
         Self::RequestComplete,
         Self::RegistrationMarkerCreate,
         Self::RegistrationMarkerRename,
+        Self::ManagedDirectoryCreated,
+        Self::ManagedMarkerCreated,
+        Self::ManagedArtifactPartial,
+        Self::ManagedArtifactWritten,
+        Self::ManagedPayloadStaged,
+        Self::ManagedRuntimePrepared,
+        Self::ManagedSmokeStarted,
+        Self::ManagedSmokePassed,
+        Self::ManagedVersionPublished,
+        Self::ManagedPointerPrepared,
+        Self::ManagedPointerReplaced,
+        Self::ManagedPointerRemoved,
+        Self::ManagedTombstoneWritten,
+        Self::ManagedVersionFileRemoved,
+        Self::ManagedUseLockRemoved,
+        Self::ManagedManifestRemoved,
+        Self::ManagedTombstoneRemoved,
+        Self::ManagedVersionRemoved,
+        Self::ManagedStageFileRemoved,
+        Self::ManagedStageFolderRemoved,
+        Self::ManagedStageArtifactRemoved,
+        Self::ManagedStageMarkerRemoved,
     ];
 
     /// The point's stable name, as `VSIFT_FAULT_POINT` spells it.
@@ -213,6 +320,28 @@ impl FaultPoint {
             Self::RequestComplete => "request-complete",
             Self::RegistrationMarkerCreate => "registration-marker-create",
             Self::RegistrationMarkerRename => "registration-marker-rename",
+            Self::ManagedDirectoryCreated => "managed-directory-created",
+            Self::ManagedMarkerCreated => "managed-marker-created",
+            Self::ManagedArtifactPartial => "managed-artifact-partial",
+            Self::ManagedArtifactWritten => "managed-artifact-written",
+            Self::ManagedPayloadStaged => "managed-payload-staged",
+            Self::ManagedRuntimePrepared => "managed-runtime-prepared",
+            Self::ManagedSmokeStarted => "managed-smoke-started",
+            Self::ManagedSmokePassed => "managed-smoke-passed",
+            Self::ManagedVersionPublished => "managed-version-published",
+            Self::ManagedPointerPrepared => "managed-pointer-prepared",
+            Self::ManagedPointerReplaced => "managed-pointer-replaced",
+            Self::ManagedPointerRemoved => "managed-pointer-removed",
+            Self::ManagedTombstoneWritten => "managed-tombstone-written",
+            Self::ManagedVersionFileRemoved => "managed-version-file-removed",
+            Self::ManagedUseLockRemoved => "managed-use-lock-removed",
+            Self::ManagedManifestRemoved => "managed-manifest-removed",
+            Self::ManagedTombstoneRemoved => "managed-tombstone-removed",
+            Self::ManagedVersionRemoved => "managed-version-removed",
+            Self::ManagedStageFileRemoved => "managed-stage-file-removed",
+            Self::ManagedStageFolderRemoved => "managed-stage-folder-removed",
+            Self::ManagedStageArtifactRemoved => "managed-stage-artifact-removed",
+            Self::ManagedStageMarkerRemoved => "managed-stage-marker-removed",
         }
     }
 
@@ -241,6 +370,57 @@ pub(crate) struct FaultPlan {
     selected: Option<(FaultPoint, u32)>,
     #[cfg(any(test, feature = "fault-injection"))]
     reached: std::sync::atomic::AtomicU32,
+    /// Unit tests only: every managed commit step and directory flush, in
+    /// order, so a test can prove each step is flushed (P13 PR 7).
+    #[cfg(test)]
+    trace: std::sync::Mutex<Vec<ManagedTrace>>,
+}
+
+/// A folder of the managed store whose entries are flushed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ManagedFolder {
+    /// The folder that holds the managed root.
+    Parent,
+    /// The managed root.
+    Root,
+    /// `versions-v1`.
+    Versions,
+    /// `current-v1`.
+    Current,
+    /// A stage's runtime copy, before it is published.
+    Runtime,
+    /// One published version.
+    Version,
+}
+
+/// A step of the managed store that commits a state change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ManagedStep {
+    /// The managed root was created.
+    RootCreated,
+    /// `versions-v1` or `current-v1` was created.
+    FolderCreated(ManagedFolder),
+    /// A runtime was renamed into `versions-v1`.
+    VersionPublished,
+    /// A selection pointer was renamed into place.
+    PointerReplaced,
+    /// A selection pointer, or a pending one, was removed.
+    PointerRemoved,
+    /// A version's removal tombstone was written.
+    TombstoneWritten,
+    /// A version's folder was removed.
+    VersionRemoved,
+    /// A stage's folder was removed by the stale-stage sweep.
+    StageRemoved,
+}
+
+/// One entry of a managed store's unit-test trace.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ManagedTrace {
+    /// A commit step.
+    Step(ManagedStep),
+    /// A folder's entries were flushed.
+    Flushed(ManagedFolder),
 }
 
 impl FaultPlan {
@@ -255,6 +435,8 @@ impl FaultPlan {
                     .as_deref()
                     .and_then(parse_selection),
                 reached: std::sync::atomic::AtomicU32::new(0),
+                #[cfg(test)]
+                trace: std::sync::Mutex::default(),
             }
         }
         #[cfg(not(any(test, feature = "fault-injection")))]
@@ -286,6 +468,43 @@ impl FaultPlan {
         #[cfg(not(any(test, feature = "fault-injection")))]
         let _ = point;
     }
+
+    /// Records a managed commit step or flush; only unit tests keep it.
+    #[cfg_attr(
+        not(test),
+        allow(clippy::unused_self, reason = "only unit tests keep a trace")
+    )]
+    pub(crate) fn trace(&self, entry: ManagedTrace) {
+        #[cfg(test)]
+        if let Ok(mut trace) = self.trace.lock() {
+            trace.push(entry);
+        }
+        #[cfg(not(test))]
+        let _ = entry;
+    }
+
+    /// Takes the trace recorded so far.
+    #[cfg(test)]
+    pub(crate) fn take_trace(&self) -> Vec<ManagedTrace> {
+        self.trace
+            .lock()
+            .map(|mut trace| std::mem::take(&mut *trace))
+            .unwrap_or_default()
+    }
+}
+
+/// The fault plan of one managed store handle, shared by its clones and by
+/// every stage it creates, so an arrival count spans one whole command.
+///
+/// A managed command touches the store through several values (the store,
+/// its guard, each stage and candidate), and `<name>:<n>` must name the
+/// `n`-th arrival among all of them, not within one value.
+pub(crate) type SharedFaultPlan = std::sync::Arc<FaultPlan>;
+
+/// A new shared plan read from `VSIFT_FAULT_POINT`; always empty in a build
+/// that cannot stop at fault points.
+pub(crate) fn shared_plan_from_environment() -> SharedFaultPlan {
+    std::sync::Arc::new(FaultPlan::from_environment())
 }
 
 /// Parses `<name>[:<n>]`, `n` at least 1.
@@ -303,12 +522,13 @@ mod tests {
     use super::{FaultPoint, parse_selection};
 
     #[test]
-    fn the_commit_job_request_and_registration_points_together_are_every_point() {
+    fn the_commit_job_request_registration_and_managed_points_together_are_every_point() {
         let joined: Vec<FaultPoint> = FaultPoint::COMMIT
             .into_iter()
             .chain(FaultPoint::JOB)
             .chain(FaultPoint::REQUEST)
             .chain(FaultPoint::REGISTRATION)
+            .chain(FaultPoint::MANAGED)
             .collect();
         assert_eq!(joined, FaultPoint::ALL.to_vec());
     }

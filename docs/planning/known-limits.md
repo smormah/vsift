@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-09-30 (P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -82,7 +82,7 @@ Each entry has these fields:
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | Nothing is published yet: no native release, npm package, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its kill and power-loss qualification is still to come | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not run yet | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -401,7 +401,10 @@ Counts: 2 high, 24 medium, 62 low (88 entries).
 - **Evidence:** `process_supervisor.rs` (process groups, kill-on-drop), the P10
   `p10_kill_and_resume` stage.
 - **Impact:** after a hard kill a provider can use CPU for up to one chunk (at most
-  120 s by the chunk deadline it no longer enforces, usually a few seconds).
+  120 s by the chunk deadline it no longer enforces, usually a few seconds). A
+  hard-killed `setup install` can likewise leave a smoke provider writing into its
+  abandoned stage (P13 PR 7): the next install's sweep may keep that stage once, and
+  `setup repair` then names it for `setup remove --stale-stages`.
 - **Why:** a group leader's death does not signal its group; a Linux parent-death
   signal needs `prctl`, platform code outside the reviewed dependencies.
 - **Mitigation:** send `SIGTERM`, not `SIGKILL`. The
@@ -506,7 +509,10 @@ Counts: 2 high, 24 medium, 62 low (88 entries).
 - **Evidence:** [P10 durable-publication record](p10-durable-publication.md)
   "Residuals"; layer A models a device that honours every flush and FUA write, layer B
   one attached `cache=none`.
-- **Impact:** a durable session on such storage is only as safe as the storage.
+- **Impact:** a durable session on such storage is only as safe as the storage. The
+  managed store's power-loss claim (a reported command survives, P13 PR 7) rests on the
+  same flushes; on such storage a torn managed version is still refused by lookup, but a
+  reported command can be undone and repair may meet a state no kill leaves.
 - **Why:** the host's storage stack is outside VSift; it cannot detect a device that
   lies about flushes.
 - **Mitigation:** use storage with power-loss protection or a write-through cache;
@@ -1530,40 +1536,47 @@ Counts: 2 high, 24 medium, 62 low (88 entries).
 
 ### L-037
 
-**Managed installation is qualified on Ubuntu 24.04 x64 only, and its kill and power-loss qualification is still to come.**
+**Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not run yet.**
 
 - **What:** on Ubuntu 24.04 x86-64, `setup install` applies an accepted plan (download
   or `--artifact-dir`, size and SHA-256, stage, smoke, activate), every command resolves
-  tools through the managed tier, and since P13 PR 6 `setup list`, `setup rollback`,
-  `setup remove` and `setup repair` manage what is installed; an accepted install sweeps
-  stages that killed runs abandoned and keeps only the selected and previous version of
-  each component. Kill and power-loss qualification of the managed store (PR 7) is not
-  done: the operations are designed crash-consistent (one atomic rename per selection,
-  the pointer last, removals and sweeps that a rerun finishes), but no crash campaign
-  has exercised them. Windows x86-64 and macOS have no reviewed catalogue and keep
+  tools through the managed tier, and `setup list`, `setup rollback`, `setup remove` and
+  `setup repair` manage what is installed; an accepted install sweeps stages that killed
+  runs abandoned and keeps only the selected and previous version of each component.
+  Since P13 PR 7 a kill at every crash point of `setup install`, `setup rollback`,
+  `setup remove` and the stale-stage sweep is tested on every CI OS (every arrival of
+  every point on Linux), and so are real `SIGKILL`/`TerminateProcess` kills; each leaves
+  a consistent store that `setup repair` describes exactly and a rerun completes; every
+  folder a command changes is flushed before it returns (Windows has no flush point, and
+  no managed install). The power-loss campaign (layer A of the P10 campaign with the managed workload, workflow
+  `P13 managed power loss`) is built but has not run: its first run is the maintainer's
+  dispatch after merge. Windows x86-64 and macOS have no reviewed catalogue and keep
   manual guidance (the lifecycle commands work there and report the folder absent): the
   Windows FFmpeg candidate is a daily build (upstream keeps only the last 14) with
   unreconciled LGPL-3.0 notices, and no macOS candidate is reviewed.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 3, PR 4 and PR 6 notes; [CLI contract](../contracts/cli-v1.md) "P13 `setup install`"
-  and "P13 managed lifecycle"; [verification](verification.md) D-02, D-03, D-05..D-08;
-  [P06 Windows candidate](p06-windows-artifact-candidate.md) "Remaining gates".
+  PR 3, PR 4, PR 6 and PR 7 notes; [CLI contract](../contracts/cli-v1.md) "P13 `setup install`"
+  and "P13 managed lifecycle"; [verification](verification.md) D-02..D-08 and "P13 PR 7
+  evidence"; [P06 Windows candidate](p06-windows-artifact-candidate.md) "Remaining gates".
   *2026-09-30:* `P13 managed smoke` [run 36734316384](https://github.com/smormah/vsift/actions/runs/36734316384) on `main` at `d43a518` (hosted `ubuntu-24.04`)
   passed both jobs: the pinned-tool smoke's negative control (banner mismatch)
   discarded all three stages and activated nothing, and the real `setup plan`, `setup
   install`, `setup check` and rerun through the CLI activated all three components.
   Managed installation is qualified on Ubuntu 24.04 x64 by that run.
 - **Impact:** elsewhere users install FFmpeg and whisper.cpp themselves and register
-  them; on Ubuntu, a power loss during an install, rollback or removal is not yet shown
-  to be detected and repaired.
+  them; on Ubuntu, until the campaign has run, the claim that a reported command survives
+  a power loss rests on the flushes (each checked by a unit test), the kill tests and
+  ext4's ordered journal.
 - **Why:** ADR 0023 decision E limits managed installation to the one reviewed target;
-  PR 7 owns the kill and power-loss tests (decision H9).
+  decision H9 has the power loss qualified by the P10 campaign on a disposable runner,
+  which runs only on dispatch.
 - **Mitigation:** every managed version is verified by digest each time it is opened, so
   a torn version is never run and lookup falls through to `PATH`; `setup repair`
   diagnoses what an interruption leaves and names the command that fixes it; the manual
   path is typed on every target.
-- **Next step:** P13 PR 7 (kill and power-loss tests of the managed store, the P13
-  install E2E stage).
+- **Next step:** dispatch `P13 managed power loss` (and `P13 managed smoke`, whose job
+  `install-e2e` is the P13 E2E stage) on `main` and record the runs in PR 11's
+  qualification record.
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
