@@ -13,7 +13,8 @@ Today it can:
 - check and register its dependencies, show a read-only setup plan, report whether
   local speech recognition really works here (`setup check` `local_asr`), and on
   Ubuntu 24.04 x86-64 install the reviewed FFmpeg, whisper.cpp and model itself
-  (`setup install`, P13 PR 4, in review);
+  (`setup install`, P13 PR 4), then list, roll back, remove and diagnose them (`setup
+  list/rollback/remove/repair`, P13 PR 6, in review);
 - copy a video into a private, disposable session;
 - import an existing SRT or WebVTT transcript with the video, aligned by an offset;
 - transcribe the video's speech itself with whisper.cpp (`transcript retranscribe`),
@@ -47,9 +48,9 @@ qualified it:
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a, 2b, 3, 4 and 5 and the P12
-debt fixes are merged; PR 8 (`release.yml`, the workflow lint) is done in its pull
-request (#236). The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0-5, PR 8 and the P12 debt fixes are
+merged (human output, `handoff check`, `setup install`, `release.yml` and the workflow
+lint are done); PR 6 (managed lifecycle) is in review. The packet is not complete.
 
 ## P13 in one view
 
@@ -62,28 +63,30 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
   `vsift` over `@vsift/…` packages; managed installation on Ubuntu 24.04 x64 (`setup
   install/list/rollback/remove/repair`); human output by default; `handoff check`.
-- **Names (2026-09-30, #237):** scope `@vsift` (the maintainer owns the organisation);
-  the placeholder `vsift@0.0.0` holds the launcher name (ADR 0009 note).
-- **Done:** PR 0 (#226): ADR 0023, ledger, #16. PR 1 (#228, L-071): parse remediation.
-  PR 2a (#229), 2b (#231, `02df4eb`, L-073): readable text through `TerminalText`,
-  SEC-T02 over it. PR 3 (#230, `e22ee59`): smoke of staged candidates, failure cleanup;
-  hosted run 36701212028 passed the real tools. PR 5 (#233, `1a9d027`): `handoff check`
-  shared with the trial grader, findings never quote the draft; `regex` in production;
-  L-086 (contract crate not packageable for crates.io).
+- **Names (#237):** scope `@vsift` (owned); the placeholder `vsift@0.0.0` (ADR 0009 note).
+- **Done:** PR 0 (#226, ADR 0023); PR 1 (#228, parse remediation, L-071); PRs 2a, 2b
+  (#229, #231, `TerminalText`, SEC-T02, L-073); PR 3 (#230, smoke and failure cleanup);
+  PR 5 (#233, `handoff check` shared with the grader, `regex` in production, L-086).
 - **PR 4 (#234, `d43a518`):** `setup install --plan --accept-plan [--artifact-dir]`:
   HTTPS download or import with exact size and SHA-256, stage, smoke,
   `publish_and_select`, per component; `DOWNLOAD_FAILED` (exit 7); lookup order per
-  call, configured, managed, `PATH`; `setup plan` shows observed state beside the
-  digested intent. The real install (`P13 managed smoke`) is dispatched after merge.
-- **PR 8 (#236, done in its PR):** `release.yml` builds `vsift` per target twice and
-  requires identical bytes (Windows needs `/Brepro`), requires `--version` to name the
-  commit, makes notices (cargo-about) and a CycloneDX SBOM per target, and packages
-  deterministic `vsift-<version>-<target>.tar.gz` archives and `SHA256SUMS` with
-  `tools/vsift-release` (only `vsift` can be packaged). Run artifacts only: no write
-  scope, OIDC token or secret. The governance checker lints every workflow (pinned
-  SHAs, no `pull_request_target`, read-only top-level permissions, `id-token` only in
-  PR 10's jobs, no untrusted `${{ }}` in `run`, no feature in release builds; tool
-  dependency `yaml-rust2`). L-089: SBOM `bom-ref`s name the runner's path. **Next:** PR 6.
+  call, configured, managed, `PATH`. `P13 managed smoke` run 36734316384 (hosted Ubuntu
+  24.04, 2026-09-30) passed both jobs: real plan, install, check and rerun activated all
+  three components; the negative control activated nothing; warm `setup check` 0.65 s,
+  `frame get` 0.29 s then 0.17 s (L-087 stays monitoring).
+- **PR 8 (#236, `772ead2`):** `release.yml` builds `vsift` per target twice (identical
+  bytes), `--version` names the commit, notices and a CycloneDX SBOM per target,
+  deterministic `.tar.gz` archives and `SHA256SUMS` (`tools/vsift-release`); no write
+  scope, OIDC token or secret. The governance checker lints every workflow. L-089.
+- **In review: PR 6** (`p13-pr6-lifecycle`, steps 5-6). `setup list` and `setup repair`
+  only read (repair names the existing command that fixes each finding); the skill
+  classes both `free`. `setup rollback <component> [--version]` selects the previous (or
+  a named) version only if it verifies, in one atomic rename (pointer v2). `setup remove
+  <component> [--version] | --stale-stages` deselects first, never removes a version a
+  job holds (`BUSY`), keeps content it cannot prove its own (L-090); removal proves
+  ownership, not integrity. Every accepted install sweeps abandoned stages first and
+  keeps the selected and previous versions. Works on every OS. **Next:** PR 7 (kill and
+  power-loss tests at the crash points in ADR 0023's PR 6 note).
 - **Only the placeholder is published** until P13 ends and the maintainer approves a 0.x `next`.
 
 ## P12 in one view
@@ -91,9 +94,6 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 [ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md)
 **Accepted**; record `docs/planning/p12-agent-qualification.md` (84 trial records): the
 skill and guard (#196), harness `tools/vsift-agent-trials` (#201), fixes #203-#217.
-
-## Found in P12 (still open)
-
 - **L-085 (debt):** compact tier 82%; fixes for #218-#221 and #224 done, the re-run
   (#222) is due now. **Also open:** L-074, L-075, L-076 and #204, L-078 to L-084;
   grader readings (`untrusted_listed`, an `rg --files` exclude glob) in `memory/TODO.md`.
@@ -101,7 +101,8 @@ skill and guard (#196), harness `tools/vsift-agent-trials` (#201), fixes #203-#2
 ## What works (public CLI)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`;
-  `setup install` on Ubuntu 24.04 x86-64 (PR 4).
+  `setup install` on Ubuntu 24.04 x86-64 (PR 4); `setup list/rollback/remove/repair`
+  on every OS (PR 6, in review).
 - `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`.
 - `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run|batch`,
   `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
@@ -111,7 +112,7 @@ skill and guard (#196), harness `tools/vsift-agent-trials` (#201), fixes #203-#2
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
   that does not parse names its mistake and the `--help` to read (P13 PR 1).
 - Readable terminal text without `--json` for every command (unstable, not for parsing).
-- Still `COMMAND_NOT_IMPLEMENTED`: setup repair/list/rollback/remove (P13 PR 6).
+- No command answers `COMMAND_NOT_IMPLEMENTED` any more (P13 PR 6).
 
 ## Packet status
 
@@ -125,7 +126,7 @@ skill and guard (#196), harness `tools/vsift-agent-trials` (#201), fixes #203-#2
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-5 merged (#226, #228-#231, #233, #234); PR 8 (release workflow, lint) in its PR #236; lifecycle, npm and publishing to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-5 and 8 merged (#226, #228-#231, #233, #234, #236); PR 6 (managed lifecycle) in review; kill/power-loss tests, npm and publishing to come |
 | P14 | Not started |
 
 ## Architecture snapshot
@@ -133,12 +134,10 @@ skill and guard (#196), harness `tools/vsift-agent-trials` (#201), fixes #203-#2
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <-
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine)
 <- `vsift-cli` (parse, present, signals). `vsift-contract` sits beside the engine and
-owns the wire types. The worker lives in the engine (`worker.rs`, `batch.rs`); the CLI
-only presents. The agent skill (`skills/vsift/`) sits outside the crates and only
-calls the `vsift` binary; its guard is a test module of `vsift-cli` because the parser
-is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `vsift`
-(and runs the `vsift` binary for everything else) and on `vsift-contract` for the shared
-handoff check. `tools/vsift-release` (never shipped) packages the release archives.
+owns the wire types. The worker lives in the engine; the CLI only presents. The skill
+(`skills/vsift/`) only calls the `vsift` binary; its guard is a `vsift-cli` test module.
+The trial harness depends only on `vsift` and `vsift-contract` (the shared handoff check);
+`tools/vsift-release` (never shipped) packages the release archives.
 
 ## Quality evidence
 

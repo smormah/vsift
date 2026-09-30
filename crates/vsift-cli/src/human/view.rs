@@ -378,7 +378,101 @@ pub(crate) struct SetupInstall {
     pub(crate) catalogue_revision: Option<String>,
     pub(crate) source: String,
     pub(crate) components: Vec<InstallComponent>,
+    pub(crate) cleanup: InstallCleanup,
     pub(crate) next_step: String,
+}
+
+/// What `setup install` cleaned up around its transaction (P13 PR 6).
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstallCleanup {
+    pub(crate) stale_stages_removed: u64,
+    pub(crate) stale_stages_retained: u64,
+    pub(crate) versions: Vec<VersionOutcome>,
+}
+
+/// One version a removal or cleanup handled.
+#[derive(Debug, Deserialize)]
+pub(crate) struct VersionOutcome {
+    pub(crate) component: String,
+    pub(crate) version: String,
+    pub(crate) status: String,
+}
+
+/// `setup.list` data (`setup-list.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetupList {
+    pub(crate) managed_install: String,
+    pub(crate) managed_folder: String,
+    pub(crate) components: Vec<ListComponent>,
+    pub(crate) stale_stages: u64,
+    pub(crate) retained_stages: u64,
+    pub(crate) next_step: String,
+}
+
+/// One component of a `setup.list` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListComponent {
+    pub(crate) component: String,
+    pub(crate) selection: String,
+    pub(crate) versions: Vec<ListVersion>,
+}
+
+/// One published version of a `setup.list` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListVersion {
+    pub(crate) version: String,
+    pub(crate) selected: bool,
+    pub(crate) previous: bool,
+    pub(crate) state: String,
+    pub(crate) fault: Option<String>,
+}
+
+/// `setup.rollback` data (`setup-rollback.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetupRollback {
+    pub(crate) component: String,
+    pub(crate) status: String,
+    pub(crate) selected_version: String,
+    pub(crate) replaced_version: Option<String>,
+    pub(crate) next_step: String,
+}
+
+/// `setup.remove` data (`setup-remove.schema.json`), on a success or beside
+/// the error of a failure.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetupRemove {
+    pub(crate) target: String,
+    pub(crate) component: Option<String>,
+    pub(crate) deselected: bool,
+    pub(crate) versions: Vec<VersionOutcome>,
+    pub(crate) stages: Option<StageSweep>,
+    pub(crate) next_step: String,
+}
+
+/// What a stale-stage sweep did.
+#[derive(Debug, Deserialize)]
+pub(crate) struct StageSweep {
+    pub(crate) removed: u64,
+    pub(crate) retained: u64,
+    pub(crate) retention_reasons: Vec<String>,
+    pub(crate) interrupted_selections_removed: u64,
+}
+
+/// `setup.repair` data (`setup-repair.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetupRepair {
+    pub(crate) managed_install: String,
+    pub(crate) status: String,
+    pub(crate) findings: Vec<RepairFinding>,
+    pub(crate) next_step: String,
+}
+
+/// One finding of a `setup.repair` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct RepairFinding {
+    pub(crate) kind: String,
+    pub(crate) summary: String,
+    pub(crate) command: Option<SuggestedCommand>,
 }
 
 /// One component of a `setup.install` result.

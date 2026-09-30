@@ -1,33 +1,30 @@
 # VSift work record
 
-Current-state handoff. Rewrite this file in every change and keep it within the
-governance checker's size limit. History lives in git, `CHANGELOG.md`, the
-qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
+Current-state handoff, rewritten in every change within the governance size limit.
+History lives in git, `CHANGELOG.md`, the qualification records and `docs/history/`.
 
 ## Now
 
 **P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Merged:
-PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PR 2a (#229),
-PR 3 (#230, `e22ee59`, smoke and cleanup), PR 2b (#231, `02df4eb`; human output done,
-L-073 closed), PR 5 (#233, `1a9d027`, `handoff check`, L-086) and PR 4 (#234,
-`d43a518`, `setup install`, managed lookup tier). **PR 8 is done in its pull request
-(#236):** `release.yml`, `tools/vsift-release`, the workflow lint and `--version` with
-the commit. The packet is not complete.
+PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PRs 2a and 2b
+(#229, #231; human output done, L-073 closed), PR 3 (#230), PR 4 (#234, `d43a518`,
+`setup install`, managed lookup tier), PR 5 (#233, `handoff check`, L-086) and PR 8
+(#236, `772ead2`: `release.yml`, `tools/vsift-release`, the workflow lint, `--version`
+with the commit, L-089). **PR 6 (managed lifecycle) is in review** on
+`p13-pr6-lifecycle`: `setup list/rollback/remove/repair`, bounded cleanup and the
+stale-stage sweep; it records `P13 managed smoke` run 36734316384 (both jobs passed on
+`main` at `d43a518`: managed install qualified on Ubuntu 24.04 x64; L-037 narrowed,
+L-087 measured). The packet is not complete.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
-   6 `setup list/rollback/remove/repair`, bounded cleanup and the stale-stage sweep
-   (stages PR 3 and a killed PR 4 run retain); 7 kill/power-loss, E2E; 9 npm over PR
-   8's archives; 10 `attest`/`publish` jobs (the lint's only `id-token` jobs) and
-   `dry_run`; 11 docs; 12 ledger. #222 is due.
-2. **Now that PR 4 is merged (maintainer):** dispatch `P13 managed smoke` on `main` (both jobs,
-   no credentials); record the run in D-02/D-03/D-06/D-07 and L-037, its `L-087` timing
-   lines in L-087.
-3. **Maintainer-only, before PR 10's publish step:** scope `@vsift` (the maintainer
-   owns the organisation; 2026-09-30, #237); the placeholder `vsift@0.0.0` (ADR 0009 note,
-   published by the maintainer); trusted publishers; the
-   `release` environment (maintainer as reviewer); tag ruleset; fork-PR approval; the
-   first publish (2FA, or a short-lived environment token); the 0.x `next` pre-release.
-4. **Technical debt before P14:** the compact tier's ≥90% target (L-085: fixes for
+   7 kill/power-loss tests of the managed store (crash points in ADR 0023's PR 6 note)
+   and the install E2E stage; 9 npm over PR 8's archives; 10 `attest`/`publish` jobs
+   (the lint's only `id-token` jobs) and `dry_run`; 11 docs; 12 ledger. #222 is due.
+2. **Maintainer-only, before PR 10's publish step:** scope `@vsift` (owned, #237); the
+   placeholder `vsift@0.0.0` (ADR 0009 note); trusted publishers; the `release`
+   environment (maintainer as reviewer); tag ruleset; fork-PR approval; the first publish
+   (2FA, or a short-lived environment token); the 0.x `next` pre-release.
+3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: fixes for
    #218-#221 and #224 done; the re-run #222 pending) and SEC-T01's evidence (#188, L-068).
 
 ## P12 residuals (for the maintainer)
@@ -61,13 +58,16 @@ the commit. The packet is not complete.
 - **P13 PR 5 readings:** schema `handoff-check-data` (repo naming), a `line` beside
   each pointer, skill forms without `--session`. **PR 8** (ADR 0023 note): `.tar.gz` on
   Windows, the 12-digit commit, two added lint rules, L-089; Release a required check?
-- **Also:** MSRV; an MCP adapter; ADR 0023's open detail (`setup list`/`repair` class).
+- **PR 6** (ADR 0023 note): removal proves ownership, not integrity; `setup list`/`repair`
+  `free`; `repair` drops `--profile`; pointer v2; sweep in every accepted install; L-090.
+- **Also:** MSRV; an MCP adapter.
 
 ## Tracked issues
 
-- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210, #213. **Open:** #16, #218-#222, #232 (a session root name with controls fails `RootUnavailable` on Linux).
-- **#170-#178:** L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045 and L-042.
-- **Others:** #159, #150 fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
+- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210, #213. **Open:** #16,
+  #218-#222, #232 (a session root name with controls fails `RootUnavailable` on Linux).
+- **#170-#178:** L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045, L-042. **Others:**
+  #159, #150 fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
 
 ## Known issues and gates
 

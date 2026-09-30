@@ -89,11 +89,13 @@ const PLACEHOLDERS: [(&str, &str); 23] = [
 ];
 
 /// Commands the skill must never run. Changing this set is a reviewed safety
-/// decision (ADR 0022), not a documentation edit.
-const NEVER: [&str; 8] = [
+/// decision (ADR 0022), not a documentation edit. P13 PR 6 moved the
+/// read-only `setup list` and `setup repair` to `free` (ADR 0023's open
+/// detail, decided by the supervisor on 2026-09-30: repair only diagnoses and
+/// plans); `setup remove` and `setup rollback` change the managed tools and
+/// stay here with `setup install`.
+const NEVER: [&str; 6] = [
     "setup.install",
-    "setup.repair",
-    "setup.list",
     "setup.remove",
     "setup.rollback",
     "session.init-workspace",

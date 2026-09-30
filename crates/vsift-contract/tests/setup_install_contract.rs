@@ -10,7 +10,7 @@ use vsift_application::{
     CompatibilitySmokeCheck, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
     ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
     DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport, StageDisposal,
-    StageRetentionReason,
+    StageRetentionReason, StageSweep, VersionRemovalReport, VersionRemovalStatus,
 };
 use vsift_contract::{
     CommandName, InstallSource, OperationResponse, SetupInstallResponse, TerminalEventResponse,
@@ -147,6 +147,18 @@ fn a_complete_install_matches_the_frozen_example() -> TestResult {
         Some(REVISION.to_owned()),
         InstallSource::Publisher,
         &activated_report(),
+    )
+    .with_cleanup(
+        &StageSweep {
+            removed: 1,
+            retained: Vec::new(),
+            interrupted_selections_removed: 0,
+        },
+        &[VersionRemovalReport {
+            component: ManagedComponent::MediaTools,
+            version: String::from("n8.1-2-g0123456789-20260601"),
+            status: VersionRemovalStatus::Removed,
+        }],
     );
     let response = serde_json::to_value(OperationResponse::complete(
         CommandName::SetupInstall.identifier(),

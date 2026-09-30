@@ -12,9 +12,11 @@
 use serde::Serialize;
 use vsift_application::{
     ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport, InstallFailureReason,
-    InstallStep, ManagedInstallReport, StageDisposal,
+    InstallStep, ManagedInstallReport, StageDisposal, StageSweep, VersionRemovalReport,
 };
 use vsift_domain::ManagedComponent;
+
+use crate::lifecycle::InstallCleanupResponse;
 
 /// Where `setup install` read the reviewed artifacts from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,6 +44,7 @@ pub struct SetupInstallResponse {
     catalogue_revision: Option<String>,
     source: &'static str,
     components: Vec<InstallComponentResponse>,
+    cleanup: InstallCleanupResponse,
     next_step: &'static str,
 }
 
@@ -81,8 +84,17 @@ impl SetupInstallResponse {
             catalogue_revision,
             source: source.identifier(),
             components: report.components.iter().map(component_response).collect(),
+            cleanup: InstallCleanupResponse::default(),
             next_step,
         }
+    }
+
+    /// Adds what the stale-stage sweep before the transaction and the
+    /// bounded version cleanup after it did (P13 PR 6).
+    #[must_use]
+    pub fn with_cleanup(mut self, stages: &StageSweep, versions: &[VersionRemovalReport]) -> Self {
+        self.cleanup = InstallCleanupResponse::new(stages, versions);
+        self
     }
 }
 
@@ -115,7 +127,7 @@ fn component_response(report: &ComponentInstallReport) -> InstallComponentRespon
 }
 
 /// Remediation when another `setup install` holds the managed root.
-pub const MANAGED_INSTALL_BUSY_REMEDIATION: &str = "Another setup install is running for this user and holds the managed folder; nothing was changed. Wait for it to finish, then run setup check, or run the same setup install again.";
+pub const MANAGED_INSTALL_BUSY_REMEDIATION: &str = "Another setup install, setup rollback or setup remove is running for this user and holds the managed folder; nothing was changed. Wait for it to finish, then run the same command again.";
 
 /// Remediation when the private managed folder cannot be created or
 /// written: the manual path, which never needs it (D-09, D-10).

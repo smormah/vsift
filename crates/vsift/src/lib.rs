@@ -28,7 +28,9 @@
 //!
 //! - **Setup:** [`Engine::check_setup`], [`Engine::plan_setup`] with
 //!   [`EvaluatedSetupPlan::validate_acceptance`] for saved-plan acceptance,
-//!   [`Engine::configure_executable`] and [`Engine::configure_model`].
+//!   [`Engine::configure_executable`] and [`Engine::configure_model`]; managed
+//!   lifecycle (P13 PR 6): [`Engine::list_managed`], [`Engine::rollback_managed`],
+//!   [`Engine::remove_managed`] and the read-only [`Engine::repair_managed`].
 //! - **Sessions:** [`Engine::ingest`], [`Engine::list_sessions`],
 //!   [`Engine::session_status`], [`Engine::renew_session`],
 //!   [`Engine::close_session`], [`Engine::retain_session`] and
@@ -104,6 +106,7 @@ mod handoff;
 mod install;
 mod isolation;
 mod jobs;
+mod lifecycle;
 mod local_asr_check;
 mod managed;
 mod progress;
@@ -123,8 +126,8 @@ pub use engine::{
     SessionRootLocation, UserConfigurationLocation,
 };
 pub use error::{
-    EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError,
-    UserConfigurationError, WorkerFailure,
+    EngineError, ExecutableRejection, MANAGED_INSTALL_RETRY_AFTER_MS, SessionRootError,
+    TranscriptSourceError, UserConfigurationError, WorkerFailure,
 };
 pub use evidence::{
     AudioClipRequest, CropEvidenceRequest, CropRectangle, DEFAULT_BURST_FRAMES,
@@ -138,6 +141,7 @@ pub use jobs::{
     JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,
     MAX_LISTED_SESSION_JOBS, SessionJobEntry, SessionJobs,
 };
+pub use lifecycle::{InstallCleanup, ManagedListing, ManagedRepairDiagnosis};
 pub use local_asr_check::DEFAULT_LOCAL_ASR_CHECK_BUDGET;
 pub use progress::{AdmissionWaiting, JobProgress, ProgressObserver};
 pub use search::{SearchRange, SearchRequest, SearchResultHit, SearchResults};
@@ -178,14 +182,20 @@ pub use vsift_application::{
     DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
     ManagedPlanAvailability, StageDisposal, StageRetentionReason,
 };
+/// Managed-lifecycle values that appear in this API (P13 PR 6).
+pub use vsift_application::{
+    ComponentInventory, MANAGED_COMPONENTS, ManagedInventory, ManagedLifecycleRefusal,
+    ManagedRemovalTarget, ManagedSelection, ManagedVersionFault, ManagedVersionRecord,
+    ManagedVersionState, PreviousSelection, RETAINED_MANAGED_VERSIONS, RemovalReport,
+    RepairFinding, RepairFindingKind, RepairFix, RepairPlan, RepairStatus, RollbackOutcome,
+    SelectionRecord, SelectionStatus, StageSweep, VersionRemovalReport, VersionRemovalStatus,
+};
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_application::{
     EvidenceMediaError, MAX_FRAMES_PER_CALL, MAX_IMAGE_BYTES_PER_CALL, MAX_PIXELS_PER_CALL,
 };
 /// Why a crop rectangle's text or geometry was rejected.
 pub use vsift_domain::GeometryError;
-/// The reviewed managed components (P13).
-pub use vsift_domain::ManagedComponent;
 pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,
@@ -234,3 +244,5 @@ pub use vsift_domain::{
     CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchMatch,
     SearchQuery, SearchQueryRejection,
 };
+/// The reviewed managed components (P13).
+pub use vsift_domain::{ManagedComponent, ManagedVersionKey, ManagedVersionKeyError};

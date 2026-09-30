@@ -29,6 +29,7 @@ use crate::{
     asr::resolve_recognizer,
     engine::Engine,
     error::EngineError,
+    lifecycle::{InstallCleanup, clean_up_after_install, sweep_before_install},
     progress::{JobProgress, ProgressObserver},
     setup::SetupPlanRequest,
     transcripts::resolve_media_tool,
@@ -55,6 +56,7 @@ pub struct SetupInstallOutcome {
     catalogue_revision: Option<String>,
     source: InstallSource,
     report: ManagedInstallReport,
+    cleanup: InstallCleanup,
 }
 
 impl SetupInstallOutcome {
@@ -74,6 +76,13 @@ impl SetupInstallOutcome {
     #[must_use]
     pub const fn report(&self) -> &ManagedInstallReport {
         &self.report
+    }
+
+    /// The stale-stage sweep before the transaction and the bounded version
+    /// cleanup after it (P13 PR 6).
+    #[must_use]
+    pub const fn cleanup(&self) -> &InstallCleanup {
+        &self.cleanup
     }
 
     /// The public failure code of the transaction, or `None` when every
@@ -138,6 +147,9 @@ impl Engine {
         let plan = current.authority();
         let catalogue =
             accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        // No stage can be live while the guard is held, and nothing is staged
+        // yet: every stage found now was abandoned by an earlier run.
+        let stages = sweep_before_install(&store, &guard);
         let install_source = match source {
             ManagedArtifactSource::Publisher => InstallSource::Publisher,
             ManagedArtifactSource::Directory(_) => InstallSource::ArtifactDirectory,
@@ -145,7 +157,7 @@ impl Engine {
         let sink = OperationProgress(&progress);
         let installer = ReviewedManagedInstaller::new(
             ManagedInstallerConfig {
-                store,
+                store: store.clone(),
                 source,
                 authority: ActionAuthority::ReviewedCatalogue,
                 policy: catalogue.compatibility,
@@ -159,11 +171,13 @@ impl Engine {
         );
         let report = install_managed_components(&installer, &plan.actions, &sink).await;
         drop(installer);
+        let versions = clean_up_after_install(&store, &guard);
         drop(guard);
         Ok(SetupInstallOutcome {
             catalogue_revision: plan.catalogue_revision.clone(),
             source: install_source,
             report,
+            cleanup: InstallCleanup { stages, versions },
         })
     }
 }

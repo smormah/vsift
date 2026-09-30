@@ -326,3 +326,16 @@ commands, cleanup that keeps the current and one previous version, a stale-stage
 sweep, and kill and power-loss qualification that claims fail-closed detection plus
 repair. Managed installation is qualified on Ubuntu 24.04 x86-64 only. `setup repair`
 is read-only and emits a plan, so repair adds no second path that changes the store.
+
+## 2026-09-30 note: rollback, removal and repair (P13 PR 6)
+
+Rollback and removal are public (`setup rollback`, `setup remove`) and run under the same
+install guard as installation, never waiting. The selection pointer records the version
+selected before, so a rollback is one atomic rename to a version that verifies against
+the recorded manifest. Removal deletes only a version's manifest-named files and metadata
+(ownership, not integrity: a corrupted version can be removed) and never a version a job
+holds; user-managed files are never addressable. `setup repair` is read-only, as decided
+above: it emits a plan of these commands and a new accepted install. Bounded cleanup keeps
+the selected and previous version, and each accepted install first sweeps the stages
+killed runs abandoned ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md)
+PR 6 note).

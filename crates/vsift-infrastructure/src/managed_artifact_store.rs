@@ -18,7 +18,9 @@ use sha2::{Digest, Sha256};
 use crate::file_lock::HeldFileLock;
 use tokio::io::AsyncWriteExt;
 use vsift_application::{StageDisposal, StageRetentionReason, StagedManagedComponent};
-use vsift_domain::{ArtifactIntegrity, ManagedComponent};
+#[cfg(test)]
+use vsift_domain::MAX_MANAGED_KEY_BYTES;
+use vsift_domain::{ArtifactIntegrity, ManagedComponent, is_canonical_managed_key};
 
 use crate::{
     ArchiveInventoryBounds, ArtifactTransferError, GzipTarInventoryError, ReviewedArchiveAlias,
@@ -34,29 +36,29 @@ use crate::{
     verified_artifact_transfer::StreamingArtifactVerifier,
 };
 
-const ROOT_MARKER: &str = "owner-v1";
-const STAGE_MARKER: &str = "stage-v1";
-const ARTIFACT: &str = "artifact.pending";
-const PAYLOAD: &str = "payload.pending";
-const RUNTIME: &str = "runtime.pending";
-const SMOKE: &str = "smoke.pending";
-const INSTALL_LOCK: &str = "install.lock";
-const VERSIONS: &str = "versions-v1";
-const CURRENT: &str = "current-v1";
-const DIRECTORY_MARKER: &str = "owner-v1";
-const VERSION_MANIFEST: &str = "version-v1";
-const VERSION_USE_LOCK: &str = "use.lock";
-const VERSION_REMOVING: &str = "removing-v1";
-const MAX_MANAGED_KEY_BYTES: usize = 64;
+pub(crate) const ROOT_MARKER: &str = "owner-v1";
+pub(crate) const STAGE_MARKER: &str = "stage-v1";
+pub(crate) const ARTIFACT: &str = "artifact.pending";
+pub(crate) const PAYLOAD: &str = "payload.pending";
+pub(crate) const RUNTIME: &str = "runtime.pending";
+pub(crate) const SMOKE: &str = "smoke.pending";
+pub(crate) const INSTALL_LOCK: &str = "install.lock";
+pub(crate) const VERSIONS: &str = "versions-v1";
+pub(crate) const CURRENT: &str = "current-v1";
+pub(crate) const DIRECTORY_MARKER: &str = "owner-v1";
+pub(crate) const VERSION_MANIFEST: &str = "version-v1";
+pub(crate) const VERSION_USE_LOCK: &str = "use.lock";
+pub(crate) const VERSION_REMOVING: &str = "removing-v1";
+
 const MAX_RUNTIME_FILES: usize = 128;
 const MAX_RUNTIME_BYTES: u64 = 1_073_741_824;
-const MAX_VERSION_METADATA_BYTES: u64 = 32_768;
+pub(crate) const MAX_VERSION_METADATA_BYTES: u64 = 32_768;
 const ROOT_IDENTITY: &[u8] = b"VSIFT-MANAGED-ROOT-v1\n";
-const STAGE_IDENTITY: &[u8] = b"VSIFT-MANAGED-STAGE-v1\n";
-const VERSIONS_IDENTITY: &[u8] = b"VSIFT-MANAGED-VERSIONS-v1\n";
-const CURRENT_IDENTITY: &[u8] = b"VSIFT-MANAGED-CURRENT-v1\n";
-const USE_LOCK_IDENTITY: &[u8] = b"VSIFT-MANAGED-USE-LOCK-v1\n";
-const REMOVING_IDENTITY: &[u8] = b"VSIFT-MANAGED-REMOVING-v1\n";
+pub(crate) const STAGE_IDENTITY: &[u8] = b"VSIFT-MANAGED-STAGE-v1\n";
+pub(crate) const VERSIONS_IDENTITY: &[u8] = b"VSIFT-MANAGED-VERSIONS-v1\n";
+pub(crate) const CURRENT_IDENTITY: &[u8] = b"VSIFT-MANAGED-CURRENT-v1\n";
+pub(crate) const USE_LOCK_IDENTITY: &[u8] = b"VSIFT-MANAGED-USE-LOCK-v1\n";
+pub(crate) const REMOVING_IDENTITY: &[u8] = b"VSIFT-MANAGED-REMOVING-v1\n";
 
 /// A typed failure to own, stage or discard an unactivated artifact.
 #[derive(Debug)]
@@ -216,15 +218,15 @@ impl ManagedRuntimeIdentity {
         &self.version
     }
 
-    fn version_directory_name(&self) -> String {
+    pub(crate) fn version_directory_name(&self) -> String {
         format!("{}--{}", self.component, self.version)
     }
 
-    fn current_name(&self) -> String {
+    pub(crate) fn current_name(&self) -> String {
         format!("{}.current", self.component)
     }
 
-    fn pending_name(&self) -> String {
+    pub(crate) fn pending_name(&self) -> String {
         format!("{}.pending", self.component)
     }
 }
@@ -288,8 +290,8 @@ pub struct ManagedArtifactStore {
 #[derive(Debug)]
 pub struct ManagedInstallGuard {
     _lock: HeldFileLock,
-    root: Dir,
-    root_path: PathBuf,
+    pub(crate) root: Dir,
+    pub(crate) root_path: PathBuf,
 }
 
 impl ManagedArtifactStore {
@@ -373,6 +375,26 @@ impl ManagedArtifactStore {
     /// rejects linked, replaced or incorrectly permissioned lock files.
     pub fn try_install_guard(&self) -> Result<ManagedInstallGuard, ManagedArtifactError> {
         let root = self.open_root()?;
+        self.install_guard_in(root)
+    }
+
+    /// Like [`Self::try_install_guard`], but never creates the managed root:
+    /// `None` when this user has none, so a lifecycle command on a machine
+    /// where nothing was ever installed changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::try_install_guard`].
+    pub fn try_existing_install_guard(
+        &self,
+    ) -> Result<Option<ManagedInstallGuard>, ManagedArtifactError> {
+        match self.open_existing_root()? {
+            Some(root) => self.install_guard_in(root).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    fn install_guard_in(&self, root: Dir) -> Result<ManagedInstallGuard, ManagedArtifactError> {
         let mut options = OpenOptions::new();
         options
             .read(true)
@@ -493,6 +515,41 @@ impl ManagedArtifactStore {
         guard: &ManagedInstallGuard,
         identity: &ManagedRuntimeIdentity,
     ) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+        self.select_verified_runtime(guard, identity, None)
+    }
+
+    /// Atomically selects an already published immutable version after
+    /// verifying it: its manifest must exist and parse, every file must
+    /// match it by size, SHA-256 and mode, and, when
+    /// `expected_manifest_sha256` is given (a rollback to the version the
+    /// selection pointer recorded as previous), the manifest must be exactly
+    /// the one recorded.
+    ///
+    /// The selection pointer is replaced by one atomic rename, and the
+    /// version selected before becomes the new pointer's previous version,
+    /// so a rollback can always return. Nothing else changes.
+    ///
+    /// # Errors
+    ///
+    /// Requires the installation guard for this root and rejects a missing,
+    /// removing, changed, unverified or unsafe published version; the
+    /// selection is then unchanged.
+    pub fn select_verified_runtime(
+        &self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+        expected_manifest_sha256: Option<&str>,
+    ) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
+        self.select_verified_runtime_at_boundary(guard, identity, expected_manifest_sha256, None)
+    }
+
+    pub(crate) fn select_verified_runtime_at_boundary(
+        &self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+        expected_manifest_sha256: Option<&str>,
+        fault: Option<ManagedPublicationBoundary>,
+    ) -> Result<PublishedManagedRuntime, ManagedRuntimePublicationError> {
         let root = self
             .open_existing_root()
             .map_err(ManagedRuntimePublicationError::Storage)?
@@ -508,7 +565,7 @@ impl ManagedArtifactStore {
             &self.root_path,
             &versions,
             identity.clone(),
-            None,
+            expected_manifest_sha256,
         )?;
         let manifest = read_private_regular_file(
             &published.directory,
@@ -516,7 +573,7 @@ impl ManagedArtifactStore {
             MAX_VERSION_METADATA_BYTES,
         )
         .map_err(ManagedRuntimePublicationError::Storage)?;
-        write_current_pointer(&current, identity, &manifest, None)?;
+        write_current_pointer(&current, identity, &manifest, fault)?;
         Ok(published)
     }
 
@@ -538,7 +595,7 @@ impl ManagedArtifactStore {
         self.remove_published_runtime_at_boundary(guard, identity, None)
     }
 
-    fn remove_published_runtime_at_boundary(
+    pub(crate) fn remove_published_runtime_at_boundary(
         &self,
         guard: &ManagedInstallGuard,
         identity: &ManagedRuntimeIdentity,
@@ -606,7 +663,12 @@ impl ManagedArtifactStore {
         let removing = directory
             .try_exists(VERSION_REMOVING)
             .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
-        validate_version_contents(&directory, &files, removing, ContentCheck::LayoutAndBytes)
+        // Ownership, not integrity: every entry must be a name the manifest
+        // or the version's metadata gives, a single-link regular file. A
+        // file whose bytes or mode changed is still VSift's own file in its
+        // private version folder, so a corrupted version can be removed
+        // (P13 PR 6); a link, a folder or an unknown name still stops it.
+        validate_version_contents(&directory, &files, removing, ContentCheck::Ownership)
             .map_err(ManagedRuntimePublicationError::Storage)?;
         let use_lock = match try_exclusive_version_use(&directory, removing)? {
             ExclusiveVersionUse::Acquired(lock) => lock,
@@ -620,7 +682,7 @@ impl ManagedArtifactStore {
                 .map_err(ManagedRuntimePublicationError::Storage)?;
         }
         drop(use_lock);
-        validate_version_contents(&directory, &files, true, ContentCheck::LayoutAndBytes)
+        validate_version_contents(&directory, &files, true, ContentCheck::Ownership)
             .map_err(ManagedRuntimePublicationError::Storage)?;
         remove_managed_version_files(&directory, &files, fault)
             .map_err(ManagedRuntimePublicationError::Storage)?;
@@ -732,7 +794,7 @@ impl ManagedArtifactStore {
         Ok(root)
     }
 
-    fn open_existing_root(&self) -> Result<Option<Dir>, ManagedArtifactError> {
+    pub(crate) fn open_existing_root(&self) -> Result<Option<Dir>, ManagedArtifactError> {
         let Some((root, created)) =
             open_private_root_with_creation(&self.root_path, false).map_err(map_private_error)?
         else {
@@ -2360,21 +2422,21 @@ impl PublishedManagedRuntime {
     }
 }
 
-struct PublishedRuntimeFile {
-    name: String,
+pub(crate) struct PublishedRuntimeFile {
+    pub(crate) name: String,
     integrity: ArtifactIntegrity,
     mode: RuntimeFileMode,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum ManagedPublicationBoundary {
+pub(crate) enum ManagedPublicationBoundary {
     VersionPublished,
     PointerPrepared,
     PointerReplaced,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum ManagedRemovalBoundary {
+pub(crate) enum ManagedRemovalBoundary {
     PayloadFiles,
     UseLock,
     VersionManifest,
@@ -2385,23 +2447,29 @@ enum ExclusiveVersionUse {
     InUse,
 }
 
-struct CurrentPointer {
-    identity: ManagedRuntimeIdentity,
-    manifest_sha256: String,
+/// A component's selection pointer: the selected version, the SHA-256 of
+/// its manifest, and the version selected immediately before it, which a
+/// rollback returns to.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CurrentPointer {
+    pub(crate) identity: ManagedRuntimeIdentity,
+    pub(crate) manifest_sha256: String,
+    pub(crate) previous: Option<PreviousPointer>,
 }
 
-fn canonical_managed_key(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    !bytes.is_empty()
-        && bytes.len() <= MAX_MANAGED_KEY_BYTES
-        && (bytes[0].is_ascii_lowercase() || bytes[0].is_ascii_digit())
-        && (bytes[bytes.len() - 1].is_ascii_lowercase() || bytes[bytes.len() - 1].is_ascii_digit())
-        && bytes.iter().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
-        })
+/// The version a selection pointer records as selected before it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PreviousPointer {
+    pub(crate) identity: ManagedRuntimeIdentity,
+    pub(crate) manifest_sha256: String,
 }
 
-fn validate_install_guard(
+/// The domain's canonical key rule: a safe single path segment.
+pub(crate) fn canonical_managed_key(value: &str) -> bool {
+    is_canonical_managed_key(value)
+}
+
+pub(crate) fn validate_install_guard(
     guard: &ManagedInstallGuard,
     root: &Dir,
     root_path: &Path,
@@ -2443,7 +2511,7 @@ fn open_or_create_managed_directory(
     open_managed_directory(root, root_path, name, identity)
 }
 
-fn open_managed_directory(
+pub(crate) fn open_managed_directory(
     root: &Dir,
     root_path: &Path,
     name: &str,
@@ -2506,7 +2574,7 @@ fn remove_version_metadata(runtime: &Dir) -> Result<(), ManagedRuntimePublicatio
     Ok(())
 }
 
-fn parse_version_manifest(
+pub(crate) fn parse_version_manifest(
     bytes: &[u8],
 ) -> Result<(ManagedRuntimeIdentity, Vec<PublishedRuntimeFile>), ManagedRuntimePublicationError> {
     let text = std::str::from_utf8(bytes).map_err(|_| {
@@ -2688,14 +2756,19 @@ fn validate_published_contents(
 
 /// How much of a published version a check reads.
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum ContentCheck {
-    /// Names, kinds, link counts, modes and markers only.
+pub(crate) enum ContentCheck {
+    /// Ownership only, for removal: every entry is a reviewed or metadata
+    /// name and a single-link regular file, and the markers are intact. A
+    /// reviewed file may be missing and its mode or bytes may differ.
+    Ownership,
+    /// Names, kinds, link counts, modes and markers, every reviewed file
+    /// present.
     Layout,
     /// The layout and every file's size and SHA-256.
     LayoutAndBytes,
 }
 
-fn validate_version_contents(
+pub(crate) fn validate_version_contents(
     directory: &Dir,
     files: &[PublishedRuntimeFile],
     allow_removing: bool,
@@ -2726,10 +2799,15 @@ fn validate_version_contents(
                 .iter()
                 .find(|file| file.name == name)
                 .ok_or(ManagedArtifactError::UnsafeStorage)?;
-            validate_runtime_file(&metadata, reviewed.mode)?;
+            if check == ContentCheck::Ownership {
+                validate_owned_regular_file(&metadata)?;
+            } else {
+                validate_runtime_file(&metadata, reviewed.mode)?;
+            }
         }
     }
-    if (!allow_removing && observed.len() != files.len() + 2)
+    let complete = check == ContentCheck::Ownership || allow_removing;
+    if (!complete && observed.len() != files.len() + 2)
         || (allow_removing && observed.len() < 2)
         || !observed.contains(VERSION_MANIFEST)
         || (!allow_removing && !observed.contains(VERSION_USE_LOCK))
@@ -2743,7 +2821,7 @@ fn validate_version_contents(
     if allow_removing {
         check_marker(directory, VERSION_REMOVING, REMOVING_IDENTITY)?;
     }
-    if check == ContentCheck::Layout {
+    if check != ContentCheck::LayoutAndBytes {
         return Ok(());
     }
     for reviewed in files {
@@ -2775,7 +2853,7 @@ fn remove_managed_version_files(
     for file in files {
         match directory.symlink_metadata(&file.name) {
             Ok(metadata) => {
-                validate_runtime_file(&metadata, file.mode)?;
+                validate_owned_regular_file(&metadata)?;
                 directory
                     .remove_file(&file.name)
                     .map_err(|_| ManagedArtifactError::Io)?;
@@ -2807,7 +2885,7 @@ fn remove_managed_version_files(
     Ok(())
 }
 
-fn remove_known_regular_file_if_present(
+pub(crate) fn remove_known_regular_file_if_present(
     directory: &Dir,
     name: &str,
 ) -> Result<(), ManagedArtifactError> {
@@ -2871,7 +2949,7 @@ fn try_exclusive_version_use(
     }
 }
 
-fn open_version_use_lock(directory: &Dir) -> Result<fs::File, ManagedArtifactError> {
+pub(crate) fn open_version_use_lock(directory: &Dir) -> Result<fs::File, ManagedArtifactError> {
     let mut options = OpenOptions::new();
     options.read(true).write(true).follow(FollowSymlinks::No);
     let lock = directory
@@ -2903,12 +2981,20 @@ fn write_current_pointer(
             .remove_file(&pending_name)
             .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
     }
-    let pointer = format!(
-        "VSIFT-MANAGED-POINTER-v1\ncomponent={}\nversion={}\nmanifest_sha256={}\n",
+    let previous = previous_selection(current, identity);
+    let mut pointer = format!(
+        "{POINTER_HEADER_V2}\ncomponent={}\nversion={}\nmanifest_sha256={}\n",
         identity.component(),
         identity.version(),
         sha256_hex(manifest)
     );
+    if let Some(previous) = previous {
+        pointer.push_str("previous_version=");
+        pointer.push_str(previous.identity.version());
+        pointer.push_str("\nprevious_manifest_sha256=");
+        pointer.push_str(&previous.manifest_sha256);
+        pointer.push('\n');
+    }
     write_marker(current, &pending_name, pointer.as_bytes())
         .map_err(ManagedRuntimePublicationError::Storage)?;
     inject_publication_fault(fault, ManagedPublicationBoundary::PointerPrepared)?;
@@ -2918,44 +3004,84 @@ fn write_current_pointer(
     inject_publication_fault(fault, ManagedPublicationBoundary::PointerReplaced)
 }
 
-fn read_current_pointer(
+/// The first line of a selection pointer written before P13 PR 6: the
+/// selection only.
+const POINTER_HEADER_V1: &str = "VSIFT-MANAGED-POINTER-v1";
+/// The first line of a selection pointer since P13 PR 6: the selection and,
+/// optionally, the version selected before it.
+const POINTER_HEADER_V2: &str = "VSIFT-MANAGED-POINTER-v2";
+
+/// The version a new pointer for `identity` records as previous: the one
+/// selected now when it differs, or the one the current pointer already
+/// records when `identity` is selected again. A pointer that cannot be read
+/// records nothing, because nothing in it can be trusted.
+fn previous_selection(current: &Dir, identity: &ManagedRuntimeIdentity) -> Option<PreviousPointer> {
+    let existing = read_current_pointer(current, &identity.current_name()).ok()?;
+    if existing.identity == *identity {
+        existing.previous
+    } else {
+        Some(PreviousPointer {
+            identity: existing.identity,
+            manifest_sha256: existing.manifest_sha256,
+        })
+    }
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+pub(crate) fn read_current_pointer(
     current: &Dir,
     name: &str,
 ) -> Result<CurrentPointer, ManagedRuntimePublicationError> {
+    let unsafe_pointer =
+        || ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage);
     let bytes = read_private_regular_file(current, name, MAX_VERSION_METADATA_BYTES)
         .map_err(ManagedRuntimePublicationError::Storage)?;
-    let text = std::str::from_utf8(&bytes).map_err(|_| {
-        ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
-    })?;
+    let text = std::str::from_utf8(&bytes).map_err(|_| unsafe_pointer())?;
     let mut lines = text.lines();
-    if lines.next() != Some("VSIFT-MANAGED-POINTER-v1") {
-        return Err(ManagedRuntimePublicationError::Storage(
-            ManagedArtifactError::UnsafeStorage,
-        ));
-    }
+    let with_previous = match lines.next() {
+        Some(POINTER_HEADER_V1) => false,
+        Some(POINTER_HEADER_V2) => true,
+        _ => return Err(unsafe_pointer()),
+    };
     let component = required_metadata_value(lines.next(), "component=")?;
     let version = required_metadata_value(lines.next(), "version=")?;
     let manifest_sha256 = required_metadata_value(lines.next(), "manifest_sha256=")?;
-    if lines.next().is_some()
-        || !text.ends_with('\n')
-        || manifest_sha256.len() != 64
-        || !manifest_sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(ManagedRuntimePublicationError::Storage(
-            ManagedArtifactError::UnsafeStorage,
-        ));
+    let identity = ManagedRuntimeIdentity::new(component, version).map_err(|_| unsafe_pointer())?;
+    let previous = match (with_previous, lines.next()) {
+        (_, None) => None,
+        (false, Some(_)) => return Err(unsafe_pointer()),
+        (true, Some(line)) => {
+            let previous_version = required_metadata_value(Some(line), "previous_version=")?;
+            let previous_sha256 =
+                required_metadata_value(lines.next(), "previous_manifest_sha256=")?;
+            let previous_identity = ManagedRuntimeIdentity::new(component, previous_version)
+                .map_err(|_| unsafe_pointer())?;
+            if previous_identity == identity || !is_sha256_hex(previous_sha256) {
+                return Err(unsafe_pointer());
+            }
+            Some(PreviousPointer {
+                identity: previous_identity,
+                manifest_sha256: previous_sha256.to_owned(),
+            })
+        }
+    };
+    if lines.next().is_some() || !text.ends_with('\n') || !is_sha256_hex(manifest_sha256) {
+        return Err(unsafe_pointer());
     }
     Ok(CurrentPointer {
-        identity: ManagedRuntimeIdentity::new(component, version).map_err(|_| {
-            ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
-        })?,
+        identity,
         manifest_sha256: manifest_sha256.to_owned(),
+        previous,
     })
 }
 
-fn read_private_regular_file(
+pub(crate) fn read_private_regular_file(
     directory: &Dir,
     name: &str,
     max_bytes: u64,
@@ -2981,7 +3107,7 @@ fn read_private_regular_file(
     Ok(bytes)
 }
 
-fn validate_private_regular_metadata(
+pub(crate) fn validate_private_regular_metadata(
     metadata: &cap_std::fs::Metadata,
 ) -> Result<(), ManagedArtifactError> {
     if !metadata.is_file() || metadata.nlink() != 1 {
@@ -2994,7 +3120,7 @@ fn validate_private_regular_metadata(
     Ok(())
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
 
@@ -3008,6 +3134,18 @@ fn inject_publication_fault(
         ))
     } else {
         Ok(())
+    }
+}
+
+/// A single-link regular file, whatever its mode: what proves a reviewed
+/// name inside a positively owned version folder is `VSift`'s own file.
+pub(crate) fn validate_owned_regular_file(
+    metadata: &cap_std::fs::Metadata,
+) -> Result<(), ManagedArtifactError> {
+    if metadata.is_file() && metadata.nlink() == 1 {
+        Ok(())
+    } else {
+        Err(ManagedArtifactError::UnsafeStorage)
     }
 }
 
@@ -3049,7 +3187,11 @@ fn write_marker(directory: &Dir, name: &str, expected: &[u8]) -> Result<(), Mana
         .map_err(|_| ManagedArtifactError::Io)
 }
 
-fn check_marker(directory: &Dir, name: &str, expected: &[u8]) -> Result<(), ManagedArtifactError> {
+pub(crate) fn check_marker(
+    directory: &Dir,
+    name: &str,
+    expected: &[u8],
+) -> Result<(), ManagedArtifactError> {
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
     let mut file = directory
@@ -3068,7 +3210,7 @@ fn check_marker(directory: &Dir, name: &str, expected: &[u8]) -> Result<(), Mana
     Ok(())
 }
 
-fn map_private_error(error: PrivateRootError) -> ManagedArtifactError {
+pub(crate) fn map_private_error(error: PrivateRootError) -> ManagedArtifactError {
     match error {
         PrivateRootError::Unavailable => ManagedArtifactError::Unavailable,
         // The managed store is not yet reachable from a host, so a

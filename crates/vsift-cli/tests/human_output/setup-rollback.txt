@@ -1,0 +1,3 @@
+VSift setup rollback
+ffmpeg_ffprobe: rolled_back, selected n8.1-2-g0123456789-20260601 (replaced n9.0.1-11-ge47273f4d9-20260831)
+Next: Commands started from now on use the selected version; a running job keeps the version it started with. Run setup rollback again to return to the version it replaced.

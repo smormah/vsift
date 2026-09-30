@@ -1,0 +1,8 @@
+VSift setup remove
+Target: component whisper_cli
+Selection removed: commands no longer use a managed version of it.
+[removed] whisper_cli whisper.cpp-v1.9.1-ubuntu-x64
+[in_use] whisper_cli whisper.cpp-v1.9.2-ubuntu-x64
+Next: A running job uses a version reported in_use, so it was kept; everything else asked for is removed. Run the same setup remove again once the job has ended.
+
+Status: failed

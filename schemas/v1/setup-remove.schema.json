@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup-remove.schema.json",
+  "title": "VSift setup remove data v1",
+  "description": "The data of a setup.remove result (P13 PR 6, ADR 0023), successful or failed. target is version (setup remove <component> --version <version>: one unselected version), component (setup remove <component>: its selection first, then every version) or stale_stages (setup remove --stale-stages: stages abandoned by interrupted or failed installations, and half-written selection pointers). Each version handled is listed with its status: removed, already_absent, in_use (a running job holds it; it is kept and a later setup remove removes it), selected, unexpected_content (an invalid manifest, a link, a folder or an unknown name: kept for the user) or storage_failure. Only positively identified content inside the private managed folder is ever removed; nothing is followed through a link. When anything asked for remains, the result is a failure (BUSY for a version in use, STORAGE_IO for kept content) with this same object as data beside the error. No path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["target", "component", "deselected", "versions", "stages", "next_step"],
+  "properties": {
+    "target": { "enum": ["version", "component", "stale_stages"] },
+    "component": {
+      "oneOf": [
+        { "type": "null" },
+        { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] }
+      ]
+    },
+    "deselected": { "type": "boolean" },
+    "versions": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": { "$ref": "#/$defs/version_outcome" }
+    },
+    "stages": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stage_sweep" }]
+    },
+    "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "target": { "const": "stale_stages" } } },
+      "then": {
+        "properties": {
+          "component": { "type": "null" },
+          "deselected": { "const": false },
+          "versions": { "maxItems": 0 },
+          "stages": { "type": "object" }
+        }
+      },
+      "else": {
+        "properties": { "component": { "type": "string" }, "stages": { "type": "null" } }
+      }
+    }
+  ],
+  "$defs": {
+    "version_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "version", "status"],
+      "properties": {
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "version": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$" },
+        "status": {
+          "enum": ["removed", "already_absent", "in_use", "selected", "unexpected_content", "storage_failure"]
+        }
+      }
+    },
+    "stage_sweep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["removed", "retained", "retention_reasons", "interrupted_selections_removed"],
+      "properties": {
+        "removed": { "type": "integer", "minimum": 0 },
+        "retained": { "type": "integer", "minimum": 0 },
+        "retention_reasons": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "enum": ["ownership_unproved", "unexpected_content", "storage_failure"] }
+        },
+        "interrupted_selections_removed": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

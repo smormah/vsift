@@ -26,9 +26,10 @@
 //! PR 2a rendered setup, session, ingest, transcript, search and bundle
 //! results, every failure and rejected command lines; PR 2b renders
 //! `candidates`, the frame commands, `crop`, `audio`, the `job` commands and
-//! the worker hosts. Every command that completes has a renderer: [`result`]
-//! answers `None` only for `setup check` (rendered from its typed report by
-//! [`setup_check`]) and the commands that only ever fail.
+//! the worker hosts; PR 6 renders `setup list`, `setup rollback`, `setup
+//! remove` and `setup repair`. Every command that completes has a renderer:
+//! [`result`] answers `None` only for `setup check` (rendered from its typed
+//! report by [`setup_check`]) and a rejected command line, which only fails.
 
 mod evidence;
 mod failure;
@@ -117,6 +118,10 @@ fn render_value(
     let rendered = match command {
         CommandName::SetupPlan => setup::plan(&envelope(value)?),
         CommandName::SetupInstall => setup::install(&envelope(value)?),
+        CommandName::SetupList => setup::list(&envelope(value)?),
+        CommandName::SetupRollback => setup::rollback(&envelope(value)?),
+        CommandName::SetupRemove => setup::remove(&envelope(value)?),
+        CommandName::SetupRepair => setup::repair(&envelope(value)?),
         CommandName::SetupConfigure => setup::configure(&envelope(value)?),
         CommandName::SetupConfigureModel => setup::configure_model(&envelope(value)?),
         CommandName::Ingest => session::ingest(&envelope(value)?),
@@ -144,14 +149,9 @@ fn render_value(
         CommandName::JobRun => job::run(&envelope(value)?),
         CommandName::JobBatch => job::batch(&envelope(value)?),
         CommandName::HandoffCheck => handoff::check(&envelope(value)?),
-        // `setup check` renders from its typed report (`setup_check`), and
-        // the parse and reserved setup commands only ever fail.
-        CommandName::SetupCheck
-        | CommandName::Parse
-        | CommandName::SetupRepair
-        | CommandName::SetupList
-        | CommandName::SetupRemove
-        | CommandName::SetupRollback => return Ok(None),
+        // `setup check` renders from its typed report (`setup_check`), and a
+        // rejected command line only ever fails.
+        CommandName::SetupCheck | CommandName::Parse => return Ok(None),
     };
     rendered.map(Some).map_err(|_| OutputError::TooLarge)
 }

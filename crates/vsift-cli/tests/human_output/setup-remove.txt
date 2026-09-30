@@ -1,0 +1,5 @@
+VSift setup remove
+Target: stale_stages
+Abandoned stages: removed 2, kept 0
+Half-written selection pointers removed: 1
+Next: Everything asked for is removed. Run setup list to see what is installed.
