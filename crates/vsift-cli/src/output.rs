@@ -9,7 +9,7 @@ use std::{error::Error, fmt, io, io::Write};
 use serde::Serialize;
 use vsift::{FailureClass, FailureCode, RuntimeReadiness};
 use vsift_contract::{
-    MAX_EVENT_LINE_BYTES, OperationResponse, TerminalEventResponse, sanitize_untrusted_text,
+    MAX_EVENT_LINE_BYTES, OperationResponse, TerminalEventResponse, terminal_safe_text,
 };
 
 const MAX_RESULT_BYTES: usize = 1_048_576;
@@ -144,8 +144,13 @@ where
     }
 
     /// Best-effort bounded diagnostic output; stderr failure never panics.
+    ///
+    /// Diagnostics can repeat text the user or a provider supplied (the
+    /// parser's explanation of a rejected command line quotes the argument),
+    /// so control characters are replaced and hidden characters shown as
+    /// `<U+XXXX>` ([`terminal_safe_text`]).
     pub(crate) fn write_safe_diagnostic(&mut self, value: &str) {
-        let mut safe = sanitize_untrusted_text(value, MAX_DIAGNOSTIC_BYTES.saturating_sub(1));
+        let mut safe = terminal_safe_text(value, MAX_DIAGNOSTIC_BYTES.saturating_sub(1));
         safe.push('\n');
         let _ignored = self.standard_error.write_all(safe.as_bytes());
     }

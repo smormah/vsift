@@ -8,6 +8,8 @@
 //! - [`render_hidden_characters`] makes the characters of
 //!   [`is_hidden_character`] visible as `<U+XXXX>` notation, for the
 //!   `display_text` a reader quotes (ADR 0008, note of 2026-09-29).
+//!
+//! [`terminal_safe_text`] applies both, for text a host shows on a terminal.
 
 /// Largest provider-reported detail, such as a probed version line, carried in a
 /// public response.
@@ -102,6 +104,40 @@ pub fn sanitize_untrusted_text(value: &str, maximum_bytes: usize) -> String {
     result
 }
 
+/// Converts untrusted text into bounded single-line text that a terminal
+/// shows honestly: [`sanitize_untrusted_text`]'s rule and `display_text`'s
+/// rule together.
+///
+/// Every control character becomes U+FFFD, as in [`sanitize_untrusted_text`],
+/// and every [hidden character](is_hidden_character) becomes `<U+XXXX>`, as
+/// in [`render_hidden_characters`], so a diagnostic that repeats text a user
+/// or a provider supplied can neither drive the terminal nor reorder or hide
+/// what the reader sees (Trojan Source). Hosts use it for human diagnostics,
+/// such as the parser's explanation of a rejected command line (L-071).
+///
+/// The result never exceeds `maximum_bytes`; truncation keeps whole
+/// characters and whole notations, never half of `<U+202E>`.
+#[must_use]
+pub fn terminal_safe_text(value: &str, maximum_bytes: usize) -> String {
+    let mut result = String::with_capacity(value.len().min(maximum_bytes));
+    let mut piece = String::with_capacity(10);
+    for character in value.chars() {
+        piece.clear();
+        if character.is_control() {
+            piece.push('\u{fffd}');
+        } else if is_hidden_character(character) {
+            push_notation(&mut piece, u32::from(character));
+        } else {
+            piece.push(character);
+        }
+        if result.len() + piece.len() > maximum_bytes {
+            break;
+        }
+        result.push_str(&piece);
+    }
+    result
+}
+
 /// Whether `character` hides or reorders text instead of showing a glyph:
 /// a format character, a default-ignorable code point, or a line or
 /// paragraph separator (the set is documented on the table it reads).
@@ -169,8 +205,34 @@ fn push_notation(rendered: &mut String, code: u32) {
 mod tests {
     use super::{
         HIDDEN_CHARACTER_GROWTH, HIDDEN_CHARACTER_RANGES, is_hidden_character,
-        render_hidden_characters, sanitize_untrusted_text,
+        render_hidden_characters, sanitize_untrusted_text, terminal_safe_text,
     };
+
+    /// L-071: a terminal diagnostic shows hidden characters as notation and
+    /// replaces controls, so it is one visible line.
+    #[test]
+    fn terminal_text_replaces_controls_and_renders_hidden_characters() {
+        let safe = terminal_safe_text("a\u{202E}b\u{200B}c\u{1b}[31md\ne\u{7}", 128);
+
+        assert_eq!(safe, "a<U+202E>b<U+200B>c\u{fffd}[31md\u{fffd}e\u{fffd}");
+        assert!(!safe.chars().any(is_hidden_character));
+        assert!(!safe.chars().any(char::is_control));
+    }
+
+    #[test]
+    fn terminal_text_never_splits_a_notation_or_a_character() {
+        // "ab" and the eight bytes of "<U+202E>" fit in 10, not in 9.
+        assert_eq!(terminal_safe_text("ab\u{202E}c", 10), "ab<U+202E>");
+        assert_eq!(terminal_safe_text("ab\u{202E}c", 9), "ab");
+        assert_eq!(terminal_safe_text("ab\u{e9}", 3), "ab");
+        assert_eq!(terminal_safe_text(&"a".repeat(10_000), 4_095).len(), 4_095);
+    }
+
+    #[test]
+    fn terminal_text_keeps_visible_text_unchanged() {
+        let text = "error: invalid value for '--rect <X,Y,WIDTH,HEIGHT>' caf\u{e9} \u{5d0}";
+        assert_eq!(terminal_safe_text(text, 1_024), text);
+    }
 
     #[test]
     fn terminal_controls_are_replaced_before_human_display() {

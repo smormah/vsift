@@ -138,7 +138,7 @@ On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
 | Code | What you do |
 | --- | --- |
 | `BUSY` | Wait `retry_after_ms`, retry once, then report the gap. |
-| `INVALID_ARGUMENT` | Read the remediation, correct the request once; a `command` of `parse` means the command line itself is wrong: check it against this file or its `--help`. |
+| `INVALID_ARGUMENT` | Read the remediation, correct the request once; a `command` of `parse` means the command line itself is wrong: run the `--help` its remediation suggests, then correct the line against it and this file. |
 | `MISSING_CAPABILITY` | Quote the remediation to the user; continue on another path (transcript-only or visual-only) or go to REPORT with the gap. Never install. |
 | `CANCELLED` | For a transcription, follow resume.md. |
 | `DEADLINE_EXCEEDED` | Retry once with a smaller range; otherwise report the gap. |

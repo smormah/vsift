@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "command": "parse",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "INVALID_ARGUMENT",
+    "message": "The command line arguments are invalid.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The command line was rejected (invalid_value). The value of `--rect` is missing or not valid for `crop`; read its help. On PowerShell, quote the value of `--rect` (for example '10,20,300,80'): unquoted, PowerShell splits it at the commas into several arguments.",
+        "required_authority": "none",
+        "command": {
+          "executable": "vsift",
+          "arguments": ["crop", "--help"]
+        }
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}
