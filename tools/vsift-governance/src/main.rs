@@ -291,13 +291,16 @@ fn validate(
     messages
 }
 
-/// Checks that no build a user receives can enable fault injection.
+/// Checks that no build a user receives can enable a development-only
+/// feature ([`DEVELOPMENT_FEATURES`]).
 ///
 /// The `fault-injection` feature lets `VSIFT_FAULT_POINT` stop the process at
-/// a commit boundary (ADR 0020). Only the infrastructure crate may define it,
-/// and it may be enabled only from development dependencies, never by
-/// default, by a normal dependency or by a published crate's features. The
-/// crate itself also refuses to compile it without debug assertions.
+/// a commit boundary (ADR 0020); `install-test-hooks` lets a managed download
+/// reach a loopback test server (P13). Only the infrastructure crate may
+/// define them, and they may be enabled only from development dependencies,
+/// never by default, by a normal dependency or by a published crate's
+/// features. The crate itself also refuses to compile them without debug
+/// assertions.
 fn validate_fault_injection_features(messages: &mut Vec<String>, root: &Path) {
     let mut manifests = vec![String::from("Cargo.toml"), String::from("fuzz/Cargo.toml")];
     for directory in ["crates", "tools"] {
@@ -330,8 +333,15 @@ fn validate_fault_injection_features(messages: &mut Vec<String>, root: &Path) {
 ///
 /// `fault-injection` stops the process at a named commit boundary;
 /// `durability-campaign` lets the crash campaign's negative control remove a
-/// directory synchronisation (ADR 0020). Both weaken a build on request.
-const DEVELOPMENT_FEATURES: [&str; 2] = ["fault-injection", "durability-campaign"];
+/// directory synchronisation (ADR 0020); `install-test-hooks` routes a
+/// managed download to a local test server, bypassing the reviewed
+/// catalogue's trust anchor, and fails a stage write on request (P13). All
+/// three weaken a build on request.
+const DEVELOPMENT_FEATURES: [&str; 3] = [
+    "fault-injection",
+    "durability-campaign",
+    "install-test-hooks",
+];
 const FAULT_INJECTION_OWNER: &str = "crates/vsift-infrastructure/Cargo.toml";
 /// The crash campaign tool, which is never published and may enable
 /// `durability-campaign` through a non-default feature of its own.
@@ -361,12 +371,17 @@ fn check_fault_injection_manifest(messages: &mut Vec<String>, manifest: &str, te
                 && section == "[features]"
                 && trimmed.starts_with(&format!("{feature} ="));
             let development = section.ends_with("dev-dependencies]");
+            // A test target of the owning crate that builds only when the
+            // feature is on names it without enabling it.
+            let gated_test = manifest == FAULT_INJECTION_OWNER
+                && section == "[[test]]"
+                && trimmed.starts_with("required-features");
             let campaign_tool = manifest == CAMPAIGN_TOOL
                 && feature == CAMPAIGN_FEATURE
                 && unpublished
                 && section == "[features]"
                 && !trimmed.starts_with("default");
-            if !definition && !development && !campaign_tool {
+            if !definition && !development && !campaign_tool && !gated_test {
                 messages.push(format!(
                     "{manifest} line {} enables {feature} outside a development dependency; \
                      it must never reach a release build (ADR 0020)",
@@ -925,6 +940,43 @@ mod tests {
             (
                 "crates/vsift/Cargo.toml",
                 "[features]\ntests = [\"vsift-infrastructure/fault-injection\"]\n",
+            ),
+        ] {
+            let mut messages = Vec::new();
+            check_fault_injection_manifest(&mut messages, manifest, text);
+            assert_eq!(messages.len(), 1, "{manifest}: {text}");
+        }
+    }
+
+    /// P13: the loopback publisher route and injected stage-write failure
+    /// are refused everywhere but their definition and a development
+    /// dependency, exactly like fault injection.
+    #[test]
+    fn install_test_hooks_are_enabled_only_for_development() {
+        let owner = "crates/vsift-infrastructure/Cargo.toml";
+        let mut messages = Vec::new();
+        check_fault_injection_manifest(
+            &mut messages,
+            owner,
+            "[features]\ninstall-test-hooks = []\n[[test]]\nname = \"p13_install_transaction\"\nrequired-features = [\"install-test-hooks\"]\n[dev-dependencies]\nvsift-infrastructure = { workspace = true, features = [\"install-test-hooks\"] }\n",
+        );
+        assert!(messages.is_empty(), "{messages:#?}");
+        for (manifest, text) in [
+            (
+                owner,
+                "[features]\ndefault = [\"install-test-hooks\"]\ninstall-test-hooks = []\n",
+            ),
+            (
+                "crates/vsift-cli/Cargo.toml",
+                "[dependencies]\nvsift-infrastructure = { workspace = true, features = [\"install-test-hooks\"] }\n",
+            ),
+            (
+                "crates/vsift/Cargo.toml",
+                "[features]\nhooks = [\"vsift-infrastructure/install-test-hooks\"]\n",
+            ),
+            (
+                "crates/vsift-cli/Cargo.toml",
+                "[[test]]\nrequired-features = [\"install-test-hooks\"]\n",
             ),
         ] {
             let mut messages = Vec::new();

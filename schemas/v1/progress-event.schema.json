@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/progress-event.schema.json",
   "title": "VSift JSONL progress event v1",
-  "description": "How far a long operation has come, in an --events jsonl stream (P11, ADR 0021): transcript.retranscribe and job.resume (chunks recognised, reused chunks included) and the worker commands job.run and job.batch. Advisory: at most one per second and 4,096 per request; an update inside the second replaces the pending one, and a host drops progress rather than block on a slow reader, counting the drops in progress_dropped (for this request, before this event). The terminal event stays authoritative. operation_id is null (the command's operation id is in the terminal event); request_operation_id names the worker request, null for other commands; job_id names the recoverable job, when the work runs as one. Every line is at most 64 KiB.",
+  "description": "How far a long operation has come, in an --events jsonl stream (P11, ADR 0021): transcript.retranscribe and job.resume (chunks recognised, reused chunks included) the worker commands job.run and job.batch, and setup.install (fetching_artifact: bytes of the artifact being downloaded or imported; installing_components: components of the accepted plan finished). Advisory: at most one per second and 4,096 per request; an update inside the second replaces the pending one, and a host drops progress rather than block on a slow reader, counting the drops in progress_dropped (for this request, before this event). The terminal event stays authoritative. operation_id is null (the command's operation id is in the terminal event); request_operation_id names the worker request, null for other commands; job_id names the recoverable job, when the work runs as one. Every line is at most 64 KiB.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -42,11 +42,11 @@
       ]
     },
     "stage": {
-      "enum": ["copying_source", "recognising_speech", "analysing_video", "running_request"]
+      "enum": ["copying_source", "recognising_speech", "analysing_video", "running_request", "fetching_artifact", "installing_components"]
     },
     "completed": { "type": "integer", "minimum": 0 },
     "total": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
-    "unit": { "enum": ["bytes", "chunks", "windows", "steps"] },
+    "unit": { "enum": ["bytes", "chunks", "windows", "steps", "components"] },
     "progress_dropped": { "type": "integer", "minimum": 0 }
   },
   "allOf": [
@@ -65,6 +65,14 @@
     {
       "if": { "properties": { "stage": { "const": "running_request" } } },
       "then": { "properties": { "unit": { "const": "steps" } } }
+    },
+    {
+      "if": { "properties": { "stage": { "const": "fetching_artifact" } } },
+      "then": { "properties": { "unit": { "const": "bytes" } } }
+    },
+    {
+      "if": { "properties": { "stage": { "const": "installing_components" } } },
+      "then": { "properties": { "unit": { "const": "components" } } }
     }
   ]
 }

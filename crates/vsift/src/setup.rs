@@ -8,7 +8,8 @@ use std::{
 
 use vsift_application::{
     AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, LocalAsrSetupStatus,
-    ManagedSetupPlan, RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup,
+    ManagedPlanAvailability, ManagedSetupPlan, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    plan_managed_setup,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
 use vsift_domain::{ManagedTarget, RuntimeDependency};
@@ -51,6 +52,14 @@ impl ExecutableSelections {
         }
     }
 
+    fn select(&mut self, dependency: RuntimeDependency, path: PathBuf) {
+        match dependency {
+            RuntimeDependency::Ffmpeg => self.ffmpeg = Some(path),
+            RuntimeDependency::Ffprobe => self.ffprobe = Some(path),
+            RuntimeDependency::Whisper => self.whisper = Some(path),
+        }
+    }
+
     fn into_probe_paths(self) -> ExplicitProbePaths {
         ExplicitProbePaths {
             ffmpeg: self.ffmpeg,
@@ -82,7 +91,10 @@ pub struct SetupCheckReport {
     per_call: [bool; 3],
     /// Whether any path (per-call or configured) was selected.
     selected: [bool; 3],
+    /// Whether the managed version was used, when nothing was selected.
+    managed: [bool; 3],
     local_asr: LocalAsrSetupStatus,
+    managed_install: ManagedPlanAvailability,
 }
 
 impl SetupCheckReport {
@@ -100,7 +112,8 @@ impl SetupCheckReport {
     }
 
     /// Where the executable probed for `dependency` came from: a per-call path
-    /// wins over a configured user path, which wins over the filtered `PATH`.
+    /// wins over a configured user path, which wins over the managed
+    /// version, which wins over the filtered `PATH`.
     #[must_use]
     pub const fn lookup(&self, dependency: RuntimeDependency) -> DependencyLookup {
         let index = dependency_index(dependency);
@@ -108,9 +121,19 @@ impl SetupCheckReport {
             DependencyLookup::ExplicitPath
         } else if self.selected[index] {
             DependencyLookup::ConfiguredUserPath
+        } else if self.managed[index] {
+            DependencyLookup::ManagedVersion
         } else {
             DependencyLookup::FilteredPath
         }
+    }
+
+    /// Whether managed installation can supply a missing dependency on this
+    /// host: the availability `setup plan` reports for this target and the
+    /// built-in catalogue (the setup-check remediation's `managed_install`).
+    #[must_use]
+    pub const fn managed_install(&self) -> ManagedPlanAvailability {
+        self.managed_install
     }
 }
 
@@ -147,6 +170,11 @@ pub struct EvaluatedSetupPlan {
 }
 
 impl EvaluatedSetupPlan {
+    /// The plan's authority: its actions, digest and catalogue revision.
+    pub(crate) const fn authority(&self) -> &ManagedSetupPlan {
+        &self.authority
+    }
+
     /// The reviewable plan as the v1 contract presents it.
     #[must_use]
     pub const fn presentation(&self) -> &SetupPlanResponse {
@@ -201,27 +229,53 @@ impl Engine {
         &self,
         request: SetupCheckRequest,
     ) -> Result<SetupCheckReport, EngineError> {
-        let configured = ExecutableSelections::from_configured(self.user_configuration()?.read()?);
+        let store = self.user_configuration()?;
+        let configured = ExecutableSelections::from_configured(store.read()?);
         let per_call = request.per_call;
-        let selections = ExecutableSelections {
+        let mut selections = ExecutableSelections {
             ffmpeg: per_call.ffmpeg.clone().or(configured.ffmpeg),
             ffprobe: per_call.ffprobe.clone().or(configured.ffprobe),
             whisper: per_call.whisper.clone().or(configured.whisper),
         };
         let selected = presence(&selections);
+        // The managed tier fills what nothing selected; each managed
+        // executable is held (its version cannot be removed) for the check.
+        let mut held = Vec::new();
+        let mut managed = [false; 3];
+        let mut lookup = self.managed_lookup();
+        for dependency in RuntimeDependency::ALL {
+            if selections.for_dependency(dependency).is_none()
+                && let Some(executable) = lookup.executable(dependency)
+            {
+                selections.select(dependency, executable.path().to_path_buf());
+                managed[dependency_index(dependency)] = true;
+                held.push(executable);
+            }
+        }
         let probe = ProcessDependencyProbe::with_explicit_paths(
             request.probe_timeout,
             selections.clone().into_probe_paths(),
         );
         let diagnosis = DiagnoseRuntime::new(probe).execute().await;
+        let managed_model = match store.read_model()? {
+            Some(configured) => Some((configured, None)),
+            None => lookup.model().map(|model| (model.path, Some(model.hold))),
+        };
         let local_asr = self
-            .check_local_asr(&selections, request.local_asr_budget)
+            .check_local_asr(
+                &selections,
+                managed_model.as_ref().map(|(path, _)| path.as_path()),
+                request.local_asr_budget,
+            )
             .await?;
+        drop((held, managed_model));
         Ok(SetupCheckReport {
             diagnosis,
             per_call: presence(&per_call),
             selected,
+            managed,
             local_asr,
+            managed_install: self.managed_install_availability()?,
         })
     }
 
@@ -268,6 +322,24 @@ impl Engine {
             Some(catalogue),
         )
         .await)
+    }
+
+    /// Whether managed installation is qualified on this host today: the
+    /// built-in catalogue's target, expiry and completeness, before any
+    /// observation of the tools.
+    pub(crate) fn managed_install_availability(
+        &self,
+    ) -> Result<ManagedPlanAvailability, EngineError> {
+        let catalogue =
+            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        let target = detect_managed_target();
+        Ok(if catalogue.target != target {
+            ManagedPlanAvailability::TargetUnavailable
+        } else if self.now_unix_seconds()? >= catalogue.stop_new_plans_at {
+            ManagedPlanAvailability::CatalogueExpired
+        } else {
+            ManagedPlanAvailability::Qualified
+        })
     }
 
     /// Saves one user-managed executable selection without running it.
@@ -403,10 +475,7 @@ mod tests {
             .validate(&value)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
         let data = &value["data"];
-        assert_eq!(
-            data["managed_install"],
-            "catalogue_accepted_install_pending"
-        );
+        assert_eq!(data["managed_install"], "catalogue_accepted");
         assert_eq!(data["target"], "ubuntu_24_04_x86_64");
         assert_eq!(data["actions"].as_array().map(Vec::len), Some(3));
         assert_eq!(

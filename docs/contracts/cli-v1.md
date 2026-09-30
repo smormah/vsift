@@ -1,6 +1,6 @@
 # CLI and JSON contract v1
 
-Status: published v1 boundary. `setup check/plan/configure/configure-model`, foreground `ingest`
+Status: published v1 boundary. `setup check/plan/install/configure/configure-model` (`setup install` since P13 PR 4), foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
 `candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
@@ -50,7 +50,8 @@ told about a Ctrl-C (only Ctrl-Break); see L-053.
 | `setup configure` | Persist an explicit user-managed executable path without running it | Partial P06 |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
 | `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
-| `setup install/repair/list/remove/rollback` | Explicit managed dependency lifecycle, still reserved | P13 ([ADR 0015](../decisions/0015-r0-delivery-replan.md)) |
+| `setup install` | Apply an accepted Ubuntu 24.04 x86-64 plan: download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
+| `setup repair/list/remove/rollback` | Managed dependency lifecycle, still reserved | P13 PR 6 ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)) |
 | `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `session init-workspace` | Create a worker workspace: an explicit root with an immutable operator policy (durability, admission capacity, session retention) | Implemented in P11 PR 2 |
@@ -881,7 +882,8 @@ event names a path or carries text. Each line is at most 64 KiB.
 - `progress` ([`progress-event.schema.json`](../../schemas/v1/progress-event.schema.json)):
   `request_operation_id` (the worker request, else `null`), `job_id`, `stage`
   (`copying_source` in `bytes`, `recognising_speech` in `chunks`, `analysing_video` in
-  `windows`, `running_request` in `steps`), `completed`, `total` and
+  `windows`, `running_request` in `steps`; since P13 PR 4 `setup install`'s
+  `fetching_artifact` in `bytes` and `installing_components` in `components`), `completed`, `total` and
   `progress_dropped` (updates of this request dropped before this event). Advisory: at
   most one per second and 4,096 per request; an update inside the second replaces the
   held one, which is written with the next update or just before the terminal event;
@@ -1379,7 +1381,9 @@ typed manual/BYO remediation for missing, unhealthy and timed-out tools. The leg
 `--version`/`--help` response does **not** prove provider compatibility or a
 working transcription model. Both fields keep these constant values for v1
 compatibility; the additive `local_asr` object below reports the model and a real
-transcription check. Verified managed installation remains P13 work.
+transcription check. Since P13 PR 4, `setup install` provides verified managed
+installation on Ubuntu 24.04 x86-64 (below), and every tool lookup consults the
+managed version between the configured path and `PATH`.
 
 **Local ASR in `setup check`** (P07 increment 3c, maintainer decision D4). The
 response carries a `local_asr` object:
@@ -1409,8 +1413,9 @@ response carries a `local_asr` object:
   `whisper_unavailable`, `model_not_selected`, `model_not_pinned`.
 - When no pass is recorded and everything is present, `setup check` runs the same
   media-tool and local-ASR preflights as `transcript retranscribe` (the built-in F01
-  speech clip, with the tools selected for this check: per call, configured, then
-  `PATH`) within its own **60-second budget**, separate from `--timeout-seconds`. A
+  speech clip, with the tools selected for this check: per call, configured, managed,
+  then `PATH`; the model configured, then managed) within its own **60-second
+  budget**, separate from `--timeout-seconds`. A
   run past the budget is stopped and reported as `failed` / `budget` /
   `budget_exceeded`. It writes only the per-user verification record, and only for a
   pass, so the next check or retranscription with the same setup reuses it for up to
@@ -1446,17 +1451,16 @@ and 16-kHz mono audio contract. The policy remains an installer safety constrain
 that compatibility execution has passed.
 The same unchanged observations produce the same digest. Any changed catalogue
 or observed selection requires a fresh plan and acceptance. No configured paths
-are echoed in the response. The plan is **read-only**: `setup install` still
-returns `COMMAND_NOT_IMPLEMENTED` and cannot apply it yet. The availability
-value `catalogue_accepted_install_pending` states that distinction explicitly.
-For a readable `--plan` document, the reserved install path now decodes the
-complete strict response within the JSON byte/nesting budgets, rebuilds the
-current plan, requires the saved presentation to match it exactly, and checks
-`--accept-plan` against the current digest before returning the reserved-command
-result. Malformed, unknown-field, changed-state or mismatched-digest documents
-fail with `INVALID_ARGUMENT` before any transfer or managed-root mutation. An
-unreadable plan retains the reserved `COMMAND_NOT_IMPLEMENTED` behavior until the
-installer can provide its complete storage-failure contract.
+are echoed in the response. The plan is **read-only**; `setup install` applies it
+(below), and the availability value `catalogue_accepted` (renamed in place from
+`catalogue_accepted_install_pending` by P13 PR 4, before any publication) says the
+target has an accepted catalogue whose actions it applies. The plan observes the
+tools **outside VSift's managed store** (per-call paths are not taken, then
+configured paths, then `PATH`), not the managed versions `setup install` selected,
+so an accepted plan stays valid while it is being applied: a rerun of the same
+`setup install` continues after a failure, and a component already installed at
+the plan's version is reported `already_current`. `setup check` shows what each
+command will actually use.
 
 Windows x86-64, macOS ARM64, other hosts and expired or invalid catalogue
 entries return typed `unavailable_*` status, no actions or digest, and manual
@@ -1481,14 +1485,14 @@ is retained as historical v1 evidence. An abbreviated current response follows.
     "readiness": "blocked",
     "verification_scope": "executable_probe_and_reviewed_catalogue",
     "target": "ubuntu_24_04_x86_64",
-    "local_asr_model": {"status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed model action and its digest. Setup install remains unavailable until the complete installer qualifies."},
-    "managed_install": "catalogue_accepted_install_pending",
+    "local_asr_model": {"status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed model action, then run setup install with this saved plan and its digest; a model already installed at this version is reported already_current."},
+    "managed_install": "catalogue_accepted",
     "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
     "stop_new_plans_at": "2028-08-01T00:00:00Z",
     "plan_digest": "<64 lowercase hex characters>",
     "actions": ["<exact reviewed artifact actions>"],
     "dependencies": [
-      {"dependency": "ffmpeg", "status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed action and its digest. Setup install remains unavailable until the complete installer qualifies."}
+      {"dependency": "ffmpeg", "status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed action, then run setup install with this saved plan and its digest; a component already installed at this version is reported already_current."}
     ]
   }
 }
@@ -1552,6 +1556,84 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
   so the command and the grader cannot disagree. Its schema validator implements
   exactly the JSON Schema features the handoff schema uses and refuses any other at
   compile time; a differential test holds it to a general validator.
+
+### P13 `setup install`
+
+`setup install --plan <saved setup plan --json result> --accept-plan <its plan_digest>
+[--artifact-dir <absolute folder>]` applies an accepted plan on Ubuntu 24.04 x86-64
+([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+§3; implemented in P13 PR 4). It never prompts, elevates or waits, and it downloads
+only the reviewed publisher artifacts of the compiled catalogue.
+
+**Before anything changes**, in this order: the saved plan must be a strict,
+unmodified `setup.plan` result (`INVALID_ARGUMENT` otherwise; an unreadable file is
+`STORAGE_IO`); `--artifact-dir` must be absolute (`INVALID_ARGUMENT`); a host whose
+target has no qualified catalogue has nothing to accept (`INVALID_ARGUMENT` with the
+manual `setup configure` path, and nothing is created); the managed root's install
+guard is taken and **never waited for**: a guard another installation holds is `BUSY`
+(exit 4, `retry_after_ms` 30000), and a root that cannot be created or proved private
+is `STORAGE_IO` with the manual path; the plan is then rebuilt from the machine as it
+is now, must equal the saved plan, and the digest must accept it (`INVALID_ARGUMENT`
+naming `setup plan --json` to run again).
+
+**The transaction** installs the plan's components in its order: `ffmpeg_ffprobe`,
+then `whisper_cli`, then `whisper_model`. A component whose reviewed version is
+already selected is `already_current` and is not fetched. Every other one is:
+
+1. downloaded from its reviewed publisher over HTTPS (or, with `--artifact-dir`,
+   imported from the folder's regular file named as its reviewed URL ends), with the
+   exact reviewed size and SHA-256 checked as the bytes arrive, into a private stage;
+   there is no resume: an interrupted download is discarded and a rerun restarts it at
+   byte zero, no `Range` header is ever sent and a partial `206` is refused;
+2. extracted (only the reviewed selection) and its runtime prepared;
+3. smoked (the reviewed banners, the F01 media fixture and the speech fixture; the
+   whisper.cpp CLI and the model are smoked together when both are installed);
+4. published as an immutable version and selected atomically.
+
+Each component activates on its own. The first failure stops the transaction; the
+components after it are reported `failed` with reason `blocked` and are not fetched.
+Components activated before the failure stay active, and **running the same command
+again continues from the first component not yet current**. Ctrl-C (the command is
+long-running) cancels it, discards the stage in progress and keeps what is active. A
+version in use by a running job is never removed or replaced in place.
+
+**Result.** `data` ([`setup-install.schema.json`](../../schemas/v1/setup-install.schema.json),
+examples [`setup-install.json`](../../schemas/v1/examples/setup-install.json) and
+[`setup-install.failed.json`](../../schemas/v1/examples/setup-install.failed.json)) has
+`catalogue_revision`, `source` (`publisher` or `artifact_directory`), `next_step`
+(fixed prose) and one entry per plan component with `component`, `version`, `status`
+(`activated`, `already_current`, `failed`) and, for a failure, `step` (`download`,
+`import`, `stage`, `smoke`, `activate`, or null for `blocked` and a cancellation
+between components), `reason`, `failure_code` and, for a smoke, `smoke_check`
+(`layout`, `banner`, `media_fixture`, `speech_fixture`, `recheck`); `stage` says what
+cleanup did with its private stage (`discarded`, or `retained` with
+`retention_reason` `ownership_unproved`, `unexpected_content` or `storage_failure`).
+A failed transaction is a failure result whose `error` carries the first failure's
+code and a fixed-prose remediation, with the same `data` beside it, so a caller always
+sees what is installed. Human mode lists the components on stdout and the error on
+stderr.
+
+| First failure | `reason` | Code (exit) |
+| --- | --- | --- |
+| Download did not complete | `tls`, `redirect_policy` (outside the reviewed route, another host, credentials in the location, more than three), `http_status` (any status but one complete `200`, `206` included), `proxy_auth` (`407`), `offline` (no connection, a dropped or stalled body), `size` (a declared or received size that differs from the review) | `DOWNLOAD_FAILED` (7) |
+| Bytes differ from the reviewed SHA-256, an imported file's size differs, or the verified contents or layout differ from the review | `digest_mismatch`, `size_mismatch`, `review_mismatch` | `INTEGRITY_FAILURE` (7) |
+| The artifact folder lacks the file, or it is a link or not a regular file | `artifact_missing`, `artifact_not_regular_file` | `INVALID_ARGUMENT` (2) |
+| Private managed storage failed (a full disk included); the previously selected version stays selected and usable | `storage` | `STORAGE_IO` (7) |
+| The reviewed tools failed their compatibility smoke on this machine | the smoke's reason | `MISSING_CAPABILITY` (2); `CANCELLED` (6) for `cancelled`, `STORAGE_IO` (7) for `preparation` |
+| Cancelled | `cancelled` | `CANCELLED` (6) |
+
+No error carries a URL, header, server text, path or credential; the downloads use
+the system proxy settings and send only the neutral user agent `VSift/0.1 managed
+setup`. With `--events jsonl`, `progress` events come before the terminal event:
+`fetching_artifact` (bytes of the artifact being downloaded or imported, with its
+reviewed total) and `installing_components` (components of the plan finished).
+
+**Lookup** of every tool since P13 PR 4: a per-call path (`setup check --ffmpeg`
+etc.), then the configured path, then the managed version `setup install` selected,
+then the filtered `PATH`; the model: configured, then managed. A managed version is
+used only when every file matches its manifest's size and SHA-256 and the selection
+names the manifest's SHA-256; a version that does not is never run, and lookup falls
+through to `PATH`. A job keeps the version it resolved in use for its whole life.
 
 ## Output protocol
 
@@ -1651,8 +1733,13 @@ verification and typed remediation metadata. The complete frozen example is
 an abbreviated response is:
 
 `lookup` is `explicit_path` for a path passed to this check,
-`configured_user_path` for an explicit per-user registration, or `filtered_path`
-for safe ambient discovery. `setup configure <ffmpeg|ffprobe|whisper>
+`configured_user_path` for an explicit per-user registration, `managed_version`
+for the version `setup install` selected (P13 PR 4), or `filtered_path` for safe
+ambient discovery. A missing tool's `remediation.managed_install` says whether managed
+installation can supply it on this host: `catalogue_accepted` (run `setup plan`, then
+`setup install`), `unavailable_target`, `unavailable_catalogue_expired` or
+`unavailable_catalogue_invalid` (renamed in place from the constant
+`unavailable_unqualified` by P13 PR 4). `setup configure <ffmpeg|ffprobe|whisper>
 --executable <absolute-path>` persistently registers a canonical user-managed
 file without executing it. It creates private per-user configuration under
 `LOCALAPPDATA/vsift` on Windows, `~/Library/Application Support/vsift` on macOS,
@@ -1711,7 +1798,7 @@ root keeps its existing 5-second wait for a creator) before it is refused.
   "verification_scope": "executable_probe_only",
   "local_asr_model": "not_checked",
   "dependencies": [
-    {"dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": {"reason": "missing", "managed_install": "unavailable_unqualified", "required_authority": "user", "next_step": "Install or locate a trusted FFmpeg executable, then rerun setup check.", "explicit_path_option": "--ffmpeg"}}
+    {"dependency": "ffmpeg", "capability": "media_processing", "status": "missing", "detail": null, "lookup": "filtered_path", "validation": "not_validated", "remediation": {"reason": "missing", "managed_install": "catalogue_accepted", "required_authority": "user", "next_step": "Install or locate a trusted FFmpeg executable, then rerun setup check.", "explicit_path_option": "--ffmpeg"}}
   ],
   "local_asr": {
     "model": {"status": "not_selected", "profile": null},
@@ -1762,7 +1849,7 @@ against `operation-response.schema.json`; evidence events validate against
 | 4 | retryable condition | `BUSY` |
 | 5 | deadline or resource limit | `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT` |
 | 6 | cancellation | `CANCELLED` |
-| 7 | storage or output I/O/integrity failure | `STORAGE_IO`, `INTEGRITY_FAILURE` |
+| 7 | storage, output I/O or integrity failure, or a managed download that did not complete | `STORAGE_IO`, `INTEGRITY_FAILURE`, `DOWNLOAD_FAILED` |
 
 Every machine error includes a stable code, safe message, retryability, optional retry
 delay, affected identifiers, and structured remediation. Evidence or provider text is

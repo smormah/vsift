@@ -186,7 +186,8 @@ pub struct AcceptedManagedCatalogue {
 /// Why managed actions are or are not available in a setup plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagedPlanAvailability {
-    /// This target has an accepted, unexpired catalogue; install is still reserved.
+    /// This target has an accepted, unexpired catalogue whose actions
+    /// `setup install` applies once the plan is accepted.
     Qualified,
     /// No changes are required by the current read-only observations.
     NotRequired,
@@ -203,7 +204,7 @@ impl ManagedPlanAvailability {
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
-            Self::Qualified => "catalogue_accepted_install_pending",
+            Self::Qualified => "catalogue_accepted",
             Self::NotRequired => "not_required",
             Self::TargetUnavailable => "unavailable_target",
             Self::CatalogueExpired => "unavailable_catalogue_expired",

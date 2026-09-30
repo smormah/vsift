@@ -2,8 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use vsift_application::{
-    LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedSetupAction, ManagedSetupPlan,
-    RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedSetupAction,
+    ManagedSetupPlan, RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition,
+    SetupProfile,
 };
 use vsift_domain::{
     DependencyState, DependencyStatus, FailureCode, ReviewedAsrModel, RuntimeDependency,
@@ -17,15 +18,18 @@ use crate::{
 
 /// Where the executable probed for one dependency came from.
 ///
-/// The host resolves the precedence (per-call path, then configured user path,
-/// then filtered `PATH`) because it owns argument parsing and configuration; the
-/// contract only fixes how that provenance is reported.
+/// The engine resolves the precedence (per-call path, then configured user
+/// path, then the managed version `setup install` selected, then filtered
+/// `PATH`); the contract only fixes how that provenance is reported.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DependencyLookup {
     /// An absolute path supplied for this one invocation.
     ExplicitPath,
     /// A path previously saved with `setup configure`.
     ConfiguredUserPath,
+    /// The version `setup install` selected in the private managed root,
+    /// opened only after every file matched its manifest's SHA-256 (P13).
+    ManagedVersion,
     /// A search of the filtered `PATH`.
     FilteredPath,
 }
@@ -37,6 +41,7 @@ impl DependencyLookup {
         match self {
             Self::ExplicitPath => "explicit_path",
             Self::ConfiguredUserPath => "configured_user_path",
+            Self::ManagedVersion => "managed_version",
             Self::FilteredPath => "filtered_path",
         }
     }
@@ -66,12 +71,15 @@ impl SetupCheckResponse {
     /// Creates the compatible setup response for the explicitly resolved profile.
     ///
     /// `lookup` reports, for each probed dependency, where its executable came
-    /// from; `local_asr` is the model and verification report.
+    /// from; `managed_install` is whether managed installation can supply a
+    /// missing dependency on this host (the availability `setup plan`
+    /// reports); `local_asr` is the model and verification report.
     #[must_use]
     pub fn new<F>(
         diagnosis: &RuntimeDiagnosis,
         profile: SetupProfile,
         lookup: F,
+        managed_install: ManagedPlanAvailability,
         local_asr: &LocalAsrSetupStatus,
     ) -> Self
     where
@@ -87,7 +95,13 @@ impl SetupCheckResponse {
             dependencies: diagnosis
                 .dependencies
                 .iter()
-                .map(|status| SetupCheckDependencyResponse::new(status, lookup(status.dependency)))
+                .map(|status| {
+                    SetupCheckDependencyResponse::new(
+                        status,
+                        lookup(status.dependency),
+                        managed_install,
+                    )
+                })
                 .collect(),
             local_asr: LocalAsrSetupResponse::new(*local_asr),
         }
@@ -165,7 +179,11 @@ struct SetupRemediationResponse {
 }
 
 impl SetupCheckDependencyResponse {
-    fn new(status: &DependencyStatus, lookup: DependencyLookup) -> Self {
+    fn new(
+        status: &DependencyStatus,
+        lookup: DependencyLookup,
+        managed_install: ManagedPlanAvailability,
+    ) -> Self {
         let detail = match &status.state {
             DependencyState::Available { version } => {
                 Some(sanitize_untrusted_text(version, MAX_PROVIDER_DETAIL_BYTES))
@@ -186,7 +204,7 @@ impl SetupCheckDependencyResponse {
             },
             remediation: (!status.state.is_available()).then_some(SetupRemediationResponse {
                 reason: status.state.identifier(),
-                managed_install: "unavailable_unqualified",
+                managed_install: managed_install.identifier(),
                 required_authority: "user",
                 next_step: manual_dependency_step(status.dependency),
                 explicit_path_option: explicit_path_option(status.dependency),
@@ -370,7 +388,7 @@ fn dependency_response(
         ),
         SetupDependencyDisposition::ManagedInstall => (
             Some("user"),
-            "Review the exact managed action and its digest. Setup install remains unavailable until the complete installer qualifies.",
+            "Review the exact managed action, then run setup install with this saved plan and its digest; a component already installed at this version is reported already_current.",
         ),
         SetupDependencyDisposition::ManualSelection => {
             (Some("user"), manual_plan_step(status.dependency))
@@ -395,7 +413,7 @@ fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse 
         SetupModelDisposition::ManagedInstall => (
             "missing",
             Some("user"),
-            "Review the exact managed model action and its digest. Setup install remains unavailable until the complete installer qualifies.",
+            "Review the exact managed model action, then run setup install with this saved plan and its digest; a model already installed at this version is reported already_current.",
         ),
         SetupModelDisposition::ManualSelection => (
             "missing",

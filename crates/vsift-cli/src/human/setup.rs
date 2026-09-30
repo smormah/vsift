@@ -3,8 +3,8 @@
 
 use vsift::{
     DependencyState, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
-    LocalAsrSetupStatus, LocalAsrVerificationSource, RuntimeDependency, RuntimeDiagnosis,
-    RuntimeReadiness,
+    LocalAsrSetupStatus, LocalAsrVerificationSource, ManagedPlanAvailability, RuntimeDependency,
+    RuntimeDiagnosis, RuntimeReadiness,
 };
 use vsift_contract::{
     DependencyLookup, MAX_PROVIDER_DETAIL_BYTES, explicit_path_option, sanitize_untrusted_text,
@@ -13,7 +13,10 @@ use vsift_contract::{
 use super::{
     push_outcome,
     text::{DisplayText, Placement, RenderedText, TerminalText, TooLarge},
-    view::{ConfiguredModel, ConfiguredSelection, Envelope, PlanModel, PlanStep, SetupPlan},
+    view::{
+        ConfiguredModel, ConfiguredSelection, Envelope, InstallComponent, PlanModel, PlanStep,
+        SetupInstall, SetupPlan,
+    },
 };
 use crate::command::ExecutionProfile;
 
@@ -25,6 +28,7 @@ use crate::command::ExecutionProfile;
 pub(crate) fn setup_check<L>(
     diagnosis: &RuntimeDiagnosis,
     local_asr: LocalAsrSetupStatus,
+    managed_install: ManagedPlanAvailability,
     profile: ExecutionProfile,
     lookup: &L,
 ) -> Result<RenderedText, TooLarge>
@@ -70,6 +74,7 @@ where
         text.push_fixed(match provenance {
             DependencyLookup::ExplicitPath => " [per-call path]",
             DependencyLookup::ConfiguredUserPath => " [configured user path]",
+            DependencyLookup::ManagedVersion => " [managed version]",
             DependencyLookup::FilteredPath => " [filtered PATH]",
         })
         .end_line();
@@ -79,7 +84,12 @@ where
                  path using ",
             )
             .push_value(explicit_path_option(status.dependency))
-            .push_fixed(". Managed installation is not yet qualified for this target.")
+            .push_fixed(if managed_install == ManagedPlanAvailability::Qualified {
+                ". Or let VSift install the reviewed build: review setup plan, then accept it \
+                 with setup install."
+            } else {
+                ". Managed installation is not available for this target."
+            })
             .end_line();
         }
     }
@@ -253,6 +263,68 @@ pub(super) fn plan(envelope: &Envelope<SetupPlan>) -> Result<RenderedText, TooLa
     }
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// `setup install`: each component of the accepted plan with what happened
+/// to it, on a success and (on stdout, before the error on stderr) on a
+/// failure. Every value is a closed identifier or a reviewed version.
+pub(super) fn install(envelope: &Envelope<SetupInstall>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("VSift setup install").end_line();
+    if let Some(revision) = &data.catalogue_revision {
+        text.push_fixed("Catalogue: ")
+            .push_value(revision)
+            .end_line();
+    }
+    text.push_fixed("Source: ")
+        .push_value(&data.source)
+        .end_line();
+    if data.components.is_empty() {
+        text.push_fixed("No component needed installing.")
+            .end_line();
+    }
+    for component in &data.components {
+        push_component(&mut text, component);
+    }
+    text.push_fixed("Next: ")
+        .push_value(&data.next_step)
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+fn push_component(text: &mut TerminalText, component: &InstallComponent) {
+    text.push_fixed("[")
+        .push_value(&component.status)
+        .push_fixed("] ")
+        .push_value(&component.component)
+        .push_fixed(" ")
+        .push_value(&component.version);
+    if let Some(reason) = &component.reason {
+        text.push_fixed(": ");
+        if let Some(step) = &component.step {
+            text.push_value(step).push_fixed(" ");
+        }
+        if let Some(check) = &component.smoke_check {
+            text.push_fixed("(")
+                .push_value(check)
+                .push_fixed(" check) ");
+        }
+        text.push_value(reason);
+        if let Some(code) = &component.failure_code {
+            text.push_fixed(", ").push_value(code);
+        }
+    }
+    if let Some(stage) = &component.stage
+        && component.status != "activated"
+    {
+        text.push_fixed("; stage ").push_value(stage);
+        if let Some(reason) = &component.retention_reason {
+            text.push_fixed(" (").push_value(reason).push_fixed(")");
+        }
+    }
+    text.end_line();
 }
 
 /// Writes a planned step: status, disposition, authority, then its next

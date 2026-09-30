@@ -55,6 +55,7 @@ use vsift_infrastructure::{
 use crate::{
     engine::Engine,
     error::{EngineError, ExecutableRejection, SessionRootError, job_failure_code},
+    managed::ManagedLookup,
     progress::ProgressObserver,
     sessions::SessionSnapshot,
     verification::Cancellation,
@@ -541,8 +542,15 @@ impl Engine {
             return Ok(SelectedRecognizer::Host(host));
         }
         let store = self.user_configuration()?;
-        let executable = resolve_whisper(store.read()?.whisper)?;
-        let model = store.read_model()?.ok_or(EngineError::ModelNotSelected)?;
+        let mut managed = self.managed_lookup();
+        let executable = resolve_recognizer(&mut managed, store.read()?.whisper)?;
+        let (model, executable) = if let Some(model) = store.read_model()? {
+            (model, executable)
+        } else {
+            let managed = managed.model().ok_or(EngineError::ModelNotSelected)?;
+            // The recognizer keeps the managed model's version in use.
+            (managed.path, executable.retaining(managed.hold))
+        };
         Ok(SelectedRecognizer::Whisper(
             self.whisper_recognizer(executable, &model, capacity)?,
         ))
@@ -701,6 +709,21 @@ impl LocalAsrPreflight {
             self.state.lookup(fingerprint, self.now) == CachedMediaToolVerification::Verified
         })
     }
+}
+
+/// Resolves the whisper.cpp CLI: `configured` when given, otherwise the
+/// managed version (with its hold), otherwise `whisper-cli` on the filtered
+/// `PATH`.
+pub(crate) fn resolve_recognizer(
+    managed: &mut ManagedLookup<'_>,
+    configured: Option<PathBuf>,
+) -> Result<TrustedExecutable, EngineError> {
+    if configured.is_none()
+        && let Some(executable) = managed.executable(RuntimeDependency::Whisper)
+    {
+        return Ok(executable);
+    }
+    resolve_whisper(configured)
 }
 
 /// Resolves the whisper.cpp CLI: `selected` when given, otherwise

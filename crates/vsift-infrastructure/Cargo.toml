@@ -24,6 +24,13 @@ fault-injection = []
 # governance check, anywhere but a development dependency or the campaign
 # tool's own non-default feature.
 durability-campaign = []
+# P13 managed-install test hooks: a loopback publisher route (a local test
+# server on 127.0.0.1, optionally through an explicit proxy) and an injected
+# stage-write failure for the disk-full case. The route bypasses the
+# reviewed catalogue's trust anchor, so it is development only, like
+# fault-injection: the crate refuses to compile it without debug assertions,
+# and the governance check refuses it anywhere but a development dependency.
+install-test-hooks = []
 
 # A standard-library-only stand-in for FFmpeg, FFprobe and whisper-cli that the
 # P13 compatibility-smoke tests stage and run (tests/p13_smoke_executor.rs,
@@ -38,12 +45,23 @@ test = false
 doc = false
 bench = false
 
+# The P13 transaction tests drive the real transport through the
+# development-only loopback route (install-test-hooks). They build whenever a
+# workspace test run enables the feature (the engine crate's development
+# dependency does), and a release-mode run of this crate alone, which the
+# feature would refuse, skips them. Run them alone with
+# `cargo test -p vsift-infrastructure --features install-test-hooks --test p13_install_transaction`.
+[[test]]
+name = "p13_install_transaction"
+required-features = ["install-test-hooks"]
+
 [dependencies]
 cap-fs-ext.workspace = true
 cap-std.workspace = true
 flate2.workspace = true
 getrandom.workspace = true
 lzma-rust2.workspace = true
+native-tls.workspace = true
 process-wrap.workspace = true
 reqwest.workspace = true
 serde.workspace = true

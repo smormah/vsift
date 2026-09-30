@@ -28,14 +28,14 @@ use std::{
 };
 
 use vsift_application::{
-    CompatibilitySmokeCheck, CompatibilitySmokeFailureReason, ManagedSetupAction,
+    CompatibilitySmokeCheck, CompatibilitySmokeFailureReason, ManagedSetupAction, NoProgress,
     SmokeStageOutcome, StageDisposal, smoke_before_activation,
 };
 use vsift_domain::ManagedTarget;
 use vsift_infrastructure::{
-    HostIsolation, ManagedArtifactStore, ProcessCancellation, PublisherTransferCancellation,
-    ReviewedFixtureVerifiers, ReviewedUbuntuAction, SmokeCompanions, StagedCompatibilitySmoke,
-    accepted_ubuntu_catalogue, detect_managed_target, download_reviewed_publisher_artifact,
+    HostIsolation, ManagedArtifactStore, ProcessCancellation, ReviewedFixtureVerifiers,
+    ReviewedUbuntuAction, SmokeCompanions, StagedCompatibilitySmoke, accepted_ubuntu_catalogue,
+    detect_managed_target, download_reviewed_publisher_artifact,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -84,7 +84,8 @@ async fn pinned_ubuntu_tools_pass_the_smoke_before_activation() -> TestResult {
         let staged = download_reviewed_publisher_artifact(
             &store,
             reviewed.publisher_source(),
-            &PublisherTransferCancellation::new(),
+            &ProcessCancellation::new(),
+            &NoProgress,
         )
         .await?;
         println!(

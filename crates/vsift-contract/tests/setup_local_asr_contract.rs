@@ -12,7 +12,7 @@ use serde_json::Value;
 use vsift_application::{
     AsrFailure, AsrFailureReason, AsrStage, LocalAsrCheckFailure, LocalAsrCheckOutcome,
     LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, LocalAsrVerificationFailure,
-    LocalAsrVerificationSource, RuntimeDiagnosis, SetupProfile,
+    LocalAsrVerificationSource, ManagedPlanAvailability, RuntimeDiagnosis, SetupProfile,
 };
 use vsift_contract::{DependencyLookup, SetupCheckResponse};
 use vsift_domain::{
@@ -93,6 +93,7 @@ fn response(local_asr: LocalAsrSetupStatus) -> Result<Value, serde_json::Error> 
         &diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         SetupProfile::Desktop,
         |_| DependencyLookup::FilteredPath,
+        ManagedPlanAvailability::Qualified,
         &local_asr,
     ))
 }
@@ -165,6 +166,7 @@ fn a_verified_setup_matches_the_frozen_example() -> TestResult {
         &report,
         SetupProfile::Desktop,
         |_| DependencyLookup::ConfiguredUserPath,
+        ManagedPlanAvailability::Qualified,
         &LocalAsrSetupStatus {
             model: LocalAsrModelStatus::KnownPinned(ReviewedAsrModel::Base),
             verification: LocalAsrCheckOutcome::Verified(LocalAsrVerificationSource::RanNow),

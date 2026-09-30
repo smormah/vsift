@@ -3,7 +3,7 @@ Profile: desktop
 Readiness: blocked
 Target: ubuntu_24_04_x86_64
 Verification: executable_probe_and_reviewed_catalogue
-Managed installation: catalogue_accepted_install_pending
+Managed installation: catalogue_accepted
 Catalogue: 2026-09-20.1 (no new plans after 2026-12-31T00:00:00Z)
 Plan digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 

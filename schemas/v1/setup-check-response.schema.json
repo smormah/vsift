@@ -114,7 +114,7 @@
           "dependency": { "enum": ["ffmpeg", "ffprobe", "whisper"] },
           "capability": { "enum": ["media_processing", "transcription"] },
           "status": { "enum": ["available", "missing", "unhealthy", "timed_out"] },
-          "lookup": { "enum": ["explicit_path", "configured_user_path", "filtered_path"] },
+          "lookup": { "enum": ["explicit_path", "configured_user_path", "managed_version", "filtered_path"] },
           "validation": { "enum": ["executable_probe_only", "not_validated"] },
           "remediation": {
             "oneOf": [
@@ -125,7 +125,7 @@
                 "required": ["reason", "managed_install", "required_authority", "next_step", "explicit_path_option"],
                 "properties": {
                   "reason": { "enum": ["missing", "unhealthy", "timed_out"] },
-                  "managed_install": { "const": "unavailable_unqualified" },
+                  "managed_install": { "enum": ["catalogue_accepted", "unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] },
                   "required_authority": { "const": "user" },
                   "next_step": { "type": "string", "maxLength": 240 },
                   "explicit_path_option": { "enum": ["--ffmpeg", "--ffprobe", "--whisper"] }

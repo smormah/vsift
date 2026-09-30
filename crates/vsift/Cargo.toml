@@ -21,9 +21,15 @@ vsift-infrastructure.workspace = true
 [dev-dependencies]
 jsonschema.workspace = true
 serde_json.workspace = true
+# Already workspace dependencies; the managed-lookup test (engine_managed_lookup)
+# publishes small fixture versions into a test managed root with them.
+sha2.workspace = true
+tar.workspace = true
 # The worker request kill test (engine_worker) stops its child at the
-# request fault points; development builds only, never a release.
-vsift-infrastructure = { workspace = true, features = ["fault-injection"] }
+# request fault points, and a workspace test run builds the infrastructure
+# crate's P13 transaction tests with the loopback publisher route
+# (install-test-hooks); development builds only, never a release.
+vsift-infrastructure = { workspace = true, features = ["fault-injection", "install-test-hooks"] }
 
 [lints]
 workspace = true

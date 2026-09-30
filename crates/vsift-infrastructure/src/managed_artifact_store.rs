@@ -270,10 +270,15 @@ impl fmt::Display for ManagedArtifactError {
 
 impl Error for ManagedArtifactError {}
 
-/// A per-user root which can only hold unactivated staging in this P06 increment.
+/// The private per-user managed root: owned staging, immutable published
+/// versions and the pointer that selects one version per component.
 #[derive(Clone, Debug)]
 pub struct ManagedArtifactStore {
     root_path: PathBuf,
+    /// Development builds only: a stage write fails once this many bytes
+    /// are written, as a full disk would (the D-03 disk-full case).
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    stage_write_limit: Option<u64>,
 }
 
 /// Exclusive root-wide authority for one managed installation transaction.
@@ -330,7 +335,30 @@ impl ManagedArtifactStore {
         ) {
             return Err(ManagedArtifactError::Unavailable);
         }
-        Ok(Self { root_path })
+        Ok(Self {
+            root_path,
+            #[cfg(any(test, feature = "install-test-hooks"))]
+            stage_write_limit: None,
+        })
+    }
+
+    /// The absolute root this store manages.
+    #[must_use]
+    pub fn root_path(&self) -> &Path {
+        &self.root_path
+    }
+
+    /// Makes every streamed stage write fail with an I/O error once `bytes`
+    /// have been written, as a full disk would.
+    ///
+    /// Development builds only (`install-test-hooks`): the D-03 disk-full
+    /// test uses it to prove that a failed stage leaves the selected version
+    /// untouched.
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    #[must_use]
+    pub const fn with_stage_write_failure_after(mut self, bytes: u64) -> Self {
+        self.stage_write_limit = Some(bytes);
+        self
     }
 
     /// Tries to serialize one managed installation transaction for this root.
@@ -578,7 +606,7 @@ impl ManagedArtifactStore {
         let removing = directory
             .try_exists(VERSION_REMOVING)
             .map_err(|_| ManagedRuntimePublicationError::Storage(ManagedArtifactError::Io))?;
-        validate_version_contents(&directory, &files, removing)
+        validate_version_contents(&directory, &files, removing, ContentCheck::LayoutAndBytes)
             .map_err(ManagedRuntimePublicationError::Storage)?;
         let use_lock = match try_exclusive_version_use(&directory, removing)? {
             ExclusiveVersionUse::Acquired(lock) => lock,
@@ -592,7 +620,7 @@ impl ManagedArtifactStore {
                 .map_err(ManagedRuntimePublicationError::Storage)?;
         }
         drop(use_lock);
-        validate_version_contents(&directory, &files, true)
+        validate_version_contents(&directory, &files, true, ContentCheck::LayoutAndBytes)
             .map_err(ManagedRuntimePublicationError::Storage)?;
         remove_managed_version_files(&directory, &files, fault)
             .map_err(ManagedRuntimePublicationError::Storage)?;
@@ -647,6 +675,9 @@ impl ManagedArtifactStore {
             staged,
             file: tokio::fs::File::from_std(file.into_std()),
             verifier: StreamingArtifactVerifier::new(integrity),
+            written: 0,
+            #[cfg(any(test, feature = "install-test-hooks"))]
+            write_limit: self.stage_write_limit,
         })
     }
 
@@ -719,6 +750,9 @@ pub(crate) struct StreamingManagedArtifact {
     staged: StagedManagedArtifact,
     file: tokio::fs::File,
     verifier: StreamingArtifactVerifier,
+    written: u64,
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    write_limit: Option<u64>,
 }
 
 impl StreamingManagedArtifact {
@@ -726,10 +760,17 @@ impl StreamingManagedArtifact {
         self.verifier
             .accept(chunk)
             .map_err(ManagedArtifactError::Transfer)?;
+        let written = self.written.saturating_add(chunk.len() as u64);
+        #[cfg(any(test, feature = "install-test-hooks"))]
+        if self.write_limit.is_some_and(|limit| written > limit) {
+            return Err(ManagedArtifactError::Io);
+        }
         self.file
             .write_all(chunk)
             .await
-            .map_err(|_| ManagedArtifactError::Io)
+            .map_err(|_| ManagedArtifactError::Io)?;
+        self.written = written;
+        Ok(())
     }
 
     pub(crate) async fn finish(&mut self) -> Result<(), ManagedArtifactError> {
@@ -2075,6 +2116,85 @@ impl StagedManagedCandidate {
     }
 }
 
+impl StagedManagedCandidate {
+    /// Publishes this candidate's runtime as the immutable version
+    /// `identity` and atomically selects it, then removes the rest of the
+    /// stage (payload, smoke directory, verified artifact and marker).
+    ///
+    /// The caller must hold the installation guard for the same root and
+    /// must have run the compatibility smoke over this candidate: this
+    /// operation carries no plan or compatibility authority. Every runtime
+    /// file is rechecked against its review before the rename.
+    ///
+    /// Returns the publication's result and what cleanup did with the rest
+    /// of the stage; a failed publication leaves the selected version as it
+    /// was.
+    pub fn publish_and_select(
+        self,
+        guard: &ManagedInstallGuard,
+        identity: &ManagedRuntimeIdentity,
+    ) -> (
+        Result<PublishedManagedRuntime, ManagedRuntimePublicationError>,
+        StageDisposal,
+    ) {
+        let Self {
+            artifact,
+            component,
+            roles,
+            payload,
+            selected,
+            runtime,
+            files,
+        } = self;
+        let Some(payload) = payload else {
+            let rest = Self {
+                artifact,
+                component,
+                roles,
+                payload: None,
+                selected,
+                runtime,
+                files,
+            };
+            return (
+                Err(ManagedRuntimePublicationError::Storage(
+                    ManagedArtifactError::UnsafeStorage,
+                )),
+                rest.discard(),
+            );
+        };
+        let view = StagedManagedPayload {
+            artifact: &artifact,
+            payload,
+            selected,
+        };
+        let mut prepared = PreparedManagedRuntime {
+            payload: &view,
+            runtime,
+            files,
+        };
+        let published = prepared.publish_and_select(guard, identity);
+        let RuntimeParts {
+            directory: runtime,
+            files,
+        } = prepared.into_parts();
+        let PayloadParts {
+            directory: payload,
+            selected,
+        } = view.into_parts();
+        let rest = Self {
+            artifact,
+            component,
+            roles,
+            payload: Some(payload),
+            selected,
+            runtime,
+            files,
+        };
+        (published, rest.discard())
+    }
+}
+
 impl StagedManagedComponent for StagedManagedCandidate {
     fn component(&self) -> ManagedComponent {
         self.component
@@ -2153,11 +2273,27 @@ fn ownership_fault(error: &ManagedArtifactError) -> RuntimeFault {
 }
 
 /// Held, revalidated capability for one immutable published runtime version.
+///
+/// While it lives, the version's shared use lock is held, so the version
+/// cannot be removed; a host keeps it for as long as it runs the version's
+/// executables (a job for its whole life).
 pub struct PublishedManagedRuntime {
     identity: ManagedRuntimeIdentity,
     directory: Dir,
+    directory_path: PathBuf,
     files: Vec<PublishedRuntimeFile>,
+    manifest_sha256: String,
     _use_lock: HeldFileLock,
+}
+
+impl fmt::Debug for PublishedManagedRuntime {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PublishedManagedRuntime")
+            .field("identity", &self.identity)
+            .field("manifest_sha256", &self.manifest_sha256)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PublishedManagedRuntime {
@@ -2171,6 +2307,28 @@ impl PublishedManagedRuntime {
     #[must_use]
     pub fn reviewed_names(&self) -> Vec<&str> {
         self.files.iter().map(|file| file.name.as_str()).collect()
+    }
+
+    /// The absolute path of one reviewed file of this version, for running
+    /// it by explicit path; `None` for a name outside the version.
+    ///
+    /// Every file's size and SHA-256 matched the version manifest when this
+    /// capability was opened, and the manifest's own SHA-256 matched the
+    /// selection pointer, so the version is identified by digest, not by
+    /// path (known limit L-006).
+    #[must_use]
+    pub fn file_path(&self, name: &str) -> Option<PathBuf> {
+        self.files
+            .iter()
+            .any(|file| file.name == name)
+            .then(|| self.directory_path.join(name))
+    }
+
+    /// The SHA-256 of the version manifest, which names every file's size,
+    /// SHA-256 and mode: the version's content identity.
+    #[must_use]
+    pub fn manifest_sha256(&self) -> &str {
+        &self.manifest_sha256
     }
 
     /// Opens and rehashes one reviewed runtime file without following links.
@@ -2476,13 +2634,15 @@ fn open_published_runtime_from_manifest(
     let directory = versions.open_dir_nofollow(&version_name).map_err(|_| {
         ManagedRuntimePublicationError::Storage(ManagedArtifactError::UnsafeStorage)
     })?;
-    validate_private_root(&root_path.join(VERSIONS).join(&version_name), &directory)
+    let directory_path = root_path.join(VERSIONS).join(&version_name);
+    validate_private_root(&directory_path, &directory)
         .map_err(map_private_error)
         .map_err(ManagedRuntimePublicationError::Storage)?;
     let manifest =
         read_private_regular_file(&directory, VERSION_MANIFEST, MAX_VERSION_METADATA_BYTES)
             .map_err(ManagedRuntimePublicationError::Storage)?;
-    if expected_manifest_sha256.is_some_and(|expected| sha256_hex(&manifest) != expected) {
+    let manifest_sha256 = sha256_hex(&manifest);
+    if expected_manifest_sha256.is_some_and(|expected| manifest_sha256 != expected) {
         return Err(ManagedRuntimePublicationError::Storage(
             ManagedArtifactError::UnsafeStorage,
         ));
@@ -2493,7 +2653,9 @@ fn open_published_runtime_from_manifest(
             ManagedArtifactError::UnsafeStorage,
         ));
     }
-    validate_published_contents(&directory, &files)
+    // The names, kinds and modes first; the bytes are hashed once, after
+    // the use lock is held, so a version is never hashed twice per open.
+    validate_version_contents(&directory, &files, false, ContentCheck::Layout)
         .map_err(ManagedRuntimePublicationError::Storage)?;
     let use_lock =
         open_version_use_lock(&directory).map_err(ManagedRuntimePublicationError::Storage)?;
@@ -2510,7 +2672,9 @@ fn open_published_runtime_from_manifest(
     Ok(PublishedManagedRuntime {
         identity,
         directory,
+        directory_path,
         files,
+        manifest_sha256,
         _use_lock: use_lock,
     })
 }
@@ -2519,13 +2683,23 @@ fn validate_published_contents(
     directory: &Dir,
     files: &[PublishedRuntimeFile],
 ) -> Result<(), ManagedArtifactError> {
-    validate_version_contents(directory, files, false)
+    validate_version_contents(directory, files, false, ContentCheck::LayoutAndBytes)
+}
+
+/// How much of a published version a check reads.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ContentCheck {
+    /// Names, kinds, link counts, modes and markers only.
+    Layout,
+    /// The layout and every file's size and SHA-256.
+    LayoutAndBytes,
 }
 
 fn validate_version_contents(
     directory: &Dir,
     files: &[PublishedRuntimeFile],
     allow_removing: bool,
+    check: ContentCheck,
 ) -> Result<(), ManagedArtifactError> {
     let mut observed = HashSet::with_capacity(files.len() + 3);
     for entry in directory.entries().map_err(|_| ManagedArtifactError::Io)? {
@@ -2568,6 +2742,9 @@ fn validate_version_contents(
     }
     if allow_removing {
         check_marker(directory, VERSION_REMOVING, REMOVING_IDENTITY)?;
+    }
+    if check == ContentCheck::Layout {
+        return Ok(());
     }
     for reviewed in files {
         if allow_removing

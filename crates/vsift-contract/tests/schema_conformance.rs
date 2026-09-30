@@ -10,7 +10,8 @@ use std::{fs, io, path::PathBuf};
 use serde_json::Value;
 use vsift_application::{
     LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus,
-    RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup,
+    ManagedPlanAvailability, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    plan_managed_setup,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
@@ -97,7 +98,7 @@ fn status(state: SessionState) -> StatusData {
 #[test]
 fn failure_envelope_matches_the_frozen_example() -> TestResult {
     let response = serde_json::to_value(OperationResponse::failure(
-        "setup.install",
+        "setup.repair",
         FailureCode::CommandNotImplemented,
     ))?;
 
@@ -109,7 +110,7 @@ fn failure_envelope_matches_the_frozen_example() -> TestResult {
 #[test]
 fn terminal_event_matches_the_frozen_example() -> TestResult {
     let event = serde_json::to_value(TerminalEventResponse::new(OperationResponse::failure(
-        "setup.install",
+        "setup.repair",
         FailureCode::CommandNotImplemented,
     )))?;
 
@@ -148,6 +149,7 @@ fn blocked_setup_check_matches_the_frozen_example() -> TestResult {
         &diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         SetupProfile::Desktop,
         |_| DependencyLookup::FilteredPath,
+        ManagedPlanAvailability::Qualified,
         &NOTHING_REGISTERED,
     ))?;
 
@@ -169,6 +171,7 @@ fn ready_setup_check_reports_sanitized_detail_and_lookup_provenance() -> TestRes
             RuntimeDependency::Ffprobe => DependencyLookup::ConfiguredUserPath,
             RuntimeDependency::Whisper => DependencyLookup::FilteredPath,
         },
+        ManagedPlanAvailability::Qualified,
         &NOTHING_REGISTERED,
     ))?;
 

@@ -2085,6 +2085,8 @@ version = "0.1.0"
 dependencies = [
  "jsonschema",
  "serde_json",
+ "sha2",
+ "tar",
  "tokio",
  "vsift-application",
  "vsift-contract",
@@ -2195,6 +2197,7 @@ dependencies = [
  "getrandom 0.4.3",
  "jsonschema",
  "lzma-rust2",
+ "native-tls",
  "process-wrap",
  "proptest",
  "reqwest",

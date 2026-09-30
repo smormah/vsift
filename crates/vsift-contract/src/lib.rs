@@ -102,6 +102,7 @@ mod events;
 mod evidence;
 mod handoff;
 mod input;
+mod install;
 mod job;
 mod local_asr;
 mod navigation;
@@ -172,6 +173,11 @@ pub use handoff::{
     MAX_RESUME_CARD_BYTES, STANDARD_BUDGET, budget_profile, extract_handoff_block,
     handoff_is_cut_short, handoff_pattern_has_message, handoff_report_text_findings,
     handoff_vocabulary,
+};
+pub use install::{
+    ARTIFACT_DIRECTORY_REMEDIATION, InstallSource, MANAGED_INSTALL_BUSY_REMEDIATION,
+    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION, STALE_PLAN_REMEDIATION,
+    SetupInstallResponse, setup_install_failure_summary,
 };
 pub use job::{
     JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,

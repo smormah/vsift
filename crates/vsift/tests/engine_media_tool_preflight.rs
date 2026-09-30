@@ -29,9 +29,10 @@ use tokio::sync::Barrier;
 use vsift::{
     Cancellation, Clock, ClockError, Engine, EngineConfig, EngineError, EnginePorts, FailureCode,
     HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
-    MAX_SESSION_ROOT_WAIT, MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure,
-    MediaToolVerification, MediaToolVerifier, OpenSessionError, OperationId, RuntimeDependency,
-    SessionId, SessionRootLocation, SuppliedTranscriptRequest, UserConfigurationLocation,
+    MAX_SESSION_ROOT_WAIT, ManagedRootLocation, MediaToolCheck, MediaToolFailure,
+    MediaToolPreflightFailure, MediaToolVerification, MediaToolVerifier, OpenSessionError,
+    OperationId, RuntimeDependency, SessionId, SessionRootLocation, SuppliedTranscriptRequest,
+    UserConfigurationLocation,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -197,6 +198,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(self.sessions()),
                 user_configuration: UserConfigurationLocation::Explicit(self.root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(self.root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             ports,

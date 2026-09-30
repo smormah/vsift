@@ -33,6 +33,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   packaged for crates.io until that is resolved. L-085 records the
   mitigation; the compact-tier re-run (#222) follows.
 
+- **`setup install`: the guarded managed-install transaction** (P13 PR 4, installer
+  resume steps 3 and 4; Ubuntu 24.04 x86-64 only). `setup install --plan <file>
+  --accept-plan <digest> [--artifact-dir <absolute folder>]` takes the managed root's
+  install guard without waiting (`BUSY` when held), rebuilds and revalidates the plan,
+  then installs its components in order (media tools, whisper.cpp CLI, model): each is
+  downloaded from its reviewed publisher over HTTPS (or imported from the folder by the
+  catalogue's file name) with the exact size and SHA-256 checked as the bytes arrive,
+  staged, smoked with PR 3's smoke (the CLI and its model together) and published and
+  selected on its own. A component already selected at the plan's version is
+  `already_current`; the first failure stops the transaction and a rerun of the same
+  command continues from there. There is no resume: an interrupted download restarts at
+  byte zero, no `Range` header is sent and `206` is refused. Ctrl-C cancels it and
+  discards the stage in progress. The result lists every component (`activated`,
+  `already_current`, `failed` with its step and typed reason, and the stage's disposal),
+  also beside the error of a failed install; `--events jsonl` adds `progress`
+  (`fetching_artifact` in bytes, `installing_components` in components); human mode
+  lists the components. New failure code **`DOWNLOAD_FAILED`** (exit 7) with the reasons
+  `tls`, `redirect_policy`, `http_status`, `proxy_auth`, `offline` and `size`; a digest
+  mismatch is `INTEGRITY_FAILURE`, a failed smoke `MISSING_CAPABILITY`. New schema
+  `setup-install.schema.json` with frozen examples.
+- **The managed tier in every tool lookup** (P13 PR 4). Tools resolve as per-call path,
+  configured path, the managed version `setup install` selected, then the filtered
+  `PATH` (the model: configured, then managed); `setup check` reports `lookup:
+  managed_version`. A managed version runs only after every file matches its manifest's
+  SHA-256 (L-006 no longer applies to managed tools), and a job holds its version's use
+  lock for its whole life, so an update never removes a version in use. Library hosts
+  set the root with `EngineConfig::managed_root`.
+- **Opt-in real install** (P13 PR 4): the manual workflow `P13 managed smoke` gains the
+  job `managed-install`, which runs `setup plan`, `setup install`, `setup check` and a
+  rerun through the release binary on a hosted Ubuntu 24.04 runner
+  (`p13_managed_install_real`).
+
 - **Readable terminal text, part 2** (P13 PR 2b; closes L-073). Without `--json` or
   `--events`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`, `job
   status/resume/cancel` and the worker hosts `job run` and `job batch` now print
@@ -780,6 +812,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Setup contract values edited in place before any publication** (P13 PR 4, ADR 0008
+  note): the setup-check remediation's `managed_install` takes `catalogue_accepted`,
+  `unavailable_target`, `unavailable_catalogue_expired` or
+  `unavailable_catalogue_invalid` instead of the constant `unavailable_unqualified`; the
+  setup-plan availability `catalogue_accepted_install_pending` is renamed
+  `catalogue_accepted`; exit 7 now also covers a managed download. An unreadable
+  `setup install --plan` is `STORAGE_IO` (was `COMMAND_NOT_IMPLEMENTED`). The frozen
+  reserved-command examples use `setup.repair`. Known limits: L-006 narrowed to tools
+  VSift does not manage; L-037 rewritten (lifecycle commands still reserved); new
+  L-086 (`setup plan` does not show managed versions), L-087 (managed versions are
+  rehashed per command) and L-088 (tunnel proxy authentication is recognised by a
+  dependency's error text).
 - SEC-T01 is met for P11 by non-adversarial evidence (the strict-Linux attestation
   checks and the hardened `strict-worker-boundary` container controls), by maintainer
   decision of 2026-09-28; the adversarial containment evidence is technical debt,

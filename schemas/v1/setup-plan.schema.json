@@ -30,7 +30,7 @@
             "next_step": { "$ref": "#/$defs/step" }
           }
         },
-        "managed_install": { "enum": ["catalogue_accepted_install_pending", "not_required", "unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] },
+        "managed_install": { "enum": ["catalogue_accepted", "not_required", "unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] },
         "catalogue_revision": { "type": ["string", "null"], "maxLength": 128 },
         "stop_new_plans_at": { "type": ["string", "null"], "maxLength": 32 },
         "plan_digest": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9a-f]{64}$" }] },
@@ -51,7 +51,7 @@
         }
       },
       "allOf": [
-        { "if": { "properties": { "managed_install": { "enum": ["catalogue_accepted_install_pending", "not_required"] } } }, "then": { "properties": { "plan_digest": { "type": "string" }, "catalogue_revision": { "type": "string" }, "stop_new_plans_at": { "type": "string" } } } },
+        { "if": { "properties": { "managed_install": { "enum": ["catalogue_accepted", "not_required"] } } }, "then": { "properties": { "plan_digest": { "type": "string" }, "catalogue_revision": { "type": "string" }, "stop_new_plans_at": { "type": "string" } } } },
         { "if": { "properties": { "managed_install": { "enum": ["unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] } } }, "then": { "properties": { "plan_digest": { "type": "null" }, "actions": { "maxItems": 0 } } } }
       ]
     },

@@ -64,7 +64,8 @@ use jsonschema::{Retrieve, Uri};
 use serde_json::{Value, json};
 use vsift::{
     Cancellation, CandidatesRange, CandidatesRequest, CoverageGapReason, Engine, EngineConfig,
-    EnginePorts, HostIsolation, IngestRequest, SessionRootLocation, UserConfigurationLocation,
+    EnginePorts, HostIsolation, IngestRequest, ManagedRootLocation, SessionRootLocation,
+    UserConfigurationLocation,
 };
 use vsift_infrastructure::{ExecutableResolver, TrustedExecutable};
 
@@ -819,6 +820,7 @@ async fn budget_stage(root: &OwnedRoot, tools: &MediaTools) -> StageResult {
         EngineConfig {
             session_root: SessionRootLocation::Explicit(base.join("sessions")),
             user_configuration: UserConfigurationLocation::Explicit(base.join("engine-config")),
+            managed_root: ManagedRootLocation::Explicit(base.join("engine-managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::system().with_visual_window_budget(NonZeroUsize::MIN),

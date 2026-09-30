@@ -15,7 +15,7 @@ pub enum FailureClass {
     Limit,
     /// Caller or host cancellation won the terminal transition.
     Cancelled,
-    /// Storage, integrity, or output I/O prevented success.
+    /// Storage, integrity, output I/O or a managed download prevented success.
     StorageOrIo,
 }
 
@@ -53,6 +53,13 @@ pub enum FailureCode {
     /// cannot help until the caller sends a new operation id or the original
     /// request.
     IdempotencyConflict,
+    /// A managed-installation download from the reviewed publisher failed
+    /// before its bytes could be verified (ADR 0023 decision H3): TLS, a
+    /// refused redirect, an HTTP status, proxy authentication, no network or
+    /// a size that differs from the review. The typed reason is in the
+    /// result's data; bytes that arrive but differ from the reviewed digest
+    /// are [`FailureCode::IntegrityFailure`].
+    DownloadFailed,
 }
 
 impl FailureCode {
@@ -61,7 +68,7 @@ impl FailureCode {
     /// Contract tests iterate this list to prove each identifier is published in
     /// the v1 schemas. An exhaustive private `ordinal` match and a compile-time
     /// assertion keep it in step with the variants.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Internal,
         Self::InvalidArgument,
         Self::UnsupportedSchema,
@@ -76,6 +83,7 @@ impl FailureCode {
         Self::StorageIo,
         Self::IntegrityFailure,
         Self::IdempotencyConflict,
+        Self::DownloadFailed,
     ];
 
     /// Returns the variant's position in [`FailureCode::ALL`].
@@ -102,6 +110,7 @@ impl FailureCode {
             Self::StorageIo => 11,
             Self::IntegrityFailure => 12,
             Self::IdempotencyConflict => 13,
+            Self::DownloadFailed => 14,
         }
     }
 
@@ -123,6 +132,7 @@ impl FailureCode {
             Self::StorageIo => "STORAGE_IO",
             Self::IntegrityFailure => "INTEGRITY_FAILURE",
             Self::IdempotencyConflict => "IDEMPOTENCY_CONFLICT",
+            Self::DownloadFailed => "DOWNLOAD_FAILED",
         }
     }
 
@@ -141,7 +151,9 @@ impl FailureCode {
             Self::Busy => FailureClass::Retryable,
             Self::DeadlineExceeded | Self::ResourceLimit => FailureClass::Limit,
             Self::Cancelled => FailureClass::Cancelled,
-            Self::StorageIo | Self::IntegrityFailure => FailureClass::StorageOrIo,
+            Self::StorageIo | Self::IntegrityFailure | Self::DownloadFailed => {
+                FailureClass::StorageOrIo
+            }
         }
     }
 
@@ -216,6 +228,11 @@ mod tests {
             FailureCode::IdempotencyConflict.identifier(),
             "IDEMPOTENCY_CONFLICT"
         );
+        assert_eq!(
+            FailureCode::DownloadFailed.class(),
+            FailureClass::StorageOrIo
+        );
+        assert_eq!(FailureCode::DownloadFailed.identifier(), "DOWNLOAD_FAILED");
     }
 
     #[test]
@@ -235,6 +252,7 @@ mod tests {
             FailureCode::StorageIo,
             FailureCode::IntegrityFailure,
             FailureCode::IdempotencyConflict,
+            FailureCode::DownloadFailed,
         ] {
             assert!(!code.retryable());
         }

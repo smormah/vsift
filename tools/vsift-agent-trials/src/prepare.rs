@@ -21,8 +21,9 @@ use std::{
 use serde_json::{Value, json};
 use vsift::{
     Cancellation, Clock, ClockError, DurabilityRequirement, Engine, EngineConfig, EnginePorts,
-    HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest, OperationId,
-    SessionId, SessionRootLocation, SuppliedTranscriptRequest, UserConfigurationLocation,
+    HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest, ManagedRootLocation,
+    OperationId, SessionId, SessionRootLocation, SuppliedTranscriptRequest,
+    UserConfigurationLocation,
 };
 
 use crate::{
@@ -454,6 +455,7 @@ async fn expired_session(
         EngineConfig {
             session_root: SessionRootLocation::Explicit(layout.session_root()),
             user_configuration: UserConfigurationLocation::Explicit(layout.user_configuration()),
+            managed_root: ManagedRootLocation::PlatformDefault,
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::new(

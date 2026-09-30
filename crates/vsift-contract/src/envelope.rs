@@ -362,6 +362,15 @@ impl OperationResponse<serde_json::Value> {
         Ok(self)
     }
 
+    /// [`Self::with_failure_data`] for data already in its published JSON
+    /// form, which cannot fail to serialize (`setup install`: every
+    /// component of the plan beside the error that stopped it).
+    #[must_use]
+    pub fn with_failure_value(mut self, data: serde_json::Value) -> Self {
+        self.data = Some(data);
+        self
+    }
+
     /// Names the operation the result is recorded under, so a caller can
     /// retry with it and receive the same result (P10, ADR 0020).
     #[must_use]
@@ -493,6 +502,9 @@ const fn safe_message(code: FailureCode) -> &'static str {
         FailureCode::IntegrityFailure => "Stored or imported data failed integrity validation.",
         FailureCode::IdempotencyConflict => {
             "The operation id was already used for a different request."
+        }
+        FailureCode::DownloadFailed => {
+            "A managed download from the reviewed publisher did not complete."
         }
     }
 }

@@ -371,6 +371,30 @@ pub(crate) struct ConfiguredModel {
     pub(crate) next_step: String,
 }
 
+/// `setup.install` data (`setup-install.schema.json`), on a success or
+/// beside the error of a failure.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetupInstall {
+    pub(crate) catalogue_revision: Option<String>,
+    pub(crate) source: String,
+    pub(crate) components: Vec<InstallComponent>,
+    pub(crate) next_step: String,
+}
+
+/// One component of a `setup.install` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstallComponent {
+    pub(crate) component: String,
+    pub(crate) version: String,
+    pub(crate) status: String,
+    pub(crate) step: Option<String>,
+    pub(crate) reason: Option<String>,
+    pub(crate) failure_code: Option<String>,
+    pub(crate) smoke_check: Option<String>,
+    pub(crate) stage: Option<String>,
+    pub(crate) retention_reason: Option<String>,
+}
+
 /// `setup.plan` data, in both published forms (`setup-plan.schema.json`
 /// and `setup-plan-unqualified.schema.json`).
 #[derive(Debug, Deserialize)]

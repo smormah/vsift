@@ -6,7 +6,10 @@ use std::{
     ffi::{OsStr, OsString},
     fmt, fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
+
+use crate::PublishedManagedRuntime;
 
 /// Describes how an executable entered the trusted invocation boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,10 +23,53 @@ pub enum ExecutableProvenance {
 }
 
 /// A canonical absolute regular-file path approved for direct execution.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// An executable of a managed version carries that version's
+/// [`ManagedRuntimeHold`] (and the recognizer also its model's), so whatever
+/// holds the executable keeps the version in use: it cannot be removed while
+/// a job that resolved it still runs. Equality compares the path and
+/// provenance only.
+#[derive(Clone, Debug)]
 pub struct TrustedExecutable {
     path: PathBuf,
     provenance: ExecutableProvenance,
+    holds: Vec<ManagedRuntimeHold>,
+}
+
+impl PartialEq for TrustedExecutable {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path && self.provenance == other.provenance
+    }
+}
+
+impl Eq for TrustedExecutable {}
+
+/// One published managed version kept in use: while any clone lives, the
+/// version's shared use lock is held, so removal refuses it.
+#[derive(Clone)]
+pub struct ManagedRuntimeHold(Arc<PublishedManagedRuntime>);
+
+impl ManagedRuntimeHold {
+    /// Keeps `runtime` in use for as long as this hold or a clone lives.
+    #[must_use]
+    pub fn new(runtime: PublishedManagedRuntime) -> Self {
+        Self(Arc::new(runtime))
+    }
+
+    /// The held version.
+    #[must_use]
+    pub fn runtime(&self) -> &PublishedManagedRuntime {
+        &self.0
+    }
+}
+
+impl fmt::Debug for ManagedRuntimeHold {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("ManagedRuntimeHold")
+            .field(self.0.identity())
+            .finish()
+    }
 }
 
 impl TrustedExecutable {
@@ -45,6 +91,32 @@ impl TrustedExecutable {
     /// canonicalizable absolute regular file.
     pub fn managed(path: impl AsRef<Path>) -> Result<Self, ExecutableResolutionError> {
         Self::from_candidate(path.as_ref(), ExecutableProvenance::Managed)
+    }
+
+    /// The executable `name` of the held managed version, carrying the
+    /// hold so the version stays in use while the executable does.
+    ///
+    /// # Errors
+    ///
+    /// [`ExecutableResolutionError::NotFound`] when the version has no file
+    /// of that name, otherwise as [`Self::managed`].
+    pub fn managed_in(
+        hold: &ManagedRuntimeHold,
+        name: &str,
+    ) -> Result<Self, ExecutableResolutionError> {
+        let path = hold
+            .runtime()
+            .file_path(name)
+            .ok_or(ExecutableResolutionError::NotFound)?;
+        Ok(Self::managed(path)?.retaining(hold.clone()))
+    }
+
+    /// Also keeps `hold` in use for as long as this executable lives: a
+    /// recognizer retains its managed model's version this way.
+    #[must_use]
+    pub fn retaining(mut self, hold: ManagedRuntimeHold) -> Self {
+        self.holds.push(hold);
+        self
     }
 
     /// Returns the canonical path used by the operating-system spawn primitive.
@@ -82,6 +154,7 @@ impl TrustedExecutable {
         Ok(Self {
             path: canonical,
             provenance,
+            holds: Vec::new(),
         })
     }
 }

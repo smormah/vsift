@@ -233,6 +233,18 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   catalogue revision can enter a plan; the transaction downloads from the publisher
   over HTTPS, checks exact size and SHA-256, smokes the candidate before
   `publish_and_select`, and never updates a runtime during work (D-02, D-03, D-05).
+  *Evidence 2026-09-30 (PR 4):* `setup install` takes the compiled catalogue as the
+  only trust anchor (the saved plan and `--artifact-dir` supply no URL, digest or file
+  name), rebuilds the plan and requires the saved plan and digest to accept it, and
+  verifies every byte by exact size and SHA-256 before anything is extracted; bytes that
+  fail are discarded and never reach publication, and only a candidate whose smoke
+  passed is published and selected, one component at a time. An update selects a new
+  immutable version and never touches one a job holds: the executable a job resolved
+  carries the version's shared use lock for the job's life. A managed tool runs only
+  when every file matches its manifest by SHA-256, so a changed version is never run
+  (L-006 closed for managed tools). Tests: `vsift-infrastructure/tests/p13_install_transaction.rs`,
+  `vsift-application/tests/p13_install_transaction.rs`, `vsift/tests/engine_managed_lookup.rs`,
+  `vsift-cli/tests/p13_setup_install_cli.rs` (D-02, D-03, D-05, D-06).
 - **SEC-13 (archive traversal, bombs, substitution):** the existing bounded archive
   readers and flat private staging, plus a smoke of the staged runtime before
   activation and cleanup of every stage after a failure (D-04, D-06). *Evidence
@@ -245,6 +257,16 @@ evidence is added as each pull request lands, and none of it is claimed yet.
 - **SEC-14 (changed resume, redirects, proxy credentials):** no resume, a restart at
   byte zero and a whole-artifact hash; the reviewed redirect policy; `DOWNLOAD_FAILED`
   reasons that never render a signed URL or a proxy credential (D-03, D-07).
+  *Evidence 2026-09-30 (PR 4):* each attempt is one `GET` with no `Range` header; only
+  a complete `200 OK` identity body of the reviewed length is accepted (`206` refused);
+  a dropped transfer discards its stage and the rerun restarts at byte zero (the test
+  server records both requests without `Range`); redirects leave neither the reviewed
+  route, host, scheme nor port, and a location carrying credentials is refused; an
+  untrusted certificate is `tls`; a proxy's `407` is `proxy_auth`; errors carry only a
+  typed reason, and sentinel proxy credentials from the environment appear in no output
+  mode (D-03, D-07). The transport tests reach local servers only through the
+  development-only `install-test-hooks` feature, which the crate refuses in release
+  builds and the governance check refuses outside development dependencies.
 - **SEC-15 (rollback or removal under running jobs):** per-version use locks, removal
   only of unselected unheld versions, cleanup bounded to the current and one previous
   version, a stale-stage sweep limited to positively marked stages, BYO files never

@@ -128,7 +128,7 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
 fn a_plan_with_an_action_names_everything_the_user_accepts() -> TestResult {
     let mut plan = example("setup-plan.unavailable.json")?;
     plan["data"]["target"] = json!("ubuntu_24_04_x86_64");
-    plan["data"]["managed_install"] = json!("catalogue_accepted_install_pending");
+    plan["data"]["managed_install"] = json!("catalogue_accepted");
     plan["data"]["catalogue_revision"] = json!("2026-09-20.1");
     plan["data"]["stop_new_plans_at"] = json!("2026-12-31T00:00:00Z");
     plan["data"]["plan_digest"] = json!("a".repeat(64));
@@ -180,6 +180,36 @@ fn setup_registrations_say_what_was_registered_and_what_is_next() -> TestResult 
     let model = result(CommandName::SetupConfigureModel, &model)?.ok_or("no renderer")?;
     check_snapshot("setup-configure", selection.as_str())?;
     check_snapshot("setup-configure-model", model.as_str())?;
+    Ok(())
+}
+
+/// P13: `setup install` lists each component with its status, the step and
+/// typed reason of a failure and the stage's disposal; a failure also
+/// renders its error, with the remediation, for stderr.
+#[test]
+fn setup_install_lists_each_component_and_its_outcome() -> TestResult {
+    let complete = render_value(CommandName::SetupInstall, &example("setup-install.json")?)?
+        .ok_or("no renderer")?;
+    assert_terminal_safe(complete.as_str());
+    check_snapshot("setup-install", complete.as_str())?;
+    assert!(
+        complete
+            .as_str()
+            .contains("[activated] ffmpeg_ffprobe n9.0.1-11-ge47273f4d9-20260831")
+    );
+
+    let failed_value = example("setup-install.failed.json")?;
+    let failed = render_value(CommandName::SetupInstall, &failed_value)?.ok_or("no renderer")?;
+    assert_terminal_safe(failed.as_str());
+    check_snapshot("setup-install-failed", failed.as_str())?;
+    assert!(failed.as_str().contains(
+        "[failed] whisper_cli whisper.cpp-v1.9.2-ubuntu-x64: download offline, DOWNLOAD_FAILED"
+    ));
+    assert!(failed.as_str().contains("Status: failed"));
+    let error = render_failure(&failed_value, None)?;
+    assert_terminal_safe(error.as_str());
+    check_snapshot("failure-setup-install-download", error.as_str())?;
+    assert!(error.as_str().contains("(DOWNLOAD_FAILED)"));
     Ok(())
 }
 
@@ -338,7 +368,6 @@ fn only_setup_check_and_failing_commands_have_no_result_renderer() -> TestResult
     for command in [
         CommandName::SetupCheck,
         CommandName::Parse,
-        CommandName::SetupInstall,
         CommandName::SetupRepair,
         CommandName::SetupList,
         CommandName::SetupRemove,
@@ -347,6 +376,7 @@ fn only_setup_check_and_failing_commands_have_no_result_renderer() -> TestResult
         assert!(render_value(command, &json!({}))?.is_none(), "{command:?}");
     }
     for command in [
+        CommandName::SetupInstall,
         CommandName::Candidates,
         CommandName::FrameGet,
         CommandName::Crop,

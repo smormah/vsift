@@ -539,6 +539,17 @@ fn setup_commands_render_readable_text() -> TestResult {
     let blocked = vsift(&root, &["setup", "check"])?;
     assert_eq!(blocked.status.code(), Some(2));
     let text = assert_terminal_safe(&blocked.stdout, "setup check")?;
+    // Whether managed installation is offered depends on the host; the
+    // snapshot records the one line both hosts share around it.
+    let text = text
+        .replace(
+            ". Or let VSift install the reviewed build: review setup plan, then accept it with setup install.",
+            ". <MANAGED INSTALLATION>",
+        )
+        .replace(
+            ". Managed installation is not available for this target.",
+            ". <MANAGED INSTALLATION>",
+        );
     check_snapshot("setup-check-blocked", &text)?;
 
     let tool = root.write("stand-in-ffprobe", b"not a real tool")?;

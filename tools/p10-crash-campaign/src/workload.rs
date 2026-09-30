@@ -27,7 +27,7 @@ use std::{
 
 use vsift::{
     AdmissionWait, Cancellation, Engine, EngineConfig, EngineError, EnginePorts, HostIsolation,
-    IngestRequest, ProgressObserver, SessionRootError, SessionRootLocation,
+    IngestRequest, ManagedRootLocation, ProgressObserver, SessionRootError, SessionRootLocation,
     UserConfigurationLocation, WorkRequestRun, WorkspaceInitRequest, WorkspacePolicy,
     WorkspaceRetention,
 };
@@ -237,6 +237,7 @@ pub async fn run(config: &WorkloadConfig) -> Result<u64, CampaignError> {
         EngineConfig {
             session_root: SessionRootLocation::Explicit(config.root.clone()),
             user_configuration: UserConfigurationLocation::Explicit(config.scratch.join("config")),
+            managed_root: ManagedRootLocation::Explicit(config.scratch.join("managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::system(),

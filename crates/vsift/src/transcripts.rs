@@ -17,6 +17,7 @@ use vsift_infrastructure::{
 use crate::{
     engine::{Engine, absolute_selection},
     error::{EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError},
+    managed::ManagedLookup,
     sessions::{SessionSnapshot, SuppliedTranscriptRequest},
 };
 
@@ -174,15 +175,47 @@ impl Engine {
     }
 
     /// Resolves `FFmpeg` and `FFprobe` with the same precedence as `setup
-    /// check`: a configured user selection first, then the filtered `PATH`.
+    /// check`: a configured user selection first, then the managed version
+    /// `setup install` selected, then the filtered `PATH`. A managed tool
+    /// carries its version's hold, so the version stays in use for as long
+    /// as the returned tools live.
     pub(crate) fn media_tools(&self) -> Result<MediaProviderConformance, EngineError> {
         let configured = self.user_configuration()?.read()?;
         let resolver = ExecutableResolver::from_current_path();
-        let ffmpeg = resolve_tool(&resolver, configured.ffmpeg, RuntimeDependency::Ffmpeg)?;
-        let ffprobe = resolve_tool(&resolver, configured.ffprobe, RuntimeDependency::Ffprobe)?;
+        let mut managed = self.managed_lookup();
+        let ffmpeg = resolve_media_tool(
+            &resolver,
+            &mut managed,
+            configured.ffmpeg,
+            RuntimeDependency::Ffmpeg,
+        )?;
+        let ffprobe = resolve_media_tool(
+            &resolver,
+            &mut managed,
+            configured.ffprobe,
+            RuntimeDependency::Ffprobe,
+        )?;
         Ok(MediaProviderConformance::r0(ffmpeg, ffprobe))
     }
 }
+
+/// One media tool: `configured` when given, else the managed version, else
+/// the filtered `PATH`.
+pub(crate) fn resolve_media_tool(
+    path_lookup: &ExecutableResolver,
+    managed: &mut ManagedLookup<'_>,
+    configured: Option<PathBuf>,
+    dependency: RuntimeDependency,
+) -> Result<TrustedExecutable, EngineError> {
+    if configured.is_none()
+        && let Some(executable) = managed.executable(dependency)
+    {
+        return Ok(executable);
+    }
+    resolve_tool(path_lookup, configured, dependency)
+}
+
+impl Engine {}
 
 /// How a supplied transcript that could not be read is reported.
 #[allow(

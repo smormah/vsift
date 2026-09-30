@@ -3,10 +3,11 @@ name: P13 managed smoke
 on:
   workflow_dispatch:
 
-# The reviewed third-party tools run on a disposable runner. The job receives
-# no repository token and no secrets; checkout keeps no credentials. The test
-# downloads only the pinned artifacts of the accepted catalogue, each verified
-# by size and SHA-256, and never publishes or selects a managed version.
+# The reviewed third-party tools run on a disposable runner. The jobs receive
+# no repository token and no secrets; checkout keeps no credentials. They
+# download only the pinned artifacts of the accepted catalogue, each verified
+# by size and SHA-256, and send no credentials or personal details: publisher
+# requests carry only VSift's neutral user agent.
 permissions: {}
 
 concurrency:
@@ -37,3 +38,30 @@ jobs:
         run: >-
           cargo test --release --locked -p vsift-infrastructure
           --test p13_managed_smoke_real_tools -- --ignored --exact --nocapture
+
+  # P13 PR 4: the real `setup plan` -> `setup install` -> `setup check`
+  # journey through the release binary, from a fresh per-user base with an
+  # empty PATH, then a rerun that must find every component already current.
+  managed-install:
+    name: Managed install through the CLI (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          cat /etc/os-release
+          uname -m
+          nproc
+
+      - name: Plan, install, check and rerun the accepted plan
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real -- --ignored --exact --nocapture

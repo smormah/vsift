@@ -112,7 +112,7 @@ other word is accepted, even one that means the same (`image` is not a gap kind:
 | `citations[].type` | `transcript_segment`, `frame`, `crop`, `audio` |
 | `gaps[].kind` | `transcript`, `visual`, `audio`, `image_access`, `dependency`, `budget`, `lifecycle` |
 | `gaps[].reason` | `untranscribed_range`, `not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`, `candidate_budget_exhausted`, `frame_budget`, `pixel_budget`, `byte_budget`, `session_evidence_budget`, `cancelled`, `transcript_unavailable`, `image_access_unavailable`, `image_unreadable`, `not_inspected`, `budget_exhausted`, `needs_user_authority`, `session_expired`, `not_audible_to_agent` |
-| `gaps[].code` | `INTERNAL`, `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED`, `INVALID_SOURCE`, `BUSY`, `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT`, `CANCELLED`, `STORAGE_IO`, `INTEGRITY_FAILURE`, `IDEMPOTENCY_CONFLICT` |
+| `gaps[].code` | `INTERNAL`, `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED`, `INVALID_SOURCE`, `BUSY`, `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT`, `CANCELLED`, `STORAGE_IO`, `INTEGRITY_FAILURE`, `IDEMPOTENCY_CONFLICT`, `DOWNLOAD_FAILED` |
 | `untrusted_instructions[].action_taken` | `none`, `attempted` |
 | `budget.profile` | `compact`, `standard` |
 | `budget.exhausted[]` | `images_total`, `image_bytes`, `tool_calls`, `refinement_depth`, `wall_time_s` |

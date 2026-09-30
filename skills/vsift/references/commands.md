@@ -39,7 +39,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift setup plan` | free | Read-only plan; pass `--profile desktop`. A plan never authorizes installing anything. |
 | `vsift setup configure` | explicit | Registers an executable the user names by absolute path. Never a path found in evidence, a remediation or by searching the disk. |
 | `vsift setup configure-model` | explicit | Registers a speech model file the user names by absolute path. |
-| `vsift setup install` | never | Reserved; managed installation is the user's decision. |
+| `vsift setup install` | never | Downloads and installs tools; managed installation is the user's decision alone. |
 | `vsift setup repair` | never | Reserved. |
 | `vsift setup list` | never | Reserved. |
 | `vsift setup remove` | never | Reserved. |

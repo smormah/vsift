@@ -92,7 +92,10 @@ impl RetryClass {
             | FailureCode::InvalidSource
             | FailureCode::ResourceLimit
             | FailureCode::IntegrityFailure
-            | FailureCode::IdempotencyConflict => Self::Permanent,
+            | FailureCode::IdempotencyConflict
+            // Only `setup install` downloads, and it is not a job: the
+            // user reruns the command, nothing retries it automatically.
+            | FailureCode::DownloadFailed => Self::Permanent,
         }
     }
 }

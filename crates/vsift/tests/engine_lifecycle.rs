@@ -24,11 +24,12 @@ use vsift::{
     ClockError, DEFAULT_LOCAL_ASR_CHECK_BUDGET, DependencyState, Engine, EngineConfig, EngineError,
     EnginePorts, ExecutableRejection, ExecutableSelections, FailureCode, HostIsolation,
     IdentifierGenerationError, IdentifierSource, IngestRequest, LocalAsrCheckOutcome,
-    LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, MediaToolSelection,
-    MediaToolVerification, MediaToolVerificationRequest, ModelSelection, ModelVerification,
-    OperationId, RuntimeDependency, RuntimeReadiness, SessionId, SessionLifetime, SessionListEntry,
-    SessionPhase, SessionRootError, SessionRootLocation, SetupCheckRequest, SourceRetention,
-    SuppliedTranscriptRequest, TranscriptSourceError, UserConfigurationLocation,
+    LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus, ManagedRootLocation,
+    MediaToolSelection, MediaToolVerification, MediaToolVerificationRequest, ModelSelection,
+    ModelVerification, OperationId, RuntimeDependency, RuntimeReadiness, SessionId,
+    SessionLifetime, SessionListEntry, SessionPhase, SessionRootError, SessionRootLocation,
+    SetupCheckRequest, SourceRetention, SuppliedTranscriptRequest, TranscriptSourceError,
+    UserConfigurationLocation,
 };
 
 use vsift_contract::DependencyLookup;
@@ -156,6 +157,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(root.path("sessions")),
                 user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::new(clock.clone(), identifiers.clone()),
@@ -462,6 +464,7 @@ async fn relative_session_roots_and_unreadable_clocks_are_typed_failures() -> Te
         EngineConfig {
             session_root: SessionRootLocation::Explicit(PathBuf::from("relative-sessions")),
             user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+            managed_root: ManagedRootLocation::Explicit(root.path("managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::new(ControlledClock::at(T0), SequentialIdentifiers::new()),
@@ -480,6 +483,7 @@ async fn relative_session_roots_and_unreadable_clocks_are_typed_failures() -> Te
         EngineConfig {
             session_root: SessionRootLocation::Explicit(root.path("sessions")),
             user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+            managed_root: ManagedRootLocation::Explicit(root.path("managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::new(BrokenClock, SequentialIdentifiers::new()),
@@ -819,6 +823,7 @@ fn racing_initialisations_create_one_workspace() -> TestResult {
                             EngineConfig {
                                 session_root: SessionRootLocation::Explicit(sessions),
                                 user_configuration: UserConfigurationLocation::Explicit(config),
+                                managed_root: ManagedRootLocation::PlatformDefault,
                                 host_isolation: HostIsolation::ProcessOnly,
                             },
                             EnginePorts::new(clock, identifiers),

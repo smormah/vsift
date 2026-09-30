@@ -32,9 +32,9 @@ use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift::{
     AdmissionBudget, AdmissionWait, Cancellation, DurabilityRequirement, Engine, EngineConfig,
-    EngineError, EnginePorts, HostIsolation, JobProgress, ProgressObserver, ProgressStage,
-    SessionListEntry, SessionRootLocation, UserConfigurationLocation, WorkOutcome, WorkRequestRun,
-    WorkerFailure, WorkspaceInitRequest, WorkspacePolicy, WorkspaceRetention,
+    EngineError, EnginePorts, HostIsolation, JobProgress, ManagedRootLocation, ProgressObserver,
+    ProgressStage, SessionListEntry, SessionRootLocation, UserConfigurationLocation, WorkOutcome,
+    WorkRequestRun, WorkerFailure, WorkspaceInitRequest, WorkspacePolicy, WorkspaceRetention,
 };
 use vsift_contract::{WorkRequest, decode_work_request};
 use vsift_domain::OperationId;
@@ -95,6 +95,7 @@ impl Layout {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(self.workspace()),
                 user_configuration: UserConfigurationLocation::Explicit(self.0.join("config")),
+                managed_root: ManagedRootLocation::Explicit(self.0.join("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::system(),

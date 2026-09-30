@@ -10,6 +10,7 @@ mod asr;
 mod clock;
 mod evidence;
 mod identifiers;
+mod install;
 mod job;
 mod local_asr_setup;
 mod provisioning;
@@ -38,6 +39,11 @@ pub use evidence::{
     verify_evidence_record,
 };
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
+pub use install::{
+    ActivationFailure, ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
+    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedComponentInstaller,
+    ManagedInstallReport, StageFailure, install_managed_components,
+};
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
     CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner, JobRecord,

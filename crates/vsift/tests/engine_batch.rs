@@ -32,9 +32,9 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use vsift::{
     AdmissionBudget, AdmissionWait, BatchEvent, BatchLineEnd, Cancellation, DurabilityRequirement,
-    Engine, EngineConfig, EngineError, EnginePorts, HostIsolation, ProgressObserver,
-    SessionListEntry, SessionRootLocation, UserConfigurationLocation, WorkBatchRun, WorkerFailure,
-    WorkspaceInitRequest, WorkspacePolicy, WorkspaceRetention,
+    Engine, EngineConfig, EngineError, EnginePorts, HostIsolation, ManagedRootLocation,
+    ProgressObserver, SessionListEntry, SessionRootLocation, UserConfigurationLocation,
+    WorkBatchRun, WorkerFailure, WorkspaceInitRequest, WorkspacePolicy, WorkspaceRetention,
 };
 use vsift_contract::{BatchOutcome, BatchTermination, JobBatchData};
 use vsift_domain::FailureCode;
@@ -99,6 +99,7 @@ impl Layout {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(self.workspace()),
                 user_configuration: UserConfigurationLocation::Explicit(self.0.join("config")),
+                managed_root: ManagedRootLocation::Explicit(self.0.join("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::system(),

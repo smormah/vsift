@@ -116,6 +116,7 @@ fn render_value(
 ) -> Result<Option<RenderedText>, OutputError> {
     let rendered = match command {
         CommandName::SetupPlan => setup::plan(&envelope(value)?),
+        CommandName::SetupInstall => setup::install(&envelope(value)?),
         CommandName::SetupConfigure => setup::configure(&envelope(value)?),
         CommandName::SetupConfigureModel => setup::configure_model(&envelope(value)?),
         CommandName::Ingest => session::ingest(&envelope(value)?),
@@ -147,7 +148,6 @@ fn render_value(
         // the parse and reserved setup commands only ever fail.
         CommandName::SetupCheck
         | CommandName::Parse
-        | CommandName::SetupInstall
         | CommandName::SetupRepair
         | CommandName::SetupList
         | CommandName::SetupRemove

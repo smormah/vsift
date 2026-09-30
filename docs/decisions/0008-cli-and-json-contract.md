@@ -124,3 +124,26 @@ unreadable draft (over 64 KiB, not UTF-8, a relative or unreadable `--file`) is
 the handoff schema's own member names, a line number, the schema's allowed values and
 fixed prose, never text from the draft. `docs/contracts/cli-v1.md` ("P13 `handoff
 check`") is the contract.
+
+## 2026-09-30 note: P13 PR 4 in-place edits made
+
+P13 PR 4 made the setup edits listed above, before any publication:
+
+- the setup-check `lookup` enum gains `managed_version` (the version `setup install`
+  selected, between the configured path and the filtered `PATH`);
+- the setup-check remediation's `managed_install`, formerly the constant
+  `unavailable_unqualified`, now takes `catalogue_accepted`, `unavailable_target`,
+  `unavailable_catalogue_expired` or `unavailable_catalogue_invalid` for this host;
+- the setup-plan availability `catalogue_accepted_install_pending` is renamed
+  `catalogue_accepted`, and the managed-install `next_step` texts say that `setup
+  install` applies the plan;
+- `DOWNLOAD_FAILED` (exit 7) joins the failure codes, whose exit class 7 now covers a
+  managed download too;
+- `setup-install.schema.json` describes the `data` of a `setup.install` result, which a
+  failed install also carries beside its error (a failure's data, as `job.run` already
+  does), with frozen examples `setup-install.json` and `setup-install.failed.json`;
+- the progress event gains the stages `fetching_artifact` (bytes) and
+  `installing_components` (the new unit `components`).
+
+The frozen examples of a reserved command now use `setup.repair`, which still answers
+`COMMAND_NOT_IMPLEMENTED`.
