@@ -1454,13 +1454,24 @@ or observed selection requires a fresh plan and acceptance. No configured paths
 are echoed in the response. The plan is **read-only**; `setup install` applies it
 (below), and the availability value `catalogue_accepted` (renamed in place from
 `catalogue_accepted_install_pending` by P13 PR 4, before any publication) says the
-target has an accepted catalogue whose actions it applies. The plan observes the
-tools **outside VSift's managed store** (per-call paths are not taken, then
-configured paths, then `PATH`), not the managed versions `setup install` selected,
-so an accepted plan stays valid while it is being applied: a rerun of the same
-`setup install` continues after a failure, and a component already installed at
-the plan's version is reported `already_current`. `setup check` shows what each
-command will actually use.
+target has an accepted catalogue whose actions it applies.
+
+A plan has two kinds of member (P13 PR 4). Its **intent** is what the digest binds
+and what `setup install` compares with the saved plan: everything above, including
+the observations of the tools **outside VSift's managed store** (configured paths,
+then `PATH`) that decide which components are needed. Installing a managed
+component changes none of it, so the plan accepted before an install stays
+accepted: a rerun of the same `setup install` continues after a failure, and a
+component already installed at the plan's version is reported `already_current`.
+Its **observed state** is what commands would use now, managed versions included,
+and acceptance ignores it: `readiness` and each dependency's `status` as commands
+resolve the tools now; the model's `status`, `managed_current` once the managed
+model is selected; each action's `state`, `pending` or `current` (its reviewed
+version is selected); and `install_needed`, false when every action is current (or
+there are none), so a plan whose managed components are all installed needs no
+install. After a complete install `setup plan` shows every action `current`,
+`install_needed: false` and readiness no longer blocked on the managed tools, under
+the same digest.
 
 Windows x86-64, macOS ARM64, other hosts and expired or invalid catalogue
 entries return typed `unavailable_*` status, no actions or digest, and manual
@@ -1490,7 +1501,8 @@ is retained as historical v1 evidence. An abbreviated current response follows.
     "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
     "stop_new_plans_at": "2028-08-01T00:00:00Z",
     "plan_digest": "<64 lowercase hex characters>",
-    "actions": ["<exact reviewed artifact actions>"],
+    "install_needed": true,
+    "actions": ["<exact reviewed artifact actions, each with its state: pending>"],
     "dependencies": [
       {"dependency": "ffmpeg", "status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed action, then run setup install with this saved plan and its digest; a component already installed at this version is reported already_current."}
     ]

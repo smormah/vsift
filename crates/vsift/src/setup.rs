@@ -7,12 +7,12 @@ use std::{
 };
 
 use vsift_application::{
-    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, LocalAsrSetupStatus,
-    ManagedPlanAvailability, ManagedSetupPlan, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
+    ManagedSetupPlan, ObservedModel, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
     plan_managed_setup,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
-use vsift_domain::{ManagedTarget, RuntimeDependency};
+use vsift_domain::RuntimeDependency;
 use vsift_infrastructure::{
     ExplicitProbePaths, ProcessDependencyProbe, accepted_ubuntu_catalogue, detect_managed_target,
 };
@@ -170,6 +170,15 @@ pub struct EvaluatedSetupPlan {
 }
 
 impl EvaluatedSetupPlan {
+    /// A plan's authority with its presentation beside `observation`.
+    fn new(authority: ManagedSetupPlan, observation: &ManagedPlanObservation) -> Self {
+        let presentation = SetupPlanResponse::new(&authority, observation);
+        Self {
+            authority,
+            presentation,
+        }
+    }
+
     /// The plan's authority: its actions, digest and catalogue revision.
     pub(crate) const fn authority(&self) -> &ManagedSetupPlan {
         &self.authority
@@ -281,6 +290,11 @@ impl Engine {
 
     /// Builds the current read-only managed setup plan from fresh observations.
     ///
+    /// The plan's intent (and digest) comes from the tools outside the
+    /// managed store, which `setup install` never changes; beside it, the
+    /// plan shows what commands would use now, managed versions included:
+    /// each action's `state`, the dependencies' statuses and readiness.
+    ///
     /// # Errors
     ///
     /// Fails when the configuration, clock or built-in reviewed catalogue
@@ -289,6 +303,78 @@ impl Engine {
         &self,
         request: SetupPlanRequest,
     ) -> Result<EvaluatedSetupPlan, EngineError> {
+        let (plan, configured) = self.plan_intent(request).await?;
+        let observation = self
+            .observe_plan(&plan, configured, request.probe_timeout)
+            .await;
+        Ok(EvaluatedSetupPlan::new(plan, &observation))
+    }
+
+    /// The current plan's intent alone, for acceptance, which compares the
+    /// intent only: nothing managed is opened or probed.
+    pub(crate) async fn plan_setup_intent(
+        &self,
+        request: SetupPlanRequest,
+    ) -> Result<EvaluatedSetupPlan, EngineError> {
+        let (plan, _) = self.plan_intent(request).await?;
+        let observation = ManagedPlanObservation::without_managed_tier(&plan);
+        Ok(EvaluatedSetupPlan::new(plan, &observation))
+    }
+
+    /// What commands would use now for `plan`, the managed tier included.
+    async fn observe_plan(
+        &self,
+        plan: &ManagedSetupPlan,
+        configured: ExplicitProbePaths,
+        probe_timeout: Duration,
+    ) -> ManagedPlanObservation {
+        let mut observation = ManagedPlanObservation::without_managed_tier(plan);
+        let mut lookup = self.managed_lookup();
+        let mut paths = configured;
+        let mut held = Vec::new();
+        for dependency in RuntimeDependency::ALL {
+            if paths.for_dependency(dependency).is_none()
+                && let Some(executable) = lookup.executable(dependency)
+            {
+                let path = Some(executable.path().to_path_buf());
+                match dependency {
+                    RuntimeDependency::Ffmpeg => paths.ffmpeg = path,
+                    RuntimeDependency::Ffprobe => paths.ffprobe = path,
+                    RuntimeDependency::Whisper => paths.whisper = path,
+                }
+                held.push(executable);
+            }
+        }
+        if !held.is_empty() {
+            let probe = ProcessDependencyProbe::with_explicit_paths(probe_timeout, paths);
+            let diagnosis = DiagnoseRuntime::new(probe).execute().await;
+            observation.readiness = diagnosis.readiness;
+            observation.dependencies = diagnosis.dependencies;
+        }
+        if observation.model == ObservedModel::Missing && lookup.model().is_some() {
+            observation.model = ObservedModel::Managed;
+        }
+        observation.current = plan
+            .actions
+            .iter()
+            .filter(|action| {
+                lookup
+                    .selected_version(action.artifact.component)
+                    .as_deref()
+                    == Some(action.artifact.version.as_str())
+            })
+            .map(|action| action.artifact.component)
+            .collect();
+        drop(held);
+        observation
+    }
+
+    /// The plan's intent from the configuration, the clock, the catalogue
+    /// and the tools outside the managed store, with the configured paths.
+    async fn plan_intent(
+        &self,
+        request: SetupPlanRequest,
+    ) -> Result<(ManagedSetupPlan, ExplicitProbePaths), EngineError> {
         let store = self.user_configuration()?;
         let configured = store.read()?;
         let configured_model = store.read_model()?;
@@ -312,16 +398,17 @@ impl Engine {
                 .as_ref()
                 .map(|path| path.to_string_lossy().into_owned()),
         };
-        let probe = ProcessDependencyProbe::with_explicit_paths(request.probe_timeout, configured);
-        Ok(evaluate_plan(
-            probe,
+        let probe =
+            ProcessDependencyProbe::with_explicit_paths(request.probe_timeout, configured.clone());
+        let plan = plan_managed_setup(
             request.profile,
+            DiagnoseRuntime::new(probe).execute().await,
             detect_managed_target(),
             selections,
             now_unix_seconds,
             Some(catalogue),
-        )
-        .await)
+        );
+        Ok((plan, configured))
     }
 
     /// Whether managed installation is qualified on this host today: the
@@ -371,14 +458,16 @@ impl Engine {
     }
 }
 
-/// Diagnoses current dependencies and builds plan authority plus its presentation.
-async fn evaluate_plan<P: DependencyProbe>(
+/// Diagnoses current dependencies and builds plan authority plus its
+/// presentation on a machine with no managed tier (the unit tests' plans).
+#[cfg(test)]
+async fn evaluate_plan<P: vsift_application::DependencyProbe>(
     probe: P,
     profile: SetupProfile,
-    target: ManagedTarget,
+    target: vsift_domain::ManagedTarget,
     selections: SetupSelectionState,
     now_unix_seconds: u64,
-    catalogue: Option<AcceptedManagedCatalogue>,
+    catalogue: Option<vsift_application::AcceptedManagedCatalogue>,
 ) -> EvaluatedSetupPlan {
     let plan = plan_managed_setup(
         profile,
@@ -388,21 +477,21 @@ async fn evaluate_plan<P: DependencyProbe>(
         now_unix_seconds,
         catalogue,
     );
-    let presentation = SetupPlanResponse::new(&plan);
-    EvaluatedSetupPlan {
-        authority: plan,
-        presentation,
-    }
+    let observation = ManagedPlanObservation::without_managed_tier(&plan);
+    EvaluatedSetupPlan::new(plan, &observation)
 }
 
 #[cfg(test)]
 mod tests {
     use std::future::ready;
 
-    use vsift_application::{DependencyProbe, SetupProfile, SetupSelectionState};
+    use vsift_application::{
+        DependencyProbe, ManagedPlanObservation, ObservedModel, SetupProfile, SetupSelectionState,
+    };
     use vsift_contract::{OperationResponse, SavedSetupPlan};
     use vsift_domain::{
-        DependencyState, DependencyStatus, FailureCode, ManagedTarget, RuntimeDependency,
+        DependencyState, DependencyStatus, FailureCode, ManagedComponent, ManagedTarget,
+        RuntimeDependency, RuntimeReadiness,
     };
     use vsift_infrastructure::accepted_ubuntu_catalogue;
 
@@ -567,6 +656,152 @@ mod tests {
         let mut unknown: serde_json::Value = serde_json::from_slice(&bytes)?;
         unknown["data"]["unreviewed"] = serde_json::json!(true);
         assert!(serde_json::from_value::<SavedSetupPlan>(unknown).is_err());
+        Ok(())
+    }
+
+    /// The plan an Ubuntu machine with none of the tools makes.
+    async fn missing_tools_plan() -> Result<EvaluatedSetupPlan, Box<dyn std::error::Error>> {
+        Ok(evaluate_plan(
+            FixedProbe {
+                state: DependencyState::Missing,
+            },
+            SetupProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await)
+    }
+
+    fn available(dependency: RuntimeDependency) -> DependencyStatus {
+        DependencyStatus {
+            dependency,
+            state: DependencyState::Available {
+                version: String::from("managed fixture 1"),
+            },
+        }
+    }
+
+    /// P13 PR 4 (a) and (b): installing managed components changes the plan's
+    /// observed state, never its intent, so the accepted plan stays acceptable
+    /// after a partial install and the plan shows what is installed.
+    #[tokio::test]
+    async fn installed_managed_components_are_observed_without_changing_acceptance()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let original = missing_tools_plan().await?;
+        let digest = original
+            .authority
+            .digest
+            .clone()
+            .ok_or_else(|| std::io::Error::other("qualified plan omitted its digest"))?;
+        let original_value = plan_json(&original)?;
+        assert_eq!(original_value["data"]["install_needed"], true);
+        assert_eq!(original_value["data"]["readiness"], "blocked");
+        let saved: SavedSetupPlan = serde_json::from_value(original_value)?;
+        let schema = setup_plan_schema()?;
+        let validator = jsonschema::validator_for(&schema)?;
+
+        // (b) After a partial install (media tools only) the same accepted
+        // plan and digest are still accepted, so a rerun continues.
+        let partial_authority = missing_tools_plan().await?.authority;
+        let partial = EvaluatedSetupPlan::new(
+            partial_authority.clone(),
+            &ManagedPlanObservation {
+                readiness: RuntimeReadiness::Degraded,
+                dependencies: vec![
+                    available(RuntimeDependency::Ffmpeg),
+                    available(RuntimeDependency::Ffprobe),
+                    DependencyStatus {
+                        dependency: RuntimeDependency::Whisper,
+                        state: DependencyState::Missing,
+                    },
+                ],
+                model: ObservedModel::Missing,
+                current: vec![ManagedComponent::MediaTools],
+            },
+        );
+        assert_eq!(partial.validate_acceptance(&saved, &digest), Ok(()));
+        let value = plan_json(&partial)?;
+        validator
+            .validate(&value)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let data = &value["data"];
+        assert_eq!(data["plan_digest"].as_str(), Some(digest.as_str()));
+        assert_eq!(data["install_needed"], true);
+        assert_eq!(data["readiness"], "degraded");
+        assert_eq!(data["actions"][0]["component"], "ffmpeg_ffprobe");
+        assert_eq!(data["actions"][0]["state"], "current");
+        assert_eq!(data["actions"][1]["state"], "pending");
+        assert_eq!(data["actions"][2]["state"], "pending");
+        assert_eq!(data["dependencies"][0]["status"], "available");
+        assert_eq!(data["dependencies"][2]["status"], "missing");
+        assert_eq!(data["local_asr_model"]["status"], "missing");
+
+        // (a) After the complete install the plan reports every managed
+        // component current and readiness no longer blocked on them.
+        let complete = EvaluatedSetupPlan::new(
+            partial_authority,
+            &ManagedPlanObservation {
+                readiness: RuntimeReadiness::Ready,
+                dependencies: RuntimeDependency::ALL.into_iter().map(available).collect(),
+                model: ObservedModel::Managed,
+                current: vec![
+                    ManagedComponent::MediaTools,
+                    ManagedComponent::WhisperCli,
+                    ManagedComponent::WhisperModel,
+                ],
+            },
+        );
+        assert_eq!(complete.validate_acceptance(&saved, &digest), Ok(()));
+        let value = plan_json(&complete)?;
+        validator
+            .validate(&value)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let data = &value["data"];
+        assert_eq!(data["readiness"], "ready");
+        assert_eq!(data["install_needed"], false);
+        assert_eq!(data["local_asr_model"]["status"], "managed_current");
+        for action in data["actions"].as_array().ok_or("actions missing")? {
+            assert_eq!(action["state"], "current", "{action}");
+        }
+        for dependency in data["dependencies"].as_array().ok_or("deps missing")? {
+            assert_eq!(dependency["status"], "available", "{dependency}");
+        }
+        Ok(())
+    }
+
+    /// P13 PR 4: observed state is ignored by acceptance, but any change to
+    /// the plan's intent in the saved file is still refused.
+    #[tokio::test]
+    async fn acceptance_still_refuses_a_changed_intent_beside_observed_state()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let original = missing_tools_plan().await?;
+        let digest = original
+            .authority
+            .digest
+            .clone()
+            .ok_or_else(|| std::io::Error::other("qualified plan omitted its digest"))?;
+        let value = plan_json(&original)?;
+
+        // A saved plan whose observed members differ is still the same plan.
+        let mut observed = value.clone();
+        observed["data"]["readiness"] = serde_json::json!("ready");
+        observed["data"]["install_needed"] = serde_json::json!(false);
+        observed["data"]["actions"][0]["state"] = serde_json::json!("current");
+        let saved: SavedSetupPlan = serde_json::from_value(observed)?;
+        assert_eq!(original.validate_acceptance(&saved, &digest), Ok(()));
+
+        // A saved plan whose reviewed artifact differs is refused.
+        let mut tampered = value;
+        tampered["data"]["actions"][0]["version"] = serde_json::json!("n0.0.0-unreviewed");
+        let saved: SavedSetupPlan = serde_json::from_value(tampered)?;
+        assert_eq!(
+            original
+                .validate_acceptance(&saved, &digest)
+                .map_err(|error| error.failure_code()),
+            Err(FailureCode::InvalidArgument)
+        );
         Ok(())
     }
 

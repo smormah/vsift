@@ -52,7 +52,7 @@ impl Drop for TestRoot {
 }
 
 #[tokio::test]
-#[ignore = "downloads the pinned publisher artifacts; run only on a disposable Ubuntu 24.04 x86-64 host with VSIFT_P13_REAL_TOOL_SMOKE=1"]
+#[ignore = "downloads the pinned publisher artifacts; run only on a disposable Ubuntu 24.04 x86-64 host with VSIFT_P13_REAL_TOOL_SMOKE=1 and --release (a development build reaches no publisher)"]
 async fn pinned_ubuntu_tools_pass_the_smoke_before_activation() -> TestResult {
     if env::var(OPT_IN).as_deref() != Ok("1") {
         println!("skipped: set {OPT_IN}=1 to download and smoke the pinned tools");

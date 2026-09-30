@@ -12,7 +12,10 @@ These files are the machine-readable public v1 boundary:
 - `setup-plan.schema.json` — current read-only reviewed-catalogue plan and
   typed managed-unavailable states; a digest never authorizes installation by
   itself. Its availability for an accepted target is `catalogue_accepted` (renamed in
-  place from `catalogue_accepted_install_pending` by P13 PR 4, before publication);
+  place from `catalogue_accepted_install_pending` by P13 PR 4, before publication).
+  Beside the digested intent it carries the observed state, which acceptance ignores:
+  `readiness`, dependency and model statuses (`managed_current`), each action's
+  `state` (`pending`, `current`) and `install_needed` (P13 PR 4);
 - `setup-install.schema.json` — the `data` of a `setup.install` result (P13 PR 4):
   the catalogue revision, the source (`publisher` or `artifact_directory`) and every
   component of the accepted plan with its `status` (`activated`, `already_current`,

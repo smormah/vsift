@@ -266,7 +266,10 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   typed reason, and sentinel proxy credentials from the environment appear in no output
   mode (D-03, D-07). The transport tests reach local servers only through the
   development-only `install-test-hooks` feature, which the crate refuses in release
-  builds and the governance check refuses outside development dependencies.
+  builds and the governance check refuses outside development dependencies. A
+  development build resolves no host name for a publisher download, so no test run
+  without `--release` can send a request to a real publisher (or anything to the
+  internet) through `setup install`; release builds do not compile that guard.
 - **SEC-15 (rollback or removal under running jobs):** per-version use locks, removal
   only of unselected unheld versions, cleanup bounded to the current and one previous
   version, a stale-stage sweep limited to positively marked stages, BYO files never

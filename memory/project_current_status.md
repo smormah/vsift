@@ -30,7 +30,7 @@ Today it can:
   workspace through an OS crash or power loss;
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
 - keep every folder it creates private to the user;
-- check an agent's draft report before it is sent (`handoff check`, P13 PR 5, in review).
+- check an agent's draft report before it is sent (`handoff check`, P13 PR 5).
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an
 investigation with the CLI and write a cited report. P12's named-client trials
@@ -45,9 +45,9 @@ qualified it:
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a, 2b and 3 and the P12 debt
-fixes are merged (human output is done); PR 4 (`setup install` and the managed lookup
-tier) is in review. The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0, 1, 2a, 2b, 3 and 5 and the P12 debt
+fixes are merged (human output and `handoff check` are done); PR 4 (`setup install` and
+the managed lookup tier) is in review. The packet is not complete.
 
 ## P13 in one view
 
@@ -62,29 +62,28 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   install/list/rollback/remove/repair`); human output by default; `handoff check`.
 - **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
   `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
-- **Done:** PR 0 (#226): ADR 0023, ledger, issue #16. PR 1 (#228, L-071 closed): typed
-  parse remediation. PR 2a (#229) and PR 2b (#231, `02df4eb`, L-073 closed): readable
-  text for every command through `TerminalText`, SEC-T02 over all of it. PR 3 (#230,
-  `e22ee59`): `smoke_before_activation` smokes staged, unactivated candidates (layout,
-  banners, F01 media and speech fixtures, recheck); a failure discards every candidate
-  or keeps and reports an unprovable stage. Hosted run 36701212028 passed the real tools.
+- **Done:** PR 0 (#226): ADR 0023, ledger, #16. PR 1 (#228, L-071): parse remediation.
+  PR 2a (#229), 2b (#231, `02df4eb`, L-073): readable text through `TerminalText`,
+  SEC-T02 over it. PR 3 (#230, `e22ee59`): smoke of staged candidates, failure cleanup;
+  hosted run 36701212028 passed the real tools. PR 5 (#233, `1a9d027`): `handoff check`
+  shared with the trial grader, findings never quote the draft; `regex` in production;
+  L-086 (contract crate not packageable for crates.io).
 - **In review: PR 4** (`p13-pr4-install`, resume steps 3-4). `setup install --plan
   --accept-plan [--artifact-dir]` takes the install guard without waiting (`BUSY`),
   rebuilds and revalidates the plan, then installs media tools, whisper.cpp CLI and model
-  in order: download over HTTPS (or import from the folder by the catalogue's file names)
-  with exact size and SHA-256, stage, smoke (CLI and model together), `publish_and_select`
-  per component. `already_current` skips a selected version; the first failure stops it
-  (`blocked` after it) and a rerun continues. No resume, no `Range`, `206` refused.
+  in order: HTTPS download (or `--artifact-dir` import) with exact size and SHA-256,
+  stage, smoke, `publish_and_select`. `already_current` skips a selected version; the
+  first failure stops it (`blocked` after) and a rerun continues. No resume or `Range`.
   `DOWNLOAD_FAILED` (exit 7: `tls`, `redirect_policy`, `http_status`, `proxy_auth`,
   `offline`, `size`); digest mismatch `INTEGRITY_FAILURE`; failed smoke
   `MISSING_CAPABILITY`. Every lookup: per call, configured, managed, `PATH`; a managed
   version runs only after its manifest digests match (L-006 closed for it) and a job holds
-  it. `setup plan` observes tools outside the managed store (L-086). Tests on every CI OS
-  use local HTTP, TLS and proxy servers through the dev-only `install-test-hooks`. The
-  real install (`P13 managed smoke`, job `managed-install`) runs after merge.
-  **Next:** PR 5 (`handoff check`), then 6 (list/rollback/remove/repair, cleanup, sweep).
-- **Nothing is published** until P13 completes and the maintainer approves one 0.x
-  pre-release under npm's `next` tag; the npm setup is the maintainer's.
+  it. `setup plan` shows observed state (`install_needed`, each action `pending` or
+  `current`) beside the digested intent, so an accepted plan survives its own install.
+  Tests use local HTTP, TLS and proxy servers (`install-test-hooks`); a debug build
+  resolves no publisher host. The real install (`P13 managed smoke`) runs after merge.
+  **Next:** PR 6 (list/rollback/remove/repair, cleanup, sweep).
+- **Nothing is published** until P13 completes and the maintainer approves a 0.x `next` release.
 - **Found while planning:** the clean-install agent run is P14's (H10); Linux needs OpenSSL 3.
 
 ## P12 in one view
@@ -97,7 +96,7 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 ## Found in P12 (still open)
 
 - **L-085 (debt):** compact tier 82%; fixes for #218-#221 and #224 done, the re-run
-  (#222) follows P13 PR 5. **Also open:** L-074, L-075, L-076 and #204, L-078 to L-084;
+  (#222) is due now. **Also open:** L-074, L-075, L-076 and #204, L-078 to L-084;
   grader readings (`untrusted_listed`, an `rg --files` exclude glob) in `memory/TODO.md`.
 
 ## What works (public CLI)
@@ -108,7 +107,7 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 - `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run|batch`,
   `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
 - `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
-- `handoff check` (P13 PR 5, in review): a draft report from stdin or `--file`.
+- `handoff check` (P13 PR 5): a draft report from stdin or `--file`.
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
   that does not parse names its mistake and the `--help` to read (P13 PR 1).
 - Readable terminal text without `--json` for every command (unstable, not for parsing).
@@ -126,7 +125,7 @@ with 84 trial records. Built: the skill and `skill_contract` guard (#196), the h
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1, 2a, 2b and 3 merged (#226, #228, #229, #231, #230); PR 4 (`setup install`) in review; lifecycle commands, distribution and `handoff check` (#213) to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1, 2a, 2b, 3 and 5 merged (#226, #228-#231, #233); PR 4 (`setup install`) in review; lifecycle commands and distribution to come |
 | P14 | Not started |
 
 ## Architecture snapshot

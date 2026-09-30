@@ -14,8 +14,8 @@ use super::{
     push_outcome,
     text::{DisplayText, Placement, RenderedText, TerminalText, TooLarge},
     view::{
-        ConfiguredModel, ConfiguredSelection, Envelope, InstallComponent, PlanModel, PlanStep,
-        SetupInstall, SetupPlan,
+        ConfiguredModel, ConfiguredSelection, Envelope, InstallComponent, PlanAction, PlanModel,
+        PlanStep, SetupInstall, SetupPlan,
     },
 };
 use crate::command::ExecutionProfile;
@@ -220,49 +220,64 @@ pub(super) fn plan(envelope: &Envelope<SetupPlan>) -> Result<RenderedText, TooLa
     if !plan.actions.is_empty() {
         text.blank_line();
         text.push_fixed("Reviewed managed actions:").end_line();
+        if plan.install_needed == Some(false) {
+            text.push_fixed(
+                "  Every managed component is installed at the plan's version; nothing to \
+                 install.",
+            )
+            .end_line();
+        }
     }
     for action in &plan.actions {
-        text.push_fixed("  ")
-            .push_value(&action.id)
-            .push_fixed(": ")
-            .push_value(&action.component)
-            .push_fixed(" ")
-            .push_value(&action.version)
-            .push_fixed(" from ")
-            .push_value(&action.publisher)
-            .end_line();
-        text.push_fixed("    Download (")
-            .push_unsigned(action.bytes)
-            .push_fixed(" bytes, sha256 ")
-            .push_value(&action.sha256)
-            .push_fixed("):")
-            .end_line();
-        text.push_fixed("    ")
-            .push_value(&action.source_url)
-            .end_line();
-        text.push_fixed("    Licence: ")
-            .push_value(&action.licence)
-            .end_line();
-        text.push_fixed("    Notices:").end_line();
-        text.push_fixed("    ")
-            .push_value(&action.notice_url)
-            .end_line();
-        text.push_fixed("    Trust limit: ")
-            .push_value(&action.trust_limit)
-            .end_line();
-        for file in &action.files {
-            text.push_fixed("    File ")
-                .push_value(&file.name)
-                .push_fixed(" (")
-                .push_unsigned(file.bytes)
-                .push_fixed(" bytes, ")
-                .push_value(&file.mode)
-                .push_fixed(")")
-                .end_line();
-        }
+        push_plan_action(&mut text, action);
     }
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// One reviewed managed action of `setup plan` with its observed state.
+fn push_plan_action(text: &mut TerminalText, action: &PlanAction) {
+    text.push_fixed("  ")
+        .push_value(&action.id)
+        .push_fixed(": ")
+        .push_value(&action.component)
+        .push_fixed(" ")
+        .push_value(&action.version)
+        .push_fixed(" from ")
+        .push_value(&action.publisher);
+    if let Some(state) = &action.state {
+        text.push_fixed(" [").push_value(state).push_fixed("]");
+    }
+    text.end_line();
+    text.push_fixed("    Download (")
+        .push_unsigned(action.bytes)
+        .push_fixed(" bytes, sha256 ")
+        .push_value(&action.sha256)
+        .push_fixed("):")
+        .end_line();
+    text.push_fixed("    ")
+        .push_value(&action.source_url)
+        .end_line();
+    text.push_fixed("    Licence: ")
+        .push_value(&action.licence)
+        .end_line();
+    text.push_fixed("    Notices:").end_line();
+    text.push_fixed("    ")
+        .push_value(&action.notice_url)
+        .end_line();
+    text.push_fixed("    Trust limit: ")
+        .push_value(&action.trust_limit)
+        .end_line();
+    for file in &action.files {
+        text.push_fixed("    File ")
+            .push_value(&file.name)
+            .push_fixed(" (")
+            .push_unsigned(file.bytes)
+            .push_fixed(" bytes, ")
+            .push_value(&file.mode)
+            .push_fixed(")")
+            .end_line();
+    }
 }
 
 /// `setup install`: each component of the accepted plan with what happened

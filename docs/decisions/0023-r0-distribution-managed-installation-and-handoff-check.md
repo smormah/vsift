@@ -311,14 +311,32 @@ and power-loss tests PR 7.
   `failed` with reason `blocked` and were never fetched, and a candidate staged with the
   failed one is discarded. A rerun of the same accepted command continues from the
   first component not yet current.
-- **Reading recorded here: what `setup plan` observes.** The plan's probes see the tools
-  outside VSift's managed store (explicit, configured and `PATH`), as before this PR,
-  not the managed tier. An accepted plan therefore stays valid while `setup install`
-  applies it, which is what lets a rerun of the same command continue, and a plan whose
-  components are all installed reports each `already_current` rather than changing
-  digest. `setup check` is where the managed tier shows (`lookup: managed_version`). The
-  alternative, a plan that sees the managed tier, would make every partial install
-  invalidate its own acceptance.
+- **Decided here: a plan's intent and its observed state.** The digest binds the plan's
+  intent: target, catalogue, every action's reviewed artifact, each dependency's and the
+  model's disposition, and the observations of the tools outside VSift's managed store
+  (explicit, configured and `PATH`) that decide which components are needed. Installing
+  a managed component changes none of that. Beside it, `setup plan` shows the observed
+  state, which is what commands would use now with the managed tier included:
+  `readiness`, each dependency's `status`, the model's `status` (`managed_current` once
+  the managed model is selected), each action's `state` (`pending` or `current`) and
+  `install_needed` (false when every action is current). Acceptance compares the intent
+  only (`SetupPlanResponse::require_same_plan`, and `install_setup` rebuilds the intent
+  without opening the managed store), so the plan accepted before installing stays
+  accepted after a partial or complete install and a rerun continues, while after a
+  complete install `setup plan` reports every component current, readiness no longer
+  blocked on them and nothing to install. Any change to the intent in the saved file is
+  still refused. This replaces the first reading of this PR, a plan that did not see the
+  managed tier at all, which was never released.
+- **Network guard for tests (decided here).** A development build, which every test run
+  without `--release` is, resolves no host name for a publisher download: the transfer
+  client gets a resolver that refuses every name, so a reviewed publisher route fails
+  as `offline` before any connection and nothing is staged. The loopback routes and
+  test proxies are `127.0.0.1` literals, which are never resolved, so the D-03 and D-07
+  tests are unaffected. The opt-in real-tool checkpoints run `--release`; a developer
+  who wants a debug build to download sets `VSIFT_DEV_PUBLISHER_NETWORK=allow`. Release
+  builds do not compile the guard. This makes the CI incident of this PR (a non-ignored
+  test that accepted a real plan digest and started a real download) impossible
+  rather than merely avoided.
 - **Transport** (`publisher_artifact_transfer.rs`). One `GET` per attempt with no
   `Range` header; only a complete `200 OK` identity body is accepted, so `206` is
   refused; every byte goes through the exact size and SHA-256 check into a private

@@ -2132,6 +2132,8 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "sha2",
+ "tar",
  "time",
  "tokio",
  "vsift",

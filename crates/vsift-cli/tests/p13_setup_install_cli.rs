@@ -10,13 +10,16 @@
 //! proxy that demands authentication stops before any byte leaves the
 //! machine, and prove the busy guard, a denied managed folder, an offline
 //! folder without the artifacts and that proxy credentials never appear in
-//! any output.
+//! any output. Stand-in versions published under the catalogue's identities
+//! prove that `setup plan` shows installed components and that the accepted
+//! plan survives a partial and a complete install.
 
 use std::{
     env,
     error::Error,
+    fmt::Write as _,
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Cursor, Write},
     net::TcpListener,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -26,8 +29,14 @@ use std::{
 
 use assert_cmd::Command;
 use serde_json::Value;
-use vsift_domain::ManagedTarget;
-use vsift_infrastructure::{ManagedArtifactStore, detect_managed_target};
+use sha2::{Digest, Sha256};
+use tar::{Builder, Header};
+use vsift_domain::{ArtifactIntegrity, ManagedComponent, ManagedTarget};
+use vsift_infrastructure::{
+    ArchiveInventoryBounds, ManagedArtifactStore, ManagedRuntimeIdentity, ManagedRuntimeRole,
+    ReviewedArchiveFile, ReviewedPayloadArchive, ReviewedRuntimeLayout, StagedManagedCandidate,
+    detect_managed_target, managed_executable_name,
+};
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -417,5 +426,236 @@ fn an_offline_folder_without_the_artifacts_is_refused() -> TestResult {
     assert_eq!(value["data"]["source"], "artifact_directory");
     assert_eq!(value["data"]["components"][0]["reason"], "artifact_missing");
     assert_eq!(value["data"]["components"][0]["step"], "import");
+    Ok(())
+}
+
+fn integrity_of(bytes: &[u8]) -> Result<ArtifactIntegrity, Box<dyn Error>> {
+    let mut hex = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(hex, "{byte:02x}")?;
+    }
+    Ok(ArtifactIntegrity::from_sha256_hex(
+        u64::try_from(bytes.len())?,
+        &hex,
+    )?)
+}
+
+fn executable_name(role: ManagedRuntimeRole) -> Result<String, Box<dyn Error>> {
+    managed_executable_name(role).ok_or_else(|| "no executable name".into())
+}
+
+/// Publishes and selects a stand-in of `component` at `version` in the
+/// binary's managed root: executables that exit 0 (so the plan's probes
+/// pass) or a model file, never the reviewed bytes, with nothing fetched.
+fn publish_stand_in(base: &Base, component: ManagedComponent, version: &str) -> TestResult {
+    let (roles, executables) = match component {
+        ManagedComponent::MediaTools => (
+            vec![
+                (
+                    ManagedRuntimeRole::Ffmpeg,
+                    executable_name(ManagedRuntimeRole::Ffmpeg)?,
+                ),
+                (
+                    ManagedRuntimeRole::Ffprobe,
+                    executable_name(ManagedRuntimeRole::Ffprobe)?,
+                ),
+            ],
+            true,
+        ),
+        ManagedComponent::WhisperCli => (
+            vec![(
+                ManagedRuntimeRole::WhisperCli,
+                executable_name(ManagedRuntimeRole::WhisperCli)?,
+            )],
+            true,
+        ),
+        ManagedComponent::WhisperModel => (
+            vec![(ManagedRuntimeRole::SpeechModel, String::from("model.bin"))],
+            false,
+        ),
+    };
+    let contents: &[u8] = if executables {
+        b"#!/bin/sh\nexit 0\n"
+    } else {
+        b"stand-in model weights"
+    };
+    let mut archive = Builder::new(Vec::new());
+    let mut total = 0_u64;
+    let mut selected = Vec::new();
+    for (_, name) in &roles {
+        let path = format!("root/{name}");
+        let mut header = Header::new_gnu();
+        header.set_path(&path)?;
+        header.set_size(u64::try_from(contents.len())?);
+        header.set_mode(0o755);
+        header.set_cksum();
+        archive.append(&header, Cursor::new(contents))?;
+        total += u64::try_from(contents.len())?;
+        selected.push((path, integrity_of(contents)?));
+    }
+    let bytes = archive.into_inner()?;
+    let store = ManagedArtifactStore::at(base.managed_root())?;
+    let staged = store.import_verified(&bytes[..], integrity_of(&bytes)?)?;
+    let reviewed: Vec<ReviewedArchiveFile<'_>> = selected
+        .iter()
+        .map(|(path, integrity)| ReviewedArchiveFile {
+            path,
+            integrity: *integrity,
+        })
+        .collect();
+    let role_names: Vec<(ManagedRuntimeRole, &str)> = roles
+        .iter()
+        .map(|(role, name)| (*role, name.as_str()))
+        .collect();
+    let executable_names: Vec<&str> = if executables {
+        roles.iter().map(|(_, name)| name.as_str()).collect()
+    } else {
+        Vec::new()
+    };
+    let candidate = StagedManagedCandidate::prepare_archive(
+        staged,
+        component,
+        &role_names,
+        ReviewedPayloadArchive::Tar {
+            max_tar_bytes: u64::try_from(bytes.len())?,
+        },
+        ArchiveInventoryBounds::new(roles.len(), total)?,
+        &[],
+        &reviewed,
+        ReviewedRuntimeLayout {
+            max_bytes: total,
+            aliases: &[],
+            executables: &executable_names,
+        },
+    )?;
+    let guard = store.try_install_guard()?;
+    let identity = ManagedRuntimeIdentity::new(component.identifier(), version)?;
+    let (published, _) = candidate.publish_and_select(&guard, &identity);
+    published?;
+    Ok(())
+}
+
+fn plan_now(base: &Base) -> Result<Value, Box<dyn Error>> {
+    let output = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop", "--json"])
+        .output()?;
+    assert!(output.status.success(), "setup plan failed");
+    let value = json(&output)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("setup-plan.schema.json", &value["data"])?;
+    Ok(value)
+}
+
+fn action_states(plan: &Value) -> Vec<String> {
+    plan["data"]["actions"]
+        .as_array()
+        .map(|actions| {
+            actions
+                .iter()
+                .map(|action| action["state"].as_str().unwrap_or_default().to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn action_version(plan: &Value, index: usize) -> Result<String, Box<dyn Error>> {
+    plan["data"]["actions"][index]["version"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "action without a version".into())
+}
+
+/// P13 PR 4: the plan shows what is installed, and the plan the user
+/// accepted before installing stays acceptable. With the media tools
+/// installed the plan shows them current and the same accepted plan
+/// continues (the next component's artifact is missing from an empty
+/// offline folder, so nothing is requested); with every component installed
+/// the same plan is all `already_current`, and `setup plan` reports every
+/// component current, readiness `ready` and nothing to install, under the
+/// same digest.
+#[test]
+fn the_plan_shows_installed_components_and_its_acceptance_survives_the_install() -> TestResult {
+    if !qualified() {
+        println!("skipped: managed installation runs on Ubuntu 24.04 x86-64 only");
+        return Ok(());
+    }
+    let base = Base::new()?;
+    let (plan, digest) = base.saved_plan()?;
+    let digest = digest.ok_or("the qualified plan has no digest")?;
+    let saved: Value = serde_json::from_str(&fs::read_to_string(&plan)?)?;
+    assert_eq!(saved["data"]["install_needed"], true);
+    assert_eq!(action_states(&saved), ["pending", "pending", "pending"]);
+    let folder = base.0.join("artifacts");
+    fs::create_dir(&folder)?;
+    let install = |base: &Base| -> Result<std::process::Output, Box<dyn Error>> {
+        Ok(base
+            .vsift()?
+            .args(["setup", "install", "--plan", path_text(&plan)?])
+            .args([
+                "--accept-plan",
+                &digest,
+                "--artifact-dir",
+                path_text(&folder)?,
+            ])
+            .arg("--json")
+            .output()?)
+    };
+
+    publish_stand_in(
+        &base,
+        ManagedComponent::MediaTools,
+        &action_version(&saved, 0)?,
+    )?;
+    let partial = plan_now(&base)?;
+    assert_eq!(
+        partial["data"]["plan_digest"].as_str(),
+        Some(digest.as_str())
+    );
+    assert_eq!(partial["data"]["install_needed"], true);
+    assert_eq!(action_states(&partial), ["current", "pending", "pending"]);
+    let continued = install(&base)?;
+    assert_eq!(continued.status.code(), Some(2));
+    let value = json(&continued)?;
+    validate("setup-install.schema.json", &value["data"])?;
+    assert_eq!(value["data"]["components"][0]["status"], "already_current");
+    assert_eq!(value["data"]["components"][1]["reason"], "artifact_missing");
+
+    publish_stand_in(
+        &base,
+        ManagedComponent::WhisperCli,
+        &action_version(&saved, 1)?,
+    )?;
+    publish_stand_in(
+        &base,
+        ManagedComponent::WhisperModel,
+        &action_version(&saved, 2)?,
+    )?;
+    let complete = install(&base)?;
+    assert_eq!(complete.status.code(), Some(0));
+    let value = json(&complete)?;
+    validate("setup-install.schema.json", &value["data"])?;
+    for component in value["data"]["components"]
+        .as_array()
+        .ok_or("no components")?
+    {
+        assert_eq!(component["status"], "already_current", "{component}");
+    }
+
+    let installed = plan_now(&base)?;
+    let data = &installed["data"];
+    assert_eq!(data["plan_digest"].as_str(), Some(digest.as_str()));
+    assert_eq!(data["install_needed"], false);
+    assert_eq!(data["readiness"], "ready");
+    assert_eq!(data["local_asr_model"]["status"], "managed_current");
+    assert_eq!(action_states(&installed), ["current", "current", "current"]);
+    for dependency in data["dependencies"].as_array().ok_or("no dependencies")? {
+        assert_eq!(dependency["status"], "available", "{dependency}");
+    }
+    let human = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop"])
+        .output()?;
+    assert!(String::from_utf8_lossy(&human.stdout).contains("nothing to install"));
     Ok(())
 }

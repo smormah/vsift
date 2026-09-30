@@ -8,11 +8,18 @@
 //! check`, which must resolve every tool as `managed_version` and pass the
 //! local-ASR verification with the managed tools and model. A rerun of the
 //! same accepted plan must report every component `already_current` and
-//! download nothing. It sends no credentials and no personal detail: the
+//! download nothing, and `setup plan` must then show every component
+//! current with nothing to install. Last it times a warm `setup check` and
+//! a first and a warm `frame get` against the managed tools: every use
+//! re-hashes the managed version (L-087), and these lines are the evidence
+//! of what that costs. It sends no credentials and no personal detail: the
 //! publisher requests carry only `VSift`'s neutral user agent.
 //!
-//! `VSIFT_P13_REAL_INSTALL=1 cargo test --locked -p vsift-cli --test
-//! p13_managed_install_real -- --ignored --exact --nocapture`
+//! `VSIFT_P13_REAL_INSTALL=1 cargo test --release --locked -p vsift-cli
+//! --test p13_managed_install_real -- --ignored --exact --nocapture`
+//!
+//! A development build reaches no publisher (the P13 network guard), so the
+//! checkpoint runs `--release`.
 //!
 //! The manual workflow `P13 managed smoke` runs it on a hosted runner.
 
@@ -75,7 +82,7 @@ fn statuses(result: &Value) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "opt-in real managed installation; set VSIFT_P13_REAL_INSTALL=1 on Ubuntu 24.04 x86-64"]
+#[ignore = "opt-in real managed installation; set VSIFT_P13_REAL_INSTALL=1 on Ubuntu 24.04 x86-64 and run --release (a development build reaches no publisher)"]
 fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResult {
     if env::var_os(OPT_IN).is_none() {
         return Err(format!("set {OPT_IN}=1 to run the real managed installation").into());
@@ -175,9 +182,78 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
         ["already_current", "already_current", "already_current"]
     );
 
+    assert_installed(&base, &digest)?;
+    time_managed_use(&base)
+}
+
+/// After the install, `setup check` shows every tool as the managed version
+/// and `setup plan` shows every component current with nothing to install,
+/// under the accepted digest.
+fn assert_installed(base: &Base, digest: &str) -> TestResult {
     let human = base.vsift()?.args(["setup", "check"]).output()?;
     let text = String::from_utf8(human.stdout)?;
     println!("{text}");
     assert_eq!(text.matches("[managed version]").count(), 3);
+
+    let replanned = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop", "--json"])
+        .output()?;
+    let replanned: Value = serde_json::from_slice(&replanned.stdout)?;
+    let data = &replanned["data"];
+    assert_eq!(data["plan_digest"].as_str(), Some(digest));
+    assert_eq!(data["install_needed"], false);
+    assert_eq!(data["readiness"], "ready");
+    assert_eq!(data["local_asr_model"]["status"], "managed_current");
+    for action in data["actions"].as_array().ok_or("no actions")? {
+        assert_eq!(action["state"], "current", "{action}");
+    }
+    Ok(())
+}
+
+/// L-087 evidence: every use of a managed tool re-hashes its version, so
+/// this times a warm `setup check`, then a first `frame get` (which also
+/// verifies the media tools once) and a warm one on a corpus fixture.
+fn time_managed_use(base: &Base) -> TestResult {
+    let started = Instant::now();
+    let warm = base.vsift()?.args(["setup", "check", "--json"]).output()?;
+    println!(
+        "L-087 warm setup check: exit {:?} in {:.2} s",
+        warm.status.code(),
+        started.elapsed().as_secs_f64()
+    );
+    assert_eq!(warm.status.code(), Some(0));
+
+    let fixture = fs::canonicalize(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/corpus/generated/F01.mp4"),
+    )?;
+    let opened = base
+        .vsift()?
+        .args(["ingest", path_text(&fixture)?, "--json"])
+        .output()?;
+    assert_eq!(opened.status.code(), Some(0), "ingest failed");
+    let opened: Value = serde_json::from_slice(&opened.stdout)?;
+    let session = opened["data"]["session_id"]
+        .as_str()
+        .ok_or("ingest returned no session")?
+        .to_owned();
+    for run in ["first", "warm"] {
+        let started = Instant::now();
+        let frame = base
+            .vsift()?
+            .args(["frame", "get", &session, "--at", "0", "--json"])
+            .output()?;
+        println!(
+            "L-087 {run} frame get: exit {:?} in {:.2} s",
+            frame.status.code(),
+            started.elapsed().as_secs_f64()
+        );
+        assert_eq!(
+            frame.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&frame.stdout)
+        );
+    }
     Ok(())
 }

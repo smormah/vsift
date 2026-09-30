@@ -101,6 +101,12 @@ impl ManagedLookup<'_> {
         TrustedExecutable::managed_in(&hold, &managed_executable_name(role)?).ok()
     }
 
+    /// The version selected for `component` now, when it is verified.
+    pub(crate) fn selected_version(&mut self, component: ManagedComponent) -> Option<String> {
+        self.hold(component)
+            .map(|hold| hold.runtime().identity().version().to_owned())
+    }
+
     /// The managed model file, with its version's hold.
     pub(crate) fn model(&mut self) -> Option<ManagedModel> {
         let hold = self.hold(ManagedComponent::WhisperModel)?;

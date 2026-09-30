@@ -40,6 +40,60 @@ const USER_AGENT: &str = "VSift/0.1 managed setup";
 /// proxy test fails if a dependency update changes it.
 const PROXY_AUTH_REQUIRED: &str = "proxy authorization required";
 
+/// The variable that lets a development build reach real publishers; its
+/// only accepted value is [`DEVELOPMENT_NETWORK_ALLOWED`].
+#[cfg(debug_assertions)]
+const DEVELOPMENT_NETWORK_VARIABLE: &str = "VSIFT_DEV_PUBLISHER_NETWORK";
+/// The value of [`DEVELOPMENT_NETWORK_VARIABLE`] that allows the network.
+#[cfg(debug_assertions)]
+const DEVELOPMENT_NETWORK_ALLOWED: &str = "allow";
+
+/// Development builds resolve no host name (P13 PR 4 network guard).
+///
+/// Every test that is not `--release` runs a development build, and a test
+/// that reaches a real publisher by accident (an accepted real plan digest,
+/// say) would download from the internet on a contributor's machine or a CI
+/// runner. Every reviewed publisher route names its host, and the loopback
+/// test routes and test proxies are `127.0.0.1` literals that are never
+/// resolved, so refusing every name keeps a development build on the
+/// machine: the download fails as `offline` before any connection. The
+/// opt-in real-tool tests run `--release`; a developer who wants a debug
+/// build to download sets [`DEVELOPMENT_NETWORK_VARIABLE`] to
+/// [`DEVELOPMENT_NETWORK_ALLOWED`]. Release builds never compile this.
+#[cfg(debug_assertions)]
+struct DevelopmentBuildResolver;
+
+#[cfg(debug_assertions)]
+impl reqwest::dns::Resolve for DevelopmentBuildResolver {
+    fn resolve(&self, _name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(std::future::ready(Err(
+            Box::new(DevelopmentNetworkRefused) as Box<dyn Error + Send + Sync>
+        )))
+    }
+}
+
+/// A development build refused to resolve a publisher's host.
+#[cfg(debug_assertions)]
+#[derive(Debug)]
+struct DevelopmentNetworkRefused;
+
+#[cfg(debug_assertions)]
+impl fmt::Display for DevelopmentNetworkRefused {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a development build does not resolve publisher hosts")
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Error for DevelopmentNetworkRefused {}
+
+/// Whether this development build was explicitly allowed to download.
+#[cfg(debug_assertions)]
+fn development_network_allowed() -> bool {
+    std::env::var_os(DEVELOPMENT_NETWORK_VARIABLE)
+        .is_some_and(|value| value == DEVELOPMENT_NETWORK_ALLOWED)
+}
+
 /// A publisher's reviewed release-service route, separate from the artifact digest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PublisherOrigin {
@@ -342,6 +396,12 @@ fn transfer_client(artifact: &ReviewedPublisherArtifact) -> Result<Client, Publi
         .read_timeout(STALL_DEADLINE)
         .timeout(TRANSFER_DEADLINE)
         .user_agent(USER_AGENT);
+    #[cfg(debug_assertions)]
+    let builder = if development_network_allowed() {
+        builder
+    } else {
+        builder.dns_resolver(DevelopmentBuildResolver)
+    };
     #[cfg(any(test, feature = "install-test-hooks"))]
     let builder = if origin == PublisherOrigin::Loopback {
         let builder = builder.https_only(false);
@@ -680,8 +740,56 @@ mod tests {
         result
     }
 
+    /// The P13 PR 4 network guard: a development build (every test run
+    /// without `--release`) fails a reviewed publisher download as `offline`
+    /// before any connection and creates no stage.
+    #[cfg(debug_assertions)]
     #[tokio::test]
-    #[ignore = "opt-in pinned publisher download; set VSIFT_P06_DIRECT_TRANSFER=1"]
+    async fn a_development_build_does_not_reach_a_publisher()
+    -> Result<(), Box<dyn std::error::Error>> {
+        if super::development_network_allowed() {
+            println!("skipped: this run allows the development network");
+            return Ok(());
+        }
+        let parent = unique_parent()?;
+        let result = async {
+            let store = ManagedArtifactStore::at(parent.join("managed"))?;
+            for (url, origin) in [
+                (
+                    "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-ubuntu-x64.tar.gz",
+                    PublisherOrigin::GitHubRelease,
+                ),
+                (
+                    "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin",
+                    PublisherOrigin::HuggingFaceModel,
+                ),
+            ] {
+                let artifact =
+                    ReviewedPublisherArtifact::from_reviewed_source(url, origin, integrity()?)?;
+                assert!(matches!(
+                    download_reviewed_publisher_artifact(
+                        &store,
+                        &artifact,
+                        &ProcessCancellation::new(),
+                        &NoProgress
+                    )
+                    .await,
+                    Err(PublisherTransferError::Failed(
+                        super::DownloadFailureReason::Offline
+                    ))
+                ));
+            }
+            assert_eq!(fs::read_dir(&parent)?.count(), 0);
+            Ok::<(), Box<dyn std::error::Error>>(())
+        }
+        .await;
+        fs::remove_dir_all(parent)?;
+        result
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in pinned publisher download; set VSIFT_P06_DIRECT_TRANSFER=1 and run --release \
+                (or set VSIFT_DEV_PUBLISHER_NETWORK=allow)"]
     async fn pinned_whisper_asset_downloads_to_owned_stage_without_execution()
     -> Result<(), Box<dyn std::error::Error>> {
         if std::env::var_os("VSIFT_P06_DIRECT_TRANSFER").is_none() {

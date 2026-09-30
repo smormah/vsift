@@ -107,8 +107,10 @@ Proposed) lists the contract changes P13 makes and why:
 
 Before the first publication, values that have never shipped may change in place
 rather than by a new version: the setup-check `lookup` value `managed_version`, the
-remediation's `managed_install` values and the setup-plan availability
-`catalogue_accepted` (from `catalogue_accepted_install_pending`). After the first
+remediation's `managed_install` values, the setup-plan availability
+`catalogue_accepted` (from `catalogue_accepted_install_pending`) and the setup plan's
+observed-state members (`install_needed`, an action's `state`, the model status
+`managed_current`). After the first
 published artifact, v1 changes are additive only, as above.
 
 ## 2026-09-30 note: the `handoff` namespace (P13 PR 5)
@@ -137,6 +139,10 @@ P13 PR 4 made the setup edits listed above, before any publication:
 - the setup-plan availability `catalogue_accepted_install_pending` is renamed
   `catalogue_accepted`, and the managed-install `next_step` texts say that `setup
   install` applies the plan;
+- the setup plan gains its observed state beside the digested intent (ADR 0023 PR 4
+  note): the required `install_needed`, each action's required `state` (`pending` or
+  `current`) and the model status `managed_current`; `readiness` and the dependency
+  statuses now include the managed tier, and acceptance compares the intent only;
 - `DOWNLOAD_FAILED` (exit 7) joins the failure codes, whose exit class 7 now covers a
   managed download too;
 - `setup-install.schema.json` describes the `data` of a `setup.install` result, which a

@@ -132,8 +132,10 @@ fn a_plan_with_an_action_names_everything_the_user_accepts() -> TestResult {
     plan["data"]["catalogue_revision"] = json!("2026-09-20.1");
     plan["data"]["stop_new_plans_at"] = json!("2026-12-31T00:00:00Z");
     plan["data"]["plan_digest"] = json!("a".repeat(64));
+    plan["data"]["install_needed"] = json!(true);
     plan["data"]["actions"] = json!([{
         "id": "install-whisper_model",
+        "state": "pending",
         "component": "whisper_model",
         "version": "base-q5_1",
         "publisher": "ggml-org",
@@ -163,6 +165,19 @@ fn a_plan_with_an_action_names_everything_the_user_accepts() -> TestResult {
         text.lines()
             .any(|line| line.trim() == "https://example.invalid/ggml-base-q5_1.bin")
     );
+    assert!(text.contains("from ggml-org [pending]"));
+    assert!(!text.contains("nothing to install"));
+
+    // P13 PR 4: after the install the same plan says each action is current
+    // and that nothing is left to install.
+    plan["data"]["install_needed"] = json!(false);
+    plan["data"]["actions"][0]["state"] = json!("current");
+    plan["data"]["local_asr_model"]["status"] = json!("managed_current");
+    plan["data"]["readiness"] = json!("ready");
+    let installed = render(CommandName::SetupPlan, &plan)?;
+    assert!(installed.contains("from ggml-org [current]"));
+    assert!(installed.contains("nothing to install"));
+    assert!(installed.contains("Readiness: ready"));
     Ok(())
 }
 

@@ -34,6 +34,10 @@ predicates.workspace = true
 # Already a workspace development dependency; the O-02 property test of
 # `job batch` generates batch files with it.
 proptest.workspace = true
+# Already workspace dependencies; the P13 plan-after-install test
+# (p13_setup_install_cli) publishes stand-in managed versions with them.
+sha2.workspace = true
+tar.workspace = true
 # The opt-in P06 checkpoint drives tool verification, and the transcript and
 # search contract tests seed session records, through the engine's internal
 # crates directly; the CLI itself depends only on `vsift` and `vsift-contract`.

@@ -17,7 +17,7 @@ Local ASR model: missing, manual_selection_required (needs user authority)
   Next: For local ASR, configure trusted model weights with setup configure-model --file <absolute-path>. A supplied transcript can skip local ASR.
 
 Reviewed managed actions:
-  install-whisper_model: whisper_model base-q5_1 from ggml-org
+  install-whisper_model: whisper_model base-q5_1 from ggml-org [pending]
     Download (59707625 bytes, sha256 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb):
     https://example.invalid/ggml-base-q5_1.bin
     Licence: MIT

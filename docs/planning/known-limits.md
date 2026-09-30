@@ -792,13 +792,16 @@ Counts: 3 high, 24 medium, 55 low (82 entries).
   for both) and 148 MB for the model. With SHA extensions that is roughly 0.1 to 0.3 s
   per command; without them it can approach a second.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 4 note; `vsift/src/managed.rs`. Not yet measured on the reference machine.
+  PR 4 note; `vsift/src/managed.rs`. Not yet measured: the `P13 managed smoke`
+  workflow's managed-install job prints `L-087` lines timing a warm `setup check` and
+  a first and a warm `frame get` against the managed tools.
 - **Impact:** evidence commands on a managed install start a little later.
 - **Why:** identifying managed tools by digest on every use is what closes L-006 for
   them; a cache keyed to file identity would reopen it.
 - **Mitigation:** each version is hashed once per open, after its use lock is held,
   and one command opens each component at most once.
-- **Next step:** measure it in P14's release qualification.
+- **Next step:** read the `L-087` timings of the first managed-install run and decide
+  whether a cache is needed; measure again in P14's release qualification.
 - **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
   **Review:** pending.
 
@@ -1137,29 +1140,6 @@ Counts: 3 high, 24 medium, 55 low (82 entries).
 - **Next step:** make the source hash check cancellation per block with L-011's work.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
-
-### L-086
-
-**`setup plan` observes the tools outside the managed store, so it still lists installed components.**
-
-- **What:** the plan's probes see per-call, configured and `PATH` tools, not the
-  managed versions `setup install` selected. After a complete install, `setup plan`
-  still shows the three managed actions (and `readiness: blocked` when nothing else is
-  on the machine), and `setup install` reports each `already_current`.
-- **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 4 note ("what `setup plan` observes"); [CLI contract](../contracts/cli-v1.md)
-  `setup plan`.
-- **Impact:** a user who reads the plan after installing may think the tools are
-  missing; `setup check` (with `lookup: managed_version`) is the authority on what
-  commands use.
-- **Why:** a plan that saw the managed tier would change digest after every component
-  it installs, so a failed install could not be continued by rerunning the accepted
-  command.
-- **Mitigation:** the plan's next steps say that an installed component is reported
-  `already_current`; `setup check` reports the managed tier.
-- **Next step:** reconsider with PR 6's `setup list`.
-- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
 
 ## Speech recognition
 

@@ -68,12 +68,12 @@ pub use local_asr_setup::{
 pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmoke, CompatibilitySmokeCheck,
     CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CompatibilitySmokeVerdict,
-    ManagedPlanAvailability, ManagedSetupAction, ManagedSetupPlan, PlanAcceptanceError,
-    ReviewedArchiveLimits, ReviewedArchiveLink, ReviewedArchiveSelection,
-    ReviewedCompatibilityPolicy, ReviewedManagedFile, ReviewedRuntimeCopy,
-    SetupDependencyDisposition, SetupModelDisposition, SetupProfile, SetupSelectionState,
-    SmokeStageOutcome, StageDisposal, StageRetentionReason, StagedManagedComponent,
-    plan_managed_setup, smoke_before_activation,
+    ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction, ManagedSetupPlan,
+    ObservedModel, PlanAcceptanceError, ReviewedArchiveLimits, ReviewedArchiveLink,
+    ReviewedArchiveSelection, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+    ReviewedRuntimeCopy, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
+    StagedManagedComponent, plan_managed_setup, smoke_before_activation,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

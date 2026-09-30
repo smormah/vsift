@@ -179,7 +179,11 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   workspace test run enables it through the engine crate's development dependency; alone,
   run `cargo test -p vsift-infrastructure --features install-test-hooks --test
   p13_install_transaction`. A release-mode run of the crate alone skips that test, so the
-  opt-in real-tool tests keep `--release`. The test's untrusted TLS identity is a
+  opt-in real-tool tests keep `--release`, which they need anyway: a development build
+  resolves no host name for a publisher download (the network guard), so no test run
+  without `--release` can reach the internet through `setup install`; set
+  `VSIFT_DEV_PUBLISHER_NETWORK=allow` to let a debug build download. The test's
+  untrusted TLS identity is a
   throwaway self-signed key in `tests/fixtures/tls/` (README there). The real install
   (`VSIFT_P13_REAL_INSTALL=1`, `p13_managed_install_real` in `vsift-cli`) runs only on
   Ubuntu 24.04 x86-64, through the manual workflow `P13 managed smoke` (job

@@ -817,13 +817,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `unavailable_target`, `unavailable_catalogue_expired` or
   `unavailable_catalogue_invalid` instead of the constant `unavailable_unqualified`; the
   setup-plan availability `catalogue_accepted_install_pending` is renamed
-  `catalogue_accepted`; exit 7 now also covers a managed download. An unreadable
+  `catalogue_accepted`; exit 7 now also covers a managed download. The setup plan gains
+  its observed state beside the digested intent: required `install_needed`, each
+  action's `state` (`pending` or `current`) and the model status `managed_current`;
+  `readiness` and dependency statuses now include the managed tier, and acceptance
+  compares the intent only, so an accepted plan survives its own install. An unreadable
   `setup install --plan` is `STORAGE_IO` (was `COMMAND_NOT_IMPLEMENTED`). The frozen
   reserved-command examples use `setup.repair`. Known limits: L-006 narrowed to tools
   VSift does not manage; L-037 rewritten (lifecycle commands still reserved); new
-  L-086 (`setup plan` does not show managed versions), L-087 (managed versions are
-  rehashed per command) and L-088 (tunnel proxy authentication is recognised by a
-  dependency's error text).
+  L-087 (managed versions are rehashed per command) and L-088 (tunnel proxy
+  authentication is recognised by a dependency's error text).
+- **Development builds reach no publisher** (P13 PR 4): the managed download's client
+  in a debug build (every test run without `--release`) resolves no host name, so a
+  test that accepts a real plan cannot download from the internet;
+  `VSIFT_DEV_PUBLISHER_NETWORK=allow` lifts it for a developer. Release builds are
+  unchanged.
 - SEC-T01 is met for P11 by non-adversarial evidence (the strict-Linux attestation
   checks and the hardened `strict-worker-boundary` container controls), by maintainer
   decision of 2026-09-28; the adversarial containment evidence is technical debt,

@@ -79,7 +79,15 @@ fn unavailable_plan() -> Result<OperationResponse<Value>, serde_json::Error> {
         1_800_000_000,
         None,
     );
-    OperationResponse::complete("setup.plan", &SetupPlanResponse::new(&plan))
+    OperationResponse::complete("setup.plan", &present(&plan))
+}
+
+/// A plan as `setup plan` presents it on a machine with no managed tier.
+fn present(plan: &vsift_application::ManagedSetupPlan) -> SetupPlanResponse {
+    SetupPlanResponse::new(
+        plan,
+        &vsift_application::ManagedPlanObservation::without_managed_tier(plan),
+    )
 }
 
 fn status(state: SessionState) -> StatusData {
@@ -213,7 +221,7 @@ fn unavailable_setup_plan_matches_the_frozen_example() -> TestResult {
 fn saved_plan_round_trips_and_is_accepted_only_unchanged() -> TestResult {
     let bytes = serde_json::to_vec(&unavailable_plan()?)?;
     let saved: SavedSetupPlan = serde_json::from_slice(&bytes)?;
-    let current = SetupPlanResponse::new(&plan_managed_setup(
+    let current = present(&plan_managed_setup(
         SetupProfile::Desktop,
         diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         ManagedTarget::WindowsX86_64,
@@ -221,7 +229,7 @@ fn saved_plan_round_trips_and_is_accepted_only_unchanged() -> TestResult {
         1_800_000_000,
         None,
     ));
-    let changed = SetupPlanResponse::new(&plan_managed_setup(
+    let changed = present(&plan_managed_setup(
         SetupProfile::Worker,
         diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         ManagedTarget::WindowsX86_64,

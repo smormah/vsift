@@ -41,7 +41,9 @@ jobs:
 
   # P13 PR 4: the real `setup plan` -> `setup install` -> `setup check`
   # journey through the release binary, from a fresh per-user base with an
-  # empty PATH, then a rerun that must find every component already current.
+  # empty PATH, then a rerun that must find every component already current
+  # and a plan with nothing to install. Its "L-087" lines time a warm setup
+  # check and frame get against the managed tools (the rehash-per-use cost).
   managed-install:
     name: Managed install through the CLI (Ubuntu 24.04)
     runs-on: ubuntu-24.04
@@ -59,7 +61,7 @@ jobs:
           uname -m
           nproc
 
-      - name: Plan, install, check and rerun the accepted plan
+      - name: Plan, install, check, rerun and time the accepted plan
         env:
           VSIFT_P13_REAL_INSTALL: "1"
         run: >-

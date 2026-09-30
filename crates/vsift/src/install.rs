@@ -129,7 +129,7 @@ impl Engine {
             | ManagedArtifactError::Transfer(_) => EngineError::ManagedStorageUnavailable,
         })?;
         let current = self
-            .plan_setup(SetupPlanRequest {
+            .plan_setup_intent(SetupPlanRequest {
                 profile,
                 probe_timeout: request.probe_timeout,
             })

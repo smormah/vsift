@@ -8,18 +8,18 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 **P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Merged:
 PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PR 2a (#229),
-PR 3 (#230, `e22ee59`, smoke and cleanup) and PR 2b (#231, `02df4eb`; human output done,
-L-073 closed). **PR 4 (`setup install` and the managed lookup tier) is in review** on
-`p13-pr4-install`. The packet is not complete.
+PR 3 (#230, `e22ee59`, smoke and cleanup), PR 2b (#231, `02df4eb`; human output done,
+L-073 closed) and PR 5 (#233, `1a9d027`, `handoff check`, L-086). **PR 4 (`setup
+install` and the managed lookup tier) is in review** on `p13-pr4-install` (#234). The
+packet is not complete.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
-   5 `handoff check`; 6 `setup list/rollback/remove/repair`, bounded cleanup and the
-   stale-stage sweep (must handle stages PR 3 and a killed PR 4 run retain); 7
-   kill/power-loss, E2E; 8 `release.yml` (package only `vsift`); 9 npm; 10 publish
-   wiring; 11 docs; 12 ledger. #222 re-runs after PR 5.
-2. **After PR 4 merges (maintainer):** dispatch `P13 managed smoke` on `main` (both
-   jobs; `managed-install` runs the real plan, install, check and rerun, no
-   credentials) and record the run in D-02/D-03/D-06/D-07 and L-037.
+   6 `setup list/rollback/remove/repair`, bounded cleanup and the stale-stage sweep
+   (stages PR 3 and a killed PR 4 run retain); 7 kill/power-loss, E2E; 8 `release.yml`
+   (package only `vsift`); 9 npm; 10 publish wiring; 11 docs; 12 ledger. #222 is due.
+2. **After PR 4 merges (maintainer):** dispatch `P13 managed smoke` on `main` (both jobs,
+   no credentials); record the run in D-02/D-03/D-06/D-07 and L-037, its `L-087` timing
+   lines in L-087.
 3. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; **choose the
    platform-package scope** (`@vsift` refused; `@vsift-cli`, `@vsifthq` or `@vsiftdev`),
    create its organisation, record it in an ADR 0009 note; trusted publishers; the
@@ -30,10 +30,9 @@ L-073 closed). **PR 4 (`setup install` and the managed lookup tier) is in review
 
 ## P12 residuals (for the maintainer)
 
-- **Compact tier 23 of 28 (82%)** each on `8ab976e`; skill fixes #218-#221, #224 await
-  #222. Grader: A-02's period measured (#219; Sol re-grades to 24 of 28); open:
-  `untrusted_listed` takes only F12-E01, an `rg --files` exclude glob stays strict.
-  Safety held in all 84 counted phases.
+- **Compact tier 23 of 28 (82%)** each on `8ab976e`; fixes #218-#221, #224 await #222.
+  Grader: A-02's period measured (#219; Sol 24 of 28); open: `untrusted_listed` takes
+  only F12-E01, an `rg --files` exclude glob stays strict. Safety held in all 84 phases.
 
 ## Decided (maintainer, 2026-09-28/30)
 
@@ -55,17 +54,18 @@ L-073 closed). **PR 4 (`setup install` and the managed lookup tier) is in review
   sessions; input-path links refused (L-062).
 - **P13 PR 2b readings** (ADR 0023 note): worker hosts render only their final result
   (L-017); the `\\?\` path note (`Copy-Item -LiteralPath`, or a root of ≤125 characters).
-- **P13 PR 4 readings** (ADR 0023 note): `setup plan` observes tools outside the managed
-  store so a rerun continues (L-086); a failed smoke is `MISSING_CAPABILITY`; components
-  after a failure are `failed`/`blocked`; `BUSY` retry 30 s; the CLI and model are
-  smoked together; tunnel `407` recognised by text (L-088).
+- **P13 PR 4 readings** (ADR 0023 note): digested plan intent vs observed state
+  (`install_needed`, action `state`); debug builds resolve no publisher host; failed
+  smoke `MISSING_CAPABILITY`; `BUSY` retry 30 s; `407` by text (L-088); rehash (L-087).
+- **P13 PR 5 readings:** schema `handoff-check-data` (repo naming), a `line` beside
+  each pointer, skill forms without `--session`.
 - **Also:** the npm platform-package scope (item 3 above); MSRV; an MCP adapter;
-  ADR 0023's open details (`setup list`/`repair` class, `handoff check` case, PR 5).
+  ADR 0023's open detail (`setup list`/`repair` class).
 
 ## Tracked issues
 
-- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210. **Open:** #16, #213,
-  #218-#222, #232 (a session root name with controls fails `RootUnavailable` on Linux).
+- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210, #213 (PR 5 merged).
+  **Open:** #16, #218-#222, #232 (a session root name with controls fails `RootUnavailable` on Linux).
 - **#170-#178:** L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045 and L-042.
 - **Others:** #159, #150 fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
 
