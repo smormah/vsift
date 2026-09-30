@@ -22,8 +22,8 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > [installing and using it](docs/agents/skill.md)) takes a coding agent from a local
 > video to a grounded, cited handoff. P12's named-client trials qualify it for strong
 > models (Claude Opus 5.5, GPT-6-Astra). The compact models (Claude Sonnet 5.5,
-> GPT-6-Sol) are supported below target: 82% of trials passed fully, against a 90%
-> target ([qualification record](docs/planning/p12-agent-qualification.md)). Every
+> GPT-6-Sol) meet their 90% target on the re-run after P12's fixes: 93% and 100% of
+> trials passed fully ([qualification record](docs/planning/p12-agent-qualification.md)). Every
 > command now prints readable terminal text without `--json` (P13). Managed
 > dependency installation and native and npm distribution are P13's remaining work,
 > in progress since 2026-09-30

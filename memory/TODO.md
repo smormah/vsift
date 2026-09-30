@@ -20,14 +20,14 @@ packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
    `dry_run`, publishing exactly the tarballs `npm-package` builds after `npm-qualify`,
    `--tag next` (`latest` stays 0.0.0; notes name Yarn's one-day hold, release.md §5);
    11 docs (`install.md`'s archive verification, SmartScreen/Gatekeeper; the record
-   `p13-distribution.md`); 12 ledger. #222 is due.
+   `p13-distribution.md`); 12 ledger.
 2. **Maintainer-only, before PR 10's publish step** (`vsift-cli@0.0.0` placeholder held,
    `latest`): trusted publishers for `vsift-cli` and the three `@vsift/…` packages; the
    `release` environment (maintainer as reviewer); tag ruleset; fork-PR approval; the
    first publish (2FA, or a short-lived environment token); the 0.x `next` pre-release.
-3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: 23 of 28, 82%,
-   on `8ab976e`; fixes #218-#221 and #224 done; the re-run #222 pending; grader open
-   points `untrusted_listed` and an `rg --files` exclude glob) and SEC-T01 (#188, L-068).
+3. **Debt before P14:** A-09 blurred, review tier (L-095, #224; maintainer runs it); SEC-T01
+   (#188, L-068). #222 re-run met the compact target (Sonnet 26/28, Sol 28/28; L-085 closed).
+   Open: grader reading `untrusted_listed` (F12-E01 only); #219.
 
 ## Decided (maintainer, 2026-09-28/30)
 
@@ -65,7 +65,7 @@ packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
 ## Tracked issues
 
 - **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210, #213. **Open:** #16,
-  #218-#222, #232 (a session root name with controls fails `RootUnavailable` on Linux);
+  #219, #224, #232 (a session root name with controls fails `RootUnavailable` on Linux);
   #170-#178 (L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045, L-042); #159, #150
   fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
 
@@ -84,7 +84,7 @@ packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
 
 - **R0 ships** only when a coding agent goes from a local video to a grounded handoff,
   on both the supplied-transcript and local-ASR paths, in named Codex and Claude Code
-  trials. P12's review tier met this; the compact target is debt (L-085).
+  trials. P12's review tier met this; the compact tier met its target on the re-run (#222).
 - **The skill** orchestrates the published CLI only: no processing logic, no tool
   grants. A new public command, flag, failure code or referenced field needs a skill
   update in the same change (`skill_contract` fails otherwise); its one input exception is

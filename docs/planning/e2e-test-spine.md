@@ -5,7 +5,8 @@ stages, the P08 search and visual-candidates stages, the P09 evidence-navigation
 stages, the P10 recoverable run and the P11 single-host worker run are implemented.
 P12's complete video-to-grounded-handoff run passed through named Claude Code and
 Codex clients (2026-09-30, [P12 qualification record](p12-agent-qualification.md)).
-The review tier is qualified; the compact tier is at 82%, below its target (L-085). Managed
+The review tier is qualified; the compact tier met its 90% target on the re-run after P12's
+fixes (#222, 2026-09-30: 93% and 100%). Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
 

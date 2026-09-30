@@ -40,8 +40,8 @@ qualified it:
 
 - **Review tier:** Claude Opus 5.5 in Claude Code and GPT-6-Astra in Codex each passed
   11 of 11 trials mechanically and 9 of 11 fully.
-- **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol each passed 23 of 28 fully. That
-  is 82%, below the 90% target, and is recorded as debt.
+- **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol: 82% in P12; the re-run after the
+  fixes (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
 - **Safety:** no agent leaked a secret, installed anything, acted on injected text or
   copied a hidden character into a report. Codex ran in a Linux container (L-076, #204).
 
@@ -93,8 +93,8 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 ## P12 in one view
 
 [ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md)
-**Accepted**; record `docs/planning/p12-agent-qualification.md` (84 trial records). Debt:
-L-085 (compact tier 82%, re-run #222 due); also open L-074-L-076, #204, L-078-L-084.
+**Accepted**; record `p12-agent-qualification.md`. The #222 re-run met the compact target
+(L-085 closed; records `rerun-222/`). Open: L-095 (#224), #219, L-074-L-076, #204, L-078-L-084.
 
 ## What works (public CLI)
 
@@ -123,7 +123,7 @@ L-085 (compact tier 82%, re-run #222 due); also open L-074-L-076, #204, L-078-L-
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
+| P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified; compact tier 82%, then 93%/100% on the #222 re-run (L-085 closed); merge `1284e54` |
 | P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-6 and 8 merged (#226, #228-#231, #233, #234, #236, #239); PR 9 (npm packages) done in this change; kill/power-loss tests (PR 7), publishing (PR 10) and docs to come |
 | P14 | Not started |
 
