@@ -841,7 +841,9 @@ job stay PR 10's. The runbooks are [`install.md`](../operations/install.md) (use
   digest, median of seven in one process): 38.7 ms for the 9,716,736-byte Windows release
   executable on a workstation without SHA extensions (Node.js 22.16). The matrix measures
   it on every hosted runner and fails above 50 ms, so the check stays within H5's budget
-  or the run says otherwise.
+  or the run says otherwise. Measured on the hosted runners (Release run 36772356382):
+  median 4.6 to 5.2 ms on macOS 15 arm64, 8.4 to 9.7 ms on Ubuntu 24.04 and 10.5 to
+  10.8 ms on Windows Server 2025, under Node.js and Bun alike.
 - **The launcher (`npm/vsift/lib/launcher.cjs`, run by the three-line `bin/vsift.cjs`).** Plain CommonJS with `node:` built-ins
   only, about 250 lines. It maps `process.platform` and `process.arch` to the three
   targets, resolves `@vsift/<target>/package.json` with `require.resolve` from itself (so

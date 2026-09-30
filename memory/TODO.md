@@ -11,7 +11,7 @@ PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PRs 2a
 `setup install`), PR 5 (#233, `handoff check`, L-086), PR 8 (#236, `772ead2`,
 `release.yml`, the workflow lint) and PR 6 (#239, `02a8f76`, `setup list/rollback/
 remove/repair`, cleanup and the stale-stage sweep, L-090). **PR 9 (npm packages and the
-Verdaccio matrix) is done** on `p13-pr9-npm`: the `vsift` launcher and three `@vsift/…`
+Verdaccio matrix) is done** (#240, `p13-pr9-npm`): the `vsift` launcher and three `@vsift/…`
 packages from the archives, qualified with npm, pnpm, Yarn and Bun on three OSes
 (L-091 to L-094); PR 7 runs in parallel. The packet is not complete.
 

@@ -385,7 +385,7 @@ an agent trial.
   (POSIX `SIGTERM`/`SIGINT` to the launcher alone; Windows console Ctrl-Break) with no
   orphan, the refusals above, the one-shot runners, optional dependencies omitted (exit
   127, no stack trace), running offline and a clean uninstall
-  (`npm/qualification/qualify.cjs`; results in the pull request and each job's summary).
+  (`npm/qualification/qualify.cjs`; results in the pull request and each job's summary). Release run 36772356382 (2026-09-30, `2f0d65c`): all twelve jobs passed.
   Known limits L-091 to L-094. The clean-machine install from the published pre-release
   is P14's.
 - R-SEC03: scan results, not merely job success, have no unresolved release-blocking

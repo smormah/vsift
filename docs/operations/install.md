@@ -92,8 +92,8 @@ Each time it runs, the launcher finds the platform package for this machine, che
 it has the launcher's own version and that the executable's size and SHA-256 are those
 recorded when the release was built, and then runs it with your arguments, standard
 input, output and error. It exits with vsift's status; if vsift is ended by a signal, so
-is the launcher. The checks take a few milliseconds on most machines (at most about
-40 ms measured).
+is the launcher. The checks take 5 to 11 ms on the hosted CI machines (about 40 ms on
+a workstation without SHA extensions).
 
 If the launcher cannot run vsift it prints one message on stderr, starting with
 `vsift (npm launcher):`, and exits with a status vsift itself never uses:
