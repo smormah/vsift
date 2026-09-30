@@ -69,10 +69,10 @@ bounded trial records are in `docs/planning/p12-agent-trials/`.
   - `verification.md` §6's outcome;
   - known limits: L-085 new, L-039 deleted, and L-007 and L-075 rewritten;
   - the supported-models table in `docs/agents/skill.md`;
-  - issues #218-#222;
+  - issues #218-#222 and #224 (blurred-content overclaim);
+  - the maintainer's review (2026-09-30): 19 accepted, 6 rejected;
   - `record` now replaces every check image's code with `<check-code>`.
 - **Open:**
-  - the maintainer's review of 25 runs (decision cells `pending`);
   - the ledger follow-up;
   - the compact tier's debt (L-085).
 

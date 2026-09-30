@@ -15,9 +15,8 @@ rule 9 lets one follow-up set `complete` with that PR's merge commit.
 1. **Merge the completion PR, then the ledger follow-up.** P12 `complete`, the merge
    commit, the verification entries pointing to the record (drafted in the PR
    description), and both memory files saying P12 is complete.
-2. **Maintainer: review 25 runs** (ADR 0022 D7). The record's "Maintainer review" has
-   one `pending` cell per run: every strong-tier A-08 and A-09 run, and Sonnet 5.5's
-   three resumed A-02 phases on `56f1e1f`. Seven are flagged.
+2. **Maintainer review done (2026-09-30):** 19 accepted, 6 rejected (three blurred-banner
+   overclaims, #224; Sonnet's three reference-round resume misses). A-08 5/5 on both.
 3. **P13 (distribution and managed installation) is next.** The maintainer starts it
    (rule 10). The plan: an npm launcher over per-platform packages without install
    scripts, the name checklist, managed installation, human-readable output and the

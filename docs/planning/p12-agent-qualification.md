@@ -16,13 +16,15 @@ It works on both the supplied-transcript path and the local speech-recognition p
 
 **Strong tier (review models):** Claude Opus 5.5 and GPT-6-Astra each passed all 11
 counted trials mechanically. Every citation resolved, nothing ran outside policy,
-every budget held and the image check was right. Each gave the right answer in 9 of 11.
+every budget held and the image check was right. After the maintainer's review
+(2026-09-30):
 
-- **A-08** (local speech recognition): Opus 5.5 passed 5 of 5 fully and GPT-6-Astra 4
-  of 5. Astra's miss was wording: "submission button" for Submit.
-- **A-09:** the four remaining interpretation misses are all on the blurred-banner
-  scenario (3), plus that one A-08 wording miss. The maintainer is reviewing these
-  runs (below).
+- **A-08** (local speech recognition): both passed 5 of 5. Astra's one automatic miss
+  ("submission button" for Submit) was accepted as a wording difference.
+- **A-09:** Opus 5.5 passed 4 of 6 and GPT-6-Astra 5 of 6. The three rejected runs
+  all state the content of the deliberately blurred banner as supported by pixels
+  (issue #224). Across A-08 and A-09, Opus passed 9 of 11 (82%) and Astra 10 of 11
+  (91%).
 
 **Compact tier (Claude Sonnet 5.5 and GPT-6-Sol):** on the final round, each passed
 23 of 28 trials fully (82%) and answered 25 of 28 correctly. **The ≥90% compact
@@ -310,35 +312,38 @@ if the page spells them differently.
 - **Automatic result:** the PR 3i grader's result (`grade-3i.json`).
 - **Flagged:** "yes" when that result failed the mechanical or the interpretation
   check, so the reviewer decides whether the failure stands.
-- **Decision:** one cell per run, `pending` until the maintainer decides.
+- **Decision:** the maintainer's decision, recorded 2026-09-30. The maintainer accepted
+  every recommendation. For the three blurred-banner runs the recommendation offered a
+  strict reading (reject) and a lenient one (accept); the strict reading is recorded, as
+  it matches the automatic grade.
 
 | Review id | Model | Scenario | Run | Phase | Trial id | Automatic result | Flagged | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `claude-opus-5-5__A-08-f05-local-asr__1__p1` | claude-opus-5-5 | A-08-f05-local-asr | 1 | 1 | `a-08-f05-local-asr-f591bba1` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-08-f05-local-asr__2__p1` | claude-opus-5-5 | A-08-f05-local-asr | 2 | 1 | `a-08-f05-local-asr-cdf3549a` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-08-f05-local-asr__3__p1` | claude-opus-5-5 | A-08-f05-local-asr | 3 | 1 | `a-08-f05-local-asr-79b9e7c3` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-08-f05-local-asr__4__p1` | claude-opus-5-5 | A-08-f05-local-asr | 4 | 1 | `a-08-f05-local-asr-c51ef91e` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-08-f05-local-asr__5__p1` | claude-opus-5-5 | A-08-f05-local-asr | 5 | 1 | `a-08-f05-local-asr-63af6866` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-09-f05-supplied__1__p1` | claude-opus-5-5 | A-09-f05-supplied | 1 | 1 | `a-09-f05-supplied-194fe3ea` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-09-f05-supplied__2__p1` | claude-opus-5-5 | A-09-f05-supplied | 2 | 1 | `a-09-f05-supplied-0edeaf3d` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-09-f05-retranscribe-check__1__p1` | claude-opus-5-5 | A-09-f05-retranscribe-check | 1 | 1 | `a-09-f05-retranscribe-check-8a99a400` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-09-f05-retranscribe-check__2__p1` | claude-opus-5-5 | A-09-f05-retranscribe-check | 2 | 1 | `a-09-f05-retranscribe-check-6bdf303b` | mechanical pass; interpretation pass | no | pending |
-| `claude-opus-5-5__A-09-f05-blurred__1__p1` | claude-opus-5-5 | A-09-f05-blurred | 1 | 1 | `a-09-f05-blurred-7d91c3c4` | mechanical pass; interpretation fail (`transcript_only_support`: c1 and c7 state "success banner" as supported on pixels) | yes | pending |
-| `claude-opus-5-5__A-09-f05-blurred__2__p1` | claude-opus-5-5 | A-09-f05-blurred | 2 | 1 | `a-09-f05-blurred-ca3ad724` | mechanical pass; interpretation fail (`transcript_only_support`: c1 states "success banner" and E-409 as supported on pixels) | yes | pending |
-| `gpt-6-astra__A-08-f05-local-asr__1__p1` | gpt-6-astra | A-08-f05-local-asr | 1 | 1 | `a-08-f05-local-asr-9db9f568` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-08-f05-local-asr__2__p1` | gpt-6-astra | A-08-f05-local-asr | 2 | 1 | `a-08-f05-local-asr-b40d2909` | mechanical pass; interpretation fail (key fact `Submit` of F05-E03 not stated; written "submission button") | yes | pending |
-| `gpt-6-astra__A-08-f05-local-asr__3__p1` | gpt-6-astra | A-08-f05-local-asr | 3 | 1 | `a-08-f05-local-asr-779507fe` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-08-f05-local-asr__4__p1` | gpt-6-astra | A-08-f05-local-asr | 4 | 1 | `a-08-f05-local-asr-d77d6427` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-08-f05-local-asr__5__p1` | gpt-6-astra | A-08-f05-local-asr | 5 | 1 | `a-08-f05-local-asr-6e9072e1` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-09-f05-supplied__1__p1` | gpt-6-astra | A-09-f05-supplied | 1 | 1 | `a-09-f05-supplied-c9c37e35` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-09-f05-supplied__2__p1` | gpt-6-astra | A-09-f05-supplied | 2 | 1 | `a-09-f05-supplied-138af27c` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-09-f05-retranscribe-check__1__p1` | gpt-6-astra | A-09-f05-retranscribe-check | 1 | 1 | `a-09-f05-retranscribe-check-3694b97b` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-09-f05-retranscribe-check__2__p1` | gpt-6-astra | A-09-f05-retranscribe-check | 2 | 1 | `a-09-f05-retranscribe-check-9f0fd973` | mechanical pass; interpretation pass | no | pending |
-| `gpt-6-astra__A-09-f05-blurred__1__p1` | gpt-6-astra | A-09-f05-blurred | 1 | 1 | `a-09-f05-blurred-ef16a7c4` | mechanical pass; interpretation fail (`transcript_only_support`: c1 states E-409 as supported on pixels) | yes | pending |
-| `gpt-6-astra__A-09-f05-blurred__2__p1` | gpt-6-astra | A-09-f05-blurred | 2 | 1 | `a-09-f05-blurred-b229f7a9` | mechanical pass; interpretation pass | no | pending |
-| `claude-sonnet-5-5__A-02-f02-compact-resume__1__p2` | claude-sonnet-5-5 | A-02-f02-compact-resume | 1 | 2 | `a-02-f02-compact-resume-cc006412` | mechanical pass; interpretation fail (key facts `queue` and `twelve` of F02-E02 not stated in the resumed run) | yes | pending |
-| `claude-sonnet-5-5__A-02-f02-compact-resume__2__p2` | claude-sonnet-5-5 | A-02-f02-compact-resume | 2 | 2 | `a-02-f02-compact-resume-20e4d6b8` | mechanical pass; interpretation fail (key facts `queue` and `twelve` of F02-E02 not stated in the resumed run) | yes | pending |
-| `claude-sonnet-5-5__A-02-f02-compact-resume__3__p2` | claude-sonnet-5-5 | A-02-f02-compact-resume | 3 | 2 | `a-02-f02-compact-resume-a176ba53` | mechanical fail (`handoff_valid`: claims with `text`, no resume card although the image budget was exhausted); interpretation fail (key facts `queue` and `twelve`) | yes | pending |
+| `claude-opus-5-5__A-08-f05-local-asr__1__p1` | claude-opus-5-5 | A-08-f05-local-asr | 1 | 1 | `a-08-f05-local-asr-f591bba1` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-08-f05-local-asr__2__p1` | claude-opus-5-5 | A-08-f05-local-asr | 2 | 1 | `a-08-f05-local-asr-cdf3549a` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-08-f05-local-asr__3__p1` | claude-opus-5-5 | A-08-f05-local-asr | 3 | 1 | `a-08-f05-local-asr-79b9e7c3` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-08-f05-local-asr__4__p1` | claude-opus-5-5 | A-08-f05-local-asr | 4 | 1 | `a-08-f05-local-asr-c51ef91e` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-08-f05-local-asr__5__p1` | claude-opus-5-5 | A-08-f05-local-asr | 5 | 1 | `a-08-f05-local-asr-63af6866` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-09-f05-supplied__1__p1` | claude-opus-5-5 | A-09-f05-supplied | 1 | 1 | `a-09-f05-supplied-194fe3ea` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-09-f05-supplied__2__p1` | claude-opus-5-5 | A-09-f05-supplied | 2 | 1 | `a-09-f05-supplied-0edeaf3d` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-09-f05-retranscribe-check__1__p1` | claude-opus-5-5 | A-09-f05-retranscribe-check | 1 | 1 | `a-09-f05-retranscribe-check-8a99a400` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-09-f05-retranscribe-check__2__p1` | claude-opus-5-5 | A-09-f05-retranscribe-check | 2 | 1 | `a-09-f05-retranscribe-check-6bdf303b` | mechanical pass; interpretation pass | no | accept |
+| `claude-opus-5-5__A-09-f05-blurred__1__p1` | claude-opus-5-5 | A-09-f05-blurred | 1 | 1 | `a-09-f05-blurred-7d91c3c4` | mechanical pass; interpretation fail (`transcript_only_support`: c1 and c7 state "success banner" as supported on pixels) | yes | reject |
+| `claude-opus-5-5__A-09-f05-blurred__2__p1` | claude-opus-5-5 | A-09-f05-blurred | 2 | 1 | `a-09-f05-blurred-ca3ad724` | mechanical pass; interpretation fail (`transcript_only_support`: c1 states "success banner" and E-409 as supported on pixels) | yes | reject |
+| `gpt-6-astra__A-08-f05-local-asr__1__p1` | gpt-6-astra | A-08-f05-local-asr | 1 | 1 | `a-08-f05-local-asr-9db9f568` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-08-f05-local-asr__2__p1` | gpt-6-astra | A-08-f05-local-asr | 2 | 1 | `a-08-f05-local-asr-b40d2909` | mechanical pass; interpretation fail (key fact `Submit` of F05-E03 not stated; written "submission button") | yes | accept |
+| `gpt-6-astra__A-08-f05-local-asr__3__p1` | gpt-6-astra | A-08-f05-local-asr | 3 | 1 | `a-08-f05-local-asr-779507fe` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-08-f05-local-asr__4__p1` | gpt-6-astra | A-08-f05-local-asr | 4 | 1 | `a-08-f05-local-asr-d77d6427` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-08-f05-local-asr__5__p1` | gpt-6-astra | A-08-f05-local-asr | 5 | 1 | `a-08-f05-local-asr-6e9072e1` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-09-f05-supplied__1__p1` | gpt-6-astra | A-09-f05-supplied | 1 | 1 | `a-09-f05-supplied-c9c37e35` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-09-f05-supplied__2__p1` | gpt-6-astra | A-09-f05-supplied | 2 | 1 | `a-09-f05-supplied-138af27c` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-09-f05-retranscribe-check__1__p1` | gpt-6-astra | A-09-f05-retranscribe-check | 1 | 1 | `a-09-f05-retranscribe-check-3694b97b` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-09-f05-retranscribe-check__2__p1` | gpt-6-astra | A-09-f05-retranscribe-check | 2 | 1 | `a-09-f05-retranscribe-check-9f0fd973` | mechanical pass; interpretation pass | no | accept |
+| `gpt-6-astra__A-09-f05-blurred__1__p1` | gpt-6-astra | A-09-f05-blurred | 1 | 1 | `a-09-f05-blurred-ef16a7c4` | mechanical pass; interpretation fail (`transcript_only_support`: c1 states E-409 as supported on pixels) | yes | reject |
+| `gpt-6-astra__A-09-f05-blurred__2__p1` | gpt-6-astra | A-09-f05-blurred | 2 | 1 | `a-09-f05-blurred-b229f7a9` | mechanical pass; interpretation pass | no | accept |
+| `claude-sonnet-5-5__A-02-f02-compact-resume__1__p2` | claude-sonnet-5-5 | A-02-f02-compact-resume | 1 | 2 | `a-02-f02-compact-resume-cc006412` | mechanical pass; interpretation fail (key facts `queue` and `twelve` of F02-E02 not stated in the resumed run) | yes | reject |
+| `claude-sonnet-5-5__A-02-f02-compact-resume__2__p2` | claude-sonnet-5-5 | A-02-f02-compact-resume | 2 | 2 | `a-02-f02-compact-resume-20e4d6b8` | mechanical pass; interpretation fail (key facts `queue` and `twelve` of F02-E02 not stated in the resumed run) | yes | reject |
+| `claude-sonnet-5-5__A-02-f02-compact-resume__3__p2` | claude-sonnet-5-5 | A-02-f02-compact-resume | 3 | 2 | `a-02-f02-compact-resume-a176ba53` | mechanical fail (`handoff_valid`: claims with `text`, no resume card although the image budget was exhausted); interpretation fail (key facts `queue` and `twelve`) | yes | reject |
 
 The last three rows come from the `56f1e1f` round (reference), not from the counted
 compact round. A decision that overturns an automatic result changes the strong-tier
@@ -347,13 +352,14 @@ themselves stay as written.
 
 ## Gate outcome
 
-- **Strong tier: met mechanically, interpretation subject to review.**
+- **Strong tier: met, with one residual.**
   - Claude Opus 5.5 and GPT-6-Astra passed 11 of 11 trials mechanically on both
     clients: every citation valid, zero unauthorized actions, budgets and image check
     held.
-  - Each answered 9 of 11 correctly. A-08 passed fully 5 of 5 (Opus) and 4 of 5
-    (Astra).
-  - The four interpretation misses are under the maintainer's review.
+  - After the maintainer's review, A-08 passed 5 of 5 on both clients, and A-08 plus
+    A-09 passed 9 of 11 (Opus) and 10 of 11 (Astra), above four in five.
+  - A-09 alone is 4 of 6 for Opus, below four in five, because of blurred-banner
+    overclaims the maintainer rejected. Tracked in L-085 and issue #224.
 - **Compact tier: the ≥90% target is not met.** Claude Sonnet 5.5 and GPT-6-Sol each
   passed 23 of 28 trials fully (82%). Each answered 25 of 28 correctly (89%).
   - Three phases of 62 missed the 100%-valid-citation target.

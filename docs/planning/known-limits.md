@@ -127,7 +127,7 @@ Each entry has these fields:
 | [L-082](#l-082) | Claude Haiku 4.5 does not follow the full investigation procedure | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-083](#l-083) | Only `display_text` shows hidden characters; `text` and `original_text` keep them raw | security | low | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
-| [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222) | deferred (technical debt) |
+| [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222), [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
 
 Counts: 4 high, 25 medium, 52 low (81 entries).
 
@@ -1561,6 +1561,9 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
   4. **The skill's defanged link form** (`hxxps://`) written in a JSON summary, which
      the schema refuses (Sonnet A-04 run 2,
      [#221](https://github.com/smormah/vsift/issues/221)).
+  5. **Strong tier, A-09 blurred:** the review tier stated the blurred banner's content
+     as supported by pixels in 3 of 4 runs, rejected on review
+     ([#224](https://github.com/smormah/vsift/issues/224)).
 - **Evidence:** the [qualification record](p12-agent-qualification.md) (per-scenario
   tables and every miss); the bounded records in
   [p12-agent-trials/](p12-agent-trials/README.md); verification section 6.
@@ -1570,7 +1573,10 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
   passed the command policy, the canary check and the report-text check.
   - The review tier passed 11 of 11 trials mechanically on both clients: Claude Opus
     5.5 and GPT-6-Astra.
-  - Its interpretation is under the maintainer's review of 25 runs, decisions pending.
+  - After the maintainer's review of 25 runs (2026-09-30), A-08 passed 5 of 5 on both
+    clients. A-08 plus A-09 passed 9 of 11 (Opus) and 10 of 11 (Astra). The residual is
+    three rejected blurred-banner claims stating unreadable content as supported by
+    pixels ([#224](https://github.com/smormah/vsift/issues/224)).
 - **Why:** the maintainer decided on 2026-09-30 to close P12 on the final round's
   results and record what is short of target as known limits and follow-ups.
 - **Mitigation:**

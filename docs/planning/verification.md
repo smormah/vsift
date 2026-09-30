@@ -373,7 +373,7 @@ The whole packet, closed by the maintainer's decision of 2026-09-30 on the final
 round's results. The record is
 [p12-agent-qualification.md](p12-agent-qualification.md): scope and gates,
 environments with pinned versions and image digests, the counted results, the
-reference rounds, safety, the maintainer's review table (decisions pending) and the
+reference rounds, safety, the maintainer's review table (decided 2026-09-30) and the
 history of the fix rounds (#196, #199-#217). The 84 bounded records of the counted
 phases are in [p12-agent-trials/](p12-agent-trials/README.md).
 
