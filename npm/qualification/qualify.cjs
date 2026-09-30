@@ -690,7 +690,15 @@ async function qualify({ options, manager, target, work, tarballs, env, profile,
         expect(platforms.length === 0, `left behind: ${platforms.join(', ')}`);
       }
       for (const shim of profile.shims) {
-        expect(!fs.existsSync(shim), `${shim} is still there`);
+        if (!fs.existsSync(shim)) {
+          continue;
+        }
+        // Bun 1.2.23 on Windows leaves its `vsift.exe` shim behind; it must
+        // no longer start vsift (L-092).
+        expect(manager === 'bun' && windows, `${shim} is still there`);
+        const stale = run(shim, ['--version'], profile.env, { cwd: work, timeout: 120_000 });
+        expect(stale.status !== 0 && !stale.stdout.includes('vsift '), `the leftover ${shim} still runs vsift`);
+        note += `; Bun left ${path.basename(shim)}, which no longer runs vsift (${describeStatus(stale)})`;
       }
       if (profile.runInstalled) {
         const result = runInstalled(invocations[0], ['--version']);
@@ -745,7 +753,8 @@ async function qualifyLauncher({ manager, runtime, launcherScript, target, env, 
       ].join('\n'),
     );
     const result = childProcess.spawnSync(runtime, [probe], {
-      env: { ...env, VSIFT_QUALIFY_LAUNCHER: launcherScript },
+      // The library the command runs, so the probe times its checks without starting vsift.
+      env: { ...env, VSIFT_QUALIFY_LAUNCHER: path.join(path.dirname(launcherScript), '..', 'lib', 'launcher.cjs') },
       encoding: 'utf8',
       timeout: 120_000,
     });

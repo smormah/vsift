@@ -17,7 +17,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const launcherSource = path.join(__dirname, '..', 'vsift');
-const launcher = require(path.join(launcherSource, 'bin', 'vsift.cjs'));
+const launcher = require(path.join(launcherSource, 'lib', 'launcher.cjs'));
 const fakeScript = path.join(__dirname, 'fixtures', 'fake-vsift.cjs');
 const sendConsoleControl = path.join(__dirname, '..', '..', 'tools', 'send-console-ctrl.ps1');
 const manifest = JSON.parse(fs.readFileSync(path.join(launcherSource, 'package.json'), 'utf8'));
@@ -41,7 +41,8 @@ function makeLayout(t, { target, executable, platformVersion = VERSION, editDige
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const launcherRoot = path.join(root, 'node_modules', 'vsift');
   fs.mkdirSync(path.join(launcherRoot, 'bin'), { recursive: true });
-  for (const file of ['package.json', path.join('bin', 'vsift.cjs')]) {
+  fs.mkdirSync(path.join(launcherRoot, 'lib'), { recursive: true });
+  for (const file of ['package.json', path.join('bin', 'vsift.cjs'), path.join('lib', 'launcher.cjs')]) {
     fs.copyFileSync(path.join(launcherSource, file), path.join(launcherRoot, file));
   }
   const packageRoot = path.join(root, 'node_modules', ...target.packageName.split('/'));

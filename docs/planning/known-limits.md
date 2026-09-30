@@ -446,7 +446,7 @@ Counts: 3 high, 24 medium, 60 low (87 entries).
   after the check, so the check is not a defence against a local attacker. It proves the
   platform package is the one this launcher was released with, undamaged.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 9 note; `npm/vsift/bin/vsift.cjs`; the refusals in `npm/test/launcher.test.cjs` and
+  PR 9 note; `npm/vsift/lib/launcher.cjs`; the refusals in `npm/test/launcher.test.cjs` and
   in every `npm-qualify` job.
 - **Impact:** none beyond what write access to the install folder already gives.
 - **Why:** a user-writable install folder is the norm for npm, pnpm, Yarn and Bun; the
@@ -1765,7 +1765,7 @@ it cannot be packaged for crates.io as it is.**
   (`SIGKILL`, Windows `TerminateProcess`, `taskkill /F` on the Node.js process), vsift
   keeps running until its command ends: nothing links its life to the launcher's.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 9 note; `npm/vsift/bin/vsift.cjs` (`relaySignals`); `npm/test/launcher.test.cjs`
+  PR 9 note; `npm/vsift/lib/launcher.cjs` (`relaySignals`); `npm/test/launcher.test.cjs`
   (targeted and process-group interruptions); the Release workflow's `npm-qualify` jobs.
 - **Impact:** an escalated interruption still ends the command with its documented result
   and never leaves a provider running (SEC-04); it only skips the providers' graceful
@@ -1801,7 +1801,8 @@ it cannot be packaged for crates.io as it is.**
   because it publishes seconds before it installs, so for a day after each real release
   Yarn users must wait or preapprove `vsift` and `@vsift/*` (`install.md`). Bun 1.2's
   `bun remove --global vsift` removes the launcher and the command but leaves the
-  platform package in Bun's global folder, where nothing runs it (the matrix records it).
+  platform package in Bun's global folder, where nothing runs it, and on Windows also its
+  `vsift.exe` shim, which then fails without running vsift (the matrix records both).
   Bun 1.2.23 on Windows fails `bun add --global` with "InvalidWtf8" when its install or
   cache folder has non-ASCII letters (found by the matrix on 2026-09-30, a Bun defect),
   so the Windows Bun job keeps its own folders to ASCII with spaces; the arguments vsift

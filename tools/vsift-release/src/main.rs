@@ -49,8 +49,8 @@ use crate::{
     },
     checksums::{ChecksumError, checksum_list},
     npm::{
-        LAUNCHER_DIRECTORY, LAUNCHER_MANIFEST, LAUNCHER_README, LAUNCHER_SCRIPT, LauncherSources,
-        NpmError, NpmPackage, assemble, verify_tarball,
+        LAUNCHER_DIRECTORY, LAUNCHER_LIBRARY, LAUNCHER_MANIFEST, LAUNCHER_README, LAUNCHER_SCRIPT,
+        LauncherSources, NpmError, NpmPackage, assemble, verify_tarball,
     },
     target::ReleaseTarget,
 };
@@ -334,6 +334,7 @@ fn assemble_packages(
     let launcher = LauncherSources {
         manifest: read(&launcher_root.join(LAUNCHER_MANIFEST))?,
         script: read(&launcher_root.join(LAUNCHER_SCRIPT))?,
+        library: read(&launcher_root.join(LAUNCHER_LIBRARY))?,
         readme: read(&launcher_root.join(LAUNCHER_README))?,
     };
     Ok(assemble(VERSION, &contents, &launcher)?)

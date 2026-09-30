@@ -310,7 +310,7 @@ prints the version alone.
 
 ## npm packages
 
-`npm/vsift/` holds the npm launcher's sources: `bin/vsift.cjs` (plain CommonJS, `node:`
+`npm/vsift/` holds the npm launcher's sources: `bin/vsift.cjs`, which runs `lib/launcher.cjs` (plain CommonJS, `node:`
 built-ins only, no dependencies), `package.json` and `README.md`. The platform packages
 are generated from the release archives by `vsift-release npm`
 ([`operations/release.md`](operations/release.md) section 5). If you change the launcher,

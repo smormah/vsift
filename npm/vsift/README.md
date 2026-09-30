@@ -11,12 +11,12 @@ vsift --version
 vsift setup check
 ```
 
-One-shot use works too: `npx vsift@next`, `pnpm dlx vsift@next`, `yarn dlx vsift@next`
+One-shot use works too: `npx vsift@next`, `pnpm dlx vsift@next`, `yarn dlx --package vsift@next vsift`
 or `bunx vsift@next`. Node.js 22 or later, or Bun 1.2 or later, runs the launcher.
 
 ## What gets installed
 
-This package holds a small launcher (`bin/vsift.cjs`) and the agent skill
+This package holds a small launcher (`bin/vsift.cjs`, which runs `lib/launcher.cjs`) and the agent skill
 (`skills/vsift/`). The native executable comes in one of three platform packages,
 which your package manager picks by operating system and processor:
 

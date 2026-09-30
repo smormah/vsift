@@ -13,6 +13,7 @@
   },
   "files": [
     "bin/vsift.cjs",
+    "lib/launcher.cjs",
     "platform-digests.json",
     "skills/",
     "LICENSE",

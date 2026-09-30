@@ -67,7 +67,7 @@ vsift --version        # vsift 0.1.0 (<the first 12 digits of the source commit>
 vsift setup check
 ```
 
-**What is installed.** The `vsift` package holds a small launcher (`bin/vsift.cjs`)
+**What is installed.** The `vsift` package holds a small launcher (`bin/vsift.cjs` and `lib/launcher.cjs`)
 and the agent skill (`skills/vsift/`, the folder to give Claude Code or Codex). It lists
 the three platform packages as optional dependencies at its own exact version; your
 package manager installs only the one whose `os` and `cpu` match your machine. No
@@ -124,7 +124,8 @@ yarn remove vsift            # in the project
 
 This removes the launcher, the platform package and the command (Bun 1.2 leaves the
 platform package in its global folder, `~/.bun/install/global/node_modules/@vsift/`,
-where nothing runs it; delete that folder to reclaim the space). Package caches keep
+where nothing runs it, and on Windows also a `vsift.exe` in Bun's `bin` folder that no
+longer starts vsift; delete them to tidy up). Package caches keep
 the downloaded tarballs until you clean them (`npm cache clean --force`, `pnpm store
 prune`, `yarn cache clean`, `bun pm cache rm`). VSift's own data (sessions, the
 configuration, managed tools) is not touched; `vsift setup list` and `vsift setup remove`

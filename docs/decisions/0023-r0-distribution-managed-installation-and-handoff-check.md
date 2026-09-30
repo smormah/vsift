@@ -817,7 +817,7 @@ job stay PR 10's. The runbooks are [`install.md`](../operations/install.md) (use
   `package/` entries, exactly the assembled files with the same bytes, the executable
   bit exactly on the executable and the launcher script, and a manifest without
   lifecycle scripts or `gypfile` and no `binding.gyp`.
-  - `vsift`: `bin/vsift.cjs`, its `package.json` and `README.md` from `npm/vsift/`, the
+  - `vsift`: `bin/vsift.cjs` and `lib/launcher.cjs`, its `package.json` and `README.md` from `npm/vsift/`, the
     three licence files and `skills/vsift/` from the archives (decision H7: the skill ships
     in the npm package, byte-identical to every archive's), and `platform-digests.json`.
     H7 supersedes the 2026-09-28 launcher note's "only the launcher and its `bin` entry".
@@ -842,7 +842,7 @@ job stay PR 10's. The runbooks are [`install.md`](../operations/install.md) (use
   executable on a workstation without SHA extensions (Node.js 22.16). The matrix measures
   it on every hosted runner and fails above 50 ms, so the check stays within H5's budget
   or the run says otherwise.
-- **The launcher (`npm/vsift/bin/vsift.cjs`).** Plain CommonJS with `node:` built-ins
+- **The launcher (`npm/vsift/lib/launcher.cjs`, run by the three-line `bin/vsift.cjs`).** Plain CommonJS with `node:` built-ins
   only, about 250 lines. It maps `process.platform` and `process.arch` to the three
   targets, resolves `@vsift/<target>/package.json` with `require.resolve` from itself (so
   npm, pnpm's links, Yarn's Plug'n'Play and Bun resolve alike), requires the platform
@@ -917,4 +917,8 @@ job stay PR 10's. The runbooks are [`install.md`](../operations/install.md) (use
   waits or preapproves `vsift` and `@vsift/*` (`install.md`; the matrix sets the gate to
   zero because it installs seconds after publishing). On Windows an executable path of
   260 characters or more cannot be started (L-094); a deep pnpm global store under a long
-  home folder reaches it.
+  home folder reaches it. On Windows, Bun 1.2.23 fails a global install into a folder
+  with non-ASCII letters ("InvalidWtf8") and leaves its `vsift.exe` shim after a global
+  remove; `bunx --bun` there ran the command file without making it Node.js's main
+  module, so the launcher is split: `bin/vsift.cjs` always calls `main()` of
+  `lib/launcher.cjs` rather than testing `require.main` (L-092).

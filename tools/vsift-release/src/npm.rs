@@ -3,7 +3,7 @@
 //!
 //! Four packages, each a directory `npm pack` turns into a tarball:
 //!
-//! - `vsift`: the launcher `bin/vsift.cjs`, its manifest and README from
+//! - `vsift`: the launcher `bin/vsift.cjs` and `lib/launcher.cjs`, its manifest and README from
 //!   `npm/vsift/` in the repository, `platform-digests.json` (the size and
 //!   SHA-256 of each target's executable, computed here from the archives, so
 //!   the digest the launcher checks comes from the build), the three licence
@@ -42,6 +42,8 @@ pub(crate) const LAUNCHER_DIRECTORY: &str = "npm/vsift";
 pub(crate) const LAUNCHER_MANIFEST: &str = "package.json";
 /// The launcher script, relative to [`LAUNCHER_DIRECTORY`].
 pub(crate) const LAUNCHER_SCRIPT: &str = "bin/vsift.cjs";
+/// The launcher library the script runs, relative to [`LAUNCHER_DIRECTORY`].
+pub(crate) const LAUNCHER_LIBRARY: &str = "lib/launcher.cjs";
 /// The launcher's README, relative to [`LAUNCHER_DIRECTORY`].
 pub(crate) const LAUNCHER_README: &str = "README.md";
 
@@ -101,8 +103,10 @@ const FILE_MODE: u32 = 0o644;
 pub(crate) struct LauncherSources {
     /// `package.json`, published byte for byte once checked.
     pub manifest: Vec<u8>,
-    /// `bin/vsift.cjs`.
+    /// `bin/vsift.cjs`, the command.
     pub script: Vec<u8>,
+    /// `lib/launcher.cjs`, what the command runs.
+    pub library: Vec<u8>,
     /// `README.md`.
     pub readme: Vec<u8>,
 }
@@ -216,6 +220,10 @@ pub(crate) fn assemble(
     launcher_files.insert(
         String::from(LAUNCHER_SCRIPT),
         file(EXECUTABLE_MODE, &launcher.script),
+    );
+    launcher_files.insert(
+        String::from(LAUNCHER_LIBRARY),
+        file(FILE_MODE, &launcher.library),
     );
     launcher_files.insert(
         String::from(DIGESTS_NAME),
@@ -338,6 +346,7 @@ fn check_launcher_manifest(manifest: &[u8], version: &str) -> Result<(), NpmErro
             "files",
             json!([
                 LAUNCHER_SCRIPT,
+                LAUNCHER_LIBRARY,
                 DIGESTS_NAME,
                 "skills/",
                 "LICENSE",
@@ -624,6 +633,7 @@ mod tests {
   }},
   "files": [
     "bin/vsift.cjs",
+    "lib/launcher.cjs",
     "platform-digests.json",
     "skills/",
     "LICENSE",
@@ -647,6 +657,7 @@ mod tests {
         LauncherSources {
             manifest: manifest.as_bytes().to_vec(),
             script: b"#!/usr/bin/env node\n'use strict';\n".to_vec(),
+            library: b"'use strict';\nmodule.exports = {};\n".to_vec(),
             readme: b"# vsift\n".to_vec(),
         }
     }
@@ -706,6 +717,7 @@ mod tests {
                 "LICENSE-MIT",
                 "README.md",
                 "bin/vsift.cjs",
+                "lib/launcher.cjs",
                 "package.json",
                 "platform-digests.json",
                 "skills/vsift/SKILL.md",

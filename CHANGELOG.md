@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **npm packages and their qualification** (P13 PR 9; ADR 0023 section 2, decisions A,
   H5, H6 and H7). The launcher package `vsift` (`npm/vsift/`: a plain CommonJS
-  `bin/vsift.cjs`, the agent skill and `platform-digests.json`) and the platform packages
+  `bin/vsift.cjs` and `lib/launcher.cjs`, the agent skill and `platform-digests.json`) and the platform packages
   `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64` (the executable, its
   notices and the licences, with `os` and `cpu`) are assembled from the release archives
   by `vsift-release npm` and checked after `npm pack` by `vsift-release npm-verify`. The

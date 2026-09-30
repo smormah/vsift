@@ -78,7 +78,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   `setup rollback` selects a verified earlier version in one atomic rename (pointer v2);
   `setup remove` deselects first, keeps held versions (`BUSY`) and unprovable content
   (L-090); every accepted install sweeps abandoned stages and keeps two versions.
-- **PR 9 (this change, `p13-pr9-npm`):** `npm/vsift/bin/vsift.cjs`, a plain CommonJS
+- **PR 9 (this change, `p13-pr9-npm`):** `npm/vsift/` (`bin/vsift.cjs` runs `lib/launcher.cjs`), a plain CommonJS
   launcher: finds `@vsift/<platform>`, requires its version and the executable's
   SHA-256 (`platform-digests.json`, computed from the archives by `vsift-release npm`)
   to match, runs it without a shell, relays signals, exits with its status; failures are
