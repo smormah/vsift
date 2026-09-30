@@ -91,3 +91,22 @@ as they are.
 
 `docs/contracts/cli-v1.md` ("Display text"), `schemas/v1/transcript-segment.schema.json`
 and the SEC-T02 suite (`sec_t02_adversarial_evidence`) state and test this.
+
+## 2026-09-30 note: P13 contract changes
+
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
+Proposed) lists the contract changes P13 makes and why:
+
+- the namespace gains `handoff` (`handoff check`, #213);
+- human output becomes readable terminal text by default, with no TTY detection and no
+  colour, escaping control and hidden characters with `display_text`'s rule;
+- a new failure code, `DOWNLOAD_FAILED`, in exit class 7;
+- new response schemas for `setup install/list/remove/rollback/repair` and `handoff
+  check`;
+- a typed parse remediation that never echoes argument text (L-071).
+
+Before the first publication, values that have never shipped may change in place
+rather than by a new version: the setup-check `lookup` value `managed_version`, the
+remediation's `managed_install` values and the setup-plan availability
+`catalogue_accepted` (from `catalogue_accepted_install_pending`). After the first
+published artifact, v1 changes are additive only, as above.

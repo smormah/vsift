@@ -6,17 +6,21 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P12 are complete.** The maintainer closed P12 on 2026-09-30 on the final trial
-round's results: record `docs/planning/p12-agent-qualification.md`, 84 trial records,
-ADR 0022 accepted (#223, `1284e54`); the ledger marks P12 `complete`. Debt: L-085 and
-issues #218-#222, #224.
+**P00-P12 are complete; P13 is in progress** (started by the maintainer 2026-09-30,
+every plan recommendation accepted). Only PR 0, the kickoff (branch `p13-pr0-kickoff`:
+ADR 0023 Proposed, ledger `in_progress` with R-13), is open; no P13 code exists yet.
+The P12 debt (L-085, #218-#221, #224) is being fixed on its own branch first.
 
-1. **Maintainer review done (2026-09-30):** 19 accepted, 6 rejected (three blurred-banner
-   overclaims, #224; Sonnet's three reference-round resume misses). A-08 5/5 on both.
-2. **P13 (distribution and managed installation) is next.** The maintainer starts it
-   (rule 10). The plan: an npm launcher over per-platform packages without install
-   scripts, the name checklist, managed installation, human-readable output and the
-   handoff validator (#213).
+1. **Next P13 PRs** (plan: `implementation-work-packets.md` "P13 scope and pull
+   requests"): 1 L-071; 2a/2b human output; 3 smoke executor; 4 install transaction;
+   5 `handoff check` (after the P12 debt PRs); 6 lifecycle commands; 7 kill/power-loss
+   and install E2E; 8 `release.yml` and workflow lint; 9 npm and Verdaccio; 10
+   attest/publish; 11 docs and record; 12 ledger follow-up. #222 re-runs after PR 5.
+2. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; create the
+   npm organisation `vsift`; trusted publishers; the GitHub `release` environment with
+   the maintainer as reviewer; the tag ruleset; fork-PR workflow approval; the first
+   publish (personally with 2FA, or a short-lived token only in the environment);
+   approval of the one 0.x pre-release under `next`; any announcement (after P14).
 3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: #218-#221,
    then the re-run #222) and SEC-T01's adversarial evidence (#188, L-068).
 
@@ -38,13 +42,14 @@ issues #218-#222, #224.
 ## Decided (maintainer, 2026-09-28/30)
 
 - **P11 D1-D5** (ADR 0021); SEC-T01's non-adversarial evidence accepted for P11.
-- **P12** (ADR 0022's completion note): the maintainer's accounts; about 80 runs,
-  later extended; Codex in Linux; orientation as housekeeping (widened in PR 3i); the
-  slim handoff; the vocabulary; compact tier Sonnet 5.5 and GPT-6-Sol, with Haiku 4.5
-  and Luna below the line (L-082, L-084); `display_text`; #210 plain paths; the
-  validator deferred to P13 (#213); P12 closed on the final round.
-- **P13 plan:** an npm launcher over per-platform packages with no install scripts;
-  names held, no announcement before P14; the name checklist is open.
+- **P12** (ADR 0022 completion note): maintainer accounts; Codex in Linux; orientation
+  as housekeeping; slim handoff and vocabulary; compact tier Sonnet 5.5 and GPT-6-Sol
+  (Haiku 4.5, Luna below: L-082, L-084); `display_text`; #210; closed on the final round.
+- **P13 (ADR 0023 A-H, 2026-09-30):** names `vsift` and `@vsift/cli-{win32-x64,
+  darwin-arm64,linux-x64}`; nothing published during P13, then one 0.x pre-release
+  under `next`; no crates.io in R0; Sigstore and npm provenance only; managed install
+  on Ubuntu 24.04 x64 only; human output by default; `DOWNLOAD_FAILED`; `handoff
+  check` input on stdin (heredoc / here-string) or `--file`; no agent re-run in P13.
 
 ## Open decisions (maintainer)
 
@@ -54,13 +59,13 @@ issues #218-#222, #224.
   job-cancelled line (L-067); the engine's `tokio`; PR 2-3's continuable transient
   failures, pruning, 192 KiB records and D2; `durable_worker` for ephemeral workspace
   sessions; input-path links refused (L-062).
-- **Also:** MSRV, 0.x pre-releases, an MCP adapter now that P12 is closed.
+- **Also:** MSRV; an MCP adapter; ADR 0023's open details (`setup list`/`repair` stay
+  `never` in the skill unless changed; `handoff check` case handling, PR 5).
 
 ## Tracked issues
 
-- **Close:** #15 (P12); #14 (P11) with its ledger
-  follow-up; #180; #144 after a clean main; #210 (fixed by #215). **Open:** #218-#222
-  (P12 follow-ups, L-085).
+- **Close:** #15, #14 (ledger follow-up), #180, #144 after a clean main, #210.
+  **Open:** #16 (P13, body synced to the ledger); #213; #218-#222 (L-085).
 - **#170-#178:** L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045 and L-042.
 - **Others:** #159 motion fixtures; #150 noisy-speech fixtures; #147 faster-whisper;
   #128 flaky Windows supervisor tests; #205 and #206 test roots.

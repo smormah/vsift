@@ -866,3 +866,17 @@ may hold it.
   qualified") is deleted; L-007 keeps the general prompt-injection residual.
 - Handoff v1 is a second public format, owned by the skill; changing it incompatibly
   needs a new handoff version.
+
+## 2026-09-30 note: P13 changes to the skill
+
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
+Proposed) changes the skill in three ways; the substance is there.
+
+- `vsift handoff check` (#213) is a `free` command. Its draft arrives on standard
+  input through two literal forms, a quoted heredoc on POSIX and a single-quoted
+  here-string piped in on PowerShell: the one exception to decision 3's rule that no
+  command is piped or redirected. The guard and the grader recognise exactly those two
+  forms. The skill keeps owning `handoff.schema.json` (decision 6).
+- The skill ships byte-identical inside the npm package and every native archive.
+- The new `setup` lifecycle commands stay in the `never` class unless the maintainer
+  decides otherwise.

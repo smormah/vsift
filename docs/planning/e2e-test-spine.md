@@ -410,7 +410,9 @@ action.
 - **Agent checkpoint:** after P12, A-08/A-09 pass through both named clients with fixed
   permissions, budgets and retained bounded trial records.
 - **Distribution checkpoint:** after P13, the agent checkpoint begins from a clean
-  supported-machine installation without Rust.
+  supported-machine installation without Rust. *2026-09-30 (ADR 0023 decision H10):
+  P13's stage proves the clean installation and one managed install mechanically; the
+  named-agent run from a clean installation is P14's.*
 - **Release checkpoint:** P14 runs all supported profiles plus security, fault, load
   and release-integrity gates described in the verification specification.
 

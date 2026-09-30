@@ -87,7 +87,7 @@ Each entry has these fields:
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
 | [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
-| [L-043](#l-043) | Library API unstable; MSRV, pre-release and MCP decisions open | contract/UX | low | unscheduled | [#176](https://github.com/smormah/vsift/issues/176) | open |
+| [L-043](#l-043) | Library API unstable; MSRV and MCP decisions open | contract/UX | low | unscheduled | [#176](https://github.com/smormah/vsift/issues/176) | open |
 | [L-044](#l-044) | Accepted engineering trade-offs (CLI test dependencies, session compatibility) | contract/UX | low | unscheduled | none | accepted residual |
 | [L-045](#l-045) | Several documents and trackers state an outdated position | process/CI | low | unscheduled | [#177](https://github.com/smormah/vsift/issues/177) | open |
 | [L-046](#l-046) | Deliberate scope exclusions (live sources, OCR, speakers, URLs) | contract/UX | low | R1 or later | [#107](https://github.com/smormah/vsift/issues/107), [#108](https://github.com/smormah/vsift/issues/108) | accepted residual |
@@ -365,7 +365,8 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 - **Why:** human-readable output does not exist yet for most commands.
 - **Mitigation:** the contract replaces control characters in human diagnostics; the
   importer rejects control characters in supplied transcripts.
-- **Next step:** P13 adds human-output SEC-T02 cases with the output it builds.
+- **Next step:** P13 PR 2b re-runs SEC-T02 over the human output PRs 2a-2b build
+  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -956,8 +957,8 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 - **Why:** parse errors are presented as fixed prose so that no argument text is
   echoed into a machine result.
 - **Mitigation:** the skill's command forms are all tested against the parser.
-- **Next step:** consider a typed, non-echoing parse reason (for example the argument
-  name) with P13's presentation work.
+- **Next step:** P13 PR 1: a typed parse remediation that never echoes argument text
+  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -1066,7 +1067,8 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 - **Mitigation:** keep the session root short: the session folders and artifact name
   add 134 characters, so a root of at most 125 characters gets plain paths; the skill
   retries once without the prefix; hosts may display the path as they wish.
-- **Next step:** friendlier display in P13 human output.
+- **Next step:** friendlier display in P13's human output (PRs 2a-2b, ADR 0023); the
+  JSON path form stays as it is.
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** accepted residual. **Review:** pending.
 
@@ -1082,7 +1084,8 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 - **Impact:** people running VSift by hand get machine output; agents are unaffected.
 - **Why:** agent contract first (ADR 0008).
 - **Mitigation:** the JSON is complete and stable.
-- **Next step:** P13.
+- **Next step:** P13 PRs 2a-2b: readable text by default, no TTY detection, no colour
+  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -1471,16 +1474,18 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 
 - **What:** VSift can only be built from source with Rust. There are no native release
   artifacts, no npm launcher, no SBOM/notices, no signing or notarization and no trusted
-  publishing. The unscoped npm name `vsift` was merely observed free on 2026-09-10, not
-  reserved; crate-name availability is unchecked.
+  publishing. The npm names `vsift` and `@vsift/cli-*` were merely observed free
+  (2026-09-10 and 2026-09-30), not reserved; no crate is published in R0 (ADR 0023).
 - **Evidence:** [ADR 0009](../decisions/0009-package-identity-and-distribution.md);
   [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) decision 1;
   threat model "Installation and distribution policy"; baseline B-11.
 - **Impact:** R-14 is an R0 release gate.
 - **Why:** scheduled in P13.
 - **Mitigation:** none needed before release.
-- **Next step:** P13, following its launcher pattern and name checklist in
-  [`implementation-work-packets.md`](implementation-work-packets.md) (added 2026-09-28).
+- **Next step:** P13 PRs 8-10, following its launcher pattern and name checklist in
+  [`implementation-work-packets.md`](implementation-work-packets.md) and
+  [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md):
+  Sigstore and npm provenance, no Authenticode or notarization in R0.
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -1496,12 +1501,14 @@ Counts: 4 high, 25 medium, 52 low (81 entries).
 - **Evidence:** [ADR 0015](../decisions/0015-r0-delivery-replan.md);
   [CLI contract](../contracts/cli-v1.md) `setup plan`;
   [P06 Windows candidate](p06-windows-artifact-candidate.md) "Remaining gates";
-  [work record](../../memory/TODO.md) "Parked" (resume order).
+  the resume order in the [2026-09-09 to 23 delivery log](../history/2026-09-09-to-23-delivery-log.md).
 - **Impact:** users install FFmpeg and whisper.cpp themselves; R-03 requires at least one
   qualified managed target.
 - **Why:** moved from P06 to P13 by ADR 0015.
 - **Mitigation:** detection, bring-your-own selection, verification and typed guidance.
-- **Next step:** P13, in the recorded resume order.
+- **Next step:** P13 PRs 3-7, in the recorded resume order, on Ubuntu 24.04 x86-64 only;
+  Windows and macOS keep manual guidance
+  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -2034,12 +2041,14 @@ raw.**
 
 ### L-043
 
-**Library API unstable; MSRV, pre-release and MCP decisions open.**
+**Library API unstable; MSRV and MCP decisions open.**
 
 - **What:** the `vsift` library API is 0.x and unstable; the MSRV equals the latest
   stable release with no policy; `cargo-semver-checks` joins CI only at first
-  publication. Open maintainer decisions: an MSRV policy before publication, whether to
-  cut 0.x pre-releases after P09, and whether a local MCP adapter is wanted after P12.
+  publication. Open maintainer decisions: an MSRV policy before publication and whether
+  a local MCP adapter is wanted after P12. Decided 2026-09-30 (ADR 0023): one 0.x
+  pre-release under npm's `next` tag at P13 completion, and no crates.io publication in
+  R0.
 - **Evidence:** [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md)
   decisions 3, 7, 8; [work record](../../memory/TODO.md) "Open decisions".
 - **Impact:** embedders face breaking changes; the CLI JSON v1 contract is stable.

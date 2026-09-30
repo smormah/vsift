@@ -164,3 +164,13 @@ both depend on these values. A changed policy therefore requires a fresh plan;
 an invalid policy yields no managed actions or digest. Execution, result
 recording, cleanup after smoke failure and activation remain later transaction
 steps.
+
+## 2026-09-30 note: P13 opens step 3 on one target
+
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
+Proposed) implements step 3 for Ubuntu 24.04 x86-64 only, the one qualified managed
+target this ADR requires; Windows and macOS keep step 4's manual guidance. A failed
+managed download gets its own typed failure, `DOWNLOAD_FAILED`, with a reason (TLS,
+redirect policy, HTTP status, proxy authentication, offline or size), so step 4's
+manual path can say what failed. `--artifact-dir` imports reviewed artifacts offline
+under the same verification.

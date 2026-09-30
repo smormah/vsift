@@ -45,35 +45,39 @@ Codex's trials ran in a Linux container, because its Windows sandbox cannot run 
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is next;** the maintainer starts it.
+**P13 is in progress** (started 2026-09-30). Only its kickoff increment (PR 0) is
+open; the packet is not complete and no P13 code exists yet.
+
+## P13 in one view
+
+[ADR 0023](../docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+(**Proposed**) records the maintainer's decisions A-H of 2026-09-30; the scope and
+the 13 pull requests are in `implementation-work-packets.md` ("P13 scope and pull
+requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to it.
+
+- **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux
+  x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
+  `vsift` over `@vsift/cli-*` packages; managed installation on Ubuntu 24.04 x64
+  (`setup install/list/rollback/remove/repair`); human-readable output by default;
+  L-071's parse remediation; `vsift handoff check` (#213).
+- **In progress:** PR 0 (`p13-pr0-kickoff`): ADR 0023 and notes, ledger, traceability,
+  threat-model plan, issue #16. **Next:** PRs 1, 2a/2b and 3; PR 5 waits for the P12
+  debt PRs (same skill, guard and grader).
+- **Nothing is published** until P13 completes and the maintainer approves one 0.x
+  pre-release under npm's `next` tag; the npm organisation, trusted publishers and
+  `release` environment are the maintainer's to set up.
+- **Found while planning:** the agent run from a clean install moved to P14 (H10);
+  the Linux binary needs OpenSSL 3.
 
 ## P12 in one view
 
 [ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md) is
-**Accepted** (2026-09-30), with a dated note listing the maintainer's P12 decisions.
-The record is
-[p12-agent-qualification.md](../docs/planning/p12-agent-qualification.md), and 84
-bounded trial records are in `docs/planning/p12-agent-trials/`.
-
-- **What was built:** the skill and its `skill_contract` guard (PR 1, #196); the
-  harness `tools/vsift-agent-trials` (PR 2, #201); and PRs 3a-3i (#203-#217), which
-  fixed each trial round's findings: trusted Claude Code workspaces, Codex in a Linux
-  container, orientation as housekeeping, the slim handoff and its vocabulary,
-  `display_text`, a redrawn check image and resume guidance. The history table is in
-  the record.
-- **Counted runs:** the strong tier's final campaign on `56f1e1f` (graded with PR 3i's
-  grader) and the compact tier's final round on `8ab976e`, with Claude Code 2.1.284 on
-  Windows and codex-cli 0.155.0-alpha.16 in Docker images pinned by digest.
-- **Completion change (branch `p12-completion`):**
-  - the record, the trial records and ADR 0022 accepted;
-  - `verification.md` §6's outcome;
-  - known limits: L-085 new, L-039 deleted, and L-007 and L-075 rewritten;
-  - the supported-models table in `docs/agents/skill.md`;
-  - issues #218-#222 and #224 (blurred-content overclaim);
-  - the maintainer's review (2026-09-30): 19 accepted, 6 rejected;
-  - `record` now replaces every check image's code with `<check-code>`.
-- **Open:**
-  - the compact tier's debt (L-085).
+**Accepted** (2026-09-30). The record is
+[p12-agent-qualification.md](../docs/planning/p12-agent-qualification.md), with 84
+bounded trial records in `docs/planning/p12-agent-trials/`. Built: the skill and its
+`skill_contract` guard (#196), the harness `tools/vsift-agent-trials` (#201) and the
+fix rounds PRs 3a-3i (#203-#217). Counted runs: the strong tier on `56f1e1f`, the
+compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 
 ## Found in P12 (still open)
 
@@ -92,7 +96,7 @@ bounded trial records are in `docs/planning/p12-agent-trials/`.
 - **L-082, L-084:** Haiku 4.5 and GPT-6-Luna are below the line. **L-083:** `text`
   keeps hidden characters raw; the skill quotes only `display_text`.
 - **L-074:** SubRip markup removal drops any `<letter...>` tag. **L-071:** parse
-  failures in JSON modes carry no remediation (P13).
+  failures in JSON modes carry no remediation (P13 PR 1).
 - **Grader readings for the maintainer:**
   - `untrusted_listed` takes only F12-E01;
   - an `rg --files` exclude glob with a separator stays strict;
@@ -121,7 +125,7 @@ bounded trial records are in `docs/planning/p12-agent-trials/`.
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | Next, not started: distribution, managed installation, human-readable output, the handoff validator (#213); npm launcher pattern and name checklist planned (2026-09-28) |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PR 0 kickoff open; distribution, managed installation, human-readable output, L-071 and `handoff check` (#213) to come |
 | P14 | Not started |
 
 ## Architecture snapshot
@@ -137,12 +141,9 @@ is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `
 
 ## Quality evidence
 
-- **The P12 completion change's gates** on Windows 11 are in the pull request
-  description: fmt, strict Clippy with and without features, workspace tests,
-  warning-denied rustdoc and governance.
-- **CI on every PR:**
-  - Quality on Ubuntu, macOS and Windows;
-  - Documentation, Governance, fuzz harness replay, the strict worker boundary,
-    dependency policy and CodeQL.
-- **Merging:** squash merges to protected `main`. History is in git, `CHANGELOG.md`
-  and `docs/history/`.
+- **Local gates** (in each PR description): fmt, strict Clippy with and without
+  features, workspace tests, warning-denied rustdoc and governance.
+- **CI on every PR:** Quality on Ubuntu, macOS and Windows; Documentation, Governance,
+  fuzz harness replay, the strict worker boundary, dependency policy and CodeQL.
+- **Merging:** squash merges to protected `main`; history in git, `CHANGELOG.md` and
+  `docs/history/`.
