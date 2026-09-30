@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup-rollback.schema.json",
+  "title": "VSift setup rollback data v1",
+  "description": "The data of a complete setup.rollback result (P13 PR 6, ADR 0023). Without --version the component returns to the version its selection records as selected before; with --version it selects that installed version. Either way the version is selected only after it verifies (its manifest exists and every file matches it; a return to the recorded previous version also requires the manifest recorded), in one atomic rename, and the version it replaced becomes the new previous one, so a second rollback returns. status is rolled_back, or already_selected when the named version was already the verified selection and nothing changed. A refusal (nothing installed, no such or earlier version, a version that does not verify, another command holding the managed folder) is a failure result and changes nothing. No path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["component", "status", "selected_version", "replaced_version", "next_step"],
+  "properties": {
+    "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+    "status": { "enum": ["rolled_back", "already_selected"] },
+    "selected_version": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$"
+    },
+    "replaced_version": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$" }
+      ]
+    },
+    "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
+  }
+}

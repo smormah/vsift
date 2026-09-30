@@ -153,3 +153,22 @@ P13 PR 4 made the setup edits listed above, before any publication:
 
 The frozen examples of a reserved command now use `setup.repair`, which still answers
 `COMMAND_NOT_IMPLEMENTED`.
+
+## 2026-09-30 note: P13 PR 6 in-place edits made
+
+Before the first publication (ADR 0023 decision H4), P13 PR 6 made these v1 changes:
+
+- `setup list`, `setup rollback`, `setup remove` and `setup repair` are implemented, with
+  the data schemas `setup-list`, `setup-rollback`, `setup-remove` and `setup-repair` and
+  their frozen examples. No command answers `COMMAND_NOT_IMPLEMENTED` any more; the code
+  stays in the v1 taxonomy, and `operation-error.json` and `terminal-event.json` stay as
+  frozen envelopes of it.
+- The reserved grammar, which never shipped, is replaced: `setup repair` loses its
+  `--profile`; `setup rollback <component> [--version <version>]` and `setup remove
+  <component> [--version <version>] | --stale-stages` take the component identifiers the
+  results use and a canonical version key instead of two free strings.
+- `setup-install.schema.json` gains the required `cleanup` object (the stale-stage sweep
+  and the bounded version cleanup), additive to a schema not yet published.
+- A failed `setup remove` carries its data beside the error, as a failed `setup install`
+  does. The `BUSY` remediation of a held managed folder now names install, rollback and
+  remove.

@@ -51,7 +51,8 @@ told about a Ctrl-C (only Ctrl-Break); see L-053.
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
 | `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
 | `setup install` | Apply an accepted Ubuntu 24.04 x86-64 plan: download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
-| `setup repair/list/remove/rollback` | Managed dependency lifecycle, still reserved | P13 PR 6 ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)) |
+| `setup list`, `setup repair` | Read-only: the managed versions of each component and whether each verifies; a diagnosis and the plan of existing commands that fixes it | Implemented in P13 PR 6 |
+| `setup rollback`, `setup remove` | Select the previous or a named verified managed version; remove a version, a component or abandoned stages | Implemented in P13 PR 6 |
 | `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
 | `session list/status/close/renew/retain/clean` | Session and retention lifecycle | Implemented in P05 |
 | `session init-workspace` | Create a worker workspace: an explicit root with an immutable operator policy (durability, admission capacity, session retention) | Implemented in P11 PR 2 |
@@ -1625,6 +1626,13 @@ code and a fixed-prose remediation, with the same `data` beside it, so a caller 
 sees what is installed. Human mode lists the components on stdout and the error on
 stderr.
 
+Since P13 PR 6 the data also has `cleanup`: once the plan is accepted, under the install
+guard and before anything is staged, the stages earlier runs abandoned are swept
+(`stale_stages_removed`, `stale_stages_retained`: kept when nothing proves them VSift's
+own); after the transaction, bounded cleanup keeps each component's selected version and
+the one selected before it, and every version a running job holds, and lists each
+version it handled in `versions` (`removed`, `in_use`, ...; see `setup remove`).
+
 | First failure | `reason` | Code (exit) |
 | --- | --- | --- |
 | Download did not complete | `tls`, `redirect_policy` (outside the reviewed route, another host, credentials in the location, more than three), `http_status` (any status but one complete `200`, `206` included), `proxy_auth` (`407`), `offline` (no connection, a dropped or stalled body), `size` (a declared or received size that differs from the review) | `DOWNLOAD_FAILED` (7) |
@@ -1646,6 +1654,69 @@ then the filtered `PATH`; the model: configured, then managed. A managed version
 used only when every file matches its manifest's size and SHA-256 and the selection
 names the manifest's SHA-256; a version that does not is never run, and lookup falls
 through to `PATH`. A job keeps the version it resolved in use for its whole life.
+
+### P13 managed lifecycle (`setup list`, `rollback`, `remove`, `repair`)
+
+Implemented in P13 PR 6 ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+§3 steps 5 and 6, and its PR 6 note). They work on every platform; where managed
+installation is unavailable the managed folder is normally absent and they say so. None
+of them creates the managed folder, prompts, waits or downloads. `<component>` is
+`ffmpeg_ffprobe`, `whisper_cli` or `whisper_model`; `--version` takes a managed version
+key (1 to 64 lowercase ASCII letters, digits, `.`, `_`, `-`, beginning and ending with a
+letter or digit), and anything else is a rejected command line that is never echoed.
+
+- **`setup list`** reads only (no lock beyond each version's shared use lock while its
+  files are hashed): for each component, always in that order, its `selection`
+  (`verified`: commands use it; `unverified`: the version is missing, does not verify or
+  is being removed; `unreadable`; `none`), `selected_version`, `previous_version` and every
+  published version with `state` (`verified`, `removal_interrupted`, `unverified` with a
+  `fault`: `missing_manifest`, `invalid_manifest`, `changed_content`, `unexpected_entry`,
+  `unreadable`), plus `managed_install`, `managed_folder` (`present`, `absent`) and the
+  counts of abandoned stages a sweep would remove or keep
+  ([`setup-list.schema.json`](../../schemas/v1/setup-list.schema.json), example
+  [`setup-list.json`](../../schemas/v1/examples/setup-list.json)).
+- **`setup rollback <component> [--version <version>]`** takes the install guard without
+  waiting (`BUSY`, exit 4, `retry_after_ms` 30000) and selects, in one atomic rename, the
+  version the selection records as selected before (or the named installed version),
+  only after it verifies against its manifest (and, for the recorded one, the manifest
+  recorded); the replaced version becomes the new previous one, so a second rollback
+  returns. `status` is `rolled_back` or `already_selected`
+  ([`setup-rollback.schema.json`](../../schemas/v1/setup-rollback.schema.json), example
+  [`setup-rollback.json`](../../schemas/v1/examples/setup-rollback.json)). Refusals
+  change nothing: nothing installed, an unknown version or no earlier one
+  (`INVALID_ARGUMENT`, suggesting `setup list`); a version that does not verify or has no
+  manifest (`INTEGRITY_FAILURE`, suggesting `setup repair`). A job already running keeps
+  the version it started with.
+- **`setup remove <component> [--version <version>]`, `setup remove --stale-stages`**
+  takes the guard the same way. With `--version` it removes one unselected version (the
+  selected one is refused, `INVALID_ARGUMENT`); with a component alone it removes the
+  selection first, then every version; `--stale-stages` removes the stages interrupted or
+  failed installations abandoned and half-written selection pointers. Each version is
+  reported `removed`, `already_absent`, `in_use` (a running job holds it: kept),
+  `selected`, `unexpected_content` (an invalid manifest, a link, a folder or an unknown
+  name: kept for the user) or `storage_failure`. When something asked for remains, the
+  result is a failure with the same `data` beside the error: `BUSY` (retry 30000 ms) for a
+  version in use, `STORAGE_IO` for kept content
+  ([`setup-remove.schema.json`](../../schemas/v1/setup-remove.schema.json), examples
+  [`setup-remove.json`](../../schemas/v1/examples/setup-remove.json) and
+  [`setup-remove.failed.json`](../../schemas/v1/examples/setup-remove.failed.json)). Only
+  positively identified content inside the managed folder is removed; a link is never
+  followed; a version whose bytes changed is still removable. Source media and
+  user-configured tools are never addressable.
+- **`setup repair`** changes nothing and is always a complete result (exit 0): `status`
+  (`nothing_installed`, `healthy`, `needs_repair`) and, in the order to apply them, each
+  finding's `kind`, the component, version, count or fault concerned, a `fix` and
+  `command`, the existing `vsift` command that applies it as an executable and argument
+  array (`setup rollback ...`, `setup remove ...`), or `null` with fix `manual` for
+  content VSift cannot prove its own, which the user deletes. A reinstall is always a new
+  `setup plan` accepted with `setup install`
+  ([`setup-repair.schema.json`](../../schemas/v1/setup-repair.schema.json), example
+  [`setup-repair.json`](../../schemas/v1/examples/setup-repair.json)).
+
+A managed store that cannot be proved VSift's own and private is `STORAGE_IO` for all
+four. The commands are short: `--events jsonl` writes the terminal event alone, and an
+interruption ends them with the operating system's default; every step is
+crash-consistent (one rename per selection, removals and sweeps a rerun finishes).
 
 ## Output protocol
 
@@ -1725,7 +1796,7 @@ range, checkpoints, result or last failure, and `job resume <job>` when it can b
 resumed) and `job resume` (the job, then its retranscription as `transcript
 retranscribe` shows it). PR 5 renders `handoff check` (the verdict, the session
 check, then each finding's pointer or line, rule, fixed prose and allowed values; a
-finding holds no draft text). A command that completes without a renderer is a defect
+finding holds no draft text). PR 6 renders `setup list` (each component's selection and versions), `setup rollback`, `setup remove` (each version handled, the sweep) and `setup repair` (each finding's fixed prose and a `Run:` line with its command), and `setup install` also shows its cleanup. A command that completes without a renderer is a defect
 and fails `INTERNAL`; human mode never prints the JSON document.
 
 **Worker hosts.** In human mode `job run` prints its job result (status, attempt,

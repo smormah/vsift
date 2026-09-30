@@ -275,6 +275,26 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   version, a stale-stage sweep limited to positively marked stages, BYO files never
   addressed; kill and power-loss qualification that claims fail-closed detection plus
   repair (D-05, D-08).
+  *Evidence 2026-09-30 (PR 6):* `setup rollback` selects only a version that verifies
+  against its manifest (the recorded previous one also against the manifest the
+  selection recorded), in one atomic rename under the install guard; `setup remove`
+  refuses the selected version, deselects a component before removing it, and keeps a
+  version whose shared use lock a job holds (`in_use`, `BUSY`). Deletion boundaries:
+  every lifecycle operation opens the root, its version and selection folders and each
+  stage without following links, proves the root's and each stage's marker and that
+  each folder is private and still the one held, and removes only names it created
+  (a version's manifest files and metadata, a stage's marker, artifact and flat payload,
+  runtime and smoke files), each a single-link regular file; a link, a junction, a
+  nested folder or an unknown name keeps the whole version or stage for the user (L-090).
+  Removal proves ownership, not integrity, so a corrupted version can be removed; nothing
+  outside the managed root, no source media and no user-configured tool is addressable.
+  Bounded cleanup keeps the selected and previous versions and any held one; the sweep
+  runs only under the guard, when no stage can be live. `setup list` and `setup repair`
+  only read. Tests: `vsift-infrastructure/src/managed_store_lifecycle/tests.rs` (planted
+  links and junction-like directory links, unknown files, corrupted and interrupted
+  versions, held versions, a changed root marker), `vsift/tests/engine_managed_lifecycle.rs`,
+  `vsift-cli/tests/p13_setup_lifecycle_cli.rs` (D-05, D-08). Kill and power-loss tests
+  remain PR 7.
 - **SEC-22 (CI steals secrets or replaces a binary):** the governance workflow lint
   (actions pinned by commit SHA, no `pull_request_target`, minimal permissions,
   `id-token` only in the attest and publish jobs); publication only from the protected

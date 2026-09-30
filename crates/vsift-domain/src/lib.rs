@@ -63,8 +63,9 @@ pub use media::{
 pub use pagination::{CursorError, CursorToken, PageLimit, PageLimitError, QueryDigest};
 pub use progress::{ProgressStage, ProgressUnit, ProgressUpdate};
 pub use provisioning::{
-    ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES, ManagedArtifactFormat,
-    ManagedComponent, ManagedTarget,
+    ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES, MAX_MANAGED_KEY_BYTES,
+    ManagedArtifactFormat, ManagedComponent, ManagedTarget, ManagedVersionKey,
+    ManagedVersionKeyError, is_canonical_managed_key,
 };
 pub use retry::{
     AttemptFailure, Jitter, MAX_AUTOMATIC_RETRIES, MAX_JOB_ATTEMPTS, POISON_THRESHOLD,

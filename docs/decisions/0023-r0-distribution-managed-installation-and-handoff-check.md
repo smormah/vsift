@@ -580,9 +580,11 @@ the pull request that makes each one says so:
 - how the contract crate embeds the skill-owned `handoff.schema.json` while the skill
   keeps owning it (ADR 0022 §6);
 - whether the read-only `setup list` and `setup repair` move from the skill's `never`
-  class to `free`; until the maintainer says so they stay `never`;
+  class to `free`; until the maintainer says so they stay `never` (*decided in PR 6:*
+  `free`, see its note);
 - a typed dependency selector for `setup remove` and `setup rollback`, which parse it
-  as a string today.
+  as a string today (*decided in PR 6:* the component identifiers of the JSON results
+  and a canonical `--version` key, see its note).
 
 ## Implementation note, 2026-09-30 (P13 PR 5, `handoff check`, #213)
 
@@ -710,3 +712,91 @@ input are PR 10's; the npm packages are PR 9's. The runbook is
   Windows 11 opens it); the twelve-digit commit form; the two added lint rules; the
   path filter on the pull-request trigger; the SBOM's `bom-ref` values carrying the
   runner's checkout path ([L-089](../planning/known-limits.md#l-089)).
+
+## Implementation note, 2026-09-30 (P13 PR 6, managed lifecycle, steps 5 and 6)
+
+`setup list`, `setup rollback`, `setup remove` and `setup repair` are implemented, with
+bounded version cleanup and the stale-stage sweep. Kill and power-loss tests stay PR 7.
+The rules live in `vsift-application/src/managed_lifecycle.rs` (pure policies over the
+ports `ManagedStoreReader` and `ManagedStoreMaintenance`); the store's inspection, sweep
+and deselection in `vsift-infrastructure/src/managed_store_lifecycle.rs`; the engine
+operations in `vsift/src/lifecycle.rs`.
+
+- **Grammar (the typed selector left to this pull request).** `setup list`; `setup repair`
+  (its reserved `--profile` is dropped: the managed store is not per profile);
+  `setup rollback <component> [--version <version>]`; `setup remove <component>
+  [--version <version>]` or `setup remove --stale-stages`. `<component>` is one of the
+  identifiers the JSON results use (`ffmpeg_ffprobe`, `whisper_cli`, `whisper_model`);
+  `--version` must be a canonical managed key (`vsift_domain::ManagedVersionKey`: 1 to 64
+  lowercase ASCII letters, digits, `.`, `_`, `-`, beginning and ending alphanumeric), so
+  any other text is a parse failure and never reaches the store or any output.
+- **Repair is read-only, as §3 step 5 and ADR 0007 say.** It diagnoses and emits a plan:
+  each finding has a `kind`, a `fix` and the existing command that applies it (`setup
+  rollback`, `setup rollback --version`, `setup remove --version`, `setup remove
+  <component>` then a new plan and `setup install`, `setup remove --stale-stages`), or
+  `manual` for content VSift cannot prove its own. It never creates the managed folder,
+  takes no lock beyond a version's shared use lock while hashing it, never selects,
+  removes or downloads, and a store that needs repair is a complete result (exit 0).
+  Repair adds no second way to change the store: every fix is one of the commands above.
+- **Skill classes (decided by the supervisor, 2026-09-30).** `setup list` and `setup
+  repair` are `free`: both only read (list takes no guard, repair changes nothing, as a
+  byte snapshot of the store in the tests shows). `setup rollback` and `setup remove` stay
+  `never` with `setup install`: they change which tools every command uses. The skill tells
+  the agent to relay repair's commands to the user, never to run them.
+- **Selection history.** The selection pointer (now `VSIFT-MANAGED-POINTER-v2`; v1 is
+  still read) records the version selected before and its manifest SHA-256 beside the
+  selection, so selection and history change in one atomic rename. A rollback without
+  `--version` selects that previous version only if it verifies and its manifest is the
+  one recorded; with `--version` the version must verify against its own manifest. A
+  version that does not verify, or has no manifest, is never selected. A second rollback
+  returns, because the replaced version becomes the new previous one.
+- **Removal.** `setup remove <component>` removes the selection pointer first (commands
+  stop using the component at once), then every version; `--version` refuses the selected
+  version. A version a job holds (its shared use lock) is kept (`in_use`) and the result
+  is `BUSY` (retry 30 s) with every item as data, like a failed install; a rerun finishes.
+  *Decided here:* removal proves **ownership, not integrity**: every entry must be a name
+  the manifest or the version's metadata gives and a single-link regular file, while a
+  file's bytes or mode may differ, so a corrupted version can be removed. Before PR 6 the
+  primitive also required the bytes, which left a corrupted version impossible to remove
+  or reinstall (the reinstall's publication meets the same identity with other bytes). A
+  link, a folder, an unknown name or an unreadable manifest still stops removal
+  (`unexpected_content`, `STORAGE_IO`), and repair names it for the user (L-090).
+- **Bounded cleanup and the sweep.** Once a `setup install` plan is accepted, under the
+  guard and before anything is staged, the sweep removes the stages earlier runs
+  abandoned (a killed run's, and those PR 3 and PR 4 cleanup kept); after the
+  transaction, bounded cleanup keeps each component's selected and previous version
+  (`RETAINED_MANAGED_VERSIONS` = 2) and every version a job holds, and leaves a component
+  whose pointer cannot be read alone. The install data gains `cleanup` (stages removed
+  and kept, each version handled): an additive field of a schema not yet published
+  (decision H4). `setup remove --stale-stages` runs the sweep alone. A stage is created
+  only by an installation, which holds the guard throughout, so under the guard no stage
+  is live. The sweep removes a stage only when its marker is intact and every entry is
+  the marker, the artifact or a flat payload, runtime or smoke folder of single-link
+  regular files, or when it is empty or holds only a partial marker (a creation killed
+  mid-marker); links and junctions are never followed, and the marker goes last.
+- **Every platform.** The commands work everywhere: where managed installation is not
+  available the folder is normally absent, so list and repair report
+  `managed_folder: absent` / `nothing_installed` with `managed_install:
+  unavailable_target`, rollback is `INVALID_ARGUMENT` (nothing installed) and remove and
+  the sweep report nothing to remove. None of them creates the managed root.
+- **Contract.** New data schemas `setup-list`, `setup-rollback`, `setup-remove` and
+  `setup-repair` with frozen examples; refusals (`INVALID_ARGUMENT` for nothing
+  installed, an unknown or no earlier version, or the selected version;
+  `INTEGRITY_FAILURE` for a version that does not verify; `STORAGE_IO` for a store that
+  cannot be proved VSift's own) carry fixed prose and a suggested `setup list` or `setup
+  repair`. No new failure code. The commands are short: `--events jsonl` writes the
+  terminal event alone, and an interruption ends them with the operating system's
+  default, which the crash-consistent steps below allow.
+- **Crash points for PR 7.** (1) Selection and rollback: after `<component>.pending` is
+  written and before its rename over `<component>.current` (the selection is unchanged;
+  the sweep or the next selection removes the pending file); after the rename (done).
+  (2) Deselection: one unlink of the pointer. (3) Version removal: after the tombstone,
+  after the payload files, after the use lock, after the manifest, after the tombstone,
+  before the folder's removal (each rerun finishes; openers refuse a tombstoned version).
+  (4) Component removal: between the pointer's unlink and each version's removal. (5)
+  Sweep: after any stage file, after a folder, after the artifact, after the marker and
+  before the stage folder's removal (the next sweep finishes; an empty or partial-marker
+  stage is recognised). (6) Install: the sweep before staging and the cleanup after the
+  transaction are the same steps. No step fsyncs its directory after a rename, so PR 7's
+  power-loss claim is fail-closed detection (lookup verifies every file on each open)
+  plus repair, as decision H9 says.

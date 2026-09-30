@@ -1,0 +1,42 @@
+{
+  "command": "setup.remove",
+  "coverage": null,
+  "data": {
+    "component": "whisper_cli",
+    "deselected": true,
+    "next_step": "A running job uses a version reported in_use, so it was kept; everything else asked for is removed. Run the same setup remove again once the job has ended.",
+    "stages": null,
+    "target": "component",
+    "versions": [
+      {
+        "component": "whisper_cli",
+        "status": "removed",
+        "version": "whisper.cpp-v1.9.1-ubuntu-x64"
+      },
+      {
+        "component": "whisper_cli",
+        "status": "in_use",
+        "version": "whisper.cpp-v1.9.2-ubuntu-x64"
+      }
+    ]
+  },
+  "error": {
+    "affected_ids": [],
+    "code": "BUSY",
+    "message": "The requested operation is temporarily busy.",
+    "remediation": [
+      {
+        "command": null,
+        "required_authority": "none",
+        "summary": "A running job uses a managed version, so VSift kept it; it never removes a version in use. Run the same setup remove again once the job has ended."
+      }
+    ],
+    "retry_after_ms": 30000,
+    "retryable": true
+  },
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "failed",
+  "warnings": []
+}

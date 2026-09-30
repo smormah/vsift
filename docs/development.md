@@ -158,7 +158,10 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   clock, a sequential identifier source and temporary directories, so identities and
   expiry are exact. Tests that need real FFmpeg/FFprobe are `#[ignore]`d and opt-in.
 - Contract tests serialize `vsift-contract` values and validate them against
-  `schemas/v1` and its frozen examples, without running the CLI.
+  `schemas/v1` and its frozen examples, without running the CLI. The managed
+  lifecycle examples (`setup-list.json`, `setup-rollback.json`, `setup-remove*.json`,
+  `setup-repair.json`) are rewritten by `VSIFT_UPDATE_SCHEMA_EXAMPLES=1 cargo test -p
+  vsift-contract --test setup_lifecycle_contract`; review the diff.
 - CLI tests execute the compiled binary and verify public output and exit codes.
 - JSON changes require compatibility-focused contract tests.
 

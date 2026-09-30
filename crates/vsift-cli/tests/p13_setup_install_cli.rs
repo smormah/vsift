@@ -363,7 +363,10 @@ fn a_held_install_guard_is_busy_at_once() -> TestResult {
     let value = json(&output)?;
     assert_eq!(value["error"]["code"], "BUSY");
     assert_eq!(value["error"]["retry_after_ms"], 30_000);
-    assert!(summary(&value).contains("Another setup install is running"));
+    assert!(
+        summary(&value)
+            .contains("Another setup install, setup rollback or setup remove is running")
+    );
     Ok(())
 }
 

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup-list.schema.json",
+  "title": "VSift setup list data v1",
+  "description": "The data of a setup.list result (P13 PR 6, ADR 0023): every managed component, always in the order ffmpeg_ffprobe, whisper_cli, whisper_model, with its selection, its selected and previous versions and every published version with whether it verifies. Read-only: listing creates and changes nothing. managed_install says whether managed installation can install on this host (catalogue_accepted only on Ubuntu 24.04 x86-64); managed_folder is absent when this user has no managed folder, and every component then has no versions. selection is verified when commands use the selected version (it verifies and its manifest is the one the selection names), unverified when they do not (the version is missing, does not verify or is being removed), unreadable when the selection cannot be read, and none when nothing is selected. A version's state is verified, removal_interrupted (a removal stopped; setup remove finishes it) or unverified with a fault. stale_stages and retained_stages count stages abandoned by earlier installations that setup remove --stale-stages would remove or would keep for the user. Every string is a closed identifier, a managed version key or fixed prose; no path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "managed_install",
+    "managed_folder",
+    "components",
+    "stale_stages",
+    "retained_stages",
+    "next_step"
+  ],
+  "properties": {
+    "managed_install": {
+      "enum": [
+        "catalogue_accepted",
+        "unavailable_target",
+        "unavailable_catalogue_expired",
+        "unavailable_catalogue_invalid"
+      ]
+    },
+    "managed_folder": { "enum": ["present", "absent"] },
+    "components": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "stale_stages": { "type": "integer", "minimum": 0 },
+    "retained_stages": { "type": "integer", "minimum": 0 },
+    "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
+  },
+  "$defs": {
+    "version_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$"
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "selection", "selected_version", "previous_version", "versions"],
+      "properties": {
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "selection": { "enum": ["none", "verified", "unverified", "unreadable"] },
+        "selected_version": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/version_key" }]
+        },
+        "previous_version": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/version_key" }]
+        },
+        "versions": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/version" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "selection": { "enum": ["none", "unreadable"] } } },
+          "then": {
+            "properties": {
+              "selected_version": { "type": "null" },
+              "previous_version": { "type": "null" }
+            }
+          },
+          "else": { "properties": { "selected_version": { "type": "string" } } }
+        }
+      ]
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "selected", "previous", "state", "fault"],
+      "properties": {
+        "version": { "$ref": "#/$defs/version_key" },
+        "selected": { "type": "boolean" },
+        "previous": { "type": "boolean" },
+        "state": { "enum": ["verified", "removal_interrupted", "unverified"] },
+        "fault": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "enum": [
+                "missing_manifest",
+                "invalid_manifest",
+                "changed_content",
+                "unexpected_entry",
+                "unreadable"
+              ]
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "unverified" } } },
+          "then": { "properties": { "fault": { "type": "string" } } },
+          "else": { "properties": { "fault": { "type": "null" } } }
+        }
+      ]
+    }
+  }
+}

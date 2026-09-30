@@ -45,6 +45,7 @@ mod managed_artifact_store;
 mod managed_catalogue;
 mod managed_installer;
 mod managed_smoke;
+mod managed_store_lifecycle;
 mod media_tool_verification;
 mod media_tool_verification_cache;
 mod offline_artifact_import;
@@ -158,6 +159,7 @@ pub use managed_smoke::{
     MediaSmokeRequest, ReviewedFixtureVerifiers, SmokeCompanions, SmokeFixtureVerifiers,
     SpeechSmokeRequest, StagedCompatibilitySmoke,
 };
+pub use managed_store_lifecycle::{GuardedManagedStore, ManagedStoreInspector};
 pub use media_tool_verification::{
     FixtureMediaToolVerifier, identify_whisper_model_file, verify_model_file,
 };

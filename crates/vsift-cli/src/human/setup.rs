@@ -14,8 +14,9 @@ use super::{
     push_outcome,
     text::{DisplayText, Placement, RenderedText, TerminalText, TooLarge},
     view::{
-        ConfiguredModel, ConfiguredSelection, Envelope, InstallComponent, PlanAction, PlanModel,
-        PlanStep, SetupInstall, SetupPlan,
+        ConfiguredModel, ConfiguredSelection, Envelope, InstallCleanup, InstallComponent,
+        ListVersion, PlanAction, PlanModel, PlanStep, SetupInstall, SetupList, SetupPlan,
+        SetupRemove, SetupRepair, SetupRollback, StageSweep, VersionOutcome,
     },
 };
 use crate::command::ExecutionProfile;
@@ -302,6 +303,7 @@ pub(super) fn install(envelope: &Envelope<SetupInstall>) -> Result<RenderedText,
     for component in &data.components {
         push_component(&mut text, component);
     }
+    push_install_cleanup(&mut text, &data.cleanup);
     text.push_fixed("Next: ")
         .push_value(&data.next_step)
         .end_line();
@@ -340,6 +342,193 @@ fn push_component(text: &mut TerminalText, component: &InstallComponent) {
         }
     }
     text.end_line();
+}
+
+/// What the install's sweep and bounded cleanup did, when they did anything.
+fn push_install_cleanup(text: &mut TerminalText, cleanup: &InstallCleanup) {
+    if cleanup.stale_stages_removed > 0 || cleanup.stale_stages_retained > 0 {
+        text.push_fixed("Abandoned stages: removed ")
+            .push_unsigned(cleanup.stale_stages_removed)
+            .push_fixed(", kept ")
+            .push_unsigned(cleanup.stale_stages_retained)
+            .end_line();
+    }
+    for version in &cleanup.versions {
+        text.push_fixed("Cleanup: ");
+        push_version_outcome(text, version);
+    }
+}
+
+fn push_version_outcome(text: &mut TerminalText, version: &VersionOutcome) {
+    text.push_fixed("[")
+        .push_value(&version.status)
+        .push_fixed("] ")
+        .push_value(&version.component)
+        .push_fixed(" ")
+        .push_value(&version.version)
+        .end_line();
+}
+
+/// `setup list`: each component's selection and versions.
+pub(super) fn list(envelope: &Envelope<SetupList>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("VSift setup list").end_line();
+    text.push_fixed("Managed installation: ")
+        .push_value(&data.managed_install)
+        .end_line();
+    text.push_fixed("Managed folder: ")
+        .push_value(&data.managed_folder)
+        .end_line();
+    for component in &data.components {
+        text.push_value(&component.component).push_fixed(": ");
+        if component.versions.is_empty() && component.selection == "none" {
+            text.push_fixed("nothing installed").end_line();
+            continue;
+        }
+        text.push_fixed("selection ")
+            .push_value(&component.selection)
+            .end_line();
+        for version in &component.versions {
+            push_list_version(&mut text, version);
+        }
+    }
+    if data.stale_stages > 0 || data.retained_stages > 0 {
+        text.push_fixed("Abandoned stages: ")
+            .push_unsigned(data.stale_stages)
+            .push_fixed(" removable, ")
+            .push_unsigned(data.retained_stages)
+            .push_fixed(" to remove yourself")
+            .end_line();
+    }
+    text.push_fixed("Next: ")
+        .push_value(&data.next_step)
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+fn push_list_version(text: &mut TerminalText, version: &ListVersion) {
+    text.push_fixed("  [")
+        .push_value(&version.state)
+        .push_fixed("] ")
+        .push_value(&version.version);
+    if let Some(fault) = &version.fault {
+        text.push_fixed(" (").push_value(fault).push_fixed(")");
+    }
+    if version.selected {
+        text.push_fixed(", selected");
+    }
+    if version.previous {
+        text.push_fixed(", previous");
+    }
+    text.end_line();
+}
+
+/// `setup rollback`: what is selected now and what it replaced.
+pub(super) fn rollback(envelope: &Envelope<SetupRollback>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("VSift setup rollback").end_line();
+    text.push_value(&data.component)
+        .push_fixed(": ")
+        .push_value(&data.status)
+        .push_fixed(", selected ")
+        .push_value(&data.selected_version);
+    if let Some(replaced) = &data.replaced_version {
+        text.push_fixed(" (replaced ")
+            .push_value(replaced)
+            .push_fixed(")");
+    }
+    text.end_line();
+    text.push_fixed("Next: ")
+        .push_value(&data.next_step)
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// `setup remove`: each version handled and what the sweep did.
+pub(super) fn remove(envelope: &Envelope<SetupRemove>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("VSift setup remove").end_line();
+    text.push_fixed("Target: ").push_value(&data.target);
+    if let Some(component) = &data.component {
+        text.push_fixed(" ").push_value(component);
+    }
+    text.end_line();
+    if data.deselected {
+        text.push_fixed("Selection removed: commands no longer use a managed version of it.")
+            .end_line();
+    }
+    if data.versions.is_empty() && data.stages.is_none() {
+        text.push_fixed("Nothing was installed to remove.")
+            .end_line();
+    }
+    for version in &data.versions {
+        push_version_outcome(&mut text, version);
+    }
+    if let Some(stages) = &data.stages {
+        push_stage_sweep(&mut text, stages);
+    }
+    text.push_fixed("Next: ")
+        .push_value(&data.next_step)
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+fn push_stage_sweep(text: &mut TerminalText, stages: &StageSweep) {
+    text.push_fixed("Abandoned stages: removed ")
+        .push_unsigned(stages.removed)
+        .push_fixed(", kept ")
+        .push_unsigned(stages.retained);
+    for (index, reason) in stages.retention_reasons.iter().enumerate() {
+        text.push_fixed(if index == 0 { " (" } else { ", " })
+            .push_value(reason);
+    }
+    if !stages.retention_reasons.is_empty() {
+        text.push_fixed(")");
+    }
+    text.end_line();
+    text.push_fixed("Half-written selection pointers removed: ")
+        .push_unsigned(stages.interrupted_selections_removed)
+        .end_line();
+}
+
+/// `setup repair`: the diagnosis and, for each finding, its fixed prose and
+/// the command that fixes it.
+pub(super) fn repair(envelope: &Envelope<SetupRepair>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("VSift setup repair (changes nothing)")
+        .end_line();
+    text.push_fixed("Managed installation: ")
+        .push_value(&data.managed_install)
+        .end_line();
+    text.push_fixed("Diagnosis: ")
+        .push_value(&data.status)
+        .end_line();
+    for finding in &data.findings {
+        text.push_fixed("[")
+            .push_value(&finding.kind)
+            .push_fixed("] ")
+            .push_value(&finding.summary)
+            .end_line();
+        if let Some(command) = &finding.command {
+            text.push_fixed("  Run: ").push_value(&command.executable);
+            for argument in &command.arguments {
+                text.push_fixed(" ").push_value(argument);
+            }
+            text.end_line();
+        }
+    }
+    text.push_fixed("Next: ")
+        .push_value(&data.next_step)
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
 }
 
 /// Writes a planned step: status, disposition, authority, then its next

@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-09-30 (P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -82,7 +82,7 @@ Each entry has these fields:
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-037](#l-037) | Managed installation installs, but its lifecycle commands are still reserved, and the real install awaits its hosted evidence | platform/distribution | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its kill and power-loss qualification is still to come | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -130,6 +130,7 @@ Each entry has these fields:
 | [L-087](#l-087) | A managed version is rehashed each time a command resolves it | performance | low | unscheduled | none | monitoring |
 | [L-088](#l-088) | Proxy authentication in an HTTPS tunnel is recognised by a dependency's error text | process/CI | low | unscheduled | none | monitoring |
 | [L-089](#l-089) | A release SBOM's `bom-ref` values name the build machine's checkout path | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-090](#l-090) | Content in the managed folder that VSift cannot prove its own is left for the user to delete, and no output names the folder's path | platform/distribution | low | unscheduled | none | accepted residual |
 
 Counts: 3 high, 24 medium, 56 low (83 entries).
 
@@ -793,16 +794,17 @@ Counts: 3 high, 24 medium, 56 low (83 entries).
   for both) and 148 MB for the model. With SHA extensions that is roughly 0.1 to 0.3 s
   per command; without them it can approach a second.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 4 note; `vsift/src/managed.rs`. Not yet measured: the `P13 managed smoke`
-  workflow's managed-install job prints `L-087` lines timing a warm `setup check` and
-  a first and a warm `frame get` against the managed tools.
+  PR 4 note; `vsift/src/managed.rs`. *Measured 2026-09-30* (`P13 managed smoke`
+  [run 36734316384](https://github.com/smormah/vsift/actions/runs/36734316384), hosted `ubuntu-24.04`, all exit 0): a warm `setup check` took 0.65 s, a first
+  `frame get` 0.29 s and a warm `frame get` 0.17 s against the managed tools. Since P13
+  PR 6, `setup list` and `setup repair` also hash every published version once.
 - **Impact:** evidence commands on a managed install start a little later.
 - **Why:** identifying managed tools by digest on every use is what closes L-006 for
   them; a cache keyed to file identity would reopen it.
 - **Mitigation:** each version is hashed once per open, after its use lock is held,
   and one command opens each component at most once.
-- **Next step:** read the `L-087` timings of the first managed-install run and decide
-  whether a cache is needed; measure again in P14's release qualification.
+- **Next step:** the measured cost is well under a second on a hosted runner, so no cache
+  is needed now and this stays monitoring; measure again in P14's release qualification.
 - **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
   **Review:** pending.
 
@@ -1495,34 +1497,40 @@ Counts: 3 high, 24 medium, 56 low (83 entries).
 
 ### L-037
 
-**Managed installation installs, but its lifecycle commands are still reserved, and the real install awaits its hosted evidence.**
+**Managed installation is qualified on Ubuntu 24.04 x64 only, and its kill and power-loss qualification is still to come.**
 
-- **What:** since P13 PR 4, `setup install` applies an accepted plan on Ubuntu 24.04
-  x86-64: it downloads the three reviewed publisher artifacts (or imports them with
-  `--artifact-dir`), verifies them by size and SHA-256, smokes and activates each, and
-  every command resolves tools through the managed tier. `setup list`, `rollback`,
-  `remove` and `repair` still return `COMMAND_NOT_IMPLEMENTED`; there is no bounded
-  version cleanup and no sweep of stages left by an interrupted run (an interrupted run
-  discards its own stage, so only a killed process leaves one); kill and power-loss
-  qualification of the managed store is not done. Windows x86-64 and macOS have no
-  reviewed catalogue and keep manual guidance: the Windows FFmpeg candidate is a daily
-  build (upstream keeps only the last 14) with unreconciled LGPL-3.0 notices, and no
-  macOS candidate is reviewed.
+- **What:** on Ubuntu 24.04 x86-64, `setup install` applies an accepted plan (download
+  or `--artifact-dir`, size and SHA-256, stage, smoke, activate), every command resolves
+  tools through the managed tier, and since P13 PR 6 `setup list`, `setup rollback`,
+  `setup remove` and `setup repair` manage what is installed; an accepted install sweeps
+  stages that killed runs abandoned and keeps only the selected and previous version of
+  each component. Kill and power-loss qualification of the managed store (PR 7) is not
+  done: the operations are designed crash-consistent (one atomic rename per selection,
+  the pointer last, removals and sweeps that a rerun finishes), but no crash campaign
+  has exercised them. Windows x86-64 and macOS have no reviewed catalogue and keep
+  manual guidance (the lifecycle commands work there and report the folder absent): the
+  Windows FFmpeg candidate is a daily build (upstream keeps only the last 14) with
+  unreconciled LGPL-3.0 notices, and no macOS candidate is reviewed.
 - **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-  PR 3 and PR 4 notes; [CLI contract](../contracts/cli-v1.md) "P13 `setup install`";
-  [verification](verification.md) D-02, D-03, D-06, D-07;
+  PR 3, PR 4 and PR 6 notes; [CLI contract](../contracts/cli-v1.md) "P13 `setup install`"
+  and "P13 managed lifecycle"; [verification](verification.md) D-02, D-03, D-05..D-08;
   [P06 Windows candidate](p06-windows-artifact-candidate.md) "Remaining gates".
-- **Impact:** on Ubuntu 24.04 a user can install the managed tools but cannot yet list,
-  roll back or remove versions through VSift; every version installed stays on disk.
-  Elsewhere users install FFmpeg and whisper.cpp themselves.
-- **Why:** P13 delivers the managed lifecycle in steps (PRs 4, 6 and 7); ADR 0023
-  decision E limits it to the one reviewed target.
-- **Mitigation:** each component activates atomically and a rerun continues; an update
-  never touches a version in use; the manual path is typed on every target. The real
-  plan, install, check and rerun run on demand on a hosted runner (`P13 managed smoke`,
-  job `managed-install`); that evidence is recorded after the pull request merges.
-- **Next step:** P13 PR 6 (`setup list/rollback/remove/repair`, cleanup and the
-  stale-stage sweep) and PR 7 (kill and power-loss tests, the P13 install E2E stage).
+  *2026-09-30:* `P13 managed smoke` [run 36734316384](https://github.com/smormah/vsift/actions/runs/36734316384) on `main` at `d43a518` (hosted `ubuntu-24.04`)
+  passed both jobs: the pinned-tool smoke's negative control (banner mismatch)
+  discarded all three stages and activated nothing, and the real `setup plan`, `setup
+  install`, `setup check` and rerun through the CLI activated all three components.
+  Managed installation is qualified on Ubuntu 24.04 x64 by that run.
+- **Impact:** elsewhere users install FFmpeg and whisper.cpp themselves and register
+  them; on Ubuntu, a power loss during an install, rollback or removal is not yet shown
+  to be detected and repaired.
+- **Why:** ADR 0023 decision E limits managed installation to the one reviewed target;
+  PR 7 owns the kill and power-loss tests (decision H9).
+- **Mitigation:** every managed version is verified by digest each time it is opened, so
+  a torn version is never run and lookup falls through to `PATH`; `setup repair`
+  diagnoses what an interruption leaves and names the command that fixes it; the manual
+  path is typed on every target.
+- **Next step:** P13 PR 7 (kill and power-loss tests of the managed store, the P13
+  install E2E stage).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -2234,6 +2242,34 @@ raw.**
   plain `407` response is recognised by its status.
 - **Next step:** use a typed error if hyper-util exports one.
 - **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
+  **Review:** pending.
+
+### L-090
+
+**Content in the managed folder that VSift cannot prove its own is left for the user to delete, and no output names the folder's path.**
+
+- **What:** `setup remove`, the stale-stage sweep and bounded cleanup delete only what
+  they positively identify: a version whose manifest lists its files, and stages whose
+  every entry is a known name and a single-link regular file. A version with an invalid
+  or missing manifest, a link, a folder or an unknown name, a stage without a provable
+  marker, and entries VSift never creates are kept; `setup repair` reports each with fix
+  `manual`, and results say to delete it (or the whole managed folder) by hand. No result
+  prints the folder's path; the prose names the Ubuntu default
+  (`~/.local/share/vsift/managed-v1`, or `vsift/managed-v1` under `$XDG_DATA_HOME`).
+- **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 6 note; `vsift-infrastructure/src/managed_store_lifecycle.rs`; the tests in
+  `managed_store_lifecycle/tests.rs` that keep planted links and unknown files.
+- **Impact:** after tampering or an unusual failure, a user must delete leftovers
+  themselves; they take disk space but are never run or selected.
+- **Why:** deleting what cannot be proved VSift's own risks deleting through a link or
+  deleting user data (AGENTS.md: automatic cleanup is restricted to positively
+  identified VSift-owned content); no managed-setup result carries a path, by the
+  same rule as every other setup result.
+- **Mitigation:** lookup ignores everything that does not verify; `setup list` and
+  `setup repair` count what is kept; a version whose bytes or modes changed is still
+  removable, because its names and single-link regular files prove ownership.
+- **Next step:** none planned for R0; revisit if users report leftovers.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
 ## Review workflow

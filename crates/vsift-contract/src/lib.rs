@@ -12,7 +12,9 @@
 //!   [`CoverageResponse`] and [`LifecycleResponse`] parts, the JSON Lines
 //!   [`TerminalEventResponse`], and the [`CommandName`] identifiers they carry.
 //! - **Setup:** [`SetupCheckResponse`], [`SetupPlanResponse`], the strict
-//!   [`SavedSetupPlan`] input, and the configured-selection responses.
+//!   [`SavedSetupPlan`] input, and the configured-selection responses; the managed
+//!   lifecycle data [`SetupListResponse`], [`SetupRollbackResponse`],
+//!   [`SetupRemoveResponse`] and [`SetupRepairResponse`] (P13 PR 6).
 //! - **Session:** [`OpenData`], [`StatusData`], [`PageData`], [`CleanData`],
 //!   [`BundleData`] and their item types; `session status` adds its newest
 //!   jobs through [`SessionStatusData`].
@@ -104,6 +106,7 @@ mod handoff;
 mod input;
 mod install;
 mod job;
+mod lifecycle;
 mod local_asr;
 mod navigation;
 mod request;
@@ -183,6 +186,11 @@ pub use job::{
     JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
     JOB_SESSION_NOT_OPEN_REMEDIATION, JobData, JobPresentation, JobResumeData, SessionJobData,
     SessionStatusData, UNKNOWN_JOB_REMEDIATION,
+};
+pub use lifecycle::{
+    InstallCleanupResponse, SetupListResponse, SetupRemoveResponse, SetupRepairResponse,
+    SetupRollbackResponse, SuggestedCommandResponse, managed_lifecycle_remediation,
+    repair_fix_command, setup_remove_failure_summary,
 };
 pub use local_asr::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,

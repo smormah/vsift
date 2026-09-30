@@ -54,8 +54,8 @@ use vsift_contract::{
     TerminalEventResponse, UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION,
     UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
-    local_asr_verification_summary, media_tool_verification_summary, non_private_folder_summary,
-    search_query_rejection_summary, transcript_rejection_summary,
+    local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
+    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -366,15 +366,25 @@ where
                 let result =
                     setup::install(&engine, arguments, &cancellation, ProgressObserver::none())
                         .await;
-                write_install_result(&mut writer, mode, result)
+                write_result_with_failure_data(&mut writer, mode, CommandName::SetupInstall, result)
+            }
+            Some(SetupCommand::List) => {
+                let result = setup::list(&engine);
+                write_session_result(&mut writer, mode, CommandName::SetupList, result)
+            }
+            Some(SetupCommand::Repair) => {
+                let result = setup::repair(&engine);
+                write_session_result(&mut writer, mode, CommandName::SetupRepair, result)
+            }
+            Some(SetupCommand::Rollback(arguments)) => {
+                let result = setup::rollback(&engine, &arguments);
+                write_session_result(&mut writer, mode, CommandName::SetupRollback, result)
+            }
+            Some(SetupCommand::Remove(arguments)) => {
+                let result = setup::remove(&engine, arguments);
+                write_result_with_failure_data(&mut writer, mode, CommandName::SetupRemove, result)
             }
             None => write_setup_help(&mut writer),
-            Some(
-                reserved @ (SetupCommand::Repair(_)
-                | SetupCommand::List
-                | SetupCommand::Remove(_)
-                | SetupCommand::Rollback(_)),
-            ) => not_implemented(&mut writer, mode, reserved.operation_name()),
         },
         Command::Ingest(arguments) => {
             let result = session::ingest(&engine, arguments, &cancellation).await;
@@ -506,25 +516,6 @@ where
     }
 }
 
-/// Answers a reserved command whose implementation packet is incomplete.
-fn not_implemented<StandardOutput, StandardError>(
-    writer: &mut OutputWriter<StandardOutput, StandardError>,
-    mode: OutputMode,
-    command: CommandName,
-) -> ProcessExit
-where
-    StandardOutput: Write,
-    StandardError: Write,
-{
-    write_failure(
-        writer,
-        mode,
-        command,
-        FailureCode::CommandNotImplemented,
-        None,
-    )
-}
-
 /// Resolves the effective probe deadline for `profile`, then asks the engine
 /// for the current plan.
 async fn current_setup_plan(
@@ -588,6 +579,12 @@ impl CommandFailure {
     /// Also reports `data`, in its published JSON form, beside the error.
     pub(crate) fn with_data(mut self, data: serde_json::Value) -> Self {
         self.data = Some(Box::new(data));
+        self
+    }
+
+    /// Also tells the caller how long to wait before retrying.
+    pub(crate) const fn with_retry_after_ms(mut self, retry_after_ms: u64) -> Self {
+        self.retry_after_ms = Some(retry_after_ms);
         self
     }
 }
@@ -667,6 +664,11 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
+            EngineError::ManagedLifecycle(refusal) => managed_lifecycle_remediation(*refusal)
+                .1
+                .iter()
+                .map(|argument| (*argument).to_owned())
+                .collect(),
             _ => Vec::new(),
         };
         Self {
@@ -726,6 +728,7 @@ fn install_remediation(error: &EngineError) -> Option<String> {
         }
         EngineError::PlanAcceptance(PlanAcceptanceError::DigestMismatch)
         | EngineError::SavedPlanRejected(_) => STALE_PLAN_REMEDIATION,
+        EngineError::ManagedLifecycle(refusal) => managed_lifecycle_remediation(*refusal).0,
         _ => return None,
     };
     Some(summary.to_owned())
@@ -754,12 +757,14 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
     Some(summary.to_owned())
 }
 
-/// Writes a `setup install` result. A failure keeps what the transaction
-/// did: `--json` carries it as the failure's data, and human mode lists the
-/// components on stdout before the error on stderr.
-fn write_install_result<StandardOutput, StandardError>(
+/// Writes a result whose failure keeps what the command did (`setup
+/// install`: every component; `setup remove`: every item): `--json` carries
+/// it as the failure's data, and human mode renders it on stdout before the
+/// error on stderr.
+fn write_result_with_failure_data<StandardOutput, StandardError>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
     mode: OutputMode,
+    command: CommandName,
     result: Result<OperationResponse<serde_json::Value>, CommandFailure>,
 ) -> ProcessExit
 where
@@ -769,8 +774,8 @@ where
     match result {
         Err(failure) if mode == OutputMode::Human && failure.data.is_some() => {
             let code = failure.code;
-            let response = failure_response(CommandName::SetupInstall, failure);
-            let listed = match human::result(CommandName::SetupInstall, &response) {
+            let response = failure_response(command, failure);
+            let listed = match human::result(command, &response) {
                 Ok(Some(text)) => writer.write_rendered_stdout(&text),
                 Ok(None) | Err(_) => Ok(()),
             };
@@ -786,7 +791,7 @@ where
                 }
             }
         }
-        result => write_session_result(writer, mode, CommandName::SetupInstall, result),
+        result => write_session_result(writer, mode, command, result),
     }
 }
 

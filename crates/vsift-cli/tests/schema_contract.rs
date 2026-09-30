@@ -139,28 +139,30 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     }
     assert_eq!(serde_json::from_slice::<Value>(&setup.stdout)?, blocked);
 
+    // No command answers COMMAND_NOT_IMPLEMENTED since P13 PR 6; the
+    // reserved-command examples stay as frozen v1 envelopes, built by the
+    // contract crate's tests. `setup repair` now reads the (absent) managed
+    // folder of this fresh base and changes nothing.
     let operation = Command::cargo_bin("vsift")?
-        .args(["setup", "repair", "--profile", "desktop", "--json"])
+        .args(["setup", "repair", "--json"])
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_DATA_HOME", &base)
+        .env("HOME", &base)
         .output()?;
-    assert_eq!(
-        serde_json::from_slice::<Value>(&operation.stdout)?,
-        load("examples/operation-error.json")?
-    );
+    let repair = serde_json::from_slice::<Value>(&operation.stdout)?;
+    validate(&load("operation-response.schema.json")?, &repair)?;
+    validate(&load("setup-repair.schema.json")?, &repair["data"])?;
+    assert_eq!(repair["data"]["status"], "nothing_installed");
 
     let event = Command::cargo_bin("vsift")?
-        .args([
-            "setup",
-            "repair",
-            "--profile",
-            "desktop",
-            "--events",
-            "jsonl",
-        ])
+        .args(["setup", "repair", "--events", "jsonl"])
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_DATA_HOME", &base)
+        .env("HOME", &base)
         .output()?;
-    assert_eq!(
-        serde_json::from_slice::<Value>(&event.stdout)?,
-        load("examples/terminal-event.json")?
-    );
+    let terminal = serde_json::from_slice::<Value>(&event.stdout)?;
+    validate(&load("terminal-event.schema.json")?, &terminal)?;
+    assert_eq!(terminal["result"], repair);
     let plan = Command::cargo_bin("vsift")?
         .args(["setup", "plan", "--profile", "desktop", "--json"])
         .env("PATH", "")

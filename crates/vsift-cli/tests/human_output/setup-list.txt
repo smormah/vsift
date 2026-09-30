@@ -1,0 +1,11 @@
+VSift setup list
+Managed installation: catalogue_accepted
+Managed folder: present
+ffmpeg_ffprobe: selection verified
+  [verified] n8.1-2-g0123456789-20260601, previous
+  [verified] n9.0.1-11-ge47273f4d9-20260831, selected
+whisper_cli: selection verified
+  [verified] whisper.cpp-v1.9.2-ubuntu-x64, selected
+whisper_model: selection verified
+  [verified] whisper-base-multilingual-80da2d8, selected
+Next: Commands use each component's selected version while it verifies. setup rollback <component> returns to its previous version; setup remove removes a version or a component.

@@ -11,18 +11,20 @@ use std::{error::Error, fmt};
 use vsift_application::{
     AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError, EvidenceMediaError,
     IdentifierGenerationError, JobRunError, JobStoreError, LIVE_JOB_RETRY_AFTER,
-    LocalAsrVerificationFailure, MediaToolFailure, MediaToolPreflightFailure, OpenSessionError,
-    PlanAcceptanceError, SessionStorageError, SourceProbeError, TranscriptBuildError,
-    TranscriptQueryError, VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
+    LocalAsrVerificationFailure, ManagedLifecycleRefusal, MediaToolFailure,
+    MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
+    SourceProbeError, TranscriptBuildError, TranscriptQueryError, VisualExtensionStop,
+    VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
 
 use crate::isolation::IsolationGaps;
 
-/// How long a caller waits before retrying a `setup install` that found
-/// another one holding the managed root: an installation downloads and
-/// smokes for minutes, so a short retry would only find it busy again.
-const MANAGED_INSTALL_RETRY_AFTER_MS: u64 = 30_000;
+/// How long a caller waits before retrying a managed setup command that
+/// found another one holding the managed root, or a version a running job
+/// holds: an installation downloads and smokes for minutes, so a short
+/// retry would only find it busy again.
+pub const MANAGED_INSTALL_RETRY_AFTER_MS: u64 = 30_000;
 use vsift_domain::{
     FailureCode, FrameSelectionError, JobId, JobState, NavigationError, RuntimeDependency,
     SearchQueryRejection, SessionId, TranscriptImportError,
@@ -78,9 +80,12 @@ pub enum EngineError {
     SavedPlanRejected(FailureCode),
     /// The supplied digest does not accept the current plan.
     PlanAcceptance(PlanAcceptanceError),
-    /// Another `setup install` holds this user's managed root (P13); the
-    /// install guard never waits.
+    /// Another `setup install`, `setup rollback` or `setup remove` holds this
+    /// user's managed root (P13); the install guard never waits.
     ManagedInstallBusy,
+    /// A managed lifecycle command (`setup rollback`, `setup remove`, `setup
+    /// list`, `setup repair`; P13 PR 6) changed nothing, for this typed reason.
+    ManagedLifecycle(ManagedLifecycleRefusal),
     /// The private managed root could not be located, created or proved
     /// private, so nothing was installed (P13).
     ManagedStorageUnavailable,
@@ -359,6 +364,7 @@ impl EngineError {
             | Self::UnsupportedVideoStream => FailureCode::InvalidSource,
             Self::UserConfiguration(error) => error.failure_code(),
             Self::SavedPlanRejected(code) => *code,
+            Self::ManagedLifecycle(refusal) => refusal.failure_code(),
             Self::ManagedStorageUnavailable
             | Self::WorkingDirectoryUnavailable
             | Self::TranscriptSource(TranscriptSourceError::Io)
@@ -678,9 +684,10 @@ impl fmt::Display for EngineError {
             Self::PlanAcceptance(PlanAcceptanceError::DigestMismatch) => {
                 formatter.write_str("plan digest does not match the current plan")
             }
-            Self::ManagedInstallBusy => {
-                formatter.write_str("another managed installation holds the managed root")
-            }
+            Self::ManagedInstallBusy => formatter.write_str(
+                "another managed installation, rollback or removal holds the managed root",
+            ),
+            Self::ManagedLifecycle(refusal) => refusal.fmt(formatter),
             Self::ManagedStorageUnavailable => {
                 formatter.write_str("the private managed root could not be used")
             }
@@ -842,6 +849,7 @@ impl Error for EngineError {
             Self::FrameNotSelected(error) => Some(error),
             Self::InvalidNavigation(error) => Some(error),
             Self::EvidenceMedia(error) => Some(error),
+            Self::ManagedLifecycle(error) => Some(error),
             Self::EvidenceNotFound
             | Self::EvidenceKindMismatch
             | Self::CropOutsideParent

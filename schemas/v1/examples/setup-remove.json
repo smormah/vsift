@@ -1,0 +1,23 @@
+{
+  "command": "setup.remove",
+  "coverage": null,
+  "data": {
+    "component": null,
+    "deselected": false,
+    "next_step": "Everything asked for is removed. Run setup list to see what is installed.",
+    "stages": {
+      "interrupted_selections_removed": 1,
+      "removed": 2,
+      "retained": 0,
+      "retention_reasons": []
+    },
+    "target": "stale_stages",
+    "versions": []
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

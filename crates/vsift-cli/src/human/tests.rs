@@ -228,6 +228,57 @@ fn setup_install_lists_each_component_and_its_outcome() -> TestResult {
     Ok(())
 }
 
+/// P13 PR 6: `setup list`, `setup rollback`, `setup remove` and `setup
+/// repair` render every component, version, outcome and finding, and a
+/// repair finding's command as a `Run:` line of fixed words and keys.
+#[test]
+fn setup_lifecycle_results_render() -> TestResult {
+    for (command, file, snapshot, expected) in [
+        (
+            CommandName::SetupList,
+            "setup-list.json",
+            "setup-list",
+            "  [verified] n9.0.1-11-ge47273f4d9-20260831, selected",
+        ),
+        (
+            CommandName::SetupRollback,
+            "setup-rollback.json",
+            "setup-rollback",
+            "ffmpeg_ffprobe: rolled_back, selected n8.1-2-g0123456789-20260601",
+        ),
+        (
+            CommandName::SetupRemove,
+            "setup-remove.json",
+            "setup-remove",
+            "Abandoned stages: removed 2, kept 0",
+        ),
+        (
+            CommandName::SetupRepair,
+            "setup-repair.json",
+            "setup-repair",
+            "  Run: vsift setup rollback ffmpeg_ffprobe",
+        ),
+        (
+            CommandName::SetupRemove,
+            "setup-remove.failed.json",
+            "setup-remove-failed",
+            "[in_use] whisper_cli whisper.cpp-v1.9.2-ubuntu-x64",
+        ),
+    ] {
+        let text = render(command, &example(file)?)?;
+        check_snapshot(snapshot, &text)?;
+        assert!(text.contains(expected), "{snapshot}: {text}");
+    }
+    let failed = render_failure(&example("setup-remove.failed.json")?, None)?;
+    assert_terminal_safe(failed.as_str());
+    assert!(failed.as_str().contains("(BUSY)"));
+    assert!(failed.as_str().contains("Retry after: 30000 ms"));
+    let install = render(CommandName::SetupInstall, &example("setup-install.json")?)?;
+    assert!(install.contains("Abandoned stages: removed 1, kept 0"));
+    assert!(install.contains("Cleanup: [removed] ffmpeg_ffprobe n8.1-2-g0123456789-20260601"));
+    Ok(())
+}
+
 /// Every failure example renders as message, remediation and suggested
 /// command, on stderr.
 #[test]
@@ -379,19 +430,16 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
 /// only for `setup check`, rendered from its typed report, and for the
 /// commands that only ever fail.
 #[test]
-fn only_setup_check_and_failing_commands_have_no_result_renderer() -> TestResult {
-    for command in [
-        CommandName::SetupCheck,
-        CommandName::Parse,
-        CommandName::SetupRepair,
-        CommandName::SetupList,
-        CommandName::SetupRemove,
-        CommandName::SetupRollback,
-    ] {
+fn only_setup_check_and_rejected_command_lines_have_no_result_renderer() -> TestResult {
+    for command in [CommandName::SetupCheck, CommandName::Parse] {
         assert!(render_value(command, &json!({}))?.is_none(), "{command:?}");
     }
     for command in [
         CommandName::SetupInstall,
+        CommandName::SetupList,
+        CommandName::SetupRollback,
+        CommandName::SetupRemove,
+        CommandName::SetupRepair,
         CommandName::Candidates,
         CommandName::FrameGet,
         CommandName::Crop,

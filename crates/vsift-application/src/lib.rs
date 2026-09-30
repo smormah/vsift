@@ -13,6 +13,7 @@ mod identifiers;
 mod install;
 mod job;
 mod local_asr_setup;
+mod managed_lifecycle;
 mod provisioning;
 mod search;
 mod session;
@@ -59,6 +60,16 @@ pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
     OpenSessionRequest, StageCancellation, StagedSessionSource,
+};
+
+pub use managed_lifecycle::{
+    ComponentInventory, MANAGED_COMPONENTS, ManagedInventory, ManagedLifecycleRefusal,
+    ManagedRemovalTarget, ManagedSelection, ManagedStoreFault, ManagedStoreMaintenance,
+    ManagedStoreReader, ManagedVersionFault, ManagedVersionRecord, ManagedVersionState,
+    PreviousSelection, RETAINED_MANAGED_VERSIONS, RemovalReport, RepairFinding, RepairFindingKind,
+    RepairFix, RepairPlan, RepairStatus, RollbackOutcome, SelectionFailure, SelectionRecord,
+    SelectionStatus, StageSweep, VersionRemovalReport, VersionRemovalStatus, clean_up_versions,
+    diagnose_managed_store, remove_managed, roll_back_component,
 };
 
 pub use local_asr_setup::{

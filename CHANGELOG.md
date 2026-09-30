@@ -26,6 +26,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   untrusted `${{ }}` expression in a `run` script, and in `release.yml` no feature,
   profile override or test binary. Runbook `docs/operations/release.md`; L-089 records
   that an SBOM names the runner's checkout path.
+- **Managed lifecycle: `setup list`, `setup rollback`, `setup remove`, `setup repair`**
+  (P13 PR 6; ADR 0023 §3 steps 5 and 6). `setup list` shows each managed component's
+  selected and previous versions and whether every version verifies. `setup rollback
+  <component> [--version <version>]` selects the version selected before (or a named
+  installed one) only after it verifies, in one atomic rename. `setup remove <component>
+  [--version <version>]` removes one unselected version or a whole component (selection
+  first), and `setup remove --stale-stages` removes stages interrupted installs
+  abandoned; a version a running job holds is kept (`BUSY`), and content VSift cannot
+  prove its own is kept for the user (L-090). `setup repair` changes nothing: it diagnoses
+  the store and names the existing command that fixes each finding. Every accepted
+  `setup install` now sweeps abandoned stages first and keeps only each component's
+  selected and previous version afterwards (`data.cleanup`). Schemas `setup-list`,
+  `setup-rollback`, `setup-remove`, `setup-repair` with frozen examples; human text for
+  all four. The skill classes `setup list` and `setup repair` as `free`; `rollback` and
+  `remove` stay `never`. The commands work on every platform and report an absent managed
+  folder where managed installation is unavailable.
 
 - **`vsift handoff check`** (P13 PR 5, issue #213; ADR 0023 decisions G and H). A new
   `handoff` namespace whose one command checks an agent's draft report before it is

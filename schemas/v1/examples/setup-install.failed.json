@@ -3,6 +3,11 @@
   "coverage": null,
   "data": {
     "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
+    "cleanup": {
+      "stale_stages_removed": 0,
+      "stale_stages_retained": 0,
+      "versions": []
+    },
     "components": [
       {
         "component": "ffmpeg_ffprobe",

@@ -7,18 +7,22 @@
 use std::{io::Write, path::Path};
 
 use vsift::{
-    Cancellation, Engine, FailureCode, LocalAsrSetupStatus, ManagedPlanAvailability,
-    ProgressObserver, RuntimeDependency, RuntimeDiagnosis, SetupInstallRequest,
+    Cancellation, Engine, FailureCode, LocalAsrSetupStatus, MANAGED_INSTALL_RETRY_AFTER_MS,
+    ManagedPlanAvailability, ManagedRemovalTarget, ProgressObserver, RuntimeDependency,
+    RuntimeDiagnosis, SetupInstallRequest,
 };
 use vsift_contract::{
     CommandName, DependencyLookup, JsonLimits, OperationResponse, STALE_PLAN_REMEDIATION,
-    SavedSetupPlan, SetupCheckResponse, SetupInstallResponse, TerminalEventResponse,
-    setup_install_failure_summary,
+    SavedSetupPlan, SetupCheckResponse, SetupInstallResponse, SetupListResponse,
+    SetupRemoveResponse, SetupRepairResponse, SetupRollbackResponse, TerminalEventResponse,
+    setup_install_failure_summary, setup_remove_failure_summary,
 };
 
 use crate::{
     CommandFailure,
-    command::{ExecutionProfile, SetupInstallArguments},
+    command::{
+        ExecutionProfile, SetupInstallArguments, SetupRemoveArguments, SetupRollbackArguments,
+    },
     config::{ConfigLayer, EffectiveConfig, HostPolicy},
     json_input::read_json_file,
     output::{OutputMode, OutputWriter, ProcessExit, setup_exit},
@@ -130,7 +134,8 @@ pub(crate) async fn install(
         outcome.catalogue_revision().map(str::to_owned),
         outcome.source(),
         outcome.report(),
-    );
+    )
+    .with_cleanup(&outcome.cleanup().stages, &outcome.cleanup().versions);
     match outcome.report().first_failure() {
         None => OperationResponse::complete(CommandName::SetupInstall.identifier(), &data)
             .map_err(|_| CommandFailure::from(FailureCode::Internal)),
@@ -146,6 +151,89 @@ pub(crate) async fn install(
                 setup_install_failure_summary(component, failure),
             )
             .with_data(data))
+        }
+    }
+}
+
+fn completed<T: serde::Serialize>(
+    command: CommandName,
+    data: &T,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    OperationResponse::complete(command.identifier(), data)
+        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+}
+
+/// `setup list`: every managed component, its selected and previous
+/// versions and whether each version verifies. Reads only.
+pub(crate) fn list(
+    engine: &Engine,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    let listing = engine.list_managed()?;
+    completed(
+        CommandName::SetupList,
+        &SetupListResponse::new(listing.availability(), listing.inventory()),
+    )
+}
+
+/// `setup repair`: the diagnosis and the plan of existing commands that
+/// fixes it. Reads only; a store that needs repair is a complete result.
+pub(crate) fn repair(
+    engine: &Engine,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    let diagnosis = engine.repair_managed()?;
+    completed(
+        CommandName::SetupRepair,
+        &SetupRepairResponse::new(diagnosis.availability(), diagnosis.plan()),
+    )
+}
+
+/// `setup rollback`: selects the previous or the named verified version.
+pub(crate) fn rollback(
+    engine: &Engine,
+    arguments: &SetupRollbackArguments,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    let outcome =
+        engine.rollback_managed(arguments.component.into(), arguments.version.as_ref())?;
+    completed(
+        CommandName::SetupRollback,
+        &SetupRollbackResponse::new(&outcome),
+    )
+}
+
+/// `setup remove`: removes a version, a component or abandoned stages. What
+/// could not be removed makes the result a failure whose data reports every
+/// item, like a failed `setup install`.
+pub(crate) fn remove(
+    engine: &Engine,
+    arguments: SetupRemoveArguments,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    let target = match (arguments.component, arguments.version) {
+        (Some(component), Some(version)) => ManagedRemovalTarget::Version {
+            component: component.into(),
+            version,
+        },
+        (Some(component), None) => ManagedRemovalTarget::Component(component.into()),
+        // The parser requires a component or `--stale-stages`, and
+        // `--version` only with a component.
+        (None, _) => ManagedRemovalTarget::StaleStages,
+    };
+    let report = engine.remove_managed(&target)?;
+    let data = SetupRemoveResponse::new(&target, &report);
+    match report.failure_code() {
+        None => completed(CommandName::SetupRemove, &data),
+        Some(code) => {
+            let data = serde_json::to_value(&data)
+                .map_err(|_| CommandFailure::from(FailureCode::Internal))?;
+            let failure = CommandFailure::with_remediation(
+                code,
+                setup_remove_failure_summary(code).to_owned(),
+            )
+            .with_data(data);
+            Err(if code == FailureCode::Busy {
+                failure.with_retry_after_ms(MANAGED_INSTALL_RETRY_AFTER_MS)
+            } else {
+                failure
+            })
         }
     }
 }

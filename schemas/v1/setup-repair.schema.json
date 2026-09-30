@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup-repair.schema.json",
+  "title": "VSift setup repair data v1",
+  "description": "The data of a complete setup.repair result (P13 PR 6; ADR 0007 and ADR 0023: repair is read-only, it diagnoses and emits a plan). Repair changes, creates, selects and downloads nothing, and a store that needs repair is still a complete result: status is nothing_installed (no managed folder), healthy or needs_repair. Each finding says what is wrong (kind, the component and version concerned, a count for stages, pointers and entries, the fault of an unverified version), fix names how, summary is fixed prose, and command is the existing vsift command that applies the fix (an executable and argument array of fixed words and managed keys, run without a shell), or null for fix manual: content VSift cannot prove its own, which the user deletes. The findings are in the order to apply them. A reinstall is always a new setup plan accepted with setup install. No path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["managed_install", "status", "findings", "next_step"],
+  "properties": {
+    "managed_install": {
+      "enum": [
+        "catalogue_accepted",
+        "unavailable_target",
+        "unavailable_catalogue_expired",
+        "unavailable_catalogue_invalid"
+      ]
+    },
+    "status": { "enum": ["nothing_installed", "healthy", "needs_repair"] },
+    "findings": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "needs_repair" } } },
+      "then": { "properties": { "findings": { "minItems": 1 } } },
+      "else": { "properties": { "findings": { "maxItems": 0 } } }
+    }
+  ],
+  "$defs": {
+    "version_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$"
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "component", "version", "count", "fault", "fix", "summary", "command"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "selection_unreadable",
+            "selected_version_unverified",
+            "version_unverified",
+            "removal_interrupted",
+            "stale_stages",
+            "stages_need_manual_removal",
+            "interrupted_selection",
+            "unexpected_entries"
+          ]
+        },
+        "component": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] }
+          ]
+        },
+        "version": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/version_key" }] },
+        "count": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 1 }] },
+        "fault": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "enum": [
+                "missing_manifest",
+                "invalid_manifest",
+                "changed_content",
+                "unexpected_entry",
+                "unreadable"
+              ]
+            }
+          ]
+        },
+        "fix": {
+          "enum": [
+            "rollback",
+            "rollback_to_version",
+            "remove_version",
+            "remove_component_and_reinstall",
+            "remove_stale_stages",
+            "manual"
+          ]
+        },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "command": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["executable", "arguments"],
+              "properties": {
+                "executable": { "const": "vsift" },
+                "arguments": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 5,
+                  "prefixItems": [{ "const": "setup" }, { "enum": ["rollback", "remove"] }],
+                  "items": { "type": "string", "pattern": "^([a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?|--version|--stale-stages)$" }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "fix": { "const": "manual" } } },
+          "then": { "properties": { "command": { "type": "null" } } },
+          "else": { "properties": { "command": { "type": "object" } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": { "enum": ["stale_stages", "stages_need_manual_removal", "interrupted_selection", "unexpected_entries"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "component": { "type": "null" },
+              "version": { "type": "null" },
+              "count": { "type": "integer" }
+            }
+          },
+          "else": {
+            "properties": { "component": { "type": "string" }, "count": { "type": "null" } }
+          }
+        }
+      ]
+    }
+  }
+}

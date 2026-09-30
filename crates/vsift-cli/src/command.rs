@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
     CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection, IsolationProfile, JobId,
-    OperationId, RuntimeDependency, SessionId, SetupProfile, TranscriptRevisionId,
-    VisualCandidateId,
+    ManagedComponent, ManagedVersionKey, ManagedVersionKeyError, OperationId, RuntimeDependency,
+    SessionId, SetupProfile, TranscriptRevisionId, VisualCandidateId,
 };
 use vsift_contract::CommandName;
 
@@ -93,14 +93,14 @@ pub(crate) enum SetupCommand {
     Plan(SetupPlanArguments),
     /// Apply an unchanged, explicitly accepted installation plan.
     Install(SetupInstallArguments),
-    /// Create or apply a bounded repair plan.
-    Repair(SetupRepairArguments),
-    /// List configured and managed dependency versions.
+    /// Diagnose the managed tools and plan their repair; changes nothing.
+    Repair,
+    /// List each managed component's versions, the selected one, and whether each verifies.
     List,
-    /// Remove an unused managed dependency version.
-    Remove(SetupVersionArguments),
-    /// Activate an earlier validated managed version.
-    Rollback(SetupVersionArguments),
+    /// Remove a managed version, a whole managed component, or abandoned stages.
+    Remove(SetupRemoveArguments),
+    /// Select a component's previous managed version, or a named installed one.
+    Rollback(SetupRollbackArguments),
     /// Register explicitly supplied dependency configuration.
     Configure(SetupConfigureArguments),
     /// Register an explicit user-managed local ASR model file.
@@ -115,7 +115,7 @@ impl SetupCommand {
             Self::Check(_) => CommandName::SetupCheck,
             Self::Plan(_) => CommandName::SetupPlan,
             Self::Install(_) => CommandName::SetupInstall,
-            Self::Repair(_) => CommandName::SetupRepair,
+            Self::Repair => CommandName::SetupRepair,
             Self::List => CommandName::SetupList,
             Self::Remove(_) => CommandName::SetupRemove,
             Self::Rollback(_) => CommandName::SetupRollback,
@@ -173,21 +173,68 @@ pub(crate) struct SetupInstallArguments {
     pub artifact_dir: Option<PathBuf>,
 }
 
-/// Repair plan input; application remains a later packet.
+/// What `setup rollback` selects.
 #[derive(Args, Debug)]
-pub(crate) struct SetupRepairArguments {
-    /// Capability profile to inspect for repair.
-    #[arg(long, value_enum)]
-    pub profile: ExecutionProfile,
+pub(crate) struct SetupRollbackArguments {
+    /// The managed component.
+    #[arg(value_enum)]
+    pub component: ManagedComponentArgument,
+    /// Select this installed version instead of the one selected before
+    /// (see `setup list`).
+    #[arg(long, value_parser = parse_managed_version)]
+    pub version: Option<ManagedVersionKey>,
 }
 
-/// Managed dependency and version selector.
+/// What `setup remove` removes: one version, a whole component, or
+/// abandoned stages.
 #[derive(Args, Debug)]
-pub(crate) struct SetupVersionArguments {
-    /// Stable dependency identifier.
-    pub dependency: String,
-    /// Immutable version identifier.
-    pub version: String,
+#[command(group(
+    ArgGroup::new("target")
+        .required(true)
+        .args(["component", "stale_stages"])
+))]
+pub(crate) struct SetupRemoveArguments {
+    /// The managed component; without --version, its selection and every
+    /// version not in use by a running job.
+    #[arg(value_enum)]
+    pub component: Option<ManagedComponentArgument>,
+    /// Remove only this unselected version of the component.
+    #[arg(long, requires = "component", value_parser = parse_managed_version)]
+    pub version: Option<ManagedVersionKey>,
+    /// Remove stages abandoned by interrupted or failed installations and
+    /// half-written selection pointers.
+    #[arg(long, conflicts_with_all = ["component", "version"])]
+    pub stale_stages: bool,
+}
+
+/// A managed component, named as the JSON results name it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum ManagedComponentArgument {
+    /// `FFmpeg` and `FFprobe`.
+    #[value(name = "ffmpeg_ffprobe")]
+    MediaTools,
+    /// The whisper.cpp command-line runtime.
+    #[value(name = "whisper_cli")]
+    WhisperCli,
+    /// The speech-recognition model.
+    #[value(name = "whisper_model")]
+    WhisperModel,
+}
+
+impl From<ManagedComponentArgument> for ManagedComponent {
+    fn from(value: ManagedComponentArgument) -> Self {
+        match value {
+            ManagedComponentArgument::MediaTools => Self::MediaTools,
+            ManagedComponentArgument::WhisperCli => Self::WhisperCli,
+            ManagedComponentArgument::WhisperModel => Self::WhisperModel,
+        }
+    }
+}
+
+/// A canonical managed version key; anything else is rejected before it
+/// reaches the store or any output.
+fn parse_managed_version(value: &str) -> Result<ManagedVersionKey, ManagedVersionKeyError> {
+    ManagedVersionKey::parse(value)
 }
 
 /// Explicit external dependency registration.

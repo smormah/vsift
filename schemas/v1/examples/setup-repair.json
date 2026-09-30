@@ -1,0 +1,136 @@
+{
+  "command": "setup.repair",
+  "coverage": null,
+  "data": {
+    "findings": [
+      {
+        "command": {
+          "arguments": [
+            "setup",
+            "rollback",
+            "ffmpeg_ffprobe"
+          ],
+          "executable": "vsift"
+        },
+        "component": "ffmpeg_ffprobe",
+        "count": null,
+        "fault": "changed_content",
+        "fix": "rollback",
+        "kind": "selected_version_unverified",
+        "summary": "The selected ffmpeg_ffprobe version n9.0.1-11-ge47273f4d9-20260831 is missing or does not verify against its manifest, so commands do not use it. Roll back to the verified version selected before it.",
+        "version": "n9.0.1-11-ge47273f4d9-20260831"
+      },
+      {
+        "command": {
+          "arguments": [
+            "setup",
+            "remove",
+            "whisper_cli",
+            "--version",
+            "whisper.cpp-v1.9.1-ubuntu-x64"
+          ],
+          "executable": "vsift"
+        },
+        "component": "whisper_cli",
+        "count": null,
+        "fault": null,
+        "fix": "remove_version",
+        "kind": "removal_interrupted",
+        "summary": "The removal of the whisper_cli version whisper.cpp-v1.9.1-ubuntu-x64 was interrupted. Remove that version.",
+        "version": "whisper.cpp-v1.9.1-ubuntu-x64"
+      },
+      {
+        "command": null,
+        "component": "whisper_cli",
+        "count": null,
+        "fault": "invalid_manifest",
+        "fix": "manual",
+        "kind": "version_unverified",
+        "summary": "The whisper_cli version whisper.cpp-v1.9.0-ubuntu-x64 does not verify against its manifest (invalid_manifest). VSift does not remove what it cannot prove its own. Delete it yourself, or delete the whole managed folder (on Ubuntu by default ~/.local/share/vsift/managed-v1, or vsift/managed-v1 under $XDG_DATA_HOME) and run setup plan and setup install again.",
+        "version": "whisper.cpp-v1.9.0-ubuntu-x64"
+      },
+      {
+        "command": {
+          "arguments": [
+            "setup",
+            "rollback",
+            "whisper_model",
+            "--version",
+            "whisper-base-multilingual-80da2d8"
+          ],
+          "executable": "vsift"
+        },
+        "component": "whisper_model",
+        "count": null,
+        "fault": null,
+        "fix": "rollback_to_version",
+        "kind": "selection_unreadable",
+        "summary": "The selection of whisper_model cannot be read, so commands do not use a managed whisper_model. Select the verified version whisper-base-multilingual-80da2d8 instead.",
+        "version": null
+      },
+      {
+        "command": {
+          "arguments": [
+            "setup",
+            "remove",
+            "--stale-stages"
+          ],
+          "executable": "vsift"
+        },
+        "component": null,
+        "count": 2,
+        "fault": null,
+        "fix": "remove_stale_stages",
+        "kind": "stale_stages",
+        "summary": "Abandoned stages from an interrupted or failed installation: 2. They only hold disk space. Remove them with setup remove --stale-stages.",
+        "version": null
+      },
+      {
+        "command": {
+          "arguments": [
+            "setup",
+            "remove",
+            "--stale-stages"
+          ],
+          "executable": "vsift"
+        },
+        "component": null,
+        "count": 1,
+        "fault": null,
+        "fix": "remove_stale_stages",
+        "kind": "interrupted_selection",
+        "summary": "Half-written selection pointers from an interrupted selection: 1. Commands ignore them. Remove them with setup remove --stale-stages.",
+        "version": null
+      },
+      {
+        "command": null,
+        "component": null,
+        "count": 1,
+        "fault": null,
+        "fix": "manual",
+        "kind": "stages_need_manual_removal",
+        "summary": "Stages that hold a link, a folder or an unknown name, or that nothing proves VSift's own: 1. VSift does not remove what it cannot prove its own. Delete it yourself, or delete the whole managed folder (on Ubuntu by default ~/.local/share/vsift/managed-v1, or vsift/managed-v1 under $XDG_DATA_HOME) and run setup plan and setup install again.",
+        "version": null
+      },
+      {
+        "command": null,
+        "component": null,
+        "count": 1,
+        "fault": null,
+        "fix": "manual",
+        "kind": "unexpected_entries",
+        "summary": "Entries of the managed folder that VSift did not make: 1. Commands ignore them. VSift does not remove what it cannot prove its own. Delete it yourself, or delete the whole managed folder (on Ubuntu by default ~/.local/share/vsift/managed-v1, or vsift/managed-v1 under $XDG_DATA_HOME) and run setup plan and setup install again.",
+        "version": null
+      }
+    ],
+    "managed_install": "catalogue_accepted",
+    "next_step": "Nothing was changed. Run each finding's command, in order, then run setup repair again; a finding without a command needs you to delete what it names yourself. Nothing here downloads: a reinstall is a new setup plan accepted with setup install.",
+    "status": "needs_repair"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

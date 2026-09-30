@@ -54,6 +54,74 @@ impl ManagedComponent {
     }
 }
 
+/// The longest managed component or version key, in bytes.
+pub const MAX_MANAGED_KEY_BYTES: usize = 64;
+
+/// Whether `value` is a canonical managed key: 1 to 64 bytes of lowercase
+/// ASCII letters, digits, `.`, `_` and `-`, beginning and ending with a
+/// letter or digit. Such a key is a safe single path segment under the
+/// managed root (no separator, no `..`, no case folding) and a safe
+/// identifier to print.
+#[must_use]
+pub fn is_canonical_managed_key(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let alphanumeric = |byte: &u8| byte.is_ascii_lowercase() || byte.is_ascii_digit();
+    !bytes.is_empty()
+        && bytes.len() <= MAX_MANAGED_KEY_BYTES
+        && bytes.first().is_some_and(alphanumeric)
+        && bytes.last().is_some_and(alphanumeric)
+        && bytes
+            .iter()
+            .all(|byte| alphanumeric(byte) || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+/// A managed version key given by a user (`setup rollback --version`,
+/// `setup remove --version`), checked to be canonical before it reaches the
+/// store or any output.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ManagedVersionKey(String);
+
+impl ManagedVersionKey {
+    /// Checks and keeps a version key.
+    ///
+    /// # Errors
+    ///
+    /// [`ManagedVersionKeyError`] when `value` is not a canonical managed key.
+    pub fn parse(value: &str) -> Result<Self, ManagedVersionKeyError> {
+        if is_canonical_managed_key(value) {
+            Ok(Self(value.to_owned()))
+        } else {
+            Err(ManagedVersionKeyError)
+        }
+    }
+
+    /// The key.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ManagedVersionKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+/// A version key that is not canonical.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ManagedVersionKeyError;
+
+impl fmt::Display for ManagedVersionKeyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(
+            "a managed version is 1 to 64 lowercase letters, digits, '.', '_' or '-', beginning and ending with a letter or digit",
+        )
+    }
+}
+
+impl Error for ManagedVersionKeyError {}
+
 /// Packaging format accepted by the reviewed extraction path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagedArtifactFormat {

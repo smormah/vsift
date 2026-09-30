@@ -5,7 +5,7 @@
   "description": "The data of a setup.install result (P13, ADR 0023): every component of the accepted plan, in plan order (ffmpeg_ffprobe, whisper_cli, whisper_model), with what the transaction did to it. A successful result carries it as data; a failed or cancelled one carries the same object as data beside its error, whose code is the first failed component's failure_code. Each component activates atomically on its own: activated and already_current components are installed and selected; a rerun of the same accepted plan continues from the first component not yet current. A failed component names the step that stopped it and a typed reason; blocked means an earlier component stopped the transaction first. stage says what cleanup did with the component's private stage (retained only when its ownership or content could not be proved). Every string is a closed identifier or a reviewed version; no path, URL, server text or credential.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["catalogue_revision", "source", "components", "next_step"],
+  "required": ["catalogue_revision", "source", "components", "cleanup", "next_step"],
   "properties": {
     "catalogue_revision": {
       "oneOf": [
@@ -19,9 +19,38 @@
       "maxItems": 3,
       "items": { "$ref": "#/$defs/component" }
     },
+    "cleanup": { "$ref": "#/$defs/cleanup" },
     "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
   },
   "$defs": {
+    "cleanup": {
+      "description": "P13 PR 6: what the installation cleaned up once the plan was accepted, under its install guard. stale_stages_removed and stale_stages_retained count the stages abandoned by earlier runs that the sweep before the transaction removed or kept (kept when nothing proves them VSift's own or they hold a link, a folder or an unknown name). versions lists each version the bounded cleanup after the transaction handled: every component keeps its selected version and the one selected before it, and a version a running job holds is kept (in_use).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stale_stages_removed", "stale_stages_retained", "versions"],
+      "properties": {
+        "stale_stages_removed": { "type": "integer", "minimum": 0 },
+        "stale_stages_retained": { "type": "integer", "minimum": 0 },
+        "versions": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/version_outcome" }
+        }
+      }
+    },
+    "version_outcome": {
+      "description": "One version the bounded cleanup handled; the same shape as a setup.remove version.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "version", "status"],
+      "properties": {
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "version": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$" },
+        "status": {
+          "enum": ["removed", "already_absent", "in_use", "selected", "unexpected_content", "storage_failure"]
+        }
+      }
+    },
     "component": {
       "type": "object",
       "additionalProperties": false,
