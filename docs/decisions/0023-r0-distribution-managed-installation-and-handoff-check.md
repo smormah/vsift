@@ -225,6 +225,54 @@ In the order recorded when P06 was parked (ADR 0015; the
 7. kill and power-loss qualification (decision H9), D-02..D-08 and the P13 stage of
    the E2E spine.
 
+*Implementation note, 2026-09-30 (P13 PR 3, steps 1 and 2):* the smoke executor and
+failure cleanup exist as an internal capability; `setup install` still answers
+`COMMAND_NOT_IMPLEMENTED` until PR 4, and nothing is published or selected.
+
+- **Application ports** (`vsift-application`, `provisioning.rs`):
+  `StagedManagedComponent` (a staged, unactivated component that can only say which
+  component it is and be discarded) and `CompatibilitySmoke<C>`. The use case
+  `smoke_before_activation` returns `Passed(candidates)`, still unactivated, or
+  `Failed { failure, stages }`, having handed every candidate to cleanup: a failed
+  smoke cannot say which of several candidates is at fault, and none may be
+  published without a pass. A failure is a step (`layout`, `banner`,
+  `media_fixture`, `speech_fixture`, `recheck`) and a closed reason
+  (`missing_executable`, `wrong_architecture`, `not_executable`, `banner_mismatch`,
+  `output_over_bound`, `deadline_exceeded`, `unexpected_extra_file`,
+  `changed_content`, `provider_failed`, `fixture_mismatch`, `preparation`,
+  `invalid_request`, `cancelled`). A disposal is `Discarded` or `Retained` with
+  `ownership_unproved`, `unexpected_content` or `storage_failure`. None of these
+  values is public contract yet; PR 4 decides what `setup install` reports.
+- **Infrastructure** (`managed_smoke.rs`, `managed_artifact_store.rs`):
+  `StagedManagedCandidate` owns one stage with its payload and runtime;
+  `ReviewedUbuntuAction::stage_candidate` builds it from the accepted action and
+  names its smoke roles (`ffmpeg`, `ffprobe`, `whisper-cli`, the model file).
+  `StagedCompatibilitySmoke` runs, in order: the layout recheck (exact names, bytes,
+  modes; each executable reviewed as executable and in the host's native format,
+  read from its ELF, PE or Mach-O header); `ffmpeg -version` and `ffprobe -version`
+  against the policy's banner prefixes and `whisper-cli --help` for a clean start,
+  each through the `ProcessSupervisor` with the policy's stream bound and media
+  deadline; the existing `FixtureMediaToolVerifier` within the media deadline; the
+  existing `FixtureAsrVerifier` within the inference deadline, with the transcript
+  file bounded by the policy (new `WhisperCli::with_output_limits`, which can only
+  lower the R0 bounds); then removal of the smoke directory, which must be empty, and
+  a second layout recheck, so a provider that wrote into its own installation fails.
+  Executables run by explicit path from `runtime.pending`, with their working
+  directory in a private `smoke.pending` directory in the same stage; there is no
+  shell. A component that needs another uses the staged one, or an already selected
+  provider passed as `SmokeCompanions` (not smoked again).
+- **Cleanup** removes only positively identified content: it first proves the root
+  and stage markers and each held directory's identity (otherwise nothing is touched,
+  `ownership_unproved`); then removes only reviewed runtime names, an empty smoke
+  directory, the selected payload names, the verified artifact and the stage marker,
+  each a single-link regular file or the same held private directory. Anything else
+  stops cleanup and is kept (`unexpected_content`).
+- **Reading recorded here:** the policy's media deadline bounds the whole media
+  fixture check, which is stricter than bounding each of its provider runs; the
+  policy's stream bound applies to the banner runs, while the fixture operations keep
+  their adapters' fixed bounds (the generated audio is bounded by the policy in the
+  media verifier, and the transcript file now by the policy too).
+
 ### 4. Human-readable output
 
 A renderer per command under `crates/vsift-cli/src/human/`, writing through one

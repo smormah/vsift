@@ -144,6 +144,10 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
 - Domain tests verify invariants without I/O.
 - Application tests use small explicit fakes for ports.
 - Infrastructure tests exercise real boundaries using isolated temporary directories and rights-safe fixtures.
+  A test that needs a fake provider executable which the code under test runs with its
+  own closed argument list uses the standard-library-only `vsift-smoke-fixture` binary
+  of `vsift-infrastructure` (`testbin/`, found through `CARGO_BIN_EXE_vsift-smoke-fixture`),
+  which takes its behaviour from the file name it is staged under. It is never shipped.
 - Engine tests use `vsift` as a library, without the CLI, with an injected controlled
   clock, a sequential identifier source and temporary directories, so identities and
   expiry are exact. Tests that need real FFmpeg/FFprobe are `#[ignore]`d and opt-in.

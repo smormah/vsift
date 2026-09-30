@@ -15,10 +15,11 @@ use vsift_domain::{
 };
 
 use crate::{
-    ArchiveInventoryBounds, ManagedPayloadError, ManagedRuntimeLayoutError, PreparedManagedRuntime,
-    PublisherOrigin, PublisherSourceError, ReviewedArchiveAlias, ReviewedArchiveFile,
-    ReviewedPayloadArchive, ReviewedPublisherArtifact, ReviewedRuntimeAlias, ReviewedRuntimeLayout,
-    StagedManagedArtifact, StagedManagedPayload,
+    ArchiveInventoryBounds, ManagedCandidateError, ManagedCandidateFailure, ManagedPayloadError,
+    ManagedRuntimeLayoutError, ManagedRuntimeRole, PreparedManagedRuntime, PublisherOrigin,
+    PublisherSourceError, ReviewedArchiveAlias, ReviewedArchiveFile, ReviewedPayloadArchive,
+    ReviewedPublisherArtifact, ReviewedRuntimeAlias, ReviewedRuntimeLayout, StagedManagedArtifact,
+    StagedManagedCandidate, StagedManagedPayload,
 };
 
 const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-09-22-r2";
@@ -475,6 +476,56 @@ impl ReviewedUbuntuAction {
             max_bytes,
             aliases: &aliases,
             executables: &executables,
+        })
+    }
+
+    /// Applies the reviewed payload and runtime policy to verified staged
+    /// bytes and returns one owned, unactivated smoke candidate.
+    ///
+    /// The candidate names the reviewed smoke roles of its component: the
+    /// media-tools archive supplies `ffmpeg` and `ffprobe`, the whisper.cpp
+    /// archive `whisper-cli`, and the model artifact its one model file.
+    ///
+    /// # Errors
+    ///
+    /// Returns the typed failure with what cleanup did with the stage.
+    pub fn stage_candidate(
+        &self,
+        staged: StagedManagedArtifact,
+    ) -> Result<StagedManagedCandidate, ManagedCandidateError> {
+        let component = self.artifact.component;
+        let model = self.artifact.files.first().map(|file| file.name.as_str());
+        let roles: Vec<(ManagedRuntimeRole, &str)> = match component {
+            ManagedComponent::MediaTools => vec![
+                (ManagedRuntimeRole::Ffmpeg, "ffmpeg"),
+                (ManagedRuntimeRole::Ffprobe, "ffprobe"),
+            ],
+            ManagedComponent::WhisperCli => vec![(ManagedRuntimeRole::WhisperCli, "whisper-cli")],
+            ManagedComponent::WhisperModel => model
+                .map(|name| vec![(ManagedRuntimeRole::SpeechModel, name)])
+                .unwrap_or_default(),
+        };
+        StagedManagedCandidate::assemble(staged, component, &roles, |artifact| {
+            let payload = self.stage_payload(artifact).map_err(|error| match error {
+                ReviewedActionStageError::IntegrityMismatch => {
+                    ManagedCandidateFailure::IntegrityMismatch
+                }
+                ReviewedActionStageError::Payload(payload) => {
+                    ManagedCandidateFailure::Payload(payload)
+                }
+            })?;
+            match self.prepare_runtime(&payload) {
+                Ok(runtime) => {
+                    let runtime = runtime.into_parts();
+                    Ok((payload.into_parts(), runtime))
+                }
+                Err(error) => {
+                    // A payload that cannot be cleaned stays for the stage
+                    // disposal to report.
+                    let _ = payload.discard();
+                    Err(ManagedCandidateFailure::Runtime(error))
+                }
+            }
         })
     }
 }

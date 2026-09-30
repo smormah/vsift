@@ -1,0 +1,39 @@
+name: P13 managed smoke
+
+on:
+  workflow_dispatch:
+
+# The reviewed third-party tools run on a disposable runner. The job receives
+# no repository token and no secrets; checkout keeps no credentials. The test
+# downloads only the pinned artifacts of the accepted catalogue, each verified
+# by size and SHA-256, and never publishes or selects a managed version.
+permissions: {}
+
+concurrency:
+  group: p13-managed-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  managed-smoke:
+    name: Managed smoke on pinned tools (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          cat /etc/os-release
+          uname -m
+          nproc
+
+      - name: Smoke the pinned FFmpeg, whisper.cpp v1.9.2 and model before activation
+        env:
+          VSIFT_P13_REAL_TOOL_SMOKE: "1"
+        run: >-
+          cargo test --release --locked -p vsift-infrastructure
+          --test p13_managed_smoke_real_tools -- --ignored --exact --nocapture

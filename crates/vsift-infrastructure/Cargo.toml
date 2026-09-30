@@ -25,6 +25,19 @@ fault-injection = []
 # tool's own non-default feature.
 durability-campaign = []
 
+# A standard-library-only stand-in for FFmpeg, FFprobe and whisper-cli that the
+# P13 compatibility-smoke tests stage and run (tests/p13_smoke_executor.rs,
+# which finds it through CARGO_BIN_EXE_vsift-smoke-fixture). The smoke passes a
+# closed argument list and an empty environment, so the tests cannot re-invoke
+# their own harness binary as tests/process_supervisor.rs does; and a small
+# binary keeps each staged copy cheap to hash. It is never packaged or shipped.
+[[bin]]
+name = "vsift-smoke-fixture"
+path = "testbin/smoke_fixture_tool.rs"
+test = false
+doc = false
+bench = false
+
 [dependencies]
 cap-fs-ext.workspace = true
 cap-std.workspace = true

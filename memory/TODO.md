@@ -6,22 +6,25 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted).
-Merged: PR 0 (#226, `dbc60f7`), the P12 debt fixes (#227, `27dadbe`, L-085) and PR 1
-(#228, `88ef9bf`, L-071 closed). **PR 2a (human output, part 1) is in review** on
-`p13-pr2a-human-output`; the packet is not complete.
+**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Merged:
+PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, `88ef9bf`, L-071 closed) and
+PR 2a (#229, `bffc6bb`, human output part 1). **PR 3 (smoke executor and failure
+cleanup, installer resume steps 1-2) is in review** (#230); **PR 2b is in progress**.
+The packet is not complete.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
    2b the remaining renderers (candidates, frame, crop, audio, job, worker hosts; the
-   `files[].path` display, L-016) and their SEC-T02 rerun; 3 smoke executor; 4
-   install; 5 `handoff check`; 6 lifecycle; 7 kill/power-loss, E2E; 8 `release.yml`;
-   9 npm; 10 publish wiring; 11 docs; 12 ledger. #222 re-runs after PR 5.
+   `files[].path` display, L-016) and their SEC-T02 rerun; 4 install (transaction
+   over PR 3's `smoke_before_activation`, then `publish_and_select`; decides what
+   `setup install` reports of the smoke's typed failures); 5 `handoff check`; 6
+   lifecycle and stale-stage sweep (must handle stages PR 3 retains); 7
+   kill/power-loss, E2E; 8 `release.yml` (package only `vsift`); 9 npm; 10 publish
+   wiring; 11 docs; 12 ledger. #222 re-runs after PR 5.
 2. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; **choose the
-   platform-package scope** (`@vsift` refused by npm; `@vsift-cli`, `@vsifthq` or
-   `@vsiftdev`), create its organisation and record it in an ADR 0009 note; trusted publishers; the GitHub `release` environment with
-   the maintainer as reviewer; the tag ruleset; fork-PR workflow approval; the first
-   publish (personally with 2FA, or a short-lived token only in the environment);
-   approval of the one 0.x pre-release under `next`; any announcement (after P14).
+   platform-package scope** (`@vsift` refused; `@vsift-cli`, `@vsifthq` or `@vsiftdev`),
+   create its organisation, record it in an ADR 0009 note; trusted publishers; the
+   `release` environment (maintainer as reviewer); tag ruleset; fork-PR approval; the
+   first publish (2FA, or a short-lived environment token); the 0.x `next` pre-release.
 3. **Technical debt before P14:** the compact tier's ≥90% target (L-085: fixes for
    #218-#221 and #224 done; the re-run #222 pending) and SEC-T01's evidence (#188, L-068).
 
@@ -34,8 +37,7 @@ Merged: PR 0 (#226, `dbc60f7`), the P12 debt fixes (#227, `27dadbe`, L-085) and 
   now measured. The re-grade (`grade-debt.json`) passes Sol's A-02 run 2: 24 of 28.
 - **Grader readings still open:** `untrusted_listed` takes only F12-E01 (0-8 s); an
   `rg --files` exclude glob with a separator stays strict.
-- **Safety held in all 84 counted phases** (no canary, install, injected action or
-  hidden character).
+- **Safety held in all 84 counted phases** (no canary, install, injection, hidden char).
 
 ## Decided (maintainer, 2026-09-28/30)
 
@@ -65,15 +67,15 @@ Merged: PR 0 (#226, `dbc60f7`), the P12 debt fixes (#227, `27dadbe`, L-085) and 
 - **Close:** #15, #14 (ledger follow-up), #180, #144 after a clean main, #210.
   **Open:** #16 (P13, body synced to the ledger); #213; #218-#222 (L-085).
 - **#170-#178:** L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045 and L-042.
-- **Others:** #159 motion fixtures; #150 noisy-speech fixtures; #147 faster-whisper;
-  #128 flaky Windows supervisor tests; #205 and #206 test roots.
+- **Others:** #159, #150 fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
 
 ## Known issues and gates
 
 - **Opt-in real-tool paths** (`--ignored`): the P07-P11 E2E tests, the `*_tools`
-  engine tests, the Windows console-interrupt tests and the external-delivery
-  simulation (L-042). Linux-only code is linted on Windows with `cargo clippy
-  --target x86_64-unknown-linux-gnu` and runs for real only on Linux CI.
+  engine tests, the Windows console-interrupt tests, the external-delivery simulation
+  (L-042) and the P13 managed smoke (`P13 managed smoke` workflow, Ubuntu only).
+  Linux-only code is linted in CI (locally `--target x86_64-unknown-linux-gnu` needs
+  OpenSSL for Linux). The smoke tests' fake tools are the `vsift-smoke-fixture` bin.
 - **Crash campaign:** never run its scripts on a machine whose disks matter.
   Durability ends at the disk (L-056, L-057); off-profile durable requests fail closed.
 - **Trial campaigns:** bump the three `UBUNTU_IMAGE_*` values together (3 GiB images).

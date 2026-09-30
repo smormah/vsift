@@ -45,8 +45,9 @@ Codex's trials ran in a Linux container, because its Windows sandbox cannot run 
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0 and 1 and the P12 debt fixes are
-merged; PR 2a (readable terminal text, part 1) is in review. The packet is not complete.
+**P13 is in progress** (started 2026-09-30). PRs 0, 1 and 2a and the P12 debt fixes
+are merged; PR 3 (the managed-install smoke and its failure cleanup, #230) is in
+review and PR 2b is in progress. The packet is not complete.
 
 ## P13 in one view
 
@@ -62,13 +63,20 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 - **Open:** the platform-package scope. npm refused `@vsift`; the maintainer picks
   `@vsift-cli`, `@vsifthq` or `@vsiftdev` and records it in an ADR 0009 note.
 - **Done:** PR 0 (#226, `dbc60f7`): ADR 0023, ledger, traceability, issue #16. PR 1
-  (#228, `88ef9bf`, closes L-071): a rejected command line gets a typed remediation
-  (nine closed reasons, grammar names only) and `vsift <command> --help`.
-- **In review:** PR 2a (`p13-pr2a-human-output`): the `TerminalText` builder and
-  readable text for setup, `ingest`, `session`, `transcript`, `search`, `bundle
-  validate`, every failure and rejected command lines; SEC-T02 re-run over them. The
-  evidence and job commands keep indented JSON until PR 2b (L-017, L-073 narrowed).
-  **Next:** PR 2b; PR 3 (in progress in parallel); then PRs 4 and 5.
+  (#228, `88ef9bf`, L-071 closed): a rejected command line gets one typed remediation
+  (nine closed reasons, grammar names only, `vsift <command> --help`). PR 2a (#229,
+  `bffc6bb`): the `TerminalText` builder and readable text for setup, `ingest`,
+  `session`, `transcript`, `search`, `bundle validate`, every failure and rejected
+  command lines; SEC-T02 re-run over them (L-017, L-073 narrowed to PR 2b).
+- **In review:** PR 3 (#230, installer resume steps 1-2, internal only).
+  `smoke_before_activation` runs `StagedCompatibilitySmoke` over staged, unactivated
+  candidates: layout recheck with native-format check, FFmpeg/FFprobe banners and a
+  clean `whisper-cli --help`, the existing F01 media and speech verifiers within the
+  policy's deadlines and bounds, then a final recheck; explicit paths, a private
+  `smoke.pending`, no shell. A failure (5 steps, 13 reasons) discards every candidate;
+  a stage it cannot prove is kept and reported. Hosted run 36701212028 passed the real
+  pinned tools in 4.7 s; a wrong banner discarded all three stages.
+- **In progress:** PR 2b (evidence and job renderers). **Next:** PRs 4 and 5.
 - **Nothing is published** until P13 completes and the maintainer approves one 0.x
   pre-release under npm's `next` tag; the npm organisation, trusted publishers and
   `release` environment are the maintainer's to set up.
@@ -77,27 +85,19 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 ## P12 in one view
 
 [ADR 0022](../docs/decisions/0022-agent-skill-and-named-client-qualification.md) is
-**Accepted** (2026-09-30). The record is
-[p12-agent-qualification.md](../docs/planning/p12-agent-qualification.md), with 84
-bounded trial records in `docs/planning/p12-agent-trials/`. Built: the skill and its
-`skill_contract` guard (#196), the harness `tools/vsift-agent-trials` (#201) and the
-fix rounds PRs 3a-3i (#203-#217). Counted runs: the strong tier on `56f1e1f`, the
-compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
+**Accepted**; record [p12-agent-qualification.md](../docs/planning/p12-agent-qualification.md)
+with 84 trial records. Built: the skill and `skill_contract` guard (#196), the harness
+`tools/vsift-agent-trials` (#201), fix rounds #203-#217; review 19 accepted, 6 rejected.
 
 ## Found in P12 (still open)
 
-- **L-085 (technical debt):** the compact tier is at 82% as counted. The skill and
-  grader fixes for #218-#221 and #224 are done (ADR 0022 note); the grader's
-  looped-clip period was 12 s, not the measured 12.064 s, and the re-grade lifts Sol
-  to 24 of 28. The re-run (#222) is pending, after P13 PR 5.
-- **L-075:** Codex's image budgets are unmeasured; the right check code proves its
-  image access. **L-076, #204:** Codex's Windows sandbox and VSift's private session
-  root are incompatible.
-- **L-078 to L-080:** the trial container's relaxations. **L-081:** a slim handoff may
-  not carry its citations' times.
-- **L-082, L-084:** Haiku 4.5 and GPT-6-Luna are below the line. **L-083:** `text`
-  keeps hidden characters raw; the skill quotes only `display_text`.
-- **L-074:** SubRip markup removal drops any `<letter...>` tag.
+- **L-085 (debt):** the compact tier is at 82% as counted; the fixes for #218-#221 and
+  #224 are done and the grader's looped-clip period is now measured (Sol re-grades to
+  24 of 28). The re-run (#222) follows P13 PR 5.
+- **Also open:** L-075 (Codex image budgets), L-076 and #204 (Codex's Windows sandbox),
+  L-078 to L-080 (trial container relaxations), L-081 (slim handoff times), L-082 and
+  L-084 (Haiku 4.5, GPT-6-Luna below the line), L-083 (`text` keeps hidden characters;
+  the skill quotes `display_text`), L-074 (SubRip tag removal).
 - **Grader readings for the maintainer:** `untrusted_listed` takes only F12-E01; an
   `rg --files` exclude glob with a separator stays strict.
 
@@ -111,7 +111,7 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line
   that does not parse names its mistake and the `--help` to read (P13 PR 1).
 - Readable terminal text without `--json` (unstable, not for parsing) for the commands
-  PR 2a covers (in review); the others print indented JSON until PR 2b.
+  PR 2a covers; the others print indented JSON until PR 2b.
 - Still `COMMAND_NOT_IMPLEMENTED`: setup install/repair/list/rollback/remove.
 
 ## Packet status
@@ -126,7 +126,7 @@ compact tier on `8ab976e`. Maintainer's review: 19 accepted, 6 rejected (#224).
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified, compact tier 82% (debt, L-085); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0 (#226) and 1 (#228, L-071) merged, PR 2a (human output, part 1) in review; distribution, managed installation, the rest of human output and `handoff check` (#213) to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0, 1 and 2a merged (#226, #228, #229); PR 3 (smoke and cleanup, #230) in review; PR 2b in progress; distribution, installation and `handoff check` (#213) to come |
 | P14 | Not started |
 
 ## Architecture snapshot
