@@ -14,7 +14,8 @@
 //! parser's report is resolved against it. A name that does not resolve is
 //! left out, so an unknown flag or an invalid value is never echoed. The
 //! parser's own explanation, which does quote the text, is shown only in
-//! human mode, on stderr, through [`crate::output::OutputWriter::write_safe_diagnostic`].
+//! human mode, on stderr after the remediation's fixed message, quoted in its
+//! display form and labelled untrusted ([`parser_explanation`]).
 
 use std::ffi::OsString;
 
@@ -24,7 +25,7 @@ use clap::{
 };
 use vsift::FailureCode;
 
-use crate::{CommandFailure, command::Cli};
+use crate::{CommandFailure, command::Cli, human::DisplayText};
 
 /// Why the parser rejected a command line: a closed set, carried in the
 /// remediation summary as `(<identifier>)`, the form of the search query's
@@ -159,6 +160,20 @@ pub(crate) fn parse_failure(error: &clap::Error, arguments: &[OsString]) -> Comm
     };
     let reason = ParseRejection::from_kind(error.kind(), command.definition.has_subcommands());
     remediation(reason, &location)
+}
+
+/// The parser's own explanation of `error`, for human mode only: its first
+/// paragraph (the `error:` line and what the parser lists under it), in
+/// display form. The parser's usage and help hint are left out, because the
+/// remediation already names the help to read.
+///
+/// The explanation may quote the argument, so it is untrusted text: a line
+/// break inside the argument only starts another quoted line, and a blank
+/// line inside it only ends the paragraph early.
+pub(crate) fn parser_explanation(error: &clap::Error) -> DisplayText {
+    let rendered = error.to_string();
+    let paragraph = rendered.split("\n\n").next().unwrap_or_default();
+    DisplayText::render_lines(paragraph.trim_end())
 }
 
 /// The typed failure for `--json` given together with `--events`: the two

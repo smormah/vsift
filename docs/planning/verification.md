@@ -322,6 +322,14 @@ an agent trial.
   identities; `--events jsonl` stays one JSON value per line; `search` is literal. The
   agent trial (`SEC-T02-f12-webvtt`) is pending P12 PR 3; human-readable output is P13's
   (known limit L-073).*
+  *P13 PR 2a (2026-09-30): `crates/vsift-cli/tests/sec_t02_human_output.rs` re-runs it
+  over human output for `transcript get`, `search`, `session status` and rejected
+  command lines with hostile arguments (F12's SubRip and WebVTT imports and a voice
+  name with hidden characters): stdout and stderr hold no ESC, CSI, OSC, C0 or C1
+  control and no terminal link, hidden characters only as `<U+XXXX>`, evidence only on
+  quoted lines and no line over 4,095 bytes; a property test shows the `TerminalText`
+  builder never writes a control or hidden character. The commands PR 2b renders are
+  still to be re-run (L-073).*
 - SEC-T03: before any multi-tenant host ships, cross-tenant lookup/export/delete,
   authorization bypass, quota abuse and credentials isolation suite. R0 must not
   advertise multi-tenant isolation before this host exists and passes.

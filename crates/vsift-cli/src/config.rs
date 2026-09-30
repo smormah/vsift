@@ -89,14 +89,20 @@ pub(crate) enum ConfigError {
     ProbeTimeoutOutsidePolicy,
 }
 
-impl fmt::Display for ConfigError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = match self {
+impl ConfigError {
+    /// The fixed-prose reason, which human output shows.
+    pub(crate) const fn reason(self) -> &'static str {
+        match self {
             Self::MissingDefault => "required configuration default is missing",
             Self::ProfileDenied => "execution profile is denied by host policy",
             Self::ProbeTimeoutOutsidePolicy => "probe timeout is outside host policy",
-        };
-        formatter.write_str(message)
+        }
+    }
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.reason())
     }
 }
 

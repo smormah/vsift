@@ -1,0 +1,7 @@
+Valid bundle of session ses_5ec7020000000000000000000000f12a
+Source: src_sha256_ed5f01f978552fb79f55603b980867cdb62d1c2f3b3866bfc4b2dfe3e60917cb (31 bytes)
+Source copy: not included; re-extraction needs the matching original video
+Artifacts: 1 (2816 bytes)
+Publication: process_crash_consistent
+
+Lifecycle: retained, never cleaned up automatically

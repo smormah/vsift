@@ -1,0 +1,2 @@
+Registered ffprobe as a configured_user_path (canonical_file_only)
+Next: Run setup check to probe the selected executable; model and provider compatibility remain unverified.

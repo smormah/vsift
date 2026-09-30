@@ -1300,7 +1300,8 @@ video. `STORAGE_IO` when a delivered path is not valid UTF-8 (remediation: use a
 `--session-root` whose path is). `DEADLINE_EXCEEDED`, `BUSY` or `CANCELLED` only when
 nothing was extracted.
 
-Human output is the indented JSON result; readable terminal text is P13's.
+Human output is the indented JSON result until P13 PR 2b renders these commands as
+readable text ("Human-readable text" under "Output protocol").
 
 ### P09 crops and audio clips
 
@@ -1491,8 +1492,10 @@ is retained as historical v1 evidence. An abbreviated current response follows.
 
 ## Output protocol
 
-Human output is readable terminal text on stdout (P05 session operations use
-indented JSON). In `--json` mode stdout contains
+Human output (without `--json` or `--events`) is readable terminal text on stdout.
+**Human text is unstable and not for parsing:** its wording and layout may change in
+any release, and it is not part of v1. Agents and scripts use `--json` (the agent
+skill requires it) or `--events jsonl`. In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
 `transcript get`, `search`, `candidates`, the frame commands, `crop` and `audio` evidence
@@ -1508,15 +1511,47 @@ Output limits apply before writing:
 - result: 1,048,576 bytes including the trailing newline;
 - a `progress`, `lifecycle` or `result` event line: 65,536 bytes including the
   trailing newline (P11);
-- diagnostic: 4,096 bytes including the trailing newline;
+- diagnostic: 4,096 bytes including the trailing newline, per line; a human failure
+  on stderr is at most 65,536 bytes (P13 PR 2a);
 - provider detail shown by `setup check`: 240 bytes.
 
 ANSI, OSC, newlines, and other control characters from untrusted providers are
 replaced in human diagnostics, and since P13 PR 1 hidden characters (the set of
 `display_text`, such as bidirectional controls and zero-width characters) are shown as
-`<U+XXXX>` notation there, so a diagnostic that repeats supplied text is one visible
-line. A closed stdout is an I/O failure with exit 7; a
+`<U+XXXX>` notation there. A closed stdout is an I/O failure with exit 7; a
 closed stderr cannot make an otherwise complete result fail.
+
+### Human-readable text (P13 PR 2a)
+
+Every human result and failure is written through one builder
+(`crates/vsift-cli/src/human/`, `TerminalText`), whose rules hold for every command:
+
+- **No control character** but the line breaks it writes itself: any other (C0, `ESC`,
+  `DEL`, C1, and a line break inside a value) becomes U+FFFD, so no ANSI or OSC
+  sequence and no forged line can reach the terminal. There is no colour and no OSC-8
+  link, and no TTY detection: the text is the same when piped.
+- **No hidden character:** each is written as `<U+XXXX>`, the rule of `display_text`.
+- **Identifiers are never cut.** A long line of untrusted text continues on the next
+  quoted line; no line exceeds the diagnostic budget, and a result stays within the
+  result budget (or fails like an oversized `--json` result, exit 7).
+- **Evidence is labelled untrusted** and quoted only from `display_text` and
+  `display_label`, each line after the prefix `  | `, which no other line has. Raw
+  `text`, `original_text`, a speaker's `label` and the query's terms are never printed
+  (the query's terms are counted). A path, where a later command shows one, stands on
+  its own line.
+- **A failure** goes to stderr, stdout staying empty: `Error: <message> (<CODE>)`,
+  then for each remediation `Fix: <summary>` and, when it suggests one, `Run: vsift
+  <arguments>` (fixed words and validated identifiers), then `Affected: <ids>` and
+  `Retry after: <ms> ms` when present. The same facts as the `--json` error, in the
+  same order.
+
+Since PR 2a, `setup check`, `setup plan`, `setup configure`, `setup configure-model`,
+`ingest`, `session list/status/renew/close/retain/clean/init-workspace`, `transcript
+get`, `transcript retranscribe`, `search` and `bundle validate` print readable text, as
+does every failure. **Until P13 PR 2b**, `candidates`, `frame get/neighbours/burst`,
+`crop`, `audio`, `job status/resume/cancel` and the worker hosts `job run` and `job
+batch` still print their indented JSON result (the `--json` document, pretty-printed),
+in which a hidden character of evidence text is raw in `text` (L-017, L-073).
 
 The setup-check response preserves its existing v1 fields and adds lookup,
 verification and typed remediation metadata. The complete frozen example is
@@ -1684,8 +1719,13 @@ unchanged. The frozen example is
 <session> <evidence> --rect 10 --json`).
 
 In human mode (no `--json` or `--events`), stdout stays empty and stderr carries the
-parser's own explanation as one bounded diagnostic line: it may quote the argument,
-with control characters replaced and hidden characters shown as `<U+XXXX>`.
+failure as every human failure is written ("Human-readable text" above): the fixed
+message, then, since P13 PR 2a, the parser's own explanation (its first paragraph)
+under a label saying it quotes the untrusted command line, each of its lines quoted
+after `  | ` with control characters replaced and hidden characters shown as
+`<U+XXXX>`, so a line break inside an argument only starts another quoted line; then
+the same remediation as the JSON modes, as `Fix: <summary>` and `Run: vsift <command>
+--help`.
 
 ## Identifiers, time, geometry, and confidence
 

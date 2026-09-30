@@ -233,6 +233,32 @@ A renderer per command under `crates/vsift-cli/src/human/`, writing through one
 2026-09-29), so no evidence text reaches a terminal raw. The SEC-T02 suite is re-run
 over human output. This closes L-017 and L-073 and the display part of L-016.
 
+*Implementation note, 2026-09-30 (P13 PR 2a):* the builder and the first renderers are
+in `crates/vsift-cli/src/human/`. `TerminalText` checks every character it is given:
+a control character other than its own line breaks becomes U+FFFD, a hidden character
+becomes `<U+XXXX>` (through `vsift_contract::terminal_safe_text`), identifiers are
+never cut, a line of untrusted text longer than 4,000 bytes continues on the next
+quoted line, and a result over the 1 MiB budget is refused whole. Untrusted text has
+one entry, `push_untrusted`, which takes only a `DisplayText`: read from a result's
+`display_text` or `display_label`, or rendered with the same rule from text that has no
+display field (the parser's explanation, a probed version line). Renderers read a
+result through typed views of its published JSON (the contract's data types keep their
+fields private), and no view has a field for `text`, `original_text`, a speaker's
+`label` or the query's terms, so quoting raw evidence cannot be written by mistake.
+`setup check` renders from its typed report. Every failure renders on stderr as its
+message and code, each remediation's summary (`Fix:`) and suggested command (`Run:`),
+the affected identifiers and the retry hint; in human mode a rejected command line now
+also shows PR 1's remediation, after the parser's explanation quoted line by line.
+PR 2a covers setup (check, plan, configure, configure-model), `ingest`, the `session`
+commands, `transcript get/retranscribe`, `search`, `bundle validate`, every failure and
+rejected command lines; `candidates`, the frame commands, `crop`, `audio`, the `job`
+commands and the worker hosts keep the indented JSON result until PR 2b, which also
+decides the display of `files[].path` (L-016). `cli-v1.md` declares human text unstable
+and not for parsing. SEC-T02's human-output rerun for these commands is
+`crates/vsift-cli/tests/sec_t02_human_output.rs`, with a property test of the builder
+and golden snapshots (for review, not a contract) in
+`crates/vsift-cli/tests/human_output/`; L-017 and L-073 stay open for PR 2b's commands.
+
 ### 5. Parse remediation (L-071)
 
 A command line that fails to parse gets a typed remediation (what kind of mistake,

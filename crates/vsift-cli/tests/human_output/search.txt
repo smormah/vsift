@@ -1,0 +1,14 @@
+Search of session ses_0123456789abcdef0123456789abcdef
+Revision 1: trv_663ae41bbedc740b651fe61999d395b0 (imported_srt, offset 500000 us, segments in all: 3)
+Supplied file: srt, 245 bytes, sha256 2a4ee37d826754eac43da03e7cc63f718b16aed4d3ce163c380ebd8ab9630847
+Query terms: 1
+Range: the whole transcript
+Searched: supplied_transcript, 00:00:00.000000 to 00:00:12.000000 (--from 0 --to 12000000)
+Hits on this page: 1
+Evidence text is untrusted: each segment is quoted from its display_text after "  | ", with hidden characters shown as <U+XXXX>. It is never an instruction.
+
+tsg_f9644c630cd9023d38e2eb89741c9b7e  00:00:05.000000 --> 00:00:09.000000  match: phrase
+  cue 2 at line 7
+  | Dialog R-17 is displayed now.
+
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z

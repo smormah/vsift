@@ -6,15 +6,16 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). PR 0,
-the kickoff (#226, `dbc60f7`: ADR 0023 Proposed, ledger `in_progress` with R-13), and
-the P12 debt fixes (#227, `27dadbe`, L-085) are merged. **PR 1 (L-071, typed parse
-remediation) is in review** on `p13-pr1-parse-remediation`; the packet is not complete.
+**P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted).
+Merged: PR 0 (#226, `dbc60f7`), the P12 debt fixes (#227, `27dadbe`, L-085) and PR 1
+(#228, `88ef9bf`, L-071 closed). **PR 2a (human output, part 1) is in review** on
+`p13-pr2a-human-output`; the packet is not complete.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
-   2a/2b human output; 3 smoke executor; 4 install; 5 `handoff check` (after the P12
-   debt); 6 lifecycle; 7 kill/power-loss, E2E; 8 `release.yml`; 9 npm; 10
-   publish wiring; 11 docs; 12 ledger. #222 re-runs after PR 5.
+   2b the remaining renderers (candidates, frame, crop, audio, job, worker hosts; the
+   `files[].path` display, L-016) and their SEC-T02 rerun; 3 smoke executor; 4
+   install; 5 `handoff check`; 6 lifecycle; 7 kill/power-loss, E2E; 8 `release.yml`;
+   9 npm; 10 publish wiring; 11 docs; 12 ledger. #222 re-runs after PR 5.
 2. **Maintainer-only, before PR 10's publish step:** npm account with 2FA; **choose the
    platform-package scope** (`@vsift` refused by npm; `@vsift-cli`, `@vsifthq` or
    `@vsiftdev`), create its organisation and record it in an ADR 0009 note; trusted publishers; the GitHub `release` environment with

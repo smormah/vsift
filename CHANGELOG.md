@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Readable terminal text, part 1** (P13 PR 2a). Without `--json` or `--events`,
+  `setup check/plan/configure/configure-model`, `ingest`, `session
+  list/status/renew/close/retain/clean/init-workspace`, `transcript get`, `transcript
+  retranscribe`, `search` and `bundle validate` now print readable text instead of the
+  indented JSON result, and every failure prints on stderr as `Error: <message>
+  (<CODE>)`, then `Fix:` and `Run: vsift ...` for each remediation, `Affected:` and
+  `Retry after:`. A rejected command line in human mode now shows PR 1's typed
+  remediation and `--help` command too, after the parser's explanation, which is quoted
+  line by line. All human text goes through one builder (`crates/vsift-cli/src/human/`,
+  `TerminalText`) that replaces control characters, writes hidden characters as
+  `<U+XXXX>`, never cuts an identifier, bounds every line and the whole result, and
+  has no colour or terminal links. Evidence is labelled untrusted and quoted only from
+  `display_text` and `display_label`; the renderers' views cannot hold `text`,
+  `original_text`, `label` or query terms. Human text is declared unstable and not for
+  parsing in `docs/contracts/cli-v1.md`; JSON output is unchanged. `candidates`, the
+  frame commands, `crop`, `audio`, the `job` commands and the worker hosts keep the
+  indented JSON result until PR 2b. SEC-T02 is re-run over this output
+  (`crates/vsift-cli/tests/sec_t02_human_output.rs`: F12's SubRip and WebVTT imports, a
+  hidden-character voice name, and hostile rejected command lines) with a property test
+  of the builder and golden snapshots for review in `crates/vsift-cli/tests/human_output/`.
+  L-017 and L-073 are narrowed to PR 2b's commands.
+
 - **Typed remediation for a rejected command line** (P13 PR 1, closes L-071). In
   `--json` and `--events jsonl` modes a `parse` failure now carries one remediation
   instead of none: the summary `The command line was rejected (<reason>). ...; read

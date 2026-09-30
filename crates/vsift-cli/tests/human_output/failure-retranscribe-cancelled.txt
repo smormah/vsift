@@ -1,0 +1,4 @@
+Error: The operation was cancelled. (CANCELLED)
+Fix: The run was cancelled before it committed, so nothing was committed; affected_ids names its session and job. The job is interrupted and keeps the chunks it finished: resume it with job resume <job>, or run the same command again.
+Run: vsift job resume job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70
+Affected: ses_0123456789abcdef0123456789abcdef, job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70

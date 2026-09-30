@@ -1,0 +1,6 @@
+Error: The command line arguments are invalid. (INVALID_ARGUMENT)
+The parser explains (this quotes the command line, which is untrusted text):
+  | error: unexpected argument '--QXSENTINEL<U+202E>ZWREVERSED<U+200B>JOINEDESCAPEDLINK
+  | INJECTED' found
+Fix: The command line was rejected (unknown_argument). `search` does not take one of the arguments given; read its help.
+Run: vsift search --help

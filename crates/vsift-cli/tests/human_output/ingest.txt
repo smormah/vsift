@@ -1,0 +1,7 @@
+Opened session ses_0123456789abcdef0123456789abcdef
+Source: src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4 (41473 bytes)
+Generation: 1 (process_crash_consistent)
+Transcript: revision 1, trv_663ae41bbedc740b651fe61999d395b0 (imported_srt, offset 500000 us, segments: 3)
+Read it: vsift transcript get ses_0123456789abcdef0123456789abcdef
+
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z

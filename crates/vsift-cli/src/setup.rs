@@ -1,19 +1,15 @@
 //! Setup command presentation and saved-plan input.
 //!
-//! The engine performs every setup operation; this module renders its results
-//! as human text or v1 JSON and reads the saved plan a user supplies back.
+//! The engine performs every setup operation; this module writes the check's
+//! result as v1 JSON or, through `human::setup_check`, as human text, and
+//! reads the saved plan a user supplies back.
 
 use std::{io::Write, path::Path};
 
-use vsift::{
-    DependencyState, FailureCode, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
-    LocalAsrSetupStatus, LocalAsrVerificationSource, RuntimeDependency, RuntimeDiagnosis,
-    RuntimeReadiness,
-};
+use vsift::{FailureCode, LocalAsrSetupStatus, RuntimeDependency, RuntimeDiagnosis};
 use vsift_contract::{
-    CommandName, DependencyLookup, JsonLimits, MAX_PROVIDER_DETAIL_BYTES, OperationResponse,
-    SavedSetupPlan, SetupCheckResponse, TerminalEventResponse, explicit_path_option,
-    sanitize_untrusted_text,
+    CommandName, DependencyLookup, JsonLimits, OperationResponse, SavedSetupPlan,
+    SetupCheckResponse, TerminalEventResponse,
 };
 
 use crate::{
@@ -44,7 +40,10 @@ where
     let response = SetupCheckResponse::new(diagnosis, profile.into(), &lookup, &local_asr);
     let output_result = match mode {
         OutputMode::Human => {
-            writer.write_trusted_stdout(&human_result(diagnosis, local_asr, profile, &lookup))
+            match crate::human::setup_check(diagnosis, local_asr, profile, &lookup) {
+                Ok(text) => writer.write_rendered_stdout(&text),
+                Err(_) => Err(crate::output::OutputError::TooLarge),
+            }
         }
         OutputMode::Json => writer.write_json(&response),
         OutputMode::JsonLines => {
@@ -69,115 +68,6 @@ pub(crate) fn read_saved_plan(path: &Path) -> Result<SavedSetupPlan, FailureCode
         read_json_file(path, JsonLimits::DOCUMENT).map_err(|error| error.code())?;
     plan.validate_envelope()?;
     Ok(plan)
-}
-
-fn human_result<L>(
-    diagnosis: &RuntimeDiagnosis,
-    local_asr: LocalAsrSetupStatus,
-    profile: ExecutionProfile,
-    lookup: &L,
-) -> String
-where
-    L: Fn(RuntimeDependency) -> DependencyLookup,
-{
-    let mut result = format!(
-        "VSift setup check\nProfile: {}\nStatus: {}\n",
-        profile.identifier(),
-        diagnosis.readiness.identifier()
-    );
-    for status in &diagnosis.dependencies {
-        let provenance = lookup(status.dependency);
-        let (marker, detail) =
-            human_state(&status.state, provenance != DependencyLookup::FilteredPath);
-        result.push('[');
-        result.push_str(marker);
-        result.push_str("] ");
-        result.push_str(status.dependency.display_name());
-        result.push_str(" (");
-        result.push_str(status.dependency.capability().identifier());
-        result.push_str("): ");
-        result.push_str(&detail);
-        result.push_str(match provenance {
-            DependencyLookup::ExplicitPath => " [per-call path]",
-            DependencyLookup::ConfiguredUserPath => " [configured user path]",
-            DependencyLookup::FilteredPath => " [filtered PATH]",
-        });
-        result.push('\n');
-        if !status.state.is_available() {
-            result.push_str("  Install or locate this trusted tool, then rerun setup check with its absolute path using ");
-            result.push_str(explicit_path_option(status.dependency));
-            result.push_str(". Managed installation is not yet qualified for this target.\n");
-        }
-    }
-    if diagnosis.readiness == RuntimeReadiness::Blocked {
-        result.push_str("Media executable probes are blocked until FFmpeg and FFprobe respond.\n");
-    }
-    result.push_str(&human_local_asr(local_asr));
-    result.push_str("Executable probes only show that each tool responds. The local ASR check transcribes a short speech clip built into VSift with the selected tools and model. A supplied transcript can avoid local ASR.\n");
-    result
-}
-
-/// Fixed-prose lines for the local-ASR report; every value is a typed
-/// identifier, never a path or tool output.
-fn human_local_asr(local_asr: LocalAsrSetupStatus) -> String {
-    let model = match local_asr.model {
-        LocalAsrModelStatus::NotSelected => {
-            String::from("not registered (setup configure-model --file <path>)")
-        }
-        LocalAsrModelStatus::Unreadable => String::from("registered file cannot be read"),
-        LocalAsrModelStatus::Unrecognised => {
-            String::from("registered file is not a reviewed model, so it will not run")
-        }
-        LocalAsrModelStatus::KnownPinned(profile) => {
-            format!("reviewed {} profile", profile.identifier())
-        }
-    };
-    let verification = match local_asr.verification {
-        LocalAsrCheckOutcome::Verified(LocalAsrVerificationSource::Recorded) => {
-            String::from("verified (recorded pass)")
-        }
-        LocalAsrCheckOutcome::Verified(LocalAsrVerificationSource::RanNow) => {
-            String::from("verified (ran now)")
-        }
-        LocalAsrCheckOutcome::Failed(failure) => format!(
-            "failed at the {} step ({}); local ASR will not run until it passes",
-            failure.check(),
-            failure.reason()
-        ),
-        LocalAsrCheckOutcome::NotRun(reason) => format!(
-            "not run: {}",
-            match reason {
-                LocalAsrNotRunReason::MediaToolsUnavailable => {
-                    "FFmpeg and FFprobe are needed and must pass their own check"
-                }
-                LocalAsrNotRunReason::WhisperUnavailable => "the whisper.cpp CLI is not available",
-                LocalAsrNotRunReason::ModelNotSelected => "no model is registered",
-                LocalAsrNotRunReason::ModelNotPinned => {
-                    "the registered model is not a reviewed pinned profile"
-                }
-            }
-        ),
-    };
-    format!("Local ASR model: {model}\nLocal ASR check: {verification}\n")
-}
-
-fn human_state(state: &DependencyState, explicit: bool) -> (&'static str, String) {
-    match state {
-        DependencyState::Available { version } => (
-            "ok",
-            sanitize_untrusted_text(version, MAX_PROVIDER_DETAIL_BYTES),
-        ),
-        DependencyState::Missing => (
-            "missing",
-            String::from(if explicit {
-                "explicit path not found"
-            } else {
-                "not found on PATH"
-            }),
-        ),
-        DependencyState::Unhealthy { .. } => ("unhealthy", String::from("dependency probe failed")),
-        DependencyState::TimedOut => ("timeout", String::from("probe exceeded its deadline")),
-    }
 }
 
 #[cfg(test)]

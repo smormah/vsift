@@ -1,0 +1,8 @@
+Session ses_5ec7020000000000000000000000f12a
+State: open
+Source: src_sha256_ed5f01f978552fb79f55603b980867cdb62d1c2f3b3866bfc4b2dfe3e60917cb (31 bytes)
+Artifacts: 1 (2816 bytes)
+Generation: 1
+Jobs: none
+
+Lifecycle: ephemeral, expires <TIME>

@@ -1,0 +1,2 @@
+Error: The source is invalid or unsupported. (INVALID_SOURCE)
+Fix: The supplied transcript was rejected (invalid_timestamp) at line 6. Correct the timestamp: SubRip uses H:MM:SS,mmm and WebVTT uses [HH:]MM:SS.mmm.
