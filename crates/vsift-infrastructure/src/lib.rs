@@ -18,6 +18,13 @@ compile_error!(
      never be enabled in a release build"
 );
 
+// The managed-install test hooks can route a download to a local server and
+// fail a stage write on request (P13). They must never reach a release build.
+#[cfg(all(feature = "install-test-hooks", not(debug_assertions)))]
+compile_error!(
+    "the install-test-hooks feature bypasses the reviewed publisher routes and must      never be enabled in a release build"
+);
+
 mod archive_inventory;
 mod batch_file;
 mod bounded_tar_inventory;
@@ -36,9 +43,11 @@ mod input_root;
 mod local_asr_verification;
 mod managed_artifact_store;
 mod managed_catalogue;
+mod managed_installer;
 mod managed_smoke;
 mod media_tool_verification;
 mod media_tool_verification_cache;
+mod offline_artifact_import;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -84,7 +93,8 @@ pub use evidence_record::{
     encode_evidence_record,
 };
 pub use executable::{
-    ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, TrustedExecutable,
+    ExecutableProvenance, ExecutableResolutionError, ExecutableResolver, ManagedRuntimeHold,
+    TrustedExecutable,
 };
 #[cfg(feature = "fault-injection")]
 pub use fault_point::{FAULT_EXIT_CODE, FAULT_MARKER, FAULT_POINT_VARIABLE, FaultPoint};
@@ -136,8 +146,13 @@ pub use managed_artifact_store::{
 };
 pub use managed_catalogue::{
     ManagedCatalogueError, ReviewedActionStageError, ReviewedUbuntuAction, ReviewedWhisperModel,
-    accepted_ubuntu_catalogue, detect_managed_target, pinned_whisper_model,
-    reviewed_compatibility_policy, reviewed_whisper_models, whisper_model_profile,
+    accepted_ubuntu_catalogue, detect_managed_target, managed_executable_name,
+    pinned_whisper_model, reviewed_compatibility_policy, reviewed_whisper_models,
+    whisper_model_profile,
+};
+pub use managed_installer::{
+    ActionAuthority, ManagedArtifactSource, ManagedInstallerConfig, ReviewedManagedInstaller,
+    SmokeCompanionSource,
 };
 pub use managed_smoke::{
     MediaSmokeRequest, ReviewedFixtureVerifiers, SmokeCompanions, SmokeFixtureVerifiers,
@@ -153,6 +168,7 @@ pub use media_tool_verification_cache::{
     MediaToolVerificationAuthority, STALE_VERIFICATION_WORKSPACE_AGE_SECONDS, StaleWorkspaceSweep,
     media_tool_fingerprint,
 };
+pub use offline_artifact_import::{ArtifactImportError, import_reviewed_artifact};
 pub use process_dependency_probe::{ExplicitProbePaths, ProcessDependencyProbe};
 pub use process_supervisor::{
     CapturedOutput, ControlStatus, DEFAULT_STREAM_LIMIT, EffectiveControls, HardIsolation,
@@ -161,8 +177,8 @@ pub use process_supervisor::{
     ProcessWorkingDirectory, SupervisorPolicy, TerminationReason, completed_termination,
 };
 pub use publisher_artifact_transfer::{
-    PublisherOrigin, PublisherSourceError, PublisherTransferCancellation, PublisherTransferError,
-    ReviewedPublisherArtifact, download_reviewed_publisher_artifact,
+    PublisherOrigin, PublisherSourceError, PublisherTransferError, ReviewedPublisherArtifact,
+    download_reviewed_publisher_artifact,
 };
 pub use random_identifiers::RandomIdentifierSource;
 pub use request_timing::{DeadlineOutcome, run_until_deadline, sleep_unless_cancelled};

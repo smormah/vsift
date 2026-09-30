@@ -331,6 +331,51 @@ impl ReviewedUbuntuAction {
         })
     }
 
+    /// Binds a test catalogue's action to a local test server: the artifact
+    /// is fetched from `<base_url>/<file name of its source URL>`.
+    ///
+    /// Development builds only (`install-test-hooks`, refused in a release
+    /// build and by the governance check): unlike
+    /// [`Self::from_accepted_action`] it does not require the compiled
+    /// literals, so the transaction tests can install small fixture
+    /// artifacts. The action's size, SHA-256 and layout review still apply.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an invalid layout or a URL that is not a canonical loopback
+    /// route.
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    pub fn loopback_for_tests(
+        action: &ManagedSetupAction,
+        base_url: &str,
+        proxy: Option<&str>,
+    ) -> Result<Self, ManagedCatalogueError> {
+        validate_layout(&action.artifact)?;
+        let file_name = action
+            .artifact
+            .source_url
+            .rsplit('/')
+            .next()
+            .filter(|name| !name.is_empty())
+            .ok_or(ManagedCatalogueError::InvalidPublisherSource)?;
+        let bounds = action
+            .artifact
+            .archive_limits
+            .map(|limits| ArchiveInventoryBounds::new(limits.entries, limits.expanded_bytes))
+            .transpose()
+            .map_err(|_| ManagedCatalogueError::InvalidLayout)?;
+        let publisher = ReviewedPublisherArtifact::loopback_for_tests(
+            &format!("{base_url}/{file_name}"),
+            action.artifact.integrity,
+            proxy,
+        )?;
+        Ok(Self {
+            artifact: action.artifact.clone(),
+            publisher,
+            bounds,
+        })
+    }
+
     /// Immutable publisher source and exact artifact integrity for bounded transfer.
     #[must_use]
     pub const fn publisher_source(&self) -> &ReviewedPublisherArtifact {
@@ -494,17 +539,25 @@ impl ReviewedUbuntuAction {
         staged: StagedManagedArtifact,
     ) -> Result<StagedManagedCandidate, ManagedCandidateError> {
         let component = self.artifact.component;
-        let model = self.artifact.files.first().map(|file| file.name.as_str());
-        let roles: Vec<(ManagedRuntimeRole, &str)> = match component {
-            ManagedComponent::MediaTools => vec![
-                (ManagedRuntimeRole::Ffmpeg, "ffmpeg"),
-                (ManagedRuntimeRole::Ffprobe, "ffprobe"),
-            ],
-            ManagedComponent::WhisperCli => vec![(ManagedRuntimeRole::WhisperCli, "whisper-cli")],
+        let model = self.artifact.files.first().map(|file| file.name.clone());
+        let named = |role| {
+            managed_executable_name(role)
+                .map(|name| (role, name))
+                .into_iter()
+        };
+        let owned: Vec<(ManagedRuntimeRole, String)> = match component {
+            ManagedComponent::MediaTools => named(ManagedRuntimeRole::Ffmpeg)
+                .chain(named(ManagedRuntimeRole::Ffprobe))
+                .collect(),
+            ManagedComponent::WhisperCli => named(ManagedRuntimeRole::WhisperCli).collect(),
             ManagedComponent::WhisperModel => model
                 .map(|name| vec![(ManagedRuntimeRole::SpeechModel, name)])
                 .unwrap_or_default(),
         };
+        let roles: Vec<(ManagedRuntimeRole, &str)> = owned
+            .iter()
+            .map(|(role, name)| (*role, name.as_str()))
+            .collect();
         StagedManagedCandidate::assemble(staged, component, &roles, |artifact| {
             let payload = self.stage_payload(artifact).map_err(|error| match error {
                 ReviewedActionStageError::IntegrityMismatch => {
@@ -528,6 +581,21 @@ impl ReviewedUbuntuAction {
             }
         })
     }
+}
+
+/// The file name a managed runtime gives an executable role on this host:
+/// the reviewed name (`ffmpeg`, `ffprobe`, `whisper-cli`) with the
+/// platform's executable suffix, which is empty on the one managed target.
+/// `None` for the model, whose name is its catalogue file's.
+#[must_use]
+pub fn managed_executable_name(role: ManagedRuntimeRole) -> Option<String> {
+    let base = match role {
+        ManagedRuntimeRole::Ffmpeg => "ffmpeg",
+        ManagedRuntimeRole::Ffprobe => "ffprobe",
+        ManagedRuntimeRole::WhisperCli => "whisper-cli",
+        ManagedRuntimeRole::SpeechModel => return None,
+    };
+    Some(format!("{base}{}", std::env::consts::EXE_SUFFIX))
 }
 
 fn validate_layout(artifact: &AcceptedManagedArtifact) -> Result<(), ManagedCatalogueError> {

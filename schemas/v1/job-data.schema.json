@@ -128,7 +128,8 @@
                 "CANCELLED",
                 "STORAGE_IO",
                 "INTEGRITY_FAILURE",
-                "IDEMPOTENCY_CONFLICT"
+                "IDEMPOTENCY_CONFLICT",
+                "DOWNLOAD_FAILED"
               ]
             },
             "retryable": { "type": "boolean" }

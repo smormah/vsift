@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "command": "setup.install",
+  "command": "setup.repair",
   "operation_id": null,
   "status": "failed",
   "data": null,

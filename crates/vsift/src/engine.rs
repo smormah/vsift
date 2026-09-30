@@ -45,6 +45,17 @@ pub enum UserConfigurationLocation {
     Explicit(PathBuf),
 }
 
+/// Where the engine finds the versions `setup install` manages (P13).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ManagedRootLocation {
+    /// The platform's per-user data directory (for example
+    /// `$XDG_DATA_HOME/vsift/managed-v1` on Linux). A platform without one
+    /// has no managed tier.
+    PlatformDefault,
+    /// A host-selected absolute root. A relative path has no managed tier.
+    Explicit(PathBuf),
+}
+
 /// Process isolation the host has established around the engine.
 ///
 /// Hosts report what they provide; the engine never assumes a stronger
@@ -75,6 +86,9 @@ pub struct EngineConfig {
     pub session_root: SessionRootLocation,
     /// Where the user's dependency selections live.
     pub user_configuration: UserConfigurationLocation,
+    /// Where managed dependency versions live: the tier every tool lookup
+    /// consults after a configured path and before the filtered `PATH`.
+    pub managed_root: ManagedRootLocation,
     /// Isolation the host has established around provider processes.
     pub host_isolation: HostIsolation,
 }

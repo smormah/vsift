@@ -23,9 +23,10 @@ use std::{
 use vsift::{
     Cancellation, Clock, ClockError, CueMarkup, Engine, EngineConfig, EngineError, EnginePorts,
     FailureCode, HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
-    OperationId, RuntimeDependency, SegmentOrigin, SessionId, SessionListEntry, SessionRootError,
-    SessionRootLocation, SuppliedTranscriptRequest, TranscriptImportError, TranscriptProvenance,
-    TranscriptQuery, TranscriptRejection, TranscriptSegment, UserConfigurationLocation,
+    ManagedRootLocation, OperationId, RuntimeDependency, SegmentOrigin, SessionId,
+    SessionListEntry, SessionRootError, SessionRootLocation, SuppliedTranscriptRequest,
+    TranscriptImportError, TranscriptProvenance, TranscriptQuery, TranscriptRejection,
+    TranscriptSegment, UserConfigurationLocation,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -141,6 +142,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(root.path("sessions")),
                 user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::new(clock.clone(), identifiers.clone()),

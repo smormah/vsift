@@ -101,9 +101,11 @@ mod engine;
 mod error;
 mod evidence;
 mod handoff;
+mod install;
 mod isolation;
 mod jobs;
 mod local_asr_check;
+mod managed;
 mod progress;
 mod search;
 mod sessions;
@@ -117,8 +119,8 @@ pub use asr::{JobSummary, RetranscribeOutcome, RetranscribeRange, RetranscribeRe
 pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
-    Engine, EngineConfig, EnginePorts, HostIsolation, MAX_SESSION_ROOT_WAIT, SessionRootLocation,
-    UserConfigurationLocation,
+    Engine, EngineConfig, EnginePorts, HostIsolation, MAX_SESSION_ROOT_WAIT, ManagedRootLocation,
+    SessionRootLocation, UserConfigurationLocation,
 };
 pub use error::{
     EngineError, ExecutableRejection, SessionRootError, TranscriptSourceError,
@@ -130,6 +132,7 @@ pub use evidence::{
     FrameNeighboursRequest, FrameTarget,
 };
 pub use handoff::HandoffSessionLookup;
+pub use install::{SetupInstallOutcome, SetupInstallRequest};
 pub use isolation::{IsolationGap, IsolationGaps, IsolationProfile, attest_host_isolation};
 pub use jobs::{
     JobCancelOutcome, JobCancelReport, JobResumeReport, JobResumeRequest, JobStatusReport,
@@ -168,12 +171,21 @@ pub use vsift_application::{
     CandidateQueryError, MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError,
     VisualSamplingError,
 };
+/// Managed-installation values that appear in this API (P13).
+pub use vsift_application::{
+    CompatibilitySmokeCheck, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
+    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
+    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
+    ManagedPlanAvailability, StageDisposal, StageRetentionReason,
+};
 /// Evidence-navigation values that appear in this API (P09).
 pub use vsift_application::{
     EvidenceMediaError, MAX_FRAMES_PER_CALL, MAX_IMAGE_BYTES_PER_CALL, MAX_PIXELS_PER_CALL,
 };
 /// Why a crop rectangle's text or geometry was rejected.
 pub use vsift_domain::GeometryError;
+/// The reviewed managed components (P13).
+pub use vsift_domain::ManagedComponent;
 pub use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionBudget, AdmissionBudgetError, AdmissionWait, AttemptFailure,
     DependencyState, DependencyStatus, DurabilityRequirement, EvidenceId, FailureClass,

@@ -45,6 +45,19 @@ const MISSING_MEDIA_TOOLS: &str = "FFmpeg or FFprobe is not on PATH; install or 
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
+/// What `setup check` says managed installation can do for a missing tool
+/// on this host (P13): the reviewed catalogue applies to Ubuntu 24.04 x86-64
+/// only.
+fn host_managed_install() -> &'static str {
+    if vsift_infrastructure::detect_managed_target()
+        == vsift_domain::ManagedTarget::Ubuntu2404X86_64
+    {
+        "catalogue_accepted"
+    } else {
+        "unavailable_target"
+    }
+}
+
 /// A temporary directory this checkpoint created and alone may remove.
 struct OwnedRoot(PathBuf);
 
@@ -155,6 +168,7 @@ fn vsift(base: &Path) -> Result<Command, StageStop> {
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
+        .env("XDG_DATA_HOME", base.join("data"))
         .env("HOME", base)
         .timeout(CLI_DEADLINE);
     Ok(command)
@@ -297,7 +311,7 @@ fn partial_setup(root: &OwnedRoot, tools: Option<&MediaTools>) -> StageResult {
     ensure_eq(&remediation["required_authority"], "user", "authority")?;
     ensure_eq(
         &remediation["managed_install"],
-        "unavailable_unqualified",
+        host_managed_install(),
         "managed install",
     )?;
     ensure_eq(
@@ -372,7 +386,7 @@ fn missing_media_blocked(root: &OwnedRoot) -> StageResult {
         ensure_eq(&remediation["required_authority"], "user", "authority")?;
         ensure_eq(
             &remediation["managed_install"],
-            "unavailable_unqualified",
+            host_managed_install(),
             "managed install",
         )?;
         ensure_eq(&remediation["explicit_path_option"], option, "path option")?;
@@ -427,7 +441,7 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
     if qualified {
         ensure_eq(
             &data["managed_install"],
-            "catalogue_accepted_install_pending",
+            "catalogue_accepted",
             "managed install",
         )?;
         ensure(
@@ -461,9 +475,10 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
 
     let plan_file = root.0.join("saved-plan.json");
     fs::write(&plan_file, serde_json::to_vec(&plan)?)?;
-    let digest = data["plan_digest"]
-        .as_str()
-        .map_or_else(|| "0".repeat(64), str::to_owned);
+    // The plan's own digest would start a real managed install on a
+    // qualified host (P13 PR 4); this stage proves only that acceptance is
+    // revalidated, so it offers a digest that is not the plan's.
+    let digest = "0".repeat(64);
     let (code, install) = run_json(
         vsift(&base)?
             .args(["setup", "install", "--plan"])
@@ -474,11 +489,7 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
     ensure(code == Some(2), "setup install did not exit 2")?;
     ensure_eq(
         &install["error"]["code"],
-        if qualified {
-            "COMMAND_NOT_IMPLEMENTED"
-        } else {
-            "INVALID_ARGUMENT"
-        },
+        "INVALID_ARGUMENT",
         "install outcome",
     )?;
     ensure(
@@ -487,7 +498,7 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
     )?;
     Ok(json!({
         "target": data["target"],
-        "branch": if qualified { "qualified_install_reserved" } else { "unqualified_manual_guidance" },
+        "branch": if qualified { "qualified_acceptance_refused" } else { "unqualified_manual_guidance" },
         "managed_install": data["managed_install"],
         "install_outcome": install["error"]["code"],
     }))

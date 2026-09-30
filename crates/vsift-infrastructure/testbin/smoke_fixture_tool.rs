@@ -45,7 +45,13 @@ fn run() -> io::Result<ExitCode> {
         .and_then(|stem| stem.to_str())
         .unwrap_or_default()
         .to_owned();
-    let (tool, behaviour) = stem.split_once('-').unwrap_or((stem.as_str(), "good"));
+    // The production name `whisper-cli` is the good recognizer, so a
+    // runtime laid out under the reviewed names behaves well.
+    let (tool, behaviour) = if stem == "whisper-cli" {
+        ("whisper", "good")
+    } else {
+        stem.split_once('-').unwrap_or((stem.as_str(), "good"))
+    };
     let arguments: Vec<String> = env::args().skip(1).collect();
     let banner = matches!(arguments.as_slice(), [only] if only == "-version");
     let help = matches!(arguments.as_slice(), [only] if only == "--help");

@@ -33,8 +33,8 @@ use std::{
 use vsift::{
     Cancellation, CandidateQueryError, CandidatesRange, CandidatesRequest, Clock, ClockError,
     CoverageGapReason, CursorError, Engine, EngineConfig, EngineError, EnginePorts, FailureCode,
-    HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest, MediaTime,
-    OperationId, SessionId, SessionRootLocation, SourceId, UserConfigurationLocation,
+    HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest, ManagedRootLocation,
+    MediaTime, OperationId, SessionId, SessionRootLocation, SourceId, UserConfigurationLocation,
 };
 use vsift_application::{VisualIndexScope, visual_candidate_id, visual_index_id};
 use vsift_domain::{
@@ -154,6 +154,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(root.path("sessions")),
                 user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::new(

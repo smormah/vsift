@@ -371,6 +371,30 @@ pub(crate) struct ConfiguredModel {
     pub(crate) next_step: String,
 }
 
+/// `setup.install` data (`setup-install.schema.json`), on a success or
+/// beside the error of a failure.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetupInstall {
+    pub(crate) catalogue_revision: Option<String>,
+    pub(crate) source: String,
+    pub(crate) components: Vec<InstallComponent>,
+    pub(crate) next_step: String,
+}
+
+/// One component of a `setup.install` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct InstallComponent {
+    pub(crate) component: String,
+    pub(crate) version: String,
+    pub(crate) status: String,
+    pub(crate) step: Option<String>,
+    pub(crate) reason: Option<String>,
+    pub(crate) failure_code: Option<String>,
+    pub(crate) smoke_check: Option<String>,
+    pub(crate) stage: Option<String>,
+    pub(crate) retention_reason: Option<String>,
+}
+
 /// `setup.plan` data, in both published forms (`setup-plan.schema.json`
 /// and `setup-plan-unqualified.schema.json`).
 #[derive(Debug, Deserialize)]
@@ -387,6 +411,9 @@ pub(crate) struct SetupPlan {
     #[serde(default)]
     pub(crate) stop_new_plans_at: Option<String>,
     pub(crate) plan_digest: Option<String>,
+    /// Absent from plans made before P13 PR 4.
+    #[serde(default)]
+    pub(crate) install_needed: Option<bool>,
     pub(crate) actions: Vec<PlanAction>,
     pub(crate) dependencies: Vec<PlanDependency>,
 }
@@ -421,6 +448,9 @@ pub(crate) struct PlanDependency {
 #[derive(Debug, Deserialize)]
 pub(crate) struct PlanAction {
     pub(crate) id: String,
+    /// `pending` or `current`; absent from plans made before P13 PR 4.
+    #[serde(default)]
+    pub(crate) state: Option<String>,
     pub(crate) component: String,
     pub(crate) version: String,
     pub(crate) publisher: String,

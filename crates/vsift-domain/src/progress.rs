@@ -17,15 +17,23 @@ pub enum ProgressStage {
     AnalysingVideo,
     /// Running a worker request, in steps.
     RunningRequest,
+    /// Downloading or importing one reviewed managed artifact, in bytes
+    /// (`setup install`, P13).
+    FetchingArtifact,
+    /// Installing the managed components of an accepted plan, in
+    /// components finished (`setup install`, P13).
+    InstallingComponents,
 }
 
 impl ProgressStage {
     /// Every stage, in declaration order.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 6] = [
         Self::CopyingSource,
         Self::RecognisingSpeech,
         Self::AnalysingVideo,
         Self::RunningRequest,
+        Self::FetchingArtifact,
+        Self::InstallingComponents,
     ];
 
     /// The stable identifier.
@@ -36,6 +44,8 @@ impl ProgressStage {
             Self::RecognisingSpeech => "recognising_speech",
             Self::AnalysingVideo => "analysing_video",
             Self::RunningRequest => "running_request",
+            Self::FetchingArtifact => "fetching_artifact",
+            Self::InstallingComponents => "installing_components",
         }
     }
 
@@ -44,10 +54,11 @@ impl ProgressStage {
     #[must_use]
     pub const fn unit(self) -> ProgressUnit {
         match self {
-            Self::CopyingSource => ProgressUnit::Bytes,
+            Self::CopyingSource | Self::FetchingArtifact => ProgressUnit::Bytes,
             Self::RecognisingSpeech => ProgressUnit::Chunks,
             Self::AnalysingVideo => ProgressUnit::Windows,
             Self::RunningRequest => ProgressUnit::Steps,
+            Self::InstallingComponents => ProgressUnit::Components,
         }
     }
 
@@ -57,6 +68,8 @@ impl ProgressStage {
             Self::RecognisingSpeech => 1,
             Self::AnalysingVideo => 2,
             Self::RunningRequest => 3,
+            Self::FetchingArtifact => 4,
+            Self::InstallingComponents => 5,
         }
     }
 }
@@ -80,11 +93,19 @@ pub enum ProgressUnit {
     Windows,
     /// Steps of a request.
     Steps,
+    /// Managed components of an installation plan.
+    Components,
 }
 
 impl ProgressUnit {
     /// Every unit, in declaration order.
-    pub const ALL: [Self; 4] = [Self::Bytes, Self::Chunks, Self::Windows, Self::Steps];
+    pub const ALL: [Self; 5] = [
+        Self::Bytes,
+        Self::Chunks,
+        Self::Windows,
+        Self::Steps,
+        Self::Components,
+    ];
 
     /// The stable identifier.
     #[must_use]
@@ -94,6 +115,7 @@ impl ProgressUnit {
             Self::Chunks => "chunks",
             Self::Windows => "windows",
             Self::Steps => "steps",
+            Self::Components => "components",
         }
     }
 }

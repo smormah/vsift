@@ -2,9 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 use vsift_application::{
-    LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedSetupAction, ManagedSetupPlan,
-    RuntimeDiagnosis, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    LocalAsrCheckOutcome, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
+    ManagedSetupAction, ManagedSetupPlan, ObservedModel, RuntimeDiagnosis,
+    SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
 };
+use vsift_domain::ManagedComponent;
 use vsift_domain::{
     DependencyState, DependencyStatus, FailureCode, ReviewedAsrModel, RuntimeDependency,
 };
@@ -17,15 +19,18 @@ use crate::{
 
 /// Where the executable probed for one dependency came from.
 ///
-/// The host resolves the precedence (per-call path, then configured user path,
-/// then filtered `PATH`) because it owns argument parsing and configuration; the
-/// contract only fixes how that provenance is reported.
+/// The engine resolves the precedence (per-call path, then configured user
+/// path, then the managed version `setup install` selected, then filtered
+/// `PATH`); the contract only fixes how that provenance is reported.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DependencyLookup {
     /// An absolute path supplied for this one invocation.
     ExplicitPath,
     /// A path previously saved with `setup configure`.
     ConfiguredUserPath,
+    /// The version `setup install` selected in the private managed root,
+    /// opened only after every file matched its manifest's SHA-256 (P13).
+    ManagedVersion,
     /// A search of the filtered `PATH`.
     FilteredPath,
 }
@@ -37,6 +42,7 @@ impl DependencyLookup {
         match self {
             Self::ExplicitPath => "explicit_path",
             Self::ConfiguredUserPath => "configured_user_path",
+            Self::ManagedVersion => "managed_version",
             Self::FilteredPath => "filtered_path",
         }
     }
@@ -66,12 +72,15 @@ impl SetupCheckResponse {
     /// Creates the compatible setup response for the explicitly resolved profile.
     ///
     /// `lookup` reports, for each probed dependency, where its executable came
-    /// from; `local_asr` is the model and verification report.
+    /// from; `managed_install` is whether managed installation can supply a
+    /// missing dependency on this host (the availability `setup plan`
+    /// reports); `local_asr` is the model and verification report.
     #[must_use]
     pub fn new<F>(
         diagnosis: &RuntimeDiagnosis,
         profile: SetupProfile,
         lookup: F,
+        managed_install: ManagedPlanAvailability,
         local_asr: &LocalAsrSetupStatus,
     ) -> Self
     where
@@ -87,7 +96,13 @@ impl SetupCheckResponse {
             dependencies: diagnosis
                 .dependencies
                 .iter()
-                .map(|status| SetupCheckDependencyResponse::new(status, lookup(status.dependency)))
+                .map(|status| {
+                    SetupCheckDependencyResponse::new(
+                        status,
+                        lookup(status.dependency),
+                        managed_install,
+                    )
+                })
                 .collect(),
             local_asr: LocalAsrSetupResponse::new(*local_asr),
         }
@@ -165,7 +180,11 @@ struct SetupRemediationResponse {
 }
 
 impl SetupCheckDependencyResponse {
-    fn new(status: &DependencyStatus, lookup: DependencyLookup) -> Self {
+    fn new(
+        status: &DependencyStatus,
+        lookup: DependencyLookup,
+        managed_install: ManagedPlanAvailability,
+    ) -> Self {
         let detail = match &status.state {
             DependencyState::Available { version } => {
                 Some(sanitize_untrusted_text(version, MAX_PROVIDER_DETAIL_BYTES))
@@ -186,7 +205,7 @@ impl SetupCheckDependencyResponse {
             },
             remediation: (!status.state.is_available()).then_some(SetupRemediationResponse {
                 reason: status.state.identifier(),
-                managed_install: "unavailable_unqualified",
+                managed_install: managed_install.identifier(),
                 required_authority: "user",
                 next_step: manual_dependency_step(status.dependency),
                 explicit_path_option: explicit_path_option(status.dependency),
@@ -229,6 +248,14 @@ pub const fn explicit_path_option(dependency: RuntimeDependency) -> &'static str
 /// The same type is decoded strictly from a saved plan, which is why every nested
 /// type rejects unknown fields: acceptance must compare exactly what the user
 /// reviewed, and an unreviewed field must never ride along.
+///
+/// Two kinds of member share it (P13 PR 4). The **intent** (profile, target,
+/// availability, catalogue, digest, every action's reviewed artifact, each
+/// dependency's disposition and next step) is what the digest binds and what
+/// acceptance compares. The **observed state** (`readiness`, `install_needed`,
+/// each dependency's and the model's `status`, each action's `state`) is what
+/// commands would use now, managed versions included; it changes as `setup
+/// install` applies the plan, so acceptance ignores it.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetupPlanResponse {
@@ -241,35 +268,70 @@ pub struct SetupPlanResponse {
     catalogue_revision: Option<String>,
     stop_new_plans_at: Option<String>,
     plan_digest: Option<String>,
+    install_needed: bool,
     actions: Vec<SetupPlanActionResponse>,
     dependencies: Vec<SetupPlanDependencyResponse>,
 }
 
 impl SetupPlanResponse {
-    /// Presents an evaluated plan, including the manual guidance for each
-    /// dependency and the model.
+    /// Presents an evaluated plan with what the machine shows now, including
+    /// the manual guidance for each dependency and the model.
     ///
     /// Selected paths bound into the plan's digest are deliberately omitted: the
     /// public plan names what will change, not where the user keeps their tools.
     #[must_use]
-    pub fn new(plan: &ManagedSetupPlan) -> Self {
+    pub fn new(plan: &ManagedSetupPlan, observation: &ManagedPlanObservation) -> Self {
+        let model_current = observation.is_current(ManagedComponent::WhisperModel);
         Self {
             profile: plan.profile.identifier().to_owned(),
-            readiness: plan.readiness.identifier().to_owned(),
+            readiness: observation.readiness.identifier().to_owned(),
             verification_scope: "executable_probe_and_reviewed_catalogue".to_owned(),
             target: plan.target.identifier().to_owned(),
-            local_asr_model: model_response(plan.model),
+            local_asr_model: model_response(plan.model, observation.model, model_current),
             managed_install: plan.availability.identifier().to_owned(),
             catalogue_revision: plan.catalogue_revision.clone(),
             stop_new_plans_at: plan.stop_new_plans_date.clone(),
             plan_digest: plan.digest.clone(),
-            actions: plan.actions.iter().map(action_response).collect(),
+            install_needed: plan
+                .actions
+                .iter()
+                .any(|action| !observation.is_current(action.artifact.component)),
+            actions: plan
+                .actions
+                .iter()
+                .map(|action| {
+                    action_response(action, observation.is_current(action.artifact.component))
+                })
+                .collect(),
             dependencies: plan
                 .dependencies
                 .iter()
-                .map(|(status, disposition)| dependency_response(status, *disposition))
+                .map(|(status, disposition)| {
+                    let observed = observation
+                        .dependencies
+                        .iter()
+                        .find(|observed| observed.dependency == status.dependency)
+                        .unwrap_or(status);
+                    dependency_response(observed, *disposition)
+                })
                 .collect(),
         }
+    }
+
+    /// The plan without its observed state: what the digest binds and
+    /// acceptance compares.
+    fn intent(&self) -> Self {
+        let mut intent = self.clone();
+        intent.readiness.clear();
+        intent.install_needed = false;
+        intent.local_asr_model.status.clear();
+        for dependency in &mut intent.dependencies {
+            dependency.status.clear();
+        }
+        for action in &mut intent.actions {
+            action.state.clear();
+        }
+        intent
     }
 }
 
@@ -296,6 +358,7 @@ struct SetupPlanModelResponse {
 #[serde(deny_unknown_fields)]
 struct SetupPlanActionResponse {
     id: String,
+    state: String,
     component: String,
     version: String,
     publisher: String,
@@ -370,7 +433,7 @@ fn dependency_response(
         ),
         SetupDependencyDisposition::ManagedInstall => (
             Some("user"),
-            "Review the exact managed action and its digest. Setup install remains unavailable until the complete installer qualifies.",
+            "Review the exact managed action, then run setup install with this saved plan and its digest; a component already installed at this version is reported already_current.",
         ),
         SetupDependencyDisposition::ManualSelection => {
             (Some("user"), manual_plan_step(status.dependency))
@@ -385,7 +448,11 @@ fn dependency_response(
     }
 }
 
-fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse {
+fn model_response(
+    disposition: SetupModelDisposition,
+    observed: ObservedModel,
+    model_current: bool,
+) -> SetupPlanModelResponse {
     let (status, required_authority, next_step) = match disposition {
         SetupModelDisposition::ConfiguredProbeOnly => (
             "configured_present_unverified",
@@ -395,13 +462,18 @@ fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse 
         SetupModelDisposition::ManagedInstall => (
             "missing",
             Some("user"),
-            "Review the exact managed model action and its digest. Setup install remains unavailable until the complete installer qualifies.",
+            "Review the exact managed model action, then run setup install with this saved plan and its digest; a model already installed at this version is reported already_current.",
         ),
         SetupModelDisposition::ManualSelection => (
             "missing",
             Some("user"),
             "For local ASR, configure trusted model weights with setup configure-model --file <absolute-path>. A supplied transcript can skip local ASR.",
         ),
+    };
+    let status = if observed == ObservedModel::Managed && model_current {
+        "managed_current"
+    } else {
+        status
     };
     SetupPlanModelResponse {
         status: status.to_owned(),
@@ -411,9 +483,10 @@ fn model_response(disposition: SetupModelDisposition) -> SetupPlanModelResponse 
     }
 }
 
-fn action_response(action: &ManagedSetupAction) -> SetupPlanActionResponse {
+fn action_response(action: &ManagedSetupAction, current: bool) -> SetupPlanActionResponse {
     SetupPlanActionResponse {
         id: action.id.clone(),
+        state: if current { "current" } else { "pending" }.to_owned(),
         component: action.artifact.component.identifier().to_owned(),
         version: action.artifact.version.clone(),
         publisher: action.artifact.publisher.clone(),
@@ -556,19 +629,24 @@ impl SavedSetupPlan {
         }
     }
 
-    /// Requires the saved plan to describe exactly the current plan.
+    /// Requires the saved plan to describe exactly the current plan's intent.
     ///
     /// Comparison is over the serialized JSON values, the form the user
-    /// reviewed, so any drift in the machine, catalogue or selections since the
-    /// plan was saved invalidates it.
+    /// reviewed, so any drift in the catalogue, the target, the selections or
+    /// the tools outside the managed store since the plan was saved
+    /// invalidates it. The observed state (readiness, statuses, each action's
+    /// `state`) is left out: it changes as `setup install` applies the plan,
+    /// and a rerun of the same accepted command must continue.
     ///
     /// # Errors
     ///
     /// Returns [`FailureCode::InvalidArgument`] when the plans differ, or
     /// [`FailureCode::Internal`] when either cannot be serialized.
     pub fn require_same_plan(&self, current: &SetupPlanResponse) -> Result<(), FailureCode> {
-        let saved_data = serde_json::to_value(&self.data).map_err(|_| FailureCode::Internal)?;
-        let current_data = serde_json::to_value(current).map_err(|_| FailureCode::Internal)?;
+        let saved_data =
+            serde_json::to_value(self.data.intent()).map_err(|_| FailureCode::Internal)?;
+        let current_data =
+            serde_json::to_value(current.intent()).map_err(|_| FailureCode::Internal)?;
         if saved_data == current_data {
             Ok(())
         } else {

@@ -170,6 +170,25 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   The feature cannot be compiled without debug assertions and the governance check
   refuses it outside development dependencies; never enable it in a release build.
 
+- Managed-install transport and transaction (P13 PR 4): the development-only
+  `install-test-hooks` feature of `vsift-infrastructure` adds a loopback publisher
+  route (a local test server on `127.0.0.1`, optionally through an explicit test proxy)
+  and an injected stage-write failure. Like `fault-injection` it cannot be compiled
+  without debug assertions and the governance check refuses it outside development
+  dependencies. `tests/p13_install_transaction.rs` needs it (`required-features`): a
+  workspace test run enables it through the engine crate's development dependency; alone,
+  run `cargo test -p vsift-infrastructure --features install-test-hooks --test
+  p13_install_transaction`. A release-mode run of the crate alone skips that test, so the
+  opt-in real-tool tests keep `--release`, which they need anyway: a development build
+  resolves no host name for a publisher download (the network guard), so no test run
+  without `--release` can reach the internet through `setup install`; set
+  `VSIFT_DEV_PUBLISHER_NETWORK=allow` to let a debug build download. The test's
+  untrusted TLS identity is a
+  throwaway self-signed key in `tests/fixtures/tls/` (README there). The real install
+  (`VSIFT_P13_REAL_INSTALL=1`, `p13_managed_install_real` in `vsift-cli`) runs only on
+  Ubuntu 24.04 x86-64, through the manual workflow `P13 managed smoke` (job
+  `managed-install`), in a fresh per-user base; it downloads the three pinned artifacts.
+
 - Durable-publication crash campaign (P10 PR 4, ADR 0020 section 7): the
   `vsift-crash-campaign` tool in `tools/p10-crash-campaign/` (a workload, a verifier,
   a dm-log-writes replay and a write-error assessor; `cargo test -p

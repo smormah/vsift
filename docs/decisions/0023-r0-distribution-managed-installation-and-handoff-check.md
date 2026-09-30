@@ -284,6 +284,115 @@ failure cleanup exist as an internal capability; `setup install` still answers
   their adapters' fixed bounds (the generated audio is bounded by the policy in the
   media verifier, and the transcript file now by the policy too).
 
+*Implementation note, 2026-09-30 (P13 PR 4, steps 3 and 4):* `setup install` runs the
+guarded transaction, and every command resolves tools through the managed tier. `setup
+list/rollback/remove/repair`, bounded cleanup and the stale-stage sweep stay PR 6; kill
+and power-loss tests PR 7.
+
+- **Order.** `setup install --plan <file> --accept-plan <digest> [--artifact-dir
+  <absolute folder>]` reads the strict saved plan, then (engine `install_setup`): refuses
+  a relative artifact folder; answers `INVALID_ARGUMENT` with the manual path on a host
+  whose target has no qualified catalogue, creating nothing; takes the root's install
+  guard, which never waits (a held guard is `BUSY`, `retry_after_ms` 30,000; a root that
+  cannot be created or proved private is `STORAGE_IO` with the manual path, D-09 and
+  D-10); rebuilds the plan and requires it to equal the saved one and the digest to
+  accept it; only then installs.
+- **Transaction** (`vsift-application/src/install.rs`, `install_managed_components`, over
+  the port `ManagedComponentInstaller`). Components go in plan order: media tools, then
+  the whisper.cpp CLI, then the model. A component whose reviewed version is already
+  selected is `already_current` and is not fetched. The others are fetched, staged with
+  their runtime prepared, smoked with PR 3's `smoke_before_activation`, and published
+  and selected one by one (`StagedManagedCandidate::publish_and_select`, which then
+  removes the rest of the stage), so each activates atomically on its own. The CLI and
+  its model are staged and smoked together when both are pending (neither can be smoked
+  without the other: "the model is smoked with whisper"); any other component is smoked
+  with the providers selected at that moment as companions, resolved in the lookup
+  order below. The first failure stops the transaction; the components after it are
+  `failed` with reason `blocked` and were never fetched, and a candidate staged with the
+  failed one is discarded. A rerun of the same accepted command continues from the
+  first component not yet current.
+- **Decided here: a plan's intent and its observed state.** The digest binds the plan's
+  intent: target, catalogue, every action's reviewed artifact, each dependency's and the
+  model's disposition, and the observations of the tools outside VSift's managed store
+  (explicit, configured and `PATH`) that decide which components are needed. Installing
+  a managed component changes none of that. Beside it, `setup plan` shows the observed
+  state, which is what commands would use now with the managed tier included:
+  `readiness`, each dependency's `status`, the model's `status` (`managed_current` once
+  the managed model is selected), each action's `state` (`pending` or `current`) and
+  `install_needed` (false when every action is current). Acceptance compares the intent
+  only (`SetupPlanResponse::require_same_plan`, and `install_setup` rebuilds the intent
+  without opening the managed store), so the plan accepted before installing stays
+  accepted after a partial or complete install and a rerun continues, while after a
+  complete install `setup plan` reports every component current, readiness no longer
+  blocked on them and nothing to install. Any change to the intent in the saved file is
+  still refused. This replaces the first reading of this PR, a plan that did not see the
+  managed tier at all, which was never released.
+- **Network guard for tests (decided here).** A development build, which every test run
+  without `--release` is, resolves no host name for a publisher download: the transfer
+  client gets a resolver that refuses every name, so a reviewed publisher route fails
+  as `offline` before any connection and nothing is staged. The loopback routes and
+  test proxies are `127.0.0.1` literals, which are never resolved, so the D-03 and D-07
+  tests are unaffected. The opt-in real-tool checkpoints run `--release`; a developer
+  who wants a debug build to download sets `VSIFT_DEV_PUBLISHER_NETWORK=allow`. Release
+  builds do not compile the guard. This makes the CI incident of this PR (a non-ignored
+  test that accepted a real plan digest and started a real download) impossible
+  rather than merely avoided.
+- **Transport** (`publisher_artifact_transfer.rs`). One `GET` per attempt with no
+  `Range` header; only a complete `200 OK` identity body is accepted, so `206` is
+  refused; every byte goes through the exact size and SHA-256 check into a private
+  stage that any failure, cancellation included, discards. `DOWNLOAD_FAILED` (exit 7)
+  carries one reason: `tls` (a `native_tls::Error` in the error chain), `redirect_policy`
+  (outside the reviewed route, another host, userinfo, more than three), `http_status`
+  (any status but `200`, a `Content-Range`, a non-identity encoding), `proxy_auth` (a
+  `407` response, or hyper-util's private tunnel error, recognised by its text because
+  the type is not exported; the D-07 test fails if an update changes it), `offline`
+  (connect, DNS, a dropped or stalled body, the transfer deadline) or `size` (a
+  declared length or a body that differs from the review). Bytes of the right size and
+  the wrong digest are `INTEGRITY_FAILURE`. The client keeps the system proxy settings
+  and the neutral user agent `VSift/0.1 managed setup`; no error carries a URL, header or
+  credential.
+- **Offline import (D-07).** `--artifact-dir` reads, for each action, the file named by
+  the last segment of its reviewed URL, as a regular file (no link followed), checks
+  its size, then streams it through the same verifier into a fresh stage. The folder is
+  the only user input; no URL, checksum or file name is read from the user. A missing
+  or non-regular file is `INVALID_ARGUMENT` (`artifact_missing`,
+  `artifact_not_regular_file`); a wrong size or digest `INTEGRITY_FAILURE`
+  (`size_mismatch`, `digest_mismatch`).
+- **What `setup install` reports of the smoke's typed failures (decided here).** A smoke
+  that fails is `MISSING_CAPABILITY` (the reviewed tools do not work on this machine),
+  except `cancelled` (`CANCELLED`) and `preparation` (`STORAGE_IO`, VSift's own
+  directory); the data names the component, `step: smoke`, the smoke's `smoke_check`
+  and its reason. A staged artifact whose contents or layout differ from the review, and
+  a published version that already names other bytes, are `INTEGRITY_FAILURE`
+  (`review_mismatch`); storage is `STORAGE_IO` (`storage`); a cancellation `CANCELLED`.
+- **Result.** `data` lists every component with `status` (`activated`,
+  `already_current`, `failed`), and for a failure its `step`, `reason`, `failure_code`
+  and `smoke_check`, plus what cleanup did with its stage (`discarded`, or `retained`
+  with its retention reason). A failed transaction is a failure result whose error is
+  the first failure's code and fixed-prose remediation, with the same `data` beside it
+  (the envelope's `with_failure_value`), so a caller always sees what is installed.
+  `--events jsonl` adds `progress` events: `fetching_artifact` in bytes and
+  `installing_components` in components. The command is long-running: Ctrl-C cancels it,
+  discards the stage in progress and keeps what is already active.
+- **Managed tier in lookup (step 4, ADR 0007's order).** Every command that runs a tool
+  resolves it as: a per-call path (only `setup check` takes one), the configured path,
+  the managed version `setup install` selected, then the filtered `PATH`; the model:
+  configured, then managed. A managed version is opened only when its pointer names the
+  manifest's SHA-256 and every file matches the manifest by size and SHA-256 (hashed
+  once per open, after the shared use lock is held); one that does not is never run,
+  and lookup falls through to `PATH`. Managed tools are thus identified by digest, which
+  closes L-006 for them. The executable resolved from a version carries a
+  `ManagedRuntimeHold` (the recognizer also its model's), so a job holds the version's
+  shared use lock for as long as it holds the tool, and an update never removes a
+  version in use. The engine takes the root from `EngineConfig::managed_root`
+  (`ManagedRootLocation`, the platform default for the CLI).
+- **Development-only test hook.** The transfer and transaction tests drive the real
+  transport against local servers through the `install-test-hooks` feature of
+  `vsift-infrastructure` (a loopback route on `127.0.0.1`, an explicit test proxy and an
+  injected stage-write failure for the disk-full case). Like `fault-injection`, the crate
+  refuses to compile it without debug assertions and the governance check refuses it
+  anywhere but a development dependency.
+
 ### 4. Human-readable output
 
 A renderer per command under `crates/vsift-cli/src/human/`, writing through one

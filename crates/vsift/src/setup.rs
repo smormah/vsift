@@ -7,11 +7,12 @@ use std::{
 };
 
 use vsift_application::{
-    AcceptedManagedCatalogue, DependencyProbe, DiagnoseRuntime, LocalAsrSetupStatus,
-    ManagedSetupPlan, RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup,
+    DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
+    ManagedSetupPlan, ObservedModel, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    plan_managed_setup,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
-use vsift_domain::{ManagedTarget, RuntimeDependency};
+use vsift_domain::RuntimeDependency;
 use vsift_infrastructure::{
     ExplicitProbePaths, ProcessDependencyProbe, accepted_ubuntu_catalogue, detect_managed_target,
 };
@@ -51,6 +52,14 @@ impl ExecutableSelections {
         }
     }
 
+    fn select(&mut self, dependency: RuntimeDependency, path: PathBuf) {
+        match dependency {
+            RuntimeDependency::Ffmpeg => self.ffmpeg = Some(path),
+            RuntimeDependency::Ffprobe => self.ffprobe = Some(path),
+            RuntimeDependency::Whisper => self.whisper = Some(path),
+        }
+    }
+
     fn into_probe_paths(self) -> ExplicitProbePaths {
         ExplicitProbePaths {
             ffmpeg: self.ffmpeg,
@@ -82,7 +91,10 @@ pub struct SetupCheckReport {
     per_call: [bool; 3],
     /// Whether any path (per-call or configured) was selected.
     selected: [bool; 3],
+    /// Whether the managed version was used, when nothing was selected.
+    managed: [bool; 3],
     local_asr: LocalAsrSetupStatus,
+    managed_install: ManagedPlanAvailability,
 }
 
 impl SetupCheckReport {
@@ -100,7 +112,8 @@ impl SetupCheckReport {
     }
 
     /// Where the executable probed for `dependency` came from: a per-call path
-    /// wins over a configured user path, which wins over the filtered `PATH`.
+    /// wins over a configured user path, which wins over the managed
+    /// version, which wins over the filtered `PATH`.
     #[must_use]
     pub const fn lookup(&self, dependency: RuntimeDependency) -> DependencyLookup {
         let index = dependency_index(dependency);
@@ -108,9 +121,19 @@ impl SetupCheckReport {
             DependencyLookup::ExplicitPath
         } else if self.selected[index] {
             DependencyLookup::ConfiguredUserPath
+        } else if self.managed[index] {
+            DependencyLookup::ManagedVersion
         } else {
             DependencyLookup::FilteredPath
         }
+    }
+
+    /// Whether managed installation can supply a missing dependency on this
+    /// host: the availability `setup plan` reports for this target and the
+    /// built-in catalogue (the setup-check remediation's `managed_install`).
+    #[must_use]
+    pub const fn managed_install(&self) -> ManagedPlanAvailability {
+        self.managed_install
     }
 }
 
@@ -147,6 +170,20 @@ pub struct EvaluatedSetupPlan {
 }
 
 impl EvaluatedSetupPlan {
+    /// A plan's authority with its presentation beside `observation`.
+    fn new(authority: ManagedSetupPlan, observation: &ManagedPlanObservation) -> Self {
+        let presentation = SetupPlanResponse::new(&authority, observation);
+        Self {
+            authority,
+            presentation,
+        }
+    }
+
+    /// The plan's authority: its actions, digest and catalogue revision.
+    pub(crate) const fn authority(&self) -> &ManagedSetupPlan {
+        &self.authority
+    }
+
     /// The reviewable plan as the v1 contract presents it.
     #[must_use]
     pub const fn presentation(&self) -> &SetupPlanResponse {
@@ -201,31 +238,62 @@ impl Engine {
         &self,
         request: SetupCheckRequest,
     ) -> Result<SetupCheckReport, EngineError> {
-        let configured = ExecutableSelections::from_configured(self.user_configuration()?.read()?);
+        let store = self.user_configuration()?;
+        let configured = ExecutableSelections::from_configured(store.read()?);
         let per_call = request.per_call;
-        let selections = ExecutableSelections {
+        let mut selections = ExecutableSelections {
             ffmpeg: per_call.ffmpeg.clone().or(configured.ffmpeg),
             ffprobe: per_call.ffprobe.clone().or(configured.ffprobe),
             whisper: per_call.whisper.clone().or(configured.whisper),
         };
         let selected = presence(&selections);
+        // The managed tier fills what nothing selected; each managed
+        // executable is held (its version cannot be removed) for the check.
+        let mut held = Vec::new();
+        let mut managed = [false; 3];
+        let mut lookup = self.managed_lookup();
+        for dependency in RuntimeDependency::ALL {
+            if selections.for_dependency(dependency).is_none()
+                && let Some(executable) = lookup.executable(dependency)
+            {
+                selections.select(dependency, executable.path().to_path_buf());
+                managed[dependency_index(dependency)] = true;
+                held.push(executable);
+            }
+        }
         let probe = ProcessDependencyProbe::with_explicit_paths(
             request.probe_timeout,
             selections.clone().into_probe_paths(),
         );
         let diagnosis = DiagnoseRuntime::new(probe).execute().await;
+        let managed_model = match store.read_model()? {
+            Some(configured) => Some((configured, None)),
+            None => lookup.model().map(|model| (model.path, Some(model.hold))),
+        };
         let local_asr = self
-            .check_local_asr(&selections, request.local_asr_budget)
+            .check_local_asr(
+                &selections,
+                managed_model.as_ref().map(|(path, _)| path.as_path()),
+                request.local_asr_budget,
+            )
             .await?;
+        drop((held, managed_model));
         Ok(SetupCheckReport {
             diagnosis,
             per_call: presence(&per_call),
             selected,
+            managed,
             local_asr,
+            managed_install: self.managed_install_availability()?,
         })
     }
 
     /// Builds the current read-only managed setup plan from fresh observations.
+    ///
+    /// The plan's intent (and digest) comes from the tools outside the
+    /// managed store, which `setup install` never changes; beside it, the
+    /// plan shows what commands would use now, managed versions included:
+    /// each action's `state`, the dependencies' statuses and readiness.
     ///
     /// # Errors
     ///
@@ -235,6 +303,78 @@ impl Engine {
         &self,
         request: SetupPlanRequest,
     ) -> Result<EvaluatedSetupPlan, EngineError> {
+        let (plan, configured) = self.plan_intent(request).await?;
+        let observation = self
+            .observe_plan(&plan, configured, request.probe_timeout)
+            .await;
+        Ok(EvaluatedSetupPlan::new(plan, &observation))
+    }
+
+    /// The current plan's intent alone, for acceptance, which compares the
+    /// intent only: nothing managed is opened or probed.
+    pub(crate) async fn plan_setup_intent(
+        &self,
+        request: SetupPlanRequest,
+    ) -> Result<EvaluatedSetupPlan, EngineError> {
+        let (plan, _) = self.plan_intent(request).await?;
+        let observation = ManagedPlanObservation::without_managed_tier(&plan);
+        Ok(EvaluatedSetupPlan::new(plan, &observation))
+    }
+
+    /// What commands would use now for `plan`, the managed tier included.
+    async fn observe_plan(
+        &self,
+        plan: &ManagedSetupPlan,
+        configured: ExplicitProbePaths,
+        probe_timeout: Duration,
+    ) -> ManagedPlanObservation {
+        let mut observation = ManagedPlanObservation::without_managed_tier(plan);
+        let mut lookup = self.managed_lookup();
+        let mut paths = configured;
+        let mut held = Vec::new();
+        for dependency in RuntimeDependency::ALL {
+            if paths.for_dependency(dependency).is_none()
+                && let Some(executable) = lookup.executable(dependency)
+            {
+                let path = Some(executable.path().to_path_buf());
+                match dependency {
+                    RuntimeDependency::Ffmpeg => paths.ffmpeg = path,
+                    RuntimeDependency::Ffprobe => paths.ffprobe = path,
+                    RuntimeDependency::Whisper => paths.whisper = path,
+                }
+                held.push(executable);
+            }
+        }
+        if !held.is_empty() {
+            let probe = ProcessDependencyProbe::with_explicit_paths(probe_timeout, paths);
+            let diagnosis = DiagnoseRuntime::new(probe).execute().await;
+            observation.readiness = diagnosis.readiness;
+            observation.dependencies = diagnosis.dependencies;
+        }
+        if observation.model == ObservedModel::Missing && lookup.model().is_some() {
+            observation.model = ObservedModel::Managed;
+        }
+        observation.current = plan
+            .actions
+            .iter()
+            .filter(|action| {
+                lookup
+                    .selected_version(action.artifact.component)
+                    .as_deref()
+                    == Some(action.artifact.version.as_str())
+            })
+            .map(|action| action.artifact.component)
+            .collect();
+        drop(held);
+        observation
+    }
+
+    /// The plan's intent from the configuration, the clock, the catalogue
+    /// and the tools outside the managed store, with the configured paths.
+    async fn plan_intent(
+        &self,
+        request: SetupPlanRequest,
+    ) -> Result<(ManagedSetupPlan, ExplicitProbePaths), EngineError> {
         let store = self.user_configuration()?;
         let configured = store.read()?;
         let configured_model = store.read_model()?;
@@ -258,16 +398,35 @@ impl Engine {
                 .as_ref()
                 .map(|path| path.to_string_lossy().into_owned()),
         };
-        let probe = ProcessDependencyProbe::with_explicit_paths(request.probe_timeout, configured);
-        Ok(evaluate_plan(
-            probe,
+        let probe =
+            ProcessDependencyProbe::with_explicit_paths(request.probe_timeout, configured.clone());
+        let plan = plan_managed_setup(
             request.profile,
+            DiagnoseRuntime::new(probe).execute().await,
             detect_managed_target(),
             selections,
             now_unix_seconds,
             Some(catalogue),
-        )
-        .await)
+        );
+        Ok((plan, configured))
+    }
+
+    /// Whether managed installation is qualified on this host today: the
+    /// built-in catalogue's target, expiry and completeness, before any
+    /// observation of the tools.
+    pub(crate) fn managed_install_availability(
+        &self,
+    ) -> Result<ManagedPlanAvailability, EngineError> {
+        let catalogue =
+            accepted_ubuntu_catalogue().map_err(|_| EngineError::ReviewedPolicyInvalid)?;
+        let target = detect_managed_target();
+        Ok(if catalogue.target != target {
+            ManagedPlanAvailability::TargetUnavailable
+        } else if self.now_unix_seconds()? >= catalogue.stop_new_plans_at {
+            ManagedPlanAvailability::CatalogueExpired
+        } else {
+            ManagedPlanAvailability::Qualified
+        })
     }
 
     /// Saves one user-managed executable selection without running it.
@@ -299,14 +458,16 @@ impl Engine {
     }
 }
 
-/// Diagnoses current dependencies and builds plan authority plus its presentation.
-async fn evaluate_plan<P: DependencyProbe>(
+/// Diagnoses current dependencies and builds plan authority plus its
+/// presentation on a machine with no managed tier (the unit tests' plans).
+#[cfg(test)]
+async fn evaluate_plan<P: vsift_application::DependencyProbe>(
     probe: P,
     profile: SetupProfile,
-    target: ManagedTarget,
+    target: vsift_domain::ManagedTarget,
     selections: SetupSelectionState,
     now_unix_seconds: u64,
-    catalogue: Option<AcceptedManagedCatalogue>,
+    catalogue: Option<vsift_application::AcceptedManagedCatalogue>,
 ) -> EvaluatedSetupPlan {
     let plan = plan_managed_setup(
         profile,
@@ -316,21 +477,21 @@ async fn evaluate_plan<P: DependencyProbe>(
         now_unix_seconds,
         catalogue,
     );
-    let presentation = SetupPlanResponse::new(&plan);
-    EvaluatedSetupPlan {
-        authority: plan,
-        presentation,
-    }
+    let observation = ManagedPlanObservation::without_managed_tier(&plan);
+    EvaluatedSetupPlan::new(plan, &observation)
 }
 
 #[cfg(test)]
 mod tests {
     use std::future::ready;
 
-    use vsift_application::{DependencyProbe, SetupProfile, SetupSelectionState};
+    use vsift_application::{
+        DependencyProbe, ManagedPlanObservation, ObservedModel, SetupProfile, SetupSelectionState,
+    };
     use vsift_contract::{OperationResponse, SavedSetupPlan};
     use vsift_domain::{
-        DependencyState, DependencyStatus, FailureCode, ManagedTarget, RuntimeDependency,
+        DependencyState, DependencyStatus, FailureCode, ManagedComponent, ManagedTarget,
+        RuntimeDependency, RuntimeReadiness,
     };
     use vsift_infrastructure::accepted_ubuntu_catalogue;
 
@@ -403,10 +564,7 @@ mod tests {
             .validate(&value)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
         let data = &value["data"];
-        assert_eq!(
-            data["managed_install"],
-            "catalogue_accepted_install_pending"
-        );
+        assert_eq!(data["managed_install"], "catalogue_accepted");
         assert_eq!(data["target"], "ubuntu_24_04_x86_64");
         assert_eq!(data["actions"].as_array().map(Vec::len), Some(3));
         assert_eq!(
@@ -498,6 +656,152 @@ mod tests {
         let mut unknown: serde_json::Value = serde_json::from_slice(&bytes)?;
         unknown["data"]["unreviewed"] = serde_json::json!(true);
         assert!(serde_json::from_value::<SavedSetupPlan>(unknown).is_err());
+        Ok(())
+    }
+
+    /// The plan an Ubuntu machine with none of the tools makes.
+    async fn missing_tools_plan() -> Result<EvaluatedSetupPlan, Box<dyn std::error::Error>> {
+        Ok(evaluate_plan(
+            FixedProbe {
+                state: DependencyState::Missing,
+            },
+            SetupProfile::Desktop,
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            1_800_000_000,
+            Some(accepted_ubuntu_catalogue()?),
+        )
+        .await)
+    }
+
+    fn available(dependency: RuntimeDependency) -> DependencyStatus {
+        DependencyStatus {
+            dependency,
+            state: DependencyState::Available {
+                version: String::from("managed fixture 1"),
+            },
+        }
+    }
+
+    /// P13 PR 4 (a) and (b): installing managed components changes the plan's
+    /// observed state, never its intent, so the accepted plan stays acceptable
+    /// after a partial install and the plan shows what is installed.
+    #[tokio::test]
+    async fn installed_managed_components_are_observed_without_changing_acceptance()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let original = missing_tools_plan().await?;
+        let digest = original
+            .authority
+            .digest
+            .clone()
+            .ok_or_else(|| std::io::Error::other("qualified plan omitted its digest"))?;
+        let original_value = plan_json(&original)?;
+        assert_eq!(original_value["data"]["install_needed"], true);
+        assert_eq!(original_value["data"]["readiness"], "blocked");
+        let saved: SavedSetupPlan = serde_json::from_value(original_value)?;
+        let schema = setup_plan_schema()?;
+        let validator = jsonschema::validator_for(&schema)?;
+
+        // (b) After a partial install (media tools only) the same accepted
+        // plan and digest are still accepted, so a rerun continues.
+        let partial_authority = missing_tools_plan().await?.authority;
+        let partial = EvaluatedSetupPlan::new(
+            partial_authority.clone(),
+            &ManagedPlanObservation {
+                readiness: RuntimeReadiness::Degraded,
+                dependencies: vec![
+                    available(RuntimeDependency::Ffmpeg),
+                    available(RuntimeDependency::Ffprobe),
+                    DependencyStatus {
+                        dependency: RuntimeDependency::Whisper,
+                        state: DependencyState::Missing,
+                    },
+                ],
+                model: ObservedModel::Missing,
+                current: vec![ManagedComponent::MediaTools],
+            },
+        );
+        assert_eq!(partial.validate_acceptance(&saved, &digest), Ok(()));
+        let value = plan_json(&partial)?;
+        validator
+            .validate(&value)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let data = &value["data"];
+        assert_eq!(data["plan_digest"].as_str(), Some(digest.as_str()));
+        assert_eq!(data["install_needed"], true);
+        assert_eq!(data["readiness"], "degraded");
+        assert_eq!(data["actions"][0]["component"], "ffmpeg_ffprobe");
+        assert_eq!(data["actions"][0]["state"], "current");
+        assert_eq!(data["actions"][1]["state"], "pending");
+        assert_eq!(data["actions"][2]["state"], "pending");
+        assert_eq!(data["dependencies"][0]["status"], "available");
+        assert_eq!(data["dependencies"][2]["status"], "missing");
+        assert_eq!(data["local_asr_model"]["status"], "missing");
+
+        // (a) After the complete install the plan reports every managed
+        // component current and readiness no longer blocked on them.
+        let complete = EvaluatedSetupPlan::new(
+            partial_authority,
+            &ManagedPlanObservation {
+                readiness: RuntimeReadiness::Ready,
+                dependencies: RuntimeDependency::ALL.into_iter().map(available).collect(),
+                model: ObservedModel::Managed,
+                current: vec![
+                    ManagedComponent::MediaTools,
+                    ManagedComponent::WhisperCli,
+                    ManagedComponent::WhisperModel,
+                ],
+            },
+        );
+        assert_eq!(complete.validate_acceptance(&saved, &digest), Ok(()));
+        let value = plan_json(&complete)?;
+        validator
+            .validate(&value)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let data = &value["data"];
+        assert_eq!(data["readiness"], "ready");
+        assert_eq!(data["install_needed"], false);
+        assert_eq!(data["local_asr_model"]["status"], "managed_current");
+        for action in data["actions"].as_array().ok_or("actions missing")? {
+            assert_eq!(action["state"], "current", "{action}");
+        }
+        for dependency in data["dependencies"].as_array().ok_or("deps missing")? {
+            assert_eq!(dependency["status"], "available", "{dependency}");
+        }
+        Ok(())
+    }
+
+    /// P13 PR 4: observed state is ignored by acceptance, but any change to
+    /// the plan's intent in the saved file is still refused.
+    #[tokio::test]
+    async fn acceptance_still_refuses_a_changed_intent_beside_observed_state()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let original = missing_tools_plan().await?;
+        let digest = original
+            .authority
+            .digest
+            .clone()
+            .ok_or_else(|| std::io::Error::other("qualified plan omitted its digest"))?;
+        let value = plan_json(&original)?;
+
+        // A saved plan whose observed members differ is still the same plan.
+        let mut observed = value.clone();
+        observed["data"]["readiness"] = serde_json::json!("ready");
+        observed["data"]["install_needed"] = serde_json::json!(false);
+        observed["data"]["actions"][0]["state"] = serde_json::json!("current");
+        let saved: SavedSetupPlan = serde_json::from_value(observed)?;
+        assert_eq!(original.validate_acceptance(&saved, &digest), Ok(()));
+
+        // A saved plan whose reviewed artifact differs is refused.
+        let mut tampered = value;
+        tampered["data"]["actions"][0]["version"] = serde_json::json!("n0.0.0-unreviewed");
+        let saved: SavedSetupPlan = serde_json::from_value(tampered)?;
+        assert_eq!(
+            original
+                .validate_acceptance(&saved, &digest)
+                .map_err(|error| error.failure_code()),
+            Err(FailureCode::InvalidArgument)
+        );
         Ok(())
     }
 

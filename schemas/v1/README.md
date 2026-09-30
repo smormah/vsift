@@ -11,7 +11,19 @@ These files are the machine-readable public v1 boundary:
   `local_asr_model` fields are unchanged;
 - `setup-plan.schema.json` — current read-only reviewed-catalogue plan and
   typed managed-unavailable states; a digest never authorizes installation by
-  itself;
+  itself. Its availability for an accepted target is `catalogue_accepted` (renamed in
+  place from `catalogue_accepted_install_pending` by P13 PR 4, before publication).
+  Beside the digested intent it carries the observed state, which acceptance ignores:
+  `readiness`, dependency and model statuses (`managed_current`), each action's
+  `state` (`pending`, `current`) and `install_needed` (P13 PR 4);
+- `setup-install.schema.json` — the `data` of a `setup.install` result (P13 PR 4):
+  the catalogue revision, the source (`publisher` or `artifact_directory`) and every
+  component of the accepted plan with its `status` (`activated`, `already_current`,
+  `failed`), a failure's `step`, typed `reason`, `failure_code` and `smoke_check`, and
+  what cleanup did with its stage. A failed install carries the same object as data
+  beside its error (examples `setup-install.json` and `setup-install.failed.json`).
+  The setup-check `lookup` gains `managed_version` and its remediation's
+  `managed_install` takes the plan's availability values in the same change;
 - `setup-plan-unqualified.schema.json` — historical P06 check-first response
   before catalogue acceptance, retained for v1 compatibility evidence;
 - `operation-response.schema.json` — terminal result for new operations;

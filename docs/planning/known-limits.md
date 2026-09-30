@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-09-30 (P13 PR 4: managed installation; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -52,7 +52,7 @@ Each entry has these fields:
 | [L-003](#l-003) | A forged diagnostics line that continues the real numbering (SEC-17) | security | low | unscheduled | none | accepted residual |
 | [L-004](#l-004) | Native decoders and the recognizer are not sandboxed on the desktop | security | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-005](#l-005) | Private Windows folders get their DACL just after creation, not atomically | security | low | unscheduled | none | accepted residual |
-| [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents | security | low | unscheduled | none | accepted residual |
+| [L-006](#l-006) | The media-tool check record trusts file identity, not executable contents, for tools VSift does not manage | security | low | unscheduled | none | accepted residual |
 | [L-007](#l-007) | Evidence can carry instructions; agents can leak delivered paths | security | medium | unscheduled | [#222](https://github.com/smormah/vsift/issues/222) | accepted residual |
 | [L-008](#l-008) | OS-crash durability is qualified only on Ubuntu 24.04 with local ext4 (FS-01) | integrity/durability | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-009](#l-009) | Cleanup and erasure leave some work to the user | integrity/durability | low | unscheduled | none | accepted residual |
@@ -82,7 +82,7 @@ Each entry has these fields:
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | No native packages, npm launcher, SBOM, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-037](#l-037) | Managed dependency installation is parked | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-037](#l-037) | Managed installation installs, but its lifecycle commands are still reserved, and the real install awaits its hosted evidence | platform/distribution | medium | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -127,8 +127,10 @@ Each entry has these fields:
 | [L-084](#l-084) | GPT-6-Luna is below the compact-tier line | process/CI | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-085](#l-085) | The compact tier is below its 90% task-success target (82% on both clients) | contract/UX | high | maintainer, before P14 | [#218](https://github.com/smormah/vsift/issues/218)-[#222](https://github.com/smormah/vsift/issues/222), [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
 | [L-086](#l-086) | `vsift-contract` embeds the skill's handoff schema from outside its crate folder, so it cannot be packaged for crates.io as it is | platform/distribution | low | unscheduled (before any crates.io publication, R1 or later) | none | deferred |
+| [L-087](#l-087) | A managed version is rehashed each time a command resolves it | performance | low | unscheduled | none | monitoring |
+| [L-088](#l-088) | Proxy authentication in an HTTPS tunnel is recognised by a dependency's error text | process/CI | low | unscheduled | none | monitoring |
 
-Counts: 4 high, 23 medium, 53 low (80 entries).
+Counts: 3 high, 24 medium, 55 low (82 entries).
 
 ## Security
 
@@ -263,22 +265,29 @@ Counts: 4 high, 23 medium, 53 low (80 entries).
 
 ### L-006
 
-**The media-tool check record trusts file identity, not executable contents.**
+**The media-tool check record trusts file identity, not executable contents, for tools VSift does not manage.**
 
 - **What:** a passed FFmpeg/FFprobe (and local-ASR) check is remembered for seven days,
-  keyed to the executables' canonical paths and on-disk identity. Executable contents
-  are not hashed, so a same-user process that rewrites a tool in place while keeping
-  size and timestamps is not detected.
+  keyed to the executables' canonical paths and on-disk identity. For a configured or
+  `PATH` tool, executable contents are not hashed, so a same-user process that rewrites
+  it in place while keeping size and timestamps is not detected. Managed tools are not
+  affected since P13 PR 4: a managed version is used only after every file matches its
+  manifest's size and SHA-256 and the selection names the manifest's SHA-256, on every
+  command that resolves it, and a changed version is never run.
 - **Evidence:** [threat model](security-threat-model.md) "Process isolation profile"
   (SEC-02, P07); [ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md)
-  section 9.
-- **Impact:** outside the desktop threat model; a tampered tool could produce wrong
-  output that VSift then validates only structurally.
-- **Why:** hashing every tool before every media stage is costly; the record is an
-  optimisation, never an authority.
+  section 9; for managed tools `vsift/tests/engine_managed_lookup.rs`
+  (`a_changed_managed_version_is_not_used`) and the
+  [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 4 note.
+- **Impact:** outside the desktop threat model; a tampered bring-your-own tool could
+  produce wrong output that VSift then validates only structurally.
+- **Why:** hashing a user's tools before every media stage is costly and their bytes
+  have no reviewed digest to compare with; the record is an optimisation, never an
+  authority.
 - **Mitigation:** strict private record (4 KiB, versioned); any defect reads as
-  "unverified". Managed installs (P13) will pin tool digests.
-- **Next step:** P13 managed identity for managed tools.
+  "unverified". Managed installation (Ubuntu 24.04 x86-64) identifies tools by digest.
+- **Next step:** none planned for bring-your-own tools.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
 
@@ -772,6 +781,28 @@ Counts: 4 high, 23 medium, 53 low (80 entries).
   workspace per worker, or an external queue that schedules heavy work.
 - **Next step:** none planned for R0; R1 P19 (industrial worker plane).
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
+  **Review:** pending.
+
+### L-087
+
+**A managed version is rehashed each time a command resolves it.**
+
+- **What:** every command that uses a managed tool opens its version and checks every
+  file's SHA-256 before anything runs: about 232 MB for FFmpeg and FFprobe (hashed once
+  for both) and 148 MB for the model. With SHA extensions that is roughly 0.1 to 0.3 s
+  per command; without them it can approach a second.
+- **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 4 note; `vsift/src/managed.rs`. Not yet measured: the `P13 managed smoke`
+  workflow's managed-install job prints `L-087` lines timing a warm `setup check` and
+  a first and a warm `frame get` against the managed tools.
+- **Impact:** evidence commands on a managed install start a little later.
+- **Why:** identifying managed tools by digest on every use is what closes L-006 for
+  them; a cache keyed to file identity would reopen it.
+- **Mitigation:** each version is hashed once per open, after its use lock is held,
+  and one command opens each component at most once.
+- **Next step:** read the `L-087` timings of the first managed-install run and decide
+  whether a cache is needed; measure again in P14's release qualification.
+- **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
   **Review:** pending.
 
 ## Evidence contract and user experience
@@ -1462,31 +1493,34 @@ Counts: 4 high, 23 medium, 53 low (80 entries).
 
 ### L-037
 
-**Managed dependency installation is parked.**
+**Managed installation installs, but its lifecycle commands are still reserved, and the real install awaits its hosted evidence.**
 
-- **What:** `setup install/repair/list/remove/rollback` return `COMMAND_NOT_IMPLEMENTED`;
-  `setup plan` is read-only. The only accepted catalogue is Ubuntu 24.04 x86-64; Windows
-  x86-64 and macOS return manual guidance. The Windows FFmpeg candidate is a daily build
-  (upstream keeps only the last 14 daily builds), and its LGPL-3.0 notices are not yet
-  reconciled.
-- **Evidence:** [ADR 0015](../decisions/0015-r0-delivery-replan.md);
-  [CLI contract](../contracts/cli-v1.md) `setup plan`;
-  [P06 Windows candidate](p06-windows-artifact-candidate.md) "Remaining gates";
-  the resume order in the [2026-09-09 to 23 delivery log](../history/2026-09-09-to-23-delivery-log.md).
-- **Impact:** users install FFmpeg and whisper.cpp themselves; R-03 requires at least one
-  qualified managed target.
-- **Why:** moved from P06 to P13 by ADR 0015.
-- **Mitigation:** detection, bring-your-own selection, verification and typed guidance.
-- **Progress (2026-09-30, P13 PR 3):** resume steps 1 and 2 are implemented as an
-  internal capability: the compatibility smoke runs a staged, unactivated runtime's
-  executables under the digest-bound policy, and a failed smoke discards the stage or,
-  when its ownership or content cannot be proved, keeps it and reports why (ADR 0023
-  implementation note; D-06 in [verification](verification.md)). No command uses it
-  yet, so the limit is unchanged for users.
-- **Next step:** P13 PRs 4-7 (transaction and `setup install`, lifecycle commands,
-  cleanup and sweep, kill and power-loss tests), on Ubuntu 24.04 x86-64 only; Windows
-  and macOS keep manual guidance
-  ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
+- **What:** since P13 PR 4, `setup install` applies an accepted plan on Ubuntu 24.04
+  x86-64: it downloads the three reviewed publisher artifacts (or imports them with
+  `--artifact-dir`), verifies them by size and SHA-256, smokes and activates each, and
+  every command resolves tools through the managed tier. `setup list`, `rollback`,
+  `remove` and `repair` still return `COMMAND_NOT_IMPLEMENTED`; there is no bounded
+  version cleanup and no sweep of stages left by an interrupted run (an interrupted run
+  discards its own stage, so only a killed process leaves one); kill and power-loss
+  qualification of the managed store is not done. Windows x86-64 and macOS have no
+  reviewed catalogue and keep manual guidance: the Windows FFmpeg candidate is a daily
+  build (upstream keeps only the last 14) with unreconciled LGPL-3.0 notices, and no
+  macOS candidate is reviewed.
+- **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 3 and PR 4 notes; [CLI contract](../contracts/cli-v1.md) "P13 `setup install`";
+  [verification](verification.md) D-02, D-03, D-06, D-07;
+  [P06 Windows candidate](p06-windows-artifact-candidate.md) "Remaining gates".
+- **Impact:** on Ubuntu 24.04 a user can install the managed tools but cannot yet list,
+  roll back or remove versions through VSift; every version installed stays on disk.
+  Elsewhere users install FFmpeg and whisper.cpp themselves.
+- **Why:** P13 delivers the managed lifecycle in steps (PRs 4, 6 and 7); ADR 0023
+  decision E limits it to the one reviewed target.
+- **Mitigation:** each component activates atomically and a rerun continues; an update
+  never touches a version in use; the manual path is typed on every target. The real
+  plan, install, check and rerun run on demand on a hosted runner (`P13 managed smoke`,
+  job `managed-install`); that evidence is recorded after the pull request merges.
+- **Next step:** P13 PR 6 (`setup list/rollback/remove/repair`, cleanup and the
+  stale-stage sweep) and PR 7 (kill and power-loss tests, the P13 install E2E stage).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -2153,6 +2187,28 @@ raw.**
 - **Next step:** R1 (P15-P20) and later scope ADRs.
 - **Owner:** R1 or later. **Issue:** [#107](https://github.com/smormah/vsift/issues/107),
   [#108](https://github.com/smormah/vsift/issues/108). **Status:** accepted residual.
+  **Review:** pending.
+
+### L-088
+
+**Proxy authentication in an HTTPS tunnel is recognised by a dependency's error text.**
+
+- **What:** when a proxy answers a `CONNECT` with `407`, hyper-util reports a private
+  `TunnelError::ProxyAuthRequired` that it does not export, so `setup install` tells
+  `proxy_auth` from other connection failures by the end of that error's text (`proxy
+  authorization required`).
+- **Evidence:** `vsift-infrastructure/src/publisher_artifact_transfer.rs`
+  (`PROXY_AUTH_REQUIRED`); the D-07 proxy test in
+  `vsift-infrastructure/tests/p13_install_transaction.rs`.
+- **Impact:** if a dependency update changed that text, a proxy that wants credentials
+  would be reported as `offline` rather than `proxy_auth`; the download still fails
+  safely with no credential shown.
+- **Why:** no typed way to reach the tunnel's status exists in the pinned reqwest and
+  hyper-util.
+- **Mitigation:** the D-07 test runs on every CI OS and fails if the text changes; a
+  plain `407` response is recognised by its status.
+- **Next step:** use a typed error if hyper-util exports one.
+- **Owner:** unscheduled. **Issue:** none. **Status:** monitoring.
   **Review:** pending.
 
 ## Review workflow

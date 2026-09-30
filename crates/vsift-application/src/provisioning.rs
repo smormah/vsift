@@ -186,7 +186,8 @@ pub struct AcceptedManagedCatalogue {
 /// Why managed actions are or are not available in a setup plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagedPlanAvailability {
-    /// This target has an accepted, unexpired catalogue; install is still reserved.
+    /// This target has an accepted, unexpired catalogue whose actions
+    /// `setup install` applies once the plan is accepted.
     Qualified,
     /// No changes are required by the current read-only observations.
     NotRequired,
@@ -203,7 +204,7 @@ impl ManagedPlanAvailability {
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
-            Self::Qualified => "catalogue_accepted_install_pending",
+            Self::Qualified => "catalogue_accepted",
             Self::NotRequired => "not_required",
             Self::TargetUnavailable => "unavailable_target",
             Self::CatalogueExpired => "unavailable_catalogue_expired",
@@ -292,6 +293,66 @@ pub struct ManagedSetupPlan {
     pub digest: Option<String>,
     selection_state: SetupSelectionState,
     compatibility: Option<ReviewedCompatibilityPolicy>,
+}
+
+/// Which model a command would use now.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ObservedModel {
+    /// The user's configured model file.
+    Configured,
+    /// The managed model `setup install` selected.
+    Managed,
+    /// No model at all.
+    Missing,
+}
+
+/// What the machine shows now, beside a plan's intent (P13).
+///
+/// A plan's digest binds its intent: the components, versions, sources,
+/// sizes and digests the catalogue fixes, and the observations of the tools
+/// outside `VSift`'s managed store that decide which components are needed.
+/// Installing a managed component changes none of that, so an accepted plan
+/// stays acceptable while `setup install` applies it and a rerun continues.
+/// This observation is what commands would use now, managed tier included:
+/// it is shown with the plan and never digested.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManagedPlanObservation {
+    /// Aggregate readiness as commands resolve the tools now.
+    pub readiness: RuntimeReadiness,
+    /// Each dependency as commands resolve it now, in stable order.
+    pub dependencies: Vec<DependencyStatus>,
+    /// The model a command would use.
+    pub model: ObservedModel,
+    /// The plan's components whose reviewed version is selected now.
+    pub current: Vec<ManagedComponent>,
+}
+
+impl ManagedPlanObservation {
+    /// The observation of a machine with no managed tier: what the plan's
+    /// own probes saw.
+    #[must_use]
+    pub fn without_managed_tier(plan: &ManagedSetupPlan) -> Self {
+        Self {
+            readiness: plan.readiness,
+            dependencies: plan
+                .dependencies
+                .iter()
+                .map(|(status, _)| status.clone())
+                .collect(),
+            model: if plan.selection_state.model.is_some() {
+                ObservedModel::Configured
+            } else {
+                ObservedModel::Missing
+            },
+            current: Vec::new(),
+        }
+    }
+
+    /// Whether `component`'s reviewed version is selected now.
+    #[must_use]
+    pub fn is_current(&self, component: ManagedComponent) -> bool {
+        self.current.contains(&component)
+    }
 }
 
 /// Explicit plan acceptance failed.

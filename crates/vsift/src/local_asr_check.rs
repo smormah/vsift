@@ -39,14 +39,16 @@ use crate::{
 pub const DEFAULT_LOCAL_ASR_CHECK_BUDGET: Duration = Duration::from_secs(60);
 
 impl Engine {
-    /// Reports the registered model and the local-ASR verification for the
-    /// executables `setup check` selected (per call, configured, then `PATH`).
+    /// Reports the model (`registered`: configured, else the managed one) and
+    /// the local-ASR verification for the executables `setup check` selected
+    /// (per call, configured, managed, then `PATH`).
     ///
     /// With a host-supplied recognizer the model is the one it reports and no
     /// whisper.cpp is resolved, exactly as a retranscription would.
     pub(crate) async fn check_local_asr(
         &self,
         selections: &ExecutableSelections,
+        registered: Option<&std::path::Path>,
         budget: Duration,
     ) -> Result<LocalAsrSetupStatus, EngineError> {
         if let Some(host) = self.host_asr() {
@@ -88,15 +90,14 @@ impl Engine {
             });
         }
 
-        let registered = self.user_configuration()?.read_model()?;
-        let model = match &registered {
+        let model = match registered {
             None => LocalAsrModelStatus::NotSelected,
             Some(path) => identify_whisper_model_file(path)
                 .map_err(|_| EngineError::ReviewedPolicyInvalid)?
                 .into(),
         };
         let verification = self
-            .whisper_local_asr_outcome(selections, registered.as_deref(), model, budget)
+            .whisper_local_asr_outcome(selections, registered, model, budget)
             .await?;
         Ok(LocalAsrSetupStatus {
             model,

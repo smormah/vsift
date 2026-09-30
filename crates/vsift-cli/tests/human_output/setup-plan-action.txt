@@ -3,7 +3,7 @@ Profile: desktop
 Readiness: blocked
 Target: ubuntu_24_04_x86_64
 Verification: executable_probe_and_reviewed_catalogue
-Managed installation: catalogue_accepted_install_pending
+Managed installation: catalogue_accepted
 Catalogue: 2026-09-20.1 (no new plans after 2026-12-31T00:00:00Z)
 Plan digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
@@ -17,7 +17,7 @@ Local ASR model: missing, manual_selection_required (needs user authority)
   Next: For local ASR, configure trusted model weights with setup configure-model --file <absolute-path>. A supplied transcript can skip local ASR.
 
 Reviewed managed actions:
-  install-whisper_model: whisper_model base-q5_1 from ggml-org
+  install-whisper_model: whisper_model base-q5_1 from ggml-org [pending]
     Download (59707625 bytes, sha256 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb):
     https://example.invalid/ggml-base-q5_1.bin
     Licence: MIT

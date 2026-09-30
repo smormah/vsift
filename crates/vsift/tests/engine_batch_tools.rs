@@ -33,7 +33,7 @@ use vsift::{
     AdmissionBudget, AdmissionWait, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, BatchEvent, BatchLineEnd, Cancellation, ChunkTime, CueText,
     DurabilityRequirement, Engine, EngineConfig, EnginePorts, FailureClass, FailureCode,
-    HostIsolation, JobId, LanguageTag, LocalAsrVerification, LocalAsrVerifier,
+    HostIsolation, JobId, LanguageTag, LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation,
     MediaToolVerification, MediaToolVerifier, PlannedChunk, ProgressObserver, ProviderChunkOutput,
     ProviderSegment, ProviderToken, ProviderTokenKind, RecognizerIdentity, SessionRootLocation,
     Sha256Hex, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation,
@@ -290,6 +290,7 @@ async fn a_mixed_batch_reports_independent_outcomes() -> TestResult {
         EngineConfig {
             session_root: SessionRootLocation::Explicit(layout.0.join("workspace")),
             user_configuration: UserConfigurationLocation::Explicit(layout.0.join("config")),
+            managed_root: ManagedRootLocation::Explicit(layout.0.join("managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::system()

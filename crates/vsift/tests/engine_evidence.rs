@@ -34,9 +34,9 @@ use vsift::{
     AudioClipRequest, Cancellation, Clock, ClockError, CropEvidenceRequest, CropRectangle, Engine,
     EngineConfig, EngineError, EnginePorts, EvidenceResults, FailureCode, FrameBurstRequest,
     FrameGetRequest, FrameNeighboursRequest, FrameSelection, FrameTarget, HostIsolation,
-    IdentifierGenerationError, IdentifierSource, IngestRequest, MediaToolVerification,
-    MediaToolVerifier, OperationId, RuntimeDependency, SessionId, SessionRootLocation,
-    SessionStorageError, SourceCheck, SourceId, UserConfigurationLocation,
+    IdentifierGenerationError, IdentifierSource, IngestRequest, ManagedRootLocation,
+    MediaToolVerification, MediaToolVerifier, OperationId, RuntimeDependency, SessionId,
+    SessionRootLocation, SessionStorageError, SourceCheck, SourceId, UserConfigurationLocation,
 };
 use vsift_application::{
     AudioExtractor, EvidenceBudget, EvidenceCall, EvidenceControl, EvidenceExtraction,
@@ -283,6 +283,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(root.path("sessions")),
                 user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::new(
@@ -814,6 +815,7 @@ async fn real_session(root: &OwnedRoot, source: &Path) -> Built<(Engine, Session
         EngineConfig {
             session_root: SessionRootLocation::Explicit(root.path("sessions")),
             user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+            managed_root: ManagedRootLocation::Explicit(root.path("managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::new(

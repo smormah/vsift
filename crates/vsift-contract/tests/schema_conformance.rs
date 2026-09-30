@@ -10,7 +10,8 @@ use std::{fs, io, path::PathBuf};
 use serde_json::Value;
 use vsift_application::{
     LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus,
-    RuntimeDiagnosis, SetupProfile, SetupSelectionState, plan_managed_setup,
+    ManagedPlanAvailability, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    plan_managed_setup,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
@@ -78,7 +79,15 @@ fn unavailable_plan() -> Result<OperationResponse<Value>, serde_json::Error> {
         1_800_000_000,
         None,
     );
-    OperationResponse::complete("setup.plan", &SetupPlanResponse::new(&plan))
+    OperationResponse::complete("setup.plan", &present(&plan))
+}
+
+/// A plan as `setup plan` presents it on a machine with no managed tier.
+fn present(plan: &vsift_application::ManagedSetupPlan) -> SetupPlanResponse {
+    SetupPlanResponse::new(
+        plan,
+        &vsift_application::ManagedPlanObservation::without_managed_tier(plan),
+    )
 }
 
 fn status(state: SessionState) -> StatusData {
@@ -97,7 +106,7 @@ fn status(state: SessionState) -> StatusData {
 #[test]
 fn failure_envelope_matches_the_frozen_example() -> TestResult {
     let response = serde_json::to_value(OperationResponse::failure(
-        "setup.install",
+        "setup.repair",
         FailureCode::CommandNotImplemented,
     ))?;
 
@@ -109,7 +118,7 @@ fn failure_envelope_matches_the_frozen_example() -> TestResult {
 #[test]
 fn terminal_event_matches_the_frozen_example() -> TestResult {
     let event = serde_json::to_value(TerminalEventResponse::new(OperationResponse::failure(
-        "setup.install",
+        "setup.repair",
         FailureCode::CommandNotImplemented,
     )))?;
 
@@ -148,6 +157,7 @@ fn blocked_setup_check_matches_the_frozen_example() -> TestResult {
         &diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         SetupProfile::Desktop,
         |_| DependencyLookup::FilteredPath,
+        ManagedPlanAvailability::Qualified,
         &NOTHING_REGISTERED,
     ))?;
 
@@ -169,6 +179,7 @@ fn ready_setup_check_reports_sanitized_detail_and_lookup_provenance() -> TestRes
             RuntimeDependency::Ffprobe => DependencyLookup::ConfiguredUserPath,
             RuntimeDependency::Whisper => DependencyLookup::FilteredPath,
         },
+        ManagedPlanAvailability::Qualified,
         &NOTHING_REGISTERED,
     ))?;
 
@@ -210,7 +221,7 @@ fn unavailable_setup_plan_matches_the_frozen_example() -> TestResult {
 fn saved_plan_round_trips_and_is_accepted_only_unchanged() -> TestResult {
     let bytes = serde_json::to_vec(&unavailable_plan()?)?;
     let saved: SavedSetupPlan = serde_json::from_slice(&bytes)?;
-    let current = SetupPlanResponse::new(&plan_managed_setup(
+    let current = present(&plan_managed_setup(
         SetupProfile::Desktop,
         diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         ManagedTarget::WindowsX86_64,
@@ -218,7 +229,7 @@ fn saved_plan_round_trips_and_is_accepted_only_unchanged() -> TestResult {
         1_800_000_000,
         None,
     ));
-    let changed = SetupPlanResponse::new(&plan_managed_setup(
+    let changed = present(&plan_managed_setup(
         SetupProfile::Worker,
         diagnosis(&DependencyState::Missing, RuntimeReadiness::Blocked),
         ManagedTarget::WindowsX86_64,

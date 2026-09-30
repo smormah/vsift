@@ -10,6 +10,7 @@ mod asr;
 mod clock;
 mod evidence;
 mod identifiers;
+mod install;
 mod job;
 mod local_asr_setup;
 mod provisioning;
@@ -38,6 +39,11 @@ pub use evidence::{
     verify_evidence_record,
 };
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
+pub use install::{
+    ActivationFailure, ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
+    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedComponentInstaller,
+    ManagedInstallReport, StageFailure, install_managed_components,
+};
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
     CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner, JobRecord,
@@ -62,12 +68,12 @@ pub use local_asr_setup::{
 pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmoke, CompatibilitySmokeCheck,
     CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CompatibilitySmokeVerdict,
-    ManagedPlanAvailability, ManagedSetupAction, ManagedSetupPlan, PlanAcceptanceError,
-    ReviewedArchiveLimits, ReviewedArchiveLink, ReviewedArchiveSelection,
-    ReviewedCompatibilityPolicy, ReviewedManagedFile, ReviewedRuntimeCopy,
-    SetupDependencyDisposition, SetupModelDisposition, SetupProfile, SetupSelectionState,
-    SmokeStageOutcome, StageDisposal, StageRetentionReason, StagedManagedComponent,
-    plan_managed_setup, smoke_before_activation,
+    ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction, ManagedSetupPlan,
+    ObservedModel, PlanAcceptanceError, ReviewedArchiveLimits, ReviewedArchiveLink,
+    ReviewedArchiveSelection, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+    ReviewedRuntimeCopy, SetupDependencyDisposition, SetupModelDisposition, SetupProfile,
+    SetupSelectionState, SmokeStageOutcome, StageDisposal, StageRetentionReason,
+    StagedManagedComponent, plan_managed_setup, smoke_before_activation,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

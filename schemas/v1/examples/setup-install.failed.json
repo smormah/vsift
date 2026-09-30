@@ -1,0 +1,63 @@
+{
+  "command": "setup.install",
+  "coverage": null,
+  "data": {
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
+    "components": [
+      {
+        "component": "ffmpeg_ffprobe",
+        "failure_code": null,
+        "reason": null,
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "already_current",
+        "step": null,
+        "version": "n9.0.1-11-ge47273f4d9-20260831"
+      },
+      {
+        "component": "whisper_cli",
+        "failure_code": "DOWNLOAD_FAILED",
+        "reason": "offline",
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "failed",
+        "step": "download",
+        "version": "whisper.cpp-v1.9.2-ubuntu-x64"
+      },
+      {
+        "component": "whisper_model",
+        "failure_code": null,
+        "reason": "blocked",
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": null,
+        "status": "failed",
+        "step": null,
+        "version": "whisper-base-multilingual-80da2d8"
+      }
+    ],
+    "next_step": "Components reported activated or already_current are installed. Fix the failure the error names, then run the same setup install again: it continues from the first component not yet installed.",
+    "source": "publisher"
+  },
+  "error": {
+    "affected_ids": [],
+    "code": "DOWNLOAD_FAILED",
+    "message": "A managed download from the reviewed publisher did not complete.",
+    "remediation": [
+      {
+        "command": null,
+        "required_authority": "none",
+        "summary": "The download of whisper_cli did not complete (offline); nothing of it was installed. Check the network, TLS inspection or proxy, then run the same setup install again: it restarts that download from the first byte and keeps the components already installed. Without network access, save the plan's artifact files in one folder and pass it with --artifact-dir. Or install the tool yourself and register it with setup configure (the model with setup configure-model), then run setup check."
+      }
+    ],
+    "retry_after_ms": null,
+    "retryable": false
+  },
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "failed",
+  "warnings": []
+}

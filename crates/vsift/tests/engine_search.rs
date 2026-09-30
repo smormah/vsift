@@ -30,9 +30,10 @@ use std::{
 use vsift::{
     Clock, ClockError, CoverageBasis, CursorError, DurabilityRequirement, Engine, EngineConfig,
     EngineError, EnginePorts, FailureCode, HostIsolation, IdentifierGenerationError,
-    IdentifierSource, MediaTime, OperationId, SearchMatch, SearchQueryRejection, SearchRange,
-    SearchRequest, SessionId, SessionRootLocation, StorageGeneration, TranscriptOffset,
-    TranscriptQuery, TranscriptQueryError, TranscriptRevision, UserConfigurationLocation,
+    IdentifierSource, ManagedRootLocation, MediaTime, OperationId, SearchMatch,
+    SearchQueryRejection, SearchRange, SearchRequest, SessionId, SessionRootLocation,
+    StorageGeneration, TranscriptOffset, TranscriptQuery, TranscriptQueryError, TranscriptRevision,
+    UserConfigurationLocation,
 };
 use vsift_application::{
     ForegroundSessionPort, ImportedRevisionRequest, InitializeSessionStorage,
@@ -143,6 +144,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(root.path("sessions")),
                 user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::new(
@@ -255,6 +257,7 @@ async fn queries_are_rejected_before_any_read() -> TestResult {
         EngineConfig {
             session_root: SessionRootLocation::Explicit(root.path("absent")),
             user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+            managed_root: ManagedRootLocation::Explicit(root.path("managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::new(

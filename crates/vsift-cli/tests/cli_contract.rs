@@ -21,6 +21,7 @@ fn with_config_base<'a>(command: &'a mut Command, base: &Path) -> &'a mut Comman
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
+        .env("XDG_DATA_HOME", base.join("data"))
         .env("HOME", base)
 }
 
@@ -237,9 +238,17 @@ fn invalid_explicit_selection_does_not_fall_back_to_path() -> Result<(), Box<dyn
         value["dependencies"][2]["remediation"]["reason"],
         "unhealthy"
     );
+    // Whether managed installation could supply the tool on this host.
+    let expected = if vsift_infrastructure::detect_managed_target()
+        == vsift_domain::ManagedTarget::Ubuntu2404X86_64
+    {
+        "catalogue_accepted"
+    } else {
+        "unavailable_target"
+    };
     assert_eq!(
         value["dependencies"][2]["remediation"]["managed_install"],
-        "unavailable_unqualified"
+        expected
     );
     Ok(())
 }
@@ -437,8 +446,7 @@ fn reviewed_setup_plan_checks_first_and_never_installs() -> Result<(), Box<dyn s
 }
 
 #[test]
-fn reserved_install_remains_unavailable_without_mutation() -> Result<(), Box<dyn std::error::Error>>
-{
+fn install_refuses_an_unreadable_plan_without_mutation() -> Result<(), Box<dyn std::error::Error>> {
     let output = run(&[
         "setup",
         "install",
@@ -449,9 +457,9 @@ fn reserved_install_remains_unavailable_without_mutation() -> Result<(), Box<dyn
         "--json",
     ])?;
     let value = parse_stdout(&output)?;
-    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.status.code(), Some(7));
     assert_eq!(value["command"], "setup.install");
-    assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
+    assert_eq!(value["error"]["code"], "STORAGE_IO");
     assert_eq!(value["data"], Value::Null);
     Ok(())
 }
@@ -508,10 +516,7 @@ fn headless_plan_jsonl_has_one_terminal_and_no_install_authority()
 
 fn assert_planning_target(data: &Value, expected_ubuntu_actions: usize) {
     if data["target"] == "ubuntu_24_04_x86_64" {
-        assert_eq!(
-            data["managed_install"],
-            "catalogue_accepted_install_pending"
-        );
+        assert_eq!(data["managed_install"], "catalogue_accepted");
         assert_eq!(
             data["actions"].as_array().map(Vec::len),
             Some(expected_ubuntu_actions)
@@ -691,11 +696,11 @@ fn saved_plan_acceptance_is_revalidated_without_mutation() -> Result<(), Box<dyn
         assert!(planned.status.success());
         let plan_file = plans.join("plan.json");
         std::fs::write(&plan_file, &planned.stdout)?;
-        let plan = parse_stdout(&planned)?;
-        let qualified = plan["data"]["target"] == "ubuntu_24_04_x86_64";
-        let digest = plan["data"]["plan_digest"]
-            .as_str()
-            .map_or_else(|| "0".repeat(64), str::to_owned);
+        assert_eq!(parse_stdout(&planned)?["status"], "complete");
+        // A qualified host's real digest would start a real install (P13 PR
+        // 4), which this test must never do; it proves only refusals, so it
+        // accepts with a digest that is not the plan's.
+        let digest = "0".repeat(64);
         let install = |accept: &str| -> Result<Value, Box<dyn std::error::Error>> {
             let output = with_config_base(&mut Command::cargo_bin("vsift")?, &base)
                 .args(["setup", "install", "--plan"])
@@ -708,17 +713,10 @@ fn saved_plan_acceptance_is_revalidated_without_mutation() -> Result<(), Box<dyn
             parse_stdout(&output)
         };
 
-        // An unqualified target has no digest to accept; a qualified one is
-        // accepted but installation stays reserved. Neither mutates state.
+        // An unqualified target has no plan to accept; on a qualified one the
+        // digest does not accept the plan. Neither mutates state.
         let unchanged = install(&digest)?;
-        assert_eq!(
-            unchanged["error"]["code"],
-            if qualified {
-                "COMMAND_NOT_IMPLEMENTED"
-            } else {
-                "INVALID_ARGUMENT"
-            }
-        );
+        assert_eq!(unchanged["error"]["code"], "INVALID_ARGUMENT");
         assert!(!config_root(&base).exists());
 
         let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();

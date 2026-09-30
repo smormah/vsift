@@ -158,12 +158,17 @@ pub(crate) struct SetupPlanArguments {
 /// Explicit installation-plan acceptance.
 #[derive(Args, Debug)]
 pub(crate) struct SetupInstallArguments {
-    /// Path to the previously generated plan.
+    /// Path to the saved `setup plan --json` result to apply.
     #[arg(long)]
     pub plan: PathBuf,
-    /// Digest printed by the unchanged plan.
+    /// The saved plan's `plan_digest`, accepting exactly that plan.
     #[arg(long)]
     pub accept_plan: String,
+    /// Install offline from this absolute folder, which holds each
+    /// artifact of the plan under the file name its source URL ends with;
+    /// the bytes are verified exactly as a download is.
+    #[arg(long)]
+    pub artifact_dir: Option<PathBuf>,
 }
 
 /// Repair plan input; application remains a later packet.

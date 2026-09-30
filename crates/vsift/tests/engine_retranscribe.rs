@@ -33,10 +33,10 @@ use vsift::{
     AsrDecodingProfile, AsrFailure, AsrFailureReason, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrStage, Cancellation, ChunkTime, CueText, Engine, EngineConfig,
     EngineError, EnginePorts, FailureCode, HostIsolation, IngestRequest, LanguageTag,
-    LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier, MediaToolVerification,
-    MediaToolVerifier, PlannedChunk, ProgressObserver, ProviderChunkOutput, ProviderSegment,
-    ProviderToken, ProviderTokenKind, RecognizerIdentity, RetranscribeRange, RetranscribeRequest,
-    RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
+    LocalAsrVerification, LocalAsrVerificationFailure, LocalAsrVerifier, ManagedRootLocation,
+    MediaToolVerification, MediaToolVerifier, PlannedChunk, ProgressObserver, ProviderChunkOutput,
+    ProviderSegment, ProviderToken, ProviderTokenKind, RecognizerIdentity, RetranscribeRange,
+    RetranscribeRequest, RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
     SpeechRecognitionError, SpeechRecognizer, TranscriptQuery, TranscriptWarningKind,
     UserConfigurationLocation,
 };
@@ -244,6 +244,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(self.root.path("sessions")),
                 user_configuration: UserConfigurationLocation::Explicit(self.root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(self.root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             ports,

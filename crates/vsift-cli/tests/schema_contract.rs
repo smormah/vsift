@@ -124,21 +124,23 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         .env("XDG_CONFIG_HOME", &base)
         .env("HOME", &base)
         .output()?;
-    assert_eq!(
-        serde_json::from_slice::<Value>(&setup.stdout)?,
-        load("examples/setup-check.blocked.json")?
-    );
+    // Whether managed installation could supply a missing tool depends on
+    // the host: the frozen example is the Ubuntu 24.04 x86-64 answer.
+    let mut blocked = load("examples/setup-check.blocked.json")?;
+    if vsift_infrastructure::detect_managed_target()
+        != vsift_domain::ManagedTarget::Ubuntu2404X86_64
+    {
+        for dependency in blocked["dependencies"]
+            .as_array_mut()
+            .ok_or_else(|| io::Error::other("example has no dependencies"))?
+        {
+            dependency["remediation"]["managed_install"] = Value::from("unavailable_target");
+        }
+    }
+    assert_eq!(serde_json::from_slice::<Value>(&setup.stdout)?, blocked);
 
     let operation = Command::cargo_bin("vsift")?
-        .args([
-            "setup",
-            "install",
-            "--plan",
-            "missing.json",
-            "--accept-plan",
-            "unknown",
-            "--json",
-        ])
+        .args(["setup", "repair", "--profile", "desktop", "--json"])
         .output()?;
     assert_eq!(
         serde_json::from_slice::<Value>(&operation.stdout)?,
@@ -148,11 +150,9 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     let event = Command::cargo_bin("vsift")?
         .args([
             "setup",
-            "install",
-            "--plan",
-            "missing.json",
-            "--accept-plan",
-            "unknown",
+            "repair",
+            "--profile",
+            "desktop",
             "--events",
             "jsonl",
         ])
@@ -176,10 +176,7 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
     );
     assert_eq!(plan_value["data"]["readiness"], "blocked");
     if plan_value["data"]["target"] == "ubuntu_24_04_x86_64" {
-        assert_eq!(
-            plan_value["data"]["managed_install"],
-            "catalogue_accepted_install_pending"
-        );
+        assert_eq!(plan_value["data"]["managed_install"], "catalogue_accepted");
         assert_eq!(
             plan_value["data"]["actions"].as_array().map(Vec::len),
             Some(3)

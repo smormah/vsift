@@ -36,11 +36,11 @@ use vsift::{
     ChunkTime, Clock, ClockError, CueText, Engine, EngineConfig, EngineError, EnginePorts,
     FailureCode, HostIsolation, IdentifierGenerationError, IdentifierSource, IngestRequest,
     JobCancelOutcome, JobId, JobProgress, JobResumeRequest, JobState, LanguageTag,
-    LocalAsrVerification, LocalAsrVerifier, MediaToolVerification, MediaToolVerifier, OperationId,
-    PlannedChunk, ProgressObserver, ProgressStage, ProviderChunkOutput, ProviderSegment,
-    ProviderToken, ProviderTokenKind, RecognizerIdentity, RetranscribeRange, RetranscribeRequest,
-    RuntimeDependency, SessionId, SessionRootLocation, Sha256Hex, SpeechPcm,
-    SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation,
+    LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation, MediaToolVerification,
+    MediaToolVerifier, OperationId, PlannedChunk, ProgressObserver, ProgressStage,
+    ProviderChunkOutput, ProviderSegment, ProviderToken, ProviderTokenKind, RecognizerIdentity,
+    RetranscribeRange, RetranscribeRequest, RuntimeDependency, SessionId, SessionRootLocation,
+    Sha256Hex, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation,
 };
 use vsift_application::{
     AsrCancellation, CommitGuard, JobRequest, JobSpec, RecognitionScope, RetranscriptionPorts,
@@ -253,6 +253,7 @@ impl Harness {
             EngineConfig {
                 session_root: SessionRootLocation::Explicit(self.root.path("sessions")),
                 user_configuration: UserConfigurationLocation::Explicit(self.root.path("config")),
+                managed_root: ManagedRootLocation::Explicit(self.root.path("managed")),
                 host_isolation: HostIsolation::ProcessOnly,
             },
             EnginePorts::new(Wall, FixedIdentifiers(AtomicU64::new(1)))
@@ -723,6 +724,7 @@ fn whisper_engine(root: &OwnedRoot) -> Built<Engine> {
         EngineConfig {
             session_root: SessionRootLocation::Explicit(root.path("sessions")),
             user_configuration: UserConfigurationLocation::Explicit(root.path("config")),
+            managed_root: ManagedRootLocation::Explicit(root.path("managed")),
             host_isolation: HostIsolation::ProcessOnly,
         },
         EnginePorts::new(Wall, FixedIdentifiers(AtomicU64::new(1))),

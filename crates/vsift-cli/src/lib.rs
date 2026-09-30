@@ -35,20 +35,22 @@ use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
     Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig, EngineError, EnginePorts,
     EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation, IsolationProfile,
-    ProgressObserver, SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
-    UserConfigurationLocation, attest_host_isolation,
+    ManagedRootLocation, PlanAcceptanceError, ProgressObserver, SessionRootError,
+    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, UserConfigurationLocation,
+    attest_host_isolation,
 };
 use vsift_contract::{
-    ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, CANDIDATE_CURSOR_REMEDIATION,
-    CommandName, ConfiguredModelResponse, ConfiguredSelectionResponse,
-    DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
-    ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION,
-    JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
-    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
+    ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
+    CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
+    ConfiguredSelectionResponse, DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream,
+    IDEMPOTENCY_CONFLICT_REMEDIATION, ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION,
+    JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
+    JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
+    MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SUPERSEDED_REMEDIATION, TerminalEventResponse,
-    UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
+    TerminalEventResponse, UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION,
+    UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
     local_asr_verification_summary, media_tool_verification_summary, non_private_folder_summary,
     search_query_rejection_summary, transcript_rejection_summary,
@@ -101,11 +103,12 @@ const fn is_long_running(command: &Command) -> bool {
                 JobCommand::Resume(_) | JobCommand::Run(_) | JobCommand::Batch(_)
             )
         }
-        Command::Setup(_)
-        | Command::Session(_)
-        | Command::Search(_)
-        | Command::Bundle(_)
-        | Command::Handoff(_) => false,
+        // `setup install` downloads, verifies and smokes for minutes; an
+        // interruption cancels it and discards the stage in progress.
+        Command::Setup(arguments) => matches!(arguments.command, Some(SetupCommand::Install(_))),
+        Command::Session(_) | Command::Search(_) | Command::Bundle(_) | Command::Handoff(_) => {
+            false
+        }
     }
 }
 
@@ -128,6 +131,7 @@ fn compose_engine(
                 SessionRootLocation::Explicit,
             ),
             user_configuration: UserConfigurationLocation::PlatformDefault,
+            managed_root: ManagedRootLocation::PlatformDefault,
             host_isolation: isolation,
         },
         ports,
@@ -307,6 +311,7 @@ where
                 setup::present_setup_check(
                     report.diagnosis(),
                     *report.local_asr(),
+                    report.managed_install(),
                     config.profile,
                     mode,
                     |dependency| report.lookup(dependency),
@@ -349,67 +354,17 @@ where
                     });
                 write_session_result(&mut writer, mode, CommandName::SetupPlan, result)
             }
+            Some(SetupCommand::Install(arguments)) if mode == OutputMode::JsonLines => {
+                progress::stream_with_progress(&mut writer, CommandName::SetupInstall, |observer| {
+                    setup::install(&engine, arguments, &cancellation, observer)
+                })
+                .await
+            }
             Some(SetupCommand::Install(arguments)) => {
-                let saved = match setup::read_saved_plan(&arguments.plan) {
-                    Ok(saved) => saved,
-                    Err(FailureCode::StorageIo) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            CommandName::SetupInstall,
-                            FailureCode::CommandNotImplemented,
-                            None,
-                        );
-                    }
-                    Err(code) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            CommandName::SetupInstall,
-                            code,
-                            None,
-                        );
-                    }
-                };
-                let profile = match saved.profile() {
-                    Ok(profile) => ExecutionProfile::from(profile),
-                    Err(code) => {
-                        return write_failure(
-                            &mut writer,
-                            mode,
-                            CommandName::SetupInstall,
-                            code,
-                            None,
-                        );
-                    }
-                };
-                let current = match current_setup_plan(&engine, profile).await {
-                    Ok(current) => current,
-                    Err(failure) => {
-                        return write_command_failure(
-                            &mut writer,
-                            mode,
-                            CommandName::SetupInstall,
-                            failure,
-                        );
-                    }
-                };
-                if let Err(error) = current.validate_acceptance(&saved, &arguments.accept_plan) {
-                    return write_failure(
-                        &mut writer,
-                        mode,
-                        CommandName::SetupInstall,
-                        error.failure_code(),
-                        None,
-                    );
-                }
-                write_failure(
-                    &mut writer,
-                    mode,
-                    CommandName::SetupInstall,
-                    FailureCode::CommandNotImplemented,
-                    None,
-                )
+                let result =
+                    setup::install(&engine, arguments, &cancellation, ProgressObserver::none())
+                        .await;
+                write_install_result(&mut writer, mode, result)
             }
             None => write_setup_help(&mut writer),
             Some(
@@ -610,6 +565,9 @@ pub(crate) struct CommandFailure {
     /// Arguments of a `vsift` command the remediation suggests, when a
     /// typed cause names one (`job resume <job>` after an interruption).
     suggested_command: Vec<String>,
+    /// What the command did before it failed, in its published JSON form,
+    /// written as the failure's `data` (`setup install`: every component).
+    data: Option<Box<serde_json::Value>>,
 }
 
 impl CommandFailure {
@@ -621,7 +579,14 @@ impl CommandFailure {
             retry_after_ms: None,
             affected_ids: Vec::new(),
             suggested_command: Vec::new(),
+            data: None,
         }
+    }
+
+    /// Also reports `data`, in its published JSON form, beside the error.
+    pub(crate) fn with_data(mut self, data: serde_json::Value) -> Self {
+        self.data = Some(Box::new(data));
+        self
     }
 }
 
@@ -639,6 +604,7 @@ impl CommandFailure {
             retry_after_ms: None,
             affected_ids: Vec::new(),
             suggested_command,
+            data: None,
         }
     }
 
@@ -657,6 +623,7 @@ impl From<FailureCode> for CommandFailure {
             retry_after_ms: None,
             affected_ids: Vec::new(),
             suggested_command: Vec::new(),
+            data: None,
         }
     }
 }
@@ -706,6 +673,7 @@ impl From<EngineError> for CommandFailure {
             retry_after_ms: error.retry_after_ms(),
             affected_ids,
             suggested_command,
+            data: None,
         }
     }
 }
@@ -743,6 +711,24 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
     }
 }
 
+/// Fixed-prose remediation for `setup install` refusals that change
+/// nothing (P13): a busy or unusable managed root, no managed installation
+/// here, a stale plan or digest, or a relative artifact folder.
+fn install_remediation(error: &EngineError) -> Option<String> {
+    let summary = match error {
+        EngineError::ManagedInstallBusy => MANAGED_INSTALL_BUSY_REMEDIATION,
+        EngineError::ManagedStorageUnavailable => MANAGED_STORAGE_REMEDIATION,
+        EngineError::ArtifactDirectoryNotAbsolute => ARTIFACT_DIRECTORY_REMEDIATION,
+        EngineError::PlanAcceptance(PlanAcceptanceError::ManagedUnavailable) => {
+            MANAGED_UNAVAILABLE_REMEDIATION
+        }
+        EngineError::PlanAcceptance(PlanAcceptanceError::DigestMismatch)
+        | EngineError::SavedPlanRejected(_) => STALE_PLAN_REMEDIATION,
+        _ => return None,
+    };
+    Some(summary.to_owned())
+}
+
 /// Fixed-prose remediation for worker workspaces, admission and isolation
 /// (P11).
 fn worker_remediation(error: &EngineError) -> Option<String> {
@@ -761,9 +747,45 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         EngineError::AdmissionBusy { .. } => ADMISSION_BUSY_REMEDIATION,
         EngineError::IsolationUnavailable(_) => ISOLATION_UNAVAILABLE_REMEDIATION,
         EngineError::Worker(failure) => worker::worker_failure_remediation(*failure),
-        _ => return None,
+        other => return install_remediation(other),
     };
     Some(summary.to_owned())
+}
+
+/// Writes a `setup install` result. A failure keeps what the transaction
+/// did: `--json` carries it as the failure's data, and human mode lists the
+/// components on stdout before the error on stderr.
+fn write_install_result<StandardOutput, StandardError>(
+    writer: &mut OutputWriter<StandardOutput, StandardError>,
+    mode: OutputMode,
+    result: Result<OperationResponse<serde_json::Value>, CommandFailure>,
+) -> ProcessExit
+where
+    StandardOutput: Write,
+    StandardError: Write,
+{
+    match result {
+        Err(failure) if mode == OutputMode::Human && failure.data.is_some() => {
+            let code = failure.code;
+            let response = failure_response(CommandName::SetupInstall, failure);
+            let listed = match human::result(CommandName::SetupInstall, &response) {
+                Ok(Some(text)) => writer.write_rendered_stdout(&text),
+                Ok(None) | Err(_) => Ok(()),
+            };
+            match human::failure(&response, None) {
+                Ok(text) => writer.write_rendered_stderr(&text),
+                Err(_) => writer.write_safe_diagnostic(response.error_message()),
+            }
+            match listed {
+                Ok(()) => ProcessExit::from(code.class()),
+                Err(error) => {
+                    writer.write_safe_diagnostic(&error.to_string());
+                    ProcessExit::StorageOrIo
+                }
+            }
+        }
+        result => write_session_result(writer, mode, CommandName::SetupInstall, result),
+    }
 }
 
 fn write_session_result<StandardOutput, StandardError, Failure>(
@@ -1041,6 +1063,9 @@ fn failure_response(
     if let Some(retry_after_ms) = failure.retry_after_ms {
         response = response.with_retry_after(retry_after_ms);
     }
+    if let Some(data) = failure.data {
+        response = response.with_failure_value(*data);
+    }
     response
 }
 
@@ -1156,7 +1181,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reserved_install_remains_unavailable_for_an_unreadable_plan()
+    async fn install_reports_an_unreadable_plan_without_changing_anything()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
@@ -1180,9 +1205,9 @@ mod tests {
         .await;
         let value: serde_json::Value = serde_json::from_slice(&stdout)?;
 
-        assert_eq!(exit, ProcessExit::UsageOrCapability);
+        assert_eq!(exit, ProcessExit::StorageOrIo);
         assert_eq!(value["command"], "setup.install");
-        assert_eq!(value["error"]["code"], "COMMAND_NOT_IMPLEMENTED");
+        assert_eq!(value["error"]["code"], "STORAGE_IO");
         assert!(stderr.is_empty());
         Ok(())
     }

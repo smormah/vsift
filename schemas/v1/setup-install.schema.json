@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/setup-install.schema.json",
+  "title": "VSift setup install data v1",
+  "description": "The data of a setup.install result (P13, ADR 0023): every component of the accepted plan, in plan order (ffmpeg_ffprobe, whisper_cli, whisper_model), with what the transaction did to it. A successful result carries it as data; a failed or cancelled one carries the same object as data beside its error, whose code is the first failed component's failure_code. Each component activates atomically on its own: activated and already_current components are installed and selected; a rerun of the same accepted plan continues from the first component not yet current. A failed component names the step that stopped it and a typed reason; blocked means an earlier component stopped the transaction first. stage says what cleanup did with the component's private stage (retained only when its ownership or content could not be proved). Every string is a closed identifier or a reviewed version; no path, URL, server text or credential.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["catalogue_revision", "source", "components", "next_step"],
+  "properties": {
+    "catalogue_revision": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+      ]
+    },
+    "source": { "enum": ["publisher", "artifact_directory"] },
+    "components": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "next_step": { "type": "string", "minLength": 1, "maxLength": 512 }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "version",
+        "status",
+        "step",
+        "reason",
+        "failure_code",
+        "smoke_check",
+        "stage",
+        "retention_reason"
+      ],
+      "properties": {
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
+        "version": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "status": { "enum": ["activated", "already_current", "failed"] },
+        "step": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["download", "import", "stage", "smoke", "activate"] }
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "enum": [
+                "tls",
+                "redirect_policy",
+                "http_status",
+                "proxy_auth",
+                "offline",
+                "size",
+                "artifact_missing",
+                "artifact_not_regular_file",
+                "digest_mismatch",
+                "size_mismatch",
+                "review_mismatch",
+                "storage",
+                "missing_executable",
+                "wrong_architecture",
+                "not_executable",
+                "banner_mismatch",
+                "output_over_bound",
+                "deadline_exceeded",
+                "unexpected_extra_file",
+                "changed_content",
+                "provider_failed",
+                "fixture_mismatch",
+                "preparation",
+                "invalid_request",
+                "cancelled",
+                "blocked"
+              ]
+            }
+          ]
+        },
+        "failure_code": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "enum": [
+                "DOWNLOAD_FAILED",
+                "INVALID_ARGUMENT",
+                "INTEGRITY_FAILURE",
+                "STORAGE_IO",
+                "MISSING_CAPABILITY",
+                "CANCELLED"
+              ]
+            }
+          ]
+        },
+        "smoke_check": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["layout", "banner", "media_fixture", "speech_fixture", "recheck"] }
+          ]
+        },
+        "stage": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["discarded", "retained"] }
+          ]
+        },
+        "retention_reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["ownership_unproved", "unexpected_content", "storage_failure"] }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["activated", "already_current"] } } },
+          "then": {
+            "properties": {
+              "step": { "type": "null" },
+              "reason": { "type": "null" },
+              "failure_code": { "type": "null" },
+              "smoke_check": { "type": "null" }
+            }
+          },
+          "else": { "properties": { "reason": { "type": "string" } } }
+        },
+        {
+          "if": { "properties": { "reason": { "const": "blocked" } } },
+          "then": { "properties": { "step": { "type": "null" }, "failure_code": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "step": { "const": "smoke" } } },
+          "then": { "properties": { "smoke_check": { "type": "string" } } },
+          "else": { "properties": { "smoke_check": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "stage": { "const": "retained" } } },
+          "then": { "properties": { "retention_reason": { "type": "string" } } },
+          "else": { "properties": { "retention_reason": { "type": "null" } } }
+        }
+      ]
+    }
+  }
+}

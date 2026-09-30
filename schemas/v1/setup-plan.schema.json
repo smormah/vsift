@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/setup-plan.schema.json",
   "title": "VSift reviewed setup plan v1",
+  "description": "A read-only setup plan. Its intent (profile, target, managed_install, catalogue, plan_digest, every action's reviewed artifact, each dependency's and the model's disposition and next step) is what plan_digest binds and what setup install compares with a saved plan. Its observed state (readiness, install_needed, each dependency's and the model's status, each action's state) is what commands would use now, managed versions included (P13 PR 4): it changes as setup install applies the plan and is not compared, so a rerun of the same accepted setup install continues. An action whose state is current is installed at the plan's version; install_needed is false when every action is current or there is none.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "command", "operation_id", "status", "data", "warnings", "error", "coverage", "lifecycle"],
@@ -13,7 +14,7 @@
     "data": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile", "readiness", "verification_scope", "target", "local_asr_model", "managed_install", "catalogue_revision", "stop_new_plans_at", "plan_digest", "actions", "dependencies"],
+      "required": ["profile", "readiness", "verification_scope", "target", "local_asr_model", "managed_install", "catalogue_revision", "stop_new_plans_at", "plan_digest", "install_needed", "actions", "dependencies"],
       "properties": {
         "profile": { "enum": ["desktop", "worker"] },
         "readiness": { "enum": ["ready", "degraded", "blocked"] },
@@ -24,16 +25,17 @@
           "additionalProperties": false,
           "required": ["status", "disposition", "required_authority", "next_step"],
           "properties": {
-            "status": { "enum": ["missing", "configured_present_unverified"] },
+            "status": { "enum": ["missing", "configured_present_unverified", "managed_current"] },
             "disposition": { "enum": ["configured_model_probe_only", "managed_install", "manual_selection_required"] },
             "required_authority": { "enum": ["user", null] },
             "next_step": { "$ref": "#/$defs/step" }
           }
         },
-        "managed_install": { "enum": ["catalogue_accepted_install_pending", "not_required", "unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] },
+        "managed_install": { "enum": ["catalogue_accepted", "not_required", "unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] },
         "catalogue_revision": { "type": ["string", "null"], "maxLength": 128 },
         "stop_new_plans_at": { "type": ["string", "null"], "maxLength": 32 },
         "plan_digest": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[0-9a-f]{64}$" }] },
+        "install_needed": { "type": "boolean" },
         "actions": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/action" } },
         "dependencies": {
           "type": "array", "minItems": 3, "maxItems": 3,
@@ -51,8 +53,8 @@
         }
       },
       "allOf": [
-        { "if": { "properties": { "managed_install": { "enum": ["catalogue_accepted_install_pending", "not_required"] } } }, "then": { "properties": { "plan_digest": { "type": "string" }, "catalogue_revision": { "type": "string" }, "stop_new_plans_at": { "type": "string" } } } },
-        { "if": { "properties": { "managed_install": { "enum": ["unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] } } }, "then": { "properties": { "plan_digest": { "type": "null" }, "actions": { "maxItems": 0 } } } }
+        { "if": { "properties": { "managed_install": { "enum": ["catalogue_accepted", "not_required"] } } }, "then": { "properties": { "plan_digest": { "type": "string" }, "catalogue_revision": { "type": "string" }, "stop_new_plans_at": { "type": "string" } } } },
+        { "if": { "properties": { "managed_install": { "enum": ["unavailable_target", "unavailable_catalogue_expired", "unavailable_catalogue_invalid"] } } }, "then": { "properties": { "plan_digest": { "type": "null" }, "actions": { "maxItems": 0 }, "install_needed": { "const": false } } } }
       ]
     },
     "warnings": { "const": [] },
@@ -64,9 +66,10 @@
     "step": { "type": "string", "minLength": 1, "maxLength": 512 },
     "action": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "component", "version", "publisher", "source_url", "bytes", "sha256", "format", "archive_limits", "selected_files", "archive_links", "runtime_copies", "licence", "notice_url", "source_code_url", "trust_limit", "licence_scope", "destination", "permissions", "change", "required_authority", "files"],
+      "required": ["id", "state", "component", "version", "publisher", "source_url", "bytes", "sha256", "format", "archive_limits", "selected_files", "archive_links", "runtime_copies", "licence", "notice_url", "source_code_url", "trust_limit", "licence_scope", "destination", "permissions", "change", "required_authority", "files"],
       "properties": {
         "id": { "enum": ["install-ffmpeg_ffprobe", "install-whisper_cli", "install-whisper_model"] },
+        "state": { "enum": ["pending", "current"] },
         "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model"] },
         "version": { "type": "string", "minLength": 1, "maxLength": 128 },
         "publisher": { "type": "string", "minLength": 1, "maxLength": 128 },
