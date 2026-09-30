@@ -1,0 +1,804 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 0,
+      "step": 0,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/SKILL.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 1,
+      "step": 1,
+      "summary": "/bin/bash -lc 'command -v vsift'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 2,
+      "step": 2,
+      "summary": "/bin/bash -lc \"rg --files -g 'walkthrough.*' -g 'AGENTS.md' -g 'vsift*' .\""
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 3,
+      "step": 3,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/commands.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 4,
+      "step": 4,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/budgets.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 5,
+      "step": 5,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/handoff.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 6,
+      "step": 6,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/lifecycle.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 7,
+      "step": 7,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/safety.md'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 8,
+      "step": 8,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/resume.md'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 9,
+      "step": 9,
+      "summary": "/bin/bash -lc 'vsift setup check --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--transcript-offset",
+            "0",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 10,
+      "step": 10,
+      "summary": "/bin/bash -lc 'vsift ingest walkthrough.mp4 --transcript walkthrough.srt --transcript-offset 0 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "search",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--query",
+            "queue depth",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "search",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 11,
+      "step": 11,
+      "summary": "/bin/bash -lc 'vsift search ses_144acccf40ee39ff2d2e0a385ffb8702 --query \"queue depth\" --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "transcript",
+            "get",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--from",
+            "0",
+            "--to",
+            "15000000",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "transcript.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 12,
+      "step": 12,
+      "summary": "/bin/bash -lc 'vsift transcript get ses_144acccf40ee39ff2d2e0a385ffb8702 --from 0 --to 15000000 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--from",
+            "0",
+            "--to",
+            "494559875",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 13,
+      "step": 13,
+      "summary": "/bin/bash -lc 'vsift candidates ses_144acccf40ee39ff2d2e0a385ffb8702 --from 0 --to 494559875 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "candidates",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--from",
+            "0",
+            "--to",
+            "494559875",
+            "--limit",
+            "20",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "candidates",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 14,
+      "step": 14,
+      "summary": "/bin/bash -lc 'vsift candidates ses_144acccf40ee39ff2d2e0a385ffb8702 --from 0 --to 494559875 --limit 20 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--candidate",
+            "vcd_f3b1b100363457d4c7d3c9ee5c8018ef",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 15,
+      "step": 15,
+      "summary": "/bin/bash -lc 'vsift frame get ses_144acccf40ee39ff2d2e0a385ffb8702 --candidate vcd_f3b1b100363457d4c7d3c9ee5c8018ef --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--candidate",
+            "vcd_f42fe35520e2557cff381f68564bcd6a",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 16,
+      "step": 16,
+      "summary": "/bin/bash -lc 'vsift frame get ses_144acccf40ee39ff2d2e0a385ffb8702 --candidate vcd_f42fe35520e2557cff381f68564bcd6a --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--candidate",
+            "vcd_9931e4179976ff323b2d4b431e177bc9",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 17,
+      "step": 17,
+      "summary": "/bin/bash -lc 'vsift frame get ses_144acccf40ee39ff2d2e0a385ffb8702 --candidate vcd_9931e4179976ff323b2d4b431e177bc9 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--candidate",
+            "vcd_09786b26a022c85f8ef995fc6147c1dc",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 18,
+      "step": 18,
+      "summary": "/bin/bash -lc 'vsift frame get ses_144acccf40ee39ff2d2e0a385ffb8702 --candidate vcd_09786b26a022c85f8ef995fc6147c1dc --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "frame",
+            "get",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--candidate",
+            "vcd_1237d9ffff6404ba48b4f0fd7330b713",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "frame.get",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 19,
+      "step": 19,
+      "summary": "/bin/bash -lc 'vsift frame get ses_144acccf40ee39ff2d2e0a385ffb8702 --candidate vcd_1237d9ffff6404ba48b4f0fd7330b713 --json'"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 20,
+      "step": 20,
+      "summary": "/bin/bash -lc 'cat .agents/skills/vsift/references/handoff.md'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "retain",
+            "ses_144acccf40ee39ff2d2e0a385ffb8702",
+            "--output",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "explicit",
+          "machine_output": true,
+          "operation": "session.retain",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 21,
+      "step": 21,
+      "summary": "/bin/bash -lc 'vsift session retain ses_144acccf40ee39ff2d2e0a385ffb8702 --output evidence-bundle-phase-1 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "bundle",
+            "validate",
+            "evidence-bundle-phase-1",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "bundle.validate",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 22,
+      "step": 22,
+      "summary": "/bin/bash -lc 'vsift bundle validate evidence-bundle-phase-1 --json'"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": 0,
+      "index": 23,
+      "step": 23,
+      "summary": "/bin/bash -lc \"vsift handoff check --json <<'VSIFT_HANDOFF'\n## Problem\n\nThe request is to identify every queue-depth change in the recording. The compact image budget ended after the early changes, leaving later changes unverified.\n\n## Expected\n\nA time and inspected frame for every new queue-depth value, as requested by the user.\n\n## Actual\n\nThe queue depth is 0 at 00:00.000 [c1: e1]. It changes t..."
+    }
+  ],
+  "client": {
+    "arguments": [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-sol",
+      "--sandbox",
+      "workspace-write",
+      "-C",
+      "<workspace>",
+      "-c",
+      "approval_policy=\"never\"",
+      "-c",
+      "sandbox_workspace_write.network_access=false",
+      "-c",
+      "sandbox_workspace_write.writable_roots=['<home>']",
+      "-c",
+      "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+      "-c",
+      "sandbox_workspace_write.exclude_slash_tmp=true",
+      "The recording walkthrough.mp4 (with its transcript walkthrough.srt, offset 0) shows a queue-depth slide that changes many times. For every change of the queue depth in the whole recording, give the time and cite the frame that shows the new value. Use the VSift skill and the compact budget. If the budget runs out, stop and hand back what you have with a resume card. When you have written the hando..."
+    ],
+    "environment_names": [
+      "PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CODEX_HOME"
+    ],
+    "kind": "codex",
+    "model": "gpt-6-sol",
+    "version": "codex-cli 0.155.0-alpha.16"
+  },
+  "client_setup": [],
+  "deviations": [
+    "Codex's image views are unmeasured: its event stream shows none, so its image budgets are not checked and its image access rests on the check code (L-075)"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F02-speech.mp4": "d654d6aefcdffb6e86875190a8b5b82bfcac56192b1946baff4725264046ff29",
+    "walkthrough.mp4": "812a16d3b58c70b3561bc80099d90811dbfb4a1a94b4b49a1cee936934dc6d07",
+    "walkthrough.srt": "2ebd07d943a2d1fcc29367b4dccd1edc63ebcaa071fb06dc2ef7d38f412aec02"
+  },
+  "handoff": {
+    "budget": {
+      "exhausted": [
+        "images_total"
+      ],
+      "profile": "compact"
+    },
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>",
+      "local_asr": "not_run",
+      "media_tools": "available",
+      "transcript_basis": "supplied_transcript"
+    },
+    "citations": [
+      {
+        "actual_us": 0,
+        "delta_us": 0,
+        "evidence_id": "evd_d38196a72c3983e5949cbfc71fb12df7",
+        "id": "e1",
+        "pixels_inspected": true,
+        "type": "frame"
+      },
+      {
+        "actual_us": 4000000,
+        "delta_us": 0,
+        "evidence_id": "evd_90e433097c2563c1140816610df7f25c",
+        "id": "e2",
+        "pixels_inspected": true,
+        "type": "frame"
+      },
+      {
+        "actual_us": 8000000,
+        "delta_us": 0,
+        "evidence_id": "evd_c63ee9365e5b8e1526428aecfe547c96",
+        "id": "e3",
+        "pixels_inspected": true,
+        "type": "frame"
+      },
+      {
+        "actual_us": 16063964,
+        "delta_us": 0,
+        "evidence_id": "evd_17a7c8f80a6a461b7efc3149e015dac1",
+        "id": "e4",
+        "pixels_inspected": true,
+        "type": "frame"
+      }
+    ],
+    "claims": [
+      {
+        "certainty": "high",
+        "citations": [
+          "e1"
+        ],
+        "id": "c1",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The queue depth is 0 at 00:00.000.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e2"
+        ],
+        "id": "c2",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The queue depth changes to 12 at 00:04.000.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e3"
+        ],
+        "id": "c3",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The queue depth changes to 0 at 00:08.000.",
+        "support": "supported"
+      },
+      {
+        "certainty": "high",
+        "citations": [
+          "e4"
+        ],
+        "id": "c4",
+        "kind": "observed",
+        "section": "actual",
+        "statement": "The queue depth changes to 12 at 00:16.064.",
+        "support": "supported"
+      }
+    ],
+    "gaps": [
+      {
+        "kind": "budget",
+        "note": "The six-image compact limit includes the image check; later changes remain unverified.",
+        "reason": "budget_exhausted"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "retained",
+      "mode": "retained",
+      "policy": "user_stated"
+    },
+    "question": "For every change of queue depth in the whole recording, give the time and cite the frame showing the new value.",
+    "resume": {
+      "evidence": [
+        {
+          "at_us": 0,
+          "id": "evd_d38196a72c3983e5949cbfc71fb12df7",
+          "kind": "frame"
+        },
+        {
+          "at_us": 4000000,
+          "id": "evd_90e433097c2563c1140816610df7f25c",
+          "kind": "frame"
+        },
+        {
+          "at_us": 8000000,
+          "id": "evd_c63ee9365e5b8e1526428aecfe547c96",
+          "kind": "frame"
+        },
+        {
+          "at_us": 16063964,
+          "id": "evd_17a7c8f80a6a461b7efc3149e015dac1",
+          "kind": "frame"
+        },
+        {
+          "at_us": 20063964,
+          "id": "vcd_d9b3873fa374ca5b206ef05fa73308f1",
+          "kind": "visual_candidate"
+        }
+      ],
+      "job_id": null,
+      "next_command": "vsift frame get ses_144acccf40ee39ff2d2e0a385ffb8702 --candidate vcd_d9b3873fa374ca5b206ef05fa73308f1 --json",
+      "operation_ids": [],
+      "remaining": {
+        "images_total": 0,
+        "tool_calls": null,
+        "wall_time_s": null
+      },
+      "revision_id": "trv_fc0a8af55395a7da54bff2df1c24d5a5",
+      "session_id": "ses_144acccf40ee39ff2d2e0a385ffb8702",
+      "state": "VERIFY_SOURCE",
+      "summary": "Verified initial depth 0 and changes at 4, 8 and 16.064 seconds. A visual change at 12.064 seconds left depth at 0. Candidate index covers the whole 494.560-second video, but later values have not been inspected. Resume at the candidate near 20.064 seconds.",
+      "to_verify": [
+        {
+          "finding": "Queue depth is 0 at 00:00.000.",
+          "from_us": 0,
+          "id": "evd_d38196a72c3983e5949cbfc71fb12df7",
+          "to_us": 4000000
+        },
+        {
+          "finding": "Queue depth changes to 12 at 00:04.000.",
+          "from_us": 4000000,
+          "id": "evd_90e433097c2563c1140816610df7f25c",
+          "to_us": 8000000
+        },
+        {
+          "finding": "Queue depth changes to 0 at 00:08.000.",
+          "from_us": 8000000,
+          "id": "evd_c63ee9365e5b8e1526428aecfe547c96",
+          "to_us": 12063964
+        },
+        {
+          "finding": "Queue depth changes to 12 at 00:16.064.",
+          "from_us": 16063964,
+          "id": "evd_17a7c8f80a6a461b7efc3149e015dac1",
+          "to_us": 20063964
+        }
+      ]
+    },
+    "status": "partial",
+    "untrusted_instructions": []
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "status",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "c2",
+          "c4"
+        ],
+        "event": "F02-E02",
+        "satisfied": true,
+        "term": "queue"
+      },
+      {
+        "claims": [
+          "c2",
+          "c4"
+        ],
+        "event": "F02-E02",
+        "satisfied": true,
+        "term": "twelve"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "resume_card",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "phase": 1,
+  "record_version": 1,
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+    "raw_stdout_sha256": "5932507cb0d9c3fafb8bcad7e4294e683bbd04af892fdbaf9d5959b6f4c1904f",
+    "started_unix_s": 1790788074,
+    "timed_out": false,
+    "wall_ms": 411894
+  },
+  "scenario": {
+    "id": "A-02-f02-compact-resume",
+    "sha256": "d5d6df45a014e2212c91390dc81f4b90db57442d7bce88a6b029ba513cf68214",
+    "tests": [
+      "A-02"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "skill_sha256": "7f6dcf836b3bd362ee8d2aebab4ac4501eb1860fa819dd6be047c94a18ed0863",
+  "trial_id": "a-02-f02-compact-resume-3f94f0da",
+  "usage": {
+    "image_bytes": 0,
+    "images_per_step": 0,
+    "images_total": 0,
+    "tool_calls": 14,
+    "wall_time_s": 411
+  },
+  "valid": true,
+  "vsift": {
+    "commit": "a0bfb06e81b0bf655f27fc0e833a23f7301cc6a5",
+    "sha256": "fb9e0b538df64209824e8a2b730573c8dac996383863bb6ece7e1471d337b096"
+  }
+}

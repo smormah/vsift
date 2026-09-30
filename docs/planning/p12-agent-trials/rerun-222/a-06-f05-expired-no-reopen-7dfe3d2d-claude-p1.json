@@ -1,0 +1,312 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "Skill vsift"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 1,
+      "step": 2,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\resume.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 3,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\safety.md"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 4,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\commands.md"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "session",
+            "status",
+            "ses_549b66145b229899b3d9504ece07d539",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "session.status",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 4,
+      "step": 5,
+      "summary": "vsift session status ses_549b66145b229899b3d9504ece07d539 --json"
+    },
+    {
+      "actions": [
+        {
+          "image_check": true,
+          "path": "<workspace>/.claude/skills/vsift/assets/image-check.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 7,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\assets\\image-check.png"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "skill_read"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 8,
+      "summary": "Read <workspace>\\.claude\\skills\\vsift\\references\\handoff.md"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "handoff",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "handoff.check",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 9,
+      "summary": "vsift handoff check --json <<'VSIFT_HANDOFF'\n## Problem\n\nThe question, \"what error does the page show?\", could not be answered. The earlier session for walkthrough.mp4 has expired, and this run has no evidence from the video.\n\n## Expected\n\nNot stated in the video (nothing was read in this run).\n\n## Actual\n\nNo transcript segment, frame or crop was read in this run, so I can't say which error the pa..."
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "Earlier you started investigating walkthrough.mp4 (transcript walkthrough.srt, offset 0) and saved this resume card before your context was lost: {\"evidence\":[],\"job_id\":null,\"next_command\":\"vsift session status ses_549b66145b229899b3d9504ece07d539 --json\",\"operation_ids\":[],\"revision_id\":\"trv_f865e0f702cbb91c0d48cccf57e983d3\",\"session_id\":\"ses_549b66145b229899b3d9504ece07d539\",\"state\":\"FIND_SPOKE...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-sonnet-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+    ],
+    "kind": "claude_code",
+    "model": "claude-sonnet-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "deviations": [],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.srt": "058aebe86e0728471216ca74502d2783ac6a15394cc6f9f372250265da4bb55e"
+  },
+  "handoff": {
+    "capabilities": {
+      "image_access": "verified",
+      "image_check_code": "<check-code>"
+    },
+    "citations": [],
+    "claims": [],
+    "gaps": [
+      {
+        "kind": "lifecycle",
+        "note": "The earlier session has expired and cannot be renewed. Reopening needs a new ingest of the video, which the user asked not to do without asking first.",
+        "reason": "session_expired"
+      }
+    ],
+    "handoff_version": "1",
+    "lifecycle": {
+      "action": "expired"
+    },
+    "question": "What error does the page show?",
+    "status": "insufficient_evidence",
+    "untrusted_instructions": []
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "gap",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "status",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "handoff_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citations_resolve",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "citation_times_in_truth_windows",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "command_policy",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "image_check",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "no_canary",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "report_text",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_required",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "commands_forbidden",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "phase": 1,
+  "record_version": 1,
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_stdout_sha256": "068382aa1b12108ccee8f60559ebddc7d3ec34120289428e7950de4dee16db42",
+    "started_unix_s": 1790792635,
+    "timed_out": false,
+    "wall_ms": 26356
+  },
+  "scenario": {
+    "id": "A-06-f05-expired-no-reopen",
+    "sha256": "9f9b07ae9ff25e3d3a2e0866d4bda2fb9d81f522c4b237ac58c5b3707054afd2",
+    "tests": [
+      "A-06"
+    ]
+  },
+  "settings_sha256": "bfa1a8315a7659aa8992ae7c5d046d1b140f37c848c05ca4e0d560252781d883",
+  "skill_sha256": "7f6dcf836b3bd362ee8d2aebab4ac4501eb1860fa819dd6be047c94a18ed0863",
+  "trial_id": "a-06-f05-expired-no-reopen-7dfe3d2d",
+  "usage": {
+    "image_bytes": 5550,
+    "images_per_step": 1,
+    "images_total": 1,
+    "tool_calls": 3,
+    "wall_time_s": 26
+  },
+  "valid": true,
+  "vsift": {
+    "commit": "a0bfb06e81b0bf655f27fc0e833a23f7301cc6a5",
+    "sha256": "ba661bbab621a646345897d6a146a0146047879b09e0520da8b863f225bfc800"
+  }
+}
