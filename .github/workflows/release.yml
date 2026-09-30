@@ -1,0 +1,305 @@
+name: Release
+
+# Builds and packages VSift's native release archives (P13 PR 8, ADR 0023
+# section 1 and decision D) and keeps them only as this run's artifacts:
+#
+#   inventory  THIRD-PARTY-NOTICES (cargo-about) and a CycloneDX SBOM
+#              (cargo-cyclonedx) for each target, from the lockfile only.
+#   build      the `vsift` executable per target, built twice on the same
+#              runner and compared byte for byte; its --version must name the
+#              commit it was built from.
+#   package    one deterministic vsift-<version>-<target>.tar.gz per target,
+#              each read back and checked, packaged twice and compared, and
+#              SHA256SUMS over the three archives.
+#
+# This workflow cannot publish. It has no job with a write scope or an OIDC
+# token, uses no secret, and runs on pull requests, pushes to main and manual
+# dispatch only, never on a tag or a release. Attestation and the protected
+# `release` environment's publish job are P13 PR 10; until then every run is
+# the dry run ADR 0023 describes: it builds and checks everything and writes
+# nothing outside the run.
+#
+# Release builds take no features, so no development-only feature, test
+# binary or profile override can reach an archive; the governance workflow
+# lint (tools/vsift-governance, workflows.rs) enforces that for this file.
+#
+# The pull-request and push triggers name every path whose change can alter an
+# archive: the crates compiled into `vsift`, the skill, the licences, the
+# toolchain and lockfile, the packaging tool and this workflow. A change
+# elsewhere (documentation, the fixture corpus, other tools) cannot.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release.yml
+      - crates/**
+      - tools/vsift-release/**
+      - skills/vsift/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - LICENSE
+      - LICENSE-APACHE
+      - LICENSE-MIT
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release.yml
+      - crates/**
+      - tools/vsift-release/**
+      - skills/vsift/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - LICENSE
+      - LICENSE-APACHE
+      - LICENSE-MIT
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: never
+  # The pinned inventory tools (reviewed 2026-09-30): cargo-about 0.9.2 and
+  # cargo-cyclonedx 0.5.9, both built from crates.io with their own lockfiles.
+  CARGO_ABOUT_VERSION: "=0.9.2"
+  CARGO_CYCLONEDX_VERSION: "=0.5.9"
+
+jobs:
+  inventory:
+    name: Notices and SBOMs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Record the source commit's time
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Install the pinned inventory tools
+        run: |
+          set -euo pipefail
+          cargo install --locked --version "${CARGO_ABOUT_VERSION}" --features cli cargo-about
+          cargo install --locked --version "${CARGO_CYCLONEDX_VERSION}" cargo-cyclonedx
+
+      - name: Fetch the locked dependency sources
+        run: cargo fetch --locked
+
+      - name: Generate the notices and the SBOM of each target
+        run: |
+          set -euo pipefail
+          for target in x86_64-pc-windows-msvc aarch64-apple-darwin x86_64-unknown-linux-gnu; do
+            mkdir -p "inventory/${target}"
+            cargo about generate --offline --locked --fail --target "${target}" \
+              --config tools/vsift-release/notices/about.toml \
+              --manifest-path crates/vsift-cli/Cargo.toml \
+              --output-file "inventory/${target}/THIRD-PARTY-NOTICES" \
+              tools/vsift-release/notices/notices.hbs
+            cargo cyclonedx --manifest-path crates/vsift-cli/Cargo.toml --format json \
+              --spec-version 1.5 --target "${target}" --override-filename "vsift-${target}.cdx"
+            mv "crates/vsift-cli/vsift-${target}.cdx.json" "inventory/${target}/vsift.cdx.json"
+          done
+          ls -l inventory/*
+
+      - name: Keep the inventory for packaging
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: inventory
+          path: inventory
+          if-no-files-found: error
+          retention-days: 7
+
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows 11 x64: MSVC with a static C runtime; /Brepro makes the
+          # linker derive the PE timestamp and PDB identity from the content,
+          # so two builds of one commit are identical.
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+            executable: vsift.exe
+            rustflags: -C target-feature=+crt-static -C link-arg=/Brepro
+          # macOS 15 on Apple silicon.
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            executable: vsift
+            rustflags: ""
+          # x64 glibc Linux built on Ubuntu 22.04, so the binary also runs on
+          # newer glibc (ADR 0023 decision D).
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+            executable: vsift
+            rustflags: ""
+    env:
+      TARGET: ${{ matrix.target }}
+      EXECUTABLE: ${{ matrix.executable }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Record the source commit
+        run: |
+          set -euo pipefail
+          echo "VSIFT_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          rustup show active-toolchain
+          uname -a
+
+      - name: Build vsift (first build)
+        run: cargo build --release --locked -p vsift-cli --bin vsift --target "${TARGET}"
+
+      - name: Keep the first build and remove every release output
+        run: |
+          set -euo pipefail
+          mkdir -p reproducibility
+          cp "target/${TARGET}/release/${EXECUTABLE}" "reproducibility/${EXECUTABLE}"
+          cargo clean --release --target "${TARGET}"
+
+      - name: Build vsift again from scratch
+        run: cargo build --release --locked -p vsift-cli --bin vsift --target "${TARGET}"
+
+      - name: Require the two builds to be identical
+        run: |
+          set -euo pipefail
+          sha256sum "reproducibility/${EXECUTABLE}" "target/${TARGET}/release/${EXECUTABLE}"
+          cmp "reproducibility/${EXECUTABLE}" "target/${TARGET}/release/${EXECUTABLE}"
+
+      - name: Require the version line to name the source commit
+        run: |
+          set -euo pipefail
+          package_id="$(cargo pkgid -p vsift-cli)"
+          version="${package_id##*[#@]}"
+          expected="vsift ${version} (${VSIFT_SOURCE_COMMIT:0:12})"
+          actual="$("target/${TARGET}/release/${EXECUTABLE}" --version | tr -d '\r')"
+          echo "${actual}"
+          test "${actual}" = "${expected}"
+
+      - name: Record the executable's runtime dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          ldd --version | head -n 1
+          readelf --dynamic "target/${TARGET}/release/${EXECUTABLE}" | grep NEEDED
+          objdump -T "target/${TARGET}/release/${EXECUTABLE}" \
+            | grep -o 'GLIBC_[0-9.]*' | sort -u -V | tail -n 1
+
+      - name: Record the executable's runtime dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          sw_vers
+          otool -L "target/${TARGET}/release/${EXECUTABLE}"
+
+      - name: Require the static C runtime (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          if grep -a -i -q -E 'vcruntime140(_1)?\.dll|api-ms-win-crt-' "target/${TARGET}/release/${EXECUTABLE}"; then
+            echo "vsift.exe imports the dynamic C runtime" >&2
+            exit 1
+          fi
+
+      - name: Keep the executable for packaging
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: executable-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ matrix.executable }}
+          if-no-files-found: error
+          retention-days: 7
+
+  package:
+    name: Package, verify and checksum
+    needs:
+      - inventory
+      - build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Record the source commit's time
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Fetch the notices and SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: inventory
+          path: inventory
+
+      - name: Fetch the executables
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: executable-*
+          path: executables
+
+      - name: Package every target twice and check each archive
+        run: |
+          set -euo pipefail
+          release_tool() {
+            cargo run --quiet --locked -p vsift-release -- "$@"
+          }
+          mkdir -p dist second
+          for target in x86_64-pc-windows-msvc aarch64-apple-darwin x86_64-unknown-linux-gnu; do
+            executable=vsift
+            if [ "${target}" = x86_64-pc-windows-msvc ]; then
+              executable=vsift.exe
+            fi
+            inputs=(
+              --target "${target}"
+              --binary "executables/executable-${target}/${executable}"
+              --notices "inventory/${target}/THIRD-PARTY-NOTICES"
+              --sbom "inventory/${target}/vsift.cdx.json"
+            )
+            archive="$(release_tool package "${inputs[@]}" \
+              --source-date-epoch "${SOURCE_DATE_EPOCH}" --out-dir dist)"
+            release_tool package "${inputs[@]}" \
+              --source-date-epoch "${SOURCE_DATE_EPOCH}" --out-dir second
+            cmp "${archive}" "second/$(basename "${archive}")"
+            release_tool verify "${inputs[@]}" \
+              --source-date-epoch "${SOURCE_DATE_EPOCH}" --archive "${archive}"
+            tar -tzvf "${archive}"
+          done
+
+      - name: Write and check SHA256SUMS
+        run: |
+          set -euo pipefail
+          cargo run --quiet --locked -p vsift-release -- checksums --output dist/SHA256SUMS dist/*.tar.gz
+          cat dist/SHA256SUMS
+          (cd dist && sha256sum --check --strict SHA256SUMS)
+
+      - name: Keep the dry-run archives with this run
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-dry-run
+          path: dist
+          if-no-files-found: error
+          retention-days: 7

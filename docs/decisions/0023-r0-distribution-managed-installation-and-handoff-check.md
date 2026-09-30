@@ -648,3 +648,65 @@ the supervisor on 2026-09-30:
   every published pointer and allowed value within the grammar that keeps draft text
   out; its seeds copy `SKILL.md` and the frozen example's draft.
 - R-13 is mapped to P13. The compact tier's re-run (#222) follows this pull request.
+
+## Implementation note, 2026-09-30 (P13 PR 8, `release.yml` and the governance workflow lint)
+
+Delivered from section 1: the release workflow up to packaging, the reproducibility
+check, the commit suffix of `--version` and the governance workflow lint. The
+attestation and publish jobs, the protected `release` environment and the `dry_run`
+input are PR 10's; the npm packages are PR 9's. The runbook is
+[`docs/operations/release.md`](../operations/release.md).
+
+- **`release.yml`** runs on pull requests and pushes to `main` that touch an archive
+  input (`crates/`, `skills/vsift/`, the licences, the manifests, the toolchain, the
+  packaging tool, the workflow) and on manual dispatch; never on a tag or a release. It
+  has `permissions: {}` and `contents: read` per job, no `id-token`, no secret and no
+  cache (a cache written by one run could feed a later release build). Until PR 10
+  every run is the dry run of section 1: the archives and `SHA256SUMS` stay the run's
+  artifacts for 7 days, unsigned and unattested.
+- **Build.** `cargo build --release --locked -p vsift-cli --bin vsift --target
+  <target>` on `windows-2025` (static C runtime), `macos-15` and `ubuntu-22.04`; no
+  feature is ever selected. Each target is built twice on its runner, with the release
+  output removed in between, and the executables must be identical. Windows needs
+  `-C link-arg=/Brepro`: measured on 2026-09-30, two static-CRT builds of one commit
+  differed in the PE time stamp, the debug directory's time stamps and the PDB identity
+  without it, and were identical with it (7,884,800 bytes).
+- **`--version` names the commit.** A build with `VSIFT_SOURCE_COMMIT` set prints
+  `vsift <version> (<first 12 digits of the commit>)`, the form `rustc --version`
+  uses; the workflow sets it from the checked-out commit and requires that line. A
+  build without it prints `vsift <version>` as before; a value that is not a full
+  40-digit lowercase SHA fails the build (`crates/vsift-cli/build.rs`,
+  `src/build_identity.rs`).
+- **Notices and SBOM.** cargo-about 0.9.2 (`--offline`, the licences of `deny.toml`,
+  build and development dependencies excluded: they are not in the binary) writes
+  `THIRD-PARTY-NOTICES` from `tools/vsift-release/notices/`; cargo-cyclonedx 0.5.9
+  writes a CycloneDX 1.5 SBOM of `vsift-cli`'s graph for the target (the tool's default,
+  which keeps build-time dependencies), with `SOURCE_DATE_EPOCH` set to the commit time. Both tools are installed
+  with `cargo install --locked` at an exact version.
+- **Archives.** `tools/vsift-release` (never shipped; no new dependency) packages
+  `vsift-<version>-<target>.tar.gz` holding `vsift` or `vsift.exe`, `LICENSE`,
+  `LICENSE-APACHE`, `LICENSE-MIT`, `THIRD-PARTY-NOTICES`, `vsift.cdx.json` and
+  `skills/vsift/` byte for byte (decision H7). It refuses an executable of another name,
+  format or architecture, so no test binary can be packaged; the archive is
+  deterministic (path order, the commit time, owner 0, fixed modes, a gzip header
+  without name or time). The workflow packages twice and compares, reads each archive
+  back against its inputs, and checks `SHA256SUMS` with `sha256sum --check --strict`.
+- **Governance workflow lint (R-SEC01).** `vsift-governance` now parses every workflow
+  (new development-tool dependency `yaml-rust2` 0.13, MIT OR Apache-2.0, pure Rust,
+  with `arraydeque` and `hashlink`; never in a shipped crate) and fails, as this section
+  specifies, an action not pinned to a full commit SHA, `pull_request_target`, missing or
+  non-read-only top-level `permissions` (and `read-all`/`write-all` anywhere), and
+  `id-token: write` outside the release workflow's `attest` and `publish` jobs. Two
+  rules are added: a `run` script may interpolate only `runner`, `matrix`, `strategy`,
+  `job` and nine fixed `github` fields, everything else goes through `env`; and in
+  `release.yml` the build command above is the only `cargo build`, no cargo command but
+  a pinned `cargo install` selects features, packages or profiles, and no key or value
+  names a development feature (`fault-injection`, `durability-campaign`,
+  `install-test-hooks`), the smoke-test stand-in, the crash-campaign tool, a
+  `CARGO_PROFILE_` override or `debug-assertions`. The lint reads the YAML tree, so a
+  flow mapping or an alias cannot hide a grant, and it refuses merge keys. No existing
+  workflow violated a rule.
+- **For the maintainer's review:** `.tar.gz` for Windows too (no `zip` dependency;
+  Windows 11 opens it); the twelve-digit commit form; the two added lint rules; the
+  path filter on the pull-request trigger; the SBOM's `bom-ref` values carrying the
+  runner's checkout path ([L-089](../planning/known-limits.md#l-089)).

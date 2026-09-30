@@ -1,0 +1,23 @@
+THIRD-PARTY NOTICES
+
+The vsift executable in this archive is built from the VSift source code
+(MIT OR Apache-2.0, see LICENSE, LICENSE-MIT and LICENSE-APACHE) and the Rust
+crates listed below, grouped by the licence under which each is used. The
+full text of each licence follows its list of crates.
+
+Licences:
+{{#each overview}}
+- {{{name}}} ({{{id}}}): {{count}} crate(s)
+{{/each}}
+{{#each licenses}}
+
+================================================================================
+{{{name}}} ({{{id}}})
+
+Used by:
+{{#each used_by}}
+- {{{crate.name}}} {{{crate.version}}}{{#if crate.repository}} ({{{crate.repository}}}){{/if}}
+{{/each}}
+
+{{{text}}}
+{{/each}}

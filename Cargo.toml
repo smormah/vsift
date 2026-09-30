@@ -9,6 +9,7 @@ members = [
   "tools/p10-crash-campaign",
   "tools/vsift-agent-trials",
   "tools/vsift-governance",
+  "tools/vsift-release",
 ]
 default-members = ["crates/vsift-cli"]
 # The cargo-fuzz harness has its own nightly-only workspace and lockfile.
@@ -59,6 +60,10 @@ vsift-contract = { version = "0.1.0", path = "crates/vsift-contract" }
 vsift-domain = { version = "0.1.0", path = "crates/vsift-domain" }
 vsift-infrastructure = { version = "0.1.0", path = "crates/vsift-infrastructure" }
 windows-acl = "=0.3.0"
+# The governance checker's workflow lint (P13 PR 8): parses .github/workflows/*.yml
+# into a tree, so flow mappings and anchors cannot hide a permission or an
+# unpinned action from a line-based scan. Never a dependency of a shipped crate.
+yaml-rust2 = { version = "0.13", default-features = false }
 
 [workspace.lints.rust]
 missing_docs = "warn"

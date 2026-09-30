@@ -9,15 +9,17 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 **P00-P12 are complete; P13 is in progress** (started 2026-09-30, plan accepted). Merged:
 PR 0 (#226), the P12 debt fixes (#227, L-085), PR 1 (#228, L-071 closed), PR 2a (#229),
 PR 3 (#230, `e22ee59`, smoke and cleanup), PR 2b (#231, `02df4eb`; human output done,
-L-073 closed) and PR 5 (#233, `1a9d027`, `handoff check`, L-086). **PR 4 (`setup
-install` and the managed lookup tier) is in review** on `p13-pr4-install` (#234). The
-packet is not complete.
+L-073 closed), PR 5 (#233, `1a9d027`, `handoff check`, L-086) and PR 4 (#234,
+`d43a518`, `setup install`, managed lookup tier). **PR 8 is done in its pull request
+(#236):** `release.yml`, `tools/vsift-release`, the workflow lint and `--version` with
+the commit. The packet is not complete.
 
 1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
    6 `setup list/rollback/remove/repair`, bounded cleanup and the stale-stage sweep
-   (stages PR 3 and a killed PR 4 run retain); 7 kill/power-loss, E2E; 8 `release.yml`
-   (package only `vsift`); 9 npm; 10 publish wiring; 11 docs; 12 ledger. #222 is due.
-2. **After PR 4 merges (maintainer):** dispatch `P13 managed smoke` on `main` (both jobs,
+   (stages PR 3 and a killed PR 4 run retain); 7 kill/power-loss, E2E; 9 npm over PR
+   8's archives; 10 `attest`/`publish` jobs (the lint's only `id-token` jobs) and
+   `dry_run`; 11 docs; 12 ledger. #222 is due.
+2. **Now that PR 4 is merged (maintainer):** dispatch `P13 managed smoke` on `main` (both jobs,
    no credentials); record the run in D-02/D-03/D-06/D-07 and L-037, its `L-087` timing
    lines in L-087.
 3. **Maintainer-only, before PR 10's publish step:** scope `@vsift` (the maintainer
@@ -36,8 +38,7 @@ packet is not complete.
 
 ## Decided (maintainer, 2026-09-28/30)
 
-- **P11 D1-D5** (ADR 0021); **P12** closed on its final round (ADR 0022 completion
-  note: Codex in Linux, slim handoff, compact tier Sonnet 5.5 and GPT-6-Sol).
+- **P11 D1-D5** (ADR 0021); **P12** closed on its final round (ADR 0022 note).
 - **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift` over `@vsift/{win32-x64,
   darwin-arm64,linux-x64}`; only the `vsift@0.0.0` placeholder during P13, then one 0.x
   pre-release under `next`; no crates.io in R0; Sigstore and npm provenance only; managed
@@ -58,13 +59,13 @@ packet is not complete.
   (`install_needed`, action `state`); debug builds resolve no publisher host; failed
   smoke `MISSING_CAPABILITY`; `BUSY` retry 30 s; `407` by text (L-088); rehash (L-087).
 - **P13 PR 5 readings:** schema `handoff-check-data` (repo naming), a `line` beside
-  each pointer, skill forms without `--session`.
+  each pointer, skill forms without `--session`. **PR 8** (ADR 0023 note): `.tar.gz` on
+  Windows, the 12-digit commit, two added lint rules, L-089; Release a required check?
 - **Also:** MSRV; an MCP adapter; ADR 0023's open detail (`setup list`/`repair` class).
 
 ## Tracked issues
 
-- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210, #213 (PR 5 merged).
-  **Open:** #16, #218-#222, #232 (a session root name with controls fails `RootUnavailable` on Linux).
+- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210, #213. **Open:** #16, #218-#222, #232 (a session root name with controls fails `RootUnavailable` on Linux).
 - **#170-#178:** L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045 and L-042.
 - **Others:** #159, #150 fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
 
@@ -95,5 +96,5 @@ packet is not complete.
   a snapshot. A parser of untrusted input needs a seeded fuzz target.
 - **Commits:** session commits go through `CommitHooks`/`Commit`. A change to the
   commit path, or to request-record writes, reruns the crash campaign. Never enable
-  `fault-injection`, `durability-campaign` or `install-test-hooks` in a release. R1
-  (P15..P20) starts only after P14.
+  `fault-injection`, `durability-campaign` or `install-test-hooks` in a release (the
+  workflow lint fails a `release.yml` that selects any). R1 starts only after P14.

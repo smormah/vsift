@@ -284,6 +284,26 @@ development dependency (and the trial grader's): as a production one it added 43
 crates and 5.5 MB to the release binary. The review is in the ADR 0023 note of
 2026-09-30 ("P13 PR 5").
 
+P13 PR 8 added `yaml-rust2` 0.13 (MIT OR Apache-2.0, pure Rust, with `arraydeque`
+and `hashlink`) to the governance checker only, which parses `.github/workflows/*.yml`
+for the workflow lint; no shipped crate depends on it. The review is in the ADR 0023
+note of 2026-09-30 ("P13 PR 8").
+
+## Release archives
+
+`.github/workflows/release.yml` builds the native archives and `tools/vsift-release`
+packages and checks them; nothing is published until P13 PR 10. What they hold, how
+the build is kept reproducible and how to check a run's archives is in
+[`operations/release.md`](operations/release.md). A release build selects no feature:
+the governance check (`cargo run --locked -p vsift-governance -- check`) fails a
+`release.yml` that does, and a workflow that breaks its lint (pinned actions, no
+`pull_request_target`, read-only top-level `permissions`, `id-token` only for the
+release attest and publish jobs, no untrusted `${{ }}` in a `run` script).
+
+`vsift --version` prints `vsift <version> (<commit>)` when `VSIFT_SOURCE_COMMIT` holds
+the full commit SHA at build time, as the release workflow sets it; a build without it
+prints the version alone.
+
 ## Documentation
 
 P03's cap-std/cap-fs-ext 4.0.3 storage dependencies and their review are in
