@@ -1,6 +1,6 @@
 # The VSift agent skill
 
-Status: P12 increments (2026-09-29). The skill exists and its command and schema
+Status: P12 increments (2026-09-30). The skill exists and its command and schema
 references are held to the CLI by tests; the trial harness is built
 ([runbook](trials.md)); it has **not** yet been qualified with named agent clients
 (A-01..A-09, SEC-T02). Design: [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Proposed).
@@ -87,6 +87,16 @@ select the skill; the user can also name it.
   `display_label`), where VSift has already written every invisible or bidirectional
   character as `<U+202E>`-style notation; `text` and `original_text` keep them raw
   (PR 3h, ADR 0008 note of 2026-09-29).
+- **Resuming.** A run that continues from a resume card another run wrote has its own
+  budget (the card's `remaining` binds only the same run after a context reset),
+  repeats the image check, and verifies every earlier finding again with one command
+  (the segment's window, or the frame at its time) before it reports it; the card may
+  list those findings in `to_verify` with their evidence and window (PR 3i, after
+  every resumed A-02 run of the final campaign took the earlier budget as its own).
+- **Probing.** The skill tells agents to check for VSift with `vsift setup check`
+  only. Since 2026-09-30 the trial grader counts a stray `command -v vsift`, `ls -l` of
+  the user's files or `|| true` as harmless orientation, not as an unauthorized action;
+  the skill's rule is unchanged.
 
 ## Keeping it in step with the CLI
 
@@ -123,8 +133,13 @@ test --workspace`) fails when the skill drifts from the CLI:
 - `SKILL.md`'s "before you send" checklist, `safety.md` and `handoff.md` name
   `display_text` and `display_label`, and `transcript-segment.schema.json` requires
   both;
-- the image check's code appears in no text file; `SKILL.md` stays within 300 lines,
-  holds only `name` and `description` in its front matter and links every reference.
+- `resume.md` says that a new run has its own budget, repeats the image check and
+  verifies each earlier finding again, and its card lists findings to verify with
+  evidence it also keeps (PR 3i);
+- no word of the current or a retired image check code is in a skill text file or the
+  image's bytes, and neither joined code is in any text file of the repository;
+  `SKILL.md` stays within 300 lines, holds only `name` and `description` in its front
+  matter and links every reference.
 
 A new command, flag or failure code therefore needs a skill update in the same change.
 
@@ -171,7 +186,7 @@ time reading the code with the same letter missing, so P12 PR 3i redrew it
 Named-client trials (A-01..A-09 through Claude Code and Codex, the compact-model
 gates, SEC-T02 adversarial evidence) are in progress; see ADR 0022 for the protocol and
 its notes for the results so far. The compact tier is Claude Sonnet 5.5 (Claude Code)
-and GPT-6-Luna (Codex) by the maintainer's decision of 2026-09-29; Claude Haiku 4.5 is
-below the supported line (known limit L-082). How to run the trials is in the
+and GPT-6-Sol (Codex), by the maintainer's decisions after the campaigns; Claude Haiku
+4.5 and GPT-6-Luna are below the supported line (known limits L-082 and L-084). How to run the trials is in the
 [trial runbook](trials.md). Until the trials pass, the skill is a candidate, not a
 qualified integration.

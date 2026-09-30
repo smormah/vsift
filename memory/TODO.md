@@ -6,48 +6,49 @@ qualification records and `docs/history/2026-09-09-to-23-delivery-log.md`.
 
 ## Now
 
-**P00-P11 are complete. P12 (agent skill) is in progress.** Merged: PRs 1, 2, 3a-3g
-(3f #212 `b68d746`: the compact-tier runs; 3g #214 `f018e0d`: compact tier is Sonnet
-5.5 and GPT-6-Luna, Haiku 4.5 below the line (L-082), handoff vocabulary fixed).
-**PR 3h** (branch `p12-pr3h-display-text`, in review) implements the maintainer's
-hidden-character decision of 2026-09-29: every transcript segment gains `display_text`
-(hidden characters as `<U+XXXX>`; ADR 0008 note) and the skill quotes only that.
+**P00-P11 are complete. P12 (agent skill) is in progress.** Merged: PRs 1, 2, 3a-3h
+(3h #216 `56f1e1f`: `display_text`). The final counted campaign ran on `56f1e1f`.
+**PR 3i** (branch `p12-pr3i-final-fixes`, in review) is the last fix round before P12
+closes: the maintainer's four decisions of 2026-09-30 (orientation probes, a redrawn
+check image, resumed runs, number and time matching). An increment, not the packet.
 
-1. **Review and merge PR 3h** (an increment, not the packet).
-2. **Then re-run the compact tier** (Sonnet 5.5 in Claude Code 2.1.284, GPT-6-Luna in
-   Codex) on PR 3h's merge commit, images rebuilt there; check the init event lists only
-   `vsift` (`disableBundledSkills`). Records go to `docs/planning/p12-agent-trials/`.
+1. **Review and merge PR 3i.** Its re-grade (`grade-3i.json`, table in the PR) shows
+   only what the grader changes fix.
+2. **Then re-run the compact tier** (Claude Sonnet 5.5 in Claude Code 2.1.284, GPT-6-Sol
+   in Codex) on PR 3i's merge commit, images rebuilt there: the skill text (resume.md)
+   and the check image changed, so the old runs cannot show their effect. Check the
+   init event lists only `vsift` (`disableBundledSkills`). Records go to
+   `docs/planning/p12-agent-trials/`.
 3. **Maintainer: review ADR 0022** (decisions 3, 4, 7 and the notes, including PR 3f's
-   and PR 3g's readings: `observed` never `unsupported`, unused citations a warning,
-   `remaining.images` accepted; the resume card only when work can continue, a
-   supervisor decision), the corpus truth amendment, L-075, L-078..L-083.
+   to PR 3i's readings), the corpus truth amendment, L-075, L-078..L-084.
 4. **Technical debt:** SEC-T01 adversarial evidence (#188, L-068), before P14.
 
 ## Found in P12 (for the maintainer)
 
-- **Compact tier on `b68d746`:** Sonnet 28/28 answers, 9/28 full; Luna 24, 11; Haiku 6, 2.
-- **Hidden characters (L-083, residual):** `text` keeps raw U+202E by design; PR 3h's
-  `display_text` shows it (Sonnet had copied one into 1 of 5 SEC-T02 reports).
-- **Still open (grader):** `untrusted_listed` takes only F12-E01 (0-8 s) though the
-  instructions last to 12 s; the line-filter allowance is the harness's, not the skill's.
-  L-071 (P13) and L-074 (SubRip `<letter...>` tags) stay open; #210 is fixed (#215, `967ef01`).
+- **Final campaign on `56f1e1f`** (full passes of 28; review tier of 11): Sonnet 5.5 25,
+  GPT-6-Sol 15 (25 answers right), GPT-6-Luna 15, Opus 5.5 9, GPT-6-Astra 9. PR 3i's
+  re-grade: Sol 21 (its 5 misread check codes remain), Luna 16, others unchanged.
+- **Resume (A-02 phase 2, 9 of 9 resumed runs missed F02-E02):** the resumed agent took
+  the card's `remaining` as its own budget (Codex saw 0 images left and opened none) and
+  reported the earlier run's "queue depth 12" as unsupported or dropped it; some cards
+  kept no frame or segment behind it. PR 3i: a new run has its own budget, repeats the
+  image check and verifies each earlier finding with one command; the card may list
+  `to_verify` (finding, evidence, window). Optional, not required: a decision.
+- **Still strict after PR 3i:** an `rg --files` exclude glob with a separator
+  (`!**/.git/**`), harmless since an exclude only narrows: a decision. Also open:
+  `untrusted_listed` takes only F12-E01 (0-8 s); L-071 (P13); L-074.
 
-## Decided (maintainer, 2026-09-28/29)
+## Decided (maintainer, 2026-09-28/30)
 
-- **P11 D1-D5** (ADR 0021): explicit workspaces, workspace-set retention, request
-  steps, stop-then-cancel shutdown with opt-in drain, the D5 batch exit.
-- **SEC-T01 for P11:** non-adversarial evidence accepted; adversarial as debt (above).
-- **P13 plan:** npm launcher over per-platform packages, no install scripts; all names
-  held, no announcement before P14 (open items: P13 name checklist); a handoff
-  validator command (#213).
-- **PR 3e (supervisor):** `--help` forms free, never piped; the skill's `\\?\` retry
-  stays. **#210 (maintainer):** plain Windows paths when exact, `\\?\` only when needed;
-  the broad legacy reserved-name rule accepted. **PR 3f (maintainer):** orientation is
-  housekeeping (`cd` elsewhere strict); handoff v1 states only what the agent knows.
-  **PR 3g (maintainer):** the compact tier
-  is Sonnet 5.5 and GPT-6-Luna; fix the vocabulary now, validator in P13. **PR 3g
-  (supervisor):** resume card only when work can continue; keep `disableBundledSkills`.
-  **Hidden characters (maintainer):** an additive `display_text`, `text` unchanged.
+- **P11 D1-D5** (ADR 0021); SEC-T01 non-adversarial evidence accepted for P11.
+- **P13 plan:** npm launcher over per-platform packages, no install scripts; names
+  held, no announcement before P14 (P13 name checklist open); handoff validator (#213).
+- **PR 3e-3h:** free unpiped `--help`; plain Windows paths when exact (#210); start-folder
+  orientation is housekeeping; slim handoff v1; vocabulary; card only when work can
+  continue; `display_text`. **Compact tier:** Sonnet 5.5 and GPT-6-Sol; GPT-6-Luna
+  (L-084) and Haiku 4.5 (L-082) below the line.
+- **PR 3i (2026-09-30):** `command -v`/`which <name>`, `ls -l` of named files, `true`
+  are housekeeping; a new check image; resume guidance; number and time matching.
 
 ## Open decisions (maintainer)
 
@@ -68,7 +69,7 @@ hidden-character decision of 2026-09-29: every transcript segment gains `display
 
 ## Other follow-ups
 
-- **Known limits:** entries to L-083, review pending (P12 added L-071..L-083).
+- **Known limits:** entries to L-084, review pending (P12 added L-071..L-084).
 - **Not yet run as written:** the runbook's systemd unit and container example (L-038);
   `p11_durable_workspace` on Ubuntu 24.04 / ext4; `strict-linux` end to end in CI.
 - **Campaign upkeep:** bump the three `UBUNTU_IMAGE_*` values together (3 GiB images).
@@ -88,7 +89,8 @@ hidden-character decision of 2026-09-29: every transcript segment gains `display
   both the supplied-transcript and local-ASR paths, in named Codex and Claude Code trials.
 - The skill orchestrates the published CLI only: no processing logic, no tool grants.
   A new public command, flag, failure code or referenced field needs a skill update in
-  the same change (the `skill_contract` tests fail otherwise).
+  the same change (the `skill_contract` tests fail otherwise). The check image's code
+  lives only in its pixels and, split, in the guard and the grader's image table.
 - A new public command, failure code, event kind or record type needs its `CommandName`,
   `FailureCode::ALL`, `EventKind::ALL` or `EvidenceRecordType::ALL` entry and v1 schemas;
   a new parser of untrusted input needs a fuzz target with committed-seed provenance.

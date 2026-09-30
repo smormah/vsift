@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-09-29. Current-state document: rewrite it, don't append to it. Next
+As of 2026-09-30. Current-state document: rewrite it, don't append to it. Next
 actions and open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -29,24 +29,25 @@ Today it can:
 - refuse to claim strict worker isolation unless the Linux kernel attests it;
 - keep every folder it creates private to the user.
 
-There is now also an **agent skill** (`skills/vsift/`) that teaches Claude Code or
-Codex to run an investigation with the CLI and write a cited report, and a trial
-harness that runs and grades those clients on synthetic recordings (Codex in a Linux
-container, because its Windows sandbox cannot run VSift: L-076, #204). The strong
-models (Opus 5.5, GPT-6-Astra) pass their counted runs. Of the smaller ones, Claude
-Sonnet 5.5 answered every question right but often wrote the report's JSON block with
-words the skill never listed; GPT-6-Luna did well; Claude Haiku 4.5 did not follow
-the procedure. The maintainer made Sonnet 5.5 and GPT-6-Luna the compact tier and
-asked for the vocabulary fix (PR 3g, merged). Models also copied invisible characters
-from transcript text into reports, so every segment now also carries `display_text`,
-with those characters shown as `<U+202E>`, and the skill quotes only that (PR 3h, in
-review). The compact tier is re-run next. Until the named-client trials pass, the
-skill is a candidate, not a qualified integration. Windows image and audio paths are
-plain `C:\...` whenever that is exact (#210, PR #215, `967ef01`).
+There is also an **agent skill** (`skills/vsift/`) that teaches Claude Code or Codex
+to run an investigation with the CLI and write a cited report, and a trial harness
+that runs and grades those clients on synthetic recordings (Codex in a Linux
+container: L-076, #204). In the final counted campaign (on `56f1e1f`) the strong
+models (Opus 5.5, GPT-6-Astra) passed 9 of 11; Claude Sonnet 5.5 passed 25 of 28,
+missing only the second, resumed half of A-02; GPT-6-Sol answered 25 of 28 right but
+passed fully only 15, failing on harmless look-around commands, a misread check-image
+code and the same resumed half; GPT-6-Luna passed 15. The compact tier is now Sonnet
+5.5 and GPT-6-Sol; Luna and Haiku 4.5 are below the line. **PR 3i (in review)** is the
+last fix round: the grader accepts those harmless probes, the check image is redrawn
+so its letters cannot be confused, the skill tells a resumed run that it has its own
+budget and must check the earlier findings again, and the grader reads numbers
+written in words and times like `10.32`. Its re-grade lifts Sol to 21 of 28; the rest
+needs the compact tier's re-run. Until the named-client trials pass, the skill is a
+candidate, not a qualified integration.
 
 **P00-P11 are complete** (P11 closed 2026-09-28, merge `40c4038`; SEC-T01's
 adversarial evidence is technical debt, #188, L-068). **P12 (agent skill) is in
-progress.** PRs 1, 2, 3a-3g (merged) and 3h are increments, not the packet.
+progress.** PRs 1, 2, 3a-3h (merged) and 3i are increments, not the packet.
 
 ## P12 in one view
 
@@ -59,49 +60,44 @@ progress.** PRs 1, 2, 3a-3g (merged) and 3h are increments, not the packet.
 - **PR 2 (#201, `9d2f60e`): trial machinery.** `tools/vsift-agent-trials` (`prepare`,
   `run`, `grade` with mechanical and interpretation results, `record`); 21 scenarios;
   runbook `docs/agents/trials.md`; SEC-T02 suite.
-- **PR 3a, 3c, 3d (`ed07c0d`), after dry trials:** trusted Claude Code workspaces, one
-  settings source, `client_configuration`; search first; nothing but `vsift`;
-  `wall_time_s` may be `null` (L-077); operation-id grammar; persistent truth events.
-- **PR 3b (#209, `3f91661`): Codex in Linux** (pinned `agent`/`harness` images, seccomp
-  profile L-078, three containers per trial, `codex-trial.ps1`).
-- **PR 3e (#211, `261b50d`): every diagnostic-pass fix** (grader false positives,
-  Codex image code and notices, free help forms, the skill's inline handoff).
-- **Counted campaigns (on `261b50d`):** Opus 5.5 and GPT-6-Astra on A-08/A-09 (the
-  review tier; 11/11 each pass both results after PR 3f's re-grade), Haiku 4.5 and
-  GPT-6-Luna on A-01..A-07 and SEC-T02. Raw logs stay local.
-- **PR 3f (#212, `b68d746`, merged):** orientation in the starting folder is
-  housekeeping; handoff v1 requires only what the agent alone knows (recorded values
-  optional, checked when given, resolved from the bundle otherwise); L-081.
-- **Compact-tier runs (on `b68d746`, 28 trials each):** Sonnet 5.5 (Claude Code
-  2.1.284) 28/28 answers, 9/28 full passes, 18 failing only on the handoff; GPT-6-Luna
-  24/28 and 11/28; Haiku 4.5 6/28 and 2/28.
-- **PR 3g (#214, `f018e0d`, merged): maintainer decisions of 2026-09-29.** Compact
-  tier Sonnet 5.5 and GPT-6-Luna, Haiku 4.5 below the line (L-082), validator in P13
-  (#213); vocabulary tables guarded; one exact resume card, required only when work can
-  continue; gap notes 600 characters; letter case normalised, unused citations warned.
-- **PR 3h (branch `p12-pr3h-display-text`, this change): `display_text`** (ADR 0008
-  note). Every segment adds `display_text` (a speaker `display_label`): hidden
-  characters (Unicode `Cf`, default-ignorable, U+2028/9; `is_hidden_character` in
-  `vsift-contract`) as `<U+XXXX>`, rendered at output; `text`, storage, identities and
-  search unchanged; literal notation not escaped. The skill quotes only it.
-- **Next:** merge PR 3h, then re-run the compact tier on its merge commit. The packet
+- **PR 3a-3e:** trusted Claude Code workspaces and one settings source; search first;
+  nothing but `vsift`; Codex in Linux (PR 3b, #209: pinned images, seccomp L-078, three
+  containers per trial); every diagnostic-pass fix (PR 3e, #211).
+- **PR 3f (#212, `b68d746`):** start-folder orientation is housekeeping; handoff v1
+  requires only what the agent alone knows (L-081).
+- **PR 3g (#214, `f018e0d`):** the handoff vocabulary shown and guarded; one exact
+  resume card, required only when work can continue; unused citations a warning.
+- **PR 3h (#216, `56f1e1f`): `display_text`** (ADR 0008 note): hidden characters shown
+  as `<U+XXXX>`; the skill quotes only it. No final-campaign report held one (L-083).
+- **Final campaign (on `56f1e1f`):** full passes Sonnet 5.5 25/28, GPT-6-Sol 15/28 (25
+  answers right), GPT-6-Luna 15/28, Opus 5.5 9/11, GPT-6-Astra 9/11.
+- **PR 3i (branch `p12-pr3i-final-fixes`, this change): the maintainer's decisions of
+  2026-09-30.** Grader: `command -v`/`which <name>`, `ls -l`/`-a` of named files and
+  `true`/`:` are orientation (compound only with free vsift); the image check reads the
+  code of the image each trial's workspace received (a table by SHA-256); cardinal
+  numbers in words and `H.MM` times match key facts. Skill: a redrawn check image
+  (glyphs never confused, 776x168, command in `docs/agents/skill.md`); `resume.md`: a
+  new run has its own budget, repeats the image check and verifies each earlier finding
+  with one command; the card may carry `to_verify` (optional). Re-grade `grade-3i.json`:
+  Sol 21/28, Luna 16/28, others unchanged. L-084 (Luna below the line).
+- **Next:** merge PR 3i, then re-run the compact tier on its merge commit. The packet
   completes only when the named-client trials pass.
 
 ## Found in P12
 
 - **L-075 (decided):** Codex shows no viewed image; the right check code proves its
-  image access, and its image budgets are unmeasured.
+  image access, and its image budgets are unmeasured. PR 3i keys the code by image.
 - **L-076 (trials avoid it; #204 open):** Codex's Windows sandbox and VSift's private
   session root are incompatible. **L-078..L-080:** the container's seccomp relaxation,
   unrestricted container egress, and the agent's read access to its sign-in. **L-081:**
   a slim handoff alone may not carry its citations' times (resolve through the bundle).
-- **L-082:** Haiku 4.5 is not supported. **L-083 (accepted residual):** `text` and
-  `original_text` keep raw hidden characters by design; only `display_text` (PR 3h)
-  shows them, and the compact-tier re-run shows whether models quote it.
+- **L-082, L-084:** Haiku 4.5 and GPT-6-Luna are below the compact line. **L-083
+  (accepted residual):** `text` and `original_text` keep raw hidden characters.
 - **L-074 (open):** SubRip markup removal drops any `<letter...>` tag. **L-071:** parse
   failures in JSON modes carry no remediation (the skill works around it).
-- **Open grader readings (PR 3c):** `untrusted_listed` takes only F12-E01 (0-8 s)
-  though the on-screen instructions last to 12 s; a frame before 8 s binds `install`.
+- **Open grader readings:** `untrusted_listed` takes only F12-E01 (0-8 s) though the
+  on-screen instructions last to 12 s; an `rg --files` exclude glob with a separator
+  stays strict (PR 3i, for the maintainer).
 
 ## What works (public CLI)
 
@@ -125,7 +121,7 @@ progress.** PRs 1, 2, 3a-3g (merged) and 3h are increments, not the packet.
 | P09 | Complete (2026-09-27, `e57c706`): frames, neighbours, bursts, crops, audio, reuse, lineage |
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
-| P12 | In progress: PRs 1, 2, 3a-3g merged; review tier passes; compact tier (Sonnet 5.5, GPT-6-Luna) re-run after 3h (`display_text`, in review) |
+| P12 | In progress: PRs 1, 2, 3a-3h merged; final campaign on `56f1e1f`; PR 3i (final fixes) in review, then the compact tier (Sonnet 5.5, GPT-6-Sol) re-runs |
 | P13 | Not started; also delivers managed installation and human-readable output. Its plan now fixes the npm launcher pattern and a name checklist (2026-09-28) |
 | P14 | Not started |
 
@@ -142,7 +138,7 @@ is crate-private. The trial harness `tools/vsift-agent-trials` depends only on `
 
 ## Quality evidence
 
-- P12 PR 3h gates on Windows 11 (fmt, strict Clippy with and without features,
+- P12 PR 3i gates on Windows 11 (fmt, strict Clippy with and without features,
   workspace tests, warning-denied rustdoc, governance) go in the pull request
   description.
 - CI on every PR: Quality on Ubuntu, macOS and Windows; Documentation, Governance, fuzz

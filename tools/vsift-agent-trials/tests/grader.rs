@@ -1780,6 +1780,12 @@ fn look_around_probes_beyond_the_decision_stay_unauthorized() -> TestResult {
             "command -v vsift && vsift session retain ses_0123456789abcdef --output evidence-bundle-phase-1 --json",
             "joins the explicit command session.retain to orientation",
         ),
+        // The compound rule covers every orientation, `cd` to the starting
+        // folder included (PR 3f allowed any permitted command after it).
+        (
+            "cd . && vsift session retain ses_0123456789abcdef --output evidence-bundle-phase-1 --json",
+            "joins the explicit command session.retain to orientation",
+        ),
         ("cd /tmp && command -v vsift", "cd changes to a folder"),
         ("rg vsift .", "rg searches outside"),
     ] {
