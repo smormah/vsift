@@ -62,6 +62,10 @@ cargo test --workspace --locked
 cargo run --locked -p vsift-governance -- check
 ```
 
+If the change touches `npm/`, also run `node --test npm/test/launcher.test.cjs` (Node.js
+22 or later). No npm package may declare install scripts or name a person, and nothing in
+this repository publishes to a public registry outside the protected release workflow.
+
 Add tests at the lowest useful layer. Public CLI JSON changes require contract tests and documentation.
 
 ## Documentation is part of the change

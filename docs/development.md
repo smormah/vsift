@@ -30,7 +30,8 @@ cargo test --workspace --locked
 cargo doc --workspace --no-deps --locked
 ```
 
-CI runs the same checks on Windows, macOS, and Linux.
+CI runs the same checks on Windows, macOS, and Linux. If you changed anything under
+`npm/`, also run `node --test npm/test/launcher.test.cjs` (see "npm packages" below).
 
 If you changed a parser the fuzz targets use, or anything in `fuzz/`, also run the
 fuzz harness checks (the workspace excludes `fuzz/`, so the commands above skip it):
@@ -306,6 +307,29 @@ release attest and publish jobs, no untrusted `${{ }}` in a `run` script).
 `vsift --version` prints `vsift <version> (<commit>)` when `VSIFT_SOURCE_COMMIT` holds
 the full commit SHA at build time, as the release workflow sets it; a build without it
 prints the version alone.
+
+## npm packages
+
+`npm/vsift/` holds the npm launcher's sources: `bin/vsift.cjs` (plain CommonJS, `node:`
+built-ins only, no dependencies), `package.json` and `README.md`. The platform packages
+are generated from the release archives by `vsift-release npm`
+([`operations/release.md`](operations/release.md) section 5). If you change the launcher,
+run its tests with Node.js 22 or later (CI job `npm launcher` runs them on Windows, macOS
+and Linux):
+
+```console
+node --test npm/test/launcher.test.cjs
+```
+
+They copy the Node.js executable into fake package layouts as a stand-in for `vsift`
+(about 100 MB each, in the temporary folder) and, on Windows, send a console
+Ctrl-Break with `tools/send-console-ctrl.ps1`. No package may have `scripts`, a
+`gypfile`, a `binding.gyp` or a person in its manifest; the governance check fails
+otherwise. Bumping the workspace version means changing `npm/vsift/package.json`'s
+`version` and its three optional dependencies with it. The full qualification with npm,
+pnpm, Yarn and Bun against a loopback Verdaccio runs in the Release workflow; to run it
+yourself, see the same runbook section. It never publishes to a public registry, and
+nothing in this repository may.
 
 ## Documentation
 

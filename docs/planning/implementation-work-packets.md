@@ -196,6 +196,12 @@ esbuild and Biome use.
   above. The native binaries stay downloadable from GitHub Releases for users with no
   JavaScript runtime.
 
+2026-09-30 (P13 PR 9): implemented as the ADR 0023 PR 9 note records. The `vsift`
+package also carries the skill (decision H7) and `platform-digests.json` (H5) beside the
+launcher; a launcher failure exits 127 (no platform package) or 126 (refused or cannot
+start); the qualification is the Release workflow's `npm-qualify` matrix, with Yarn
+through a project install because Yarn 4 has no global one (L-092).
+
 ### P13 name checklist
 
 2026-09-28 (maintainer): every name VSift will be published under is held by the real

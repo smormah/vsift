@@ -365,6 +365,29 @@ an agent trial.
   workflow permissions, protected branch/tag/environment behavior and action pins.
 - R-SEC02: native/npm artifact matches protected commit; verify signatures/provenance,
   dependency/model inventory, malicious archive rejection and wrong-target behavior.
+  *P13 PR 9 (2026-09-30): the npm packages are assembled only from canonical release
+  archives (`vsift-release npm` reads each back and requires it to equal a fresh
+  packaging) and every packed tarball is checked against a fresh assembly
+  (`npm-verify`: exact files, bytes and executable modes, no lifecycle script, no
+  `binding.gyp`); `tools/vsift-release/src/npm.rs` tests refuse a changed executable, a
+  lost mode, a missing notice, an extra binary, a `binding.gyp` and every lifecycle
+  script. Wrong-target behaviour: the launcher refuses an unsupported platform with
+  exit 127 naming the three targets, and another version, a changed or replaced
+  executable or a damaged digest file with exit 126 (`npm/test/launcher.test.cjs` for
+  every target; each `npm-qualify` job on the installed packages). Provenance is PR 10.*
+- R-14 (install without Rust through npm, pnpm, Yarn and Bun): *P13 PR 9 (2026-09-30):*
+  the Release workflow's `npm-qualify` jobs publish the packed tarballs to a loopback
+  Verdaccio and, on `windows-2025`, `macos-15` and `ubuntu-24.04` with each package
+  manager, check the global (Yarn: project) install with scripts disabled under a path
+  with spaces and Unicode, `--version` naming the commit, `setup check --json`, a path
+  argument with spaces and Unicode through every installed command, exit statuses equal
+  to vsift's, standard input, the launcher's check cost under 50 ms, signal forwarding
+  (POSIX `SIGTERM`/`SIGINT` to the launcher alone; Windows console Ctrl-Break) with no
+  orphan, the refusals above, the one-shot runners, optional dependencies omitted (exit
+  127, no stack trace), running offline and a clean uninstall
+  (`npm/qualification/qualify.cjs`; results in the pull request and each job's summary).
+  Known limits L-091 to L-094. The clean-machine install from the published pre-release
+  is P14's.
 - R-SEC03: scan results, not merely job success, have no unresolved release-blocking
   findings. Review Cargo, native provider and container advisories separately.
 

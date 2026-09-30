@@ -308,7 +308,86 @@ pub(crate) fn verify_archive(
     archive: &[u8],
 ) -> Result<(), ArchiveError> {
     let expected = entries(version, target, contents)?;
+    let (mut found, _) = read_entries(archive)?;
+    for (path, entry) in &expected {
+        match found.remove(path) {
+            None => return Err(ArchiveError::Mismatch(format!("{path} is missing"))),
+            Some(actual) if actual != *entry => {
+                return Err(ArchiveError::Mismatch(format!("{path} differs")));
+            }
+            Some(_) => {}
+        }
+    }
+    if let Some(extra) = found.keys().next() {
+        return Err(ArchiveError::Mismatch(format!("{extra} was not packaged")));
+    }
+    let repackaged = write_archive(version, target, source_date_epoch, contents, Vec::new())?;
+    if repackaged != archive {
+        return Err(ArchiveError::Mismatch(String::from(
+            "its bytes differ from a fresh packaging (header fields or compression)",
+        )));
+    }
+    Ok(())
+}
+
+/// Reads a packaged archive back into its contents, and requires it to be
+/// exactly the archive [`write_archive`] makes of those contents at the time
+/// its entries carry.
+///
+/// The npm packages are assembled from the release archives (P13 PR 9), so
+/// they carry the bytes that were built, checked and checksummed, never loose
+/// files; an archive that is not a canonical release archive is refused.
+pub(crate) fn read_archive(
+    version: &str,
+    target: ReleaseTarget,
+    archive: &[u8],
+) -> Result<ArchiveContents, ArchiveError> {
+    let (found, first_mtime) = read_entries(archive)?;
+    let top = archive_stem(version, target);
+    let prefix = format!("{top}/");
+    let skill_prefix = format!("{SKILL_DIRECTORY}/");
+    let mut contents = ArchiveContents {
+        executable: Vec::new(),
+        licences: BTreeMap::new(),
+        notices: Vec::new(),
+        sbom: Vec::new(),
+        skill: BTreeMap::new(),
+    };
+    for (path, entry) in found {
+        let Entry::File { bytes, .. } = entry else {
+            continue;
+        };
+        let Some(relative) = path.strip_prefix(&prefix) else {
+            return Err(ArchiveError::Mismatch(format!("{path} is outside {top}")));
+        };
+        if relative == target.executable_name() {
+            contents.executable = bytes;
+        } else if LICENCE_FILES.contains(&relative) {
+            contents.licences.insert(relative.to_owned(), bytes);
+        } else if relative == NOTICES_NAME {
+            contents.notices = bytes;
+        } else if relative == SBOM_NAME {
+            contents.sbom = bytes;
+        } else if let Some(skill) = relative.strip_prefix(&skill_prefix) {
+            contents.skill.insert(skill.to_owned(), bytes);
+        } else {
+            return Err(ArchiveError::Mismatch(format!("{path} was not packaged")));
+        }
+    }
+    let Some(source_date_epoch) = first_mtime else {
+        return Err(ArchiveError::Mismatch(String::from("the archive is empty")));
+    };
+    verify_archive(version, target, source_date_epoch, &contents, archive)?;
+    Ok(contents)
+}
+
+/// Every entry of a gzip-compressed tar archive by path (directories without
+/// a trailing slash), and the first entry's modification time. Only
+/// directories with mode 0755 and regular files are accepted, each path once,
+/// with at most [`MAXIMUM_UNPACKED_BYTES`] of content in all.
+fn read_entries(archive: &[u8]) -> Result<(BTreeMap<String, Entry>, Option<u64>), ArchiveError> {
     let mut found = BTreeMap::new();
+    let mut first_mtime = None;
     let mut reader = Archive::new(GzDecoder::new(archive).take(MAXIMUM_UNPACKED_BYTES + 1));
     let mut unpacked: u64 = 0;
     for entry in reader.entries()? {
@@ -321,6 +400,9 @@ pub(crate) fn verify_archive(
         let header = entry.header();
         let mode = header.mode()?;
         let kind = header.entry_type();
+        if first_mtime.is_none() {
+            first_mtime = Some(header.mtime()?);
+        }
         let actual = if kind == EntryType::Directory {
             if mode != DIRECTORY_MODE {
                 return Err(ArchiveError::Mismatch(format!("{path} has mode {mode:o}")));
@@ -345,25 +427,7 @@ pub(crate) fn verify_archive(
             return Err(ArchiveError::Mismatch(format!("{path} appears twice")));
         }
     }
-    for (path, entry) in &expected {
-        match found.remove(path) {
-            None => return Err(ArchiveError::Mismatch(format!("{path} is missing"))),
-            Some(actual) if actual != *entry => {
-                return Err(ArchiveError::Mismatch(format!("{path} differs")));
-            }
-            Some(_) => {}
-        }
-    }
-    if let Some(extra) = found.keys().next() {
-        return Err(ArchiveError::Mismatch(format!("{extra} was not packaged")));
-    }
-    let repackaged = write_archive(version, target, source_date_epoch, contents, Vec::new())?;
-    if repackaged != archive {
-        return Err(ArchiveError::Mismatch(String::from(
-            "its bytes differ from a fresh packaging (header fields or compression)",
-        )));
-    }
-    Ok(())
+    Ok((found, first_mtime))
 }
 
 #[cfg(test)]
@@ -373,7 +437,10 @@ pub(crate) mod tests {
     use flate2::{Compression, GzBuilder, read::GzDecoder};
     use tar::{Archive, Builder, EntryType, Header};
 
-    use super::{ArchiveContents, ArchiveError, archive_file_name, verify_archive, write_archive};
+    use super::{
+        ArchiveContents, ArchiveError, archive_file_name, read_archive, verify_archive,
+        write_archive,
+    };
     use crate::target::{ReleaseTarget, tests::minimal_executable};
 
     const EPOCH: u64 = 1_790_000_000;
@@ -520,6 +587,30 @@ pub(crate) mod tests {
             verify_archive("0.1.0", target, EPOCH, &other_binary, archive.as_slice()),
             Err(ArchiveError::Mismatch(_))
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn an_archive_reads_back_into_its_contents() -> Result<(), Box<dyn Error>> {
+        for target in ReleaseTarget::ALL {
+            let packaged = contents(target);
+            let archive = write_archive("0.1.0", target, EPOCH, &packaged, Vec::new())?;
+            let read = read_archive("0.1.0", target, &archive)?;
+            assert_eq!(read.executable, packaged.executable);
+            assert_eq!(read.licences, packaged.licences);
+            assert_eq!(read.notices, packaged.notices);
+            assert_eq!(read.sbom, packaged.sbom);
+            assert_eq!(read.skill, packaged.skill);
+            // Another version or target names another top directory.
+            assert!(read_archive("0.1.1", target, &archive).is_err());
+        }
+        let target = ReleaseTarget::WindowsX64;
+        let archive = write_archive("0.1.0", target, EPOCH, &contents(target), Vec::new())?;
+        assert!(read_archive("0.1.0", ReleaseTarget::LinuxX64, &archive).is_err());
+        let mut truncated = archive.clone();
+        truncated.truncate(archive.len() / 2);
+        assert!(read_archive("0.1.0", target, &truncated).is_err());
+        assert!(read_archive("0.1.0", target, &[]).is_err());
         Ok(())
     }
 

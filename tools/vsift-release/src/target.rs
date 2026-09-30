@@ -24,7 +24,6 @@ pub(crate) enum ReleaseTarget {
 
 impl ReleaseTarget {
     /// Every target, in the order archives and checksums list them.
-    #[cfg(test)]
     pub(crate) const ALL: [Self; 3] = [Self::MacosArm64, Self::WindowsX64, Self::LinuxX64];
 
     /// The Rust target triple, which also names the archive.
@@ -42,6 +41,45 @@ impl ReleaseTarget {
         match self {
             Self::WindowsX64 => "vsift.exe",
             Self::MacosArm64 | Self::LinuxX64 => "vsift",
+        }
+    }
+
+    /// The npm package that carries this target's executable (ADR 0023
+    /// decision A and its amendment: the `@vsift` scope).
+    pub(crate) const fn npm_package_name(self) -> &'static str {
+        match self {
+            Self::WindowsX64 => "@vsift/win32-x64",
+            Self::MacosArm64 => "@vsift/darwin-arm64",
+            Self::LinuxX64 => "@vsift/linux-x64",
+        }
+    }
+
+    /// The directory the npm package is assembled in, which is also the stem
+    /// of the file `npm pack` names after the package.
+    pub(crate) const fn npm_directory(self) -> &'static str {
+        match self {
+            Self::WindowsX64 => "vsift-win32-x64",
+            Self::MacosArm64 => "vsift-darwin-arm64",
+            Self::LinuxX64 => "vsift-linux-x64",
+        }
+    }
+
+    /// The `os` and `cpu` values the npm package declares: Node.js's
+    /// `process.platform` and `process.arch` of the machines it runs on.
+    pub(crate) const fn npm_os_and_cpu(self) -> (&'static str, &'static str) {
+        match self {
+            Self::WindowsX64 => ("win32", "x64"),
+            Self::MacosArm64 => ("darwin", "arm64"),
+            Self::LinuxX64 => ("linux", "x64"),
+        }
+    }
+
+    /// The machines the target runs on, in words.
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::WindowsX64 => "Windows x64",
+            Self::MacosArm64 => "macOS on Apple silicon",
+            Self::LinuxX64 => "Linux x64 with glibc",
         }
     }
 

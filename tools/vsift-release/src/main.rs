@@ -11,7 +11,15 @@
 //! vsift-release verify --target <triple> --binary <file> --notices <file> \
 //!     --sbom <file> --source-date-epoch <seconds> --archive <file>
 //! vsift-release checksums --output <file> <archive>...
+//! vsift-release npm --archive <file> --archive <file> --archive <file> \
+//!     --out-dir <dir>
+//! vsift-release npm-verify --archive <file> (three times) --tarball <file> \
+//!     (four times)
 //! ```
+//!
+//! `npm` assembles the four npm packages from the three archives (P13 PR 9,
+//! see the `npm` module); `npm pack` turns each directory into a tarball, and
+//! `npm-verify` checks those tarballs against a fresh assembly.
 //!
 //! The tool writes only the files it is asked to create, never overwrites one,
 //! and contacts no network.
@@ -20,6 +28,7 @@
 
 mod archive;
 mod checksums;
+mod npm;
 mod target;
 
 use std::{
@@ -36,9 +45,13 @@ use clap::{Parser, Subcommand};
 use crate::{
     archive::{
         ArchiveContents, ArchiveError, LICENCE_FILES, SKILL_DIRECTORY, archive_file_name,
-        is_plain_relative_path, verify_archive, write_archive,
+        is_plain_relative_path, read_archive, verify_archive, write_archive,
     },
     checksums::{ChecksumError, checksum_list},
+    npm::{
+        LAUNCHER_DIRECTORY, LAUNCHER_MANIFEST, LAUNCHER_README, LAUNCHER_SCRIPT, LauncherSources,
+        NpmError, NpmPackage, assemble, verify_tarball,
+    },
     target::ReleaseTarget,
 };
 
@@ -93,6 +106,28 @@ enum Command {
         #[arg(required = true)]
         archives: Vec<PathBuf>,
     },
+    /// Assemble the npm packages from the three release archives, one
+    /// directory per package in the output directory.
+    Npm {
+        /// A release archive, named `vsift-<version>-<target>.tar.gz`; give
+        /// one per target.
+        #[arg(long = "archive", required = true)]
+        archives: Vec<PathBuf>,
+        /// An existing directory; the package directories must not exist in
+        /// it yet.
+        #[arg(long)]
+        out_dir: PathBuf,
+    },
+    /// Check tarballs made by `npm pack` against a fresh assembly from the
+    /// same archives.
+    NpmVerify {
+        /// A release archive; give one per target.
+        #[arg(long = "archive", required = true)]
+        archives: Vec<PathBuf>,
+        /// A packed package; give one per package.
+        #[arg(long = "tarball", required = true)]
+        tarballs: Vec<PathBuf>,
+    },
 }
 
 /// The inputs of one archive besides the repository's licences and skill.
@@ -130,6 +165,12 @@ enum ReleaseError {
     Archive(ArchiveError),
     /// The checksum list could not be written.
     Checksums(ChecksumError),
+    /// The archive's file name does not name this version and a target.
+    UnrecognisedArchive(PathBuf),
+    /// The npm packages could not be assembled or a tarball is wrong.
+    Npm(NpmError),
+    /// Not exactly one tarball was given per package.
+    Tarballs(String),
 }
 
 impl fmt::Display for ReleaseError {
@@ -150,6 +191,15 @@ impl fmt::Display for ReleaseError {
             ),
             Self::Archive(error) => error.fmt(formatter),
             Self::Checksums(error) => error.fmt(formatter),
+            Self::UnrecognisedArchive(path) => write!(
+                formatter,
+                "{} is not named vsift-{VERSION}-<target>.tar.gz for a release target",
+                path.display()
+            ),
+            Self::Npm(error) => error.fmt(formatter),
+            Self::Tarballs(reason) => {
+                write!(formatter, "the tarballs are not one per package: {reason}")
+            }
         }
     }
 }
@@ -165,6 +215,12 @@ impl From<ArchiveError> for ReleaseError {
 impl From<ChecksumError> for ReleaseError {
     fn from(error: ChecksumError) -> Self {
         Self::Checksums(error)
+    }
+}
+
+impl From<NpmError> for ReleaseError {
+    fn from(error: NpmError) -> Self {
+        Self::Npm(error)
     }
 }
 
@@ -229,7 +285,102 @@ fn run(command: Command, repository_root: &Path) -> Result<PathBuf, ReleaseError
                 .map_err(|source| io_error(&output, source))?;
             Ok(output)
         }
+        Command::Npm { archives, out_dir } => {
+            let packages = assemble_packages(&archives, repository_root)?;
+            for package in &packages {
+                write_package(&out_dir, package)?;
+            }
+            Ok(out_dir)
+        }
+        Command::NpmVerify { archives, tarballs } => {
+            let packages = assemble_packages(&archives, repository_root)?;
+            if tarballs.len() != packages.len() {
+                return Err(ReleaseError::Tarballs(format!(
+                    "{} given for {} packages",
+                    tarballs.len(),
+                    packages.len()
+                )));
+            }
+            let mut verified = Vec::new();
+            for (index, tarball) in tarballs.iter().enumerate() {
+                let name = verify_tarball(&packages, &read(tarball)?, index + 1)?;
+                if verified.contains(&name) {
+                    return Err(ReleaseError::Tarballs(format!("{name} is given twice")));
+                }
+                verified.push(name);
+            }
+            Ok(tarballs.into_iter().next().unwrap_or_default())
+        }
     }
+}
+
+/// Reads each archive back (it must be a canonical release archive of this
+/// version, named for its target) and assembles the npm packages from them
+/// and the launcher's sources in the repository.
+fn assemble_packages(
+    archives: &[PathBuf],
+    repository_root: &Path,
+) -> Result<Vec<NpmPackage>, ReleaseError> {
+    let mut contents = Vec::new();
+    for path in archives {
+        let name = path.file_name().and_then(|name| name.to_str());
+        let target = ReleaseTarget::ALL
+            .into_iter()
+            .find(|target| name == Some(archive_file_name(VERSION, *target).as_str()))
+            .ok_or_else(|| ReleaseError::UnrecognisedArchive(path.clone()))?;
+        contents.push((target, read_archive(VERSION, target, &read(path)?)?));
+    }
+    let launcher_root = repository_root.join(LAUNCHER_DIRECTORY);
+    let launcher = LauncherSources {
+        manifest: read(&launcher_root.join(LAUNCHER_MANIFEST))?,
+        script: read(&launcher_root.join(LAUNCHER_SCRIPT))?,
+        readme: read(&launcher_root.join(LAUNCHER_README))?,
+    };
+    Ok(assemble(VERSION, &contents, &launcher)?)
+}
+
+/// Writes one package's directory under `out_dir`; the directory must not
+/// exist yet. On Unix each file gets its package mode, which `npm pack`
+/// records; packing therefore runs on Linux or macOS (the release workflow
+/// packs on Ubuntu, and `npm-verify` refuses a tarball whose executable lost
+/// its mode).
+fn write_package(out_dir: &Path, package: &NpmPackage) -> Result<(), ReleaseError> {
+    let root = out_dir.join(package.directory);
+    fs::create_dir(&root).map_err(|source| io_error(&root, source))?;
+    for (relative, file) in &package.files {
+        let path = relative
+            .split('/')
+            .fold(root.clone(), |path, component| path.join(component));
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|source| io_error(parent, source))?;
+        }
+        let mut output = create_new(&path)?;
+        output
+            .write_all(&file.bytes)
+            .and_then(|()| output.sync_all())
+            .map_err(|source| io_error(&path, source))?;
+        set_mode(&path, file.mode)?;
+    }
+    Ok(())
+}
+
+/// Gives a written file its package mode.
+#[cfg(unix)]
+fn set_mode(path: &Path, mode: u32) -> Result<(), ReleaseError> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+        .map_err(|source| io_error(path, source))
+}
+
+/// Windows records no Unix modes; a package directory written here must be
+/// packed on Linux or macOS after its modes are set there.
+#[cfg(not(unix))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the Unix version can fail; this one has nothing to do"
+)]
+fn set_mode(_path: &Path, _mode: u32) -> Result<(), ReleaseError> {
+    Ok(())
 }
 
 fn load_contents(inputs: &Inputs, root: &Path) -> Result<ArchiveContents, ReleaseError> {
@@ -482,6 +633,101 @@ mod tests {
             "{result:?}"
         );
         assert_eq!(fs::read_dir(&scratch.0)?.count(), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn npm_packages_are_assembled_from_packaged_archives() -> Result<(), Box<dyn Error>> {
+        let scratch = Scratch::new("npm")?;
+        let root = repository_root();
+        let archives_dir = scratch.0.join("archives");
+        fs::create_dir(&archives_dir)?;
+        let mut archives = Vec::new();
+        for target in ReleaseTarget::ALL {
+            let fixture = contents(target);
+            let inputs_dir = scratch.0.join(target.triple());
+            fs::create_dir(&inputs_dir)?;
+            let binary = inputs_dir.join(target.executable_name());
+            let notices = inputs_dir.join("notices.txt");
+            let sbom = inputs_dir.join("sbom.json");
+            fs::write(&binary, &fixture.executable)?;
+            fs::write(&notices, &fixture.notices)?;
+            fs::write(&sbom, &fixture.sbom)?;
+            archives.push(run(
+                Command::Package {
+                    inputs: Inputs {
+                        target,
+                        binary,
+                        notices,
+                        sbom,
+                    },
+                    source_date_epoch: 1_790_000_000,
+                    out_dir: archives_dir.clone(),
+                },
+                &root,
+            )?);
+        }
+        let out = scratch.0.join("npm");
+        fs::create_dir(&out)?;
+        run(
+            Command::Npm {
+                archives: archives.clone(),
+                out_dir: out.clone(),
+            },
+            &root,
+        )?;
+        for directory in [
+            "vsift",
+            "vsift-darwin-arm64",
+            "vsift-linux-x64",
+            "vsift-win32-x64",
+        ] {
+            assert!(
+                out.join(directory).join("package.json").is_file(),
+                "{directory}"
+            );
+        }
+        assert_eq!(
+            fs::read(out.join("vsift/bin/vsift.cjs"))?,
+            fs::read(root.join("npm/vsift/bin/vsift.cjs"))?
+        );
+        assert_eq!(
+            fs::read(out.join("vsift/skills/vsift/SKILL.md"))?,
+            fs::read(root.join("skills/vsift/SKILL.md"))?
+        );
+        assert!(out.join("vsift-win32-x64/vsift.exe").is_file());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(out.join("vsift-linux-x64/vsift"))?
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o755);
+        }
+        // Existing package directories are never overwritten.
+        let again = run(
+            Command::Npm {
+                archives: archives.clone(),
+                out_dir: out,
+            },
+            &root,
+        );
+        assert!(matches!(again, Err(ReleaseError::Io { .. })), "{again:?}");
+
+        // An archive must be named for this version and a target.
+        let renamed = archives_dir.join("vsift.tar.gz");
+        fs::copy(&archives[0], &renamed)?;
+        let unrecognised = run(
+            Command::Npm {
+                archives: vec![renamed],
+                out_dir: scratch.0.clone(),
+            },
+            &root,
+        );
+        assert!(
+            matches!(unrecognised, Err(ReleaseError::UnrecognisedArchive(_))),
+            "{unrecognised:?}"
+        );
         Ok(())
     }
 }

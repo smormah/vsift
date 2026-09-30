@@ -1,17 +1,19 @@
 # Building and checking release archives
 
-Status: maintainer runbook for the native release archives, 2026-09-30 (P13 PR 8,
+Status: maintainer runbook for the native release archives and the npm packages,
+2026-09-30 (P13 PRs 8 and 9,
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-section 1 and decision D). **Nothing is published yet.** The workflow described here
-builds, checks and packages the archives and keeps them only as artifacts of its own
-run. Attestation and publishing (the protected `release` environment, Sigstore build
-provenance, npm trusted publishing) are P13 PR 10, and the npm packages are PR 9; this
-runbook gains those sections then. The installation guide for users is
-`docs/operations/install.md` (P13 PR 11).
+sections 1 and 2, decisions D and H5). **Nothing is published yet.** The workflow
+described here builds, checks and packages the archives, assembles and qualifies the npm
+packages (section 5), and keeps everything only as artifacts of its own run. Attestation
+and publishing (the protected `release` environment, Sigstore build provenance, npm
+trusted publishing) are P13 PR 10; this runbook gains that section then. The
+installation guide for users is [`install.md`](install.md).
 
 ## 1. What the release workflow does
 
-`.github/workflows/release.yml` (**Release**) has three jobs:
+`.github/workflows/release.yml` (**Release**) has three archive jobs, and the two npm
+jobs of section 5:
 
 | Job | Runner | What it does |
 | --- | --- | --- |
@@ -39,9 +41,10 @@ executable is built: test and qualification binaries such as the smoke-test stan
 belong to other packages and are never compiled here.
 
 **When it runs.** On pull requests to `main` and pushes to `main` that change anything
-an archive is made from (`crates/`, `skills/vsift/`, the licences, `Cargo.toml`,
-`Cargo.lock`, `rust-toolchain.toml`, `tools/vsift-release/` or the workflow itself),
-and on manual dispatch. Never on a tag or a GitHub release.
+an archive or npm package is made from (`crates/`, `skills/vsift/`, the licences,
+`Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `tools/vsift-release/`, `npm/`,
+`tools/send-console-ctrl.ps1`, which the Windows qualification uses, or the workflow
+itself), and on manual dispatch. Never on a tag or a GitHub release.
 
 **Why it cannot publish.** The workflow grants no job a write scope or an OIDC token
 (`permissions: {}` at the top, `contents: read` per job), checks out without keeping
@@ -132,3 +135,57 @@ cargo run --locked -p vsift-release -- package --target <target> --binary <path 
 ```
 
 A dry-run archive is unsigned and unattested. Do not distribute one.
+
+## 5. The npm packages and their qualification (P13 PR 9)
+
+The same workflow turns the archives into the four npm packages and qualifies them. Both
+jobs run after `package`, and neither can publish: they have `contents: read`, no OIDC
+token and no secret, and the only registry they write to runs on the job's own loopback
+address and is gone when the job ends.
+
+| Job | Runner | What it does |
+| --- | --- | --- |
+| `npm-package` | `ubuntu-24.04` | `vsift-release npm` reads the three archives back (each must be canonical) and writes the package folders; `npm pack` packs each twice and the two tarballs must be identical; `vsift-release npm-verify` checks every tarball against a fresh assembly; keeps the four tarballs as the run's `npm-packages` artifact for 7 days. |
+| `npm-qualify` | `windows-2025`, `macos-15`, `ubuntu-24.04`, each with npm, pnpm, Yarn and Bun (12 jobs) | Installs the pinned Verdaccio and package manager from the public registry (read-only, no credentials), then runs `npm/qualification/qualify.cjs`, which publishes the tarballs to Verdaccio on `127.0.0.1:4873` and qualifies the package manager against it (ADR 0023, PR 9 note). The job summary lists every check. |
+
+**The packages.**
+
+| Package | Holds |
+| --- | --- |
+| `vsift` | `bin/vsift.cjs`, `package.json` and `README.md` from `npm/vsift/`; `platform-digests.json` (each executable's size and SHA-256, computed from the archives); `LICENSE`, `LICENSE-APACHE`, `LICENSE-MIT`; `skills/vsift/` |
+| `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64` | the target's `vsift` or `vsift.exe` (mode 0755), its `THIRD-PARTY-NOTICES`, the licence files, a README and a manifest with `os`, `cpu`, `preferUnplugged` and `publishConfig.access: public` |
+
+The launcher lists the platform packages as `optionalDependencies` at its own exact
+version. No package has a lifecycle script, a `gypfile` or a `binding.gyp`, and no
+manifest names a person: `vsift-governance check` holds every `package.json` under `npm/`
+to that, and `npm-verify` holds the packed tarballs to it too. The version of every
+package is the workspace version; `npm/vsift/package.json` must carry it, with each
+optional dependency at the same version (a release-tool test and the governance check
+fail otherwise). To release a new version, change the workspace version and those four
+places in `npm/vsift/package.json` together.
+
+**Pinned tools** (workflow `env`): Node.js 22.23.3 (with the npm it ships), Bun 1.2.23,
+pnpm 12.8.1, Yarn 4.18.1, Verdaccio 6.10.4. Update them in one reviewed change.
+
+**Reproducing it locally.** On Linux or macOS (the tarballs must be packed where Unix
+modes exist), with the three archives of one run in `dist/`:
+
+```console
+mkdir -p npm-dist/packages npm-dist/tarballs
+cargo run --locked -p vsift-release -- npm --archive dist/<archive> --archive dist/<archive> \
+  --archive dist/<archive> --out-dir npm-dist/packages
+(cd npm-dist/packages/vsift && npm pack --ignore-scripts --pack-destination ../../tarballs)
+# ... and the same for vsift-darwin-arm64, vsift-linux-x64 and vsift-win32-x64
+cargo run --locked -p vsift-release -- npm-verify --archive ... --tarball npm-dist/tarballs/<tarball> ...
+npm install --prefix /tmp/tools --ignore-scripts verdaccio@6.10.4
+node npm/qualification/qualify.cjs --manager npm --packages npm-dist/tarballs \
+  --verdaccio /tmp/tools/node_modules/verdaccio/bin/verdaccio \
+  --version-line "vsift 0.1.0 (<12 digits>)" --work /tmp/qualification
+```
+
+The driver refuses any registry but `http://127.0.0.1:4873/`, removes every
+`npm_config_`, `YARN_`, `BUN_CONFIG_`, `PNPM_` and token variable before it runs a
+package manager, and uses a throwaway Verdaccio user whose token is written only to a
+scratch npmrc scoped to that address. Never point it at a real registry, and never add
+`npm login`, `npm adduser` or a publish to the public registry to this workflow: PR 10's
+protected `publish` job is the only publishing path.
