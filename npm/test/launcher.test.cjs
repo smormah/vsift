@@ -117,7 +117,8 @@ test('an unsupported platform names every supported target', () => {
 for (const target of Object.values(launcher.TARGETS)) {
   test(`${target.packageName}: the matching package is found and checked`, (t) => {
     const layout = makeLayout(t, { target, executable: Buffer.from('native executable') });
-    assert.equal(prepareFor(layout, target).executablePath, layout.executablePath);
+    // require.resolve answers real paths (macOS keeps its temporary folder behind /var).
+    assert.equal(fs.realpathSync(prepareFor(layout, target).executablePath), fs.realpathSync(layout.executablePath));
   });
 
   test(`${target.packageName}: a missing package names it and how to reinstall`, (t) => {
