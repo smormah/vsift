@@ -284,7 +284,7 @@ ADR 0023 note of its pull request; none blocks completion.
   more Release jobs per archive or npm change; Yarn through a project install.
 - **PR 10:** path A was chosen for the first publish (2026-10-01); `attest` runs without
   an approval (it did, in both approved runs); npm's staged publishing is not wired
-  ([issue #246](https://github.com/smormah/vsift/issues/246), before a stable release);
+  ([issue #246](https://github.com/smormah/vsift/issues/246), deferred on 2026-10-02 until after R1 or the public announcements);
   release immutability; the Release workflow as a required check; `SHA256SUMS` lists
   archives only. Settled in the release-prep change (#247): the release notes no longer say
   that installing through npm avoids every warning; they say that npm-installed files carry
@@ -418,7 +418,8 @@ and the machine is a development machine, not a clean one.
 ### What stays open
 
 - [Issue #246](https://github.com/smormah/vsift/issues/246): whether to move npm publishing
-  to staged publishing (a second approval on npmjs.com) before a stable release.
+  to staged publishing (a second approval on npmjs.com); deferred by the maintainer on
+  2026-10-02 until after R1 or the public announcements.
 - [L-100](known-limits.md#l-100): the missing reason when a trusted publisher is wrong; a
   preflight is in the runbook, and a workflow change (verbose npm logging or a hint) is
   possible later and is not made here.

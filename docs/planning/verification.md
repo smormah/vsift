@@ -584,7 +584,7 @@ what is open is listed per row.
 | R-SEC02 | Tarballs equal their assembly and the published bytes by digest; launcher refusals tested; `npm audit signatures` and `gh attestation verify` passed for all four packages and ten release files | One machine, one session; the launcher check is not a defence against a local attacker ([L-093](known-limits.md#l-093)) |
 | SEC-T02 over human output | Met (L-073 closed) | Terminal emulators not exercised; no progress in human worker output ([L-017](known-limits.md#l-017)) |
 | R-03 | Met on Ubuntu 24.04 x64 (decision E) | Managed installation elsewhere is not in R0 |
-| R-13 | `handoff check` merged; the compact tier meets 90% (#222) | Named-agent run from a clean install; review-tier A-09 blurred ([L-095](known-limits.md#l-095)) |
+| R-13 | `handoff check` merged; the compact tier meets 90% (#222) | Named-agent run from a clean install, with the cold-agent variant (decided 2026-10-02); review-tier A-09 blurred ([L-095](known-limits.md#l-095)) |
 | R-14 | Twelve-job npm matrix green on `main` and on the tag; one install of `vsift-cli@next` from the real registry on Windows 11 with npm | A clean machine; pnpm, Yarn and Bun, macOS and Ubuntu on the real registry (the next packet) |
 
 ## 2026-09-30 P12 completion evidence (named-client trials, branch `p12-completion`)

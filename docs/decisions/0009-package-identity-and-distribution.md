@@ -137,8 +137,9 @@ maintainer weighed: everything real is still published only by the Release workf
 manual placeholders exist because npm's trusted-publisher setting lives on a package's
 own settings page and these packages did not yet exist (whether npm offers it before a
 first publish was not confirmed). The trusted publishers were then configured on all four
-packages with "npm publish" allowed; whether to move to staged publishing before a
-stable release is [issue #246](https://github.com/smormah/vsift/issues/246).
+packages with "npm publish" allowed; whether to move to staged publishing is
+[issue #246](https://github.com/smormah/vsift/issues/246), deferred by the maintainer on
+2026-10-02 until after R1 or the public announcements.
 
 npm's own registry record of a package lists the publishing account (its `maintainers`
 and `_npmUser` fields). VSift's manifests name nobody, and the governance check and

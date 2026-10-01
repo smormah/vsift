@@ -246,7 +246,9 @@ Prefer a review-tier model when the report must be right first time.
   after the #224 fix; the maintainer starts it
   ([L-095](../planning/known-limits.md#l-095)).
 - **A named-agent run from a clean installation** (P14, the release qualification; ADR
-  0023 decision H10). No agent has yet used the published pre-release.
+  0023 decision H10). No agent has yet used the published pre-release. It includes a
+  cold-agent variant (the CLI on `PATH`, no skill, no docs; maintainer decision
+  2026-10-02): no trial has yet tested an agent using the CLI from its own help alone.
 - **Open readings and limits:** Sonnet's "previous value" slip (#219), Codex on Windows
   (#204, L-076) and L-078 to L-084 in the register.
 

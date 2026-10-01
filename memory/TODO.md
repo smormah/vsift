@@ -29,25 +29,25 @@ published. npm gives no reason (L-100), so `release.md` 6.2 has a preflight.
    fuzz, race, fault and soak runs; findings triage; the supported-profile matrix (L-035);
    user docs; a release candidate; R-01..R-14, SEC-01..SEC-25 and R-SEC03. It includes the
    named Codex and Claude Code run from a clean install on both transcript paths (decision
-   H10), the clean-machine install with each package manager from the real registry,
-   real-tool runs on hosted CI (L-042) and the stable-release decisions (version, `latest`,
-   signing, staged publishing #246).
+   H10) with a **cold-agent variant** (CLI on `PATH`, no skill, no docs; decided 2026-10-02),
+   the clean-machine install with each package manager from the real registry, real-tool
+   runs on hosted CI (L-042) and the stable-release decisions (version, `latest`, signing).
 2. **What P14 needs from the maintainer:** to say "start"; the review tier's A-09 blurred
    re-run (L-095, #224, on the maintainer's accounts); SEC-T01's adversarial evidence or a
    decision (#188, L-068); the Smart App Control try-out on Windows 11 and a macOS 15 browser
-   download (L-098); decisions on #246 and #204.
-3. **Raised once at the checkpoint after P14 (neither is a commitment now):** (a) a plan to
-   use the published CLI ourselves as a trial, with notes reviewed in batches; it installs
-   nothing without the maintainer's word. (b) A prerequisite from the maintainer: an agent
-   must be able to use the CLI from its own help and errors alone, with no skill and no MCP.
-   No trial has tested it (every P12 trial loaded the skill), so P14's clean-install run
-   should include a "cold agent" variant (CLI on `PATH`, no skill, no docs); if it shows
-   gaps, the cheap fix is a short "typical investigation" section in `vsift --help`.
+   download (L-098); a decision on #204.
+3. **Decided 2026-10-02 (maintainer):** (a) at the completion of R0 (after P14) we use the
+   published CLI ourselves as a trial, with notes reviewed in batches; raised once at that
+   point, and it installs nothing without the maintainer's word. (b) P14's clean-install run
+   includes the cold-agent variant: an agent must be able to use the CLI from its own help
+   and errors alone, with no skill and no MCP, which no trial has tested (every P12 trial
+   loaded the skill); if it shows gaps, the cheap fix is a short "typical investigation"
+   section in `vsift --help`.
 
 ## Open decisions (maintainer; decided ones are in ADRs 0021-0023)
 
-- **#246:** staged publishing (a second approval on npmjs.com) before a stable release;
-  **#204:** Codex on Windows (L-076); the grader's `untrusted_listed` reading (F12-E01 only);
+- **#246:** staged publishing (a second approval on npmjs.com); deferred by the maintainer
+  (2026-10-02) until after R1 or the public announcements; **#204:** Codex on Windows (L-076); the grader's `untrusted_listed` reading (F12-E01 only);
   #219.
 - **P11 readings** (ADR 0021 notes): `KillMode=mixed` and resubmission (L-069); batch limits
   and exit 6 for a job-cancelled line (L-067); the engine's `tokio`; continuable failures,
