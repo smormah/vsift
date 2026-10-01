@@ -4,79 +4,77 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now
 
-**P00-P12 are complete. P13 is not.** PRs 0-11 are done: 0-10 merged (#226, #228-#231, #233,
-#234, #236, #239-#241, #243, #244 `6de55da`; P12 debt #227, #238, #242); PR 11 (#245) is the user guide
-`docs/operations/install.md`, the record `docs/planning/p13-distribution.md` and the closing
-sweep. **Nothing real is published**: only the four `0.0.0` placeholders (`vsift-cli`, and the
-three `@vsift/...` on 2026-10-01); the attest and publish jobs have never run (L-096). The power-loss campaign passed on `main` (run 36829198545);
-`P13 managed smoke` with `install-e2e` passed (run 36793180858). The ledger still says
-`in_progress`: only PR 12 may change it, after a real publish.
+**P00-P13 are complete. P14 (R0 qualification) is not started, and under governance rule 10
+it does not start on its own: the maintainer says when.** P13 finished on 2026-10-01 with
+the 0.1.0 pre-release: `vsift-cli`, `@vsift/win32-x64`, `@vsift/darwin-arm64` and
+`@vsift/linux-x64` on npm under `next` (`latest` is still the empty `0.0.0` placeholder),
+and the GitHub pre-release `v0.1.0` with ten files. The ledger names the release commit
+`011bc4d`; PR 12 (this change) holds the record, in `docs/planning/p13-distribution.md`.
 
-**What remains, in order:**
+**What the pre-release means:** anyone can install it (`npm install --global vsift-cli@next`
+or the archives) and check it (`npm audit signatures` and `gh attestation verify` passed).
+**What it does not mean:** a stable or supported release (nothing is announced; promotion
+waits for P14). It was installed once from the real registry, on the maintainer's Windows
+11 machine with npm: not a clean machine, not pnpm, Yarn or Bun, no agent has used it, and
+Smart App Control is untried (L-098).
 
-1. **The maintainer's release steps** (`docs/operations/release.md` section 6). **6.2 is done
-   (2026-10-01):** fork-PR approval; environment `release` and the `v*` tag ruleset (both read
-   back with `gh api`); the three `@vsift/...` placeholders (path A, ADR 0009 note); trusted
-   publishers on all four packages and "disallow bypass 2fa tokens" (maintainer-reported,
-   unverifiable until the first publish). Still the maintainer's: `npm logout` on the
-   machine used. **6.3:** merge the release-prep change, tag `v0.1.0`, dry run on the tag,
-   dispatch with `dry_run` cleared, approve in the `release` environment. **6.4:** verify
-   (`npm audit signatures`, `gh attestation verify`). #246: staged publishing, before P14.
-2. **The publish** (`vsift-cli@next`; `latest` stays `0.0.0`).
-3. **PR 12** (small, after the publish): the record's "First publish" section; ADR 0023
-   Accepted; ledger P13 `complete` with PR 11's merge commit; L-036 and L-096 closed or
-   rewritten; the register's packet-close sweep. Then P14 (not started; governance rule 10).
+**The first publish took two tries.** The first approved run failed with `ENEEDAUTH` before
+anything was published: the maintainer reported the npm-to-GitHub trusted-publisher
+connections had never been completed (an earlier report said they were). The second run
+published. npm gives no reason (L-100), so `release.md` 6.2 has a preflight.
 
-**Debt before P14:** A-09 blurred, review tier (L-095, #224; the maintainer runs it); SEC-T01
-(#188, L-068); L-098's try-out on Windows 11 with Smart App Control On and a macOS 15
-browser download. Open: grader reading `untrusted_listed` (F12-E01 only); #219.
+## What remains
 
-## Decided (maintainer, 2026-09-28/30)
+1. **P14, the R0 qualification** (#17; not started). It holds: the release evidence ledger;
+   fuzz, race, fault and soak runs; findings triage; the supported-profile matrix (L-035);
+   user docs; a release candidate; R-01..R-14, SEC-01..SEC-25 and R-SEC03. It includes the
+   named Codex and Claude Code run from a clean install on both transcript paths (decision
+   H10), the clean-machine install with each package manager from the real registry,
+   real-tool runs on hosted CI (L-042) and the stable-release decisions (version, `latest`,
+   signing, staged publishing #246).
+2. **What P14 needs from the maintainer:** to say "start"; the review tier's A-09 blurred
+   re-run (L-095, #224, on the maintainer's accounts); SEC-T01's adversarial evidence or a
+   decision (#188, L-068); the Smart App Control try-out on Windows 11 and a macOS 15 browser
+   download (L-098); decisions on #246 and #204.
+3. **Raised once at the checkpoint after P14 (neither is a commitment now):** (a) a plan to
+   use the published CLI ourselves as a trial, with notes reviewed in batches; it installs
+   nothing without the maintainer's word. (b) A prerequisite from the maintainer: an agent
+   must be able to use the CLI from its own help and errors alone, with no skill and no MCP.
+   No trial has tested it (every P12 trial loaded the skill), so P14's clean-install run
+   should include a "cold agent" variant (CLI on `PATH`, no skill, no docs); if it shows
+   gaps, the cheap fix is a short "typical investigation" section in `vsift --help`.
 
-- **P11 D1-D5** (ADR 0021); **P12** closed on its final round (ADR 0022 note); the compact
-  re-run #222 met the target (Sonnet 26/28, Sol 28/28; L-085 closed).
-- **P13 (ADR 0023 A-H, 2026-09-30):** launcher `vsift-cli` (npm refused `vsift`; command
-  `vsift`) over `@vsift/{win32-x64,darwin-arm64,linux-x64}`; only the `0.0.0` placeholder in
-  P13, then one 0.x pre-release under `next`; no crates.io; Sigstore and npm provenance only;
-  managed install on Ubuntu 24.04 x64 only; human output by default; `DOWNLOAD_FAILED`;
-  `handoff check` input on stdin or `--file`; no agent re-run in P13.
+## Open decisions (maintainer; decided ones are in ADRs 0021-0023)
 
-## Open decisions (maintainer)
-
-- **#204:** Codex on Windows, the product side of L-076.
-- **P11 readings** (ADR 0021 notes): `KillMode=mixed` and resubmission (L-069); batch limits and
-  exit 6 for a job-cancelled line (L-067); the engine's `tokio`; continuable failures, pruning,
-  192 KiB records, D2; `durable_worker` for ephemeral workspaces; input-path links (L-062).
-- **P13 readings** (each in its ADR 0023 note; none blocks completion): PR 2b worker hosts
-  render only their result (L-017), the `\\?\` note; PR 4 plan intent vs observed state,
-  failed smoke `MISSING_CAPABILITY`, `407` by text (L-088), rehash (L-087); PR 5 schema
-  `handoff-check-data`; PR 6 removal proves ownership, `list`/`repair` `free`, L-090; PR 7
-  directory flushes, an empty store folder adopted; PR 8 Windows `.tar.gz`, 12-digit commit,
-  L-089; PR 9 exits 126/127, signal rules (L-091), no SBOM in platform packages, matrix
-  coverage (L-092); PR 10 path A or B, `attest` without an approval, npm staged publishing
-  (not wired), release immutability, release notes (their npm-avoids-prompts sentence may
-  not hold for Smart App Control, L-098), `SHA256SUMS` lists archives only, Release as a
-  required check (main requires Quality, Documentation, dependency policy and review, Rust
-  analysis, Governance). **Also:** MSRV; an MCP adapter.
+- **#246:** staged publishing (a second approval on npmjs.com) before a stable release;
+  **#204:** Codex on Windows (L-076); the grader's `untrusted_listed` reading (F12-E01 only);
+  #219.
+- **P11 readings** (ADR 0021 notes): `KillMode=mixed` and resubmission (L-069); batch limits
+  and exit 6 for a job-cancelled line (L-067); the engine's `tokio`; continuable failures,
+  pruning, 192 KiB records, D2; `durable_worker` for ephemeral workspaces; links (L-062).
+- **P13 readings** (each in its ADR 0023 note; none blocks anything): worker hosts render
+  only their result (L-017); a failed smoke is `MISSING_CAPABILITY`; `407` by text (L-088);
+  removal proves ownership (L-090); Windows `.tar.gz`; exits 126/127; `attest` without an
+  approval; Release as a required check. **Also:** MSRV; an MCP adapter.
 
 ## Tracked issues
 
-- **Close:** #213 (delivered by PR 5; still open on GitHub, read 2026-10-01). **Open:** #16,
-  #219, #224, #232 (a session root name with controls fails `RootUnavailable` on Linux);
-  #170-#178 (L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045, L-042); #159, #150
-  fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
+- **Close with this change:** #16 (the P13 packet issue, still open). **Open:** #17 (P14),
+  #219, #224, #232 (a session root name with controls fails on Linux), #246; #170-#178
+  (the L-numbers of the register); #159, #150 fixtures; #147; #128 flaky tests; #205, #206.
 
 ## Known issues and gates
 
 - **Opt-in real-tool paths** (`--ignored`, never run by CI alone): the P07-P11 E2E tests, the
   `*_tools` engine tests, the Windows console-interrupt tests, the external-delivery
-  simulation (L-042) and P13's real downloads (`P13 managed smoke`, `P13 managed power loss`,
-  dispatch only). The install and kill tests need `install-test-hooks` and `fault-injection`.
-- **npm:** `node --test npm/test/launcher.test.cjs` when `npm/` changes; a workspace
-  version bump also bumps `npm/vsift-cli/package.json` and its three optional dependencies.
-- **Campaigns:** crash campaign (also `--store managed`) never on disks that matter
-  (L-056, L-057); bump the three `UBUNTU_IMAGE_*` together; trial records never hold the
-  check code. **Release:** only `plan`/`attest`/`publish` publish (lint rule 7).
+  simulation (L-042) and P13's real downloads (workflows `P13 managed smoke` and `P13
+  managed power loss`, dispatch only).
+- **npm:** `node --test npm/test/launcher.test.cjs` when `npm/` changes; a version bump also
+  bumps `npm/vsift-cli/package.json` and its three optional dependencies.
+- **Releasing again:** `docs/operations/release.md` section 6 (tag, dry run, preflight,
+  dispatch with `dry_run` cleared, approve, verify). Only `plan`/`attest`/`publish` publish.
+- **Campaigns:** never on disks that matter (L-056, L-057); bump the three `UBUNTU_IMAGE_*`
+  together; trial records never hold the check code.
 
 ## Guardrails
 
@@ -87,10 +85,10 @@ browser download. Open: grader reading `untrusted_listed` (F12-E01 only); #219.
   grants. A new public command, flag, failure code or referenced field needs a skill
   update in the same change (`skill_contract` fails otherwise); its one input exception is
   the two `handoff check` forms. The check code lives only in its pixels, guard and grader.
-- **New public items:** a public command, failure code, event kind or record type
-  needs its `CommandName`, `FailureCode::ALL`, `EventKind::ALL` or
-  `EvidenceRecordType::ALL` entry, v1 schemas and, for a command that completes, a
-  renderer in `crates/vsift-cli/src/human/` with a snapshot. A parser of untrusted input
+- **New public items:** a public command, failure code, event kind or record type needs its
+  `CommandName`, `FailureCode::ALL`, `EventKind::ALL` or `EvidenceRecordType::ALL` entry, v1
+  schemas and, for a command that completes, a renderer in `crates/vsift-cli/src/human/`
+  with a snapshot. v1 changes are additive only since 0.1.0. A parser of untrusted input
   needs a seeded fuzz target. No npm package has scripts or names a person.
 - **Commits:** session commits go through `CommitHooks`/`Commit`. A change to the
   commit path, or to request-record writes, reruns the crash campaign. Never enable

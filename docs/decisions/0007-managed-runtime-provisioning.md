@@ -317,8 +317,8 @@ accepts the policy only; no candidate is executed or activated yet.
 
 ## 2026-09-30 note: P13 delivers the transaction
 
-[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
-Proposed) resumes this work in the order recorded when P06 was parked: smoke
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13;
+Proposed when written, Accepted 2026-10-01) resumes this work in the order recorded when P06 was parked: smoke
 executor, failure cleanup, the guarded per-component transaction (download or
 `--artifact-dir` import, stage, smoke, `publish_and_select`), the managed tier in
 lookup (explicit, then managed, then `PATH`, as decided above), the public lifecycle

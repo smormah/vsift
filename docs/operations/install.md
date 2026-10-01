@@ -1,16 +1,17 @@
 # Installing VSift
 
-Status: user guide, 2026-10-01 (P13 PR 11,
+Status: user guide, 2026-10-01 (P13 PR 11, updated by PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift is a pre-release, and nothing is published yet.** The first release will be a 0.x
-pre-release: the npm packages under the dist-tag `next`, with npm provenance, and the
-native archives on a GitHub pre-release, each carrying a Sigstore build-provenance
-attestation. Until the maintainer publishes it, the npm package `vsift-cli` holds only an
-empty `0.0.0` placeholder, the three `@vsift/...` platform packages and the GitHub release
-do not exist, and VSift is built from source ([`development.md`](../development.md)). The
-steps below describe the pre-release as it is built and qualified; none has yet been run
-against a published package (the record of that first run is
-[`p13-distribution.md`](../planning/p13-distribution.md), "First publish").
+**VSift 0.1.0 is a pre-release, published on 2026-10-01.** It is available as the npm
+packages under the dist-tag `next`, with npm provenance, and as native archives on a GitHub
+pre-release, each carrying a Sigstore build-provenance attestation. It is not a stable
+release, and no platform is "supported" yet (section 1). A plain `npm install vsift-cli`
+installs the empty `0.0.0` placeholder, which stays `latest` until a stable release, so
+always ask for `vsift-cli@next`. The steps below were qualified on hosted runners against a
+local registry; the one install from the real registry so far was npm on a Windows 11
+development machine, and no coding agent has used the published package (the record is
+[`p13-distribution.md`](../planning/p13-distribution.md), "First publish"). Building from
+source ([`development.md`](../development.md)) also works.
 
 ## 1. What is and is not supported
 
@@ -171,7 +172,9 @@ the trust signals are the Sigstore attestation and npm provenance of section 3 a
 section 6, which anyone can verify. It also means **VSift makes no claim of publisher
 trust**, and the operating systems treat an unsigned program from the internet with
 suspicion. What follows is written from Microsoft's and Apple's documentation: VSift has
-not yet watched these prompts appear for one of its own archives.
+not yet watched these prompts appear for one of its own archives. (One `npx vsift
+--version` of the published npm package ran on a Windows 11 machine with no block or
+prompt; that machine's Smart App Control state was not checked.)
 
 **Windows.**
 
@@ -188,7 +191,7 @@ not yet watched these prompts appear for one of its own archives.
   ([Microsoft's description](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview);
   it does not tie this to a download mark). **Installing through npm may therefore not
   help with this.** Check Settings, Windows Security, App and browser control. VSift has not
-  been run on a machine where it is On, and expects to be blocked there
+  been run on a machine where it is known to be On, and expects to be blocked there
   ([L-098](../planning/known-limits.md#l-098)). Microsoft says Smart App Control can only be
   turned on by a clean install, so turning it off is a decision to take with care; it also
   says the feature turns itself off on machines that look like developers'.
@@ -343,8 +346,9 @@ folder.
    ```
 
    `npm audit signatures` should report the registry signatures and the provenance
-   attestations of `vsift-cli` and its platform package as verified; npmjs.com shows each
-   version as built and signed on GitHub Actions.
+   attestations as verified (for 0.1.0 on Windows it reported 4 packages with verified
+   registry signatures and 4 with verified attestations); npmjs.com shows each version as
+   built and signed on GitHub Actions.
 3. **The archive is the released one** (archive installs): section 3, steps 2 and 3.
 4. **Your setup is ready.** `vsift setup check` reports each tool, how it was found
    (`managed version`, your configured path, or `PATH`) and whether local speech

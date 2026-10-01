@@ -3,8 +3,8 @@
 Status: accepted R0 sequence with scoped R1 packets, re-planned by
 [ADR 0015](../decisions/0015-r0-delivery-replan.md) and
 [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) on 2026-09-23.
-P00-P12 are complete; P13 is in progress (started 2026-09-30, see "P13 scope and
-pull requests"). P06 closed on detection, bring-your-own selection, verification and
+P00-P13 are complete (P13 started 2026-09-30 and published the 0.1.0 pre-release on
+2026-10-01, see "P13 scope and pull requests"); P14 is not started. P06 closed on detection, bring-your-own selection, verification and
 guidance; managed installation moved to P13. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
@@ -81,7 +81,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P10 — Recovery integration | Stage checkpoints, operation-key handling, interrupted-job discovery/resume, cancellation/commit ordering and retry policy; Ubuntu/ext4 durable publication qualification | P03/P05/P07/P08/P09 | X-01..06/X-09/X-10, S-07/S-08; owned OS/storage crash campaign demonstrates no lost acknowledged durable evidence before enablement. In progress in four PRs ([ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md), accepted 2026-09-27): commit path (incremental chain validation #164, durable protocol disabled, fault points; merged `e2b14d9`), jobs and checkpointed retranscribe (keys, chunk checkpoints, retry policy, exactly-once commit, engine job operations, `IDEMPOTENCY_CONFLICT`, caps D-2; merged `2ae55be`), public job surface and cancellation (`job status/resume/cancel`, `--operation-id`, trapped SIGINT/SIGTERM and Ctrl-C/Ctrl-Break; merged `8af331b`), Ubuntu 24.04/ext4 crash campaign and durable enablement (dm-log-writes power loss, QEMU kills, dm-flakey errors, negative control; engine-level durable ingest; [record](p10-durable-publication.md); PR 4) |
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualifies only after P10 durable evidence; repeated external-delivery simulation passes |
 | P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic. Closed 2026-09-30 by maintainer decision ([ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md), Accepted; [qualification record](p12-agent-qualification.md)): the skill `skills/vsift/` and its CLI contract guard, the trial harness, and named-client trials on both clients. The review tier is qualified; the compact tier passed 82%, below the 90% target (L-085). The compact re-run after the debt fixes (#222, 2026-09-30, on `a0bfb06`) met it: 93% and 100%; L-085 closed |
-| P13 — Distribution and managed installation | Native artifacts and thin npm launcher over per-platform optional packages with no install scripts (see "P13 launcher boundary"); package-name checklist held before release (see "P13 name checklist"); architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target. Human-readable terminal output for every command (ADR 0008; the readable terminal text of `cli-v1.md`), assigned 2026-09-26. Since 2026-09-30 also L-071's parse remediation and `vsift handoff check` (#213, R-13); scope, decisions and pull requests in "P13 scope and pull requests" ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md), Proposed). In progress: pull requests 0-10 are merged and PR 11 documents them ([qualification record](p13-distribution.md)); the packet completes with the maintainer's first publish and the ledger follow-up (PR 12) | P06/P11/P12 | Fresh OS install without Rust; install and run through npm, pnpm, Yarn and Bun on every supported target; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02; SEC-T02 over human output |
+| P13 — Distribution and managed installation | Native artifacts and thin npm launcher over per-platform optional packages with no install scripts (see "P13 launcher boundary"); package-name checklist held before release (see "P13 name checklist"); architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target. Human-readable terminal output for every command (ADR 0008; the readable terminal text of `cli-v1.md`), assigned 2026-09-26. Since 2026-09-30 also L-071's parse remediation and `vsift handoff check` (#213, R-13); scope, decisions and pull requests in "P13 scope and pull requests" ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md), Accepted 2026-10-01). **Complete (2026-10-01):** pull requests 0-11 and the release-prep change are merged, the maintainer published the 0.1.0 pre-release under npm's `next` and on GitHub Releases, and the completion change (PR 12) records it ([qualification record](p13-distribution.md)) | P06/P11/P12 | Fresh OS install without Rust; install and run through npm, pnpm, Yarn and Bun on every supported target; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02; SEC-T02 over human output |
 | P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
 
 ### P00/P03 feasibility decisions
@@ -223,12 +223,12 @@ launcher boundary above as `vsift-cli`.
 2026-09-30 (maintainer, ADR 0023 decisions A and B): the names are chosen, crates.io
 and native installers are not in R0, and the state column is updated.
 
-| Channel | Name(s) | State on 2026-09-30 | Note |
+| Channel | Name(s) | State (2026-09-30; updated 2026-10-01) | Note |
 | --- | --- | --- | --- |
 | npm package | `vsift` | **Refused by npm** (2026-09-30): E403 "Package name too similar to existing packages sift, tsify" on the maintainer's placeholder publish; never published. Anonymous `npm view` had found it free on 2026-09-10 and 2026-09-30 | Not used. ADR 0009 note "npm refused `vsift`": a not-found lookup is not availability |
-| npm package (launcher) | `vsift-cli` | **Held** since 2026-09-30 by the maintainer's placeholder `vsift-cli@0.0.0` (`latest`); the 0.x pre-release goes under `next` | Installs the `vsift` command; ADR 0023 decision A amendment and ADR 0009 note of 2026-09-30 |
+| npm package (launcher) | `vsift-cli` | **Held** since 2026-09-30 by the maintainer's placeholder `vsift-cli@0.0.0` (`latest`); **0.1.0 published 2026-10-01 under `next`** | Installs the `vsift` command; ADR 0023 decision A amendment and ADR 0009 note of 2026-09-30 |
 | npm scope | `@vsift` (maintainer, 2026-09-30) | Held: the maintainer owns the organisation `vsift`. The earlier "not available" came from a repeated submission after the first one had created it | Holds the per-platform packages; ADR 0009 2026-09-30 note |
-| npm platform packages | `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64` | Held through the `vsift` organisation; first published by the 0.x pre-release | One per R0 target (ADR 0023 decision D) |
+| npm platform packages | `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64` | **Held** by `0.0.0` placeholders (the maintainer, 2026-10-01, `latest`); **0.1.0 published 2026-10-01 under `next`** by the Release workflow | One per R0 target (ADR 0023 decision D) |
 | crates.io | `vsift`, `vsift-contract` | Not in R0 | Names confirmed in ADR 0016; no crate is published in R0 (ADR 0023 decision B) |
 | crates.io | `vsift-domain`, `vsift-application`, `vsift-infrastructure` | Not in R0 | crates.io needs every dependency of a published crate published too |
 | crates.io | `vsift-cli` | Not in R0 | Only if `cargo install` is offered; maintainer decision |
@@ -241,10 +241,11 @@ and native installers are not in R0, and the state column is updated.
   registry supports it; P13 verifies account and scope ownership before publication.
 - A name found taken is a maintainer decision recorded in ADR 0009, never a silent
   rename.
-- State read on 2026-10-01 (anonymous registry reads; nothing changed): `vsift-cli` has one
-  version, `0.0.0`, as `latest`, with no command; `@vsift/win32-x64`, `@vsift/darwin-arm64`
-  and `@vsift/linux-x64` are not found, so they are held by the organisation's scope alone
-  until the pre-release publishes them (ADR 0009 note of 2026-10-01).
+- State read on 2026-10-01 before the publish (anonymous registry reads; nothing changed):
+  `vsift-cli` had one version, `0.0.0`, as `latest`, with no command; the three platform
+  packages were not found and were then held by `0.0.0` placeholders (path A, ADR 0009
+  note of 2026-10-01). After the publish (read the same day, anonymously): all four
+  packages have `latest` `0.0.0` and `next` `0.1.0`.
 
 ### P13 scope and pull requests
 
@@ -252,7 +253,8 @@ and native installers are not in R0, and the state column is updated.
 accepted. The decisions (A-H), the planned contract changes, the exclusions and the
 maintainer-only actions are in
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-(Proposed). The ledger maps P13 to R-03, R-13 and R-14.
+(Accepted 2026-10-01 at completion). The ledger maps P13 to R-03, R-13 and R-14 and marks
+it complete.
 
 **Scope.**
 
@@ -296,9 +298,9 @@ completion. State on 2026-10-01 (merge commits are in the
 | 7 | Kill and power-loss tests of the managed store, and the P13 install E2E stage | 6 | merged (#241, with the verifier fix #244) |
 | 8 | `release.yml` and the governance workflow lint | 0 | merged (#236) |
 | 9 | The npm packages and the Verdaccio matrix | 8 | merged (#240) |
-| 10 | Attestation and publish wiring | 8, 9; the maintainer's environment and trusted publishers | merged (#243); the environment and publishers are the maintainer's, not yet made |
-| 11 | Documentation, the qualification record and completion preparation | 1-10 | this change |
-| 12 | The ledger follow-up with the merge commit (governance rule 9) | 11, and the maintainer's first publish | pending |
+| 10 | Attestation and publish wiring | 8, 9; the maintainer's environment and trusted publishers | merged (#243); the environment and publishers were made by the maintainer on 2026-10-01 |
+| 11 | Documentation, the qualification record and completion preparation | 1-10 | merged (#245); release prep (#247) followed |
+| 12 | The ledger follow-up and the first-publish record (governance rule 9) | 11, and the maintainer's first publish (done 2026-10-01) | this change; the ledger names `011bc4d`, the release commit |
 
 The compact tier's re-run (#222) followed PR 5 (decision F): it ran on `a0bfb06` on
 2026-09-30 and met the 90% target (P12 qualification record).

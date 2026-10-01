@@ -29,5 +29,6 @@ one. As built, the executable is `vsift` and the npm package that installs it is
 notes of 2026-09-30, [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md)
 decision A), over per-platform packages in the scope `@vsift`. The "appropriate native
 installation methods" are, for R0, the archives on GitHub Releases; no installer (winget,
-Scoop, Homebrew, a Debian package) is part of R0. The first release is a pre-release that
-is not yet published ([`install.md`](../operations/install.md)).
+Scoop, Homebrew, a Debian package) is part of R0. The first release is a pre-release,
+0.1.0, published on 2026-10-01 under the npm dist-tag `next` and as a GitHub pre-release
+([`install.md`](../operations/install.md)); a stable release waits for P14.

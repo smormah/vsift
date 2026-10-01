@@ -6,10 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **P13 is complete: the first publish is recorded** (P13 PR 12; documentation, ledger
+  and memory only, no product code, workflow or package changed). The maintainer's
+  publish of 0.1.0 on 2026-10-01 (Release run 36931487439 on the tag `v0.1.0`, after a
+  first run, 36922901956, that failed with `ENEEDAUTH` before anything was published) is
+  recorded in `docs/planning/p13-distribution.md` ("First publish") with its verification
+  (`npm audit signatures`, `gh attestation verify` of all ten release files and four
+  tarballs) and what it does not prove. The ledger marks P13 `complete` with the release
+  commit `011bc4d`; ADR 0023 is Accepted with a completion note and ADRs 0001, 0008, 0009
+  and 0016 gain dated notes. Known limits: L-036 and L-096 are closed and deleted; L-037 is
+  re-read and handed to P14; L-097 and L-098 are updated; new L-100 (npm prints only
+  `ENEEDAUTH`, with no reason, when a trusted publisher is missing or wrong). The runbook
+  (`docs/operations/release.md`) gains a trusted-publisher preflight (6.2) and the
+  `ENEEDAUTH` case (6.5); the README, `SECURITY.md`, `install.md`, the skill guide, the
+  spine, verification, the threat model and the work-packets table no longer say that
+  nothing is published.
+
 ## [0.1.0] - 2026-10-01
 
-The first pre-release (the npm dist-tag `next`; `latest` stays at the `0.0.0`
-placeholder). It carries everything from P00 to P13 below.
+The first pre-release, published on 2026-10-01: the npm packages `vsift-cli`,
+`@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64` under the dist-tag
+`next` (`latest` stays at the `0.0.0` placeholders), with npm provenance, and the GitHub
+pre-release `v0.1.0` with the native archives, `SHA256SUMS`, SBOMs and notices, each with
+a Sigstore build-provenance attestation. It carries everything from P00 to P13 below.
 
 ### Added
 

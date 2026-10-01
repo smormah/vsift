@@ -215,9 +215,13 @@ Use short-lived release credentials and trusted publishing where supported. npm'
 OIDC publishing can attach provenance; configure its trust relationship for the exact
 repository/workflow/environment. Since P13 PR 10 the Release workflow's `publish` job
 uses it (repository `smormah/vsift`, workflow `release.yml`, environment `release`);
-the trust relationships themselves are the maintainer's to configure before the first
-publish ([`release.md`](../operations/release.md) section 6), so no npm publishing is
-configured yet. See [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/).
+the trust relationships themselves are the maintainer's to configure
+([`release.md`](../operations/release.md) section 6.2). They were configured on all four
+packages, after a first attempt on 2026-10-01 failed because the connection step had not
+been completed, and the 0.1.0 pre-release was then published through them with no token
+(the P13 record's "First publish"). npm shows the settings only to the package owner, so
+the proof is that the publish worked. See
+[npm trusted publishers](https://docs.npmjs.com/trusted-publishers/).
 
 Produce an SBOM covering the Rust graph, launcher, shipped runtimes and model inventory;
 retain notices and verify distribution rights for actual binaries/models. Do not
@@ -231,11 +235,14 @@ Authenticode signature and no notarization).
 ### P13 notes
 
 **2026-09-30, P13 started ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
-Proposed).** The controls P13 implements, per threat. They began as a plan; the
-evidence was added as each pull request landed. **Status 2026-10-01:** pull requests 0-10
-have landed; the final state of each threat is in the table at the end of these notes.
-What stays unverified until the first publish: any attestation, npm provenance, the
-`release` environment, the tag ruleset and trusted publishing (L-096).
+Proposed, Accepted at P13's completion on 2026-10-01).** The controls P13 implements, per
+threat. They began as a plan; the evidence was added as each pull request landed. **Status
+2026-10-01:** P13 is complete and the 0.1.0 pre-release is published; the final state of
+each threat is in the table at the end of these notes. What the first publish verified:
+attestations on every release file and tarball, npm provenance on all four packages, the
+`release` environment's approval at run time, the tag ruleset (read back) and trusted
+publishing (by the second run working; L-096 is closed). What stays unverified from outside:
+npm's trusted-publisher settings and "disallow bypass 2FA tokens".
 
 - **SEC-12 (malicious provider or runtime update):** only the reviewed Ubuntu 24.04
   catalogue revision can enter a plan; the transaction downloads from the publisher
@@ -349,8 +356,12 @@ What stays unverified until the first publish: any attestation, npm provenance, 
   change. The governance lint's rule 7 (`workflows/publish.rs`) fails a workflow that
   loosens any of this, with a test per rule; it also requires the dispatch input to be
   compared as a string, because GitHub's loose comparison makes `inputs.dry_run ==
-  false` true on events with no inputs. The environment, ruleset and trusted publishers
-  are maintainer steps not yet taken ([L-096](known-limits.md#l-096)).
+  false` true on events with no inputs. *Evidence 2026-10-01 (the first publish):* the
+  environment (one reviewer, administrator bypass off, tag rule `v*`) and the tag ruleset
+  were read back with `gh api`; the first real run's `publish` job waited for the approval
+  and the second published with no token anywhere; npm's trusted-publisher settings cannot
+  be read from outside, and "disallow bypass 2FA tokens" is the maintainer's report. L-096
+  is closed; the first attempt's `ENEEDAUTH` is L-100.
 - **SEC-23 (checksums from the same compromised server):** the managed trust anchor
   stays in reviewed source, never in a downloaded checksum; release archives carry
   Sigstore build provenance tied to the protected commit, npm packages carry npm
@@ -371,7 +382,11 @@ What stays unverified until the first publish: any attestation, npm provenance, 
   SHA-256 (`npm-package`'s `tarball-sums` output, checked by every later job). Anyone can
   verify with `gh attestation verify` and `npm audit signatures` (release.md section
   6.4). A `SHA256SUMS` from the release page stays a convenience, not proof of origin;
-  its attestation is. No attestation exists until the first publish (L-096).
+  its attestation is. *Evidence 2026-10-01 (the first publish):* for 0.1.0, `gh attestation
+  verify` accepted all ten release files and all four tarballs against `smormah/vsift`'s
+  `release.yml` at `refs/tags/v0.1.0`, and `npm audit signatures` verified the registry
+  signatures and attestations of all four packages (one machine, one session; L-096 is
+  closed).
 - **No install-time code (the npm packages, PR 9):** no VSift package declares a
   lifecycle script, a `gypfile` or a `binding.gyp`, so installing runs nothing and
   downloads nothing beyond the packages; the governance check refuses such a manifest
@@ -390,8 +405,8 @@ does not.
 | SEC-13 | Bounded readers, flat private staging, native-format check, ownership-proving cleanup; the kill matrix covers the stage lifecycle | Hostile archives from the wild |
 | SEC-14 | No resume, reviewed redirect route, six `DOWNLOAD_FAILED` reasons, sentinel proxy credentials in no output mode | Real corporate proxies; `407` recognised by text ([L-088](known-limits.md#l-088)) |
 | SEC-15 | Use locks; removal only of unselected, unheld versions; kill matrix; on Ubuntu 24.04 with ext4 no replayed power loss lost an acknowledged command (run 36829198545, whose first attempt failed on a verifier defect that #244 fixed) | Other filesystems; real disks ([L-056](known-limits.md#l-056)) |
-| SEC-22 | Lint rules 1-7 hold statically; only `attest` and `publish` can request an OIDC token and only for a dispatch on the tag; the qualified tarballs are published by digest; no long-lived token | The `release` environment, tag ruleset, fork approval and trusted publishers do not exist yet (verified read-only on 2026-10-01) |
-| SEC-23 | Trust anchor in reviewed source; the launcher checks the version and digest; attestations are designed to prove origin | No attestation exists until the first publish; a `SHA256SUMS` alone proves no origin |
+| SEC-22 | Lint rules 1-7 hold statically; only `attest` and `publish` can request an OIDC token and only for a dispatch on the tag; the qualified tarballs are published by digest; no long-lived token (the 0.1.0 publish used trusted publishing alone); the `release` environment, tag ruleset and fork approval are set and were read back (2026-10-01) | npm's trusted-publisher settings and "disallow bypass 2FA tokens" cannot be read from outside; staged publishing before a stable release ([#246](https://github.com/smormah/vsift/issues/246)) |
+| SEC-23 | Trust anchor in reviewed source; the launcher checks the version and digest; Sigstore attestations on every release file and tarball and npm provenance on all four packages, verified for 0.1.0 | The verification was one machine, one session; a `SHA256SUMS` alone proves no origin; unsigned executables ([L-098](known-limits.md#l-098)) |
 | Unsigned binaries | Documented in `install.md` section 4: no publisher-trust claim | SmartScreen, Gatekeeper and Smart App Control behaviour is documented, not observed ([L-098](known-limits.md#l-098)) |
 
 Human-readable output (SEC-T02) and `handoff check`'s untrusted input (a draft
@@ -415,7 +430,7 @@ asking the agent to exfiltrate or weaken protections. A refusal to obey is requi
 one successful defense does not prove universal safety. See [OWASP prompt injection prevention](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html).
 
 **P12 PR 1 (2026-09-28, [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md),
-Proposed).** The skill in `skills/vsift/` implements these controls as instructions
+Proposed when written, Accepted 2026-09-30).** The skill in `skills/vsift/` implements these controls as instructions
 and data, not as enforcement: every public command has one class (`free`, `explicit`
 on the user's instruction, `never`), and `never` covers managed installation,
 worker-host commands, the operator-only global options and every non-`vsift`

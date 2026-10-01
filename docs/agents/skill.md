@@ -39,8 +39,9 @@ The skill is the same folder everywhere: the repository's `skills/vsift/`, the
 `skills/vsift/` folder inside every native release archive, and the `skills/vsift/` folder
 of the `vsift-cli` npm package, byte for byte (`npm root --global` names the folder that
 holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
-the agent's `PATH` ([`install.md`](../operations/install.md); nothing is published yet, so
-today that means building from source). Then copy (or link) the whole `skills/vsift`
+the agent's `PATH` ([`install.md`](../operations/install.md): the 0.1.0 pre-release is
+published, as `npm install --global vsift-cli@next` and as archives on GitHub Releases;
+building from source also works). Then copy (or link) the whole `skills/vsift`
 directory, keeping its name, into the client's skill folder:
 
 | Client | For one user | For one project |
@@ -244,8 +245,8 @@ Prefer a review-tier model when the report must be right first time.
 - **The review tier's blurred-banner re-run.** A-09 on Claude Opus 5.5 and GPT-6-Astra
   after the #224 fix; the maintainer starts it
   ([L-095](../planning/known-limits.md#l-095)).
-- **A named-agent run from a clean installation** (the release qualification, after
-  P13; ADR 0023 decision H10).
+- **A named-agent run from a clean installation** (P14, the release qualification; ADR
+  0023 decision H10). No agent has yet used the published pre-release.
 - **Open readings and limits:** Sonnet's "previous value" slip (#219), Codex on Windows
   (#204, L-076) and L-078 to L-084 in the register.
 
