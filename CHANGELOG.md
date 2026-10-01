@@ -893,6 +893,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Documentation
 
+- **P13 user guide, qualification record and closing sweep** (P13 PR 11; ADR 0023
+  section 7). No behaviour changes. `docs/operations/install.md` is now the user guide:
+  what is and is not supported, installing with npm, pnpm, Yarn (and its one-day hold on
+  new versions) and Bun, the native archives with checksum and attestation verification,
+  managed installation on Ubuntu 24.04 x64 (`setup plan`, `setup install`,
+  `--artifact-dir`, `list/rollback/remove/repair`) and bring-your-own tools on Windows and
+  macOS, what SmartScreen, Gatekeeper and Smart App Control do with an unsigned download
+  and what to check instead, upgrade, uninstall, proxies and each `DOWNLOAD_FAILED`
+  reason, the launcher's exits 126 and 127 and a verification walk-through. The new
+  qualification record `docs/planning/p13-distribution.md` lists the pull requests with
+  their merge commits, how decisions A-H were met, the hosted runs, what each piece of
+  evidence proves and does not, the residual limits and the maintainer-only steps with
+  their state; its "First publish" section is pending until the pre-release is published.
+  The passing `P13 managed power loss` run on `main` (run 36829198545, `6de55da`) and the
+  hosted smoke runs are recorded in verification, the ADR 0023 PR 7 addendum and L-037.
+  The spine's P13 stage, the threat model (a final-state table for SEC-12 to SEC-15,
+  SEC-22 and SEC-23) and the verification rows are brought to their final P13 state. Known
+  limits L-098 (unsigned executables and Windows Smart App Control) and L-099 (managed
+  installation depends on the publishers' files and hosts) are added and L-035, L-036,
+  L-037, L-042 and L-096 updated. ADR 0023 gains a note and stays Proposed until the first
+  publish; ADRs 0001, 0007, 0008, 0009, 0014 and 0022 gain dated notes. Stale statements
+  were corrected in the README, `cli-v1.md`, `architecture-and-contracts.md`, the skill
+  guide, the work-packets table, `release.md` and `SECURITY.md`.
 - P13's plan names the npm launcher pattern (per-platform `optionalDependencies`, no
   install scripts, qualified under npm, pnpm, Yarn and Bun) and a checklist of names to
   hold before release; ADR 0009 gains a note and L-036 points to both.

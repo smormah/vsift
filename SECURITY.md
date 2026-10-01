@@ -2,9 +2,11 @@
 
 VSift processes untrusted media and invokes specialist native tools. Security reports are taken seriously.
 
-The only executable workflow remains the setup diagnostic. P02 routes its external
-provider probes through a bounded, shell-free process supervisor with explicit
-executable provenance and descendant lifecycle containment. This does not make an
+VSift runs FFmpeg, FFprobe and whisper.cpp on local media, and on Ubuntu 24.04 `setup
+install` downloads reviewed tool artifacts after you accept a plan (nothing else is
+downloaded). Every external provider run goes through the bounded, shell-free process
+supervisor of P02, with explicit executable provenance and descendant lifecycle
+containment. This does not make an
 ambient executable trusted or turn desktop process containment into a filesystem,
 network, CPU, memory or PID sandbox. The
 [baseline review](docs/planning/baseline-review.md) records remaining hardening gaps;

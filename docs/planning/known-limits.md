@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-01 (P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-01 (P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -82,7 +82,7 @@ Each entry has these fields:
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | Nothing is published yet: no native release or npm package (the attested publish path is wired but has not run) | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not passed yet | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss claim is for ext4 only | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -137,8 +137,10 @@ Each entry has these fields:
 | [L-095](#l-095) | Review-tier models can state blurred content as supported by pixels; the skill fix is not yet re-measured | contract/UX | medium | maintainer, before P14 | [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
 | [L-096](#l-096) | The attestation and publish jobs have never run against GitHub's attestation service, npm or GitHub Releases | process/CI | medium | P13 (the maintainer's first publish) | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-097](#l-097) | A publish that fails part-way leaves part of the release public until a re-run completes it | platform/distribution | low | unscheduled | none | accepted residual |
+| [L-098](#l-098) | The Windows and macOS executables are unsigned: SmartScreen and Gatekeeper may warn about a direct download, and Windows Smart App Control may block `vsift.exe` outright | platform/distribution | medium | P14, maintainer | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-099](#l-099) | Managed installation depends on files and redirect hosts that the publishers control | platform/distribution | low | unscheduled | none | accepted residual |
 
-Counts: 2 high, 25 medium, 63 low (90 entries).
+Counts: 2 high, 26 medium, 64 low (92 entries).
 
 ## Security
 
@@ -1492,9 +1494,12 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
 
 - **What:** the P08 and P09 real-tool checkpoints and all performance numbers were
   recorded on one Windows 11 machine. Local ASR was also measured on hosted Ubuntu 24.04
-  and Windows Server 2025 runners. macOS runs only the ordinary Quality CI: no media,
-  ASR or evidence checkpoint, and whisper.cpp v1.9.2 publishes no macOS CLI archive, so
-  there is no reviewed macOS build. Linux desktop and other distributions, network
+  and Windows Server 2025 runners, and since P13 the hosted Ubuntu 24.04 runner also runs
+  the managed install and the A-08 local-ASR journey on the managed tools. macOS runs
+  the ordinary Quality CI and, since P13 PR 9, the release-package qualification (the
+  installed launcher running `--version`, `setup check` and `handoff check`): still no
+  media, ASR or evidence checkpoint, and whisper.cpp v1.9.2 publishes no macOS CLI
+  archive, so there is no reviewed macOS build. Linux desktop and other distributions, network
   filesystems, and Windows/macOS worker use are unqualified.
 - **Evidence:** [resource profiles](support-and-resource-profiles.md);
   [P09 record](p09-evidence-navigation.md) residuals;
@@ -1528,7 +1533,9 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
   pending, all maintainer steps at P13 completion** (release.md section 6): the `release`
   environment, the tag ruleset, fork-PR approval, the first publish of the three
   `@vsift/…` packages, the four trusted publishers, and the 0.x pre-release itself. No
-  crate is published in R0 (ADR 0023).
+  crate is published in R0 (ADR 0023). State read on 2026-10-01: `vsift-cli` has only the
+  `0.0.0` placeholder (`latest`); the three `@vsift/…` packages are not found; the
+  repository has no `release` environment, no tag ruleset, no tag and no release.
 - **Evidence:** [ADR 0009](../decisions/0009-package-identity-and-distribution.md);
   [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) decision 1;
   [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
@@ -1539,13 +1546,16 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
   B), and the npm and GitHub settings it needs are maintainer-only actions.
 - **Mitigation:** none needed before release.
 - **Next step:** the maintainer's setup and first publish (release.md section 6), then
-  P13 PR 11; the untested first run is [L-096](#l-096).
+  the ledger follow-up (P13 PR 12) records it in
+  [p13-distribution.md](p13-distribution.md) ("First publish"); the user guide
+  [`install.md`](../operations/install.md) and that record landed in PR 11. The untested
+  first run is [L-096](#l-096).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
 ### L-037
 
-**Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not passed yet.**
+**Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss claim is for ext4 only.**
 
 - **What:** on Ubuntu 24.04 x86-64, `setup install` applies an accepted plan (download
   or `--artifact-dir`, size and SHA-256, stage, smoke, activate), every command resolves
@@ -1561,8 +1571,12 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
   `P13 managed power loss`) first ran on 2026-10-01 (run 36793177930): no damage, a clean
   `e2fsck` at all 1,812 points, but 53 acknowledgements reported lost, every one because
   the verifier compared the selection of the command in flight at the point (always
-  newer, never older) with the previous acknowledgement. The verifier is fixed (ADR 0023
-  PR 7 addendum); the promise is unchanged and holds once a run on `main` passes. Windows x86-64 and macOS have no reviewed catalogue and keep
+  newer, never older) with the previous acknowledgement. The verifier was fixed (ADR 0023
+  PR 7 addendum, #244) and the re-run on `main` at `6de55da` passed (run 36829198545: 0
+  lost acknowledgements, no damage, a clean `e2fsck` and mounts at 1,812 points; the
+  negative control lost 36). The claim is for Ubuntu 24.04 with ext4 on a hosted runner,
+  one-file stand-in versions and a workload of 150 managed commands, and nothing else.
+  Windows x86-64 and macOS have no reviewed catalogue and keep
   manual guidance (the lifecycle commands work there and report the folder absent): the
   Windows FFmpeg candidate is a daily build (upstream keeps only the last 14) with
   unreconciled LGPL-3.0 notices, and no macOS candidate is reviewed.
@@ -1576,9 +1590,10 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
   install`, `setup check` and rerun through the CLI activated all three components.
   Managed installation is qualified on Ubuntu 24.04 x64 by that run.
 - **Impact:** elsewhere users install FFmpeg and whisper.cpp themselves and register
-  them; on Ubuntu, until the campaign has run, the claim that a reported command survives
-  a power loss rests on the flushes (each checked by a unit test), the kill tests and
-  ext4's ordered journal.
+  them; on Ubuntu the claim that a reported command survives a power loss rests on the
+  flushes (each checked by a unit test), the kill tests, ext4's ordered journal and the
+  passing campaign run; on another filesystem, or a disk that ignores flushes
+  ([L-056](#l-056)), it is unqualified.
 - **Why:** ADR 0023 decision E limits managed installation to the one reviewed target;
   decision H9 has the power loss qualified by the P10 campaign on a disposable runner,
   which runs only on dispatch.
@@ -1586,9 +1601,11 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
   a torn version is never run and lookup falls through to `PATH`; `setup repair`
   diagnoses what an interruption leaves and names the command that fixes it; the manual
   path is typed on every target.
-- **Next step:** once the verifier fix (branch `p13-pr7-durability`) is merged, dispatch
-  `P13 managed power loss` on `main` again (`P13 managed smoke` and its `install-e2e`
-  passed in run 36793180858) and record both in PR 11's qualification record.
+- **Next step:** done: the power-loss run and `P13 managed smoke` with its `install-e2e`
+  (run 36793180858) are recorded in [p13-distribution.md](p13-distribution.md). At P13's
+  close (PR 12) re-read this entry; managed installation on other targets is not in R0.
+  Before a stable release, dispatch both workflows on the release candidate (they run only
+  on demand, [L-042](#l-042)).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -1834,6 +1851,72 @@ it cannot be packaged for crates.io as it is.**
   uploaded. The re-run must happen within the run's 7-day artifact retention; after
   that, a new run publishes a new version.
 - **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-098
+
+**The Windows and macOS executables are unsigned: SmartScreen and Gatekeeper may warn
+about a direct download, and Windows Smart App Control may block `vsift.exe` outright.**
+
+- **What:** R0 ships no Authenticode signature and no Apple notarization (ADR 0023
+  decision C). A browser download of an archive is marked as coming from the internet.
+  Microsoft Defender SmartScreen may warn about an unsigned file that has no reputation,
+  and Gatekeeper stops a quarantined, non-notarized program the first time it is opened
+  (on macOS 15 only System Settings, Privacy & Security, "Open Anyway", or removing the
+  quarantine attribute continues). An install through npm carries no such mark and
+  avoids both. Windows 11's Smart App Control, when it is On, is documented to block
+  unsigned programs that Microsoft's reputation service does not recognise (the
+  documentation does not tie this to a download mark, so an npm install may not avoid it);
+  policies that allow only signed software (AppLocker, App Control for Business) would
+  refuse an unsigned executable too. **None of this has been observed on a VSift archive or
+  executable:** `install.md` section 4 is written from Microsoft's and Apple's
+  documentation.
+- **Evidence:** ADR 0023 decision C and Consequences;
+  [`install.md`](../operations/install.md) section 4, which links Microsoft's Smart App
+  Control overview and Apple's guide to opening an app Apple cannot check.
+- **Impact:** a Windows user with Smart App Control On may be unable to run VSift at all;
+  a user who downloads an archive meets a warning that is right to heed and safe to pass
+  only after the checks of `install.md` section 3. The generated release notes' sentence
+  that installing through npm avoids the warnings holds for the download mark; it may not
+  hold for Smart App Control.
+- **Why:** certificates and an Apple developer account are recurring costs and key custody
+  that R0 does not need (decision C); the trust signals are the Sigstore attestation and
+  npm provenance.
+- **Mitigation:** `install.md` says what appears, why, and what to check instead
+  (`SHA256SUMS`, `gh attestation verify`, `npm audit signatures`); no claim of publisher
+  trust is made.
+- **Next step:** before a stable release, run the Windows archive and an npm install on a
+  Windows 11 machine with Smart App Control On, and a browser download on macOS 15; record
+  what appears; the maintainer decides whether signing is then needed.
+- **Owner:** P14 and the maintainer. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
+  **Status:** deferred. **Review:** pending.
+
+### L-099
+
+**Managed installation depends on files and redirect hosts that the publishers control.**
+
+- **What:** the reviewed catalogue pins three artifacts: the BtbN FFmpeg build's month-end
+  release asset on GitHub, whisper.cpp v1.9.2's Ubuntu archive on GitHub, and one
+  revision of the multilingual `base` model on Hugging Face. The transport follows
+  redirects only to `release-assets.githubusercontent.com` and `us.aws.cdn.hf.co`. If a
+  publisher removes a file, changes its download host or path, or refuses the transfer,
+  `setup install` fails with `DOWNLOAD_FAILED` (`http_status` or `redirect_policy`) until
+  a VSift release carries a reviewed catalogue that matches. The catalogue also offers no
+  new plan after 2028-08-01.
+- **Evidence:** `crates/vsift-infrastructure/src/managed_catalogue.rs` and
+  `publisher_artifact_transfer.rs`; [ADR 0015](../decisions/0015-r0-delivery-replan.md)
+  (Consequences: the publisher's retention of the month-end asset); ADR 0023 PR 4 note;
+  [`install.md`](../operations/install.md) section 9.
+- **Impact:** managed installation can stop working without any VSift change. Nothing
+  unsafe happens: nothing unreviewed is downloaded or run.
+- **Why:** pinned provenance means the addresses and the redirect route are reviewed, not
+  discovered (ADR 0007, ADR 0014).
+- **Mitigation:** the typed reason and the manual path (`install.md` sections 5.2 and 9);
+  `--artifact-dir` imports files obtained another way and verifies them identically; the
+  hosted `P13 managed smoke` run shows whether the real routes still work.
+- **Next step:** dispatch `P13 managed smoke` before each release (it runs only on demand,
+  [L-042](#l-042)); revalidate or replace the catalogue before its stop date.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
 
@@ -2245,8 +2328,10 @@ raw.**
   opt-in (`--ignored`): `p07_transcript_e2e`, `p07_local_asr_e2e`,
   `p07_asr_qualification`, `p08_search_e2e`, `p08_candidates_e2e`, `p09_evidence_e2e`
   and the listed engine tests. Only the P07 local ASR workflow runs some of them on
-  hosted runners, on demand. Long fuzz campaigns (weekly short runs today), soak and the
-  load ladder are P14 gates.
+  hosted runners, on demand. P13's real-download workflows (`P13 managed smoke` with its
+  `install-e2e` stage, and `P13 managed power loss`) are manual dispatches too, so a later
+  change can break managed installation without CI noticing until someone dispatches them.
+  Long fuzz campaigns (weekly short runs today), soak and the load ladder are P14 gates.
 - **Evidence:** [work record](../../memory/TODO.md) "Known issues and gates";
   [verification](verification.md) section 7 CI tiers.
 - **Impact:** a regression in a real-tool path is found only when someone runs the
@@ -2415,7 +2500,7 @@ raw.**
   failure before `npm publish` publishes nothing; a failure after it can be re-run
   ([L-097](#l-097)); release.md section 6 lists each setting and how to check it.
 - **Next step:** the maintainer's first publish at P13 completion, recorded in the
-  qualification record (PR 11).
+  qualification record's "First publish" section by the ledger follow-up (PR 12).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 

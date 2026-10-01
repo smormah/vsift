@@ -172,3 +172,14 @@ Before the first publication (ADR 0023 decision H4), P13 PR 6 made these v1 chan
 - A failed `setup remove` carries its data beside the error, as a failed `setup install`
   does. The `BUSY` remediation of a held managed folder now names install, rollback and
   remove.
+
+## 2026-10-01 note: P13's contract changes are complete
+
+Every change the 2026-09-30 note listed is made: the `handoff` namespace (PR 5); readable
+terminal text by default (PRs 2a and 2b; it stays unstable and is not for parsing); the
+typed parse remediation (PR 1); `DOWNLOAD_FAILED` and the response schemas
+`setup-install`, `setup-list`, `setup-rollback`, `setup-remove`, `setup-repair` and
+`handoff-check-data`, with the in-place edits of the PR 4 and PR 6 notes. The npm
+launcher's exit statuses 126 and 127 are the launcher's, not vsift's (`cli-v1.md`, "Exit
+and error taxonomy"). The window for editing a never-published v1 value in place closes at
+the first published artifact, which is pending; from then on v1 changes are additive only.

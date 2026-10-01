@@ -1,16 +1,20 @@
 # CLI and JSON contract v1
 
-Status: published v1 boundary. `setup check/plan/install/configure/configure-model` (`setup install` since P13 PR 4), foreground `ingest`
+Status: published v1 boundary. Every command of the namespace table below is operational:
+`setup check/plan/install/list/repair/rollback/remove/configure/configure-model` (`setup
+install` since P13 PR 4, the managed lifecycle commands since PR 6), foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
 `candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
 and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
-recoverable jobs), `job run` and `session init-workspace` (P11 worker host),
-`bundle validate` and `handoff check` (P13 PR 5) are operational. Other commands below
-remain reserved and return `COMMAND_NOT_IMPLEMENTED` with exit 2. Reserving a
-command does not claim its media, provisioning, or worker behavior is implemented.
-The P11 batch contracts (batch summary and its events) are published ahead of `job
-batch`; see "P11 worker contracts and events".
+recoverable jobs), `job run`, `job batch` and `session init-workspace` (P11 worker host),
+`bundle validate` and `handoff check` (P13 PR 5). Since P13 PR 6 no command answers
+`COMMAND_NOT_IMPLEMENTED`: the code stays in the v1 failure taxonomy (a command reserved
+in a later version would answer it with exit 2) and its frozen examples stay as envelopes.
+Reserving a command does not claim its media, provisioning, or worker behavior is
+implemented. The P11 worker contracts (the batch summary and its events) are in "P11
+worker contracts and events". The readable text printed without `--json` is not part of
+the contract (see "Human-readable text").
 
 ## Command namespace
 

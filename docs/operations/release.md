@@ -279,8 +279,10 @@ release command with its assets. The same plan is the run's `publish-plan` artif
 
 ### 6.2 One-time setup, in this order
 
-1. **Merge P13's pull requests** through PR 10 (the publish wiring). The pre-release
-   follows P13's completion (ADR 0023 decision B); PR 11's documentation can land first.
+1. **Merge P13's pull requests** through PR 11 (the documentation and the qualification
+   record). PRs 0-10 are merged; PR 12, the ledger follow-up, comes after the publish
+   (ADR 0023 decision B). Read the guide users will follow,
+   [`install.md`](install.md), before you publish.
 2. **Fork pull requests** (Settings, Actions, General, "Approval for running fork pull
    request workflows from contributors"): choose **Require approval for all external
    contributors** (today it is "first-time contributors"). Under "Workflow permissions"
@@ -381,7 +383,11 @@ release command with its assets. The same plan is the run's `publish-plan` artif
    the plan summary once more, then **Review deployments**, tick `release`, **Approve
    and deploy**. A run waits for approval for at most 30 days, but its artifacts expire
    after 7: approve within a week.
-5. **Verify** (section 6.4) and record the run in the qualification record (PR 11).
+5. **Verify** (section 6.4). The ledger follow-up (P13 PR 12) records the run in the
+   qualification record's "First publish" section
+   ([`p13-distribution.md`](../planning/p13-distribution.md)), marks ADR 0023 Accepted and
+   sets P13 complete; bring it the run's link, the output of the section 6.4 commands and
+   anything that failed or was re-run.
 
 ### 6.4 Verifying provenance and attestations after publishing
 
@@ -443,4 +449,11 @@ archives, `SHA256SUMS`, three SBOMs and three notices files.
   after the environment's approval: not wired; it would change the publish command.
 - GitHub's release immutability (Settings, General, Releases): compatible with the
   draft-then-publish flow above.
-- Whether the Release workflow becomes a required check.
+- Whether the Release workflow becomes a required check (main's required checks today are
+  Quality, Documentation, dependency policy and review, Rust analysis and Governance).
+- The generated release notes say that installing through npm avoids the SmartScreen and
+  Gatekeeper warnings (`tools/vsift-release/src/publish.rs`). That holds for the download
+  mark; it may not hold for Windows Smart App Control, which Microsoft documents as
+  blocking unsigned programs it does not recognise, so it may block the unsigned
+  `vsift.exe` however it was installed ([L-098](../planning/known-limits.md#l-098),
+  `install.md` section 4). Keep the sentence, soften it, or link `install.md` section 4.

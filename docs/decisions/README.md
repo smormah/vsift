@@ -26,4 +26,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0020: Recoverable jobs and durable publication](0020-recoverable-jobs-and-durable-publication.md) (Accepted 2026-09-27)
 - [0021: Worker and batch host](0021-worker-and-batch-host.md) (Accepted 2026-09-28)
 - [0022: Agent skill and named-client qualification](0022-agent-skill-and-named-client-qualification.md) (Accepted 2026-09-30)
-- [0023: R0 distribution, managed installation and handoff check](0023-r0-distribution-managed-installation-and-handoff-check.md) (Proposed 2026-09-30)
+- [0023: R0 distribution, managed installation and handoff check](0023-r0-distribution-managed-installation-and-handoff-check.md) (Proposed 2026-09-30; implemented through P13 PR 11; accepted when P13 completes with the first publish)

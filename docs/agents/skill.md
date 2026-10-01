@@ -33,10 +33,14 @@ within what budget, and how to report.
 The skill lives at the repository root, not in `.claude/skills` or `.agents/skills`,
 so that contributors' own agents working on VSift do not load it by accident.
 
-## Installing it from a source checkout
+## Installing it
 
-Build or install `vsift` first so that the command is on the agent's `PATH` (a
-packaged release is P13's work). Then copy (or link) the whole `skills/vsift`
+The skill is the same folder everywhere: the repository's `skills/vsift/`, the
+`skills/vsift/` folder inside every native release archive, and the `skills/vsift/` folder
+of the `vsift-cli` npm package, byte for byte (`npm root --global` names the folder that
+holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
+the agent's `PATH` ([`install.md`](../operations/install.md); nothing is published yet, so
+today that means building from source). Then copy (or link) the whole `skills/vsift`
 directory, keeping its name, into the client's skill folder:
 
 | Client | For one user | For one project |
@@ -237,10 +241,16 @@ Prefer a review-tier model when the report must be right first time.
 
 ## Not yet done
 
-- **The compact tier's ≥90% target.** First the skill fixes (#218-#221), then the
-  re-run (#222).
-- **The maintainer's review of the flagged strong-tier runs.** The table is in the
-  qualification record.
-- **A `vsift` command that validates a handoff draft** (P13, #213).
+- **The review tier's blurred-banner re-run.** A-09 on Claude Opus 5.5 and GPT-6-Astra
+  after the #224 fix; the maintainer starts it
+  ([L-095](../planning/known-limits.md#l-095)).
+- **A named-agent run from a clean installation** (the release qualification, after
+  P13; ADR 0023 decision H10).
+- **Open readings and limits:** Sonnet's "previous value" slip (#219), Codex on Windows
+  (#204, L-076) and L-078 to L-084 in the register.
+
+Done since this page's first version: the compact tier's ≥90% target (the #222 re-run
+met it, 93% and 100%), the maintainer's review of the flagged strong-tier runs, and the
+command that validates a handoff draft (`vsift handoff check`, P13 PR 5, #213).
 
 How to run the trials is in the [trial runbook](trials.md).
