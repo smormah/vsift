@@ -93,7 +93,7 @@ commits are from `gh pr view` on 2026-10-01.
 | 7 | #241 kill tests, directory flushes, power-loss campaign, install E2E stage | `01656d6` | 2026-09-30 |
 | 10 | #243 release plan, Sigstore attestation, gated npm and GitHub publish wiring | `57f03fe` | 2026-10-01 |
 | 7 follow-up | #244 power-loss checker accepts the in-flight command's state | `6de55da` | 2026-10-01 |
-| 11 | this pull request: documentation, this record, closing sweep | not yet merged | |
+| 11 | #245 this pull request: documentation, this record, closing sweep | recorded by PR 12 | |
 | 12 | the ledger follow-up with the merge commit (governance rule 9) | pending | |
 
 ## Decisions A to H and how each was met

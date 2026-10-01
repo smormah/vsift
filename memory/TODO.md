@@ -4,8 +4,8 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now
 
-**P00-P12 are complete. P13 is not.** PRs 0-11 are done: 0-10 merged (#226-#231, #233, #234,
-#236, #239-#241, #243, #244 `6de55da`; P12 debt #227, #238, #242); PR 11 is the user guide
+**P00-P12 are complete. P13 is not.** PRs 0-11 are done: 0-10 merged (#226, #228-#231, #233,
+#234, #236, #239-#241, #243, #244 `6de55da`; P12 debt #227, #238, #242); PR 11 (#245) is the user guide
 `docs/operations/install.md`, the record `docs/planning/p13-distribution.md` and the closing
 sweep. **Nothing is published** except the `vsift-cli@0.0.0` placeholder; the attest and
 publish jobs have never run (L-096). The power-loss campaign passed on `main` (run 36829198545);
@@ -62,7 +62,7 @@ browser download. Open: grader reading `untrusted_listed` (F12-E01 only); #219.
 
 ## Tracked issues
 
-- **Close:** #15, #14 (ledger), #180, #144 after a clean main, #210, #213, #222. **Open:** #16,
+- **Close:** #213 (delivered by PR 5; still open on GitHub, read 2026-10-01). **Open:** #16,
   #219, #224, #232 (a session root name with controls fails `RootUnavailable` on Linux);
   #170-#178 (L-011, L-013, L-015, L-018, L-024, L-028, L-043, L-045, L-042); #159, #150
   fixtures; #147 faster-whisper; #128 flaky supervisor tests; #205, #206.
