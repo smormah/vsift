@@ -386,17 +386,22 @@ an agent trial.
   and holds the workflow's commands to them. The protected environment, tag ruleset and
   fork approval are maintainer settings not yet made, so their behaviour is unverified
   (L-096).*
-  *P13 final state (2026-10-01):* R-SEC01 holds statically and is unverified at run time.
-  Statically: a pull request, a push or a fork cannot reach `attest` or `publish`, the
-  only jobs that can write or request an OIDC token (the lint and its 28 mutations, the
-  mode tests; Release runs 36797351652 on `main` and 36794417916 on PR 10 ran the plan job
-  in dry-run mode with `attest` and `publish` skipped). At run time: read with `gh api` on
-  2026-10-01, the repository has no `release` environment, no tag ruleset, no tag or
-  release, and fork approval is "first-time contributors"; main's required checks are
+  *P13 final state (2026-10-01, after the first publish):* R-SEC01 holds statically and was
+  exercised at run time. Statically: a pull request, a push or a fork cannot reach `attest`
+  or `publish`, the only jobs that can write or request an OIDC token (the lint and its 28
+  mutations, the mode tests; Release runs 36797351652 on `main` and 36794417916 on PR 10
+  ran the plan job in dry-run mode with `attest` and `publish` skipped, and so did the dry
+  run on the tag, 36919612380). At run time: read with `gh api` on 2026-10-01 after the
+  maintainer's settings, the `release` environment has one reviewer, administrator bypass
+  off and a deployment rule for tags `v*` only; the ruleset `release tags` is active on
+  `v*` tags; fork approval is "all external contributors"; main's required checks are
   Quality, Documentation, dependency policy and review, Rust analysis and Governance (the
-  Release workflow is not required). Completing R-SEC01 means the maintainer's settings
-  ([`release.md`](../operations/release.md) section 6.2) and the first publish's evidence
-  ([P13 record](p13-distribution.md)).
+  Release workflow is not required). The first real run's `publish` waited for the approval,
+  and the second published with no token anywhere. Not shown: a fork pull request tried
+  against the live settings; npm's trusted-publisher settings and "disallow bypass 2FA
+  tokens", which cannot be read from outside (the maintainer's report; the publish
+  working is the proof for the first). L-096 is closed; the first attempt's `ENEEDAUTH` is
+  L-100 ([P13 record](p13-distribution.md), "First publish").
 - R-SEC02: native/npm artifact matches protected commit; verify signatures/provenance,
   dependency/model inventory, malicious archive rejection and wrong-target behavior.
   *P13 PR 9 (2026-09-30): the npm packages are assembled only from canonical release
@@ -420,17 +425,23 @@ an agent trial.
   provenance; neither has run yet (L-096), so verifying a real attestation with `gh
   attestation verify` and `npm audit signatures` is the first publish's evidence
   (release.md section 6.4).*
-  *P13 final state (2026-10-01):* the supply-chain half of R-SEC02 is shown, the
-  signature half is not. Shown: every npm tarball is assembled only from canonical
+  *P13 final state (2026-10-01, after the first publish):* both halves of R-SEC02 are
+  shown for 0.1.0. Supply chain: every npm tarball is assembled only from canonical
   archives and equals a fresh assembly, and the tarballs the twelve `npm-qualify` jobs
-  installed are the bytes the plan job checks and the publish job would publish, by
-  SHA-256; the launcher refuses another version, a changed or replaced executable and a
-  damaged digest file (exit 126) and an unsupported platform (exit 127) in its own tests
-  and in all twelve jobs. Not shown: any attestation, npm provenance or registry
-  signature, because none exists until the first publish; the launcher check is not a
-  defence against someone who can write to the install (L-093). Wrong-target behaviour
-  was exercised on the hosted systems (`windows-2025`, `macos-15`, `ubuntu-24.04`), not
-  on a machine of an unsupported kind.
+  installed are the bytes the plan job checked and the publish job published, by SHA-256;
+  the launcher refuses another version, a changed or replaced executable and a damaged
+  digest file (exit 126) and an unsupported platform (exit 127) in its own tests and in all
+  twelve jobs. Signatures and provenance: on 2026-10-01 `npm audit signatures` verified
+  registry signatures and attestations for all four packages, and `gh attestation verify`
+  (`--repo smormah/vsift`, `--signer-workflow` `release.yml`, `--source-ref
+  refs/tags/v0.1.0`, `--deny-self-hosted-runners`) verified all ten release files and all
+  four tarballs; the first 16 hex digits of the four tarballs' SHA-256 equal the dry-run
+  plan's, so the builds are reproducible across separate runs (Release runs 36919612380 and
+  36931487439; [P13 record](p13-distribution.md), "First publish"). Not shown: that anyone
+  but this one session checked; the launcher check is not a defence against someone who
+  can write to the install (L-093). Wrong-target behaviour was exercised on the hosted
+  systems (`windows-2025`, `macos-15`, `ubuntu-24.04`), not on a machine of an unsupported
+  kind.
 - R-14 (install without Rust through npm, pnpm, Yarn and Bun): *P13 PR 9 (2026-09-30):*
   the Release workflow's `npm-qualify` jobs publish the packed tarballs to a loopback
   Verdaccio and, on `windows-2025`, `macos-15` and `ubuntu-24.04` with each package
@@ -451,8 +462,14 @@ an agent trial.
   the pinned toolchain); no tested step invokes Rust and the driver does not remove it, so
   "installs without Rust" is shown as "needs no Rust", not on a machine without it. The real
   registry (name and scope rules, provenance, Yarn's one-day gate, which the matrix sets to
-  zero), Windows 11 itself and runtimes above the minimums are not exercised: the first
-  publish and the next packet's clean-machine run are.
+  zero), Windows 11 itself and runtimes above the minimums were not exercised by the matrix.
+  *After the first publish (2026-10-01):* one install from the real registry ran on the
+  maintainer's Windows 11 development machine with npm and no login: `npm install
+  vsift-cli@next`, `npm audit signatures` (4 verified signatures, 4 verified attestations)
+  and `npx vsift --version` (`vsift 0.1.0 (011bc4da1af6)`). That is one observation: no
+  clean machine, no pnpm, Yarn or Bun, no macOS or Ubuntu from the real registry, and
+  Yarn's one-day gate on a real `@next` was not observed. The clean-machine run with each
+  package manager is the next packet's.
 - R-SEC03: scan results, not merely job success, have no unresolved release-blocking
   findings. Review Cargo, native provider and container advisories separately.
 
@@ -549,12 +566,13 @@ Coverage percentages supplement these checks but never replace behavioral assert
   x86-64 (manual workflow `P13 managed smoke`, job `install-e2e`). *2026-10-01:* passed
   on `main` at `01656d6` ([run 36793180858](https://github.com/smormah/vsift/actions/runs/36793180858)).
 
-## 2026-10-01 P13 evidence summary (documentation and record, branch `p13-pr11-docs`)
+## 2026-10-01 P13 evidence summary (completion, PR 12)
 
-P13's implementation pull requests 0-10 are merged and this change adds the record
-[p13-distribution.md](p13-distribution.md), which maps each row below to its tests and
-hosted runs and says what each does and does not prove. **The packet is not complete:** the
-first publish is pending and PR 12 records it.
+P13's pull requests 0-11 and the release-prep change are merged, the 0.1.0 pre-release was
+published on 2026-10-01 and the record [p13-distribution.md](p13-distribution.md) maps each
+row below to its tests, hosted runs and the first publish, and says what each does and
+does not prove. **The packet is complete** (the ledger names the release commit `011bc4d`);
+what is open is listed per row.
 
 | ID | Final state | Open |
 | --- | --- | --- |
@@ -562,12 +580,12 @@ first publish is pending and PR 12 records it.
 | D-05 | Met: kill matrix on every CI OS; power loss on Ubuntu 24.04 with ext4 (run 36829198545) | Other filesystems, real disks ([L-056](known-limits.md#l-056)) |
 | D-07 | Met with local TLS, proxy and redirect servers; unavailable targets give typed guidance | Real proxies; the offline install with the real artifacts has not run; publisher hosts ([L-099](known-limits.md#l-099)) |
 | D-08 | Met | Content VSift cannot prove its own is left for the user ([L-090](known-limits.md#l-090)) |
-| R-SEC01 | Holds statically (lint rules 1-7) | The `release` environment, tag ruleset and fork approval are not set ([L-096](known-limits.md#l-096)) |
-| R-SEC02 | Tarballs equal their assembly and the qualified bytes by digest; launcher refusals tested | No attestation or provenance until the first publish |
+| R-SEC01 | Holds statically (lint rules 1-7); the environment, tag ruleset and fork approval are set and were read back; the publish waited for approval and used no token | npm's trusted-publisher settings and "disallow bypass 2FA tokens" cannot be read from outside; the first attempt's `ENEEDAUTH` ([L-100](known-limits.md#l-100)); staged publishing ([#246](https://github.com/smormah/vsift/issues/246)) |
+| R-SEC02 | Tarballs equal their assembly and the published bytes by digest; launcher refusals tested; `npm audit signatures` and `gh attestation verify` passed for all four packages and ten release files | One machine, one session; the launcher check is not a defence against a local attacker ([L-093](known-limits.md#l-093)) |
 | SEC-T02 over human output | Met (L-073 closed) | Terminal emulators not exercised; no progress in human worker output ([L-017](known-limits.md#l-017)) |
 | R-03 | Met on Ubuntu 24.04 x64 (decision E) | Managed installation elsewhere is not in R0 |
 | R-13 | `handoff check` merged; the compact tier meets 90% (#222) | Named-agent run from a clean install; review-tier A-09 blurred ([L-095](known-limits.md#l-095)) |
-| R-14 | Twelve-job npm matrix green on `main` | A clean machine and the real registry (the first publish, then the next packet) |
+| R-14 | Twelve-job npm matrix green on `main` and on the tag; one install of `vsift-cli@next` from the real registry on Windows 11 with npm | A clean machine; pnpm, Yarn and Bun, macOS and Ubuntu on the real registry (the next packet) |
 
 ## 2026-09-30 P12 completion evidence (named-client trials, branch `p12-completion`)
 

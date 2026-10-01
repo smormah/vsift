@@ -354,3 +354,13 @@ read, orchestrating only the published CLI and its v1 JSON contract
 handoff v1 schema is owned by the skill, not added to `schemas/v1`. The skill is not
 yet qualified: the named-client trials are a later P12 increment, and the optional
 MCP adapter still waits until after P12.
+
+## 2026-10-01 note: the skill is qualified and the first pre-release is out
+
+Superseding the state in the note above: [ADR 0022](0022-agent-skill-and-named-client-qualification.md)
+is Accepted (2026-09-30) and the skill is qualified by P12's named-client trials. Decision 8's
+pre-release is now real: 0.1.0 was published on 2026-10-01 under the npm dist-tag `next` and
+as a GitHub pre-release (P13, [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md)
+completion note). It is unstable by design, `latest` stays an empty placeholder, and R0
+remains the first release that claims full qualification (P14). No crate is published, and the
+optional MCP adapter remains an open decision for the maintainer.

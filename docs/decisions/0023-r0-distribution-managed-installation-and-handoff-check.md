@@ -1,13 +1,14 @@
 # ADR 0023: R0 distribution, managed installation and handoff check
 
-- Status: **Proposed** (2026-09-30). The maintainer started P13 on 2026-09-30 and
-  accepted every recommendation of the P13 plan (decisions A-H below). The ADR is
-  accepted when P13 completes with its evidence. *2026-10-01:* the implementation (pull
-  requests 0-10) is merged and documented, and the qualification record is
-  [p13-distribution.md](../planning/p13-distribution.md); completion waits for the first
-  publish, after which the ledger follow-up (PR 12) marks this ADR Accepted, as ADR 0021
-  and ADR 0022 were at their packets' completion (see the last note below).
-- Date: 2026-09-30
+- Status: **Accepted** (2026-10-01, with P13's completion: the maintainer's merge of the PR
+  12 change is the acceptance, as ADR 0021 and ADR 0022 were accepted at their packets'
+  completion; see the [completion note](#completion-note-2026-10-01-p13-pr-12-the-first-publish)
+  at the end). Proposed 2026-09-30: the maintainer started P13 on 2026-09-30 and accepted
+  every recommendation of the P13 plan (decisions A-H below). Pull requests 0-11 and the
+  release-prep change implemented them (notes below); the 0.1.0 pre-release was published
+  and verified on 2026-10-01. The qualification record is
+  [p13-distribution.md](../planning/p13-distribution.md).
+- Date: 2026-09-30 (accepted 2026-10-01)
 - Tracking: [P13 / issue #16](https://github.com/smormah/vsift/issues/16);
   [#213](https://github.com/smormah/vsift/issues/213) (`handoff check`)
 - Refines: [ADR 0001](0001-rust-native-cli.md) (native binaries and npm),
@@ -568,7 +569,9 @@ configuring the trusted publishers;
 the GitHub `release` environment and its reviewer; the tag ruleset; approving fork
 pull-request workflows; the first publish (done personally with two-factor
 authentication, or with a short-lived token stored only in the `release`
-environment); and any announcement.
+environment); and any announcement. *All of these but the announcement were done by the
+maintainer on 2026-09-30 and 2026-10-01 (path A for the first publish, no token); see the
+completion note.*
 
 ## Consequences
 
@@ -1118,7 +1121,7 @@ them. **Nothing is published**, and no repository, environment, ruleset or npm s
 was changed: those are the maintainer-only actions above, listed step by step in
 [`release.md`](../operations/release.md) section 6, the maintainer's runbook. The first
 real run is the maintainer's at P13 completion
-([L-096](../planning/known-limits.md#l-096)).
+(known limit L-096, closed by the 2026-10-01 publish and deleted from the register).
 
 - **When a run publishes.** Every run is the dry run of section 1 except a
   `workflow_dispatch` with the new boolean input `dry_run` (default `true`) cleared, in
@@ -1215,10 +1218,11 @@ Delivered from section 7. It changes no behaviour and no decision above.
   `cli-v1.md`, `architecture.md`, `architecture-and-contracts.md`, the planning README, the
   skill guide, the work-packets table and `release.md`, and added notes to ADRs 0001,
   0007, 0008, 0009, 0014 and 0022.
-- **Status: still Proposed, deliberately.** The header makes this ADR accepted when P13
+- **Status: still Proposed, deliberately** (*superseded 2026-10-01: P13 completed and this
+  ADR is Accepted; see the completion note at the end*). The header made this ADR accepted when P13
   completes with its evidence. The evidence of decisions B and C, the real publishing
   path (attestation, npm provenance, trusted publishing, the protected environment), is
-  the one thing no test could exercise ([L-096](../planning/known-limits.md#l-096)), and
+  the one thing no test could exercise (known limit L-096, since closed), and
   nothing but an empty `vsift-cli@0.0.0` placeholder is published. P13 completes when the
   maintainer has made the settings of `release.md` section 6.2, published the 0.x
   pre-release and verified it (6.3, 6.4); the ledger follow-up (PR 12, governance rule 9)
@@ -1254,3 +1258,67 @@ Delivered from section 7. It changes no behaviour and no decision above.
   the files), never with the real reviewed artifacts; and the managed catalogue depends
   on the publishers' files and redirect hosts
   ([L-099](../planning/known-limits.md#l-099)).
+
+## Completion note, 2026-10-01 (P13 PR 12, the first publish)
+
+Status: **Accepted**. P13 is complete: the ledger marks it `complete` with the merge commit
+`011bc4d` of the release-prep change (#247), the commit the 0.1.0 pre-release was built from,
+tagged `v0.1.0` and published. The evidence, including a first publishing attempt that
+failed, is in [p13-distribution.md](../planning/p13-distribution.md) ("First publish"). This
+note changes no accepted decision.
+
+**How each decision was met.**
+
+- **A, names:** met, with the amendments already recorded above. The launcher is
+  `vsift-cli` (the command stays `vsift`; npm refused the unscoped name) and the platform
+  packages are `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64`. A further
+  amendment on 2026-10-01 (ADR 0009 note): each platform package was first held by a
+  `0.0.0` placeholder the maintainer published with two-factor authentication (path A), so
+  that its trusted publisher could be configured. That extends decision B's placeholder
+  exception from the launcher to the three platform packages.
+- **B, what is published and when:** met. Nothing real was published during the pull
+  requests; the four `0.0.0` placeholders are the only earlier publishes. The one 0.x
+  pre-release, 0.1.0, went out on 2026-10-01 under `next`, with `latest` untouched, and its
+  archives are on a GitHub pre-release. No crate was published.
+- **C, trust signals:** met and verified for 0.1.0: Sigstore attestations on every release
+  file and npm tarball, npm provenance on all four packages, no Authenticode and no
+  notarization. `npm audit signatures` and `gh attestation verify` accepted them
+  (qualification record). An unsigned download's meaning for users stays
+  [L-098](../planning/known-limits.md#l-098).
+- **D, platforms; E, managed installation on Ubuntu 24.04 x64 only; F, order of work; G, the
+  draft's path to `handoff check`:** met as the implementation notes above record.
+- **H1-H9:** met. H4 (in-place v1 edits before the first publication) ended with the
+  publication of 0.1.0: from 0.1.0 on, v1 changes are additive only. **H10** (no named-agent
+  re-run from a clean install in P13) was kept: nobody ran an agent on the published
+  package.
+
+**Deviations and what the real run found.**
+
+- **Scope and names:** `@shongo` was chosen and withdrawn within a day (#235, #237); the
+  scope is `@vsift`.
+- **The first publishing attempt failed.** The first approved dispatch (run 36922901956)
+  stopped at its first `npm publish` with `ENEEDAUTH`; nothing was published. The maintainer
+  reported that the trusted-publisher connections between npm and GitHub had not really been
+  set up, although an earlier report said they were; after they were, a second dispatch on
+  the same tag (run 36931487439) published everything. npm prints no reason for the failure
+  at its default log level, so which field was wrong is not known: it is recorded as
+  [L-100](../planning/known-limits.md#l-100), with a preflight in
+  [`release.md`](../operations/release.md) 6.2. The failure was safe: it came at the first
+  `npm publish`, so no package or release was left part-way.
+- **Found by the real run:** the registry showed each new version about a minute after
+  `npm publish` returned, and the publish job's wait for the new `next` tag handled it (three
+  waits); two attestations exist for each release file, one from each approved run, naming
+  the same bytes.
+- **Not exercised:** a publish that fails part-way, the recovery by re-running the failed
+  job, and the skip of versions npm already holds ([L-097](../planning/known-limits.md#l-097)).
+  `install.md` section 3 was walked as far as download, checksum and attestation; an
+  extracted archive was not run.
+
+**What stays open.** [Issue #246](https://github.com/smormah/vsift/issues/246): whether to
+move to npm's staged publishing before a stable release (the workflow publishes directly
+today). P14 (release qualification: a stable release, the clean-machine install with each
+package manager, the named-agent run from a clean install under decision H10, the Smart App
+Control and macOS prompts try-out, and the `latest` dist-tag) has not started and does not
+start automatically. The readings each pull request's note flagged for the maintainer remain
+open and none blocks completion (listed in the record), as do the debts carried out of P12
+and P11 (L-095, SEC-T01).

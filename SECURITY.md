@@ -16,7 +16,7 @@ These documents do not certify that the planned mitigations have shipped.
 
 ## Supported versions
 
-VSift has not published a stable release. Until then, security fixes are applied to the default branch only. A supported-version table will be introduced with the first stable release.
+VSift has published a 0.x pre-release (0.1.0, 2026-10-01) and no stable release. Until a stable release, security fixes are applied to the default branch only, and a pre-release is not a supported version. A supported-version table will be introduced with the first stable release.
 
 ## Reporting a vulnerability
 

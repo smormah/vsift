@@ -3,13 +3,14 @@
 Status: maintainer runbook for the native release archives, the npm packages and their
 publication, 2026-10-01 (P13 PRs 8, 9 and 10,
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-sections 1 and 2, decisions B, C, D and H5). **Nothing is published yet.** The workflow
-described here builds, checks and packages the archives, assembles and qualifies the npm
-packages (section 5), and on every run writes the publish plan and shows it (a dry run).
-It publishes only when the maintainer dispatches it on a release tag with `dry_run`
-cleared and then approves the protected `release` environment (section 6). The
-maintainer's one-time setup and the first publish are section 6 too. The installation
-guide for users is [`install.md`](install.md).
+sections 1 and 2, decisions B, C, D and H5). **0.1.0 was published with it on 2026-10-01**
+(section 6; the record is [`p13-distribution.md`](../planning/p13-distribution.md), "First
+publish"). The workflow described here builds, checks and packages the archives, assembles
+and qualifies the npm packages (section 5), and on every run writes the publish plan and
+shows it (a dry run). It publishes only when the maintainer dispatches it on a release tag
+with `dry_run` cleared and then approves the protected `release` environment (section 6).
+The maintainer's one-time setup and the publish are section 6 too. The installation guide
+for users is [`install.md`](install.md).
 
 ## 1. What the release workflow does
 
@@ -242,12 +243,15 @@ with the `npmPreapprovedPackages` workaround of `install.md`.
 
 ## 6. Attestation and publishing (P13 PR 10): the maintainer's runbook
 
-As of 2026-10-01, steps 2 to 7 of section 6.2 are done (the record
-[`p13-distribution.md`](../planning/p13-distribution.md) says how each was checked); the
-tag, the dry run and the publish (6.3) are not. Every setting below is the maintainer's to
-make (ADR 0023, "Maintainer-only actions"); no agent or workflow changes them. Nothing
-here needs an e-mail address or other personal detail beyond the public GitHub owner
-`smormah` and repository `vsift`, and no step asks for one.
+**Status: sections 6.2 to 6.4 were completed on 2026-10-01 for 0.1.0** (the record
+[`p13-distribution.md`](../planning/p13-distribution.md) says how each was checked): the
+one-time setup, the tag `v0.1.0`, a dry run on it, two real dispatches (the first failed
+with `ENEEDAUTH` before anything was published, the second published; see 6.2's preflight
+and 6.5) and the verification. They are written below as the steps for the next release.
+Every setting below is the maintainer's to make (ADR 0023, "Maintainer-only actions"); no
+agent or workflow changes them. Nothing here needs an e-mail address or other personal
+detail beyond the public GitHub owner `smormah` and repository `vsift`, and no step asks
+for one.
 
 ### 6.1 The three publishing jobs
 
@@ -281,10 +285,10 @@ release command with its assets. The same plan is the run's `publish-plan` artif
 
 ### 6.2 One-time setup, in this order
 
-1. **Merge P13's pull requests** through PR 11 (the documentation and the qualification
-   record). PRs 0-10 are merged; PR 12, the ledger follow-up, comes after the publish
-   (ADR 0023 decision B). Read the guide users will follow,
-   [`install.md`](install.md), before you publish.
+1. **Merge the pull requests the release needs** (for 0.1.0, P13's PRs 0-11 and the
+   release-prep change; PR 12, the ledger follow-up, came after the publish, ADR 0023
+   decision B). Read the guide users will follow, [`install.md`](install.md), before you
+   publish.
 2. **Fork pull requests** (Settings, Actions, General, "Approval for running fork pull
    request workflows from contributors"): choose **Require approval for all external
    contributors** (today it is "first-time contributors"). Under "Workflow permissions"
@@ -306,9 +310,10 @@ release command with its assets. The same plan is the run's `publish-plan` artif
    force pushes**, and in the bypass list the **Repository admin** role (you). Only you
    can then create, move or delete a `v*` tag, and the workflow never creates one.
 5. **The first publish of `@vsift/win32-x64`, `@vsift/darwin-arm64` and
-   `@vsift/linux-x64`.** npm lets you configure a trusted publisher only on a package
-   that exists, and these three do not yet (`vsift-cli` does: the `0.0.0` placeholder).
-   ADR 0023 allows two ways; choose one:
+   `@vsift/linux-x64`** (done on 2026-10-01 by path A; a later release needs nothing
+   here). npm lets you configure a trusted publisher only on a package that exists, and
+   these three did not yet (`vsift-cli` did: the `0.0.0` placeholder). ADR 0023 allows two
+   ways; choose one:
    - **Path A (recommended; no token ever exists): placeholders published by you with
      two-factor authentication**, as you did for `vsift-cli`. For each of the three names,
      in an empty folder, write the two files below by hand (do not run `npm init`, which
@@ -358,6 +363,18 @@ release command with its assets. The same plan is the run's `publish-plan` artif
    npm cannot change a trusted publisher once created; to fix a field, delete it and add
    it again. Configurations created after 2026-09-03 allow only `npm stage publish`
    unless **npm publish** is ticked, and the workflow publishes directly.
+
+   **Preflight, before the first real dispatch of every release.** Filling in the form is
+   not enough. Clicking **Set up connection** and confirming with your second factor is
+   what saves the entry, and no dry run can tell whether that happened, because the
+   exchange with npm exists only in the `publish` job. So, on npmjs.com, open each of the
+   four packages' Settings page and confirm that a **saved Trusted Publisher entry is
+   listed** (not the empty form) with the values of the table and **npm publish** allowed.
+   npm shows these settings only to the package owner, so nothing else can check them for
+   you. The first real dispatch of 2026-10-01 failed with `ENEEDAUTH` (section 6.5), and the
+   maintainer then reported that the connections had not been set up, although an earlier
+   report said they were
+   ([L-100](../planning/known-limits.md#l-100)).
 7. **Lock token publishing** (each package, Settings, Publishing access): choose
    **Require two-factor authentication and disallow tokens** once its trusted publisher
    exists (after path B's release, for the three platform packages). Trusted publishing
@@ -383,13 +400,16 @@ release command with its assets. The same plan is the run's `publish-plan` artif
 4. **Publish.** Run it again on the same tag with **dry_run cleared**. The plan job must
    say **PUBLISH**, `attest` runs, and `publish` waits with "Waiting for review". Check
    the plan summary once more, then **Review deployments**, tick `release`, **Approve
-   and deploy**. A run waits for approval for at most 30 days, but its artifacts expire
-   after 7: approve within a week.
-5. **Verify** (section 6.4). The ledger follow-up (P13 PR 12) records the run in the
-   qualification record's "First publish" section
-   ([`p13-distribution.md`](../planning/p13-distribution.md)), marks ADR 0023 Accepted and
-   sets P13 complete; bring it the run's link, the output of the section 6.4 commands and
-   anything that failed or was re-run.
+   and deploy**. The run waits in the environment as long as you take (a wait of about 45
+   minutes did no harm on 2026-10-01), but a run waits for approval for at most 30 days
+   and its files, the artifacts every job downloads, expire after 7: approve within a week,
+   or the run cannot publish and you dispatch again.
+5. **Verify** (section 6.4). For 0.1.0 the ledger follow-up (P13 PR 12) recorded the runs
+   in the qualification record's "First publish" section
+   ([`p13-distribution.md`](../planning/p13-distribution.md)), marked ADR 0023 Accepted and
+   set P13 complete; for a later release, bring the run's link, the output of the section
+   6.4 commands and anything that failed or was re-run to the record that release belongs
+   to.
 
 ### 6.4 Verifying provenance and attestations after publishing
 
@@ -423,12 +443,41 @@ npm pack vsift-cli@0.1.0 @vsift/win32-x64@0.1.0 @vsift/darwin-arm64@0.1.0 @vsift
 The release must be a pre-release that is not marked latest, with ten assets: three
 archives, `SHA256SUMS`, three SBOMs and three notices files.
 
+A version that `npm publish` has just reported can take a minute or more to appear in
+`npm view` ("Your package is being processed and may take a few minutes to become
+available"); on 2026-10-01 the publish job's check for `next` polled three times, 30
+seconds apart, before it saw 0.1.0, and it waits up to five minutes. Nothing is wrong if
+your own `npm view` is empty for a moment.
+
+How 0.1.0 verified, for comparison: `npm audit signatures` reported 4 packages with
+verified registry signatures and 4 with verified attestations; `gh attestation verify`
+accepted 10 of 10 release files and 4 of 4 npm tarballs; the checksums of the three archives
+matched.
+
 ### 6.5 If something goes wrong
 
 - **The plan job fails on the tag:** nothing was attested or published. Fix the cause.
   If the fix needs a new commit, the tag may be moved (you can bypass the ruleset) as
   long as nothing was published from it; once anything was, never move a tag: publish a
   new version.
+- **`npm error code ENEEDAUTH` ("This command requires you to be logged in") in
+  `publish`.** npm could not exchange the run's identity token for permission to publish
+  and fell back to asking for a login, which a workflow cannot give. At its default log
+  level npm prints no reason ([L-100](../planning/known-limits.md#l-100)). If this was the
+  first `npm publish` of the run, nothing was published: confirm with an anonymous `npm
+  view <package> versions`. Check, in this order, for each of the four packages: a
+  **saved** Trusted Publisher entry exists (the preflight in 6.2; this is what stopped the
+  first real run on 2026-10-01); each of its fields matches the table in 6.2 (owner
+  `smormah`, repository `vsift`, workflow `release.yml`, environment `release`); **npm
+  publish** is allowed; the package is the one named in the error. npm cannot edit an
+  entry: delete it and add it again. Then finish the release either with **Re-run failed
+  jobs** on the same run (approve the environment again; only the `publish` job runs
+  again) or with a new dispatch on the same tag with `dry_run` cleared. Both are safe
+  because the builds are reproducible: the second run of 2026-10-01 rebuilt everything and
+  its four tarballs matched the dry run's plan, and the one tarball the failed run logged
+  is the one that was finally published. Only a new dispatch has been used so far. A new
+  dispatch attests again, so each file then has two attestations naming the same bytes;
+  either way the 7-day limit on the run's files applies to a re-run.
 - **A publish fails part-way** ([L-097](../planning/known-limits.md#l-097)): use **Re-run
   failed jobs** on the same run within 7 days, and approve again. Versions npm already
   holds with the same bytes are skipped; the job stops if npm holds other bytes for one.
@@ -442,13 +491,16 @@ archives, `SHA256SUMS`, three SBOMs and three notices files.
 
 ### 6.6 Decisions left to the maintainer
 
-- Path A or path B for the first publish of the three platform packages (step 5).
+- Settled (2026-10-01): path A for the first publish of the three platform packages
+  (step 5): `0.0.0` placeholders, no token ever existed.
 - Whether `attest` should also wait for the `release` environment: today it runs without
   an approval once you dispatch the tag with `dry_run` cleared, so that the approval you
-  give is for publishing alone; gating it too means approving twice per release.
+  give is for publishing alone (in both real runs of 2026-10-01 it ran first and succeeded);
+  gating it too means approving twice per release.
 - npm's staged publishing (a trusted publisher allowed only `npm stage publish`, each
   version then approved on npmjs.com with two-factor authentication) as a second gate
-  after the environment's approval: not wired; it would change the publish command.
+  after the environment's approval: not wired; it would change the publish command. To
+  be decided before a stable release ([issue #246](https://github.com/smormah/vsift/issues/246)).
 - GitHub's release immutability (Settings, General, Releases): compatible with the
   draft-then-publish flow above.
 - Whether the Release workflow becomes a required check (main's required checks today are

@@ -39,8 +39,8 @@ no placeholder package, and a name counts as held only once the release publishe
 
 ## 2026-09-30 note: P13 names, publication and trust signals
 
-[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
-Proposed) records the maintainer's decisions: the unscoped `vsift` launcher over three
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13;
+Proposed when written, Accepted 2026-10-01) records the maintainer's decisions: the unscoped `vsift` launcher over three
 per-platform packages in one npm scope (`@<scope>/win32-x64`, `@<scope>/darwin-arm64`,
 `@<scope>/linux-x64`); nothing published during P13's pull requests, then one quiet 0.x
 pre-release under the dist-tag `next` at P13 completion; no crates.io publication in
@@ -143,3 +143,28 @@ stable release is [issue #246](https://github.com/smormah/vsift/issues/246).
 npm's own registry record of a package lists the publishing account (its `maintainers`
 and `_npmUser` fields). VSift's manifests name nobody, and the governance check and
 `npm-verify` enforce that.
+
+## 2026-10-01 note: the pre-release is published
+
+The notes above that say nothing real is published, or that the three `@vsift/...` packages
+do not exist, describe the days before this one and are superseded. On 2026-10-01 the
+Release workflow, started by the maintainer on the tag `v0.1.0` and approved in the protected
+`release` environment, published `vsift-cli@0.1.0`, `@vsift/darwin-arm64@0.1.0`,
+`@vsift/win32-x64@0.1.0` and `@vsift/linux-x64@0.1.0` under the dist-tag `next`, through
+npm trusted publishing with npm provenance and no stored token, and created the GitHub
+pre-release `v0.1.0` with its archives. `latest` is still the `0.0.0` placeholder on all
+four packages, so users install `vsift-cli@next` until a stable release. The first publishing
+attempt failed with `ENEEDAUTH` before anything was published, because (as the maintainer
+reported) the trusted-publisher connections had not been completed; a second dispatch
+after they were completed succeeded. The account is in
+[the P13 record](../planning/p13-distribution.md) ("First publish") and in the completion
+note of [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md), which
+is now Accepted. This decision's other parts are unchanged: the executable is `vsift`,
+publishing is only through the protected release workflow with provenance, and no crate is
+published to crates.io.
+
+The Consequences' "P13 rechecks the registry and verifies account/namespace ownership
+before publication" was done by the placeholders (the lesson stands: only a successful
+publish proves a name), and "installation without Rust is a release qualification
+requirement" is met for the npm path by P13's twelve-job matrix and one install from the
+real registry, with the clean-machine install across package managers left to P14.

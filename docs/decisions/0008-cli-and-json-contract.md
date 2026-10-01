@@ -94,8 +94,8 @@ and the SEC-T02 suite (`sec_t02_adversarial_evidence`) state and test this.
 
 ## 2026-09-30 note: P13 contract changes
 
-[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
-Proposed) lists the contract changes P13 makes and why:
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13;
+Proposed when written, Accepted 2026-10-01) lists the contract changes P13 makes and why:
 
 - the namespace gains `handoff` (`handoff check`, #213);
 - human output becomes readable terminal text by default, with no TTY detection and no
@@ -182,4 +182,5 @@ typed parse remediation (PR 1); `DOWNLOAD_FAILED` and the response schemas
 `handoff-check-data`, with the in-place edits of the PR 4 and PR 6 notes. The npm
 launcher's exit statuses 126 and 127 are the launcher's, not vsift's (`cli-v1.md`, "Exit
 and error taxonomy"). The window for editing a never-published v1 value in place closes at
-the first published artifact, which is pending; from then on v1 changes are additive only.
+the first published artifact. *That artifact, 0.1.0, was published on 2026-10-01 (ADR 0023
+completion note): from 0.1.0 on, v1 changes are additive only.*

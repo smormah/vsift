@@ -26,12 +26,14 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > trials passed fully ([qualification record](docs/planning/p12-agent-qualification.md)). Every
 > command now prints readable terminal text without `--json` (P13). On Ubuntu 24.04
 > `vsift setup install` installs the reviewed FFmpeg, whisper.cpp and model after you
-> accept a plan, and the native archives and npm packages are built and tested; **nothing
-> is published yet**, and the first release will be a pre-release
-> ([installing VSift, pre-release](docs/operations/install.md)). P13 is in progress since
-> 2026-09-30
+> accept a plan. P13 (distribution) is complete
 > ([ADR 0023](docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
-> Proposed). See the
+> Accepted): the first 0.x pre-release, 0.1.0, was published on 2026-10-01 as the npm
+> package `vsift-cli` under the dist-tag `next` (`npm install --global vsift-cli@next`) and
+> as native archives on [GitHub Releases](https://github.com/smormah/vsift/releases), with
+> npm provenance and Sigstore attestations
+> ([installing VSift, pre-release](docs/operations/install.md)). It is a pre-release, not a
+> stable or supported release; the release qualification (P14) has not started. See the
 > [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
@@ -109,7 +111,7 @@ install the tools yourself. A supplied transcript avoids the local Whisper/model
 
 ## Architecture
 
-VSift is a native Rust CLI, to be distributed as prebuilt native archives and through an npm launcher (`vsift-cli`); nothing is published yet. Specialist media and machine-learning tools run as isolated external processes.
+VSift is a native Rust CLI, distributed as prebuilt native archives and through an npm launcher (`vsift-cli`); only a 0.x pre-release is published so far, and no crate is published to crates.io. Specialist media and machine-learning tools run as isolated external processes.
 
 ```text
 CLI -> Application -> Domain

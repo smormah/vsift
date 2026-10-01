@@ -937,8 +937,8 @@ The skill text changes need the re-run (#222) to show an effect.
 
 ## 2026-09-30 note: P13 changes to the skill
 
-[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13,
-Proposed) changes the skill in three ways; the substance is there.
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) (P13;
+Proposed when written, Accepted 2026-10-01) changes the skill in three ways; the substance is there.
 
 - `vsift handoff check` (#213) is a `free` command. Its draft arrives on standard
   input through two literal forms, a quoted heredoc on POSIX and a single-quoted

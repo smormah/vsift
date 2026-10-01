@@ -10,8 +10,10 @@ fixes (#222, 2026-09-30: 93% and 100%). P13's installed-user and managed-depende
 implemented and has run mechanically: the managed-dependency stage passed on a hosted
 Ubuntu 24.04 runner (2026-09-30, `install-e2e`, run 36793180858) and the installs of the
 release packages with npm, pnpm, Yarn and Bun run in the Release workflow's twelve-job
-matrix; the named-agent run from a clean install belongs to P14 (ADR 0023 decision H10)
-and the first publish is pending ([P13 record](p13-distribution.md)).
+matrix; the named-agent run from a clean install belongs to P14 (ADR 0023 decision H10).
+The 0.1.0 pre-release was published on 2026-10-01 and installed once from the real
+registry on Windows 11 with npm ([P13 record](p13-distribution.md), "First publish"); no
+agent has used it.
 Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
@@ -420,9 +422,11 @@ the registry stopped and a clean uninstall. **Result:** all twelve jobs passed o
 checked by the `package` and `plan` jobs (reproducible, read back against their inputs, by
 digest); their executables are the ones the matrix ran from the platform packages, but no
 job extracts and runs an archive. **What this stage does not show:** a clean machine (the
-hosted runners have a Rust toolchain on `PATH` that no step invokes), the real registry,
-an agent, or the first publish; those are the next packet's checkpoint and the P13
-record's pending "First publish". How a user checks an install is
+hosted runners have a Rust toolchain on `PATH` that no step invokes), the real registry
+on any system but one Windows 11 development machine with npm (the P13 record's "First
+publish"), or an agent; those are the next packet's checkpoint. The same twelve jobs also
+passed on the tag `v0.1.0` in the dry run and the published run (runs 36919612380 and
+36931487439). How a user checks an install is
 [`install.md`](../operations/install.md) section 6.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
@@ -478,8 +482,10 @@ action.
   supported-machine installation without Rust. *2026-09-30 (ADR 0023 decision H10):
   P13's stage proves the clean installation and one managed install mechanically; the
   named-agent run from a clean installation is P14's.* *2026-10-01: met mechanically as
-  described above, on hosted runners and a local registry; the install from the published
-  pre-release is recorded in the [P13 record](p13-distribution.md) once it exists.*
+  described above, on hosted runners and a local registry; then the 0.1.0 pre-release
+  was published, and one install of `vsift-cli@next` from the real registry on a Windows 11
+  development machine with npm is recorded in the [P13 record](p13-distribution.md); the
+  clean-machine install with each package manager and the agent part are P14's.*
 - **Release checkpoint:** P14 runs all supported profiles plus security, fault, load
   and release-integrity gates described in the verification specification.
 
