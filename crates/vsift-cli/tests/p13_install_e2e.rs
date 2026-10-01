@@ -39,8 +39,9 @@
 //! workflow `P13 managed smoke`, job `install-e2e`. It downloads the three
 //! pinned publisher artifacts up to four times and sends no credentials and
 //! no personal detail: the requests carry only `VSift`'s neutral user agent.
-//! The clean install of the native archive and of the npm packages without
-//! Rust belongs to P13 PRs 9 and 11. It writes a bounded report to
+//! The install of the npm packages is qualified by the Verdaccio matrix of
+//! P13 PR 9 (`release.yml`), and no job extracts and runs a native archive
+//! (`docs/planning/p13-distribution.md`). It writes a bounded report to
 //! `.vsift/e2e-runs/p13-<run-id>/report.json`, and fails unless every stage
 //! passed.
 
@@ -878,7 +879,7 @@ fn p13_install_checkpoint() -> TestResult {
         "prior_checkpoints": ["P06: p06_setup_e2e", "P07: p07_local_asr_e2e", "P08-P11 checkpoints", "P12: p12_skill_procedure_e2e"],
         "stages": stages,
         "coverage_gaps": [
-            "the clean install of the native archive and of the npm packages without Rust is P13 PRs 9 and 11",
+            "the npm packages are installed by the P13 PR 9 Verdaccio matrix, and no job extracts and runs a native archive",
             "power loss is qualified by the P13 managed power loss workflow, not by this stage",
             "an agent run from a clean install is P14's release checkpoint (ADR 0023 decision H10)"
         ],

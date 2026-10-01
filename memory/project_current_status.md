@@ -74,7 +74,7 @@ runbook is `docs/operations/release.md`.
   default; `handoff check`.
 - **Names:** scope `@vsift` (owned, #237); launcher package `vsift-cli` (npm refused
   `vsift`; placeholder `0.0.0` held, `latest`; command `vsift`; ADR 0009 notes). The
-  three `@vsift/...` packages are not on the registry yet.
+  three `@vsift/...` packages hold `0.0.0` placeholders too (2026-10-01, path A).
 - **Hosted evidence (all Ubuntu 24.04 unless noted):** `P13 managed smoke` runs 36734316384
   (`d43a518`) and 36793180858 (`01656d6`, with `install-e2e`); `P13 managed power loss` run
   36793177930 failed on a verifier defect (53 "lost" acks, none an older state), fixed in

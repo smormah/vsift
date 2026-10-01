@@ -7,22 +7,21 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 **P00-P12 are complete. P13 is not.** PRs 0-11 are done: 0-10 merged (#226, #228-#231, #233,
 #234, #236, #239-#241, #243, #244 `6de55da`; P12 debt #227, #238, #242); PR 11 (#245) is the user guide
 `docs/operations/install.md`, the record `docs/planning/p13-distribution.md` and the closing
-sweep. **Nothing is published** except the `vsift-cli@0.0.0` placeholder; the attest and
-publish jobs have never run (L-096). The power-loss campaign passed on `main` (run 36829198545);
+sweep. **Nothing real is published**: only the four `0.0.0` placeholders (`vsift-cli`, and the
+three `@vsift/...` on 2026-10-01); the attest and publish jobs have never run (L-096). The power-loss campaign passed on `main` (run 36829198545);
 `P13 managed smoke` with `install-e2e` passed (run 36793180858). The ledger still says
 `in_progress`: only PR 12 may change it, after a real publish.
 
 **What remains, in order:**
 
-1. **The maintainer's release steps** (`docs/operations/release.md` section 6; read `install.md`
-   first). 6.2: fork-PR approval "all external contributors"; environment `release` (you as
-   reviewer, self-review allowed, no admin bypass, tag rule `v*`); tag ruleset `v*`; first
-   publish of the three `@vsift/...` names (path A placeholders with 2FA, an ADR 0009 note
-   needed; or path B, short-lived `NPM_BOOTSTRAP_TOKEN`); trusted publishers on all four
-   (`smormah`, `vsift`, `release.yml`, `release`, "npm publish" ticked); disallow tokens.
-   6.3: version, CHANGELOG release section, tag `v0.1.0`, dry run, dispatch with `dry_run`
-   cleared, approve. 6.4: verify (`npm audit signatures`, `gh attestation verify`).
-   State read 2026-10-01: none of 6.2 is done; the three `@vsift/...` are not on the registry.
+1. **The maintainer's release steps** (`docs/operations/release.md` section 6). **6.2 is done
+   (2026-10-01):** fork-PR approval; environment `release` and the `v*` tag ruleset (both read
+   back with `gh api`); the three `@vsift/...` placeholders (path A, ADR 0009 note); trusted
+   publishers on all four packages and "disallow bypass 2fa tokens" (maintainer-reported,
+   unverifiable until the first publish). Still the maintainer's: `npm logout` on the
+   machine used. **6.3:** merge the release-prep change, tag `v0.1.0`, dry run on the tag,
+   dispatch with `dry_run` cleared, approve in the `release` environment. **6.4:** verify
+   (`npm audit signatures`, `gh attestation verify`). #246: staged publishing, before P14.
 2. **The publish** (`vsift-cli@next`; `latest` stays `0.0.0`).
 3. **PR 12** (small, after the publish): the record's "First publish" section; ADR 0023
    Accepted; ledger P13 `complete` with PR 11's merge commit; L-036 and L-096 closed or
