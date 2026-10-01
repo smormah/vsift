@@ -51,8 +51,8 @@ final round's results (#223, `1284e54`); the ledger marks it `complete`.
 **P13 is in progress** (started 2026-09-30). PRs 0-9 and the P12 debt fixes are merged
 (human output, `handoff check`, `setup install` and its lifecycle with kill and
 power-loss tests, `release.yml`, the workflow lint and the npm packages); PR 10
-(attestation and publish wiring) is done in this change; PRs 11 and 12, PR 7's two
-maintainer runs and the maintainer's first publish remain. The packet is not complete.
+(attestation and publish wiring, #243) too. The power-loss campaign's verifier fix is in
+review; PRs 11 and 12, its re-run and the first publish remain. The packet is not complete.
 
 ## P13 in one view
 
@@ -79,16 +79,17 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
   package's version and executable SHA-256, runs it without a shell and relays signals
   (exit 127/126 for its own failures); no package has scripts or names a person. Release
   jobs `npm-package` and `npm-qualify` (12 jobs, loopback Verdaccio). L-091 to L-094.
-- **PR 7 (#241, `01656d6`, step 7):** 22 `managed-*` fault points; kills leave a store
-  repair describes and a rerun completes; every changed folder is flushed (a reported
-  command survives a power loss, Ubuntu 24.04 ext4). Workflows `P13 managed power loss`
-  and `install-e2e` (`P13 managed smoke`) await the maintainer's first runs.
-- **PR 10 (this change):** `dry_run` input (default `true`); `plan` on every run checks
-  archives and tarballs by digest and shows `vsift-release publish-plan`'s plan. Only a
-  dispatch of `v<version>` with `dry_run` cleared runs `attest` (Sigstore provenance for
-  every release file and tarball) and, after the `release` environment's approval,
-  `publish` (qualified tarballs to npm under `next` with provenance, then the GitHub
-  pre-release). Lint rule 7. Untested first run (L-096); re-runnable partial publish (L-097).
+- **PR 7 (#241, `01656d6`):** 22 `managed-*` fault points; kills leave a store repair
+  describes and a rerun completes; every changed folder is flushed (Ubuntu ext4).
+  `install-e2e` passed (run 36793180858). `P13 managed power loss` (run 36793177930): no
+  damage, but 53 acks counted lost, each the in-flight command's newer selection: a
+  verifier defect, fixed in review (`p13-pr7-durability`); the re-run is pending.
+- **PR 10 (#243, `57f03fe`):** `dry_run` input (default `true`); `plan` on every run
+  checks archives and tarballs by digest and shows `vsift-release publish-plan`'s plan.
+  Only a dispatch of `v<version>` with `dry_run` cleared runs `attest` (Sigstore
+  provenance for every release file and tarball) and, after the `release` environment's
+  approval, `publish` (npm `next` with provenance, then the GitHub pre-release). Lint
+  rule 7. Untested first run (L-096); re-runnable partial publish (L-097).
 - **Only the placeholder is published** until P13 ends and the maintainer approves a 0.x `next`.
 
 ## P12 in one view
@@ -125,7 +126,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified; compact tier 82%, then 93%/100% on the #222 re-run (L-085 closed); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-9 merged (#226-#231, #233, #234, #236, #239-#241); PR 10 (publish wiring) done in this change; docs (PR 11), the ledger (PR 12) and the maintainer's runs and first publish to come |
+| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-10 merged (#226-#231, #233, #234, #236, #239-#241, #243); the power-loss verifier fix in review; docs (PR 11), the ledger (PR 12) and the maintainer's runs and first publish to come |
 | P14 | Not started |
 
 ## Architecture snapshot

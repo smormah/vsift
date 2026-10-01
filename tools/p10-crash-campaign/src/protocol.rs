@@ -158,6 +158,23 @@ pub fn seq_of_mark(mark: &str) -> Option<u64> {
     mark.strip_prefix("ack-")?.parse().ok()
 }
 
+/// The dm-log-writes mark the managed workload logs just before command
+/// `seq` touches the store (P13 PR 7 addendum, 2026-10-01).
+///
+/// A replay point after this mark may hold some of that command's writes
+/// although its acknowledgement mark comes later: the replay needs the start
+/// to tell a command in flight at the point from one that had not begun.
+#[must_use]
+pub fn start_mark_for(seq: u64) -> String {
+    format!("start-{seq}")
+}
+
+/// The sequence number a mark names, if it is a command's start mark.
+#[must_use]
+pub fn seq_of_start_mark(mark: &str) -> Option<u64> {
+    mark.strip_prefix("start-")?.parse().ok()
+}
+
 /// A failed operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Failure {
@@ -312,7 +329,9 @@ fn hex_digest(text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Ack, OperationKind, mark_for, parse_events, seq_of_mark};
+    use super::{
+        Ack, OperationKind, mark_for, parse_events, seq_of_mark, seq_of_start_mark, start_mark_for,
+    };
     use vsift_domain::SessionId;
 
     const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -390,5 +409,9 @@ mod tests {
         assert_eq!(seq_of_mark("ack-42"), Some(42));
         assert_eq!(seq_of_mark("ack-"), None);
         assert_eq!(seq_of_mark("mkfs"), None);
+        assert_eq!(start_mark_for(42), "start-42");
+        assert_eq!(seq_of_start_mark("start-42"), Some(42));
+        assert_eq!(seq_of_start_mark("ack-42"), None);
+        assert_eq!(seq_of_mark("start-42"), None);
     }
 }

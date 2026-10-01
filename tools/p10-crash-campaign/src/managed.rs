@@ -15,8 +15,9 @@
 //! P13 PR 7), and whatever a power loss catches half done is detected and
 //! repaired (decision H9). So at every replayed flush the verifier requires:
 //!
-//! - every acknowledged selection is still selected, and no acknowledged
-//!   removal has come back;
+//! - every acknowledged selection is still selected, or replaced by the
+//!   selection the one command in flight at the point reported (see
+//!   [`in_flight`]), and no acknowledged removal has come back;
 //! - the store can be inspected;
 //! - a component's lookup either refuses its selection or returns a version
 //!   whose file holds exactly the bytes published under that name (checked
@@ -54,7 +55,7 @@ use vsift_infrastructure::{
 
 use crate::{
     error::CampaignError,
-    protocol::mark_for,
+    protocol::{mark_for, start_mark_for},
     rng::SplitMix64,
     verify::sha256_hex,
     workload::{Channel, mark, unix_nanos},
@@ -363,6 +364,11 @@ pub fn run_managed_workload(config: &ManagedWorkloadConfig) -> Result<u64, Campa
             _ => ManagedOperation::Sweep,
         };
         channel.line(&format!("MSTART {seq} {} {operation} {key}", unix_nanos()?))?;
+        // Logged before the command's first write: the replay needs it to
+        // know which command may be in flight at a point (see `in_flight`).
+        if let Some(device) = &config.mark_device {
+            mark(&config.dmsetup, device, &start_mark_for(seq))?;
+        }
         let version = next_version.entry(key).or_insert(0);
         let outcome = run_operation(&store, component, operation, version);
         match outcome {
@@ -505,6 +511,10 @@ pub struct ManagedFindings {
     pub refused_whole: usize,
     /// Acknowledgements checked.
     pub acks: usize,
+    /// Components found holding the selection of the command in flight at
+    /// the point rather than their last acknowledged one (allowed: a later
+    /// command superseded it, nothing was undone).
+    pub in_flight_states: usize,
     /// Repair passes applied.
     pub repair_passes: usize,
 }
@@ -530,12 +540,14 @@ impl ManagedFindings {
             )
             .collect();
         lines.push(format!(
-            "{prefix} managed acks={} lost={} damaged={} torn_refused={} refused_whole={} repair_passes={}",
+            "{prefix} managed acks={} lost={} damaged={} torn_refused={} refused_whole={} \
+             in_flight_states={} repair_passes={}",
             self.acks,
             self.lost.len(),
             self.damage.len(),
             self.torn_refused,
             self.refused_whole,
+            self.in_flight_states,
             self.repair_passes
         ));
         lines
@@ -562,11 +574,49 @@ fn raw_version_whole(root: &Path, component: &str, version: &str) -> bool {
     .is_ok_and(|bytes| bytes == stand_in_bytes(component, version))
 }
 
+/// The acknowledged command that may be in flight at a replay point, given
+/// the acknowledgements in workload order, how many of them must hold there
+/// (`required`) and the last command whose start mark the point's prefix
+/// holds (`started`).
+///
+/// Why (run 36793177930, P13 PR 7 addendum of 2026-10-01): a command's
+/// acknowledgement binds only from the point before its mark, but the
+/// command's own flushes come earlier, so between its selection's flush and
+/// its mark the device durably holds the selection the command is about to
+/// report while the previous acknowledgement of that component is still the
+/// last one required. A managed selection is overwritten, not appended, so
+/// that is a newer state, not an undone one. The workload is sequential, so
+/// only the first acknowledged command after the required ones can be in
+/// flight (every later one started after its mark), and only once it has
+/// started: before its start mark the prefix holds nothing of it, and the
+/// required acknowledgements must hold exactly. Failed commands in between
+/// are not admitted: their outcome was never reported.
+#[must_use]
+pub fn in_flight(
+    acks: &[ManagedAck],
+    required: usize,
+    started: Option<u64>,
+) -> Option<&ManagedAck> {
+    let next = acks.get(required)?;
+    started
+        .is_some_and(|started| started >= next.seq)
+        .then_some(next)
+}
+
 /// Holds the managed root at one replay point to the claim, then repairs
 /// it and reinstalls each component's last acknowledged selection. It
 /// writes to the store: run it on a copy.
+///
+/// `acks` are the acknowledgements that must hold; `in_flight` the one
+/// acknowledged command that may be part-way through at the point
+/// ([`in_flight`]): a component may hold the selection that command
+/// reported instead of its last acknowledged one. Anything else is a loss.
 #[must_use]
-pub fn verify_managed(root: &Path, acks: &[ManagedAck]) -> ManagedFindings {
+pub fn verify_managed(
+    root: &Path,
+    acks: &[ManagedAck],
+    in_flight: Option<&ManagedAck>,
+) -> ManagedFindings {
     let mut findings = ManagedFindings {
         acks: acks.len(),
         ..ManagedFindings::default()
@@ -610,9 +660,15 @@ pub fn verify_managed(root: &Path, acks: &[ManagedAck]) -> ManagedFindings {
             Err(_) if raw.is_some() && !whole => findings.torn_refused += 1,
             Err(_) => findings.refused_whole += 1,
         }
-        if let Some(ack) = last.get(key)
-            && ack.selected != raw
-        {
+        let Some(ack) = last.get(key) else {
+            continue;
+        };
+        if ack.selected == raw {
+            continue;
+        }
+        if in_flight.is_some_and(|command| command.component == key && command.selected == raw) {
+            findings.in_flight_states += 1;
+        } else {
             findings.lost.push((
                 ack.seq,
                 format!(
@@ -762,9 +818,13 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use vsift_application::{ManagedRemovalTarget, remove_managed};
+    use vsift_infrastructure::{GuardedManagedStore, ManagedArtifactStore};
+
     use super::{
-        ManagedAck, ManagedOperation, ManagedWorkloadConfig, STAND_IN_MIN_BYTES,
-        parse_managed_events, run_managed_workload, stand_in_bytes, verify_managed,
+        ManagedAck, ManagedOperation, ManagedWorkloadConfig, STAND_IN_MIN_BYTES, in_flight,
+        parse_managed_events, publish_stand_in, run_managed_workload, stand_in_bytes,
+        verify_managed,
     };
     use crate::workload::{MAX_ACK_BYTES, read_text};
 
@@ -835,7 +895,7 @@ mod tests {
         let events = parse_managed_events(&read_text(&acks_path, MAX_ACK_BYTES)?);
         assert!(events.malformed.is_empty());
         assert!(events.acks.len() > 10, "{}", events.acks.len());
-        let findings = verify_managed(&root, &events.acks);
+        let findings = verify_managed(&root, &events.acks, None);
         assert!(findings.clean(), "{:?}", findings.lines("TEST"));
         assert!(findings.lost.is_empty(), "{:?}", findings.lines("TEST"));
 
@@ -853,10 +913,188 @@ mod tests {
             .join(format!("{component}--{version}"))
             .join(super::STAND_IN_FILE);
         fs::write(&file, b"")?;
-        let findings = verify_managed(&root, &events.acks);
+        let findings = verify_managed(&root, &events.acks, None);
         assert!(findings.clean(), "{:?}", findings.lines("TEST"));
         assert_eq!(findings.torn_refused, 1, "{:?}", findings.lines("TEST"));
         assert!(findings.repair_passes >= 1);
+        Ok(())
+    }
+
+    fn ack(
+        seq: u64,
+        operation: ManagedOperation,
+        component: &str,
+        selected: Option<&str>,
+    ) -> ManagedAck {
+        ManagedAck {
+            seq,
+            unix_ns: u128::from(seq),
+            operation,
+            component: component.to_owned(),
+            selected: selected.map(str::to_owned),
+            removed: None,
+        }
+    }
+
+    /// What happens to the component after its installs.
+    #[derive(Clone, Copy)]
+    enum Then {
+        /// Nothing: the last install stays selected.
+        Keep,
+        /// `setup remove <component>`.
+        RemoveComponent,
+    }
+
+    /// A fresh managed root at `scratch/name` where `component` installed
+    /// `versions` in order, then `then`.
+    fn store_with(
+        scratch: &Scratch,
+        name: &str,
+        component: vsift_domain::ManagedComponent,
+        versions: &[&str],
+        then: Then,
+    ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let root = scratch.0.join(name);
+        let store = ManagedArtifactStore::at(root.clone()).map_err(|error| format!("{error:?}"))?;
+        let guard = store
+            .try_install_guard()
+            .map_err(|error| format!("{error:?}"))?;
+        for version in versions {
+            publish_stand_in(&store, &guard, component.identifier(), version)?;
+        }
+        if let Then::RemoveComponent = then {
+            let maintainer = GuardedManagedStore::new(&store, &guard);
+            remove_managed(&maintainer, &ManagedRemovalTarget::Component(component))
+                .map_err(|error| format!("{error:?}"))?;
+        }
+        Ok(root)
+    }
+
+    /// Only the first acknowledged command beyond the required ones can be
+    /// in flight, and only once its start mark is in the prefix.
+    #[test]
+    fn only_the_next_acknowledged_command_is_in_flight_once_it_started() {
+        let acks = [
+            ack(1, ManagedOperation::Install, "whisper_cli", Some("v00001")),
+            ack(4, ManagedOperation::Install, "whisper_cli", Some("v00002")),
+            ack(5, ManagedOperation::Rollback, "whisper_cli", Some("v00001")),
+        ];
+        assert_eq!(in_flight(&acks, 1, None), None);
+        // Failed commands 2 and 3 started; command 4 had not.
+        assert_eq!(in_flight(&acks, 1, Some(3)), None);
+        assert_eq!(in_flight(&acks, 1, Some(4)), acks.get(1));
+        // Command 5 cannot be in flight while 4's acknowledgement does not
+        // bind: it started after 4's mark.
+        assert_eq!(in_flight(&acks, 2, Some(4)), None);
+        assert_eq!(in_flight(&acks, 2, Some(5)), acks.get(2));
+        assert_eq!(in_flight(&acks, 3, Some(5)), None);
+    }
+
+    /// Regression for run 36793177930 (53 "lost" acknowledgements, none
+    /// undone): at a point between a command's selection flush and its
+    /// acknowledgement mark, the component durably holds the selection that
+    /// command reports, newer than its last required acknowledgement. That
+    /// is not a loss. A selection that went back, or one no command in
+    /// flight reported, still is.
+    #[test]
+    fn a_selection_the_command_in_flight_made_is_not_a_loss_but_an_undone_one_is() -> TestResult {
+        let scratch = Scratch::new()?;
+        let component = vsift_application::MANAGED_COMPONENTS
+            .first()
+            .copied()
+            .ok_or("no managed component")?;
+        let other = vsift_application::MANAGED_COMPONENTS
+            .get(1)
+            .copied()
+            .ok_or("one managed component")?;
+        let key = component.identifier();
+        let first = ack(1, ManagedOperation::Install, key, Some("v00001"));
+        let second = ack(2, ManagedOperation::Install, key, Some("v00002"));
+        let removal = ack(3, ManagedOperation::RemoveComponent, key, None);
+
+        // The store selects v00002: command 2 committed, its mark not yet.
+        // The old rule (no command in flight) calls it lost, as the run did.
+        let root = store_with(
+            &scratch,
+            "strict",
+            component,
+            &["v00001", "v00002"],
+            Then::Keep,
+        )?;
+        let findings = verify_managed(&root, std::slice::from_ref(&first), None);
+        assert_eq!(findings.lost.len(), 1, "{:?}", findings.lines("TEST"));
+
+        // With command 2 in flight it is the newer state, and nothing else
+        // about the point changes.
+        let root = store_with(
+            &scratch,
+            "ahead",
+            component,
+            &["v00001", "v00002"],
+            Then::Keep,
+        )?;
+        let findings = verify_managed(&root, std::slice::from_ref(&first), Some(&second));
+        assert!(findings.lost.is_empty(), "{:?}", findings.lines("TEST"));
+        assert!(findings.clean(), "{:?}", findings.lines("TEST"));
+        assert_eq!(findings.in_flight_states, 1);
+
+        // A component removal in flight: nothing selected is its outcome.
+        let root = store_with(
+            &scratch,
+            "removed",
+            component,
+            &["v00001", "v00002"],
+            Then::RemoveComponent,
+        )?;
+        let required = [first.clone(), second.clone()];
+        let findings = verify_managed(&root, &required, Some(&removal));
+        assert!(findings.lost.is_empty(), "{:?}", findings.lines("TEST"));
+        assert_eq!(findings.in_flight_states, 1);
+        let root = store_with(
+            &scratch,
+            "removed-strict",
+            component,
+            &["v00001", "v00002"],
+            Then::RemoveComponent,
+        )?;
+        let findings = verify_managed(&root, &required, None);
+        assert_eq!(findings.lost.len(), 1, "{:?}", findings.lines("TEST"));
+
+        // The command in flight reports another version, or concerns another
+        // component: the selection is still a loss.
+        let root = store_with(
+            &scratch,
+            "elsewhere",
+            component,
+            &["v00001", "v00002"],
+            Then::Keep,
+        )?;
+        let wrong_version = ack(2, ManagedOperation::Install, key, Some("v00003"));
+        let findings = verify_managed(&root, std::slice::from_ref(&first), Some(&wrong_version));
+        assert_eq!(findings.lost.len(), 1, "{:?}", findings.lines("TEST"));
+        let root = store_with(
+            &scratch,
+            "other",
+            component,
+            &["v00001", "v00002"],
+            Then::Keep,
+        )?;
+        let other_component = ack(
+            2,
+            ManagedOperation::Install,
+            other.identifier(),
+            Some("v00002"),
+        );
+        let findings = verify_managed(&root, std::slice::from_ref(&first), Some(&other_component));
+        assert_eq!(findings.lost.len(), 1, "{:?}", findings.lines("TEST"));
+
+        // An acknowledged install undone (the store went back to v00001)
+        // while a third install is in flight: still a loss.
+        let root = store_with(&scratch, "undone", component, &["v00001"], Then::Keep)?;
+        let third = ack(3, ManagedOperation::Install, key, Some("v00003"));
+        let findings = verify_managed(&root, &required, Some(&third));
+        assert_eq!(findings.lost.len(), 1, "{:?}", findings.lines("TEST"));
+        assert_eq!(findings.in_flight_states, 0);
         Ok(())
     }
 }

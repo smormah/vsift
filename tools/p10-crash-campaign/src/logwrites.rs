@@ -257,6 +257,11 @@ pub struct Point {
     pub replayed: usize,
     /// How many acknowledgements (in mark order) must hold here.
     pub required: usize,
+    /// The highest command whose start mark is among the replayed entries
+    /// (managed workload only; `None` in a log without start marks). The
+    /// first acknowledgement beyond `required` is in flight here exactly
+    /// when its command started at or before this one.
+    pub started: Option<u64>,
 }
 
 /// The replay points of `log`: after every flush and FUA entry, and after
@@ -269,15 +274,25 @@ pub struct Point {
 /// later point. `acks` are the acknowledgement sequence numbers in the order
 /// the workload made them.
 ///
+/// A command's start mark (managed workload) is logged before it writes, so
+/// a point whose prefix holds the start mark of the next acknowledged
+/// command may hold part of that command too: [`Point::started`] says so.
+///
 /// # Errors
 ///
 /// The sequence number of an acknowledgement whose mark is not in the log.
 pub fn plan(log: &WriteLog, acks: &[u64]) -> Result<Vec<Point>, u64> {
     let mut mark_positions = Vec::with_capacity(acks.len());
     let mut marks = std::collections::BTreeMap::new();
+    let mut starts: Vec<(usize, u64)> = Vec::new();
     for (index, entry) in log.entries.iter().enumerate() {
-        if let Some(seq) = entry.mark.as_deref().and_then(crate::protocol::seq_of_mark) {
+        let Some(mark) = entry.mark.as_deref() else {
+            continue;
+        };
+        if let Some(seq) = crate::protocol::seq_of_mark(mark) {
             marks.insert(seq, index);
+        } else if let Some(seq) = crate::protocol::seq_of_start_mark(mark) {
+            starts.push((index, seq));
         }
     }
     for seq in acks {
@@ -307,9 +322,15 @@ pub fn plan(log: &WriteLog, acks: &[u64]) -> Result<Vec<Point>, u64> {
                     .take_while(|position| **position < next)
                     .count()
             });
+            let started = starts
+                .iter()
+                .take_while(|(position, _)| position < replayed)
+                .map(|(_, seq)| *seq)
+                .max();
             Point {
                 replayed: *replayed,
                 required,
+                started,
             }
         })
         .collect();
@@ -397,23 +418,95 @@ mod tests {
             Ok(vec![
                 Point {
                     replayed: 0,
-                    required: 0
+                    required: 0,
+                    started: None
                 },
                 Point {
                     replayed: 2,
-                    required: 1
+                    required: 1,
+                    started: None
                 },
                 Point {
                     replayed: 4,
-                    required: 1
+                    required: 1,
+                    started: None
                 },
                 Point {
                     replayed: 5,
-                    required: 1
+                    required: 1,
+                    started: None
                 },
             ])
         );
         assert_eq!(plan(&log, &[1, 2]), Err(2));
+        Ok(())
+    }
+
+    /// A managed log: command 1 (start, write, flush, ack); commands 2 and 3
+    /// failed (start, write, flush each); command 4 (start, write, flush,
+    /// write, flush, ack).
+    fn managed_sample() -> Vec<u8> {
+        let mut log = vec![0_u8; SECTOR];
+        log[0..8].copy_from_slice(&LOG_MAGIC.to_le_bytes());
+        log[8..16].copy_from_slice(&1_u64.to_le_bytes());
+        log[16..24].copy_from_slice(&16_u64.to_le_bytes());
+        log[24..28].copy_from_slice(&512_u32.to_le_bytes());
+        let write = |log: &mut Vec<u8>, sector: u64, fill: u8| {
+            log.extend(header(sector, 1, 0, ""));
+            log.extend(vec![fill; SECTOR]);
+        };
+        log.extend(header(0, 0, MARK, "start-1")); // 0
+        write(&mut log, 4, 0xaa); // 1
+        log.extend(header(0, 0, FLUSH, "")); // 2
+        log.extend(header(0, 0, MARK, "ack-1")); // 3
+        log.extend(header(0, 0, MARK, "start-2")); // 4
+        write(&mut log, 5, 0xbb); // 5
+        log.extend(header(0, 0, FLUSH, "")); // 6
+        log.extend(header(0, 0, MARK, "start-3")); // 7
+        write(&mut log, 6, 0xcc); // 8
+        log.extend(header(0, 0, FLUSH, "")); // 9
+        log.extend(header(0, 0, MARK, "start-4")); // 10
+        write(&mut log, 7, 0xdd); // 11
+        log.extend(header(0, 0, FLUSH, "")); // 12
+        write(&mut log, 8, 0xee); // 13
+        log.extend(header(0, 0, FLUSH, "")); // 14
+        log.extend(header(0, 0, MARK, "ack-4")); // 15
+        log
+    }
+
+    /// Regression (run 36793177930): a point records the last command that
+    /// had started, so the replay can tell the command in flight there (its
+    /// writes may be in the prefix, its acknowledgement not yet made) from
+    /// one that had not begun.
+    #[test]
+    fn a_point_records_the_last_command_started_before_it() -> Result<(), LogError> {
+        let bytes = managed_sample();
+        let length = bytes.len() as u64;
+        let log = WriteLog::read(&mut Cursor::new(bytes), length)?;
+        assert_eq!(log.entries.len(), 16);
+        let summary = plan(&log, &[1, 4]).map(|points| {
+            points
+                .iter()
+                .map(|point| (point.replayed, point.required, point.started))
+                .collect::<Vec<_>>()
+        });
+        // (replayed, required, started). At 7 and 10 the failed commands 2
+        // and 3 had started but not command 4, the next acknowledged one: it
+        // cannot be in flight. At 13 command 4 had started and written, and
+        // its acknowledgement does not bind yet: it is in flight. From 15 it
+        // binds.
+        assert_eq!(
+            summary,
+            Ok(vec![
+                (0, 0, None),
+                (3, 1, Some(1)),
+                (7, 1, Some(2)),
+                (10, 1, Some(3)),
+                (13, 1, Some(4)),
+                (15, 2, Some(4)),
+                (16, 2, Some(4)),
+            ])
+        );
         Ok(())
     }
 }

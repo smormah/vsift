@@ -227,7 +227,10 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   Since P13 PR 7 the same tool qualifies the managed store: `--store managed` on
   `workload` and `replay`, and `layer-a.sh`'s seventh argument `managed`, run the
   managed workload (stand-in versions, no tools) and hold every replayed flush to
-  zero undone acknowledgements and no damage (ADR 0023 PR 7 note). The manual workflow
+  zero undone acknowledgements and no damage (ADR 0023 PR 7 note). The workload marks
+  each command's start (`start-<seq>`) as well as its acknowledgement (`ack-<seq>`), so
+  a point may hold the selection of the one command in flight there instead of the last
+  acknowledged one (ADR 0023 PR 7 addendum, 2026-10-01). The manual workflow
   `P13 managed power loss` runs its positive run and negative control on hosted
   `ubuntu-24.04` runners; its negative control skips every managed folder flush and
   each runtime file's flush, and must lose acknowledgements.

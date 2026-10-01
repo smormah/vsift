@@ -17,8 +17,8 @@ use std::{
 
 use crate::{
     error::CampaignError,
-    logwrites::{WriteLog, plan},
-    managed::{CampaignStore, ManagedAck, parse_managed_events, verify_managed},
+    logwrites::{Point, WriteLog, plan},
+    managed::{CampaignStore, ManagedAck, in_flight, parse_managed_events, verify_managed},
     protocol::{Ack, parse_events},
     verify::{probe_writes, verify},
     workload::{MAX_ACK_BYTES, read_text, unix_seconds},
@@ -239,15 +239,19 @@ pub fn replay(config: &ReplayConfig) -> Result<ReplaySummary, CampaignError> {
             &image,
             &copy,
             &acks,
-            point.required,
+            *point,
             &mut summary,
             &mut lost,
         )?;
         if let Some(line) = line {
             writeln!(
                 report,
-                "POINT {number} replayed={} required={} {line}",
-                point.replayed, point.required
+                "POINT {number} replayed={} required={} started={} {line}",
+                point.replayed,
+                point.required,
+                point
+                    .started
+                    .map_or_else(|| String::from("-"), |seq| seq.to_string())
             )
             .map_err(CampaignError::io("writing the report", &config.report))?;
         }
@@ -267,16 +271,16 @@ struct PointFindings {
     lines: Vec<String>,
 }
 
-/// Verifies the mounted root against the acknowledgements `required`
-/// counts.
+/// Verifies the mounted root against the acknowledgements the point
+/// requires (and, for the managed store, the command in flight there).
 fn verify_point(
     root: &Path,
     acks: &Acknowledgements,
-    required: usize,
+    point: Point,
 ) -> Result<PointFindings, CampaignError> {
     match acks {
         Acknowledgements::Session(acks) => {
-            let required = acks.get(..required).unwrap_or(acks);
+            let required = acks.get(..point.required).unwrap_or(acks);
             let now = unix_seconds()?;
             let mut findings = verify(root, required, now);
             if findings.clean() {
@@ -291,8 +295,9 @@ fn verify_point(
             })
         }
         Acknowledgements::Managed(acks) => {
-            let required = acks.get(..required).unwrap_or(acks);
-            let findings = verify_managed(root, required);
+            let required = acks.get(..point.required).unwrap_or(acks);
+            let command = in_flight(acks, point.required, point.started);
+            let findings = verify_managed(root, required, command);
             Ok(PointFindings {
                 lost: findings.lost.iter().map(|(seq, _)| *seq).collect(),
                 damaged: !findings.clean(),
@@ -311,7 +316,7 @@ fn check_point(
     image: &Path,
     copy: &Path,
     acks: &Acknowledgements,
-    required: usize,
+    point: Point,
     summary: &mut ReplaySummary,
     lost: &mut std::collections::BTreeSet<u64>,
 ) -> Result<Option<String>, CampaignError> {
@@ -341,7 +346,7 @@ fn check_point(
         return Ok(Some(format!("mount-failed status={mounted}")));
     }
     let root = config.mount_point.join(&config.root_in_filesystem);
-    let findings = verify_point(&root, acks, required)?;
+    let findings = verify_point(&root, acks, point)?;
     require(
         "umount",
         "/usr/bin/umount",
