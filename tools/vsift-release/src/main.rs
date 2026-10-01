@@ -650,8 +650,8 @@ mod tests {
     use clap::Parser;
 
     use super::{
-        Cli, Command, Inputs, PlanArguments, ReleaseError, VERSION, assemble_packages,
-        load_skill, read_release_archives, run,
+        Cli, Command, Inputs, PlanArguments, ReleaseError, VERSION, assemble_packages, load_skill,
+        read_release_archives, run,
     };
     use crate::{
         archive::tests::contents,
