@@ -6,8 +6,12 @@ stages, the P10 recoverable run and the P11 single-host worker run are implement
 P12's complete video-to-grounded-handoff run passed through named Claude Code and
 Codex clients (2026-09-30, [P12 qualification record](p12-agent-qualification.md)).
 The review tier is qualified; the compact tier met its 90% target on the re-run after P12's
-fixes (#222, 2026-09-30: 93% and 100%). P13's managed-dependency stage is implemented
-(P13 PR 7, not yet run); its clean native and npm install belongs to P13 PRs 9 and 11.
+fixes (#222, 2026-09-30: 93% and 100%). P13's installed-user and managed-dependency run is
+implemented and has run mechanically: the managed-dependency stage passed on a hosted
+Ubuntu 24.04 runner (2026-09-30, `install-e2e`, run 36793180858) and the installs of the
+release packages with npm, pnpm, Yarn and Bun run in the Release workflow's twelve-job
+matrix; the named-agent run from a clean install belongs to P14 (ADR 0023 decision H10)
+and the first publish is pending ([P13 record](p13-distribution.md)).
 Managed
 installation moved from P06 to P13 under
 [ADR 0015](../decisions/0015-r0-delivery-replan.md). Tracking issue: [#40](https://github.com/smormah/vsift/issues/40).
@@ -101,7 +105,8 @@ standing in for FFprobe fails at the probe check. Missing FFmpeg/FFprobe makes t
 affected journeys `blocked`, and the test fails unless every journey passed. It
 writes `.vsift/e2e-runs/p06-<run-id>/report.json` and leaves P07-P14 and the complete
 journey `not_implemented`. Offline behaviour is inferred rather than sandboxed: no
-P06 command opens a network connection while `setup install` stays reserved.
+P06 command opens a network connection while `setup install` stays reserved (since P13 PR 4
+it is implemented; the P13 stage below exercises it).
 
 P07 adds the supplied-transcript stage of A-09:
 
@@ -392,7 +397,33 @@ reinstalls only the model). It prints `p13_install: passed` and writes
 store itself is not this stage: it is the kill matrix in
 `vsift-infrastructure/tests/p13_install_transaction/kill.rs` (every CI OS) and the
 workflow `P13 managed power loss` ([verification](verification.md) "P13 PR 7
-evidence"). The clean native-archive and npm installs without Rust are P13 PRs 9 and 11.
+evidence"). **Result:** `p13_install: passed` in 47.7 s on `main` at `01656d6` ([run
+36793180858](https://github.com/smormah/vsift/actions/runs/36793180858)); the same run's
+other two jobs (`managed-install`, `managed-smoke`) passed as well. The stage runs the
+release binary built on that runner, with an empty `PATH`, and the managed tools it
+installs are the real reviewed artifacts downloaded from their publishers.
+
+P13 PR 9 adds the **installed-user part** of the same run, in the Release workflow rather
+than a test binary (the jobs `npm-package` and `npm-qualify`, [`release.md`](../operations/release.md)
+section 5). It installs the packed release packages, not a build from source, and runs
+them: on `windows-2025`, `macos-15` and `ubuntu-24.04`, each with npm, pnpm, Yarn and Bun
+(twelve jobs), against a Verdaccio on the runner's loopback address with no uplink, with
+install scripts disabled and under a folder whose name has spaces, accents and CJK
+letters. Each job checks the global install (Yarn: a project install), `--version` naming
+the commit, `setup check --json`, a path argument with spaces and Unicode through every
+installed command, vsift's exit statuses through the launcher, standard input, the
+launcher's cost (under 50 ms), signals with no orphan, a changed or replaced executable and
+a mismatched platform package each refused readably, the one-shot runner (`npx`, `pnpm dlx`,
+`yarn dlx`, `bunx`), optional dependencies omitted (exit 127, no stack trace), running with
+the registry stopped and a clean uninstall. **Result:** all twelve jobs passed on `main` at
+`951226f` (run 36786019996) and `57f03fe` (run 36797351652). The native archives are
+checked by the `package` and `plan` jobs (reproducible, read back against their inputs, by
+digest); their executables are the ones the matrix ran from the platform packages, but no
+job extracts and runs an archive. **What this stage does not show:** a clean machine (the
+hosted runners have a Rust toolchain on `PATH` that no step invokes), the real registry,
+an agent, or the first publish; those are the next packet's checkpoint and the P13
+record's pending "First publish". How a user checks an install is
+[`install.md`](../operations/install.md) section 6.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
@@ -446,7 +477,9 @@ action.
 - **Distribution checkpoint:** after P13, the agent checkpoint begins from a clean
   supported-machine installation without Rust. *2026-09-30 (ADR 0023 decision H10):
   P13's stage proves the clean installation and one managed install mechanically; the
-  named-agent run from a clean installation is P14's.*
+  named-agent run from a clean installation is P14's.* *2026-10-01: met mechanically as
+  described above, on hosted runners and a local registry; the install from the published
+  pre-release is recorded in the [P13 record](p13-distribution.md) once it exists.*
 - **Release checkpoint:** P14 runs all supported profiles plus security, fault, load
   and release-integrity gates described in the verification specification.
 

@@ -224,13 +224,18 @@ retain notices and verify distribution rights for actual binaries/models. Do not
 infer an FFmpeg build's licence from VSift's own dual licence. Review native DLL/shared
 library contents and hashes. Release artifacts must map to a protected source commit,
 and a tag alone must not bypass tests or release approval. Document signing/notarization
-availability and avoid claiming publisher trust for unsigned artifacts.
+availability and avoid claiming publisher trust for unsigned artifacts (done in
+[`install.md`](../operations/install.md) section 4 since P13 PR 11: R0 ships no
+Authenticode signature and no notarization).
 
 ### P13 notes
 
 **2026-09-30, P13 started ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
-Proposed).** The controls P13 will implement, per threat. This is a plan; the
-evidence is added as each pull request lands, and none of it is claimed yet.
+Proposed).** The controls P13 implements, per threat. They began as a plan; the
+evidence was added as each pull request landed. **Status 2026-10-01:** pull requests 0-10
+have landed; the final state of each threat is in the table at the end of these notes.
+What stays unverified until the first publish: any attestation, npm provenance, the
+`release` environment, the tag ruleset and trusted publishing (L-096).
 
 - **SEC-12 (malicious provider or runtime update):** only the reviewed Ubuntu 24.04
   catalogue revision can enter a plan; the transaction downloads from the publisher
@@ -374,6 +379,20 @@ evidence is added as each pull request lands, and none of it is claimed yet.
   qualification job installs with scripts disabled. The launcher starts only the
   platform executable, by explicit path and argument list with `shell: false`; no
   manifest names a person.
+
+**P13 final state (2026-10-01).** The record
+[p13-distribution.md](p13-distribution.md) says, per row, what its evidence proves and
+does not.
+
+| Threat | Final state | Open |
+| --- | --- | --- |
+| SEC-12 | The reviewed catalogue is the only trust anchor; bytes are checked by exact size and SHA-256 before extraction and smoked before activation; hosted runs 36734316384 and 36793180858 installed the real artifacts | No signature check exists; the catalogue depends on the publishers' files ([L-099](known-limits.md#l-099)) |
+| SEC-13 | Bounded readers, flat private staging, native-format check, ownership-proving cleanup; the kill matrix covers the stage lifecycle | Hostile archives from the wild |
+| SEC-14 | No resume, reviewed redirect route, six `DOWNLOAD_FAILED` reasons, sentinel proxy credentials in no output mode | Real corporate proxies; `407` recognised by text ([L-088](known-limits.md#l-088)) |
+| SEC-15 | Use locks; removal only of unselected, unheld versions; kill matrix; on Ubuntu 24.04 with ext4 no replayed power loss lost an acknowledged command (run 36829198545, whose first attempt failed on a verifier defect that #244 fixed) | Other filesystems; real disks ([L-056](known-limits.md#l-056)) |
+| SEC-22 | Lint rules 1-7 hold statically; only `attest` and `publish` can request an OIDC token and only for a dispatch on the tag; the qualified tarballs are published by digest; no long-lived token | The `release` environment, tag ruleset, fork approval and trusted publishers do not exist yet (verified read-only on 2026-10-01) |
+| SEC-23 | Trust anchor in reviewed source; the launcher checks the version and digest; attestations are designed to prove origin | No attestation exists until the first publish; a `SHA256SUMS` alone proves no origin |
+| Unsigned binaries | Documented in `install.md` section 4: no publisher-trust claim | SmartScreen, Gatekeeper and Smart App Control behaviour is documented, not observed ([L-098](known-limits.md#l-098)) |
 
 Human-readable output (SEC-T02) and `handoff check`'s untrusted input (a draft
 that may carry evidence text) belong with the agent-specific controls below: both

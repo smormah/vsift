@@ -2,7 +2,11 @@
 
 - Status: **Proposed** (2026-09-30). The maintainer started P13 on 2026-09-30 and
   accepted every recommendation of the P13 plan (decisions A-H below). The ADR is
-  accepted when P13 completes with its evidence.
+  accepted when P13 completes with its evidence. *2026-10-01:* the implementation (pull
+  requests 0-10) is merged and documented, and the qualification record is
+  [p13-distribution.md](../planning/p13-distribution.md); completion waits for the first
+  publish, after which the ledger follow-up (PR 12) marks this ADR Accepted, as ADR 0021
+  and ADR 0022 were at their packets' completion (see the last note below).
 - Date: 2026-09-30
 - Tracking: [P13 / issue #16](https://github.com/smormah/vsift/issues/16);
   [#213](https://github.com/smormah/vsift/issues/213) (`handoff check`)
@@ -1095,6 +1099,16 @@ refused, no damage). `P13 managed smoke` (with `install-e2e`) passed on the same
 - **Durability promise unchanged:** a managed command that reported success survives a
   power loss on Ubuntu 24.04 with ext4. It is qualified once a `P13 managed power loss`
   run on `main` passes with this fix.
+- **Confirmed (2026-10-01, PR 11):** the fix merged in #244 (`6de55da`) and `P13 managed
+  power loss` passed on `main` at that commit ([run
+  36829198545](https://github.com/smormah/vsift/actions/runs/36829198545)). Positive: 1,812
+  points, 134 acknowledgements, 0 lost, 0 damaged, 0 torn, no `e2fsck` or mount failure.
+  Negative control: 507 points, 50 acknowledgements, 36 lost, 0 damaged, 458 torn, as it
+  must (it fails). The claim is the one in the bullet above and no wider: Ubuntu 24.04
+  with ext4 on one hosted runner, one-file stand-in versions, a workload of 150 managed
+  commands. The verifier changed between the two runs; the reclassification of the first
+  run's own report (0 lost in the positive run, 36 in the negative) and the unchanged
+  negative control are what keep the change honest.
 
 ## Implementation note, 2026-10-01 (P13 PR 10, attestation and publish wiring)
 
@@ -1179,3 +1193,64 @@ real run is the maintainer's at P13 completion
   release notes' wording (`tools/vsift-release/src/publish.rs`); the Release workflow as
   a required check; `SHA256SUMS` still lists only the archives (the SBOM and notices
   assets and the tarballs are covered by attestations).
+
+## Implementation note, 2026-10-01 (P13 PR 11, documentation, the record and what completion waits for)
+
+Delivered from section 7. It changes no behaviour and no decision above.
+
+- **Documentation.** [`install.md`](../operations/install.md) is the user guide: what is
+  and is not supported (decisions D and E), the package managers (`vsift-cli@next`; the
+  `0.0.0` placeholder is `latest`), the archives with checksum and attestation
+  verification, managed installation on Ubuntu 24.04 x64 (`setup plan`, `setup install
+  --plan ... --accept-plan ...`, `--artifact-dir`, `list/rollback/remove/repair`) and
+  bring-your-own tools elsewhere, what SmartScreen, Gatekeeper and Smart App Control do
+  with an unsigned download and what to check instead (decision C), upgrade, uninstall,
+  proxies and each `DOWNLOAD_FAILED` reason, the launcher's exits 126 and 127 and a
+  verification walk-through. The qualification record is
+  [`p13-distribution.md`](../planning/p13-distribution.md). The spine's P13 stage,
+  verification (D-02..D-08, R-SEC01, R-SEC02, R-14), the threat model (a final-state table
+  for SEC-12..SEC-15, SEC-22 and SEC-23), the known limits (L-098 and L-099 added; L-035,
+  L-036, L-037, L-042 and L-096 updated) and both work records are brought to the state
+  below. A closing sweep corrected stale statements in `README.md`, `SECURITY.md`,
+  `cli-v1.md`, `architecture.md`, `architecture-and-contracts.md`, the planning README, the
+  skill guide, the work-packets table and `release.md`, and added notes to ADRs 0001,
+  0007, 0008, 0009, 0014 and 0022.
+- **Status: still Proposed, deliberately.** The header makes this ADR accepted when P13
+  completes with its evidence. The evidence of decisions B and C, the real publishing
+  path (attestation, npm provenance, trusted publishing, the protected environment), is
+  the one thing no test could exercise ([L-096](../planning/known-limits.md#l-096)), and
+  nothing but an empty `vsift-cli@0.0.0` placeholder is published. P13 completes when the
+  maintainer has made the settings of `release.md` section 6.2, published the 0.x
+  pre-release and verified it (6.3, 6.4); the ledger follow-up (PR 12, governance rule 9)
+  then records that in `p13-distribution.md` ("First publish"), sets P13 `complete` with
+  PR 11's merge commit, and changes this status to Accepted with a note like the one
+  ADR 0022 carries for P12.
+- **State on 2026-10-01** (read-only: `gh api` and an anonymous registry read, no
+  setting changed): `vsift-cli` has one version, `0.0.0`, as `latest` and without a
+  command; `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64` are not
+  found; the repository has no `release` environment, no tag ruleset, no tag and no
+  release; fork-pull-request approval is still "first-time contributors".
+- **A refinement of the Consequences' unsigned-binary line (decision C stands).** "Users
+  who want no prompt install through npm" holds for the download mark that triggers
+  SmartScreen's download check and Gatekeeper's quarantine. It may not hold for Windows
+  Smart App Control, which Microsoft documents as blocking unsigned programs that its
+  reputation service does not recognise (the documentation does not tie this to how a
+  file arrived), nor for policies that allow only signed software. Nobody has run VSift on
+  such a machine ([L-098](../planning/known-limits.md#l-098)). The release notes the `plan` job
+  generates (`tools/vsift-release/src/publish.rs`) repeat the shorter claim; they are code,
+  so this documentation change leaves them for the maintainer's review.
+- **How the PR 7 note's "the npm and archive installs without Rust are PRs 9 and 11" was
+  carried out.** The npm installs are PR 9's twelve-job matrix, on runners that have Rust
+  on `PATH` and a local registry, so they show that VSift needs no Rust, not an install on a
+  machine without it. The native-archive route has no job that downloads, extracts and
+  runs an archive: the executable inside each archive is the byte-identical one that
+  the matrix ran from its platform package, `vsift-release verify` reads each archive
+  back, and `install.md` section 3 is walked by hand at the first publish. Both gaps are
+  the clean-machine install of the next packet's checkpoint. (Two comments in
+  `crates/vsift-cli/tests/p13_install_e2e.rs` still say "P13 PRs 9 and 11"; they are code,
+  and are left for the maintainer to correct.)
+- **Found while writing the record:** the offline install (`--artifact-dir`) has run only
+  with stand-in artifacts (and, through the binary, as a refusal when the folder lacks
+  the files), never with the real reviewed artifacts; and the managed catalogue depends
+  on the publishers' files and redirect hosts
+  ([L-099](../planning/known-limits.md#l-099)).

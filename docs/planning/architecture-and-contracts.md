@@ -74,17 +74,17 @@ distinction explicitly.
 
 P01 publishes the namespace and common v1 boundary. `setup check` executes a
 read-only executable probe with explicit off-PATH selection and manual guidance.
-The partial P06 `setup plan` now diagnoses configured/PATH executables and returns
-only typed manual dispositions while no managed artifact is qualified; it has no
-install actions or acceptance digest. Other unimplemented rows remain reserved
-and return `COMMAND_NOT_IMPLEMENTED` until their owning packet ships. The exact
+`setup plan` diagnoses configured, managed and `PATH` tools; on Ubuntu 24.04 x86-64 it
+lists the reviewed managed actions with an acceptance digest, and elsewhere it returns
+only typed manual dispositions, with no install actions or digest. Every row of the table
+below is implemented: since P13 PR 6 no command answers `COMMAND_NOT_IMPLEMENTED`. The exact
 limits, compatibility rules, schemas, and implementation map
 are in the [v1 CLI contract](../contracts/cli-v1.md).
 
 | Command | Purpose / constraints |
 | --- | --- |
 | `setup check [--profile ...] [--timeout-seconds ...] [--ffmpeg ABS] [--ffprobe ABS] [--whisper ABS] --json` | Read-only executable probing with per-call explicit BYO selection and typed manual guidance; compatibility, model and managed state remain unverified |
-| `setup plan --profile ... --json` | Read-only current executable/model-presence plan. Ubuntu 24.04 x86-64 receives only needed reviewed direct-publisher actions, full provenance/layout/disclosure and a state-bound digest; unsupported/expired targets receive typed manual guidance without actions. Applying the plan is still reserved. |
+| `setup plan --profile ... --json` | Read-only current executable/model-presence plan. Ubuntu 24.04 x86-64 receives only needed reviewed direct-publisher actions, full provenance/layout/disclosure and a state-bound digest; unsupported/expired targets receive typed manual guidance without actions. Applying the plan is `setup install` (P13 PR 4). |
 | `setup install --plan <file> --accept-plan <digest>` | Apply only that validated plan; revalidate expiry and current state; no silent elevation; typed manual fallback on failure |
 | `setup repair` | Read-only diagnosis and a plan of existing commands (rollback, remove, a new accepted install); changes nothing (P13 PR 6) |
 | `setup list`, `setup remove`, `setup rollback`, `setup configure`, `setup configure-model` | Managed versions (list; remove only positively identified unheld content; roll back to a verified version; P13 PR 6) and explicit off-PATH user-supplied executable/model registrations; live jobs pin immutable versions |

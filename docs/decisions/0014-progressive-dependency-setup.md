@@ -174,3 +174,13 @@ managed download gets its own typed failure, `DOWNLOAD_FAILED`, with a reason (T
 redirect policy, HTTP status, proxy authentication, offline or size), so step 4's
 manual path can say what failed. `--artifact-dir` imports reviewed artifacts offline
 under the same verification.
+
+## 2026-10-01 note: the install step is delivered on one target (P13)
+
+Step 3 (install only missing, reviewed components after separate acceptance of a plan) is
+delivered on Ubuntu 24.04 x86-64 by P13, with the manual and bring-your-own guidance of
+step 4 on every target, as decided above. The notes of 2026-09-22 that say `setup install`
+stays reserved were true at their dates and are superseded by the notes of 2026-09-30;
+the evidence and what it does not prove are in
+[`p13-distribution.md`](../planning/p13-distribution.md), and the steps users follow are
+in [`install.md`](../operations/install.md) section 5. The decision is unchanged.

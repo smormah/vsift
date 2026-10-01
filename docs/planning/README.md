@@ -167,7 +167,7 @@ P00 accepted these decisions on 2026-09-10. The linked ADRs are authoritative.
 | DEC-05 | Durable workers require an explicit qualified local workspace; R0 enablement is Ubuntu/ext4 only after P10/P11 qualification | [0010](../decisions/0010-storage-qualification-gate.md) |
 | DEC-06 | Publish immutable artifacts through versioned manifest generations | [0006](../decisions/0006-workspace-publication-and-durability.md) |
 | DEC-07 | Detect existing tools, explicitly install reviewed missing ones, and guide manual recovery on every target | [0014](../decisions/0014-progressive-dependency-setup.md), refining [0007](../decisions/0007-managed-runtime-provisioning.md) |
-| DEC-08 | Keep executable `vsift`; recheck unscoped npm name before release | [0009](../decisions/0009-package-identity-and-distribution.md) |
+| DEC-08 | Keep executable `vsift`; the npm launcher is `vsift-cli` over `@vsift/...` platform packages (npm refused the unscoped `vsift`; ADR 0009 notes of 2026-09-30) | [0009](../decisions/0009-package-identity-and-distribution.md) |
 | DEC-09 | Use the accepted R0 CLI namespace | [0008](../decisions/0008-cli-and-json-contract.md) |
 | DEC-10 | Preserve setup v1 and use typed v1 envelopes for new operations | [0008](../decisions/0008-cli-and-json-contract.md) |
 | DEC-11 | Qualify the strict Linux worker profile first | [0005](../decisions/0005-r0-scope-and-qualification-profiles.md) |

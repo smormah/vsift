@@ -14,7 +14,8 @@ Today it can:
   local speech recognition really works here (`setup check` `local_asr`), and on
   Ubuntu 24.04 x86-64 install the reviewed FFmpeg, whisper.cpp and model itself
   (`setup install`, P13 PR 4), then list, roll back, remove and diagnose them (`setup
-  list/rollback/remove/repair`, P13 PR 6);
+  list/rollback/remove/repair`, P13 PR 6); that store survives kills at every step and,
+  on Ubuntu 24.04 with ext4, power loss (P13 PR 7);
 - copy a video into a private, disposable session;
 - import an existing SRT or WebVTT transcript with the video, aligned by an offset;
 - transcribe the video's speech itself with whisper.cpp (`transcript retranscribe`),
@@ -31,9 +32,10 @@ Today it can:
 - keep every folder it creates private to the user;
 - check an agent's draft report before it is sent (`handoff check`, P13 PR 5);
 - build, in CI, its own release archives for the three R0 targets (P13 PR 8) and the npm
-  packages made from them, and install and run those with npm, pnpm, Yarn and Bun on
-  Windows, macOS and Ubuntu from a local registry (P13 PR 9); plan, attest and publish
-  them when the maintainer releases (P13 PR 10). Nothing is published yet.
+  packages made from them, install and run those with npm, pnpm, Yarn and Bun on Windows,
+  macOS and Ubuntu from a local registry (P13 PR 9), and plan, attest and publish them when
+  the maintainer releases (P13 PR 10). **Nothing is published yet** (only a `0.0.0`
+  placeholder); the attest and publish path has never run.
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an
 investigation with the CLI and write a cited report. P12's named-client trials
@@ -48,48 +50,43 @@ qualified it:
 
 **P00-P12 are complete.** P12 closed on 2026-09-30 by maintainer decision on its
 final round's results (#223, `1284e54`); the ledger marks it `complete`.
-**P13 is in progress** (started 2026-09-30). PRs 0-9 and the P12 debt fixes are merged
-(human output, `handoff check`, `setup install` and its lifecycle with kill and
-power-loss tests, `release.yml`, the workflow lint and the npm packages); PR 10
-(attestation and publish wiring, #243) too. The power-loss campaign's verifier fix is in
-review; PRs 11 and 12, its re-run and the first publish remain. The packet is not complete.
+**P13 is in progress and is not complete** (started 2026-09-30). All its code, tests
+and documentation are merged or in the PR 11 change (PRs 0-11): human output, `handoff
+check`, `setup install` and its lifecycle with kill and power-loss tests, `release.yml`, the
+workflow lint, the npm packages, the publish wiring, and the user guide and record. It
+completes only when the maintainer has made the release settings and published the 0.x
+pre-release, and PR 12 has recorded it. What remains is listed in `memory/TODO.md`.
 
 ## P13 in one view
 
 [ADR 0023](../docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-(**Proposed**) records the maintainer's decisions A-H of 2026-09-30; the scope and
-the 13 pull requests are in `implementation-work-packets.md` ("P13 scope and pull
-requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to it.
+(**Proposed**; Accepted by PR 12 at completion) records the maintainer's decisions A-H of
+2026-09-30; the scope and the 13 pull requests are in `implementation-work-packets.md`
+("P13 scope and pull requests"). The ledger marks P13 `in_progress` and maps R-03, R-13
+and R-14 to it. **The record `docs/planning/p13-distribution.md` has the pull requests with
+merge commits, the evidence per ID, what each proves and does not, and the pending
+"First publish".** The guide for users is `docs/operations/install.md`; the maintainer's
+runbook is `docs/operations/release.md`.
 
-- **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux
-  x64 glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher
-  over `@vsift/…` packages; managed installation on Ubuntu 24.04 x64; human output by
+- **Delivers:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux x64
+  glibc) with SBOMs, notices, checksums and Sigstore provenance; the npm launcher over
+  `@vsift/...` packages; managed installation on Ubuntu 24.04 x64; human output by
   default; `handoff check`.
 - **Names:** scope `@vsift` (owned, #237); launcher package `vsift-cli` (npm refused
-  `vsift`; placeholder `0.0.0` held, `latest`; command `vsift`; ADR 0009 note).
-- **Done:** PR 0 (#226); PR 1 (#228, L-071); PRs 2a, 2b (#229, #231, SEC-T02, L-073);
-  PR 3 (#230, smoke); PR 5 (#233, `handoff check`, L-086).
-- **PR 4 (#234):** `setup install` (download or import, SHA-256, stage, smoke, activate),
-  `DOWNLOAD_FAILED`, managed lookup tier; hosted run 36734316384 activated all three.
-- **PR 8 (#236):** `release.yml` (reproducible archives, notices, SBOMs, `SHA256SUMS`,
-  `--version` with the commit); the workflow lint. L-089.
-- **PR 6 (#239):** `setup list/repair` (read only, `free`), `setup rollback` (atomic,
-  verified), `setup remove` (deselect first, keeps held and unprovable content, L-090).
-- **PR 9 (#240):** `npm/vsift-cli/`, a CommonJS launcher that checks the platform
-  package's version and executable SHA-256, runs it without a shell and relays signals
-  (exit 127/126 for its own failures); no package has scripts or names a person. Release
-  jobs `npm-package` and `npm-qualify` (12 jobs, loopback Verdaccio). L-091 to L-094.
-- **PR 7 (#241, `01656d6`):** 22 `managed-*` fault points; kills leave a store repair
-  describes and a rerun completes; every changed folder is flushed (Ubuntu ext4).
-  `install-e2e` passed (run 36793180858). `P13 managed power loss` (run 36793177930): no
-  damage, but 53 acks counted lost, each the in-flight command's newer selection: a
-  verifier defect, fixed in review (`p13-pr7-durability`); the re-run is pending.
-- **PR 10 (#243, `57f03fe`):** `dry_run` input (default `true`); `plan` on every run
-  checks archives and tarballs by digest and shows `vsift-release publish-plan`'s plan.
-  Only a dispatch of `v<version>` with `dry_run` cleared runs `attest` (Sigstore
-  provenance for every release file and tarball) and, after the `release` environment's
-  approval, `publish` (npm `next` with provenance, then the GitHub pre-release). Lint
-  rule 7. Untested first run (L-096); re-runnable partial publish (L-097).
+  `vsift`; placeholder `0.0.0` held, `latest`; command `vsift`; ADR 0009 notes). The
+  three `@vsift/...` packages are not on the registry yet.
+- **Hosted evidence (all Ubuntu 24.04 unless noted):** `P13 managed smoke` runs 36734316384
+  (`d43a518`) and 36793180858 (`01656d6`, with `install-e2e`); `P13 managed power loss` run
+  36793177930 failed on a verifier defect (53 "lost" acks, none an older state), fixed in
+  #244, then passed on `6de55da` (run 36829198545: 0 lost, 0 damaged; negative control 36
+  lost); `Release` runs 36786019996 and 36797351652 on `main` (the twelve-job npm matrix on
+  Windows, macOS and Ubuntu, and the publish plan in dry-run mode).
+- **Weaker than it sounds:** the matrix is a local registry on runners that have Rust on
+  `PATH` (not a clean machine); the power-loss claim is ext4 and stand-in versions only;
+  `--artifact-dir` never ran with the real artifacts; Windows and macOS prompts for an
+  unsigned download are documented, not observed (L-098); no attestation exists.
+- **Settings read 2026-10-01 (nothing changed):** no `release` environment, no ruleset, no
+  tag or release; fork approval is "first-time contributors".
 - **Only the placeholder is published** until P13 ends and the maintainer approves a 0.x `next`.
 
 ## P12 in one view
@@ -126,7 +123,7 @@ requests"). The ledger marks P13 `in_progress` and maps R-03, R-13 and R-14 to i
 | P10 | Complete (2026-09-28, `3f27ce3`): jobs, resume, cancellation, durable Ubuntu/ext4 |
 | P11 | Complete (2026-09-28, `40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, maintainer decision): skill, harness, named-client trials; review tier qualified; compact tier 82%, then 93%/100% on the #222 re-run (L-085 closed); merge `1284e54` |
-| P13 | In progress (started 2026-09-30, ADR 0023 Proposed): PRs 0-10 merged (#226-#231, #233, #234, #236, #239-#241, #243); the power-loss verifier fix in review; docs (PR 11), the ledger (PR 12) and the maintainer's runs and first publish to come |
+| P13 | **In progress, not complete** (started 2026-09-30, ADR 0023 Proposed): PRs 0-11 done; waits for the maintainer's release settings and first publish, then PR 12 (ledger, ADR 0023 Accepted) |
 | P14 | Not started |
 
 ## Architecture snapshot
@@ -147,4 +144,6 @@ packages and plans their publication; `npm/` holds the launcher and its qualific
 - **CI on every PR:** Quality on Ubuntu, macOS and Windows; Documentation, Governance,
   fuzz harness replay, the strict worker boundary, dependency policy, CodeQL and the npm
   launcher tests; the Release dry run (npm matrix, publish plan) on archive/npm changes.
-- **Merging:** squash merges to protected `main`; history in git, `CHANGELOG.md`, `docs/history/`.
+- **Required on `main`:** Quality (three OS), Documentation, Dependency policy and review,
+  Analyze Rust, Governance. **Merging:** squash merges; history in git, `CHANGELOG.md`,
+  `docs/history/`.

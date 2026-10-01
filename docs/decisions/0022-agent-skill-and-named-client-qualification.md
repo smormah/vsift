@@ -1031,3 +1031,17 @@ tables and every miss are in the
 - **Debt status.** L-085 is closed. #222 is complete, and it supports closing #218
   and #220. #219 stays open because Sonnet's A-02 miss is the "previous value" slip
   it names. #224 needs a review-tier re-run of A-09 blurred, tracked as L-095.
+
+## 2026-10-01 note: P13's changes to the skill are complete
+
+The note of 2026-09-30 ("P13 changes to the skill") is carried out, with one reading
+settled since: `vsift handoff check` is `free` (PR 5), and `setup list` and `setup repair`
+are `free` too, because both only read (PR 6, decided by the supervisor on 2026-09-30;
+[ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md) PR 6 note), so
+the sentence that the new setup lifecycle commands stay in the `never` class is superseded
+for those two. `setup install`, `setup rollback` and `setup remove` stay `never`: they
+change which tools every command uses, and the skill relays repair's commands to the user
+instead of running them. The skill ships byte-identical inside the npm package and every
+native archive (PRs 8 and 9: `vsift-release verify` and `npm-verify` read each back). No
+named-agent run from a clean installation is part of P13 (ADR 0023 decision H10); it is
+the next packet's checkpoint. The skill guide is [`../agents/skill.md`](../agents/skill.md).

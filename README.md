@@ -24,11 +24,14 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > models (Claude Opus 5.5, GPT-6-Astra). The compact models (Claude Sonnet 5.5,
 > GPT-6-Sol) meet their 90% target on the re-run after P12's fixes: 93% and 100% of
 > trials passed fully ([qualification record](docs/planning/p12-agent-qualification.md)). Every
-> command now prints readable terminal text without `--json` (P13). Managed
-> dependency installation and native and npm distribution are P13's remaining work,
-> in progress since 2026-09-30
+> command now prints readable terminal text without `--json` (P13). On Ubuntu 24.04
+> `vsift setup install` installs the reviewed FFmpeg, whisper.cpp and model after you
+> accept a plan, and the native archives and npm packages are built and tested; **nothing
+> is published yet**, and the first release will be a pre-release
+> ([installing VSift, pre-release](docs/operations/install.md)). P13 is in progress since
+> 2026-09-30
 > ([ADR 0023](docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
-> Proposed); nothing is published yet. See the
+> Proposed). See the
 > [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop
@@ -80,8 +83,9 @@ vsift session clean --expired --dry-run --json
 The full R0 command namespace is visible through `vsift --help` so integrations can
 target a stable grammar. `session status/renew/close/retain/clean/init-workspace`,
 `frame`, `crop`, `audio`, `job status/resume/cancel/run/batch` and `bundle validate`
-are also operational. Setup installation still returns `COMMAND_NOT_IMPLEMENTED`
-until its owning packet (P13) ships.
+are also operational, and so are `setup install`, `setup list`, `setup rollback`,
+`setup remove`, `setup repair` and `handoff check` (P13): no command answers
+`COMMAND_NOT_IMPLEMENTED` any more.
 
 FFmpeg and FFprobe are required for media processing. A compatible Whisper backend enables local transcription but is not required when a usable transcript already exists.
 R0 setup will first detect user-installed tools, then offer an explicitly approved,
@@ -99,13 +103,13 @@ bytes. Configuration does not run a tool or download anything. The check's
 compatibility or model weights. Instead, the first media operation with a given
 FFmpeg/FFprobe pair (today `ingest --transcript`) runs a small built-in test video
 through them, adding about 1–2 seconds once; a pair that fails stops the operation
-before anything is written, with typed remediation. Managed plans and installation remain gated by
-reviewed, pinned artifacts; no target is qualified yet. A supplied transcript
-avoids the local Whisper/model requirement.
+before anything is written, with typed remediation. Managed plans and installation are gated by
+reviewed, pinned artifacts and are qualified on Ubuntu 24.04 x64 only; elsewhere you
+install the tools yourself. A supplied transcript avoids the local Whisper/model requirement.
 
 ## Architecture
 
-VSift is a native Rust CLI distributed through native installers and, eventually, npm. Specialist media and machine-learning tools run as isolated external processes.
+VSift is a native Rust CLI, to be distributed as prebuilt native archives and through an npm launcher (`vsift-cli`); nothing is published yet. Specialist media and machine-learning tools run as isolated external processes.
 
 ```text
 CLI -> Application -> Domain

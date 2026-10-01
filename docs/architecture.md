@@ -76,9 +76,11 @@ Direct native linking requires benchmark evidence and an accepted architecture d
 A child process or Unix process group alone does not provide filesystem/network
 isolation or kernel CPU/memory/PID caps. Required strict-worker isolation therefore
 fails with `ISOLATION_UNAVAILABLE` unless a trusted Linux host attests inherited
-container/cgroup controls. Ambient `PATH` discovery remains bring-your-own,
-unverified provenance until P06 verifies selected tools and P13 adds managed
-identity ([ADR 0015](decisions/0015-r0-delivery-replan.md)).
+container/cgroup controls. Ambient `PATH` discovery remains bring-your-own, with
+unverified provenance: P06 verifies a selected FFmpeg/FFprobe pair by running a fixture
+through it, and since P13 a managed version (Ubuntu 24.04 x64) is identified by digest on
+every use ([ADR 0015](decisions/0015-r0-delivery-replan.md),
+[ADR 0023](decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
 See the [baseline review](planning/baseline-review.md) and
 [process contract](planning/architecture-and-contracts.md#7-multiprocessing-admission-and-cancellation).
 

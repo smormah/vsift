@@ -112,3 +112,25 @@ decision A and the `vsift` placeholder of the note above; ADR 0023 carries the a
 availability: npm checks a new name's similarity to existing packages only when it is
 published, so the only proof that a name can be used is a successful publish. Future name
 decisions are settled by a placeholder publish, not by a lookup.
+
+## 2026-10-01 note: names as built, and their state
+
+The 2026-09-28 note's "the `vsift` npm package" and the Consequences' "no placeholder
+package" are superseded by the two notes of 2026-09-30: the launcher package is
+**`vsift-cli`** (command `vsift`), the platform packages are `@vsift/win32-x64`,
+`@vsift/darwin-arm64` and `@vsift/linux-x64`, and the maintainer published the single
+placeholder `vsift-cli@0.0.0`. Read-only checks on 2026-10-01 (anonymous registry reads;
+no setting changed): `vsift-cli` has that one version, published 2026-09-30 at 21:59 UTC,
+as `latest`, with no command; the three `@vsift/...` packages are not found, because the
+0.x pre-release will first publish them.
+
+**Pending maintainer decision.** [`release.md`](../operations/release.md) section 6.2
+step 5 offers two ways to make the three platform packages exist before their trusted
+publishers can be configured. Path A, three more `0.0.0` placeholders published by the
+maintainer with two-factor authentication, needs a note here, because the placeholder
+exception above covers only the launcher. Path B, a short-lived token held only in the
+protected `release` environment, needs none.
+
+npm's own registry record of a package lists the publishing account (its `maintainers`
+and `_npmUser` fields). VSift's manifests name nobody, and the governance check and
+`npm-verify` enforce that.

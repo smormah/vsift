@@ -339,3 +339,16 @@ above: it emits a plan of these commands and a new accepted install. Bounded cle
 the selected and previous version, and each accepted install first sweeps the stages
 killed runs abandoned ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md)
 PR 6 note).
+
+## 2026-10-01 note: delivered on Ubuntu 24.04 x64 (P13)
+
+The provisioning this ADR decided is delivered for Ubuntu 24.04 x86-64 by P13 PRs 3, 4, 6
+and 7 ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md)): the
+smoke executor, the guarded transaction, the managed tier in lookup in this ADR's order
+(per-call path, configured path, managed version, filtered `PATH`; the model: configured,
+then managed), `setup install/list/rollback/remove/repair`, bounded cleanup and the
+stale-stage sweep, with kill and power-loss qualification
+([`p13-distribution.md`](../planning/p13-distribution.md)). Other targets keep the manual
+and bring-your-own guidance (ADR 0023 decision E). Statements above that `setup install`
+is reserved or answers `COMMAND_NOT_IMPLEMENTED` were true at their dates and are
+superseded; the user guide is [`install.md`](../operations/install.md).
