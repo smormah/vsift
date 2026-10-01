@@ -101,7 +101,7 @@ commits are from `gh pr view` on 2026-10-01.
 | Decision | Outcome | Evidence and amendments |
 | --- | --- | --- |
 | A. Names | Launcher `vsift-cli` (command `vsift`) over `@vsift/win32-x64`, `@vsift/darwin-arm64`, `@vsift/linux-x64` | Two amendments on 2026-09-30. The scope: npm's "not available" for the organisation `vsift` was a repeated submission after the first had created it; `@shongo` was chosen briefly (#235, merged 14:32 UTC) and withdrawn about an hour later (#237). The launcher: npm refused the unscoped `vsift` as too similar to `sift` and `tsify` when the maintainer published a placeholder, so `vsift-cli` holds the name. [ADR 0009](../decisions/0009-package-identity-and-distribution.md) notes; the lesson there: a not-found lookup is not availability, only a publish proves a name |
-| B. What is published, and when | Nothing during the pull requests; one 0.x pre-release under `next` at completion; no crates.io | Held so far. The only publish is the maintainer's placeholder `vsift-cli@0.0.0`. An anonymous registry read on 2026-10-01 shows `vsift-cli` with that one version, published 2026-09-30 at 21:59, as `latest`, and no `bin`; the three `@vsift/...` packages are not found. The pre-release is pending |
+| B. What is published, and when | Nothing during the pull requests; one 0.x pre-release under `next` at completion; no crates.io | Held so far. The only publishes are the maintainer's four `0.0.0` placeholders: `vsift-cli` on 2026-09-30 and the three `@vsift/...` packages on 2026-10-01. An anonymous registry read on 2026-10-01 shows `vsift-cli` with that one version, published 2026-09-30 at 21:59, as `latest`, and no `bin`; the three `@vsift/...` packages were published as `0.0.0` placeholders on 2026-10-01 (see the maintainer steps below). The pre-release is pending |
 | C. Trust signals | Sigstore attestation and npm provenance only; no Authenticode, no notarization | Wired (PR 10), never run ([L-096](known-limits.md#l-096)). What an unsigned download means for users is in `install.md` section 4 ([L-098](known-limits.md#l-098)) |
 | D. Platforms | Windows 11 x64 (MSVC, static C runtime), macOS 15 arm64, Linux x64 glibc built on Ubuntu 22.04 | The Release workflow builds each target twice and requires identical executables: passed on `main` at `951226f` ([run 36786019996](https://github.com/smormah/vsift/actions/runs/36786019996)) and `57f03fe` (run 36797351652). Windows needs `-C link-arg=/Brepro` (ADR 0023 PR 8 note) |
 | E. Managed installation on Ubuntu 24.04 x64 only | Met | The two hosted managed-smoke runs below; Windows and macOS keep typed manual guidance (`unavailable_target`, engine tests and the P06 stage) |
@@ -222,13 +222,13 @@ anonymous registry read); the runbook is [`release.md`](../operations/release.md
 | --- | --- |
 | The maintainer's npm account (two-factor authentication, per ADR 0009's placeholder note); the organisation `vsift` (scope `@vsift`) | Done 2026-09-30 |
 | `vsift-cli@0.0.0` placeholder (README and `package.json` only) | Done 2026-09-30, 21:59 UTC; `latest` |
-| Fork pull requests: approval for all external contributors | Pending (policy is `first_time_contributors`) |
-| Environment `release` (reviewer, no admin bypass, tag rule `v*`) | Pending (no environments) |
-| Tag ruleset `v*` | Pending (no rulesets) |
-| First publish of the three `@vsift/...` names (path A placeholders, or path B short-lived token) | Pending (all three not found on the registry) |
-| Trusted publishers on all four packages | Pending (needs the packages to exist) |
-| Disallow tokens on the four packages | Pending |
-| Version, `CHANGELOG.md` release section, tag `v0.1.0` | Pending (no tags) |
+| Fork pull requests: approval for all external contributors | Done 2026-10-01; read back with `gh api`: `all_external_contributors`, default token read-only, Actions cannot approve pull requests |
+| Environment `release` (reviewer, no admin bypass, tag rule `v*`) | Done 2026-10-01; read back with `gh api`: one reviewer, self-review allowed, administrator bypass off (corrected after the first read showed it on), deployment rule type tag `v*` only, no secrets |
+| Tag ruleset `v*` | Done 2026-10-01; read back with `gh api`: ruleset `release tags`, active, refs `refs/tags/v*`, rules creation, update, deletion and non-fast-forward, bypass only the Repository admin role |
+| First publish of the three `@vsift/...` names (path A placeholders, or path B short-lived token) | Done 2026-10-01 (path A: placeholders `0.0.0` published by the maintainer with two-factor authentication: `@vsift/win32-x64` 17:44 UTC, `@vsift/linux-x64` 17:45, `@vsift/darwin-arm64` 17:46; each `latest`; confirmed by anonymous registry reads) |
+| Trusted publishers on all four packages | Done 2026-10-01 as reported by the maintainer: GitHub Actions, `smormah`, `vsift`, `release.yml`, environment `release`, label `release workflow`, allowed actions npm publish ticked and npm dist-tag unticked. npm shows these settings only to the package owner, so they are unverified until the first publish ([issue #246](https://github.com/smormah/vsift/issues/246) tracks whether to move to staged publishing before a stable release) |
+| Disallow tokens on the four packages | Done 2026-10-01 as reported by the maintainer (npm's option "Require two-factor authentication and disallow bypass 2fa tokens"); unverified from outside |
+| Version, `CHANGELOG.md` release section, tag `v0.1.0` | The version is 0.1.0 in `Cargo.toml` and `npm/vsift-cli/package.json`, and the changelog's `[0.1.0]` section is cut in the release-prep change; the tag is pending (no tags) |
 | Dry run on the tag, dispatch with `dry_run` cleared, approval | Pending |
 | Verification of the published files and the record of it here | Pending |
 

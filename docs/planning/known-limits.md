@@ -1877,9 +1877,9 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
   Control overview and Apple's guide to opening an app Apple cannot check.
 - **Impact:** a Windows user with Smart App Control On may be unable to run VSift at all;
   a user who downloads an archive meets a warning that is right to heed and safe to pass
-  only after the checks of `install.md` section 3. The generated release notes' sentence
-  that installing through npm avoids the warnings holds for the download mark; it may not
-  hold for Smart App Control.
+  only after the checks of `install.md` section 3. The generated release notes say that
+  npm-installed files carry no download mark, and that Smart App Control can still block
+  an unsigned program however it was installed (reworded 2026-10-01).
 - **Why:** certificates and an Apple developer account are recurring costs and key custody
   that R0 does not need (decision C); the trust signals are the Sigstore attestation and
   npm provenance.

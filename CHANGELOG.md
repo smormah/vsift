@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-01
+
+The first pre-release (the npm dist-tag `next`; `latest` stays at the `0.0.0`
+placeholder). It carries everything from P00 to P13 below.
+
 ### Added
 
 - **Attestation and publish wiring** (P13 PR 10; ADR 0023 section 1, decisions B and

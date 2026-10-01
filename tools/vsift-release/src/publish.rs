@@ -817,7 +817,10 @@ impl PublishPlan {
              (`sha256sum --check --ignore-missing SHA256SUMS`, or `shasum -a 256 --check \
              --ignore-missing SHA256SUMS` on macOS). The executables are not code-signed or \
              notarized, so Windows SmartScreen and macOS Gatekeeper may warn about one \
-             downloaded directly; installing through npm avoids that.\n\
+             downloaded directly. Files installed through npm do not carry the download mark \
+             that triggers those two warnings, but Windows Smart App Control, where it is \
+             turned on, can block an unsigned program however it was installed; see the \
+             installation guide.\n\
              \n\
              ## Verify the provenance\n\
              \n\

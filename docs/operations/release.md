@@ -242,7 +242,9 @@ with the `npmPreapprovedPackages` workaround of `install.md`.
 
 ## 6. Attestation and publishing (P13 PR 10): the maintainer's runbook
 
-Nothing in this section has been done yet. Every setting below is the maintainer's to
+As of 2026-10-01, steps 2 to 7 of section 6.2 are done (the record
+[`p13-distribution.md`](../planning/p13-distribution.md) says how each was checked); the
+tag, the dry run and the publish (6.3) are not. Every setting below is the maintainer's to
 make (ADR 0023, "Maintainer-only actions"); no agent or workflow changes them. Nothing
 here needs an e-mail address or other personal detail beyond the public GitHub owner
 `smormah` and repository `vsift`, and no step asks for one.
@@ -451,9 +453,9 @@ archives, `SHA256SUMS`, three SBOMs and three notices files.
   draft-then-publish flow above.
 - Whether the Release workflow becomes a required check (main's required checks today are
   Quality, Documentation, dependency policy and review, Rust analysis and Governance).
-- The generated release notes say that installing through npm avoids the SmartScreen and
-  Gatekeeper warnings (`tools/vsift-release/src/publish.rs`). That holds for the download
-  mark; it may not hold for Windows Smart App Control, which Microsoft documents as
-  blocking unsigned programs it does not recognise, so it may block the unsigned
-  `vsift.exe` however it was installed ([L-098](../planning/known-limits.md#l-098),
-  `install.md` section 4). Keep the sentence, soften it, or link `install.md` section 4.
+- Settled (2026-10-01): the generated release notes (`tools/vsift-release/src/publish.rs`)
+  no longer say that installing through npm avoids the warnings outright. They say that
+  files installed through npm do not carry the download mark that triggers SmartScreen
+  and Gatekeeper, and that Windows Smart App Control, where it is on, can still block an
+  unsigned program however it was installed, with a pointer to the installation guide
+  ([L-098](../planning/known-limits.md#l-098), `install.md` section 4).

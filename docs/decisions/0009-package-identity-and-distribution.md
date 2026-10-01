@@ -124,12 +124,21 @@ no setting changed): `vsift-cli` has that one version, published 2026-09-30 at 2
 as `latest`, with no command; the three `@vsift/...` packages are not found, because the
 0.x pre-release will first publish them.
 
-**Pending maintainer decision.** [`release.md`](../operations/release.md) section 6.2
-step 5 offers two ways to make the three platform packages exist before their trusted
-publishers can be configured. Path A, three more `0.0.0` placeholders published by the
-maintainer with two-factor authentication, needs a note here, because the placeholder
-exception above covers only the launcher. Path B, a short-lived token held only in the
-protected `release` environment, needs none.
+**Decided 2026-10-01 (maintainer): path A.** [`release.md`](../operations/release.md)
+section 6.2 step 5 offered two ways to make the three platform packages exist before
+their trusted publishers could be configured. The maintainer chose path A: three more
+`0.0.0` placeholders, published personally with two-factor authentication, which extends
+the placeholder exception above from the launcher to the three platform packages. They
+hold only a README and a `package.json` (no code, no binary, no scripts, no author) and
+were published on 2026-10-01 (`@vsift/win32-x64` at 17:44 UTC, `@vsift/linux-x64` at
+17:45, `@vsift/darwin-arm64` at 17:46). Path B, a short-lived token in the protected
+`release` environment, was not used, so no npm token exists anywhere. The trade-off the
+maintainer weighed: everything real is still published only by the Release workflow; the
+manual placeholders exist because npm's trusted-publisher setting lives on a package's
+own settings page and these packages did not yet exist (whether npm offers it before a
+first publish was not confirmed). The trusted publishers were then configured on all four
+packages with "npm publish" allowed; whether to move to staged publishing before a
+stable release is [issue #246](https://github.com/smormah/vsift/issues/246).
 
 npm's own registry record of a package lists the publishing account (its `maintainers`
 and `_npmUser` fields). VSift's manifests name nobody, and the governance check and
