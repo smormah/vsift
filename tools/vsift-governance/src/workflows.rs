@@ -22,7 +22,13 @@
 //! 6. the release workflow builds only the `vsift` binary of `vsift-cli`, in
 //!    the release profile, with `--locked` and without any feature selection,
 //!    and names no development feature, test binary or profile override
-//!    anywhere, so no test-only behaviour can reach a shipped archive.
+//!    anywhere, so no test-only behaviour can reach a shipped archive;
+//! 7. the release workflow publishes only as the `publish` module describes
+//!    (P13 PR 10): from a dispatch of the release tag with `dry_run` cleared,
+//!    in the protected `release` environment, with npm provenance under
+//!    `next`, and exactly the tarballs the qualification installed.
+
+mod publish;
 
 use std::{fs, path::Path};
 
@@ -149,6 +155,7 @@ pub(crate) fn check_workflow(messages: &mut Vec<String>, relative_path: &str, te
     lint.check_jobs(workflow);
     if lint.release {
         lint.check_release_text(workflow);
+        publish::check_publishing(&mut lint, workflow);
     }
 }
 
@@ -595,16 +602,24 @@ mod tests {
         format!("name: Example\non:\n  pull_request:\n{permissions}jobs:\n{jobs}")
     }
 
-    fn release_workflow(build: &str) -> String {
-        format!(
-            "name: Release\non:\n  workflow_dispatch:\npermissions: {{}}\njobs:\n  build:\n    \
-             runs-on: ubuntu-24.04\n    permissions:\n      contents: read\n    steps:\n      \
-             - uses: {CHECKOUT}\n      - run: |\n          {build}\n"
-        )
-    }
-
     const GOOD_BUILD: &str =
         "cargo build --release --locked -p vsift-cli --bin vsift --target \"${TARGET}\"";
+
+    /// The repository's release workflow with its first build step running
+    /// `build` and its second one building nothing, so a test sees the
+    /// release rules' findings for `build` alone: the real workflow has none
+    /// (the publishing rules need its whole shape, P13 PR 10).
+    fn release_workflow(build: &str) -> String {
+        let text = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(RELEASE_WORKFLOW),
+        )
+        .unwrap_or_default();
+        let build_step = format!("run: {GOOD_BUILD}\n");
+        text.replacen(&build_step, &format!("run: |\n          {build}\n"), 1)
+            .replacen(&build_step, "run: echo rebuilt\n", 1)
+    }
 
     #[test]
     fn a_pinned_least_privilege_workflow_passes() {
@@ -868,20 +883,28 @@ mod tests {
             "vsift-crash-campaign",
             "CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS",
         ] {
-            let with_env = release_workflow(GOOD_BUILD).replace(
-                "    permissions:\n",
-                &format!("    env:\n      EXTRA: \"{text}\"\n    permissions:\n"),
+            let with_env = release_workflow(GOOD_BUILD).replacen(
+                "env:\n  CARGO_TERM_COLOR: never\n",
+                &format!("env:\n  EXTRA: \"{text}\"\n  CARGO_TERM_COLOR: never\n"),
+                1,
             );
             let messages = findings(RELEASE_WORKFLOW, &with_env);
             assert_eq!(messages.len(), 1, "{text}: {messages:#?}");
         }
-        let commented = release_workflow(GOOD_BUILD).replace(
-            "jobs:\n",
-            "# never fault-injection or vsift-smoke-fixture\njobs:\n",
+        let commented = release_workflow(GOOD_BUILD).replacen(
+            "\njobs:\n",
+            "\n# never fault-injection or vsift-smoke-fixture\njobs:\n",
+            1,
         );
         assert_eq!(findings(RELEASE_WORKFLOW, &commented), Vec::<String>::new());
         // The rule is the release workflow's: CI may build the whole workspace.
-        let ci = release_workflow("cargo build --workspace --release --locked --all-features");
+        let ci = workflow(
+            "permissions: {}\n",
+            &format!(
+                "  build:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: {CHECKOUT}\n      \
+                 - run: cargo build --workspace --release --locked --all-features\n"
+            ),
+        );
         assert_eq!(
             findings(".github/workflows/ci.yml", &ci),
             Vec::<String>::new()

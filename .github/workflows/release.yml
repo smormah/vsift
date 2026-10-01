@@ -19,13 +19,24 @@ name: Release
 #              tarballs published to a Verdaccio registry on 127.0.0.1 with
 #              no uplink, installed and run (npm/qualification/qualify.cjs).
 #              Nothing is published to any public registry.
+#   plan       on every run: checks the archives, SHA256SUMS and the
+#              qualified tarballs again, decides whether this run may publish
+#              and writes the plan, which the job summary shows (P13 PR 10).
+#   attest     only when publishing: Sigstore build provenance for every
+#              release asset and npm tarball.
+#   publish    only when publishing, in the protected `release` environment
+#              after the maintainer's approval: the tarballs the npm-qualify
+#              jobs installed, by digest, to npm under `next` with npm
+#              provenance (trusted publishing), platform packages first, then
+#              the GitHub pre-release with its assets.
 #
-# This workflow cannot publish. It has no job with a write scope or an OIDC
-# token, uses no secret, and runs on pull requests, pushes to main and manual
-# dispatch only, never on a tag or a release. Attestation and the protected
-# `release` environment's publish job are P13 PR 10; until then every run is
-# the dry run ADR 0023 describes: it builds and checks everything and writes
-# nothing outside the run.
+# Every run is a dry run (ADR 0023 section 1: it builds, checks and plans
+# everything, and writes nothing outside the run: no attestation, release or
+# package) except a manual dispatch on the tag v<version> of smormah/vsift with
+# `dry_run` cleared. Pull requests, pushes and forks never publish: the
+# privileged jobs' conditions and the plan both refuse them, and the lint in
+# tools/vsift-governance (workflows/publish.rs) holds this file to those rules.
+# The runbook is docs/operations/release.md section 6.
 #
 # Release builds take no features, so no development-only feature, test
 # binary or profile override can reach an archive; the governance workflow
@@ -70,13 +81,24 @@ on:
       - LICENSE
       - LICENSE-APACHE
       - LICENSE-MIT
+  # A dispatch is a dry run unless `dry_run` is cleared, and a cleared
+  # `dry_run` publishes only on the tag v<version> (the plan job refuses any
+  # other ref). No tag push or release event starts this workflow: the
+  # maintainer creates the tag under the tag ruleset, then dispatches it.
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Dry run (build, check and show the plan; publish nothing). Clear it only on the tag v<version> to publish, after the release environment's approval.
+        type: boolean
+        default: true
 
 permissions: {}
 
+# A publishing run is never cancelled by a newer run on the same ref; pull
+# requests and pushes still cancel their superseded runs.
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 defaults:
   run:
@@ -92,6 +114,10 @@ env:
   # the minimum runtimes ADR 0023 decision H6 supports (Node.js 22, Bun 1.2),
   # the current pnpm and Yarn, and the local registry.
   NODE_VERSION: "22.23.3"
+  # The publish job's Node.js (P13 PR 10, reviewed 2026-10-01): npm trusted
+  # publishing needs npm 11.5.1 or later, and Node.js 22 ships npm 10;
+  # Node.js 24.21.0 ships npm 11.19.0.
+  PUBLISH_NODE_VERSION: "24.21.0"
   BUN_VERSION: "1.2.23"
   PNPM_VERSION: "12.8.1"
   YARN_VERSION: "4.18.1"
@@ -262,6 +288,10 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    # SHA256SUMS as a job output: the privileged jobs compare the archives
+    # they download with this list, which no later job can change.
+    outputs:
+      archive-sums: ${{ steps.sums.outputs.sums }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -312,11 +342,17 @@ jobs:
           done
 
       - name: Write and check SHA256SUMS
+        id: sums
         run: |
           set -euo pipefail
           cargo run --quiet --locked -p vsift-release -- checksums --output dist/SHA256SUMS dist/*.tar.gz
           cat dist/SHA256SUMS
           (cd dist && sha256sum --check --strict SHA256SUMS)
+          {
+            echo 'sums<<END_OF_SUMS'
+            cat dist/SHA256SUMS
+            echo 'END_OF_SUMS'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Keep the dry-run archives with this run
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -334,6 +370,11 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    # The tarballs' digests as a job output: every npm-qualify job, the plan
+    # and the privileged jobs require the tarballs they download to be
+    # exactly these, so the packages published are the packages qualified.
+    outputs:
+      tarball-sums: ${{ steps.tarballs.outputs.sums }}
     env:
       npm_config_update_notifier: "false"
     steps:
@@ -355,6 +396,7 @@ jobs:
           path: dist
 
       - name: Assemble, pack twice and verify the npm packages
+        id: tarballs
         run: |
           set -euo pipefail
           archives=()
@@ -374,7 +416,13 @@ jobs:
             tar -tzvf "${tarball}"
           done
           cargo run --quiet --locked -p vsift-release -- npm-verify "${archives[@]}" "${tarballs[@]}"
-          (cd npm-dist/tarballs && sha256sum ./*.tgz)
+          cargo run --quiet --locked -p vsift-release -- checksums --output npm-dist/TARBALL-SHA256SUMS npm-dist/tarballs/*.tgz
+          cat npm-dist/TARBALL-SHA256SUMS
+          {
+            echo 'sums<<END_OF_SUMS'
+            cat npm-dist/TARBALL-SHA256SUMS
+            echo 'END_OF_SUMS'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Keep the npm tarballs with this run
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -449,6 +497,23 @@ jobs:
           name: npm-packages
           path: ${{ runner.temp }}/npm-packages
 
+      # The tarballs qualified here are the ones the publish job publishes:
+      # both require them to be exactly npm-package's list, by SHA-256.
+      # macOS may lack coreutils' sha256sum; Perl's shasum reads the same list.
+      - name: Require the tarballs to be the packed ones
+        env:
+          TARBALL_SUMS: ${{ needs.npm-package.outputs.tarball-sums }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "${TARBALL_SUMS}" > "${RUNNER_TEMP}/tarball-sums"
+          cd "${RUNNER_TEMP}/npm-packages"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum --check --strict "${RUNNER_TEMP}/tarball-sums"
+          else
+            shasum -a 256 --check --strict "${RUNNER_TEMP}/tarball-sums"
+          fi
+          test "$(ls -A | wc -l)" -eq "$(wc -l < "${RUNNER_TEMP}/tarball-sums")"
+
       - name: Qualify the packages from a loopback registry
         run: |
           set -euo pipefail
@@ -462,3 +527,323 @@ jobs:
             --verdaccio "${RUNNER_TEMP}/tools/node_modules/verdaccio/bin/verdaccio" \
             --version-line "vsift ${version} (${commit:0:12})" \
             --work "${RUNNER_TEMP}/qualification"
+
+  # Runs on every run and has no write scope, OIDC token or secret. It checks
+  # the inputs once more, decides the mode and shows the plan in the job
+  # summary; a dry run ends here, so this is what a dry run shows.
+  plan:
+    name: Publish plan (a dry run publishes nothing)
+    needs:
+      - package
+      - npm-package
+      - npm-qualify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      plan-sums: ${{ steps.plan-sums.outputs.sums }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dry-run
+          path: dist
+
+      - name: Fetch the npm tarballs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-packages
+          path: npm-packages
+
+      - name: Require the archives and tarballs to be the checked and qualified ones
+        env:
+          ARCHIVE_SUMS: ${{ needs.package.outputs.archive-sums }}
+          TARBALL_SUMS: ${{ needs.npm-package.outputs.tarball-sums }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "${ARCHIVE_SUMS}" | cmp - dist/SHA256SUMS
+          (cd dist && sha256sum --check --strict SHA256SUMS)
+          test "$(ls -A dist | wc -l)" -eq 4
+          printf '%s\n' "${TARBALL_SUMS}" > "${RUNNER_TEMP}/tarball-sums"
+          (cd npm-packages && sha256sum --check --strict "${RUNNER_TEMP}/tarball-sums")
+          test "$(ls -A npm-packages | wc -l)" -eq "$(wc -l < "${RUNNER_TEMP}/tarball-sums")"
+
+      - name: Plan the release
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          archives=()
+          for archive in dist/*.tar.gz; do
+            archives+=(--archive "${archive}")
+          done
+          tarballs=()
+          for tarball in npm-packages/*.tgz; do
+            tarballs+=(--tarball "${tarball}")
+          done
+          mkdir publish-plan
+          cargo run --quiet --locked -p vsift-release -- publish-plan "${archives[@]}" \
+            --checksums dist/SHA256SUMS "${tarballs[@]}" --event "${EVENT_NAME}" --ref "${GIT_REF}" \
+            --repository "${REPOSITORY}" --dry-run-input "${DRY_RUN_INPUT}" --commit "${SOURCE_COMMIT}" \
+            --out-dir publish-plan > "${RUNNER_TEMP}/plan-outputs"
+          cat "${RUNNER_TEMP}/plan-outputs" >> "$GITHUB_OUTPUT"
+          cat publish-plan/publish-plan.md >> "$GITHUB_STEP_SUMMARY"
+          cat publish-plan/publish-plan.md
+
+      - name: Record the plan's digests
+        id: plan-sums
+        run: |
+          set -euo pipefail
+          {
+            echo 'sums<<END_OF_SUMS'
+            (cd publish-plan && sha256sum -- *)
+            echo 'END_OF_SUMS'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Keep the plan with this run
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: publish-plan
+          path: publish-plan
+          if-no-files-found: error
+          retention-days: 7
+
+  # Only when publishing: a manual dispatch with dry_run cleared, on a v* tag
+  # of smormah/vsift, which the plan has accepted as this version's tag. It
+  # runs no repository code; it checks what it downloaded against the earlier
+  # jobs' outputs and attests exactly the plan's list.
+  attest:
+    name: Attest build provenance
+    needs:
+      - package
+      - npm-package
+      - npm-qualify
+      - plan
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && github.event.inputs.dry_run == 'false'
+      && github.repository == 'smormah/vsift'
+      && startsWith(github.ref, 'refs/tags/v')
+      && needs.plan.outputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Fetch the archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dry-run
+          path: dist
+
+      - name: Fetch the npm tarballs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-packages
+          path: npm-packages
+
+      - name: Fetch the plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: publish-plan
+          path: publish-plan
+
+      - name: Require every subject to be the checked, qualified and planned one
+        env:
+          ARCHIVE_SUMS: ${{ needs.package.outputs.archive-sums }}
+          TARBALL_SUMS: ${{ needs.npm-package.outputs.tarball-sums }}
+          PLAN_SUMS: ${{ needs.plan.outputs.plan-sums }}
+        run: |
+          set -euo pipefail
+          # require_exactly <directory> <sha256sum list>: every listed file
+          # with its digest, and nothing else.
+          require_exactly() {
+            (cd "$1" && sha256sum --check --strict "$2")
+            test "$(ls -A "$1" | wc -l)" -eq "$(wc -l < "$2")"
+          }
+          printf '%s\n' "${PLAN_SUMS}" > "${RUNNER_TEMP}/plan-sums"
+          require_exactly publish-plan "${RUNNER_TEMP}/plan-sums"
+          printf '%s\n' "${ARCHIVE_SUMS}" | cmp - dist/SHA256SUMS
+          printf '%s\n' "${TARBALL_SUMS}" > "${RUNNER_TEMP}/tarball-sums"
+          require_exactly npm-packages "${RUNNER_TEMP}/tarball-sums"
+          mkdir subjects
+          cp dist/* npm-packages/* subjects/
+          cp publish-plan/*.cdx.json publish-plan/*.THIRD-PARTY-NOTICES.txt subjects/
+          require_exactly subjects "${GITHUB_WORKSPACE}/publish-plan/attestation-subjects.sha256"
+
+      - name: Attest every release asset and npm tarball
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: publish-plan/attestation-subjects.sha256
+
+  # Only when publishing, after attest, and only once the maintainer approves
+  # the `release` environment (its required reviewer; deployments limited to
+  # v* tags). It runs no repository code and publishes exactly the tarballs
+  # the npm-qualify jobs installed, by digest; nothing is rebuilt or repacked.
+  publish:
+    name: Publish to npm (next) and GitHub Releases
+    needs:
+      - package
+      - npm-package
+      - npm-qualify
+      - plan
+      - attest
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && github.event.inputs.dry_run == 'false'
+      && github.repository == 'smormah/vsift'
+      && startsWith(github.ref, 'refs/tags/v')
+      && needs.plan.outputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: release
+      url: https://www.npmjs.com/package/vsift-cli/v/${{ needs.plan.outputs.version }}
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: write
+    env:
+      npm_config_update_notifier: "false"
+      npm_config_registry: https://registry.npmjs.org/
+    steps:
+      - name: Set up the pinned Node.js (npm 11 publishes with trusted publishing)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.PUBLISH_NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Fetch the archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dry-run
+          path: dist
+
+      - name: Fetch the npm tarballs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-packages
+          path: npm-packages
+
+      - name: Fetch the plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: publish-plan
+          path: publish-plan
+
+      - name: Require every file to be the checked, qualified and planned one
+        env:
+          ARCHIVE_SUMS: ${{ needs.package.outputs.archive-sums }}
+          TARBALL_SUMS: ${{ needs.npm-package.outputs.tarball-sums }}
+          PLAN_SUMS: ${{ needs.plan.outputs.plan-sums }}
+        run: |
+          set -euo pipefail
+          require_exactly() {
+            (cd "$1" && sha256sum --check --strict "$2")
+            test "$(ls -A "$1" | wc -l)" -eq "$(wc -l < "$2")"
+          }
+          printf '%s\n' "${PLAN_SUMS}" > "${RUNNER_TEMP}/plan-sums"
+          require_exactly publish-plan "${RUNNER_TEMP}/plan-sums"
+          printf '%s\n' "${ARCHIVE_SUMS}" | cmp - dist/SHA256SUMS
+          printf '%s\n' "${TARBALL_SUMS}" > "${RUNNER_TEMP}/tarball-sums"
+          require_exactly npm-packages "${RUNNER_TEMP}/tarball-sums"
+          mkdir release-assets
+          cp dist/* release-assets/
+          cp publish-plan/*.cdx.json publish-plan/*.THIRD-PARTY-NOTICES.txt release-assets/
+          require_exactly release-assets "${GITHUB_WORKSPACE}/publish-plan/release-assets.sha256"
+
+      # With trusted publishing npm exchanges the job's OIDC token for a
+      # one-publish token and adds npm provenance. NPM_BOOTSTRAP_TOKEN exists
+      # only for the first publish of a package that has no trusted publisher
+      # yet, as a short-lived environment secret (release.md section 6); npm
+      # expands it from the environment, so it is never written to disk.
+      # A version already published with the same bytes is skipped, so a
+      # re-run after a partial failure completes the release.
+      - name: Publish the platform packages, then vsift-cli, under next
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "${VERSION}" =~ ^0\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$|^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]
+          npm_version="$(npm --version)"
+          echo "npm ${npm_version}"
+          case "${npm_version}" in
+            11.5.[1-9]*|11.[6-9].*|11.[1-9][0-9].*|1[2-9].*) ;;
+            *) echo "npm ${npm_version} cannot publish with trusted publishing (11.5.1 or later)" >&2; exit 1 ;;
+          esac
+          : > "${RUNNER_TEMP}/publish.npmrc"
+          if [ -n "${NPM_BOOTSTRAP_TOKEN}" ]; then
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NPM_BOOTSTRAP_TOKEN}' > "${RUNNER_TEMP}/publish.npmrc"
+          fi
+          export npm_config_userconfig="${RUNNER_TEMP}/publish.npmrc"
+          for package in @vsift/darwin-arm64 @vsift/win32-x64 @vsift/linux-x64 vsift-cli; do
+            file="${package#@}"
+            file="${file//\//-}-${VERSION}.tgz"
+            integrity="sha512-$(openssl dgst -sha512 -binary "npm-packages/${file}" | base64 -w 0)"
+            published="$(npm view "${package}@${VERSION}" dist.integrity 2>/dev/null || true)"
+            if [ "${published}" = "${integrity}" ]; then
+              echo "${package}@${VERSION} is already published with these bytes"
+              continue
+            fi
+            if [ -n "${published}" ]; then
+              echo "${package}@${VERSION} is already published with other bytes" >&2
+              exit 1
+            fi
+            npm publish "./npm-packages/${file}" --tag next --access public --provenance --ignore-scripts
+          done
+
+      - name: Require next to be this version and latest to be untouched
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          next=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            next="$(npm view vsift-cli dist-tags.next 2>/dev/null || true)"
+            if [ "${next}" = "${VERSION}" ]; then
+              break
+            fi
+            echo "attempt ${attempt}: vsift-cli next is '${next}', waiting for ${VERSION}"
+            sleep 30
+          done
+          latest="$(npm view vsift-cli dist-tags.latest)"
+          echo "vsift-cli: next ${next}, latest ${latest}"
+          test "${next}" = "${VERSION}"
+          if [ "${latest}" = "${VERSION}" ]; then
+            echo "latest moved to ${VERSION}; point it back at the placeholder (release.md section 6)" >&2
+            exit 1
+          fi
+
+      # A draft first, so a release whose upload fails is never public; then
+      # the draft is published as a pre-release that GitHub does not mark as
+      # latest. The tag must exist already: the workflow never creates one.
+      - name: Create the GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test "${TAG}" = "v${VERSION}"
+          gh release create "${TAG}" --repo smormah/vsift --verify-tag --draft --prerelease --latest=false \
+            --title "VSift ${VERSION}" --notes-file publish-plan/release-notes.md release-assets/*
+          gh release edit "${TAG}" --repo smormah/vsift --draft=false
+          gh release view "${TAG}" --repo smormah/vsift

@@ -15,20 +15,29 @@
 //!     --out-dir <dir>
 //! vsift-release npm-verify --archive <file> (three times) --tarball <file> \
 //!     (four times)
+//! vsift-release publish-plan --archive <file> (three times) --checksums <file> \
+//!     --tarball <file> (four times) --event <event> --ref <ref> \
+//!     --repository <owner/name> --dry-run-input <""|true|false> \
+//!     --commit <sha> --out-dir <dir>
 //! ```
 //!
 //! `npm` assembles the four npm packages from the three archives (P13 PR 9,
 //! see the `npm` module); `npm pack` turns each directory into a tarball, and
 //! `npm-verify` checks those tarballs against a fresh assembly.
+//! `publish-plan` (P13 PR 10, see the `publish` module) checks the archives,
+//! `SHA256SUMS` and tarballs again, decides whether the run may publish, and
+//! writes the plan the privileged `attest` and `publish` jobs carry out; it
+//! prints the plan job's outputs as `name=value` lines.
 //!
 //! The tool writes only the files it is asked to create, never overwrites one,
-//! and contacts no network.
+//! publishes nothing and contacts no network.
 
 #![forbid(unsafe_code)]
 
 mod archive;
 mod checksums;
 mod npm;
+mod publish;
 mod target;
 
 use std::{
@@ -51,6 +60,9 @@ use crate::{
     npm::{
         LAUNCHER_DIRECTORY, LAUNCHER_LIBRARY, LAUNCHER_MANIFEST, LAUNCHER_README, LAUNCHER_SCRIPT,
         LauncherSources, NpmError, NpmPackage, assemble, verify_tarball,
+    },
+    publish::{
+        DryRunInput, PackedPackage, PublishError, ReleaseArchive, RunContext, TriggerEvent, plan,
     },
     target::ReleaseTarget,
 };
@@ -128,6 +140,72 @@ enum Command {
         #[arg(long = "tarball", required = true)]
         tarballs: Vec<PathBuf>,
     },
+    /// Check the archives, `SHA256SUMS` and the qualified tarballs, decide
+    /// whether this workflow run may publish, and write the publish plan into
+    /// the output directory. Prints the plan job's outputs.
+    PublishPlan(PlanArguments),
+}
+
+/// The inputs of `publish-plan`: the release's files and the workflow run.
+#[derive(Debug, clap::Args)]
+struct PlanArguments {
+    /// A release archive; give one per target.
+    #[arg(long = "archive", required = true)]
+    archives: Vec<PathBuf>,
+    /// The `SHA256SUMS` file the `package` job wrote.
+    #[arg(long)]
+    checksums: PathBuf,
+    /// A packed package the `npm-qualify` jobs installed; give one per
+    /// package.
+    #[arg(long = "tarball", required = true)]
+    tarballs: Vec<PathBuf>,
+    /// `github.event_name`.
+    #[arg(long, value_enum)]
+    event: TriggerEvent,
+    /// `github.ref`.
+    #[arg(long = "ref")]
+    git_ref: String,
+    /// `github.repository`.
+    #[arg(long)]
+    repository: String,
+    /// `github.event.inputs.dry_run`: empty unless dispatched.
+    #[arg(long, default_value = "")]
+    dry_run_input: String,
+    /// `github.sha`.
+    #[arg(long)]
+    commit: String,
+    /// An existing directory; the plan's files must not exist in it yet.
+    #[arg(long)]
+    out_dir: PathBuf,
+}
+
+/// What a command produced, which `main` prints.
+#[derive(Debug)]
+enum Outcome {
+    /// The file or directory it created or checked.
+    Path(PathBuf),
+    /// The plan job's outputs, one `name=value` line each.
+    Outputs(String),
+}
+
+impl Outcome {
+    /// The path, for the commands that produce one.
+    #[cfg(test)]
+    fn path(self) -> Option<PathBuf> {
+        match self {
+            Self::Path(path) => Some(path),
+            Self::Outputs(_) => None,
+        }
+    }
+}
+
+impl fmt::Display for Outcome {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Path(path) => write!(formatter, "{}", path.display()),
+            Self::Outputs(outputs) => formatter.write_str(outputs),
+        }
+    }
 }
 
 /// The inputs of one archive besides the repository's licences and skill.
@@ -171,6 +249,8 @@ enum ReleaseError {
     Npm(NpmError),
     /// Not exactly one tarball was given per package.
     Tarballs(String),
+    /// The run may not publish, or its inputs are not the release.
+    Publish(PublishError),
 }
 
 impl fmt::Display for ReleaseError {
@@ -200,6 +280,7 @@ impl fmt::Display for ReleaseError {
             Self::Tarballs(reason) => {
                 write!(formatter, "the tarballs are not one per package: {reason}")
             }
+            Self::Publish(error) => error.fmt(formatter),
         }
     }
 }
@@ -224,11 +305,17 @@ impl From<NpmError> for ReleaseError {
     }
 }
 
+impl From<PublishError> for ReleaseError {
+    fn from(error: PublishError) -> Self {
+        Self::Publish(error)
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli.command, Path::new(".")) {
-        Ok(created) => {
-            println!("{}", created.display());
+        Ok(outcome) => {
+            println!("{outcome}");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -238,9 +325,8 @@ fn main() -> ExitCode {
     }
 }
 
-/// Runs one command from `repository_root` and returns the file it created or
-/// checked.
-fn run(command: Command, repository_root: &Path) -> Result<PathBuf, ReleaseError> {
+/// Runs one command from `repository_root` and returns what it produced.
+fn run(command: Command, repository_root: &Path) -> Result<Outcome, ReleaseError> {
     match command {
         Command::Package {
             inputs,
@@ -252,7 +338,7 @@ fn run(command: Command, repository_root: &Path) -> Result<PathBuf, ReleaseError
             let file = create_new(&path)?;
             let file = write_archive(VERSION, inputs.target, source_date_epoch, &contents, file)?;
             file.sync_all().map_err(|source| io_error(&path, source))?;
-            Ok(path)
+            Ok(Outcome::Path(path))
         }
         Command::Verify {
             inputs,
@@ -262,7 +348,7 @@ fn run(command: Command, repository_root: &Path) -> Result<PathBuf, ReleaseError
             let contents = load_contents(&inputs, repository_root)?;
             let bytes = read(&archive)?;
             verify_archive(VERSION, inputs.target, source_date_epoch, &contents, &bytes)?;
-            Ok(archive)
+            Ok(Outcome::Path(archive))
         }
         Command::Checksums { output, archives } => {
             let mut files = Vec::new();
@@ -279,57 +365,106 @@ fn run(command: Command, repository_root: &Path) -> Result<PathBuf, ReleaseError
                     .iter()
                     .map(|(name, bytes)| (name.as_str(), bytes.as_slice())),
             )?;
-            let mut file = create_new(&output)?;
-            file.write_all(list.as_bytes())
-                .and_then(|()| file.sync_all())
-                .map_err(|source| io_error(&output, source))?;
-            Ok(output)
+            write_new(&output, list.as_bytes())?;
+            Ok(Outcome::Path(output))
         }
         Command::Npm { archives, out_dir } => {
-            let packages = assemble_packages(&archives, repository_root)?;
+            let packages = assemble_packages(&read_release_archives(&archives)?, repository_root)?;
             for package in &packages {
                 write_package(&out_dir, package)?;
             }
-            Ok(out_dir)
+            Ok(Outcome::Path(out_dir))
         }
         Command::NpmVerify { archives, tarballs } => {
-            let packages = assemble_packages(&archives, repository_root)?;
-            if tarballs.len() != packages.len() {
-                return Err(ReleaseError::Tarballs(format!(
-                    "{} given for {} packages",
-                    tarballs.len(),
-                    packages.len()
-                )));
-            }
-            let mut verified = Vec::new();
-            for (index, tarball) in tarballs.iter().enumerate() {
-                let name = verify_tarball(&packages, &read(tarball)?, index + 1)?;
-                if verified.contains(&name) {
-                    return Err(ReleaseError::Tarballs(format!("{name} is given twice")));
-                }
-                verified.push(name);
-            }
-            Ok(tarballs.into_iter().next().unwrap_or_default())
+            let packages = assemble_packages(&read_release_archives(&archives)?, repository_root)?;
+            verify_tarballs(&packages, &tarballs)?;
+            Ok(Outcome::Path(
+                tarballs.into_iter().next().unwrap_or_default(),
+            ))
         }
+        Command::PublishPlan(arguments) => write_publish_plan(arguments, repository_root),
     }
 }
 
-/// Reads each archive back (it must be a canonical release archive of this
-/// version, named for its target) and assembles the npm packages from them
-/// and the launcher's sources in the repository.
-fn assemble_packages(
-    archives: &[PathBuf],
+/// Checks the release once more, plans its publication and writes the plan's
+/// files; returns the plan job's outputs.
+fn write_publish_plan(
+    arguments: PlanArguments,
     repository_root: &Path,
-) -> Result<Vec<NpmPackage>, ReleaseError> {
-    let mut contents = Vec::new();
+) -> Result<Outcome, ReleaseError> {
+    let context = RunContext {
+        event: arguments.event,
+        git_ref: arguments.git_ref,
+        repository: arguments.repository,
+        dry_run: DryRunInput::parse(&arguments.dry_run_input)?,
+        commit: arguments.commit,
+    };
+    let loaded = read_release_archives(&arguments.archives)?;
+    let packages = assemble_packages(&loaded, repository_root)?;
+    let packed = verify_tarballs(&packages, &arguments.tarballs)?;
+    let release_archives: Vec<ReleaseArchive> = loaded
+        .contents
+        .into_iter()
+        .zip(loaded.files)
+        .map(|((target, contents), (file_name, bytes))| ReleaseArchive {
+            target,
+            file_name,
+            bytes,
+            sbom: contents.sbom,
+            notices: contents.notices,
+        })
+        .collect();
+    let plan = plan(
+        VERSION,
+        context,
+        &release_archives,
+        &read(&arguments.checksums)?,
+        &packed,
+    )?;
+    for (name, bytes) in plan.files()? {
+        write_new(&arguments.out_dir.join(name), &bytes)?;
+    }
+    Ok(Outcome::Outputs(plan.outputs()))
+}
+
+/// The release archives read back: each one's contents by target, and in the
+/// same order its file name and bytes.
+struct LoadedArchives {
+    contents: Vec<(ReleaseTarget, ArchiveContents)>,
+    files: Vec<(String, Vec<u8>)>,
+}
+
+/// Reads each archive back; each must be a canonical release archive of this
+/// version, named for its target.
+fn read_release_archives(archives: &[PathBuf]) -> Result<LoadedArchives, ReleaseError> {
+    let mut loaded = LoadedArchives {
+        contents: Vec::new(),
+        files: Vec::new(),
+    };
     for path in archives {
         let name = path.file_name().and_then(|name| name.to_str());
         let target = ReleaseTarget::ALL
             .into_iter()
             .find(|target| name == Some(archive_file_name(VERSION, *target).as_str()))
             .ok_or_else(|| ReleaseError::UnrecognisedArchive(path.clone()))?;
-        contents.push((target, read_archive(VERSION, target, &read(path)?)?));
+        let bytes = read(path)?;
+        loaded
+            .contents
+            .push((target, read_archive(VERSION, target, &bytes)?));
+        loaded
+            .files
+            .push((archive_file_name(VERSION, target), bytes));
     }
+    Ok(loaded)
+}
+
+/// Assembles the npm packages from the archives read back and the
+/// launcher's sources in the repository.
+fn assemble_packages(
+    archives: &LoadedArchives,
+    repository_root: &Path,
+) -> Result<Vec<NpmPackage>, ReleaseError> {
+    let contents = &archives.contents;
     let launcher_root = repository_root.join(LAUNCHER_DIRECTORY);
     let launcher = LauncherSources {
         manifest: read(&launcher_root.join(LAUNCHER_MANIFEST))?,
@@ -337,7 +472,41 @@ fn assemble_packages(
         library: read(&launcher_root.join(LAUNCHER_LIBRARY))?,
         readme: read(&launcher_root.join(LAUNCHER_README))?,
     };
-    Ok(assemble(VERSION, &contents, &launcher)?)
+    Ok(assemble(VERSION, contents, &launcher)?)
+}
+
+/// Checks each tarball against the assembled packages: exactly one per
+/// package, each the package it names, byte for byte.
+fn verify_tarballs(
+    packages: &[NpmPackage],
+    tarballs: &[PathBuf],
+) -> Result<Vec<PackedPackage>, ReleaseError> {
+    if tarballs.len() != packages.len() {
+        return Err(ReleaseError::Tarballs(format!(
+            "{} given for {} packages",
+            tarballs.len(),
+            packages.len()
+        )));
+    }
+    let mut verified: Vec<PackedPackage> = Vec::new();
+    for (index, tarball) in tarballs.iter().enumerate() {
+        let bytes = read(tarball)?;
+        let name = verify_tarball(packages, &bytes, index + 1)?;
+        if verified.iter().any(|packed| packed.package == name) {
+            return Err(ReleaseError::Tarballs(format!("{name} is given twice")));
+        }
+        let file_name = tarball
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_owned();
+        verified.push(PackedPackage {
+            package: name,
+            file_name,
+            bytes,
+        });
+    }
+    Ok(verified)
 }
 
 /// Writes one package's directory under `out_dir`; the directory must not
@@ -447,6 +616,14 @@ fn read(path: &Path) -> Result<Vec<u8>, ReleaseError> {
     fs::read(path).map_err(|source| io_error(path, source))
 }
 
+/// Writes a new file; an existing one is never overwritten.
+fn write_new(path: &Path, bytes: &[u8]) -> Result<(), ReleaseError> {
+    let mut file = create_new(path)?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|source| io_error(path, source))
+}
+
 fn create_new(path: &Path) -> Result<fs::File, ReleaseError> {
     fs::File::options()
         .write(true)
@@ -470,9 +647,16 @@ mod tests {
         path::{Path, PathBuf},
     };
 
-    use super::{Command, Inputs, ReleaseError, VERSION, load_skill, run};
+    use clap::Parser;
+
+    use super::{
+        Cli, Command, Inputs, PlanArguments, ReleaseError, VERSION, assemble_packages, load_skill,
+        read_release_archives, run,
+    };
     use crate::{
         archive::tests::contents,
+        npm,
+        publish::{PublishError, TriggerEvent, npm_tarball_name},
         target::{ReleaseTarget, tests::minimal_executable},
     };
 
@@ -499,6 +683,56 @@ mod tests {
         fn drop(&mut self) {
             let _ignored = fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// The plan job passes GitHub's values as they are: an empty `dry_run`
+    /// input outside a dispatch, and the event's own name.
+    #[test]
+    fn publish_plan_reads_the_workflow_arguments_as_the_plan_job_passes_them()
+    -> Result<(), Box<dyn Error>> {
+        let parse = |event: &str, dry_run: &str| {
+            Cli::try_parse_from([
+                "vsift-release",
+                "publish-plan",
+                "--archive",
+                "a.tar.gz",
+                "--checksums",
+                "SHA256SUMS",
+                "--tarball",
+                "t.tgz",
+                "--event",
+                event,
+                "--ref",
+                "refs/pull/1/merge",
+                "--repository",
+                "smormah/vsift",
+                "--dry-run-input",
+                dry_run,
+                "--commit",
+                "0123456789abcdef0123456789abcdef01234567",
+                "--out-dir",
+                "publish-plan",
+            ])
+        };
+        for (event, expected) in [
+            ("pull_request", TriggerEvent::PullRequest),
+            ("push", TriggerEvent::Push),
+            ("workflow_dispatch", TriggerEvent::WorkflowDispatch),
+        ] {
+            let Command::PublishPlan(arguments) = parse(event, "")?.command else {
+                return Err("not publish-plan".into());
+            };
+            assert_eq!(arguments.event, expected);
+            assert_eq!(arguments.dry_run_input, "");
+        }
+        let Command::PublishPlan(arguments) = parse("workflow_dispatch", "false")?.command else {
+            return Err("not publish-plan".into());
+        };
+        assert_eq!(arguments.dry_run_input, "false");
+        // An event the Release workflow does not have is refused by the parser.
+        assert!(parse("schedule", "").is_err());
+        assert!(parse("pull_request_target", "").is_err());
+        Ok(())
     }
 
     #[test]
@@ -565,7 +799,9 @@ mod tests {
                 out_dir: out.clone(),
             },
             &root,
-        )?;
+        )?
+        .path()
+        .ok_or("package names no archive")?;
         assert_eq!(
             archive.file_name().and_then(|name| name.to_str()),
             Some(format!("vsift-{VERSION}-x86_64-unknown-linux-gnu.tar.gz").as_str())
@@ -637,9 +873,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn npm_packages_are_assembled_from_packaged_archives() -> Result<(), Box<dyn Error>> {
-        let scratch = Scratch::new("npm")?;
+    /// Packages one fixture archive per target into `scratch/archives`.
+    fn package_fixture_archives(scratch: &Scratch) -> Result<Vec<PathBuf>, Box<dyn Error>> {
         let root = repository_root();
         let archives_dir = scratch.0.join("archives");
         fs::create_dir(&archives_dir)?;
@@ -654,7 +889,7 @@ mod tests {
             fs::write(&binary, &fixture.executable)?;
             fs::write(&notices, &fixture.notices)?;
             fs::write(&sbom, &fixture.sbom)?;
-            archives.push(run(
+            let archive = run(
                 Command::Package {
                     inputs: Inputs {
                         target,
@@ -666,8 +901,20 @@ mod tests {
                     out_dir: archives_dir.clone(),
                 },
                 &root,
-            )?);
+            )?
+            .path()
+            .ok_or("package names no archive")?;
+            archives.push(archive);
         }
+        Ok(archives)
+    }
+
+    #[test]
+    fn npm_packages_are_assembled_from_packaged_archives() -> Result<(), Box<dyn Error>> {
+        let scratch = Scratch::new("npm")?;
+        let root = repository_root();
+        let archives = package_fixture_archives(&scratch)?;
+        let archives_dir = scratch.0.join("archives");
         let out = scratch.0.join("npm");
         fs::create_dir(&out)?;
         run(
@@ -728,6 +975,149 @@ mod tests {
         assert!(
             matches!(unrecognised, Err(ReleaseError::UnrecognisedArchive(_))),
             "{unrecognised:?}"
+        );
+        Ok(())
+    }
+
+    /// The whole dry-run path the Release workflow's `plan` job takes on a
+    /// pull request: archives, `SHA256SUMS` and packed tarballs in, the plan
+    /// files and `mode=dry-run` out; a request to publish off the release tag
+    /// and a tarball that is not the assembled package are refused.
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one fixture release, planned and then refused three ways"
+    )]
+    fn publish_plan_checks_everything_and_writes_the_plan() -> Result<(), Box<dyn Error>> {
+        let scratch = Scratch::new("publish-plan")?;
+        let root = repository_root();
+        let archives = package_fixture_archives(&scratch)?;
+        let sums = scratch.0.join("SHA256SUMS");
+        run(
+            Command::Checksums {
+                output: sums.clone(),
+                archives: archives.clone(),
+            },
+            &root,
+        )?;
+        let packages = assemble_packages(&read_release_archives(&archives)?, &root)?;
+        let tarball_dir = scratch.0.join("tarballs");
+        fs::create_dir(&tarball_dir)?;
+        let mut tarballs = Vec::new();
+        for package in &packages {
+            let path = tarball_dir.join(npm_tarball_name(package.name, VERSION));
+            fs::write(&path, npm::tests::pack(package)?)?;
+            tarballs.push(path);
+        }
+        let command = |event, git_ref: &str, dry_run: &str, out_dir: PathBuf, tarballs| {
+            Command::PublishPlan(PlanArguments {
+                archives: archives.clone(),
+                checksums: sums.clone(),
+                tarballs,
+                event,
+                git_ref: git_ref.to_owned(),
+                repository: String::from("smormah/vsift"),
+                dry_run_input: dry_run.to_owned(),
+                commit: String::from("0123456789abcdef0123456789abcdef01234567"),
+                out_dir,
+            })
+        };
+
+        let out = scratch.0.join("plan");
+        fs::create_dir(&out)?;
+        let outcome = run(
+            command(
+                TriggerEvent::PullRequest,
+                "refs/pull/1/merge",
+                "",
+                out.clone(),
+                tarballs.clone(),
+            ),
+            &root,
+        )?;
+        assert_eq!(
+            outcome.to_string(),
+            format!("mode=dry-run\nversion={VERSION}\ntag=v{VERSION}")
+        );
+        let mut written: Vec<String> = fs::read_dir(&out)?
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .collect();
+        written.sort();
+        assert_eq!(written.len(), 11, "{written:#?}");
+        for name in [
+            "attestation-subjects.sha256",
+            "publish-plan.json",
+            "publish-plan.md",
+            "release-assets.sha256",
+            "release-notes.md",
+        ] {
+            assert!(written.iter().any(|file| file == name), "{name}");
+        }
+        // The SBOM asset is the archive's own SBOM, byte for byte.
+        assert_eq!(
+            fs::read(out.join(format!("vsift-{VERSION}-x86_64-unknown-linux-gnu.cdx.json")))?,
+            contents(ReleaseTarget::LinuxX64).sbom
+        );
+        // A plan is never written over an existing one.
+        let again = run(
+            command(
+                TriggerEvent::PullRequest,
+                "refs/pull/1/merge",
+                "",
+                out,
+                tarballs.clone(),
+            ),
+            &root,
+        );
+        assert!(matches!(again, Err(ReleaseError::Io { .. })), "{again:?}");
+
+        let elsewhere = scratch.0.join("elsewhere");
+        fs::create_dir(&elsewhere)?;
+        let off_tag = run(
+            command(
+                TriggerEvent::WorkflowDispatch,
+                "refs/heads/main",
+                "false",
+                elsewhere.clone(),
+                tarballs.clone(),
+            ),
+            &root,
+        );
+        assert!(
+            matches!(
+                off_tag,
+                Err(ReleaseError::Publish(PublishError::NotOnReleaseTag { .. }))
+            ),
+            "{off_tag:?}"
+        );
+
+        let mut swapped = tarballs.clone();
+        swapped.swap(0, 1);
+        let renamed_dir = scratch.0.join("renamed");
+        fs::create_dir(&renamed_dir)?;
+        let mut misnamed = Vec::new();
+        for (source, target) in tarballs.iter().zip(&swapped) {
+            let path = renamed_dir.join(target.file_name().ok_or("no name")?);
+            fs::copy(source, &path)?;
+            misnamed.push(path);
+        }
+        let refused = run(
+            command(
+                TriggerEvent::PullRequest,
+                "refs/pull/1/merge",
+                "",
+                elsewhere,
+                misnamed,
+            ),
+            &root,
+        );
+        assert!(
+            matches!(
+                refused,
+                Err(ReleaseError::Publish(PublishError::Tarballs(_)))
+            ),
+            "{refused:?}"
         );
         Ok(())
     }

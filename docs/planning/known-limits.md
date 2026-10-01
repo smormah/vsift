@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-09-30 (P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-01 (P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -81,7 +81,7 @@ Each entry has these fields:
 | [L-033](#l-033) | A supplied transcript is assumed to cover the whole video | contract/UX | low | unscheduled | none | accepted residual |
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
-| [L-036](#l-036) | Nothing is published yet: no native release, npm package, signing or provenance | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-036](#l-036) | Nothing is published yet: no native release or npm package (the attested publish path is wired but has not run) | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not run yet | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
@@ -134,10 +134,11 @@ Each entry has these fields:
 | [L-092](#l-092) | The npm qualification covers the minimum runtimes, one pnpm and one Yarn version, and Yarn only through a project install | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-093](#l-093) | The launcher's digest check finds damaged or mismatched packages, not a local attacker who can write to the install | security | low | unscheduled | none | accepted residual |
 | [L-094](#l-094) | On Windows, vsift cannot start from an install whose executable path is 260 characters or longer | platform/distribution | low | unscheduled | none | accepted residual |
-
 | [L-095](#l-095) | Review-tier models can state blurred content as supported by pixels; the skill fix is not yet re-measured | contract/UX | medium | maintainer, before P14 | [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
+| [L-096](#l-096) | The attestation and publish jobs have never run against GitHub's attestation service, npm or GitHub Releases | process/CI | medium | P13 (the maintainer's first publish) | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-097](#l-097) | A publish that fails part-way leaves part of the release public until a re-run completes it | platform/distribution | low | unscheduled | none | accepted residual |
 
-Counts: 2 high, 24 medium, 62 low (88 entries).
+Counts: 2 high, 25 medium, 63 low (90 entries).
 
 ## Security
 
@@ -454,10 +455,10 @@ Counts: 2 high, 24 medium, 62 low (88 entries).
   in every `npm-qualify` job.
 - **Impact:** none beyond what write access to the install folder already gives.
 - **Why:** a user-writable install folder is the norm for npm, pnpm, Yarn and Bun; the
-  registry's integrity check and npm provenance (PR 10) cover the path from the release
-  to the machine.
+  registry's integrity check and npm provenance (wired by PR 10) cover the path from the
+  release to the machine.
 - **Mitigation:** npm verifies each tarball's integrity on install, and `npm audit
-  signatures` checks provenance once PR 10 publishes with it.
+  signatures` checks provenance once the first release is published with it.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
@@ -1508,29 +1509,37 @@ Counts: 2 high, 24 medium, 62 low (88 entries).
 
 ### L-036
 
-**Nothing is published yet: no native release, npm package, signing or provenance.**
+**Nothing is published yet: no native release or npm package (the attested publish path is wired but has not run).**
 
 - **What:** VSift can only be installed by building it from source with Rust. No native
-  release artifact or npm package is published, and there is no signing or
-  notarization, no provenance and no trusted publishing. Since P13 PR 8,
-  `.github/workflows/release.yml` builds, checks and packages the three native archives
-  with notices, an SBOM each and `SHA256SUMS`; since PR 9 it also assembles the npm
-  launcher `vsift-cli` (the `vsift` command) and the three `@vsift/…` platform packages from those archives and
-  qualifies them with npm, pnpm, Yarn and Bun on three operating systems against a
-  loopback registry. All of it stays in the run's artifacts. No crate is published in
-  R0 (ADR 0023).
+  release artifact or npm package is published (only the maintainer's `vsift-cli@0.0.0`
+  placeholder), and there is no Authenticode signing or Apple notarization (none is
+  planned for R0). Since P13 PR 8, `.github/workflows/release.yml` builds, checks and
+  packages the three native archives with notices, an SBOM each and `SHA256SUMS`; since
+  PR 9 it also assembles the npm launcher `vsift-cli` (the `vsift` command) and the three
+  `@vsift/…` platform packages from those archives and qualifies them with npm, pnpm,
+  Yarn and Bun on three operating systems against a loopback registry. **Since PR 10 the
+  publish path is wired:** every run makes and shows a publish plan (a dry run); only
+  the maintainer's dispatch of the tag `v<version>` with `dry_run` cleared runs the
+  `attest` job (Sigstore build provenance for every archive, `SHA256SUMS`, SBOM, notices
+  file and npm tarball) and, after the `release` environment's approval, the `publish`
+  job (the qualified tarballs by digest to npm under `next` with npm provenance through
+  trusted publishing, platform packages first, then the GitHub pre-release). **Still
+  pending, all maintainer steps at P13 completion** (release.md section 6): the `release`
+  environment, the tag ruleset, fork-PR approval, the first publish of the three
+  `@vsift/…` packages, the four trusted publishers, and the 0.x pre-release itself. No
+  crate is published in R0 (ADR 0023).
 - **Evidence:** [ADR 0009](../decisions/0009-package-identity-and-distribution.md);
   [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) decision 1;
-  threat model "Installation and distribution policy"; baseline B-11.
+  [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 10 note; threat model "Installation and distribution policy"; baseline B-11;
+  `tools/vsift-release/src/publish.rs`; `tools/vsift-governance/src/workflows/publish.rs`.
 - **Impact:** R-14 is an R0 release gate.
-- **Why:** scheduled in P13.
+- **Why:** publishing is the maintainer's decision at P13 completion (ADR 0023 decision
+  B), and the npm and GitHub settings it needs are maintainer-only actions.
 - **Mitigation:** none needed before release.
-- **Next step:** P13 PR 10 (attestation, npm provenance and the protected publish job;
-  the maintainer publishes the 0.x pre-release under `next`), following its launcher
-  pattern and name checklist in
-  [`implementation-work-packets.md`](implementation-work-packets.md) and
-  [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md):
-  Sigstore and npm provenance, no Authenticode or notarization in R0.
+- **Next step:** the maintainer's setup and first publish (release.md section 6), then
+  P13 PR 11; the untested first run is [L-096](#l-096).
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 
@@ -1796,6 +1805,31 @@ it cannot be packaged for crates.io as it is.**
 - **Mitigation:** the default locations of npm, pnpm, Yarn and Bun give paths well under
   the limit (about 190 characters for pnpm on the hosted runners); the native archive can
   be extracted anywhere.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-097
+
+**A publish that fails part-way leaves part of the release public until a re-run completes it.**
+
+- **What:** the `publish` job publishes the three platform packages, then `vsift-cli`,
+  then creates the GitHub pre-release. npm has no transaction across packages, and a
+  published version can never be replaced, so if the job stops part-way (a registry
+  error, an expired approval) the packages already published stay public, and the
+  release is incomplete until the job runs again.
+- **Evidence:** `.github/workflows/release.yml` job `publish`;
+  [`release.md`](../operations/release.md) section 6 ("If a publish fails part-way").
+- **Impact:** for a while a platform package can exist without the launcher that selects
+  it (harmless: nobody installs it directly), or npm packages without the GitHub
+  release. `vsift-cli` is published last, so `vsift-cli@next` never names a platform
+  version that is missing.
+- **Why:** npm and GitHub Releases are separate services with no shared commit.
+- **Mitigation:** a re-run of the failed job skips every version npm already holds with
+  the same bytes (compared by its `sha512` integrity) and fails if npm holds other bytes;
+  the GitHub release is created as a draft and published only once every asset is
+  uploaded. The re-run must happen within the run's 7-day artifact retention; after
+  that, a new run publishes a new version.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
@@ -2353,6 +2387,34 @@ raw.**
 - **Next step:** none planned for R0; revisit if users report leftovers.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
   **Review:** pending.
+
+### L-096
+
+**The attestation and publish jobs have never run against GitHub's attestation service, npm or GitHub Releases.**
+
+- **What:** P13 PR 10 wired the Release workflow's `attest` and `publish` jobs, but
+  nothing may be published before P13 completes, so neither has run. What is tested
+  without credentials: the plan job on every pull request that changes an archive or
+  npm input (it checks the archives, `SHA256SUMS` and the qualified tarballs by digest
+  and shows the exact commands); the mode decision, dist-tag, order and arguments in
+  `tools/vsift-release/src/publish.rs`, whose test also holds the workflow's commands to
+  the plan's word for word; and the governance lint's publishing rules. Untested until
+  the first real run: the OIDC exchange with npm's trusted publishers, npm provenance,
+  the attestation action, the `release` environment's approval and deployment rule,
+  `gh release create` and the npm 11 that Node.js 24.21.0 ships.
+- **Evidence:** [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
+  PR 10 note; [`release.md`](../operations/release.md) section 6.
+- **Impact:** the first publish may fail on a setting (a trusted publisher's workflow
+  file name, environment or allowed actions) that no dry run can check.
+- **Why:** npm and GitHub offer no way to exercise OIDC publishing or attestation
+  without doing it; ADR 0023 decision B allows one publish, at completion.
+- **Mitigation:** every step before the first irreversible one checks its inputs; a
+  failure before `npm publish` publishes nothing; a failure after it can be re-run
+  ([L-097](#l-097)); release.md section 6 lists each setting and how to check it.
+- **Next step:** the maintainer's first publish at P13 completion, recorded in the
+  qualification record (PR 11).
+- **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
+  **Status:** deferred. **Review:** pending.
 
 ## Review workflow
 

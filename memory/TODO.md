@@ -4,25 +4,24 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now
 
-**P00-P12 are complete; P13 is in progress** (started 2026-09-30). Merged: PRs 0-6, 8
-and 9 (#226, #228-#231, #233, #234, #236, #239, #240 `951226f`; the P12 debt fixes #227):
-human output, `handoff check`, `setup install` and the lifecycle, `release.yml` and the
-lint, the `vsift-cli` npm launcher over `@vsift/…` (L-091 to L-094). **PR 7 is in
-review** (#241): 22 managed fault points, a kill matrix (4 store defects fixed), every
-changed managed folder flushed (a reported command survives a power loss, Ubuntu ext4),
-the campaign's `--store managed` (`P13 managed power loss`) and the E2E stage (`P13
-managed smoke`, job `install-e2e`); both runs are the maintainer's after merge.
+**P00-P12 are complete; P13 is in progress** (started 2026-09-30). Merged: PRs 0-9
+(#226-#231, #233, #234, #236, #239-#241; PR 7 `01656d6`: kill matrix, flushed managed
+folders, `P13 managed power loss` and the `install-e2e` job, first run by the
+maintainer) and the P12 debt fixes (#227). **PR 10 (attestation and publish wiring) is done in this change**
+(`p13-pr10-publish`): `dry_run` input, a `plan` job on every run, `attest` and `publish`
+(environment `release`) only for a dispatch of `v<version>` with `dry_run` cleared;
+nothing published (L-096, L-097). The packet is not complete.
 
-1. **Next P13 PRs** (`implementation-work-packets.md` "P13 scope and pull requests"):
-   10 `attest`/`publish` jobs (the lint's only `id-token` jobs), npm provenance and
-   `dry_run`, publishing exactly the tarballs `npm-package` builds after `npm-qualify`,
-   `--tag next` (`latest` stays 0.0.0; notes name Yarn's one-day hold, release.md §5);
-   11 docs (`install.md`'s archive verification, SmartScreen/Gatekeeper; the record
-   `p13-distribution.md`); 12 ledger.
-2. **Maintainer-only, before PR 10's publish step** (`vsift-cli@0.0.0` placeholder held,
-   `latest`): trusted publishers for `vsift-cli` and the three `@vsift/…` packages; the
-   `release` environment (maintainer as reviewer); tag ruleset; fork-PR approval; the
-   first publish (2FA, or a short-lived environment token); the 0.x `next` pre-release.
+1. **Next P13 PRs:** 11 docs (`install.md`'s verification walk-through,
+   SmartScreen/Gatekeeper; the record `p13-distribution.md`, with the first publish's
+   evidence); 12 ledger.
+2. **Maintainer-only, in order** (release.md 6.2-6.4; `vsift-cli@0.0.0` stays `latest`):
+   PR 7's two runs; fork-PR approval "all external contributors"; environment `release`
+   (you as reviewer, self-review allowed, no admin bypass, tag rule `v*`); tag ruleset
+   `v*`; first publish of the three `@vsift/…` names (path A placeholders with 2FA, or
+   path B short-lived `NPM_BOOTSTRAP_TOKEN`); trusted publishers on all four (`smormah`,
+   `vsift`, `release.yml`, `release`, "npm publish" ticked); disallow tokens; tag
+   `v0.1.0`, dry run, dispatch with `dry_run` cleared, approve, verify.
 3. **Debt before P14:** A-09 blurred, review tier (L-095, #224; maintainer runs it); SEC-T01
    (#188, L-068). #222 re-run met the compact target (Sonnet 26/28, Sol 28/28; L-085 closed).
    Open: grader reading `untrusted_listed` (F12-E01 only); #219.
@@ -55,11 +54,12 @@ managed smoke`, job `install-e2e`); both runs are the maintainer's after merge.
 - **PR 6** (ADR 0023 note): removal proves ownership, not integrity; `setup list`/`repair`
   `free`; `repair` drops `--profile`; pointer v2; sweep in every accepted install; L-090.
 - **PR 7** (ADR 0023 note, reviewed): directory flushes; empty store folder adopted.
-- **PR 9** (ADR 0023 note): launcher exits 126/127; the signal rules (POSIX relays
-  `SIGINT` only when no standard stream is a terminal; Windows relays nothing, L-091);
-  no SBOM in the platform packages; twelve more Release jobs per archive/npm PR; Yarn
-  through a project install; only the minimum runtimes in the matrix (L-092).
-- **Also:** MSRV; an MCP adapter.
+- **PR 9** (ADR 0023 note): exits 126/127; the signal rules (L-091); no SBOM in the
+  platform packages; twelve more Release jobs per archive/npm PR; Yarn through a project
+  install; only the minimum runtimes in the matrix (L-092).
+- **PR 10** (release.md 6.6): path A (three more placeholders, an ADR 0009 note) or B;
+  `attest` without an approval; npm staged publishing (not wired); release immutability;
+  release notes; `SHA256SUMS` lists archives only. **Also:** MSRV; an MCP adapter.
 
 ## Tracked issues
 
@@ -77,8 +77,8 @@ managed smoke`, job `install-e2e`); both runs are the maintainer's after merge.
 - **npm:** `node --test npm/test/launcher.test.cjs` when `npm/` changes; a workspace
   version bump also bumps `npm/vsift-cli/package.json` and its three optional dependencies.
 - **Campaigns:** crash campaign (also `--store managed`) never on disks that matter
-  (L-056, L-057); bump the three
-  `UBUNTU_IMAGE_*` together; trial records never hold the check code.
+  (L-056, L-057); bump the three `UBUNTU_IMAGE_*` together; trial records never hold the
+  check code. **Release:** only `plan`/`attest`/`publish` publish (lint rule 7).
 
 ## Guardrails
 

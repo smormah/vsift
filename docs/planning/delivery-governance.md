@@ -13,7 +13,10 @@ ordering, completion evidence and the size limits of the two handoff files. Sinc
 PR 8 it also lints every GitHub workflow (pinned actions, no `pull_request_target`,
 least-privilege `permissions`, `id-token` only for release attestation and publishing,
 no untrusted expressions in `run` scripts, and no feature selection in release builds;
-see [`../operations/release.md`](../operations/release.md)). A packet marked complete requires a full merge
+since P13 PR 10 also the release workflow's publishing rules: publishing only from a
+dispatch of the release tag with `dry_run` cleared, in the protected `release`
+environment, with npm provenance under `next`, and only the qualified tarballs by
+digest; see [`../operations/release.md`](../operations/release.md)). A packet marked complete requires a full merge
 commit and nonempty verification record. The checker deliberately fixes the R0
 objective; changing it requires an explicit reviewed code, ledger and ADR change.
 

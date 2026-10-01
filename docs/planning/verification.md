@@ -370,6 +370,22 @@ an agent trial.
   advertise multi-tenant isolation before this host exists and passes.
 - R-SEC01: fork PRs cannot access publish secrets or mutate release artifacts; review
   workflow permissions, protected branch/tag/environment behavior and action pins.
+  *P13 PR 10 (2026-10-01): the governance lint's rule 7 (`tools/vsift-governance/src/
+  workflows/publish.rs`) fails a `release.yml` whose `attest` or `publish` job could run
+  without a dispatch, with `dry_run` set, outside `smormah/vsift`, off a `v*` tag or
+  without the plan's `publish` mode, or with a bypassing operator; that writes anywhere
+  else; whose `publish` job is not in the `release` environment; that publishes without
+  `--provenance` and `--tag next`, or names `latest`; that does not check the qualified
+  tarballs by digest in `npm-qualify`, `plan`, `attest` and `publish`; whose privileged
+  jobs download another run's artifacts, use another action or build anything; or that
+  names any secret but `NPM_BOOTSTRAP_TOKEN` in `publish`. Tests: the real workflow
+  passes, and a mutation of it per rule (28) is refused. `tools/vsift-release/src/
+  publish.rs` tests the mode decision for every event, ref, repository and input (a pull
+  request, a push, a fork and a dispatch off the tag never publish), the dist-tag
+  (`next` only; a stable version is refused), the publication order and every argument,
+  and holds the workflow's commands to them. The protected environment, tag ruleset and
+  fork approval are maintainer settings not yet made, so their behaviour is unverified
+  (L-096).*
 - R-SEC02: native/npm artifact matches protected commit; verify signatures/provenance,
   dependency/model inventory, malicious archive rejection and wrong-target behavior.
   *P13 PR 9 (2026-09-30): the npm packages are assembled only from canonical release
@@ -382,6 +398,17 @@ an agent trial.
   exit 127 naming the three targets, and another version, a changed or replaced
   executable or a damaged digest file with exit 126 (`npm/test/launcher.test.cjs` for
   every target; each `npm-qualify` job on the installed packages). Provenance is PR 10.*
+  *P13 PR 10 (2026-10-01): the Release workflow's `plan` job, on every run, requires the
+  archives to match `package`'s `SHA256SUMS` output and the tarballs `npm-package`'s
+  `tarball-sums` output (which every `npm-qualify` job also checks before qualifying),
+  then `vsift-release publish-plan` re-assembles the packages from the archives and
+  requires each tarball to be its package byte for byte, and writes the plan (test
+  `publish_plan_checks_everything_and_writes_the_plan`, with a swapped tarball and a
+  publish request off the tag refused). When the maintainer publishes, `attest` attests
+  every release file and tarball and `publish` publishes exactly those tarballs with npm
+  provenance; neither has run yet (L-096), so verifying a real attestation with `gh
+  attestation verify` and `npm audit signatures` is the first publish's evidence
+  (release.md section 6.4).*
 - R-14 (install without Rust through npm, pnpm, Yarn and Bun): *P13 PR 9 (2026-09-30):*
   the Release workflow's `npm-qualify` jobs publish the packed tarballs to a loopback
   Verdaccio and, on `windows-2025`, `macos-15` and `ubuntu-24.04` with each package

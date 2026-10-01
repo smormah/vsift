@@ -1,19 +1,20 @@
-# Building and checking release archives
+# Building, checking and publishing releases
 
-Status: maintainer runbook for the native release archives and the npm packages,
-2026-09-30 (P13 PRs 8 and 9,
+Status: maintainer runbook for the native release archives, the npm packages and their
+publication, 2026-10-01 (P13 PRs 8, 9 and 10,
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-sections 1 and 2, decisions D and H5). **Nothing is published yet.** The workflow
+sections 1 and 2, decisions B, C, D and H5). **Nothing is published yet.** The workflow
 described here builds, checks and packages the archives, assembles and qualifies the npm
-packages (section 5), and keeps everything only as artifacts of its own run. Attestation
-and publishing (the protected `release` environment, Sigstore build provenance, npm
-trusted publishing) are P13 PR 10; this runbook gains that section then. The
-installation guide for users is [`install.md`](install.md).
+packages (section 5), and on every run writes the publish plan and shows it (a dry run).
+It publishes only when the maintainer dispatches it on a release tag with `dry_run`
+cleared and then approves the protected `release` environment (section 6). The
+maintainer's one-time setup and the first publish are section 6 too. The installation
+guide for users is [`install.md`](install.md).
 
 ## 1. What the release workflow does
 
-`.github/workflows/release.yml` (**Release**) has three archive jobs, and the two npm
-jobs of section 5:
+`.github/workflows/release.yml` (**Release**) has three archive jobs, the two npm jobs
+of section 5 and the three publishing jobs of section 6:
 
 | Job | Runner | What it does |
 | --- | --- | --- |
@@ -44,14 +45,20 @@ belong to other packages and are never compiled here.
 an archive or npm package is made from (`crates/`, `skills/vsift/`, the licences,
 `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `tools/vsift-release/`, `npm/`,
 `tools/send-console-ctrl.ps1`, which the Windows qualification uses, or the workflow
-itself), and on manual dispatch. Never on a tag or a GitHub release.
+itself), and on manual dispatch (with the input `dry_run`, set by default). Never on a
+tag push or a GitHub release event: a release is a manual dispatch on its tag.
 
-**Why it cannot publish.** The workflow grants no job a write scope or an OIDC token
-(`permissions: {}` at the top, `contents: read` per job), checks out without keeping
-credentials, uses no secret, and has no step that talks to a registry or creates a
-release. Its output is the run's own artifacts, which expire after 7 days. The
-governance workflow lint (section 3) keeps it that way until PR 10 adds the `attest`
-and `publish` jobs, the only jobs the lint will allow an OIDC token.
+**Why a run does not publish unless the maintainer means it to.** Every job but
+`attest` and `publish` has `contents: read` only (`permissions: {}` at the top), checks
+out without keeping credentials and uses no secret. `attest` and `publish` run only when
+all of these hold, checked twice (the jobs' conditions and the plan job's decision):
+the run is a manual dispatch, `dry_run` is cleared, the repository is `smormah/vsift`
+(not a fork), and the ref is the tag `v<version>` of the workspace version. A pull
+request, a push or a fork therefore never publishes, and a dispatch with `dry_run`
+cleared anywhere else fails the plan job rather than quietly doing a dry run. `publish`
+then waits for the maintainer's approval of the `release` environment. Everything a dry
+run produces is the run's own artifacts, which expire after 7 days. The governance
+workflow lint (section 3) holds the workflow to all of this.
 
 ## 2. The archives
 
@@ -107,11 +114,44 @@ every file in `.github/workflows/` and fails when a workflow:
    any feature, package-set or profile selection to any cargo command but `cargo
    install` of a pinned tool, or names a development feature, the smoke-test stand-in,
    the crash-campaign tool, a `CARGO_PROFILE_` override or `debug-assertions` in any
-   key or value.
+   key or value;
+7. for `release.yml` only (P13 PR 10), breaks a publishing rule:
+   - it is triggered by anything but `pull_request`, `push` to branches (never tags) and
+     `workflow_dispatch`, whose one input `dry_run` is a boolean defaulting to `true`;
+   - it has no `plan`, `attest` or `publish` job, or `attest` or `publish` can run
+     without every one of `github.event_name == 'workflow_dispatch'`,
+     `github.event.inputs.dry_run == 'false'`, `github.repository == 'smormah/vsift'`,
+     `startsWith(github.ref, 'refs/tags/v')` and `needs.plan.outputs.mode == 'publish'`,
+     or its condition holds `||`, `!`, `always()`, `failure()` or `cancelled()`;
+   - a job other than `attest` (`id-token`, `attestations`) or `publish` (`id-token`,
+     `contents`) writes anything;
+   - `publish` does not run in the `release` environment, another job names an
+     environment, or a publish could be cancelled part-way (`publish` needs
+     `cancel-in-progress: false`; the run's own setting may cancel only non-dispatch runs);
+   - `npm publish` runs outside `publish`, or without `--provenance` and `--tag next`, or
+     names `latest`; `gh release` runs outside `publish`, or creates a release without
+     `--verify-tag`, `--prerelease` and `--latest=false`; any job runs `npm dist-tag`,
+     `npm unpublish`, `npm deprecate`, `gh release delete`, `git tag` or `git push`;
+   - `npm-package` does not export `tarball-sums`, or `npm-qualify`, `plan`, `attest` or
+     `publish` does not check its tarballs against that output with
+     `sha256sum --check --strict`; `attest` or `publish` uses an action other than its
+     few reviewed ones, downloads anything but this run's `release-dry-run`,
+     `npm-packages` or `publish-plan` artifact (no pattern, run id, repository or token),
+     or runs `cargo`, `vsift-release`, `npm pack`, `npm install`, `npm ci`, `npx`, `pnpm`
+     or `yarn`;
+   - the workflow names any secret but `NPM_BOOTSTRAP_TOKEN`, or names that one outside
+     `publish`.
 
 The lint reads the YAML tree, so flow mappings and aliases are seen, and it refuses
 merge keys (`<<`). Comments are not part of the tree. Its tests are in
-`tools/vsift-governance/src/workflows.rs`.
+`tools/vsift-governance/src/workflows.rs` and, for rule 7, `workflows/publish.rs`, which
+checks the real `release.yml` and a mutation of it for every rule.
+
+*Why the dispatch input is compared as a string:* GitHub compares values of different
+types loosely, turning `null` and `false` both into 0, so `inputs.dry_run == false` is
+also true on a push or pull request, which has no inputs at all. The workflow compares
+`github.event.inputs.dry_run == 'false'` (a string, and empty without a dispatch) and
+checks the event separately; the lint requires exactly that form.
 
 ## 4. Running it and checking a result
 
@@ -199,3 +239,208 @@ the maintainer's placeholder, is `latest` and stays `latest` until a stable rele
 `vsift-cli@next`. Yarn 4.18 holds every new version back for a day
 (`npmMinimalAgeGate`), for `vsift-cli` and `@vsift/*` alike: say so in the release notes,
 with the `npmPreapprovedPackages` workaround of `install.md`.
+
+## 6. Attestation and publishing (P13 PR 10): the maintainer's runbook
+
+Nothing in this section has been done yet. Every setting below is the maintainer's to
+make (ADR 0023, "Maintainer-only actions"); no agent or workflow changes them. Nothing
+here needs an e-mail address or other personal detail beyond the public GitHub owner
+`smormah` and repository `vsift`, and no step asks for one.
+
+### 6.1 The three publishing jobs
+
+| Job | Runs | Permissions | What it does |
+| --- | --- | --- | --- |
+| `plan` | every run, after all twelve `npm-qualify` jobs | `contents: read` | Requires the downloaded archives to equal `package`'s `SHA256SUMS` output and the tarballs to equal `npm-package`'s `tarball-sums` output, by SHA-256. Runs `vsift-release publish-plan`, which reads every archive back, re-assembles the npm packages and requires each tarball to be its package byte for byte, decides the mode (below) and writes the plan: `publish-plan.md` (added to the job summary), `publish-plan.json`, the release notes, the SBOM and notices of each target as separate release assets, and the digest lists of the release assets and of every file to attest. Outputs `mode` (`dry-run` or `publish`), `version`, `tag` and the plan's own digests. |
+| `attest` | only when publishing | `id-token: write`, `attestations: write` | Downloads the archives, tarballs and plan, requires each to match the earlier jobs' outputs, and creates a Sigstore build-provenance attestation (`actions/attest-build-provenance` v4.2.2, pinned by commit) for every archive, `SHA256SUMS`, SBOM, notices file and npm tarball, named in the plan's `attestation-subjects.sha256`. |
+| `publish` | only when publishing, after `attest`, in the `release` environment | `id-token: write`, `contents: write` | Waits for the maintainer's approval. Checks every file again, then with the npm of Node.js 24.21.0 (npm 11.19.0; trusted publishing needs 11.5.1 or later) runs, in this order, `npm publish ./npm-packages/<tarball> --tag next --access public --provenance --ignore-scripts` for `@vsift/darwin-arm64`, `@vsift/win32-x64`, `@vsift/linux-x64` and then `vsift-cli`; requires `vsift-cli`'s `next` to be the new version and `latest` not to be; then `gh release create v<version> --verify-tag --draft --prerelease --latest=false` with the archives, `SHA256SUMS`, SBOMs and notices and the plan's notes, and publishes the draft. |
+
+**The mode.** `vsift-release publish-plan` answers `publish` only for a
+`workflow_dispatch` with `dry_run` cleared, in `smormah/vsift`, on the ref
+`refs/tags/v<workspace version>`, for a 0.x version or a pre-release. Pull requests and
+pushes are dry runs, and so is a dispatch with `dry_run` set. A dispatch with `dry_run`
+cleared anywhere else fails the plan job and names the reason. A stable version
+(1.0.0 or later without a pre-release part) is refused in every mode: its dist-tag
+(`latest`) and release are P14's to plan, and this workflow never moves `latest`.
+
+**What is published is what was qualified.** `npm-package` packs the tarballs once and
+exports their SHA-256 list as a job output, which no later job can change. Every
+`npm-qualify` job requires the tarballs it installs to match that list, and so do
+`plan`, `attest` and `publish`, which download only this run's artifacts. `attest` and
+`publish` check out no code and build, pack or install nothing; they run a few lines of
+shell and two reviewed actions. `tools/vsift-release`'s test
+`the_release_workflow_runs_the_planned_commands` holds those lines to the plan's
+commands word for word, and the lint (section 3, rule 7) holds the rest.
+
+**What the dry run shows.** Open a Release run and its **Publish plan** job summary: the
+mode and why, the version, dist-tag and Git tag, and three tables, each file with its
+SHA-256: the files to attest, the four `npm publish` commands in order, and the GitHub
+release command with its assets. The same plan is the run's `publish-plan` artifact.
+
+### 6.2 One-time setup, in this order
+
+1. **Merge P13's pull requests** through PR 10 (the publish wiring). The pre-release
+   follows P13's completion (ADR 0023 decision B); PR 11's documentation can land first.
+2. **Fork pull requests** (Settings, Actions, General, "Approval for running fork pull
+   request workflows from contributors"): choose **Require approval for all external
+   contributors** (today it is "first-time contributors"). Under "Workflow permissions"
+   keep **Read repository contents and packages permissions** and leave **Allow GitHub
+   Actions to create and approve pull requests** cleared.
+3. **The `release` environment** (Settings, Environments, New environment, name
+   `release`):
+   - **Required reviewers:** yourself. Leave **Prevent self-review** cleared, or you
+     could not approve your own dispatch.
+   - **Allow administrators to bypass configured protection rules:** clear it, so the
+     approval is always asked for.
+   - **Deployment branches and tags:** **Selected branches and tags**, then one rule of
+     type **Tag** with the pattern `v*`, and no branch rule. The `publish` job can then
+     run only on a release tag.
+   - **Environment secrets:** none, unless you choose path B in step 5.
+4. **The tag ruleset** (Settings, Rules, Rulesets, New ruleset, **New tag ruleset**):
+   name `release tags`, enforcement **Active**, target tags **Include by pattern** `v*`,
+   rules **Restrict creations**, **Restrict updates**, **Restrict deletions** and **Block
+   force pushes**, and in the bypass list the **Repository admin** role (you). Only you
+   can then create, move or delete a `v*` tag, and the workflow never creates one.
+5. **The first publish of `@vsift/win32-x64`, `@vsift/darwin-arm64` and
+   `@vsift/linux-x64`.** npm lets you configure a trusted publisher only on a package
+   that exists, and these three do not yet (`vsift-cli` does: the `0.0.0` placeholder).
+   ADR 0023 allows two ways; choose one:
+   - **Path A (recommended; no token ever exists): placeholders published by you with
+     two-factor authentication**, as you did for `vsift-cli`. For each of the three names,
+     in an empty folder, write the two files below by hand (do not run `npm init`, which
+     copies your npm profile's name into `author`), then run `npm publish --access public`
+     from that folder and confirm with your second factor.
+
+     `package.json` (for `@vsift/win32-x64`; change the name for the other two):
+
+     ```json
+     {
+       "name": "@vsift/win32-x64",
+       "version": "0.0.0",
+       "description": "Placeholder that holds the name until VSift's first release. Install vsift-cli instead.",
+       "license": "MIT OR Apache-2.0",
+       "homepage": "https://github.com/smormah/vsift",
+       "repository": { "type": "git", "url": "git+https://github.com/smormah/vsift.git" }
+     }
+     ```
+
+     `README.md`: one line saying the package is a placeholder and to install
+     `vsift-cli`. No code, no binary, no scripts, no `author`. Each placeholder stays its
+     package's `latest`; the release goes under `next`, and `vsift-cli` selects the
+     platform packages by exact version, so nobody installs a placeholder by accident.
+     This publishes three more placeholders, which ADR 0009's note of 2026-09-30 allowed
+     only for the launcher: record the choice there.
+   - **Path B: a short-lived token stored only in the `release` environment.** Create an
+     npm granular access token with the shortest expiry npm offers, read and write access
+     to the `@vsift` scope only, and no other permission; add it to the `release`
+     environment (not to the repository) as the secret `NPM_BOOTSTRAP_TOKEN`. npm uses
+     trusted publishing when it can and falls back to this token for the three packages
+     that have no trusted publisher yet; the token only ever reaches npm through an
+     environment variable. The first release then publishes all four packages with
+     provenance. **Immediately afterwards** revoke the token on npmjs.com, delete the
+     environment secret, and do step 6 for the three new packages.
+6. **Trusted publishers, one per package** (npmjs.com, the package, Settings, Trusted
+   Publisher, GitHub Actions), for `vsift-cli`, `@vsift/win32-x64`, `@vsift/darwin-arm64`
+   and `@vsift/linux-x64`, each exactly:
+
+   | Field | Value |
+   | --- | --- |
+   | Organization or user | `smormah` |
+   | Repository | `vsift` |
+   | Workflow filename | `release.yml` |
+   | Environment name | `release` |
+   | Allowed actions | tick **npm publish**; leave **npm dist-tag** cleared |
+
+   npm cannot change a trusted publisher once created; to fix a field, delete it and add
+   it again. Configurations created after 2026-09-03 allow only `npm stage publish`
+   unless **npm publish** is ticked, and the workflow publishes directly.
+7. **Lock token publishing** (each package, Settings, Publishing access): choose
+   **Require two-factor authentication and disallow tokens** once its trusted publisher
+   exists (after path B's release, for the three platform packages). Trusted publishing
+   keeps working; a stolen token no longer can publish. Keep two-factor authentication
+   required for the `vsift` organisation's members.
+
+### 6.3 Publishing the pre-release
+
+1. **Choose the version.** The workspace version in `Cargo.toml` is the published
+   version (0.1.0 today); `npm/vsift-cli/package.json` and its three optional
+   dependencies must carry the same (section 5). It must be a 0.x version or a
+   pre-release. Update `CHANGELOG.md`'s release section and merge.
+2. **Create the tag** on the merged commit of `main` and push it:
+
+   ```console
+   git tag -a v0.1.0 -m "VSift 0.1.0" <commit>
+   git push origin v0.1.0
+   ```
+
+3. **Dry run on the tag.** Actions, **Release**, **Run workflow**, "Use workflow from"
+   **Tags: v0.1.0**, leave **dry_run** ticked. When it finishes, read the **Publish
+   plan** summary: mode `dry-run`, the version, `next`, and the digests.
+4. **Publish.** Run it again on the same tag with **dry_run cleared**. The plan job must
+   say **PUBLISH**, `attest` runs, and `publish` waits with "Waiting for review". Check
+   the plan summary once more, then **Review deployments**, tick `release`, **Approve
+   and deploy**. A run waits for approval for at most 30 days, but its artifacts expire
+   after 7: approve within a week.
+5. **Verify** (section 6.4) and record the run in the qualification record (PR 11).
+
+### 6.4 Verifying provenance and attestations after publishing
+
+From a machine with no npm credentials (an empty user and global configuration, as in
+ADR 0009's name checks):
+
+```console
+npm view vsift-cli dist-tags        # latest: '0.0.0', next: '0.1.0'
+npm view vsift-cli@next dist.attestations
+mkdir check && cd check && echo '{"private": true}' > package.json
+npm install vsift-cli@next
+npm audit signatures                # registry signatures and provenance attestations verified
+npx vsift --version                 # vsift 0.1.0 (<the tag's first 12 commit digits>)
+```
+
+npmjs.com shows each version as "Built and signed on GitHub Actions", linking the
+workflow run. For the GitHub release and the tarballs (`gh` signed in):
+
+```console
+gh release download v0.1.0 --repo smormah/vsift --dir release
+cd release && sha256sum --check --strict SHA256SUMS
+for file in *; do
+  gh attestation verify "$file" --repo smormah/vsift \
+    --signer-workflow smormah/vsift/.github/workflows/release.yml \
+    --source-ref refs/tags/v0.1.0 --deny-self-hosted-runners
+done
+npm pack vsift-cli@0.1.0 @vsift/win32-x64@0.1.0 @vsift/darwin-arm64@0.1.0 @vsift/linux-x64@0.1.0
+# ... and the same gh attestation verify for each .tgz
+```
+
+The release must be a pre-release that is not marked latest, with ten assets: three
+archives, `SHA256SUMS`, three SBOMs and three notices files.
+
+### 6.5 If something goes wrong
+
+- **The plan job fails on the tag:** nothing was attested or published. Fix the cause.
+  If the fix needs a new commit, the tag may be moved (you can bypass the ruleset) as
+  long as nothing was published from it; once anything was, never move a tag: publish a
+  new version.
+- **A publish fails part-way** ([L-097](../planning/known-limits.md#l-097)): use **Re-run
+  failed jobs** on the same run within 7 days, and approve again. Versions npm already
+  holds with the same bytes are skipped; the job stops if npm holds other bytes for one.
+- **`latest` moved** (the job says so and stops before the GitHub release): point it
+  back yourself with `npm dist-tag add vsift-cli@0.0.0 latest` (two-factor
+  authentication), then re-run the failed job. The workflow never runs `npm dist-tag`.
+- **A draft release was left behind** by a failed run: delete the draft on GitHub, then
+  re-run.
+- **A published version is bad:** do not unpublish it (npm refuses to reuse the version
+  number); deprecate it with `npm deprecate` yourself and publish a fixed version.
+
+### 6.6 Decisions left to the maintainer
+
+- Path A or path B for the first publish of the three platform packages (step 5).
+- Whether `attest` should also wait for the `release` environment: today it runs without
+  an approval once you dispatch the tag with `dry_run` cleared, so that the approval you
+  give is for publishing alone; gating it too means approving twice per release.
+- npm's staged publishing (a trusted publisher allowed only `npm stage publish`, each
+  version then approved on npmjs.com with two-factor authentication) as a second gate
+  after the environment's approval: not wired; it would change the publish command.
+- GitHub's release immutability (Settings, General, Releases): compatible with the
+  draft-then-publish flow above.
+- Whether the Release workflow becomes a required check.
