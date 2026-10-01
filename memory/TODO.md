@@ -4,19 +4,19 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 ## Now
 
-**P00-P12 are complete; P13 is in progress** (started 2026-09-30). Merged: PRs 0-9
-(#226-#231, #233, #234, #236, #239-#241; PR 7 `01656d6`: kill matrix, flushed managed
-folders, `P13 managed power loss` and the `install-e2e` job, first run by the
-maintainer) and the P12 debt fixes (#227). **PR 10 (attestation and publish wiring) is done in this change**
-(`p13-pr10-publish`): `dry_run` input, a `plan` job on every run, `attest` and `publish`
-(environment `release`) only for a dispatch of `v<version>` with `dry_run` cleared;
-nothing published (L-096, L-097). The packet is not complete.
+**P00-P12 are complete; P13 is in progress.** Merged: PRs 0-10 (#226-#231, #233, #234,
+#236, #239-#241, #243 `57f03fe`; P12 debt #227, #242); PR 10 wired `dry_run`, `plan`,
+`attest`/`publish`, nothing published (L-096, L-097). PR 7: `install-e2e` passed (run
+36793180858); `P13 managed power loss` (run 36793177930) found no damage but 53 "lost"
+acks, each the in-flight command's newer selection, a verifier defect (ADR 0023 PR 7
+addendum). **In review:** its fix, `p13-pr7-durability` (start marks, `managed::in_flight`);
+then the maintainer re-dispatches the run on `main` (rule unchanged). Packet not complete.
 
 1. **Next P13 PRs:** 11 docs (`install.md`'s verification walk-through,
    SmartScreen/Gatekeeper; the record `p13-distribution.md`, with the first publish's
    evidence); 12 ledger.
 2. **Maintainer-only, in order** (release.md 6.2-6.4; `vsift-cli@0.0.0` stays `latest`):
-   PR 7's two runs; fork-PR approval "all external contributors"; environment `release`
+   PR 7's power-loss re-run; fork-PR approval "all external contributors"; environment `release`
    (you as reviewer, self-review allowed, no admin bypass, tag rule `v*`); tag ruleset
    `v*`; first publish of the three `@vsift/…` names (path A placeholders with 2FA, or
    path B short-lived `NPM_BOOTSTRAP_TOKEN`); trusted publishers on all four (`smormah`,

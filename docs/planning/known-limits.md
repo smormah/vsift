@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-01 (P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-01 (P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P12 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -82,7 +82,7 @@ Each entry has these fields:
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
 | [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-036](#l-036) | Nothing is published yet: no native release or npm package (the attested publish path is wired but has not run) | platform/distribution | high | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
-| [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not run yet | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
+| [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not passed yet | platform/distribution | low | P13 | [#16](https://github.com/smormah/vsift/issues/16) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
@@ -1545,7 +1545,7 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
 
 ### L-037
 
-**Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not run yet.**
+**Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss campaign has not passed yet.**
 
 - **What:** on Ubuntu 24.04 x86-64, `setup install` applies an accepted plan (download
   or `--artifact-dir`, size and SHA-256, stage, smoke, activate), every command resolves
@@ -1558,8 +1558,11 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
   a consistent store that `setup repair` describes exactly and a rerun completes; every
   folder a command changes is flushed before it returns (Windows has no flush point, and
   no managed install). The power-loss campaign (layer A of the P10 campaign with the managed workload, workflow
-  `P13 managed power loss`) is built but has not run: its first run is the maintainer's
-  dispatch after merge. Windows x86-64 and macOS have no reviewed catalogue and keep
+  `P13 managed power loss`) first ran on 2026-10-01 (run 36793177930): no damage, a clean
+  `e2fsck` at all 1,812 points, but 53 acknowledgements reported lost, every one because
+  the verifier compared the selection of the command in flight at the point (always
+  newer, never older) with the previous acknowledgement. The verifier is fixed (ADR 0023
+  PR 7 addendum); the promise is unchanged and holds once a run on `main` passes. Windows x86-64 and macOS have no reviewed catalogue and keep
   manual guidance (the lifecycle commands work there and report the folder absent): the
   Windows FFmpeg candidate is a daily build (upstream keeps only the last 14) with
   unreconciled LGPL-3.0 notices, and no macOS candidate is reviewed.
@@ -1583,9 +1586,9 @@ Counts: 2 high, 25 medium, 63 low (90 entries).
   a torn version is never run and lookup falls through to `PATH`; `setup repair`
   diagnoses what an interruption leaves and names the command that fixes it; the manual
   path is typed on every target.
-- **Next step:** dispatch `P13 managed power loss` (and `P13 managed smoke`, whose job
-  `install-e2e` is the P13 E2E stage) on `main` and record the runs in PR 11's
-  qualification record.
+- **Next step:** once the verifier fix (branch `p13-pr7-durability`) is merged, dispatch
+  `P13 managed power loss` on `main` again (`P13 managed smoke` and its `install-e2e`
+  passed in run 36793180858) and record both in PR 11's qualification record.
 - **Owner:** P13. **Issue:** [#16](https://github.com/smormah/vsift/issues/16).
   **Status:** deferred. **Review:** pending.
 

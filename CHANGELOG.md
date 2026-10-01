@@ -1002,6 +1002,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Managed power-loss campaign: a command in flight is no longer counted as a lost
+  acknowledgement** (2026-10-01, P13 PR 7 follow-up; ADR 0023 PR 7 addendum). The first
+  `P13 managed power loss` run on `main` (run 36793177930) failed with 53 of 134
+  acknowledgements reported lost, but no store state went back: at every one of the 240
+  failing points the component held the selection the *next* acknowledged command
+  reported (a newer install, a rollback, or nothing after a component removal). Those
+  points fall between that command's selection flush and its acknowledgement mark,
+  where the previous acknowledgement is still the last one required; a managed
+  selection is overwritten, so the verifier compared a newer state with an older one.
+  The session store's verifier never had this problem because a session's generation
+  only grows. The workload now logs a `start-<seq>` mark before each command, each
+  replay point records the last command started, and the verifier also accepts the
+  selection reported by the one acknowledged command that had started and is not yet
+  required. A selection that went back, a reappeared removal and a selection no
+  in-flight command reported are still losses. The store, its flushes and the
+  acceptance rule (zero lost acknowledgements, at least 500 points, no damage, clean
+  `e2fsck`, a negative control that loses acknowledgements) are unchanged. Tests:
+  `managed::tests::a_selection_the_command_in_flight_made_is_not_a_loss_but_an_undone_one_is`,
+  `managed::tests::only_the_next_acknowledged_command_is_in_flight_once_it_started`,
+  `logwrites::tests::a_point_records_the_last_command_started_before_it`.
 - **Compact-tier re-run: the 90% target is met; L-085 is closed** (2026-09-30, #222;
   ADR 0022 note "the compact-tier re-run"). The re-run on `a0bfb06` used P12's final
   compact plan (28 trials per model over A-01 to A-07 and SEC-T02). Claude Sonnet 5.5

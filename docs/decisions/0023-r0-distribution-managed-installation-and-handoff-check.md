@@ -1047,6 +1047,55 @@ command changes is flushed before it returns (see "Directory flushes" below).
   accepted plan reinstalls only the model. The npm and archive installs without Rust
   are PRs 9 and 11.
 
+**Addendum, 2026-10-01: the first power-loss run, and the campaign's accounting fix.**
+The maintainer dispatched `P13 managed power loss` on `main` at `01656d6` ([run
+36793177930](https://github.com/smormah/vsift/actions/runs/36793177930)). The positive
+run failed: 1,812 points, 134 acknowledgements, 53 reported lost at 240 points, no
+damage, no torn selection, clean `e2fsck` everywhere. The negative control behaved as
+designed (36 of 50 acknowledgements lost, 458 points with a torn selection that lookup
+refused, no damage). `P13 managed smoke` (with `install-e2e`) passed on the same commit
+([run 36793180858](https://github.com/smormah/vsift/actions/runs/36793180858)).
+
+- **Root cause: the campaign's verifier, not the store.** At every one of the 240
+  failing points the component held exactly the selection that the *next*
+  acknowledged command (the first one beyond those the point requires) reported:
+  the version a later install selected, the one a later rollback selected, or nothing
+  after a later component removal. None went back to an older version. An
+  acknowledgement binds from the point before its mark, and the mark follows the
+  command's last flush; the command's selection is flushed earlier (the pointer
+  rename, then `current-v1`'s flush, then the bounded cleanup or removals with their
+  own flushes), so for a few points the device durably holds the newer selection while
+  the previous acknowledgement is still the last one required. A managed selection is
+  overwritten, so comparing it for equality with the last acknowledgement called the
+  newer state a loss. The session verifier holds a session's generation to *at least*
+  the acknowledged one, which is why P10 and P11 never saw this. The negative control's
+  losses include real ones (a selection back at an older version, removed versions
+  back), which is why it still fails with the fix.
+- **Candidates ruled out.** No missing or misdirected flush: no finding shows an older
+  state, and no removal reappeared in the positive run. The acknowledgement is written
+  only after the command returned, after its last flush. Commands that change no
+  selection (an abandoned stage, a sweep) appear among the findings only as the
+  component's last acknowledgement before the next command moved its selection, the
+  same pattern as installs; every acknowledgement records the selection the store
+  reported, a claim the store does promise to keep.
+- **Fix** (`tools/p10-crash-campaign`). The managed workload logs a dm-log-writes mark
+  `start-<seq>` before each command touches the store; each replay point records the
+  last command started in its prefix (`Point::started`); and the verifier accepts, for
+  the component of the one acknowledged command that had started there but is not yet
+  required (`managed::in_flight`; the workload is sequential, so no other can be in
+  flight), the selection that command reported, as well as the last acknowledged one.
+  Before the command's start mark nothing of it is in the prefix, and the required
+  acknowledgements must hold exactly. Failed commands are never admitted. Everything
+  else is unchanged: a selection that went back, a selection no in-flight command
+  reported and a removal that came back are losses; the store's code and flushes are
+  untouched; and so is the acceptance rule (zero lost acknowledgements, at least 500
+  points, no damage, clean `e2fsck`, and a negative control that loses
+  acknowledgements). Each report line now names the point's `started` command and the
+  verifier's `in_flight_states`.
+- **Durability promise unchanged:** a managed command that reported success survives a
+  power loss on Ubuntu 24.04 with ext4. It is qualified once a `P13 managed power loss`
+  run on `main` passes with this fix.
+
 ## Implementation note, 2026-10-01 (P13 PR 10, attestation and publish wiring)
 
 Delivered from section 1 and decisions B and C: the `dry_run` input, the attest job,
