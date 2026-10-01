@@ -419,10 +419,10 @@ the registry stopped and a clean uninstall. **Result:** all twelve jobs passed o
 `951226f` (run 36786019996) and `57f03fe` (run 36797351652). The native archives are
 checked by the `package` and `plan` jobs (reproducible, read back against their inputs, by
 digest); their executables are the ones the matrix ran from the platform packages, but no
-job extracts and runs an archive. **What this stage does not show:** a clean machine (the hosted runners have a Rust
-toolchain on `PATH` that no step invokes), the real registry, an agent, or the first
-publish; those are the next packet's checkpoint and the P13 record's pending "First
-publish". A user-facing walk-through of the same checks is
+job extracts and runs an archive. **What this stage does not show:** a clean machine (the
+hosted runners have a Rust toolchain on `PATH` that no step invokes), the real registry,
+an agent, or the first publish; those are the next packet's checkpoint and the P13
+record's pending "First publish". How a user checks an install is
 [`install.md`](../operations/install.md) section 6.
 
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)

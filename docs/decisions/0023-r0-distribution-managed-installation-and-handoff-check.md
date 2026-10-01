@@ -1211,9 +1211,10 @@ Delivered from section 7. It changes no behaviour and no decision above.
   verification (D-02..D-08, R-SEC01, R-SEC02, R-14), the threat model (a final-state table
   for SEC-12..SEC-15, SEC-22 and SEC-23), the known limits (L-098 and L-099 added; L-035,
   L-036, L-037, L-042 and L-096 updated) and both work records are brought to the state
-  below. A closing sweep corrected stale statements in `README.md`, `cli-v1.md`,
-  `architecture-and-contracts.md`, the skill guide and the work-packets table, and added
-  notes to ADRs 0001, 0007, 0008, 0009, 0014 and 0022.
+  below. A closing sweep corrected stale statements in `README.md`, `SECURITY.md`,
+  `cli-v1.md`, `architecture.md`, `architecture-and-contracts.md`, the planning README, the
+  skill guide, the work-packets table and `release.md`, and added notes to ADRs 0001,
+  0007, 0008, 0009, 0014 and 0022.
 - **Status: still Proposed, deliberately.** The header makes this ADR accepted when P13
   completes with its evidence. The evidence of decisions B and C, the real publishing
   path (attestation, npm provenance, trusted publishing, the protected environment), is

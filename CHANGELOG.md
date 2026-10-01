@@ -914,8 +914,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   installation depends on the publishers' files and hosts) are added and L-035, L-036,
   L-037, L-042 and L-096 updated. ADR 0023 gains a note and stays Proposed until the first
   publish; ADRs 0001, 0007, 0008, 0009, 0014 and 0022 gain dated notes. Stale statements
-  were corrected in the README, `cli-v1.md`, `architecture-and-contracts.md`, the skill
-  guide, the work-packets table, `release.md` and `SECURITY.md`.
+  were corrected in the README, `SECURITY.md`, `cli-v1.md`, `architecture.md`,
+  `architecture-and-contracts.md`, the planning README, the skill guide, the work-packets
+  table and `release.md`.
 - P13's plan names the npm launcher pattern (per-platform `optionalDependencies`, no
   install scripts, qualified under npm, pnpm, Yarn and Bun) and a checklist of names to
   hold before release; ADR 0009 gains a note and L-036 points to both.
