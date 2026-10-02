@@ -33,7 +33,7 @@ The initial use case is a recorded QA walkthrough: VSift combines timestamped sp
 > as native archives on [GitHub Releases](https://github.com/smormah/vsift/releases), with
 > npm provenance and Sigstore attestations
 > ([installing VSift, pre-release](docs/operations/install.md)). It is a pre-release, not a
-> stable or supported release; the release qualification (P14) has not started. See the
+> stable or supported release; the release qualification (P14) is in progress. See the
 > [2026-09-23 re-plan](docs/decisions/0015-r0-delivery-replan.md).
 
 The accepted [implementation blueprint](docs/planning/README.md) covers the desktop

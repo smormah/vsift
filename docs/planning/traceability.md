@@ -25,6 +25,12 @@ the immutable project invariants. A requirement is complete only after every pri
 packet is complete and its release proof is attached. Packet completion cannot be
 inferred from code presence or an assistant's status message.
 
+P14's release proof is traced item by item in the
+[release evidence ledger](p14-evidence-ledger.json): each `RQ-nn` item names the
+requirements, threats, verification rows and limits it supports, and the Governance check
+fails if any of R-01..R-14, SEC-01..SEC-25, `R-SEC03` or a P14-owned limit is supported by no
+item ([P14 plan](p14-qualification.md) sections 3 and 4 hold the reasoning).
+
 P01 executable evidence is mapped case-by-case in the published
 [v1 CLI contract](../contracts/cli-v1.md). That evidence qualifies the public boundary,
 not the later media, storage, process, or worker implementations.

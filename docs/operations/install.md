@@ -456,7 +456,7 @@ If the launcher cannot run vsift it prints one message on stderr, starting with
 
 | Exit | Meaning | What to do |
 | ---: | --- | --- |
-| 127 | No platform package for this machine: optional dependencies were omitted (`--omit=optional`, `--no-optional`), the lockfile was made without it, or the machine is not supported | Reinstall `vsift-cli` with optional dependencies included, on a supported machine |
+| 127 | No platform package for this machine: optional dependencies were omitted (`--omit=optional`, `--no-optional`), the lockfile was made without it, or the machine is not supported | Reinstall `vsift-cli` with optional dependencies included, on one of the machines in section 1 |
 | 126 | The platform package is refused or cannot start: another version, an executable that does not match its recorded digest (damaged or replaced), a damaged launcher package, or a start error (on Linux, glibc or OpenSSL 3 missing; on Windows, an executable path of 260 characters or more) | Reinstall `vsift-cli`; on Windows with a very long install path, install in a folder with a shorter path ([L-094](../planning/known-limits.md#l-094)) |
 
 The message names the package it expected, the version and the supported targets. The

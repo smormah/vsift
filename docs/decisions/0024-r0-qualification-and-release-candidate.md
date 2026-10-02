@@ -402,3 +402,84 @@ and announcements.
 - Which docs flip after the publish (the repository-only pages: PR 13) and which ship
   inside the artifacts and are right at the publish (package READMEs, the skill, release
   notes: PR 12), so `main` never claims a stable release before one exists.
+
+## Implementation note, 2026-10-02 (P14 PR 1, the evidence ledger and the claims registry)
+
+Pull request #251. Delivered from "What P14 delivers" item 1, and the `verification.md` rows. No product
+code, workflow, package or setting changed, and nothing was published. What exists now, and
+the decisions taken inside this ADR:
+
+- **Files and commands.** `docs/planning/p14-evidence-ledger.json` (schema version 1) and
+  `docs/planning/public-claims.json` (the name the plan gives; not `p14-claims.json`), checked
+  by `vsift-governance`: the structure rules of both run inside the existing `check`, so the
+  Governance job enforces them on every pull request with no workflow change; two further
+  subcommands run on demand: `release-evidence [--complete-for <version> [--commit <sha>]]`
+  and `public-claims`. The new code is in new modules (`release_evidence`, `public_claims`,
+  `repository`, `command`); the workflow lint is untouched. The Governance failure header now
+  reads "governance check failed". No new dependency.
+- **The ledger holds one entry for each of RQ-01..RQ-20**, in the plan's order, each with the
+  requirements, threats, verification rows and limits it supports, what it proves and does not
+  prove, its producer and the P14 pull request that builds it, a `gate` (what the candidate
+  needs, and whether the stable release must `repeat` the item on its own bytes or may `carry`
+  the candidate's), a staleness `scope`, a status (`planned`, `running`, `passed`, `failed`,
+  `waived`, `not_applicable`), the counted evidence with the version and commit it is for, and
+  `prior` material that does not count. Every closed set is an enum and every struct rejects
+  unknown fields. **Seeded from today's facts: every item is `planned` and none is passed.**
+  Earlier evidence (the 0.1.0 matrix runs, the P10 and P13 campaigns, the P12 trials, the one
+  Windows install) is kept as `prior`, with the reason it does not count (another commit, a
+  source build, a local registry, one machine).
+- **Structure rules** (each has a test): the schema; the item set equals the plan's table
+  (every `RQ-nn` present once, in order, none invented); every identifier an item supports exists
+  in the document that owns it (requirements in the delivery ledger, threats in the threat
+  model, rows in `verification.md`, limits in the register); every item has its
+  `verification.md` row; what each status carries (a counted status names its version and
+  commit and has evidence, a `passed` workflow item links a run, an issue alone is not
+  evidence, `failed` names an issue, `waived` names the maintainer's decision, `not_applicable`
+  gives a reason); dates agree; links are well formed and a record path exists; and nothing the
+  plan lists is unowned: R-01..R-14, the threats the delivery ledger maps to P14 (SEC-01..SEC-25;
+  the threat model's R1 rows SEC-26..SEC-35 are not P14's), `R-SEC03` and every limit whose owner
+  names P14. A verification row of sections 1 to 6 is covered through the requirement it
+  belongs to; it is named in an item only where the plan names it.
+- **Completeness** (RQ-20), on demand, for a release: a candidate needs every item whose
+  candidate rule is `required` to be passed for that version and commit, waived by a recorded
+  decision or not applicable. The **staleness rule** (left to this pull request by "Details left
+  to their pull requests"): evidence recorded at an earlier commit counts only when no file
+  under the item's `scope` changed since, asked of `git diff --name-only` with literal
+  pathspecs; if Git cannot say (a shallow checkout), it does not count. The stable needs a
+  `repeat` item recorded again for the stable version and commit, and a `carry` item's
+  candidate evidence plus a recorded, allowed `release_delta`. RQ-20 is excluded: it records
+  the run of the check itself. **Extension point for PR 8:** the delta check of decision A
+  (only version strings and shipped documents differ) is release tooling and is not built here;
+  the ledger has a `release_delta` field (null today) that PR 8 writes, and until then a stable
+  completeness check fails on every carried item, which is the safe answer (L-103).
+- **The claims registry** has the three rungs of decision G (`now`, `candidate`, `after_p14`)
+  and a `current_rung` (today `now`; PR 10 sets `candidate`, PR 13 `after_p14`). It lists
+  **controlled words** (`supported`, `stable`, `qualified`, `qualify`, `qualifies`, `certified`,
+  `guaranteed`) that may appear in a scanned document only inside a registered statement, and
+  **banned phrases** (the plan's never-claim list: production readiness, a strict worker or
+  hostile-media containment, multi-tenant use, publisher trust, durability off ext4, managed
+  install off Ubuntu, Codex on Windows, untrialled models and clients, 100% citation validity)
+  that no scanned document may use unless a registered negation excuses them, or, for the
+  strict worker, RQ-14 is `passed`. A statement is a **claim** (a rung, the evidence items that
+  must be `passed` while it is in use, or the record it rests on, and a note on its limits)
+  or a **non-claim** (a negation, condition or name: no evidence, every rung). A claim used
+  above the current rung, or without its evidence passed, fails; so does a statement used in a
+  document it is not registered for, and a **stale** entry (at or below the current rung, found
+  nowhere), so a permissive text cannot linger and return unreviewed. The later rungs'
+  allowed statements are listed now, unused, so decision G's ladder is held in one file.
+- **Seeded with today's claims.** 27 statements at the `now` rung cover every use of a
+  controlled word in the README, `install.md`, `SECURITY.md`, the skill guide and the npm
+  README. The first run flagged two statements, fixed as wording only: the skill guide's
+  "Supported models" heading (now "Models and clients trialled", its table unchanged) and
+  `install.md`'s "on a supported machine" (now "on one of the machines in section 1").
+  Alongside, the README's stale "the release qualification (P14) has not started" now says
+  "is in progress" (no check flagged it).
+- **Found, not fixed here:** the generated release notes, and the published v0.1.0 release page,
+  say "Supported machines" for the three R0 targets, against decision G and `install.md`; the
+  template is Rust source that PR 8 rewrites, so the registry lists it (and the launcher's
+  refusal messages, the worker runbook and `release.md`) as not yet scanned, each with its owner
+  pull request (L-102). The checks prove recorded evidence and absent banned words, not that a
+  sentence is true or a run passed (L-101).
+- **For the maintainer's review:** the `now`-rung claims that keep "qualified" and "stable" in
+  the existing pre-release wording (the P12 and P13 results, the v1 JSON contract) rather than
+  rewording them; the choice of controlled words and banned phrases; the staleness scopes.

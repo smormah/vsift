@@ -8,8 +8,10 @@ pull requests" in
 [implementation-work-packets](implementation-work-packets.md). This file becomes the P14
 qualification record when the packet completes: until then every "Evidence that exists"
 cell is what the earlier records show, every "P14 adds" cell is a plan, and nothing here is
-a result. Test IDs are [verification](verification.md)'s; the new `RQ-nn` IDs below are
-local to P14's evidence ledger and are added to verification by PR 1. Dates are UTC.
+a result. Test IDs are [verification](verification.md)'s; the `RQ-nn` IDs below are local to
+P14's [evidence ledger](p14-evidence-ledger.json) and have their rows in verification
+section 8 (added by PR 1, 2026-10-02, which also built the ledger's checks and the
+[claims registry](public-claims.json)). Dates are UTC.
 
 ## 1. What P14 must show
 
@@ -33,6 +35,11 @@ so a "clean install" job proves there is no hidden dependency on a toolchain, a 
 a developer's `PATH`. Real clean-machine evidence is the maintainer's try-outs (RQ-17).
 
 ## 2. Evidence items
+
+This table defines the items. Where each stands (status, counted links, the earlier material
+that does not count, what a stable release must repeat or may carry) is in the
+[evidence ledger](p14-evidence-ledger.json), which `vsift-governance` checks against this table
+(section 11).
 
 | ID | Evidence | Runs | Pass rule | Proves | Does not prove |
 | --- | --- | --- | --- | --- | --- |
@@ -165,7 +172,7 @@ stable, unless fixed, mitigated, or accepted by the maintainer with a register e
 | #177 documentation sweep | PR 9 |
 | #246 staged publishing | Deferred by the maintainer (2026-10-02) |
 
-**The register.** All 91 entries read `Review: pending`. Before the stable, the maintainer
+**The register.** All 94 entries (91 and L-101 to L-103, added by PR 1) read `Review: pending`. Before the stable, the maintainer
 reviews the thirty a public claim leans on, and PR 9 prepares them as one sheet: L-004,
 L-007, L-008, L-020, L-021, L-022, L-028, L-029, L-030, L-035, L-037, L-038, L-042, L-043,
 L-044, L-056, L-057, L-058, L-068, L-072, L-075, L-076, L-082, L-083, L-084, L-095, L-097,
@@ -289,6 +296,22 @@ evidence for the candidate, or when a banned word ("production ready", "supporte
 The check proves that a listed claim has recorded evidence and that banned words are
 absent. It does not prove that a sentence is true.
 
+**Built in PR 1** (`cargo run --locked -p vsift-governance -- public-claims`, and inside
+`check` on every pull request). The registry is
+[`public-claims.json`](public-claims.json). It has a `current_rung` (`now` today; PR 10 sets
+`candidate`, PR 13 `after_p14`), five scanned documents (the README, `install.md`,
+`SECURITY.md`, the skill guide and the npm README), the words that need a registered
+statement (`supported`, `stable`, `qualified` and kin), the never-claim list as banned
+phrases, and the statements. A statement is a **claim** (the rung it first appears at, the
+evidence items that must be `passed` while it is in use or the record it rests on, and a note
+on its limits) or a **non-claim** (a negation or a name: "not supported", "until a stable
+release"). It fails on: a controlled word outside a statement, a banned phrase, a claim above
+the current rung, a claim whose evidence is not `passed`, a statement used in a document it is
+not registered for, and a stale entry. The later rungs' statements are listed already, unused.
+Not yet scanned, each with its owner pull request: the release-notes template (Rust source,
+PR 8; it says "Supported machines", L-102), the launcher's refusal messages (PR 9), the worker
+runbook and `release.md` (PR 9). It reads plain text: it cannot see meaning (L-101).
+
 ## 10. What the maintainer does, and the fallback
 
 | Item | What | If it cannot be done |
@@ -313,6 +336,14 @@ Read from `tools/vsift-governance/src/main.rs` on 2026-10-02:
   separate evidence ledger carries it, and the delivery ledger gets a summary at completion).
 - The ledger struct rejects unknown fields; adding any needs a checker change, which P14
   does not need.
+- **Built in PR 1:** the separate [evidence ledger](p14-evidence-ledger.json) (schema
+  version 1, one entry per RQ item, every item `planned` at the start), checked on every pull
+  request by `check` (the schema, the item set against this plan, every referenced
+  identifier against its owning document, the rules each status carries, and that every
+  requirement, P14 threat, `R-SEC03` and P14-owned limit is supported by an item); and on demand
+  by `cargo run --locked -p vsift-governance -- release-evidence --complete-for <version>`
+  (completeness for a candidate or the stable, with the staleness rule and the extension point for
+  PR 8's delta check, ADR 0024's PR 1 note).
 - The sets are fixed: packets P00-P14, requirements R-01..R-14, decisions DEC-01..DEC-13.
   P14 adds none; the cold-agent variant maps to R-13, which already lists P14; `RQ-nn` and
   `A-10` are P14's own IDs (verification's `Q-` IDs belong to R1). P14's `tests` stay

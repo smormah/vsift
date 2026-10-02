@@ -358,6 +358,48 @@ pnpm, Yarn and Bun against a loopback Verdaccio runs in the Release workflow; to
 yourself, see the same runbook section. It never publishes to a public registry, and
 nothing in this repository may.
 
+## Governance checks, release evidence and public claims
+
+`cargo run --locked -p vsift-governance -- check` is the Governance job. Besides the delivery
+ledger, the fixture corpus, the handoff files, the workflow lint and the npm package rules, it
+checks the structure of the P14 release evidence ledger
+(`docs/planning/p14-evidence-ledger.json`) and the public-claims registry
+(`docs/planning/public-claims.json`) ([delivery governance](planning/delivery-governance.md)).
+Run either on its own while you edit it, and the completeness check when a release needs it:
+
+```console
+cargo run --locked -p vsift-governance -- release-evidence
+cargo run --locked -p vsift-governance -- public-claims
+cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.1 --commit <40 hex digits>
+```
+
+- **The ledger's shape** (schema version 1; the Rust types in
+  `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
+  rejects unknown fields): a header (`schema_version`, `packet`, `plan`, `release_delta`) and
+  one item per plan row with `id`, `title`, `supports` (`requirements`, `threats`,
+  `verification`, `limits`), `proves`, `does_not_prove`, `producer` (`kind`, `p14_pr`,
+  `description`), `scope`, `gate` (`candidate`: `required` or `not_required`; `stable`:
+  `repeat`, `carry` or `not_required`), `status` (`planned`, `running`, `passed`, `failed`,
+  `waived`, `not_applicable`), `applies_to` (`version`, `commit`), `evidence` and `prior` (each a
+  typed `reference` of `workflow_run`, `pull_request`, `issue` or `record`, with a `date` and a
+  `note`), `issues`, `decision`, `reason` and `date`. `release_delta` stays null until P14 PR 8's
+  delta check records it.
+- **Changing an evidence item's status** is a change to the ledger: set `status`, give the
+  version and commit it is for (`applies_to`) and at least one typed link (a workflow run, a
+  pull request, a repository record), move what no longer counts into `prior`, and add the
+  `date`. The checker refuses a `passed` item without evidence, a `waived` one without the
+  maintainer's decision, and so on. Keep each item's `scope` honest: it is the list of paths
+  whose change makes older evidence stale.
+- **Changing a public sentence** that uses `supported`, `stable`, `qualified` or kin changes
+  the registry: the sentence must be inside a registered statement (a `claim` with its rung and
+  the evidence it needs, or a `non_claim` such as a negation). A statement the documents no
+  longer contain must be removed, or the check calls it stale.
+- `--complete-for` needs the Git history between the evidence's commit and the target
+  commit (a full checkout, not a shallow one); `--commit` defaults to `HEAD`. It is not part of
+  the Governance job: it fails by design until every item the release needs is answered.
+- The tool reads files and, for completeness only, runs `git diff` with explicit arguments and
+  no shell. It fetches nothing and needs no credentials.
+
 ## Documentation
 
 P03's cap-std/cap-fs-ext 4.0.3 storage dependencies and their review are in

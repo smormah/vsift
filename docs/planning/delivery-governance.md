@@ -20,6 +20,32 @@ digest; see [`../operations/release.md`](../operations/release.md)). A packet ma
 commit and nonempty verification record. The checker deliberately fixes the R0
 objective; changing it requires an explicit reviewed code, ledger and ADR change.
 
+Since P14 PR 1 the same `check` also validates two further records, so the Governance job
+enforces them on every pull request: the
+[release evidence ledger](p14-evidence-ledger.json) (what each `RQ-nn` evidence item of the
+[P14 plan](p14-qualification.md) proves and where it stands: its schema, the item set
+against the plan, every referenced requirement, threat, verification row and limit against
+its owning document, the rules each status carries, and that every requirement, P14 threat,
+`R-SEC03` and P14-owned limit is supported by some item) and the
+[public-claims registry](public-claims.json) (the statements the public documents may make
+about support, stability and qualification, each tied to its rung and to evidence that must
+be `passed`, and the phrases that are never claimed). Two commands run them on their own:
+
+```console
+cargo run --locked -p vsift-governance -- release-evidence
+cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-rc.1 [--commit <sha>]
+cargo run --locked -p vsift-governance -- public-claims
+```
+
+The second form is the completeness check (evidence item RQ-20): it fails unless every item
+the release needs is passed for that version and commit, carried forward because nothing in its
+scope changed (it asks Git, so it needs history), waived by a recorded maintainer decision or
+not applicable; for the stable version it also needs a recorded candidate-to-stable delta, which
+P14 PR 8 builds. These checks prove that recorded evidence exists and that banned words are
+absent; they do not fetch a run or judge a sentence (known limits L-101 and L-103). A pull
+request that changes a quoted public sentence updates the registry with it; one that changes an
+item's status updates the ledger.
+
 The [R1 industrial capability expansion](r1-industrial-capability-expansion.md)
 reserves R-15..R-20 and P15..P20 without activating them. P15 must create a separate
 machine-readable R1 ledger and independent fixture truth before any P16+ implementation.

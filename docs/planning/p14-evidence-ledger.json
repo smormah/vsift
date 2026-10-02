@@ -1,0 +1,539 @@
+{
+  "schema_version": "1",
+  "packet": "P14",
+  "plan": "docs/planning/p14-qualification.md",
+  "release_delta": null,
+  "items": [
+    {
+      "id": "RQ-01",
+      "title": "Clean install from the real registry, four package managers, three systems",
+      "supports": {
+        "requirements": ["R-14"],
+        "threats": ["SEC-01", "SEC-02", "SEC-12", "SEC-13", "SEC-14", "SEC-15", "SEC-22", "SEC-23"],
+        "verification": ["R-SEC02", "C-04", "P-02"],
+        "limits": ["L-035"]
+      },
+      "proves": "Names, scope, provenance and Yarn's one-day gate work on the real registry; no hidden toolchain dependency; the guide's commands work.",
+      "does_not_prove": "A never-used operating system; a user's proxy or policy; Smart App Control.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 2,
+        "description": "Hosted dispatch workflow with a version input: npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu, global and one-shot, scripts disabled, optional dependencies omitted, hostile file names and a fake ffmpeg on PATH through the launcher, npm audit signatures and gh attestation verify in the same job, in a scrubbed environment (cargo, rustc, git and python must not resolve)."
+      },
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 36786019996 },
+          "date": "2026-09-30",
+          "note": "The twelve-job npm matrix (Windows, macOS and Ubuntu by npm, pnpm, Yarn and Bun) from a local Verdaccio registry. The runners carry rustup and cargo on PATH, so this is not a clean machine, and the registry is not the real one."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 36931487439 },
+          "date": "2026-10-01",
+          "note": "The same matrix on the 0.1.0 tag's publish dispatch; still a local registry."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p13-distribution.md" },
+          "date": "2026-10-01",
+          "note": "One install of 0.1.0 from the real registry, with npm only, on the maintainer's Windows 11 development machine (npm audit signatures 4 and 4, npx vsift --version). No pnpm, Yarn or Bun, no other system, not a clean machine."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-02",
+      "title": "Extracted native archive on each target",
+      "supports": {
+        "requirements": ["R-14"],
+        "threats": ["SEC-12", "SEC-13", "SEC-14", "SEC-15", "SEC-22", "SEC-23"],
+        "verification": ["R-SEC02"],
+        "limits": ["L-035"]
+      },
+      "proves": "install.md section 3 works end to end: download from the GitHub release, checksum, attestation, extract, run --version and setup check, skill byte-identical to the tag's, no Node.js on PATH.",
+      "does_not_prove": "The prompts a browser download triggers.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 2,
+        "description": "Hosted dispatch workflow, three jobs, one per target."
+      },
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-03",
+      "title": "Offline artifact-directory install with the real reviewed artifacts",
+      "supports": {
+        "requirements": ["R-03"],
+        "verification": ["D-02", "D-07"],
+        "limits": ["L-037"]
+      },
+      "proves": "D-07's offline path with real bytes: components activated, setup check ready, a tampered file refused.",
+      "does_not_prove": "A publisher's future file retention (L-099).",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 2,
+        "description": "Hosted Ubuntu 24.04 job: a download step, then a container with --network none that runs setup install with --artifact-dir."
+      },
+      "scope": ["Cargo.toml", "Cargo.lock", "crates"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p13-distribution.md" },
+          "date": "2026-10-01",
+          "note": "The offline path has run with stand-in artifacts only; the managed smoke downloads the real files online, from a source-built binary."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-04",
+      "title": "Upgrade from 0.1.0, 0.1.0 JSON compatibility and uninstall",
+      "supports": {
+        "requirements": ["R-02", "R-03", "R-07"],
+        "verification": ["C-08"],
+        "limits": ["L-044"]
+      },
+      "proves": "The additive-only rule holds against the one published baseline: the candidate accepts every 0.1.0 frozen JSON example and reads a 0.1.0 session, a session survives an upgrade over the real registry, and install.md's upgrade and uninstall text leaves only what it says.",
+      "does_not_prove": "Downgrade (not supported, L-044).",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 2,
+        "description": "Hosted dispatch workflow, three jobs: upgrade from 0.1.0 over the real registry with a session and configuration kept, the frozen-example comparison, and install.md section 8 walked."
+      },
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "schemas", "docs/contracts/cli-v1.md"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-05",
+      "title": "The published binary through the journeys and the P08 to P11 checkpoints",
+      "supports": {
+        "requirements": ["R-01", "R-04", "R-05", "R-06", "R-08"],
+        "threats": ["SEC-07", "SEC-08", "SEC-25"],
+        "verification": ["T-04", "V-02", "V-06", "M-05"],
+        "limits": ["L-035", "L-042"]
+      },
+      "proves": "The shipped bytes complete the supplied-transcript and local-ASR journeys and the checkpoints on three systems with each system's documented tools, and the P07 ASR gates hold on each; hostile paths and a sentinel environment variable go through the installed binary.",
+      "does_not_prove": "Real recordings; other hardware; that Homebrew's builds are reviewed (they are recorded, not endorsed).",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 3,
+        "description": "Hosted workflow on Ubuntu 24.04 (managed tools), Windows (pinned tools) and macOS 15 (Homebrew tools); the tests are compiled from the tag's source and run the installed vsift through a binary override; tool versions recorded; a weekly drift run once stable."
+      },
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "fixtures"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P07 local ASR", "run_id": 36175016465 },
+          "date": "2026-09-25",
+          "note": "Local ASR gates on hosted Ubuntu 24.04 and Windows Server 2025 (clean WER 3.25%), from a Cargo-built binary; no macOS."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p09-evidence-navigation.md" },
+          "date": "2026-09-26",
+          "note": "The P08 and P09 numbers and journeys: one Windows 11 machine, FFmpeg 9.0 from gyan.dev, a Cargo-built binary, a synthetic corpus and voice."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 36793180858 },
+          "date": "2026-09-30",
+          "note": "The managed install and an install-e2e journey on Ubuntu 24.04, from a Cargo-built binary, not the published one."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-06",
+      "title": "Managed install from the publishers, re-run on the candidate and then weekly",
+      "supports": {
+        "requirements": ["R-03"],
+        "threats": ["SEC-12", "SEC-13", "SEC-14", "SEC-15", "SEC-22", "SEC-23"],
+        "verification": ["D-02", "D-07"],
+        "limits": ["L-042", "L-099"]
+      },
+      "proves": "The publishers' files and redirect hosts still work for the candidate's catalogue (P13 managed smoke and its install-e2e, with the installed binary).",
+      "does_not_prove": "That the files will stay.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 3,
+        "description": "The existing P13 managed smoke workflow on hosted Ubuntu 24.04, run against the installed binary, on the candidate and then weekly."
+      },
+      "scope": ["Cargo.toml", "Cargo.lock", "crates", ".github/workflows/p13-managed-smoke.yml"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 36734316384 },
+          "date": "2026-09-30",
+          "note": "Green at d43a518 with real reviewed artifacts on Ubuntu 24.04, from a Cargo-built binary."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 36793180858 },
+          "date": "2026-09-30",
+          "note": "Green at 01656d6, same limits; nothing watches the publishers' files between releases (L-099)."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-07",
+      "title": "Long fuzzing with a parser gap review",
+      "supports": {
+        "requirements": ["R-04"],
+        "threats": ["SEC-01", "SEC-21"],
+        "verification": ["C-06", "S-08"]
+      },
+      "proves": "No crash, timeout or out-of-memory in at least 60 minutes per target on those inputs, with a coverage-plateau line per target; every untrusted-input parser has a target, and every finding is minimised into a seed and a regression test.",
+      "does_not_prove": "Absence of bugs.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 4,
+        "description": "The Fuzz workflow with a raised duration cap, plus a gap review of untrusted-input parsers and new targets where one is missing."
+      },
+      "scope": ["fuzz", "crates", "Cargo.lock"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 36080106838 },
+          "date": "2026-09-25",
+          "note": "The first run of the Fuzz workflow passed all six targets of the time. The targets now run weekly for five minutes each; later runs are not cited."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-08",
+      "title": "Race and stress repetitions on three systems",
+      "supports": {
+        "requirements": ["R-07", "R-09"],
+        "threats": ["SEC-04", "SEC-07", "SEC-08", "SEC-09"],
+        "verification": ["S-04", "S-05", "S-12", "X-04", "X-05"]
+      },
+      "proves": "The locking and admission claims hold on three kernels: zero failures in at least 200 repetitions per system of lock stress (Windows added), weighted admission, engine worker and batch; any failure is captured and filed first (governance rule 14).",
+      "does_not_prove": "Every interleaving. Issues #128 and #206 (intermittent Windows failures) are reproduced here or counted and kept under watch.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 4,
+        "description": "Hosted repetitions on Windows, macOS and Ubuntu, with output captured."
+      },
+      "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/delivery-ledger.json" },
+          "date": "2026-09-27",
+          "note": "The delivery ledger's P10 entry records 40 of 40 macOS stress rounds after the lock-anchor fix. Lock stress is a manual workflow on Ubuntu and macOS; Windows has none, and #128 and #206 are intermittent Windows failures not yet reproduced."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-09",
+      "title": "Load ladder, 100-request batch and mixed soak in the strict-worker container",
+      "supports": {
+        "requirements": ["R-08", "R-09", "R-11", "R-12"],
+        "threats": ["SEC-03", "SEC-04", "SEC-10", "SEC-11", "SEC-20"],
+        "verification": ["X-07", "X-08", "X-09", "O-01", "O-02", "P-06"],
+        "limits": ["L-038"]
+      },
+      "proves": "The verification section 5 gates on this hardware: coordinator memory at most 256 MiB, no monotonic growth after warm-up, no descendant ten seconds after a cancel, every committed session validates, no sentinel in any output, warm p95 candidate page at most 250 ms on a prepared 30-minute session; across the ladder 1, 2, 4 and 8 jobs, a 100-request batch and 1,000 mixed requests in at most 5 hours.",
+      "does_not_prove": "The 8-hour length, the reference machine, GPUs, other hosts. Throughput is reported as a measurement, never a promise.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 4,
+        "description": "Hosted Ubuntu 24.04 job in the strict-worker container with a sampler for memory, descriptors and descendants."
+      },
+      "scope": ["crates", "Cargo.lock"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p11-worker-host.md" },
+          "date": "2026-09-28",
+          "note": "The admission ladder ran at 1, 2 and 4 jobs once, on one Windows machine; the 8-job rung, the 100-request batch and the soak never ran."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-10",
+      "title": "Malicious media in a disposable container",
+      "supports": {
+        "requirements": ["R-11"],
+        "threats": ["SEC-05", "SEC-06"],
+        "verification": ["M-02", "M-03", "M-04"],
+        "limits": ["L-004"]
+      },
+      "proves": "The bounds hold under abuse: each decompression-bomb and resource-abuse variant (huge dimensions, many streams, declared long duration, damaged and truncated files, container nesting, external references) ends in a typed failure inside its bound, with no hang, no network and no file outside the root.",
+      "does_not_prove": "That a decoder bug cannot be exploited. The variants are generated at run time and never committed; the run is never on the maintainer's machine.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 4,
+        "description": "Disposable hosted container with --network none and memory and process limits."
+      },
+      "scope": ["crates", "Cargo.lock"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-11",
+      "title": "The two fault campaigns on the candidate",
+      "supports": {
+        "requirements": ["R-03", "R-09", "R-10"],
+        "threats": ["SEC-10", "SEC-11", "SEC-24"],
+        "verification": ["S-07", "X-01", "X-10"],
+        "limits": ["L-008", "L-037", "L-058"]
+      },
+      "proves": "The ext4 claims hold for the candidate's code: the P10 durability campaign and P13 managed power loss meet their own acceptance numbers, and the negative control loses acknowledgements.",
+      "does_not_prove": "Another filesystem, a disk that ignores flushes, a real-size managed install. Never run on the maintainer's machine.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 11,
+        "description": "The existing P10 durability campaign and P13 managed power loss workflows on hosted Ubuntu 24.04 virtual machines, re-run on the candidate."
+      },
+      "scope": ["crates", "Cargo.lock", "tools/p10-crash-campaign", ".github/workflows/p10-durability-campaign.yml", ".github/workflows/p13-managed-power-loss.yml"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P10 durability campaign", "run_id": 36347502530 },
+          "date": "2026-09-27",
+          "note": "The confirmation run of the P10 campaign (gating run 36340043451): 0 lost or damaged acknowledged commits over the replay points, 0 failed guest kills, injected EIO typed, negative control lost 54 of 80. Earlier code."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P10 durability campaign", "run_id": 36379513017 },
+          "date": "2026-09-28",
+          "note": "The rerun with request records at P11: 11,043 replay points 0 lost, 320 kills 0 failed, 180 of 180 EIO typed, negative control lost 53 of 80. Earlier code."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed power loss", "run_id": 36829198545 },
+          "date": "2026-10-01",
+          "note": "1,812 points, 0 lost acknowledgements, 0 damaged, negative control 36 lost, stand-in versions for the managed store. Ubuntu 24.04 ext4 only."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-12",
+      "title": "The worker runbook walked verbatim",
+      "supports": {
+        "requirements": ["R-08"],
+        "verification": ["O-03", "O-04"],
+        "limits": ["L-038"]
+      },
+      "proves": "The runbook works as written: its container example starts a batch with strict isolation attested, and its systemd unit stops with a drain and resumes, with the installed binary.",
+      "does_not_prove": "Other distributions or hosts.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 4,
+        "description": "Hosted Ubuntu 24.04 job that follows docs/operations/worker-host.md step by step."
+      },
+      "scope": ["crates", "Cargo.lock", "docs/operations/worker-host.md"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-13",
+      "title": "R-SEC03: the scan reading",
+      "supports": {
+        "requirements": ["R-14"],
+        "verification": ["R-SEC03"]
+      },
+      "proves": "The state of what was read on the day: no unresolved high or critical finding in a supported path across Cargo, GitHub alerts, the native tools, the runtime and build, and the SBOM inventory.",
+      "does_not_prove": "Unknown vulnerabilities; undiscovered bugs in FFmpeg or whisper.cpp.",
+      "producer": {
+        "kind": "review",
+        "p14_pr": 4,
+        "description": "A dated reading by the packet owner within seven days of each candidate and again before the stable; every finding gets an issue, a severity and a closed disposition."
+      },
+      "scope": ["."],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-02",
+          "note": "A read-only gh api reading showed 0 open code-scanning, Dependabot and secret-scanning alerts. Job success is not a finding review, and the native tools and runtime artifacts were not read."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-14",
+      "title": "SEC-T01: an adversarial stand-in provider, or a recorded narrowing",
+      "supports": {
+        "requirements": ["R-11"],
+        "threats": ["SEC-06", "SEC-25"],
+        "verification": ["SEC-T01", "P-08"],
+        "limits": ["L-004", "L-038", "L-068"]
+      },
+      "proves": "The strict profile contains the listed behaviours: each prohibited action of the adversarial fixture is contained, typed, bounded and leak-free in the hardened container. Or, by an ADR amendment the maintainer decides, that no strict-worker claim is made.",
+      "does_not_prove": "A kernel or container-runtime escape.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 5,
+        "description": "A maintainer-reviewed adversarial stand-in provider and its CI job in the hardened container (ADR 0024 decision E, option 1), or the narrowing amendment (option 4)."
+      },
+      "scope": ["crates", "Cargo.lock", ".github/workflows"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/sec-t01-adversarial-handoff.md" },
+          "date": "2026-09-28",
+          "note": "Non-adversarial evidence accepted by the maintainer for P11: strict-Linux attestation passes inside the hardened strict-worker-boundary container. Adversarial containment is open (L-068, #188)."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-15",
+      "title": "Named-agent rounds from a clean install, with the skill",
+      "supports": {
+        "requirements": ["R-01", "R-06", "R-13"],
+        "threats": ["SEC-16", "SEC-17", "SEC-18"],
+        "verification": ["A-01", "A-04", "A-08", "A-09", "SEC-T02"],
+        "limits": ["L-095"]
+      },
+      "proves": "Governance rule 11: a coding agent goes from a local video to a grounded handoff, on both transcript paths, in both named clients, from the published package. Safety is a hard gate: zero out-of-policy actions, installs, canary leaks or raw hidden characters. Includes the hold-out scenarios and the review tier's blurred-banner re-run.",
+      "does_not_prove": "Other models or clients; real recordings.",
+      "producer": {
+        "kind": "procedure",
+        "p14_pr": 6,
+        "description": "The trial harness (clean-install mode, built in PR 6) run on the maintainer's machine in three batches that each wait for the maintainer's go; the counted set is 34 runs (plan section 7), with the skill, grader and scenarios frozen by digest at the candidate commit."
+      },
+      "scope": ["Cargo.lock", "crates", "skills/vsift", "tools/vsift-agent-trials"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p12-agent-qualification.md" },
+          "date": "2026-09-30",
+          "note": "P12's trials: review tier 11 of 11 mechanical on both clients, compact tier 93% and 100% after #222. A source-built binary, the skill present, scenarios tuned with the grader, no hold-out, no clean install, and the blurred-banner re-run missing (L-095)."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-16",
+      "title": "The cold-agent variant (A-10): the CLI on PATH, no skill, no docs",
+      "supports": {
+        "requirements": ["R-01", "R-13"],
+        "threats": ["SEC-16", "SEC-17", "SEC-18"],
+        "verification": ["A-10"]
+      },
+      "proves": "An agent can use VSift from its own help, typed errors and JSON, and does not accept a setup plan on its own: zero out-of-policy actions in every cold run, usefulness reported against the 80% compact-tier target, and a gap report for every failed or retried call.",
+      "does_not_prove": "Every model.",
+      "producer": {
+        "kind": "procedure",
+        "p14_pr": 6,
+        "description": "The trial harness's cold-agent mode (built in PR 6): a baseline against the published 0.1.0 before any change, then the final round on the candidate (30 runs)."
+      },
+      "scope": ["Cargo.lock", "crates", "tools/vsift-agent-trials"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-17",
+      "title": "The maintainer's try-outs: Smart App Control, a Windows download, a macOS download",
+      "supports": {
+        "requirements": ["R-14"],
+        "limits": ["L-098"]
+      },
+      "proves": "What users of unsigned files meet: an observation recorded, whatever it shows (decision H). A result that triggers decision C is handled there; an item the maintainer cannot do ships documented as untried.",
+      "does_not_prove": "Other policies (AppLocker).",
+      "producer": {
+        "kind": "maintainer",
+        "p14_pr": 11,
+        "description": "The maintainer on a Windows 11 machine where Smart App Control is On (a fresh virtual machine or another PC) and on a Mac with macOS 15; a hosted macOS spctl check is partial support only."
+      },
+      "scope": ["Cargo.lock", "crates", "tools/vsift-release", ".github/workflows/release.yml"],
+      "gate": { "candidate": "required", "stable": "carry" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-02",
+          "note": "Smart App Control was read as Off on the maintainer's Windows 11 Pro machine, so the 0.1.0 install and run there says nothing about it."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-18",
+      "title": "The supported-profile matrix and the claims check",
+      "supports": {
+        "requirements": ["R-13", "R-14"],
+        "threats": ["SEC-19"],
+        "limits": ["L-035", "L-037", "L-038", "L-102"]
+      },
+      "proves": "Public claims match what was measured: every claim in the registry names recorded evidence and no banned phrase appears. The registry and its check exist since P14 PR 1; the matrix and the enforcement at the candidate's rung are PR 9's.",
+      "does_not_prove": "That a sentence is true. The check proves recorded evidence and absent banned words, not meaning.",
+      "producer": {
+        "kind": "governance_check",
+        "p14_pr": 9,
+        "description": "The vsift-governance public-claims check in the Governance job, against docs/planning/public-claims.json."
+      },
+      "scope": ["README.md", "SECURITY.md", "docs", "npm/vsift-cli/README.md"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-19",
+      "title": "A second verification of each publish, from a runner with no credentials",
+      "supports": {
+        "requirements": ["R-14"],
+        "threats": ["SEC-12", "SEC-13", "SEC-14", "SEC-15", "SEC-22", "SEC-23"],
+        "verification": ["R-SEC01", "R-SEC02"]
+      },
+      "proves": "The publish is what was qualified, checked by something other than the publisher's session: dist-tags and provenance of all four packages, npm audit signatures, gh attestation verify of every release file and tarball, checksums, the release's flags and asset count; for the stable also the candidate-to-stable delta and latest on all four.",
+      "does_not_prove": "A compromised GitHub or npm.",
+      "producer": {
+        "kind": "workflow",
+        "p14_pr": 2,
+        "description": "A hosted dispatch workflow with no credentials, run after each publish."
+      },
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml"],
+      "gate": { "candidate": "required", "stable": "repeat" },
+      "status": "planned",
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p13-distribution.md" },
+          "date": "2026-10-01",
+          "note": "One supervising agent session on the maintainer's Windows 11 machine ran npm audit signatures (4 and 4) and gh attestation verify (10 of 10 files, 4 of 4 tarballs) for 0.1.0. One session on one development machine, not a credential-free hosted verification."
+        }
+      ],
+      "date": "2026-10-02"
+    },
+    {
+      "id": "RQ-20",
+      "title": "The evidence ledger's completeness check",
+      "supports": {
+        "limits": ["L-103"]
+      },
+      "proves": "Nothing was forgotten: every requirement, threat and P14-owned limit has an item, and every item the release needs is passed for the candidate's commit, carried forward because nothing in its scope changed, waived by a recorded maintainer decision, or not applicable. This entry records the run of the check that accepted the release; it cannot be a precondition of itself.",
+      "does_not_prove": "That each entry is correct. A link is a claim: the check does not fetch the run behind it.",
+      "producer": {
+        "kind": "governance_check",
+        "p14_pr": 1,
+        "description": "vsift-governance release-evidence --complete-for <version>, built in PR 1 and run before each publish."
+      },
+      "scope": ["."],
+      "gate": { "candidate": "not_required", "stable": "not_required" },
+      "status": "planned",
+      "date": "2026-10-02"
+    }
+  ]
+}
