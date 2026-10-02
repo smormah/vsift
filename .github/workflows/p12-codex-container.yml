@@ -96,6 +96,8 @@ jobs:
             test ! -e /opt/vsift/src
             test ! -e /opt/ffmpeg
             test ! -e /opt/whisper.cpp
+            # The reviewed whisper.cpp that setup install downloads needs it (#256).
+            test -e /usr/lib/x86_64-linux-gnu/libgomp.so.1
             pkg=/opt/vsift-published/lib/node_modules/vsift-cli
             if ls "$pkg/skills" >/dev/null 2>&1; then echo "the skill is readable"; exit 1; fi
             if cat "$pkg/README.md" >/dev/null 2>&1; then echo "the README is readable"; exit 1; fi
@@ -108,5 +110,6 @@ jobs:
             test -d /opt/vsift/src/skills/vsift
             test -d /opt/vsift-published/lib/node_modules/vsift-cli/skills/vsift
             test -x /opt/ffmpeg/bin/ffmpeg
+            test -e /usr/lib/x86_64-linux-gnu/libgomp.so.1
           '
           docker image inspect --format '{{.Id}}' vsift-codex-trials-agent-published:ci vsift-codex-trials-harness-published:ci

@@ -222,6 +222,7 @@ pub fn build_record(
         "freeze_sha256": manifest.freeze_sha256,
         "cold_assertions": manifest.cold_assertions,
         "reported_usage": graded.reported_usage,
+        "shim_use": graded.shim_use,
         "usage_limit": run.usage_limit,
         "cold": redactions.apply_value(&serde_json::to_value(&graded.cold).unwrap_or(Value::Null)),
         "fixture_hashes": manifest.fixture_hashes,

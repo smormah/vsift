@@ -2789,7 +2789,12 @@ candidate to be the accepted one.**
   install gives all three components, so `tools.whisper: false` cannot withhold whisper.cpp on
   Ubuntu (the plan's unit is the profile), and each Codex trial downloads about 271 MB from the
   publishers (L-099). A cold trial's own settings file, decoy and prompt still say that a tool
-  named `vsift` is installed; its folder and canary names say nothing else.
+  named `vsift` is installed; its folder and canary names say nothing else. Two findings of P14
+  PR 2 shape the trials and are therefore not what a user always meets: the Codex images install
+  `libgomp1` from the distribution because a minimal Ubuntu 24.04 lacks it and `setup install`
+  then fails without naming it (L-110, #256), and the Claude trials reach `vsift` only through
+  Git Bash, never through the `vsift.cmd` shim that re-reads arguments (L-109, #257), so no agent
+  trial exercises that shim; each record says which shell ran (`shim_use`).
 - **Evidence:** [`trials.md`](../agents/trials.md) ("Clean-install mode", "What is weaker than it
   sounds"); `tools/vsift-agent-trials/src/install.rs`; the Dockerfile's `agent-published` stage.
 - **Impact:** a hidden dependency of the maintainer's machine could let a run pass that a clean

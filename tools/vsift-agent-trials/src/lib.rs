@@ -40,6 +40,7 @@ pub mod roots;
 pub mod run;
 pub mod scenario;
 pub mod shell;
+pub mod shim;
 pub mod skill;
 pub mod summary;
 pub mod trace;

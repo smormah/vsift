@@ -758,6 +758,14 @@ mode", "Cold-agent mode", "The P14 batches"); the plan facts are in
   tools, says what is missing and states nothing it cannot have seen); a **gap report** lists every
   failed or retried call with its typed error, whether its remediation was followed and the help text
   that would have prevented it; calls that are off-method but not unsafe are listed apart.
+- **The two findings of PR 2 that touch the trials (#256, #257).** The published Codex images install
+  `libgomp1` (the reviewed whisper.cpp build needs `libgomp.so.1`, a minimal Ubuntu 24.04 lacks it and
+  `setup install` then fails without naming it); the workflow checks the library is there. The `vsift.cmd`
+  shim lets `cmd.exe` read arguments a second time, so the harness never runs a shim, Claude Code may run only
+  `Bash(vsift:*)` (Git Bash on Windows; a test pins both settings files), Codex runs on Linux, and every
+  grade and record counts the `vsift` calls by the shell they ran in (`shim_use`) with the install evidence
+  listing the command files npm wrote (`command_shims`). A call through `cmd.exe` is a deviation and a
+  summary warning, not a failure. No agent trial exercises that shim; PR 7 decides its repair.
 - **Hold-outs** (`holdout.rs`, `holdout/`). `H-01-f10-supplied-sidecar` and `H-02-f01-local-asr` sit
   outside `scenarios/` with a frozen `INDEX.json`; a check fails on an edit without its entry, a
   shared event or id, a wrong path or an uncovered path. **The freeze** (`freeze.rs`) digests the skill,

@@ -401,6 +401,29 @@ fn the_summary_holds_no_local_path() -> TestResult {
 }
 
 #[test]
+fn a_counted_run_that_ran_vsift_through_cmd_exe_is_listed_for_the_reader() -> TestResult {
+    let (state, mut records) = batch(2, ClientName::Claude, |_| Verdict::pass())?;
+    records[1]["shim_use"] = json!({"posix": 3, "powershell": 0, "cmd": 2});
+    records[2]["shim_use"] = json!({"posix": 3, "powershell": 1, "cmd": 0});
+    let summary = summarize(&[state], &records);
+    let note = summary
+        .warnings
+        .iter()
+        .find(|warning| warning.contains("cmd.exe"))
+        .ok_or("no warning about the cmd.exe shim")?;
+    assert!(note.starts_with("1 counted run(s)"), "{note}");
+    assert_eq!(
+        summary
+            .runs
+            .iter()
+            .map(|run| run.cmd_shim_calls)
+            .sum::<u64>(),
+        2
+    );
+    Ok(())
+}
+
+#[test]
 fn a_counted_run_whose_client_exited_in_error_is_listed_for_the_reader() -> TestResult {
     let (state, mut records) = batch(2, ClientName::Claude, |_| Verdict::pass())?;
     records[3]["run"]["exit_code"] = json!(1);
@@ -412,6 +435,9 @@ fn a_counted_run_whose_client_exited_in_error_is_listed_for_the_reader() -> Test
         .find(|warning| warning.contains("exiting in error"))
         .ok_or("no warning about the clients that failed")?;
     assert!(note.starts_with("2 counted run(s)"), "{note}");
-    assert_eq!(summary.runs.iter().filter(|run| run.client_failed).count(), 2);
+    assert_eq!(
+        summary.runs.iter().filter(|run| run.client_failed).count(),
+        2
+    );
     Ok(())
 }

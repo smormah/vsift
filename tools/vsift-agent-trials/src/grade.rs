@@ -45,6 +45,7 @@ use crate::{
     handoff::{HandoffSchema, MAX_RESUME_BYTES, PrivateMarkers, text_problems},
     policy::{BudgetLimits, CommandClass, CommandPolicy, HANDOFF_CHECK_OPERATION, HELP_OPERATION},
     scenario::{Expectation, ImagePolicy, PeriodBasis, Scenario, Timeline, TranscriptSource},
+    shim::ShimUse,
     trace::{ClientKind, Trace, Usage, UsageSource},
     truth::{CorpusTruth, Event, Fixture, KeyFact, SpeechSpan, normalize},
 };
@@ -186,6 +187,10 @@ pub struct Grade {
     /// none). Absent in grades written before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reported_usage: Option<Usage>,
+    /// Which of npm's command shims the client's `vsift` calls went through
+    /// (P14, #257); absent when the client ran none.
+    #[serde(default, skip_serializing_if = "ShimUse::is_empty")]
+    pub shim_use: ShimUse,
 }
 
 impl Grade {
@@ -320,6 +325,7 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
         checks: interpretation_checks,
         human_review: None,
     };
+    let shim_use = ShimUse::from_calls(&input.trace.calls);
     Grade {
         mechanical: Mechanical {
             passed: checks.iter().all(|check| check.passed),
@@ -333,6 +339,7 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
             .deviations
             .iter()
             .cloned()
+            .chain(shim_use.cmd_note())
             .chain((!images_measured).then(|| CODEX_IMAGES_UNMEASURED.to_owned()))
             .chain(
                 (context.timeline.basis == PeriodBasis::Nominal)
@@ -345,6 +352,7 @@ pub fn grade(input: &GradeInput<'_>) -> Grade {
         invalid_reasons: input.client_warnings.clone(),
         cold: None,
         reported_usage: reported_usage(input.trace),
+        shim_use,
     }
 }
 

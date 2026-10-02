@@ -63,9 +63,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   client's own cost estimate (`reported_usage`); a client that stops at its usage limit is detected and
   never counted. `campaign` plans the three batches (20, 34 and 18 runs) with retry limits, `summarize`
   computes the plan's gates, and `run-campaign.ps1` runs a batch resumably with a stop file. #205 was
-  already fixed by #203 and is closed. ADR 0024's note, `docs/agents/trials.md` ("The P14 batches"),
-  the plan's section 7, L-117 to L-120. Opt-in `install_npm` runs the real npm against a loopback
-  registry.
+  already fixed by #203 and is closed. **P14 PR 2's two findings are handled here:** both published
+  Codex images install `libgomp1`, which the reviewed whisper.cpp build needs (#256), and the
+  harness never runs an npm shim, Claude Code may run only `Bash(vsift:*)` (Git Bash on Windows; a
+  test pins the settings), and every grade and record counts the `vsift` calls by the shell they ran
+  in (`shim_use`), with a warning if one went through `cmd.exe`'s `vsift.cmd` (#257). ADR 0024's
+  note, `docs/agents/trials.md` ("The P14 batches"), the plan's section 7, L-117 to L-120.
+  Opt-in `install_npm` runs the real npm against a loopback registry.
 
 - **P14 PR 8: the release machinery for a release candidate and the stable release** (code,
   the Release workflow, its lint, tests and documentation; **nothing is published**, no tag or

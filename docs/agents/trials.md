@@ -641,6 +641,21 @@ managed mode it is never registered.
 **`run`** compares the SHA-256 of the installed executable with the one `prepare` verified and refuses
 to start the client if it changed.
 
+**Which shim the agent runs (#257, [L-109](../planning/known-limits.md#l-109)).** On Windows npm writes three
+command files for `vsift`: `vsift` (a POSIX script), `vsift.ps1` and `vsift.cmd`. P14 PR 2 found that the `.cmd`
+shim lets `cmd.exe` read a command line a second time (`%NAME%` is expanded, quotes are dropped, an unquoted
+redirection runs), which the other two do not. The trials keep off it in three ways. **The harness never runs a
+shim:** `install`, `prepare` and `verify-install` run `node`, `npm-cli.js`, the launcher or the native executable
+as explicit programs and arguments. **The agent can only use Git Bash:** Claude Code's settings allow
+`Bash(vsift:*)` (the Bash tool, which is Git Bash on Windows) and, under `dontAsk`, deny every other tool, so a
+`cmd.exe` or PowerShell call is refused (a test pins both settings files to this); Codex runs on Linux, where
+npm makes no shim at all. **Every record says which shim ran:** `shim_use` counts the `vsift` calls by the shell
+they ran in (`posix`: the extensionless shim on Windows, the plain link on Linux; `powershell`: `vsift.ps1`;
+`cmd`: `vsift.cmd`), read from the commands the client reported, and the install evidence lists the command
+files npm wrote (`command_shims`). A call through `cmd.exe` is a note in the grade's deviations and a warning in
+the batch summary, not a failure: it should be impossible, so seeing it means a rule or the harness changed.
+The `cmd.exe` shim is therefore **not exercised by any agent trial**; PR 7 decides what to do about it.
+
 **Codex.** `codex-trial.ps1 build -Published -PublishedVersion <exact>` builds two more images
 (`agent-published`, `harness-published`) whose Dockerfile stages run `vsift-agent-trials install` against
 the real registry at build time and fail the build unless the install is the published package
@@ -648,8 +663,13 @@ the real registry at build time and fail the build unless the install is the pub
 repository, no FFmpeg, no whisper.cpp and no model, and the package's `skills/` folder and READMEs are made
 unreadable to everyone but root (the bytes are unchanged), so a cold Codex agent cannot read them;
 the harness image has the repository, FFmpeg for the clips and the readable package, and never runs a
-client. `.github/workflows/p12-codex-container.yml` builds both from the published 0.1.0 on every
-change to the harness and checks what each holds and hides.
+client. Both published images install `libgomp1` from Ubuntu's archive: the reviewed whisper.cpp build that
+`setup install` downloads needs `libgomp.so.1`, a minimal Ubuntu 24.04 image lacks it, and the install then fails
+with `MISSING_CAPABILITY` without naming the library (P14 PR 2's finding, #256,
+[L-110](../planning/known-limits.md#l-110)). It belongs to the system image, as on a user's Ubuntu; the harness
+installs no distribution package into a trial. `.github/workflows/p12-codex-container.yml` builds both from the
+published 0.1.0 on every change to the harness and checks what each holds and hides, and that the library is
+there.
 
 ## Cold-agent mode (P14)
 
@@ -830,6 +850,8 @@ private fails `records_privacy`.
 
 - A clean install here is **not a clean machine**: Windows has the maintainer's developer tools around the trial,
   and Claude Code itself is installed. The proof is that the bytes are the registry's, not the maintainers' (L-117).
+- **No agent trial exercises the `vsift.cmd` shim**, the one #257 found re-reads arguments: the Claude trials reach
+  `vsift` only through Git Bash and the Codex trials run on Linux (L-109; PR 7 decides).
 - A cold agent could still **find the package's README and skill on disk** (Windows) if it looked: the read gate flags
   it as a safety failure, and Claude Code's own rules deny it, but nothing physically stops a read there; in the Codex
   image the files are unreadable. A cold trial's folder and prompt still say it is a test (L-117).

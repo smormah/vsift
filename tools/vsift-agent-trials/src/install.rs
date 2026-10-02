@@ -205,6 +205,11 @@ pub struct InstallEvidence {
     pub npm_version: String,
     /// Install scripts were switched off.
     pub ignore_scripts: bool,
+    /// Which command files npm wrote for `vsift` (`vsift`, `vsift.cmd`,
+    /// `vsift.ps1`). Only the first is reachable by an agent: see
+    /// [`crate::shim`].
+    #[serde(default)]
+    pub command_shims: Vec<String>,
 }
 
 impl InstallEvidence {
@@ -488,6 +493,10 @@ pub fn modules_root(prefix: &Path) -> PathBuf {
     }
 }
 
+/// The command files npm writes for `vsift` on Windows, the extensionless
+/// POSIX script first; elsewhere only that name exists.
+const COMMAND_SHIMS: [&str; 3] = ["vsift", "vsift.cmd", "vsift.ps1"];
+
 /// The folder npm puts a global package's command shims in under `prefix`.
 #[must_use]
 pub fn command_directory(prefix: &Path) -> PathBuf {
@@ -594,12 +603,10 @@ pub fn verify_install(
     }
 
     let command = command_directory(request.prefix);
-    let shim = if cfg!(windows) {
-        command.join("vsift.cmd")
-    } else {
-        command.join("vsift")
-    };
-    if !shim.exists() {
+    // The extensionless shim is a POSIX script on Windows (the Bash tool's
+    // shell runs it) and npm's link to the launcher elsewhere: the one the
+    // agent reaches.
+    if !command.join(COMMAND_SHIMS[0]).exists() {
         return Err(TrialError::Invalid(
             "npm made no vsift command in the prefix".to_owned(),
         ));
@@ -631,6 +638,11 @@ pub fn verify_install(
             node_version: request.node_version.to_owned(),
             npm_version: request.npm_version.to_owned(),
             ignore_scripts: true,
+            command_shims: COMMAND_SHIMS
+                .iter()
+                .filter(|name| command.join(name).exists())
+                .map(|name| (*name).to_owned())
+                .collect(),
         },
         prefix: request.prefix.to_path_buf(),
         package_root,

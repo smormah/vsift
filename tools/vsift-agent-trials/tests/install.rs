@@ -163,10 +163,15 @@ impl Fabricated {
         )?;
         let commands = command_directory(&prefix);
         fs::create_dir_all(&commands)?;
-        fs::write(
-            commands.join(if cfg!(windows) { "vsift.cmd" } else { "vsift" }),
-            "shim",
-        )?;
+        // On Windows npm writes three command files; elsewhere one.
+        let shims: &[&str] = if cfg!(windows) {
+            &["vsift", "vsift.cmd", "vsift.ps1"]
+        } else {
+            &["vsift"]
+        };
+        for shim in shims {
+            fs::write(commands.join(shim), "shim")?;
+        }
         let node = scratch.path().join("node").join("node");
         fs::create_dir_all(scratch.path().join("node"))?;
         fs::write(&node, "node")?;
@@ -239,6 +244,15 @@ fn a_registry_install_with_matching_records_counts_as_published() -> TestResult 
     assert_eq!(evidence.launcher.actual_sha256, sha256_hex(NATIVE_BYTES));
     assert_eq!(evidence.launcher.version_line, "vsift 0.1.0 (0123456789ab)");
     assert!(evidence.ignore_scripts);
+    // The record names the command files npm wrote, the POSIX script first.
+    assert_eq!(
+        evidence.command_shims.first().map(String::as_str),
+        Some("vsift")
+    );
+    assert_eq!(
+        evidence.command_shims.len(),
+        if cfg!(windows) { 3 } else { 1 }
+    );
     // The agent reaches vsift through npm's shim and Node.js, never the
     // native executable's own folder.
     assert_eq!(proof.client_path_directories.len(), 2);

@@ -389,6 +389,16 @@ fn the_real_npm_installs_from_a_registry_and_the_proof_agrees() -> TestResult {
     assert_eq!(evidence.packages[1].integrity_installed, native_sri);
     assert!(evidence.launcher.matches);
     assert_eq!(evidence.launcher.version_exit_code, Some(0));
+    // What the real npm wrote for the command: three files on Windows (the
+    // POSIX script first), the one link elsewhere (#257).
+    assert_eq!(
+        evidence.command_shims,
+        if cfg!(windows) {
+            vec!["vsift", "vsift.cmd", "vsift.ps1"]
+        } else {
+            vec!["vsift"]
+        }
+    );
     assert_eq!(evidence.launcher.version_line, "vsift 0.1.0 (0123456789ab)");
     assert!(proof.native_executable.is_file());
     assert!(proof.package_root.join("skills/vsift/SKILL.md").is_file());

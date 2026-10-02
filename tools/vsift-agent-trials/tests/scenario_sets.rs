@@ -215,3 +215,45 @@ fn the_hold_outs_are_ordinary_skill_scenarios_and_name_the_skill() -> TestResult
     }
     Ok(())
 }
+
+/// P14 PR 2 found that the `vsift.cmd` shim lets `cmd.exe` read arguments a
+/// second time (issue #257). The Windows trials stay off it because Claude
+/// Code may run only `Bash(vsift:*)` (the Bash tool, which is Git Bash on
+/// Windows) and every other tool is denied; a settings edit that allowed
+/// another shell would end that, so it fails here.
+#[test]
+fn the_claude_settings_let_the_agent_run_only_the_bash_tool_for_vsift() -> TestResult {
+    let folder = repository().join("tools/vsift-agent-trials");
+    for file in [
+        "claude-trial-settings.json",
+        "claude-cold-trial-settings.json",
+    ] {
+        let settings: Value = serde_json::from_str(&std::fs::read_to_string(folder.join(file))?)?;
+        assert_eq!(
+            settings["permissions"]["defaultMode"],
+            json!("dontAsk"),
+            "{file}: a tool outside the allow list must be denied, not asked about"
+        );
+        let allowed: Vec<&str> = settings["permissions"]["allow"]
+            .as_array()
+            .ok_or("no allow list")?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert!(allowed.contains(&"Bash(vsift:*)"), "{file}");
+        for rule in &allowed {
+            let lowered = rule.to_ascii_lowercase();
+            assert!(
+                !lowered.starts_with("powershell")
+                    && !lowered.starts_with("pwsh")
+                    && !lowered.contains("cmd"),
+                "{file} allows {rule}, a shell other than the Bash tool"
+            );
+            assert!(
+                *rule == "Bash(vsift:*)" || rule.starts_with("Read(") || rule.starts_with("Skill("),
+                "{file} allows {rule}, which the shim guarantee did not consider"
+            );
+        }
+    }
+    Ok(())
+}

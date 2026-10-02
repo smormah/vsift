@@ -103,6 +103,9 @@ pub struct RunLine {
     /// The client exited with an error or was stopped at the timeout, a
     /// usage limit, a turn limit or an outage among the possible reasons.
     pub client_failed: bool,
+    /// `vsift` calls that ran through `cmd.exe`'s `vsift.cmd` shim (#257);
+    /// expected to be 0.
+    pub cmd_shim_calls: u64,
     /// Input tokens as the client reported them.
     pub input_tokens: Option<u64>,
     /// Output tokens.
@@ -179,6 +182,7 @@ fn line(state: &RunState, trial_id: &str, record: &Value) -> RunLine {
         gap_entries: record["cold"]["gap_report"].as_array().map_or(0, Vec::len),
         wall_ms: record["run"]["wall_ms"].as_u64().unwrap_or_default(),
         client_failed: record["run"]["exit_code"].as_i64() != Some(0),
+        cmd_shim_calls: record["shim_use"]["cmd"].as_u64().unwrap_or_default(),
         input_tokens: number("input_tokens"),
         output_tokens: number("output_tokens"),
         cached_tokens: number("cached_input_tokens"),
@@ -541,6 +545,18 @@ pub fn summarize(states: &[CampaignState], records: &[Value]) -> Summary {
             "{} counted run(s) ended with the client exiting in error or stopped at the timeout (a usage limit in words the harness does not know, a turn limit or an outage look alike): {}",
             failed.len(),
             failed.join(", ")
+        ));
+    }
+    let through_cmd: Vec<&str> = runs
+        .iter()
+        .filter(|run| run.cmd_shim_calls > 0)
+        .map(|run| run.run_id.as_str())
+        .collect();
+    if !through_cmd.is_empty() {
+        warnings.push(format!(
+            "{} counted run(s) ran vsift through cmd.exe's vsift.cmd shim, which re-reads arguments (L-109, issue #257); the trials expect Git Bash or PowerShell: {}",
+            through_cmd.len(),
+            through_cmd.join(", ")
         ));
     }
     for (client, count) in used {

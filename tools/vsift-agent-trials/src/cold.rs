@@ -66,6 +66,7 @@ use crate::{
     policy::{BudgetLimits, CommandPolicy, PolicyViolation},
     scenario::{ColdUsefulness, Scenario},
     shell::{Dialect, SimpleCommand, parse_script},
+    shim::ShimUse,
     trace::{CallKind, ToolCall, Trace},
     truth::CorpusTruth,
 };
@@ -1425,6 +1426,8 @@ pub fn grade_cold(input: &ColdInput<'_>) -> Grade {
     if commands == 0 {
         deviations.push("the agent ran no vsift command".to_owned());
     }
+    let shim_use = ShimUse::from_calls(&input.trace.calls);
+    deviations.extend(shim_use.cmd_note());
     Grade {
         mechanical: Mechanical {
             passed: checks.iter().all(|check| check.passed),
@@ -1443,5 +1446,6 @@ pub fn grade_cold(input: &ColdInput<'_>) -> Grade {
         invalid_reasons: input.client_warnings.clone(),
         cold: Some(report),
         reported_usage: reported_usage(input.trace),
+        shim_use,
     }
 }

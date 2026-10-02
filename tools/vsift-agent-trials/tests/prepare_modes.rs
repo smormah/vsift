@@ -76,6 +76,7 @@ fn proof(scratch: &Scratch) -> Result<InstallProof, Box<dyn Error>> {
             node_version: "v24.21.0".to_owned(),
             npm_version: "11.19.0".to_owned(),
             ignore_scripts: true,
+            command_shims: vec!["vsift".to_owned()],
         },
         prefix: prefix.clone(),
         package_root,
@@ -632,6 +633,11 @@ async fn a_cold_trial_runs_grades_and_records_end_to_end() -> TestResult {
     );
     assert_eq!(record["cold_assertions"].as_array().map(Vec::len), Some(6));
     assert_eq!(record["reported_usage"]["cost_micro_usd"], 50_000);
+    // The record says which shell the client's vsift calls ran in (#257):
+    // the stub client runs plain commands, so only the POSIX shim, never
+    // cmd.exe.
+    assert!(record["shim_use"]["posix"].as_u64() > Some(0));
+    assert_eq!(record["shim_use"]["cmd"], 0);
     assert_eq!(record["holdout"], false);
     assert!(record["interpretation"]["human_review"].is_null());
     Ok(())

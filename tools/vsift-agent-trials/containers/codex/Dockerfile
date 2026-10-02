@@ -242,14 +242,22 @@ RUN curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
 # the registry's integrity of each package against what npm installed, the
 # launcher's digest check redone, and `vsift --version` through the launcher.
 # It fails the build if the install is not the published package.
+#
+# libgomp1: the reviewed whisper.cpp build that `setup install` downloads needs
+# libgomp.so.1, which a minimal Ubuntu 24.04 image lacks, and the install then
+# fails with MISSING_CAPABILITY without naming the library (P14 PR 2's finding,
+# issue #256, known limit L-110). It is part of the system image here, as it is
+# on a user's Ubuntu: the harness plays the user's part and installs no
+# distribution package into a trial.
 FROM ${UBUNTU_IMAGE} AS published-runtime
 ARG VSIFT_PUBLISHED_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 COPY --from=build-base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 RUN sed -i 's#http://#https://#g' /etc/apt/sources.list.d/ubuntu.sources \
  && apt-get update \
- && apt-get install --yes --no-install-recommends ca-certificates curl libssl3t64 \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get install --yes --no-install-recommends ca-certificates curl libgomp1 libssl3t64 \
+ && rm -rf /var/lib/apt/lists/* \
+ && test -e /usr/lib/x86_64-linux-gnu/libgomp.so.1
 RUN groupadd --gid 10001 trials \
  && useradd --uid 10001 --gid 10001 --home-dir /home/trials --create-home --shell /bin/bash trials \
  && install -d -o 10001 -g 10001 -m 0700 /trials /exports
