@@ -54,8 +54,7 @@ the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
   taken inside this ADR"). **The go for batch 1**, after PR 6 merges: edit a copy of
   `campaigns/campaign.example.json`, then `run-campaign.ps1 -Batch 1 -Client claude|codex
   -Version 0.1.0 -MaxRuns 4` (the pilots), read them, then the rest; needs Claude Code 2.1.284
-  and Docker; cost unknown until the pilots record tokens. Optional (L-102): edit the v0.1.0
-  release page ("Supported machines").
+  and Docker; cost unknown until the pilots record tokens.
 - **PR 5:** the SEC-T01 fixture, or the fallback. **PR 9:** one pass over the thirty register
   entries the claims lean on. **PRs 10 and 12:** each publish (`release.md` 6.3 and 6.7); the
   first stable publish is the first real `--tag latest`.
