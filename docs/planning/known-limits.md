@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-02 (P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-02 (the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -139,7 +139,6 @@ Each entry has these fields:
 | [L-099](#l-099) | Managed installation depends on files and redirect hosts that the publishers control | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-100](#l-100) | npm prints only `ENEEDAUTH`, with no reason, when a trusted publisher is missing or set wrongly | process/CI | low | unscheduled | none | accepted residual |
 | [L-101](#l-101) | The evidence ledger and the claims registry prove that recorded evidence exists and banned words are absent, not that a run passed or a sentence is true | process/CI | low | unscheduled | none | accepted residual |
-| [L-102](#l-102) | The published v0.1.0 release page still calls three machines "Supported machines" (the generated notes no longer do) | contract/UX | low | P14 (PR 13) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-103](#l-103) | Evidence carried forward from an earlier commit rests on a hand-written scope and needs Git history, and the delta record is copied into the ledger by hand | process/CI | low | P14 (PR 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-105](#l-105) | The stable publish path has never run against the real services | platform/distribution | medium | P14 (PR 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-107](#l-107) | The candidate-to-stable check compares paths and bytes, not meaning, and takes the highest candidate to be the accepted one | process/CI | low | unscheduled | none | accepted residual |
@@ -149,7 +148,7 @@ Each entry has these fields:
 | [L-111](#l-111) | The upgrade evidence has one published baseline, and its two modes prove different things | process/CI | low | P14 (PRs 10, 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-112](#l-112) | The clean-install jobs hide named programs from `PATH` on a hosted image; that is not a clean machine, and one tool set stands in for each system's users | process/CI | low | unscheduled | none | accepted residual |
 
-Counts: 1 high, 26 medium, 74 low (101 entries).
+Counts: 1 high, 26 medium, 73 low (100 entries).
 
 ## Security
 
@@ -2540,38 +2539,6 @@ banned words are absent, not that a run passed or a sentence is true.**
   different runner and by a person; the documents say what the checks do not prove.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
-  pending.
-
-### L-102
-
-**The published v0.1.0 release page still calls three machines "Supported machines" (the
-generated notes no longer do).**
-
-- **What:** the v0.1.0 release page, published 2026-10-01 from notes written before the
-  claims ladder, carries the line "Supported machines: Windows 11 x64, macOS 15 on Apple
-  silicon, and Linux x64 ..." (read 2026-10-02). `install.md`, the README, `SECURITY.md`
-  and ADR 0024 say no platform is "supported" until the release matrix earns the word, and
-  the three are "R0 targets". P14 PR 8 fixed the source of the line: the notes are rendered
-  from Markdown templates (`tools/vsift-release/notes/`) that say the executables are
-  built for the three R0 targets, the templates and `release.md` are scanned by the claims
-  check (`docs/planning/public-claims.json`), and the notes' tests refuse "supported". The
-  npm launcher's refusal messages (`npm/vsift-cli/lib/launcher.cjs`, which say "the
-  supported targets") are still unscanned, for PR 9.
-- **Evidence:** the published v0.1.0 release notes; `tools/vsift-release/notes/body.md` and
-  `src/notes.rs` with its tests; [`install.md`](../operations/install.md) section 1; ADR 0024
-  decisions F and G.
-- **Impact:** a reader of the v0.1.0 page is told these machines are supported, which the
-  project does not claim. The release is a pre-release and nothing is announced, so the
-  audience is whoever opens the page. Every later release's notes are worded and checked.
-- **Why:** the published page is public content on GitHub; changing it needs the
-  maintainer's word, and no agent or workflow edits a published release.
-- **Mitigation:** the install guide, the README and `SECURITY.md` say "target", and the
-  page opens by saying the release is a pre-release.
-- **Next step:** the maintainer edits the v0.1.0 page's line to the R0 wording (`gh release
-  edit v0.1.0 --notes-file <file>`), or leaves it; the ledger follow-up (PR 13) records
-  which, and deletes this entry once the page is right.
-- **Owner:** P14 (PR 13, the maintainer's edit). **Issue:**
-  [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred. **Review:**
   pending.
 
 ### L-103

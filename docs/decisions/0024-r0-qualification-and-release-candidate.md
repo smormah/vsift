@@ -699,3 +699,14 @@ this ADR:
 - **Found and fixed in documentation, not product code:** `install.md` now names the Windows `.cmd`
   shim (#257), `libgomp.so.1` (#256), Git's `tar` on Windows, the configuration folder's second
   content and the Linux data folder's parent. The known limits are L-109 to L-112.
+
+## Note, 2026-10-02: the v0.1.0 release page and the README
+
+On the maintainer's instruction the published v0.1.0 release page's line "Supported machines:"
+was edited to "Machines this release targets:" (nothing else on the page changed), which closes
+known limit L-102. The README was rewritten as the project's front page; it stays on the "now"
+rung of decision G's ladder (no platform is called "supported"), and the public-claims
+registry was updated in the same change (retired entries NC-003, NC-016, CL-001 and CL-003;
+NC-004 now covers the README as well). Its worked example is real output from the published
+`vsift-cli@0.1.0` on a synthetic recording of this repository's corpus. Promotion of any kind
+still starts only after P14 completes (ADR 0009).

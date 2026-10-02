@@ -518,7 +518,7 @@
       "supports": {
         "requirements": ["R-13", "R-14"],
         "threats": ["SEC-19"],
-        "limits": ["L-035", "L-037", "L-038", "L-102"]
+        "limits": ["L-035", "L-037", "L-038"]
       },
       "proves": "Public claims match what was measured: every claim in the registry names recorded evidence and no banned phrase appears. The registry and its check exist since P14 PR 1; the matrix and the enforcement at the candidate's rung are PR 9's.",
       "does_not_prove": "That a sentence is true. The check proves recorded evidence and absent banned words, not meaning.",

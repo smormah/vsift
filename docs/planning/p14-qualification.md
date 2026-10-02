@@ -310,7 +310,7 @@ the current rung, a claim whose evidence is not `passed`, a statement used in a 
 not registered for, and a stale entry. The later rungs' statements are listed already, unused.
 Scanned since PR 8: `release.md` and the four release-notes templates
 (`tools/vsift-release/notes/`, which no longer say "Supported machines"; the published v0.1.0 page
-still does, L-102). Not yet scanned, each with its owner pull request: the launcher's refusal
+was edited to the same wording on 2026-10-02, L-102 closed). Not yet scanned, each with its owner pull request: the launcher's refusal
 messages and the worker runbook (PR 9). It reads plain text: it cannot see meaning (L-101).
 
 ## 10. What the maintainer does, and the fallback

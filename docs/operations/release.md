@@ -663,7 +663,7 @@ matched.
   public-claims check (`docs/planning/public-claims.json`), and the notes name the three
   machines as the R0 targets the executables are built for rather than with the word the
   claims ladder reserves for the release matrix
-  ([L-102](../planning/known-limits.md#l-102)): a wording change is a change to a scanned
+  (L-102, closed 2026-10-02): a wording change is a change to a scanned
   document.
 - Settled (2026-10-02, ADR 0024 decisions A, B and C): R0 ships as `0.2.0` on `latest`,
   after a published release candidate `0.2.0-rc.N` under `next`, and without signing
