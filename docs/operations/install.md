@@ -19,7 +19,7 @@ source ([`development.md`](../development.md)) also works.
 | --- | --- | --- |
 | Windows 11 x64 | R0 target | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2) |
 | macOS 15 on Apple silicon | R0 target | `@vsift/darwin-arm64`. Bring your own tools (section 5.2). No media, speech or evidence check has run on macOS yet ([L-035](../planning/known-limits.md#l-035)) |
-| Ubuntu 24.04 on x64 | R0 target, and the only machine where VSift installs its own tools | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have |
+| Ubuntu 24.04 on x64 | R0 target, and the only machine where VSift installs its own tools | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (section 5.1) |
 | Another Linux on x64 with glibc 2.35 or later and OpenSSL 3 | not a target | The binary is built on Ubuntu 22.04 and may run; it has not been tested |
 | Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | not supported | The launcher says so and exits 127 (section 10) |
 
@@ -92,6 +92,17 @@ disabled (`--ignore-scripts`, Bun's default, pnpm's and Yarn's settings), and in
 downloads nothing else. After the install the command works offline. Media tools and the
 speech model are separate (section 5).
 
+**On Windows, run `vsift` from PowerShell, or call the platform package's `vsift.exe`, when
+an argument holds text you did not write.** npm and pnpm create a
+`vsift.cmd` beside the `vsift.ps1` that PowerShell runs for `vsift`, and cmd.exe re-reads the
+command line of a `.cmd` file: it expands `%NAME%`, can drop a double quote, and acts on an
+unquoted `>` or `|` as its own syntax (an argument such as `a;echo,x>marker` created the file
+`marker` when a hosted runner started `vsift.cmd` from PowerShell). The `.ps1` shim and
+Bun's `vsift.exe` did not misbehave: a hosted Windows runner gave each of them 14 hostile file
+names (each had to open the file) and 11 hostile arguments (each had to run no command) with
+leading dashes, spaces, accents, `$()`, `;&^`, `%` and `--help` after `--`, and VSift answered
+exactly as when it is started directly ([L-109](../planning/known-limits.md#l-109)).
+
 **Where the skill is.** Under the global package folder: `npm root --global` (or `pnpm
 root --global`) names the folder that holds `vsift-cli/skills/vsift/`. Copy it as
 [`../agents/skill.md`](../agents/skill.md) describes.
@@ -162,6 +173,12 @@ It holds one folder with the `vsift` executable (`vsift.exe` on Windows), the li
    `--version` line ends in the first 12 digits of the commit it was built from, which must
    be the start of the commit the release tag names (`git ls-remote
    https://github.com/smormah/vsift 'refs/tags/v<version>^{}'`).
+
+   **On Windows, use the `tar` that comes with Windows** (`C:\Windows\System32\tar.exe`).
+   Git for Windows installs a GNU `tar` too, and when its tools come first on your `PATH` it
+   reads `D:\...` as the name of another machine and stops with "Cannot connect to D". Call the
+   Windows one by its full path, or give the GNU one `--force-local`. A hosted Windows runner
+   met exactly this on 2026-10-02.
 
 ## 4. Windows and macOS: SmartScreen, Gatekeeper and what to check instead
 
@@ -269,6 +286,13 @@ vsift setup check                                  # each tool now reports [mana
   with one atomic step. A component that fails never becomes active, and what was active
   before stays. Run the same command again and it continues from the first component that
   is not current. It restarts an interrupted download from byte zero: it never resumes.
+- **A library the guide used not to name.** The reviewed whisper.cpp build is linked
+  against the OpenMP runtime, `libgomp.so.1` (Ubuntu package `libgomp1`). A hosted Ubuntu
+  24.04 runner has it; the minimal `ubuntu:24.04` container image does not, and there
+  `setup install` stops at the whisper.cpp component with `MISSING_CAPABILITY` (the banner
+  check, `provider_failed`) while FFmpeg installs. If you meet
+  that, `sudo apt-get install libgomp1` and run the same `setup install` again
+  ([L-110](../planning/known-limits.md#l-110)).
 - **Where:** `~/.local/share/vsift/managed-v1` (or under `$XDG_DATA_HOME`). Nothing is
   written outside VSift's own folders.
 - **Ctrl-C** cancels, discards the stage in progress and keeps what is already active. A
@@ -401,9 +425,9 @@ folder.
 
    | What | Windows | macOS | Linux |
    | --- | --- | --- | --- |
-   | Configuration (registered tool paths) | `%LOCALAPPDATA%\vsift` | `~/Library/Application Support/vsift` | `$XDG_CONFIG_HOME/vsift` or `~/.config/vsift` |
+   | Configuration (registered tool paths, and the record of the media-tool check) | `%LOCALAPPDATA%\vsift` | `~/Library/Application Support/vsift` | `$XDG_CONFIG_HOME/vsift` or `~/.config/vsift` |
    | Disposable sessions (private copies of videos you ingested) | `%LOCALAPPDATA%\VSift-sessions` | `~/Library/Caches/VSift-sessions` | `$XDG_CACHE_HOME/vsift-sessions` or `~/.cache/vsift-sessions` |
-   | Managed tools | not installed | not installed | `$XDG_DATA_HOME/vsift/managed-v1` or `~/.local/share/vsift/managed-v1` |
+   | Managed tools | not installed | not installed | `$XDG_DATA_HOME/vsift/managed-v1` or `~/.local/share/vsift/managed-v1` (the `vsift` folder above it holds nothing else: delete it too) |
 
    `vsift session clean --expired` removes expired sessions first, if you prefer.
 4. **What VSift never deletes:** your original videos and transcripts (it works on private

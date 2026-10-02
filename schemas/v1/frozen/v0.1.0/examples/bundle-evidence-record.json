@@ -1,0 +1,51 @@
+{
+  "detail": "single",
+  "format": "vsift.evidence_record",
+  "items": [
+    {
+      "evidence_id": "evd_4bde1fcff2101c6b1e8d176108a5603d",
+      "media": {
+        "bytes": 41,
+        "kind": "frame_png",
+        "sha256": "03ae1406ce88657b795ffae98e2721a0bd401b8dcdd5c4906b2f51a3832fed86"
+      },
+      "source_check": "full_hash",
+      "stream_index": 0,
+      "subject": {
+        "frame": {
+          "height": 36,
+          "pts": 21,
+          "time_base_denominator": 20,
+          "time_base_numerator": 1,
+          "time_us": 1050000,
+          "width": 64
+        }
+      },
+      "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+    }
+  ],
+  "partial_reason": null,
+  "profile": "p09-r0-v1",
+  "request": {
+    "frame_get": {
+      "at_us": 1025000,
+      "candidate_id": null,
+      "policy": "at_or_after",
+      "tolerance_us": 10000000
+    }
+  },
+  "request_key": "opk_sha256_442d8d04d344cc04cc2454b1a9990eec6daf257d58617ccf3a900f844a828483",
+  "schema_version": 1,
+  "selections": [
+    {
+      "actual_us": 1050000,
+      "delta_us": 25000,
+      "evidence_id": "evd_4bde1fcff2101c6b1e8d176108a5603d",
+      "requested_us": 1025000,
+      "role": "requested"
+    }
+  ],
+  "session_id": "ses_0123456789abcdef0123456789abcdef",
+  "source_id": "src_sha256_2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+  "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+}

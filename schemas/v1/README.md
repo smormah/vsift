@@ -317,6 +317,11 @@ workspace with capacity 8 and the default 168-hour retention.
 `transcript-retranscribe.json`: the job's chunk progress (0 of 1, 1 of 1), then that
 result as the terminal event (checked by `local_asr_contract`).
 
+`frozen/v0.1.0/examples/` (P14 PR 2) is a byte-for-byte copy of `examples/` as the tag `v0.1.0`
+published it, kept so that the current schemas and stored-record readers can be held to the
+published release (`vsift-contract`'s `published_compatibility`, `vsift-infrastructure`'s
+`published_v0_1_0_records`; see its `README.md`). It is never edited.
+
 Every file under `examples/` is a frozen valid instance checked by the Rust contract
 suites in `vsift-contract` (`schema_conformance`, `transcript_contract`) and `vsift-cli`. Response readers must tolerate additive fields within major v1. Strict request
 and configuration readers reject unknown fields. Unknown major versions are rejected.

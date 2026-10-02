@@ -379,6 +379,36 @@ pnpm, Yarn and Bun against a loopback Verdaccio runs in the Release workflow; to
 yourself, see the same runbook section. It never publishes to a public registry, and
 nothing in this repository may.
 
+## Published-artifact qualification tools (P14)
+
+`tools/p14-published/` holds plain Node.js tools (CommonJS, no dependency) that install and run
+the **published** VSift on hosted runners: the real registry's packages with npm, pnpm, Yarn and
+Bun, the release archives, the offline install with the real reviewed artifacts, the upgrade, and a
+second verification of a publish. Four workflows run them: `P14 published artifacts`, `P14 local
+upgrade`, `P14 verify release` and `P14 compatibility`
+([`planning/p14-qualification.md`](planning/p14-qualification.md) section 15 says what each proves
+and what it does not; the folder's `README.md` lists the scripts). They publish nothing, hold no
+secret and need only the job's default read-only token; the governance workflow lint and
+`test/pins.test.cjs` hold them to that.
+
+```console
+node --test "tools/p14-published/test/*.test.cjs"
+```
+
+The tests need no network and no published package. The tools themselves do: they read the public
+registry and the GitHub release, so run them on a hosted runner (dispatch the workflow, or open a
+pull request that changes the workflow or the tools). Only `verify-release.cjs` is safe elsewhere
+(it reads, and downloads the release files into its work folder); the others install packages,
+make sessions, run the published binary and delete folders in a throwaway user state, so do not run
+them on a machine whose state you care about. Their pins (Node.js, Bun, pnpm, Yarn, Verdaccio, the actions,
+the Ubuntu image) are the Release workflow's; change them there and in the P14 workflows together,
+or the pins test fails. A pull request that changes `tools/p14-published/**` or one of the four
+workflows starts the first three workflows; one that changes the schemas, the contract or the
+record readers starts `P14 compatibility`, which fetches the history and requires the checked-in
+copy of 0.1.0's JSON examples (`schemas/v1/frozen/v0.1.0/`) to be the tag's bytes. The tests behind
+that workflow, `published_compatibility` and `published_v0_1_0_records`, also run in every Quality
+job with the checked-in copy.
+
 ## Governance checks, release evidence and public claims
 
 `cargo run --locked -p vsift-governance -- check` is the Governance job. Besides the delivery

@@ -1,0 +1,96 @@
+{
+  "command": "job.run",
+  "coverage": null,
+  "data": {
+    "attempt": 1,
+    "controls": {
+      "admission_capacity": 8,
+      "concurrency": 2,
+      "free_space_reserve": "enforced",
+      "isolation": "strict_linux",
+      "resource_limits": "host_cgroup"
+    },
+    "failure": null,
+    "lifecycle": {
+      "expires_at": "2026-10-05T12:00:00Z",
+      "mode": "durable_worker"
+    },
+    "operation_id": "op_5b1e0c7a9d2f4e6b8a3c1d0e9f7a6b5c",
+    "publication": "os_crash_durable",
+    "replayed": false,
+    "request_digest": "38ca75e74476daae1ec4f372a621f9c0223bbf7788ec15145bb121a7978b4160",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_id": "src_sha256_f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881",
+    "status": "complete",
+    "steps": [
+      {
+        "admission_wait_ms": 0,
+        "coverage": null,
+        "elapsed_ms": 412,
+        "failure": null,
+        "job_id": null,
+        "kind": "ingest",
+        "outputs": {
+          "generation": 1,
+          "revision_id": null
+        },
+        "status": "complete"
+      },
+      {
+        "admission_wait_ms": 180,
+        "coverage": null,
+        "elapsed_ms": 21530,
+        "failure": null,
+        "job_id": "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70",
+        "kind": "retranscribe",
+        "outputs": {
+          "chunks_reused": 0,
+          "generation": 2,
+          "revision_id": "trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978"
+        },
+        "status": "complete"
+      },
+      {
+        "admission_wait_ms": 0,
+        "coverage": {
+          "gaps": [],
+          "reasons": [],
+          "truncated": false
+        },
+        "elapsed_ms": 2940,
+        "failure": null,
+        "job_id": null,
+        "kind": "candidates",
+        "outputs": {
+          "candidate_count": 4,
+          "generation": 3,
+          "visual_index_id": "vix_31b0dcc02c3694707c889ba38d140c4f"
+        },
+        "status": "complete"
+      },
+      {
+        "admission_wait_ms": 0,
+        "coverage": null,
+        "elapsed_ms": 96,
+        "failure": null,
+        "job_id": null,
+        "kind": "retain",
+        "outputs": {
+          "artifact_count": 3,
+          "bundle_name": "f01-review",
+          "bundle_sha256": "3c9a0e5f7b2d4c6e8a1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a5c"
+        },
+        "status": "complete"
+      }
+    ]
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-10-05T12:00:00Z",
+    "mode": "durable_worker"
+  },
+  "operation_id": "op_5b1e0c7a9d2f4e6b8a3c1d0e9f7a6b5c",
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

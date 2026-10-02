@@ -1,0 +1,61 @@
+{
+  "command": "setup.install",
+  "coverage": null,
+  "data": {
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
+    "cleanup": {
+      "stale_stages_removed": 1,
+      "stale_stages_retained": 0,
+      "versions": [
+        {
+          "component": "ffmpeg_ffprobe",
+          "status": "removed",
+          "version": "n8.1-2-g0123456789-20260601"
+        }
+      ]
+    },
+    "components": [
+      {
+        "component": "ffmpeg_ffprobe",
+        "failure_code": null,
+        "reason": null,
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": "discarded",
+        "status": "activated",
+        "step": null,
+        "version": "n9.0.1-11-ge47273f4d9-20260831"
+      },
+      {
+        "component": "whisper_cli",
+        "failure_code": null,
+        "reason": null,
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": "discarded",
+        "status": "activated",
+        "step": null,
+        "version": "whisper.cpp-v1.9.2-ubuntu-x64"
+      },
+      {
+        "component": "whisper_model",
+        "failure_code": null,
+        "reason": null,
+        "retention_reason": null,
+        "smoke_check": null,
+        "stage": "discarded",
+        "status": "activated",
+        "step": null,
+        "version": "whisper-base-multilingual-80da2d8"
+      }
+    ],
+    "next_step": "Every component of the plan is installed and selected. Run setup check to confirm what each command will use.",
+    "source": "publisher"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

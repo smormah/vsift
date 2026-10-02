@@ -7,8 +7,8 @@ and decisions: [ADR 0024](../decisions/0024-r0-qualification-and-release-candida
 pull requests" in
 [implementation-work-packets](implementation-work-packets.md). This file becomes the P14
 qualification record when the packet completes: until then every "Evidence that exists"
-cell is what the earlier records show, every "P14 adds" cell is a plan, and nothing here is
-a result. Test IDs are [verification](verification.md)'s; the `RQ-nn` IDs below are local to
+cell is what the earlier records show, every "P14 adds" cell is a plan, and the only results are
+those of section 15 (PR 2, on the published 0.1.0). Test IDs are [verification](verification.md)'s; the `RQ-nn` IDs below are local to
 P14's [evidence ledger](p14-evidence-ledger.json) and have their rows in verification
 section 8 (added by PR 1, 2026-10-02, which also built the ledger's checks and the
 [claims registry](public-claims.json)). Dates are UTC.
@@ -72,7 +72,7 @@ the code where noted (checked 2026-10-02).
 | Requirement | Evidence that exists | Weak because | P14 adds |
 | --- | --- | --- | --- |
 | R-01 agent video investigation | P09 mechanical journeys on both transcript paths (Windows 11); P12 named-client trials (Claude Code on Windows, Codex in a Linux container; review tier 11 of 11 mechanical, compact 93% and 100% on #222); the A-08 journey on managed tools on hosted Ubuntu | Every checkpoint ran a Cargo-built binary, never the published one; one Windows machine; synthetic corpus and voice; no macOS; skill, grader and scenarios co-evolved; no skill-less run | RQ-05, RQ-15, RQ-16 |
-| R-02 stable CLI and JSON | C-01..C-10; frozen examples; the v1 schemas; additive-only since 0.1.0 | No external consumer; no test compares a later build with the published 0.1.0 (to be confirmed in PR 2: none was found) | RQ-04, the `--help` review in PR 7 |
+| R-02 stable CLI and JSON | C-01..C-10; frozen examples; the v1 schemas; additive-only since 0.1.0 | No external consumer; no test compared a later build with the published 0.1.0 (PR 2 confirmed it and added two: section 15) | RQ-04, the `--help` review in PR 7 |
 | R-03 dependency lifecycle | D-01..D-10; hosted managed smoke (runs 36734316384, 36793180858); kill matrix; power loss (run 36829198545) | Offline install with stand-ins only; runs used a source build; publisher files unwatched (L-099); Windows and macOS are guidance only | RQ-03, RQ-06, RQ-11 |
 | R-04 transcript import and local ASR | T-01..T-06; weekly local-ASR job on Ubuntu 24.04 and Windows; WER 3.25% clean | Synthetic voice; noisy clip 61.5% ungated; no accent or human voice; nothing on macOS (L-020..L-022) | RQ-05 on macOS; claims worded as "measured on a synthetic corpus"; RQ-07 |
 | R-05 visual and audio retrieval | M-01..M-06, V-01..V-08: recall 10 of 10 stable events, 0 false change candidates; pixel-equal crops | Windows 11 with FFmpeg 9.0 (gyan.dev); thresholds calibrated on drawn video; three corpus limitations (#159) | RQ-05 on Ubuntu (BtbN build), Windows, macOS |
@@ -401,8 +401,107 @@ counts as qualification evidence.
 | Whether Windows Sandbox is available on the maintainer's machine | Unknown: it could not be read without elevation | Not needed if a virtual machine or another PC is used; the maintainer may check |
 | Whether the maintainer owns a Mac (macOS 15) | Unknown; the supervisor has asked | If not: the macOS Gatekeeper try-out ships "untried", with a hosted `spctl` check as partial support (decision H) |
 | Whether hosted-runner minutes are free for the account | Unknown; the supervisor has asked. The repository is public and GitHub documents standard runners as free for public repositories (not re-checked for this account) | Section 5 lists runner-hours either way; a cost would change the soak and fuzz budgets, not the gates |
-| Whether any test compares a build with the published 0.1.0 schemas | None found by reading | PR 2 confirms and adds one |
+| Whether any test compares a build with the published 0.1.0 schemas | **Settled in PR 2 (2026-10-02): none did.** `published_compatibility` and `published_v0_1_0_records` do now (section 15.3) | Done |
 | Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | Not checked | PR 3 |
 | Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | Not checked | PR 3 records the versions |
 | Whether the automated safety stop on authoring a hostile provider fixture recurs | Unknown | PR 5; the fallback is decision E's option 4 |
 | Tokens spent per agent run | Not recorded in P12 | The budget in section 7 is an estimate; PR 6 records usage where the clients report it |
+
+## 15. PR 2: the published-artifact qualification (RQ-01 to RQ-04 and RQ-19), built and run on 0.1.0
+
+Built in P14 PR 2 (2026-10-02, pull request #255; [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)'s
+PR 2 note has the decisions). It qualifies the **published** bytes: nothing is built from source
+except in the local upgrade mode. Four workflows, each with `contents: read` (and `attestations:
+read` where `gh attestation verify` runs), no secret and no OIDC token, which the governance
+workflow lint and `tools/p14-published/test/pins.test.cjs` hold them to. The tools are
+`tools/p14-published/` (Node.js, no dependency); how to run and extend them is in
+[`development.md`](../development.md).
+
+### 15.1 What each job proves, and what it does not
+
+| Workflow, job | Evidence | What a pass shows | What it does not show |
+| --- | --- | --- | --- |
+| `P14 published artifacts`, `clean-install` (3 systems x npm, pnpm, Yarn, Bun) | RQ-01 | `vsift-cli@<version>` installs from `https://registry.npmjs.org/` in an environment where `cargo`, `rustc`, `rustup`, `git` and `python` do not resolve (asserted first): global (Yarn: project) and one-shot, scripts disabled; `--version` names the version and the tag's first 12 commit digits; `setup check --json` is vsift's own answer; the installed skill is the tag's, byte for byte (not Yarn: its zip); 14 to 23 hostile file names and 11 to 14 hostile arguments reach vsift through every shim PowerShell, a POSIX shell or Bun runs (a file name must open the file, an argument must run no command) and answer as vsift itself; a fake `ffmpeg` is never selected or run from the working directory or a relative `PATH` entry, never trusted for media work from an absolute `PATH` directory, and loses to a registered tool; optional dependencies omitted fail with exit 127 naming the package and the three targets; `npm audit signatures` and `gh attestation verify` pass for the launcher and the system's platform tarball; Yarn's one-day gate is met and the documented exemption passes | A clean machine ([L-112](known-limits.md#l-112)); a user's proxy or policy; Smart App Control; Windows `vsift.cmd` (run from PowerShell and only observed, [L-109](known-limits.md#l-109)) and from cmd.exe; pnpm, Yarn and Bun upgrades |
+| `archive` (3 systems) | RQ-02 | The three archives and `SHA256SUMS` download from the release; the checksums and each archive's attestation verify; each extracts and holds its executable in the right format, the licences, notices, SBOM and skill; the one for the system runs `--version` (version and commit) and `setup check --json` with no Node.js, toolchain, Git or Python on `PATH`; the skill is the tag's, byte for byte | The prompts a browser download triggers (RQ-17); that the other two executables run |
+| `offline-install` (Ubuntu 24.04) | RQ-03 | The published binary's own `setup plan` names three reviewed artifacts; they download by that plan (size and SHA-256 as the bytes arrive, a neutral user agent) and install with `--artifact-dir` inside a container with `--network none`: all three components activated, `setup check` ready from the managed store, every component verifies and a rerun is `already_current`; the same install without the folder fails there as `offline` (so the network really is absent); a relative folder is `INVALID_ARGUMENT`; one changed byte is `INTEGRITY_FAILURE` (`digest_mismatch`) and the tampered file is never used; a missing file is `INVALID_ARGUMENT` (`artifact_missing`) | That the publishers keep their files ([L-099](known-limits.md#l-099)); a system but a minimal Ubuntu 24.04 image given the one library it lacked ([L-110](known-limits.md#l-110)) |
+| `upgrade` (3 systems), real-registry mode | RQ-04 | The published from-version installs from the real registry, gets its media tools (Ubuntu: the managed install of that version; Windows: the pinned FFmpeg; macOS: Homebrew's) and a registered configuration, makes two sessions (a supplied SRT and a VTT) and a retained bundle; the guide's upgrade command is run; the configuration is byte-identical, session A's status, transcript page and search read the same (additive members allowed), the session list and the bundle are as before, a new session works; then `install.md` section 8 is walked: managed tools removed, the package gone, VSift's own folders exactly the ones the guide names, deleting them removes every trace, and the bundle, registered tools and sources stay | A newer version reading an older one's data, **while only one version is published** (the same version is installed again: the procedure and persistence only) |
+| `P14 local upgrade`, 3 systems | RQ-04 | The same, but the upgrade installs the pull request's own build, packed as `vsift-cli@99.0.0-p14local.1` and served by a loopback-only registry (Verdaccio, no uplink, a throwaway token): a newer build reads a published build's sessions, bundle and configuration; the package manager upgrades | The release packaging (`vsift-release npm`); anything about a published version ([L-111](known-limits.md#l-111)) |
+| `P14 compatibility` and, in every Quality job, `published_compatibility` and `published_v0_1_0_records` | RQ-04 | Every one of the 52 JSON examples of 0.1.0 (`schemas/v1/frozen/v0.1.0/examples/`, byte-identical to the tag's: the workflow fetches the history and requires it) validates against the **current** v1 schemas; the four stored session records (two transcript revisions, the evidence lineage, the visual index) decode with the current readers | A whole 0.1.0 session in a unit test (a session carries an expiry and the source video; the upgrade jobs cover it on real binaries) |
+| `P14 verify release` | RQ-19 | From a hosted runner with no publishing credential: the four packages' dist-tags and npm provenance (the attestation names `release.yml`, the tag, the tag's commit and a GitHub-hosted builder), `npm audit signatures`, `gh attestation verify` for the ten release files and the four tarballs, the checksums against GitHub's own digests, the release flags (not a draft, a pre-release, not the latest release) and its ten files | A compromised GitHub or npm; a stable version (below) |
+
+### 15.2 The scrubbed environment
+
+Every install and every run happens with a `PATH` from which `cargo`, `rustc`, `rustup`, `rustdoc`,
+`git` and `python` (and `pip`, `py`, versioned Python names, the rest of a Rust toolchain's own
+directory) do not resolve; the archive job also hides `node`, `npm`, `npx`, `bun`, `pnpm` and
+`yarn`. The job asserts that **before anything is installed** and prints what the runner carried
+beforehand. A directory that holds none of these is kept; on Windows a directory that holds one is
+dropped whole; on Linux and macOS it is replaced by links to everything in it but those names.
+Relative and empty entries are dropped. The user state (`HOME`, `LOCALAPPDATA`, the XDG folders) is
+a fresh folder, no token or package-manager setting of the runner's reaches a child, and the
+registry is checked to be the public one. Unit-tested on all three systems; limits are
+[L-112](known-limits.md#l-112).
+
+### 15.3 The two modes of the upgrade check, and the compatibility test
+
+Only 0.1.0 is published, so the real-registry mode upgrades 0.1.0 to 0.1.0: it proves the guide's
+procedure and that nothing it does disturbs what the user kept. The local mode upgrades 0.1.0 to
+the pull request's own build ([L-111](known-limits.md#l-111)). When the candidate is published, run
+`P14 published artifacts` with `from_version` 0.1.0: the same job then reads 0.1.0's data with the
+candidate over the real registry, which is the evidence the plan wants.
+
+The compatibility test is built at the lowest layer that does the job. The frozen copy is checked
+in, so it runs in every pull request on three systems with no history; `P14 compatibility` proves
+the copy is the tag's. Reading the tag at test time was rejected for the default checkout (shallow,
+no tags), and the live examples cannot stand in because they are free to grow. A later release is
+frozen the same way, in a folder of its own.
+
+### 15.4 Results on 0.1.0 (2026-10-02)
+
+Runs on commit `6aa5403` of the pull request, rebased onto PR 8's merge (#252); the tools differ
+from the all-green round before the rebase only in PR 8's channel rule and the message of the
+unregistered stable checks (unit-tested). This round used about 50 runner-minutes, rounded up per
+job (the longest job 3.8 minutes); the three rounds before the rebase, which found the problems
+below, about 105 in all. All jobs green: `P14 published artifacts` run 36969577337 (12 clean-install
+jobs, 3 archive jobs, the offline install, 3 upgrade jobs, and the tests and version jobs), `P14 local
+upgrade` run 36969577251 (3 builds, the packing, 3 upgrade jobs), `P14 verify release` run
+36969577300, `P14 compatibility` run 36969577282.
+Each of the first jobs failed at its first run for a reason in the checks, not in VSift (an
+`--file` that must be absolute, Git's GNU `tar` on a Windows runner, `session list`'s paging, the
+configuration folder's media-tool record, PowerShell splitting `--option=C:\...` on its own command
+line); every one was fixed in the tool and none by relaxing a rule.
+
+**Findings** (each an issue, a known limit and a documentation fix; no product code was changed here):
+
+| Finding | Issue | Limit |
+| --- | --- | --- |
+| On Windows the `vsift.cmd` shim of npm and pnpm lets cmd.exe re-read arguments: `%NAME%` expanded, quotes dropped, an unquoted redirection ran as a command (`.ps1`, Bun's `.exe` and the Linux and macOS shell shim passed every hostile case) | [#257](https://github.com/smormah/vsift/issues/257) | [L-109](known-limits.md#l-109) |
+| The reviewed whisper.cpp build needs `libgomp.so.1`, absent from the minimal Ubuntu 24.04 image; `setup install` then stops at that component with `MISSING_CAPABILITY` and says nothing of the library; `install.md` did not name it | [#256](https://github.com/smormah/vsift/issues/256) | [L-110](known-limits.md#l-110) |
+| Git for Windows' GNU `tar`, first on a runner's `PATH`, reads `D:\...` as a host and cannot extract an archive; `install.md` now says to use `System32\tar.exe` or `--force-local` | (documentation) | |
+| `install.md`'s configuration folder also holds the media-tool check record, and the Linux data folder `vsift` holds only `managed-v1`; the guide's section 8 table now says so | (documentation) | |
+
+**Observations worth keeping.** Yarn 4.18.1 held 0.1.0 back for its first day ("quarantined", 6.5
+hours old) and the exemption in `install.md` section 2 let it through. pnpm 12.8.1 and Bun 1.2.23
+had no such gate. A fake tool on an absolute `PATH` directory is run once as a probe by `setup
+check` and reported (`install.md` section 5.2: the user's own tools on `PATH` are found
+automatically), and is refused for media work by the media-tool check; a tool the user registered
+beats it. Homebrew's current FFmpeg passed VSift's media-tool check on macOS 15 and made sessions
+(PR 3 records versions; this is not a macOS journey). Every PowerShell, shell and Bun shim
+answered hostile names and arguments as vsift itself does.
+
+### 15.5 Not tested, and for the pull requests that follow
+
+- Not tested: pnpm, Yarn or Bun upgrades; a downgrade; Windows `vsift.cmd` typed in cmd.exe; macOS
+  Gatekeeper and Windows Smart App Control (RQ-17); the other two archives' executables running;
+  the media journeys on the published binary (PR 3); a candidate or a stable version.
+- **Before PR 12 (the stable publish)**, register in `STABLE_CHECKS`
+  (`tools/p14-published/lib/verify.cjs`) the candidate-to-stable delta, which reads PR 8's
+  `release-delta.json` from the Release run's `publish-plan` artifact (kept seven days; the run id
+  is in the check's context), and `latest` on all four packages; until then `P14 verify release`
+  fails a stable version by name. Its tests show the shape.
+- **PRs 10 and 12** dispatch `P14 published artifacts` and `P14 verify release` with the
+  candidate's and then the stable's version (leave `from_version` empty: 0.1.0), and `P14 local
+  upgrade` runs on the pull requests that change the code. The ledger records the run for that
+  version and commit; the items are `passed` for 0.1.0 only, and the staleness rule (the version
+  bump changes `Cargo.toml` and `npm/`, which are in every scope) means none of them counts for
+  `0.2.0-rc.1`.

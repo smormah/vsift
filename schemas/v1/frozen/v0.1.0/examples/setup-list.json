@@ -1,0 +1,71 @@
+{
+  "command": "setup.list",
+  "coverage": null,
+  "data": {
+    "components": [
+      {
+        "component": "ffmpeg_ffprobe",
+        "previous_version": "n8.1-2-g0123456789-20260601",
+        "selected_version": "n9.0.1-11-ge47273f4d9-20260831",
+        "selection": "verified",
+        "versions": [
+          {
+            "fault": null,
+            "previous": true,
+            "selected": false,
+            "state": "verified",
+            "version": "n8.1-2-g0123456789-20260601"
+          },
+          {
+            "fault": null,
+            "previous": false,
+            "selected": true,
+            "state": "verified",
+            "version": "n9.0.1-11-ge47273f4d9-20260831"
+          }
+        ]
+      },
+      {
+        "component": "whisper_cli",
+        "previous_version": null,
+        "selected_version": "whisper.cpp-v1.9.2-ubuntu-x64",
+        "selection": "verified",
+        "versions": [
+          {
+            "fault": null,
+            "previous": false,
+            "selected": true,
+            "state": "verified",
+            "version": "whisper.cpp-v1.9.2-ubuntu-x64"
+          }
+        ]
+      },
+      {
+        "component": "whisper_model",
+        "previous_version": null,
+        "selected_version": "whisper-base-multilingual-80da2d8",
+        "selection": "verified",
+        "versions": [
+          {
+            "fault": null,
+            "previous": false,
+            "selected": true,
+            "state": "verified",
+            "version": "whisper-base-multilingual-80da2d8"
+          }
+        ]
+      }
+    ],
+    "managed_folder": "present",
+    "managed_install": "catalogue_accepted",
+    "next_step": "Commands use each component's selected version while it verifies. setup rollback <component> returns to its previous version; setup remove removes a version or a component.",
+    "retained_stages": 0,
+    "stale_stages": 0
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

@@ -1,0 +1,17 @@
+{
+  "command": "setup.rollback",
+  "coverage": null,
+  "data": {
+    "component": "ffmpeg_ffprobe",
+    "next_step": "Commands started from now on use the selected version; a running job keeps the version it started with. Run setup rollback again to return to the version it replaced.",
+    "replaced_version": "n9.0.1-11-ge47273f4d9-20260831",
+    "selected_version": "n8.1-2-g0123456789-20260601",
+    "status": "rolled_back"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}
