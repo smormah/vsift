@@ -1,0 +1,398 @@
+{
+  "schema_version": "1",
+  "current_rung": "now",
+  "documents": [
+    "README.md",
+    "docs/operations/install.md",
+    "SECURITY.md",
+    "docs/agents/skill.md",
+    "npm/vsift-cli/README.md"
+  ],
+  "unscanned_documents": [
+    {
+      "path": "tools/vsift-release/src/publish.rs",
+      "owner": "P14 PR 8",
+      "reason": "Holds the generated release notes as a Rust format string, which says 'Supported machines' (L-102). PR 8 rewords the notes and brings the template under the check."
+    },
+    {
+      "path": "npm/vsift-cli/lib/launcher.cjs",
+      "owner": "P14 PR 9",
+      "reason": "The launcher's refusal messages name 'the supported targets' and ship in the npm package. PR 9 decides their wording against the matrix and brings the file under the check."
+    },
+    {
+      "path": "docs/operations/worker-host.md",
+      "owner": "P14 PR 9",
+      "reason": "The worker runbook describes the strict profile and its attestation; it is worded against decision E and the matrix in PR 9, which adds it."
+    },
+    {
+      "path": "docs/operations/release.md",
+      "owner": "P14 PR 9",
+      "reason": "The maintainer's runbook; brought to the matrix and the stable procedure by PR 9 (and PR 8 for the stable path)."
+    }
+  ],
+  "controlled_words": ["supported", "stable", "qualified", "qualify", "qualifies", "certified", "guaranteed"],
+  "banned_phrases": [
+    {
+      "id": "BAN-01",
+      "phrases": ["production ready", "production grade", "ready for production", "enterprise ready"],
+      "reason": "Production readiness on real recordings is never claimed: every accuracy number is measured on a synthetic corpus (ADR 0024 decision G).",
+      "lifted_by": []
+    },
+    {
+      "id": "BAN-02",
+      "phrases": ["strict worker", "strict isolation", "hostile media", "hostile decoder", "hostile provider"],
+      "reason": "No claim that the strict profile contains a hostile decoder or provider unless SEC-T01 is resolved (decision E; L-068).",
+      "lifted_by": ["RQ-14"]
+    },
+    {
+      "id": "BAN-03",
+      "phrases": ["multi tenant", "multitenant"],
+      "reason": "There is no multi-tenant host and SEC-T03 has not run (R0 must not advertise multi-tenant isolation).",
+      "lifted_by": []
+    },
+    {
+      "id": "BAN-04",
+      "phrases": ["publisher trust", "verified publisher", "signed executables", "signed binaries"],
+      "reason": "The Windows and macOS executables are unsigned; the only trust signals are the checksum, the Sigstore attestation and npm provenance (decision C; L-098).",
+      "lifted_by": []
+    },
+    {
+      "id": "BAN-05",
+      "phrases": ["any filesystem", "every filesystem", "all filesystems"],
+      "reason": "Durability is shown on Ubuntu 24.04 with local ext4 only (L-008, L-037).",
+      "lifted_by": []
+    },
+    {
+      "id": "BAN-06",
+      "phrases": ["managed install on windows", "managed installation on windows", "managed install on macos", "managed installation on macos"],
+      "reason": "Managed installation is qualified on Ubuntu 24.04 x64 only (ADR 0023 decision E).",
+      "lifted_by": []
+    },
+    {
+      "id": "BAN-07",
+      "phrases": ["codex on windows is supported", "supports codex on windows", "codex works on windows"],
+      "reason": "Codex's Windows sandbox cannot run VSift (L-076, #204); the Codex trials ran in a Linux container.",
+      "lifted_by": []
+    },
+    {
+      "id": "BAN-08",
+      "phrases": ["works with any model", "works with every model", "any coding agent", "all coding agents", "any llm", "every llm"],
+      "reason": "Only the named models and clients were trialled; others are untested (L-082, L-084).",
+      "lifted_by": []
+    },
+    {
+      "id": "BAN-09",
+      "phrases": ["100% citation validity", "100% valid citations", "every citation is valid", "all citations are valid"],
+      "reason": "Compact-tier citation validity is not 100%: 2 of 62 phases missed on the #222 re-run.",
+      "lifted_by": []
+    }
+  ],
+  "statements": [
+    {
+      "kind": "non_claim",
+      "id": "NC-001",
+      "documents": ["README.md", "docs/operations/install.md"],
+      "text": "not yet a supported platform",
+      "note": "A negation: the R0 targets are not yet supported platforms."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-002",
+      "documents": ["docs/operations/install.md"],
+      "text": "earns the word \"supported\"",
+      "note": "Says the release matrix is what will earn the word; the word is not applied to anything."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-003",
+      "documents": ["README.md"],
+      "text": "not a stable or supported release",
+      "note": "A negation about the 0.1.0 pre-release."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-004",
+      "documents": ["docs/operations/install.md"],
+      "text": "not a stable release, and no platform is \"supported\" yet",
+      "note": "A negation about the 0.1.0 pre-release and every platform."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-005",
+      "documents": ["docs/operations/install.md", "SECURITY.md"],
+      "text": "until a stable release",
+      "note": "A condition: describes what holds before a stable release exists."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-006",
+      "documents": ["docs/operations/install.md"],
+      "text": "a stable release waits for",
+      "note": "A condition: a stable release waits for the release qualification."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-007",
+      "documents": ["docs/operations/install.md", "npm/vsift-cli/README.md"],
+      "text": "until the first stable release",
+      "note": "A condition: the latest dist-tag stays the empty placeholder until then."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-008",
+      "documents": ["docs/operations/install.md"],
+      "text": "what is and is not supported",
+      "note": "The heading of the section whose table says no platform is supported yet."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-009",
+      "documents": ["docs/operations/install.md", "docs/agents/skill.md"],
+      "text": "not supported",
+      "note": "A negation: unsupported machines, downgrades, and the models below the line."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-010",
+      "documents": ["docs/operations/install.md"],
+      "text": "the supported targets",
+      "note": "Describes what the launcher's own refusal message names (the message is code, listed as unscanned)."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-011",
+      "documents": ["SECURITY.md"],
+      "text": "not a supported version",
+      "note": "A negation: the pre-release is not a supported version."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-012",
+      "documents": ["SECURITY.md"],
+      "text": "supported versions",
+      "note": "The heading of the section that says there is no supported version yet."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-013",
+      "documents": ["SECURITY.md"],
+      "text": "a supported-version table will be introduced with the first stable release",
+      "note": "A statement about the future: no table exists yet."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-014",
+      "documents": ["SECURITY.md"],
+      "text": "and no stable release",
+      "note": "A negation: no stable release exists."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-015",
+      "documents": ["README.md"],
+      "text": "stable Rust toolchain",
+      "note": "Names the Rust release channel, not a property of VSift."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-016",
+      "documents": ["README.md"],
+      "text": "where that component/target is qualified",
+      "note": "A condition: a managed install is offered only where an artifact was reviewed; it names no platform."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-017",
+      "documents": ["docs/agents/skill.md"],
+      "text": "but they are not qualified",
+      "note": "A negation: other clients and models were not trialled."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-018",
+      "documents": ["docs/operations/install.md"],
+      "text": "makes no claim of publisher trust",
+      "note": "A negation: the executables are unsigned, so no publisher-trust claim is made."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-001",
+      "rung": "now",
+      "documents": ["README.md"],
+      "text": "named-client trials qualify it for strong models",
+      "basis": ["docs/planning/p12-agent-qualification.md"],
+      "note": "P12's trials of the review-tier models, run on a source build with the skill present; the README gives the numbers and points to the record. Not a claim about a clean install of the published package (that is RQ-15)."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-002",
+      "rung": "now",
+      "documents": ["README.md"],
+      "text": "provide stable, versioned JSON",
+      "basis": ["docs/contracts/cli-v1.md"],
+      "note": "The v1 JSON contract is versioned, additive-only since 0.1.0 and held by contract tests; it is not a statement that the readable text is stable, and no 1.0 promise is made."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-003",
+      "rung": "now",
+      "documents": ["README.md"],
+      "text": "target a stable grammar",
+      "basis": ["docs/contracts/cli-v1.md"],
+      "note": "The command grammar of the v1 contract; the same limits as CL-002."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-004",
+      "rung": "now",
+      "documents": ["README.md", "docs/operations/install.md"],
+      "text": "qualified on Ubuntu 24.04 x64 only",
+      "basis": ["docs/planning/p13-distribution.md"],
+      "note": "Managed installation, qualified in P13 with real reviewed artifacts on hosted Ubuntu 24.04 x64 and a power-loss campaign on ext4; not a clean machine, and no other platform."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-005",
+      "rung": "now",
+      "documents": ["docs/operations/install.md"],
+      "text": "the steps below were qualified on hosted runners against a local registry",
+      "basis": ["docs/planning/p13-distribution.md"],
+      "note": "The twelve-job npm matrix in the Release workflow; the sentence goes on to say what it did not cover (a clean machine, the real registry beyond one install)."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-006",
+      "rung": "now",
+      "documents": ["docs/agents/skill.md"],
+      "text": "qualified for the review tier and, since the compact re-run (#222, 2026-09-30), for the compact tier",
+      "basis": ["docs/planning/p12-agent-qualification.md"],
+      "note": "P12's named-client results; the page below lists the clients, versions and numbers and says what was not tried."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-007",
+      "rung": "now",
+      "documents": ["docs/agents/skill.md"],
+      "text": "qualified (interpretation misses under the maintainer's review)",
+      "basis": ["docs/planning/p12-agent-qualification.md"],
+      "note": "The review-tier rows of the model table, each with its own numbers."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-008",
+      "rung": "now",
+      "documents": ["docs/agents/skill.md"],
+      "text": "qualified (meets the 90% target)",
+      "basis": ["docs/planning/p12-agent-qualification.md"],
+      "note": "The compact-tier rows, from the #222 re-run; citation validity is not 100% and the table's numbers say so."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-009",
+      "rung": "now",
+      "documents": ["docs/agents/skill.md"],
+      "text": "qualified by the P12 trials (2026-09-30) through the same skill, prompts and compact budget",
+      "basis": ["docs/planning/p12-agent-qualification.md"],
+      "note": "Introduces the model table; the same limits as CL-001."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-101",
+      "rung": "candidate",
+      "documents": ["README.md", "docs/operations/install.md", "npm/vsift-cli/README.md"],
+      "text": "is a release candidate under qualification",
+      "requires": ["RQ-19"],
+      "note": "The candidate rung's only headline (decision G): published under next, never announced, no claim of support or stability. Allowed once the publish was checked by a second runner."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-102",
+      "rung": "candidate",
+      "documents": ["README.md", "docs/operations/install.md"],
+      "text": "the evidence gathered so far, with its gaps, is recorded in the release evidence ledger",
+      "requires": ["RQ-19"],
+      "note": "The evidence summary as it stands; points at the ledger rather than restating results."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-201",
+      "rung": "after_p14",
+      "documents": ["README.md", "docs/operations/install.md"],
+      "text": "Windows 11 x64 is supported",
+      "requires": ["RQ-01", "RQ-02", "RQ-04", "RQ-05", "RQ-15", "RQ-17"],
+      "note": "The matrix cell (plan section 8) with its caveats; 'supported' is a statement about evidence, not a service promise. Carries 'Smart App Control untried' if RQ-17 was waived."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-202",
+      "rung": "after_p14",
+      "documents": ["README.md", "docs/operations/install.md"],
+      "text": "Ubuntu 24.04 x64 is supported",
+      "requires": ["RQ-01", "RQ-02", "RQ-03", "RQ-04", "RQ-05", "RQ-06", "RQ-11", "RQ-15"],
+      "note": "The matrix cell; durable sessions on local ext4 with barriers are a separate statement (CL-207)."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-203",
+      "rung": "after_p14",
+      "documents": ["README.md", "docs/operations/install.md"],
+      "text": "macOS 15 on Apple silicon is supported for what the hosted run proves",
+      "requires": ["RQ-01", "RQ-02", "RQ-04", "RQ-05"],
+      "note": "Your own tools, no managed install, no agent trial; stays a qualification target if the hosted run does not pass."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-204",
+      "rung": "after_p14",
+      "documents": ["README.md", "docs/agents/skill.md"],
+      "text": "Claude Code on Windows 11 with Claude Opus 5.5 and Claude Sonnet 5.5 is qualified",
+      "requires": ["RQ-15"],
+      "note": "Qualified only on the system it was trialled on, from a clean install of the published package."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-205",
+      "rung": "after_p14",
+      "documents": ["README.md", "docs/agents/skill.md"],
+      "text": "Codex on Linux with GPT-6-Astra and GPT-6-Sol is qualified",
+      "requires": ["RQ-15"],
+      "note": "Codex runs in a Linux container; Codex on Windows stays unsupported."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-206",
+      "rung": "after_p14",
+      "documents": ["README.md", "docs/agents/skill.md"],
+      "text": "an agent with no skill can use VSift from its own help",
+      "requires": ["RQ-16"],
+      "note": "Stated with the cold-agent results and the models it was measured on."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-207",
+      "rung": "after_p14",
+      "documents": ["README.md", "docs/operations/install.md"],
+      "text": "durable sessions survive a power loss on local ext4 on Ubuntu 24.04 only",
+      "requires": ["RQ-11"],
+      "note": "The only filesystem the campaigns ran on."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-208",
+      "rung": "after_p14",
+      "documents": ["README.md"],
+      "text": "the strict worker profile is qualified against an adversarial provider",
+      "requires": ["RQ-14", "RQ-09", "RQ-12"],
+      "note": "Only if decision E's option 1 was delivered; otherwise the strict-worker claim is narrowed by an ADR amendment and this statement stays unused."
+    },
+    {
+      "kind": "claim",
+      "id": "CL-209",
+      "rung": "after_p14",
+      "documents": ["README.md"],
+      "text": "accuracy numbers are measured on a synthetic corpus on hosted hardware",
+      "requires": ["RQ-05"],
+      "note": "The conditions that go with every measured number; real recordings are untried."
+    }
+  ]
+}
