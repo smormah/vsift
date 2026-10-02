@@ -42,6 +42,10 @@ Read these documents together:
     deferral and accepted trade-off in one reviewable place.
 11. [Worker-host runbook](../operations/worker-host.md): how an operator runs VSift
     under an external supervisor (P11), with the guarantee matrix per platform.
+12. [P14 qualification plan](p14-qualification.md): the release-qualification evidence
+    items, traceability, budgets, supported-profile matrix and public-claims policy
+    (proposed 2026-10-02, with [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md);
+    awaiting the maintainer's confirmation).
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
 ledger describe approved direction. Existing ADRs remain intact. A reviewed design

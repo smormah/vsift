@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **The P14 plan** (P14 PR 0, draft; documentation only: no code, workflow, package,
+  setting or ledger change, and P14 stays `planned` until the maintainer confirms). ADR 0024
+  "R0 qualification and the release candidate" (Proposed) with eight decisions for the
+  maintainer (the release version and stable procedure, what a release candidate is,
+  signing, the agent-trial plan and budget, SEC-T01 and the strict-worker claim, the
+  supported-profile matrix, public claims, and the maintainer's hands-on items);
+  `docs/planning/p14-qualification.md` (the evidence items RQ-01..RQ-20, the traceability of
+  R-01..R-14 and SEC-01..SEC-25, campaign and trial budgets, the matrix and the claims
+  policy); "P14 scope and pull requests" in `docs/planning/implementation-work-packets.md`;
+  a note in known limit L-042 that every real-tool checkpoint runs a Cargo-built binary,
+  not a published one.
+
 ### Changed
 
 - **P13 is complete: the first publish is recorded** (P13 PR 12; documentation, ledger

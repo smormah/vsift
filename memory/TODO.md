@@ -23,6 +23,9 @@ anything was published: the maintainer reported the npm-to-GitHub trusted-publis
 connections had never been completed (an earlier report said they were). The second run
 published. npm gives no reason (L-100), so `release.md` 6.2 has a preflight.
 
+**The P14 plan awaits the maintainer's confirmation (2026-10-02):** ADR 0024 (Proposed) and
+`docs/planning/p14-qualification.md`; the eight decisions head the draft PR "P14 PR 0".
+
 ## What remains
 
 1. **P14, the R0 qualification** (#17; not started). It holds: the release evidence ledger;

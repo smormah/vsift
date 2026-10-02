@@ -27,3 +27,4 @@ Architecture decision records explain decisions that constrain future implementa
 - [0021: Worker and batch host](0021-worker-and-batch-host.md) (Accepted 2026-09-28)
 - [0022: Agent skill and named-client qualification](0022-agent-skill-and-named-client-qualification.md) (Accepted 2026-09-30)
 - [0023: R0 distribution, managed installation and handoff check](0023-r0-distribution-managed-installation-and-handoff-check.md) (Accepted 2026-10-01, with P13's completion and the 0.1.0 pre-release)
+- [0024: R0 qualification and the release candidate](0024-r0-qualification-and-release-candidate.md) (Proposed 2026-10-02; the P14 plan, awaiting the maintainer's confirmation)

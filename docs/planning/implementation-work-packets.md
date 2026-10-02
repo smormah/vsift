@@ -309,6 +309,95 @@ The compact tier's re-run (#222) followed PR 5 (decision F): it ran on `a0bfb06`
 macOS, native installers, crates.io, the MCP adapter, SEC-T01 (L-068) and the P12
 debt #218-#224.
 
+### P14 scope and pull requests
+
+2026-10-02: the plan below is **proposed and awaiting the maintainer's confirmation**;
+P14 is `planned` in the ledger and stays so until then (governance rule 10). The decisions
+(A-H), the reasons and their costs are in
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) (Proposed); the
+traceability tables, the evidence items (`RQ-01..RQ-20`), the campaign and trial budgets,
+the matrix and the claims policy are in [p14-qualification.md](p14-qualification.md), which
+becomes the qualification record when the packet completes. The ledger maps P14 to
+R-01..R-14, SEC-01..SEC-25 and `ALL-R0`, `R-SEC03`; it adds no requirement and no ID the
+checker knows.
+
+**Scope.**
+
+1. **The release evidence ledger:** `docs/planning/p14-evidence-ledger.json`, a
+   `vsift-governance` subcommand that checks it for completeness against the candidate, and
+   a public-claims registry the Governance job checks (the delivery ledger cannot hold
+   per-pull-request evidence: it requires an empty `verification` until completion).
+2. **Published-artifact qualification on hosted runners:** clean install from the real
+   registry with npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu; the extracted native
+   archive on each target; the offline `--artifact-dir` install with the real artifacts;
+   upgrade from 0.1.0 and uninstall; a second, credential-free verification of each publish.
+3. **The journeys on the published binary** on Ubuntu 24.04, Windows and macOS 15, and the
+   managed-install drift run (L-042, L-035, L-099, #178).
+4. **Fuzz, race, fault, load and soak runs:** long fuzzing with a parser gap review, stress
+   on three systems, the load ladder to eight jobs, a 100-request batch, a mixed soak,
+   malicious media in a disposable container, the fault campaigns re-run, the worker
+   runbook walked.
+5. **Findings triage and R-SEC03:** the scan reading, SEC-T01 (or its recorded narrowing),
+   the open issues #128, #205, #206, #232.
+6. **The named-agent rounds from a clean install**, with the skill (both clients, both
+   transcript paths, hold-out scenarios, the blurred-banner re-run) and the cold-agent
+   variant (no skill, no docs; 84 runs planned, see the plan's section 7).
+7. **The supported-profile matrix, operator and user documents, and the claims check.**
+8. **The release candidate and the stable release:** release tooling for stable versions,
+   `0.2.0-rc.N` qualified in full, the stable `0.2.0` published by the maintainer, and the
+   completion record with the handoff for using the published CLI ourselves.
+
+**Pull requests.** Each is a coherent increment with its code, tests, documentation and
+handoff updates, and each PR description holds its verification evidence (no evidence-only
+pull requests). No pull request publishes anything: the candidate and the stable are
+published by the maintainer, by the procedure of `release.md` section 6. Effort is
+agent-working days; wall time is calendar days including waits for hosted runs, the
+maintainer and usage limits. Both are rough (plus or minus half) and not measured.
+
+| PR | Content | Depends on | Effort / wall |
+| --- | --- | --- | --- |
+| 0 | ADR 0024 and the plan (this change as a draft); after the maintainer confirms: the decisions marked confirmed, the ledger `in_progress`, a note on issue #17 | P13 complete; the maintainer's confirmation | 0.5 d / the maintainer's reply |
+| 1 | The evidence ledger and its completeness check, the claims registry and its check (seeded with today's claims), the `RQ-nn` and `A-10` rows in `verification.md` | 0 | 2-3 d / 4 d |
+| 2 | Published-artifact qualification workflow: RQ-01 (clean install, four managers, three systems, real registry), RQ-02 (archive), RQ-03 (offline with real artifacts), RQ-04 (upgrade from 0.1.0, 0.1.0 JSON compatibility, uninstall), RQ-19 (second verifier); runs against 0.1.0, which is published | 1 | 4-5 d / 8 d |
+| 3 | The journeys on the published binary: a binary override for the real-tool checkpoints, the `P14 journeys` workflow on Ubuntu 24.04 (managed tools), Windows (pinned) and macOS 15 (Homebrew) (RQ-05), RQ-06 and its weekly schedule | 1 | 5-6 d / 8 d |
+| 4 | Campaigns: the fuzz gap review, new targets and a raised duration cap (RQ-07); lock stress on Windows and the stress repetitions (RQ-08); ladder, 100-request batch and soak (RQ-09); malicious media (RQ-10); the runbook walk (RQ-12); the first scan reading (RQ-13); triage records | 1 | 5-7 d / 8 d (the long runs take about two days) |
+| 5 | SEC-T01 (RQ-14): the adversarial fixture and its CI job, or the ADR amendment that narrows the claim, as the maintainer decides | 1; the maintainer's review | 3-5 d (fixture) or 1 d (narrowing) / 6 d |
+| 6 | The trial harness: clean-install mode, cold-agent mode and scenarios, hold-out scenarios, usage capture, the Codex clean-install image, #205; pilots (8 runs) and the cold baseline against 0.1.0 (12 runs) | 1; the maintainer's go (batch 1) | 4-5 d / 8 d |
+| 7 | Fixes for what PRs 2-6 find, one finding per pull request with a regression test: the `vsift --help` "typical investigation" section if the baseline shows gaps, #232, #206 or #128 if reproduced, platform defects | findings | 3-8 d / 10 d (number of pull requests not known) |
+| 8 | Release machinery: stable versions and `latest` in `vsift-release`, the Release workflow and the lint, the candidate rule, the candidate-to-stable delta check, release-notes wording, `release.md`; reviewed as a high-risk seam | 0 (decisions A-C) | 3-4 d / 7 d |
+| 9 | The matrix, the documents and the claims: `support-and-resource-profiles.md`, the README for newcomers, `install.md`, `SECURITY.md`'s supported-versions table, the worker runbook, the skill guide, the register review sheet and the readings, the registry filled and enforced | 1, 2-5, 8 | 4-5 d / 7 d |
+| 10 | The release candidate `0.2.0-rc.1`: the version bump, `CHANGELOG.md`; the maintainer tags, runs the dry run, publishes and verifies (RQ-19) | 7, 8, 9 merged | 1 d / 2 d (the maintainer about an hour) |
+| 11 | The candidate's qualification: every hosted workflow on rc.1, the counted agent rounds (batches 2 and 3), the maintainer's try-outs (RQ-17), the scan reading again, the ledger entries; findings fixed and a second candidate if needed | 10 | 5-7 d / 12-15 d |
+| 12 | The stable `0.2.0`: the version bump, the documents that ship inside the artifacts, the completeness check green on the candidate with the delta check; the maintainer publishes and verifies; the hosted qualification re-run on the stable bytes | 11 | 1-2 d / 3 d (the maintainer about two hours) |
+| 13 | The ledger follow-up (governance rule 9): the repository-only pages flip to the stable instructions, `p14-qualification.md` becomes the record, the delivery ledger gets P14 `complete` with the stable release commit and a verification summary, ADR 0024 Accepted, the register swept, the work record states R0 complete and the neutral checkpoint for using the published CLI | 12 and the maintainer's publish | 1 d / 1 d |
+
+Totals: about 40-60 agent-days. Calendar time is about 7 weeks on the critical path if
+pull requests 2, 3, 4, 6 and 8, which touch separate files, are built in parallel sessions
+under one integrating owner (governance rule 2), and about 12 weeks if they are built one
+after another; the plan does not require parallel work. A hosted run needs a published
+version: PRs 2-6 qualify the published 0.1.0 while the code is built, and every later run
+uses the candidate.
+
+**Who runs what.**
+
+| Who | What |
+| --- | --- |
+| CI (hosted runners) | Every qualification workflow (dispatched by the packet owner's session, or scheduled once stable), the Release workflow's builds and dry runs, the scan tools, the Governance checks |
+| The packet owner's agent session | Code, tests, documents, pull requests; dispatching non-publishing workflows and reading their results; running the agent trials on the maintainer's machine after each go; the scan reading; the triage |
+| The maintainer | The decisions; each trial-batch go; every publish (dispatch with `dry_run` cleared, the `release` approval, npm two-factor); the Smart App Control and Gatekeeper try-outs; the SEC-T01 fixture review; the register pass; merging; every announcement |
+
+The crash and power-loss campaigns, malicious-media runs and any other destructive test run
+on disposable hosted runners or virtual machines only, never on the maintainer's machine.
+Every sub-agent brief that can touch a network repeats the personal-data rule, and no
+workflow, header or record carries a personal detail.
+
+**Not in P14:** R1 and P15 onward, staged npm publishing (#246, deferred by the maintainer
+on 2026-10-02 to after R1 or the announcements), crates.io, the MCP adapter, native
+installers, managed installation on Windows or macOS, a product fix for Codex on Windows
+(#204), signing (unless decision C's trigger fires), real-recording accuracy work
+(#150, #159, #173-#175), a multi-tenant host, any announcement, and using the published CLI
+ourselves (after P14; only its neutral handoff is P14's).
+
 ## R1 industrial capability expansion
 
 R1 is the managed, industrial expansion of the complete R0 product. Its authoritative
