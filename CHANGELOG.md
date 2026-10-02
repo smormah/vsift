@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **P14 starts: the plan and its kickoff** (P14 PR 0; documentation, the ledger line and
+  the handoff files only: no code, workflow, package or setting changed, nothing published).
+  The maintainer confirmed eight decisions and started P14 on 2026-10-02; the ledger marks it
+  `in_progress`. ADR 0024 "R0 qualification and the release candidate" (Proposed until P14
+  completes) records them (the release version and stable procedure, what a release
+  candidate is, signing, the agent-trial plan and budget, SEC-T01 and the strict-worker
+  claim, the supported-profile matrix, public claims, and the maintainer's hands-on items);
+  `docs/planning/p14-qualification.md` (the evidence items RQ-01..RQ-20, the traceability of
+  R-01..R-14 and SEC-01..SEC-25, campaign and trial budgets, the matrix and the claims
+  policy); "P14 scope and pull requests" in `docs/planning/implementation-work-packets.md`;
+  a note in known limit L-042 that every real-tool checkpoint runs a Cargo-built binary,
+  not a published one; and the fact, read on 2026-10-02, that Smart App Control is Off on
+  the maintainer's Windows 11 machine, so the 0.1.0 install-and-run there says nothing about
+  it (L-098, the P13 record and `install.md` corrected). Both handoff files are rewritten.
+
 ### Changed
 
 - **P13 is complete: the first publish is recorded** (P13 PR 12; documentation, ledger

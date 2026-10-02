@@ -487,7 +487,10 @@ action.
   development machine with npm is recorded in the [P13 record](p13-distribution.md); the
   clean-machine install with each package manager and the agent part are P14's.*
 - **Release checkpoint:** P14 runs all supported profiles plus security, fault, load
-  and release-integrity gates described in the verification specification.
+  and release-integrity gates described in the verification specification. *2026-10-02:
+  the plan (evidence items `RQ-01..RQ-20`, the published-binary journeys and the
+  clean-install agent rounds), confirmed by the maintainer the same day, is
+  [p14-qualification.md](p14-qualification.md); this bullet is otherwise unchanged.*
 
 Failures become regression tests at the lowest useful layer. The end-to-end result
 stays failed or blocked until the responsible production behavior and regression

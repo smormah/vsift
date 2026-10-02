@@ -174,7 +174,7 @@ trust**, and the operating systems treat an unsigned program from the internet w
 suspicion. What follows is written from Microsoft's and Apple's documentation: VSift has
 not yet watched these prompts appear for one of its own archives. (One `npx vsift
 --version` of the published npm package ran on a Windows 11 machine with no block or
-prompt; that machine's Smart App Control state was not checked.)
+prompt; that machine has Smart App Control Off, so this says nothing about it.)
 
 **Windows.**
 

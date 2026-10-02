@@ -4,7 +4,8 @@ Status: accepted R0 sequence with scoped R1 packets, re-planned by
 [ADR 0015](../decisions/0015-r0-delivery-replan.md) and
 [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) on 2026-09-23.
 P00-P13 are complete (P13 started 2026-09-30 and published the 0.1.0 pre-release on
-2026-10-01, see "P13 scope and pull requests"); P14 is not started. P06 closed on detection, bring-your-own selection, verification and
+2026-10-01, see "P13 scope and pull requests"); P14 is in progress (started by the
+maintainer on 2026-10-02, see "P14 scope and pull requests"). P06 closed on detection, bring-your-own selection, verification and
 guidance; managed installation moved to P13. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
@@ -82,7 +83,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualifies only after P10 durable evidence; repeated external-delivery simulation passes |
 | P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic. Closed 2026-09-30 by maintainer decision ([ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md), Accepted; [qualification record](p12-agent-qualification.md)): the skill `skills/vsift/` and its CLI contract guard, the trial harness, and named-client trials on both clients. The review tier is qualified; the compact tier passed 82%, below the 90% target (L-085). The compact re-run after the debt fixes (#222, 2026-09-30, on `a0bfb06`) met it: 93% and 100%; L-085 closed |
 | P13 — Distribution and managed installation | Native artifacts and thin npm launcher over per-platform optional packages with no install scripts (see "P13 launcher boundary"); package-name checklist held before release (see "P13 name checklist"); architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target. Human-readable terminal output for every command (ADR 0008; the readable terminal text of `cli-v1.md`), assigned 2026-09-26. Since 2026-09-30 also L-071's parse remediation and `vsift handoff check` (#213, R-13); scope, decisions and pull requests in "P13 scope and pull requests" ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md), Accepted 2026-10-01). **Complete (2026-10-01):** pull requests 0-11 and the release-prep change are merged, the maintainer published the 0.1.0 pre-release under npm's `next` and on GitHub Releases, and the completion change (PR 12) records it ([qualification record](p13-distribution.md)) | P06/P11/P12 | Fresh OS install without Rust; install and run through npm, pnpm, Yarn and Bun on every supported target; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02; SEC-T02 over human output |
-| P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate; the named-agent clean-install run includes a cold-agent variant (CLI on `PATH`, no skill, no docs; maintainer decision 2026-10-02) | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
+| P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate; the named-agent clean-install run includes a cold-agent variant (CLI on `PATH`, no skill, no docs; maintainer decision 2026-10-02). **In progress since 2026-10-02** (the maintainer confirmed decisions A-H and started it): scope and pull requests in "P14 scope and pull requests" below, decisions in [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) (Proposed until completion) | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
 
 ### P00/P03 feasibility decisions
 
@@ -308,6 +309,99 @@ The compact tier's re-run (#222) followed PR 5 (decision F): it ran on `a0bfb06`
 **Not in P13:** P14's release qualification, managed installation on Windows and
 macOS, native installers, crates.io, the MCP adapter, SEC-T01 (L-068) and the P12
 debt #218-#224.
+
+### P14 scope and pull requests
+
+2026-10-02 (maintainer): P14 started, and the maintainer confirmed all eight decisions,
+A to H, exactly as recommended (version `0.2.0`, a published release candidate, no signing
+unless the try-outs trigger it, the recommended 84-run trial plan, SEC-T01 by a reviewed
+fixture with the narrowed claim as the fallback, the per-cell support matrix, the claims
+ladder, and try-outs that block the stable only until an observation is recorded). The
+ledger marks P14 `in_progress`. The decisions, the reasons and their costs are in
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) (Proposed until
+the packet completes, as ADR 0023 was); the
+traceability tables, the evidence items (`RQ-01..RQ-20`), the campaign and trial budgets,
+the matrix and the claims policy are in [p14-qualification.md](p14-qualification.md), which
+becomes the qualification record when the packet completes. The ledger maps P14 to
+R-01..R-14, SEC-01..SEC-25 and `ALL-R0`, `R-SEC03`; it adds no requirement and no ID the
+checker knows.
+
+**Scope.**
+
+1. **The release evidence ledger:** `docs/planning/p14-evidence-ledger.json`, a
+   `vsift-governance` subcommand that checks it for completeness against the candidate, and
+   a public-claims registry the Governance job checks (the delivery ledger cannot hold
+   per-pull-request evidence: it requires an empty `verification` until completion).
+2. **Published-artifact qualification on hosted runners:** clean install from the real
+   registry with npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu; the extracted native
+   archive on each target; the offline `--artifact-dir` install with the real artifacts;
+   upgrade from 0.1.0 and uninstall; a second, credential-free verification of each publish.
+3. **The journeys on the published binary** on Ubuntu 24.04, Windows and macOS 15, and the
+   managed-install drift run (L-042, L-035, L-099, #178).
+4. **Fuzz, race, fault, load and soak runs:** long fuzzing with a parser gap review, stress
+   on three systems, the load ladder to eight jobs, a 100-request batch, a mixed soak,
+   malicious media in a disposable container, the fault campaigns re-run, the worker
+   runbook walked.
+5. **Findings triage and R-SEC03:** the scan reading, SEC-T01 (or its recorded narrowing),
+   the open issues #128, #205, #206, #232.
+6. **The named-agent rounds from a clean install**, with the skill (both clients, both
+   transcript paths, hold-out scenarios, the blurred-banner re-run) and the cold-agent
+   variant (no skill, no docs; 84 runs planned, see the plan's section 7).
+7. **The supported-profile matrix, operator and user documents, and the claims check.**
+8. **The release candidate and the stable release:** release tooling for stable versions,
+   `0.2.0-rc.N` qualified in full, the stable `0.2.0` published by the maintainer, and the
+   completion record with the handoff for using the published CLI ourselves.
+
+**Pull requests.** Each is a coherent increment with its code, tests, documentation and
+handoff updates, and each PR description holds its verification evidence (no evidence-only
+pull requests). No pull request publishes anything: the candidate and the stable are
+published by the maintainer, by the procedure of `release.md` section 6. Effort is
+agent-working days; wall time is calendar days including waits for hosted runs, the
+maintainer and usage limits. Both are rough (plus or minus half) and not measured.
+
+| PR | Content | Depends on | Effort / wall |
+| --- | --- | --- | --- |
+| 0 | ADR 0024 and the plan, the decisions marked confirmed, the ledger `in_progress`, the packet issue #17 synced, the two handoff files rewritten (#250) | P13 complete; the maintainer's confirmation (given 2026-10-02) | 0.5 d / 1 d; done once it merges |
+| 1 | The evidence ledger and its completeness check, the claims registry and its check (seeded with today's claims), the `RQ-nn` and `A-10` rows in `verification.md` | 0 | 2-3 d / 4 d |
+| 2 | Published-artifact qualification workflow: RQ-01 (clean install, four managers, three systems, real registry), RQ-02 (archive), RQ-03 (offline with real artifacts), RQ-04 (upgrade from 0.1.0, 0.1.0 JSON compatibility, uninstall), RQ-19 (second verifier); runs against 0.1.0, which is published | 1 | 4-5 d / 8 d |
+| 3 | The journeys on the published binary: a binary override for the real-tool checkpoints, the `P14 journeys` workflow on Ubuntu 24.04 (managed tools), Windows (pinned) and macOS 15 (Homebrew) (RQ-05), RQ-06 and its weekly schedule | 1 | 5-6 d / 8 d |
+| 4 | Campaigns: the fuzz gap review, new targets and a raised duration cap (RQ-07); lock stress on Windows and the stress repetitions (RQ-08); ladder, 100-request batch and soak (RQ-09); malicious media (RQ-10); the runbook walk (RQ-12); the first scan reading (RQ-13); triage records | 1 | 5-7 d / 8 d (the long runs take about two days) |
+| 5 | SEC-T01 (RQ-14): the adversarial fixture and its CI job, or the ADR amendment that narrows the claim, as the maintainer decides | 1; the maintainer's review | 3-5 d (fixture) or 1 d (narrowing) / 6 d |
+| 6 | The trial harness: clean-install mode, cold-agent mode and scenarios, hold-out scenarios, usage capture, the Codex clean-install image, #205; pilots (8 runs) and the cold baseline against 0.1.0 (12 runs) | 1; the maintainer's go (batch 1) | 4-5 d / 8 d |
+| 7 | Fixes for what PRs 2-6 find, one finding per pull request with a regression test: the `vsift --help` "typical investigation" section if the baseline shows gaps, #232, #206 or #128 if reproduced, platform defects | findings | 3-8 d / 10 d (number of pull requests not known) |
+| 8 | Release machinery: stable versions and `latest` in `vsift-release`, the Release workflow and the lint, the candidate rule, the candidate-to-stable delta check, release-notes wording, `release.md`; reviewed as a high-risk seam | 0 (decisions A-C) | 3-4 d / 7 d |
+| 9 | The matrix, the documents and the claims: `support-and-resource-profiles.md`, the README for newcomers, `install.md`, `SECURITY.md`'s supported-versions table, the worker runbook, the skill guide, the register review sheet and the readings, the registry filled and enforced | 1, 2-5, 8 | 4-5 d / 7 d |
+| 10 | The release candidate `0.2.0-rc.1`: the version bump, `CHANGELOG.md`; the maintainer tags, runs the dry run, publishes and verifies (RQ-19) | 7, 8, 9 merged | 1 d / 2 d (the maintainer about an hour) |
+| 11 | The candidate's qualification: every hosted workflow on rc.1, the counted agent rounds (batches 2 and 3), the maintainer's try-outs (RQ-17), the scan reading again, the ledger entries; findings fixed and a second candidate if needed | 10 | 5-7 d / 12-15 d |
+| 12 | The stable `0.2.0`: the version bump, the documents that ship inside the artifacts, the completeness check green on the candidate with the delta check; the maintainer publishes and verifies; the hosted qualification re-run on the stable bytes | 11 | 1-2 d / 3 d (the maintainer about two hours) |
+| 13 | The ledger follow-up (governance rule 9): the repository-only pages flip to the stable instructions, `p14-qualification.md` becomes the record, the delivery ledger gets P14 `complete` with the stable release commit and a verification summary, ADR 0024 Accepted, the register swept, the work record states R0 complete and the neutral checkpoint for using the published CLI | 12 and the maintainer's publish | 1 d / 1 d |
+
+Totals: about 40-60 agent-days. Calendar time is about 7 weeks on the critical path if
+pull requests 2, 3, 4, 6 and 8, which touch separate files, are built in parallel sessions
+under one integrating owner (governance rule 2), and about 12 weeks if they are built one
+after another; the plan does not require parallel work. A hosted run needs a published
+version: PRs 2-6 qualify the published 0.1.0 while the code is built, and every later run
+uses the candidate.
+
+**Who runs what.**
+
+| Who | What |
+| --- | --- |
+| CI (hosted runners) | Every qualification workflow (dispatched by the packet owner's session, or scheduled once stable), the Release workflow's builds and dry runs, the scan tools, the Governance checks |
+| The packet owner's agent session | Code, tests, documents, pull requests; dispatching non-publishing workflows and reading their results; running the agent trials on the maintainer's machine after each go; the scan reading; the triage |
+| The maintainer | The decisions; each trial-batch go; every publish (dispatch with `dry_run` cleared, the `release` approval, npm two-factor); the Smart App Control and Gatekeeper try-outs; the SEC-T01 fixture review; the register pass; merging; every announcement |
+
+The crash and power-loss campaigns, malicious-media runs and any other destructive test run
+on disposable hosted runners or virtual machines only, never on the maintainer's machine.
+Every sub-agent brief that can touch a network repeats the personal-data rule, and no
+workflow, header or record carries a personal detail.
+
+**Not in P14:** R1 and P15 onward, staged npm publishing (#246, deferred by the maintainer
+on 2026-10-02 to after R1 or the announcements), crates.io, the MCP adapter, native
+installers, managed installation on Windows or macOS, a product fix for Codex on Windows
+(#204), signing (unless decision C's trigger fires), real-recording accuracy work
+(#150, #159, #173-#175), a multi-tenant host, any announcement, and using the published CLI
+ourselves (after P14; only its neutral handoff is P14's).
 
 ## R1 industrial capability expansion
 

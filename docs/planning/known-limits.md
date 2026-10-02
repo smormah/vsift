@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-01 (P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-02 (P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -1837,7 +1837,10 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
   executable:** `install.md` section 4 is written from Microsoft's and Apple's
   documentation. The one run of the published package on Windows 11 (`npx vsift --version`
   after `npm install vsift-cli@next`, 2026-10-01) met no block or prompt, but that machine's
-  Smart App Control state was not checked, so it settles nothing.
+  Smart App Control state was not checked at the time. *Read on 2026-10-02: Smart App
+  Control is **Off** there (registry value `VerifiedAndReputablePolicyState` is 0), so that
+  run says nothing about Smart App Control. Not known: what state a fresh Windows 11
+  install shows (it starts in evaluation mode).*
 - **Evidence:** ADR 0023 decision C and Consequences;
   [`install.md`](../operations/install.md) section 4, which links Microsoft's Smart App
   Control overview and Apple's guide to opening an app Apple cannot check.
@@ -1854,7 +1857,13 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
   trust is made.
 - **Next step:** before a stable release, run the Windows archive and an npm install on a
   Windows 11 machine with Smart App Control On, and a browser download on macOS 15; record
-  what appears; the maintainer decides whether signing is then needed.
+  what appears; the maintainer decides whether signing is then needed. Since 2026-10-02
+  (ADR 0024 decisions C and H, confirmed): the maintainer's own machine is Off, so the
+  Windows try-out needs a fresh Windows 11 virtual machine or another PC; whether the
+  maintainer owns a Mac is not known; an observation, whatever it shows, is what the stable
+  release needs, and a block with no way through short of turning protection off triggers
+  the signing decision. Not known: whether Windows Sandbox is available (it could not be
+  read without elevation).
 - **Owner:** P14 and the maintainer. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
   **Status:** deferred. **Review:** pending.
 
@@ -2298,6 +2307,10 @@ raw.**
   `install-e2e` stage, and `P13 managed power loss`) are manual dispatches too, so a later
   change can break managed installation without CI noticing until someone dispatches them.
   Long fuzz campaigns (weekly short runs today), soak and the load ladder are P14 gates.
+  *Found while planning P14 (2026-10-02, read from the code):* every real-tool checkpoint of
+  the `vsift-cli` crate runs the binary Cargo builds inside the test run
+  (`Command::cargo_bin("vsift")`), not an installed or published one, so no checkpoint has
+  exercised the shipped artifact on a video; the P14 plan's RQ-05 closes that.
 - **Evidence:** [work record](../../memory/TODO.md) "Known issues and gates";
   [verification](verification.md) section 7 CI tiers.
 - **Impact:** a regression in a real-tool path is found only when someone runs the
@@ -2306,7 +2319,10 @@ raw.**
   execution policy).
 - **Mitigation:** recorded samples keep the P08 recall gate in every CI run; stand-in
   tools cover contracts.
-- **Next step:** consider a scheduled hosted run of the P08/P09 checkpoints.
+- **Next step:** consider a scheduled hosted run of the P08/P09 checkpoints. The proposed
+  P14 plan (RQ-05, RQ-06 in [p14-qualification.md](p14-qualification.md)) runs the
+  checkpoints against the published binary on Ubuntu, Windows and macOS and schedules a
+  weekly drift run once the release is stable.
 - **Owner:** P14 (release runs); scheduled runs unscheduled. **Issue:** [#178](https://github.com/smormah/vsift/issues/178).
   **Status:** open. **Review:** pending.
 
