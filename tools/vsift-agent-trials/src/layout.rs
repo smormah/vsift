@@ -31,6 +31,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::{install::InstallEvidence, scenario::TrialMode};
+
 /// The directory layout of one trial.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TrialLayout {
@@ -206,4 +208,94 @@ pub struct TrialManifest {
     pub vsift_executable: PathBuf,
     /// Each phase's prompt; a later phase may still hold `{{resume_card}}`.
     pub prompts: Vec<String>,
+    /// Whether the agent got the skill or none (P14). Absent in manifests
+    /// written before it existed, which are skill trials.
+    #[serde(default)]
+    pub mode: TrialMode,
+    /// Whether the scenario is one of the hold-outs listed in
+    /// `tools/vsift-agent-trials/holdout/INDEX.json`.
+    #[serde(default)]
+    pub holdout: bool,
+    /// Where the skill copy came from: `repository` (P12), `installed_package`
+    /// (a clean install: the copy the npm package ships, checked equal to the
+    /// repository's) or `none` (a cold trial).
+    #[serde(default)]
+    pub skill_source: SkillSource,
+    /// What the published install proves; `None` for a binary built from the
+    /// checkout (P12). Free of local paths.
+    #[serde(default)]
+    pub install: Option<InstallEvidence>,
+    /// The install's npm prefix, so the record can name it by token.
+    #[serde(default)]
+    pub install_prefix: Option<PathBuf>,
+    /// The directories the client's `PATH` gets in a clean-install trial
+    /// (npm's command folder, Node.js's); empty otherwise, when the client
+    /// gets the directory of `vsift_executable`.
+    #[serde(default)]
+    pub client_path_directories: Vec<PathBuf>,
+    /// How the dependencies came to be there.
+    #[serde(default)]
+    pub tools_source: ToolSource,
+    /// What `vsift setup check` reported after the harness set the tools up
+    /// and before the agent started (clean-install trials only).
+    #[serde(default)]
+    pub setup_check: Option<SetupCheckState>,
+    /// The digest of the freeze file the trial was prepared under, if the
+    /// operator named one ([`crate::freeze`]).
+    #[serde(default)]
+    pub freeze_sha256: Option<String>,
+    /// What `prepare` proved about a cold workspace (the skill and the
+    /// documentation absent from every discovery location).
+    #[serde(default)]
+    pub cold_assertions: Vec<String>,
+}
+
+/// Where a trial's skill copy came from.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillSource {
+    /// The checkout's `skills/vsift` (P12).
+    #[default]
+    Repository,
+    /// The copy inside the installed npm package.
+    InstalledPackage,
+    /// No skill (a cold trial).
+    None,
+}
+
+/// How a trial's media tools were provided.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolSource {
+    /// The harness registered executables by absolute path with `setup
+    /// configure`, as P12 did (and as a Windows user must).
+    #[default]
+    Registered,
+    /// The harness ran `setup plan` and `setup install` for the managed
+    /// tools, as a user on Ubuntu 24.04 does. The agent never does.
+    Managed,
+}
+
+/// What `vsift setup check` reported, kept to public fields and no path.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+pub struct SetupCheckState {
+    /// The command's exit code.
+    pub exit_code: Option<i32>,
+    /// The overall status (`ready`, `blocked`, ...).
+    pub status: String,
+    /// Each dependency: its name, status and where it was found.
+    pub dependencies: Vec<DependencyState>,
+    /// The local speech recognition verification status, when reported.
+    pub local_asr: Option<String>,
+}
+
+/// One dependency of `setup check`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+pub struct DependencyState {
+    /// `ffmpeg`, `ffprobe`, `whisper`.
+    pub dependency: String,
+    /// `ready`, `missing`, ...
+    pub status: String,
+    /// How it was looked up (`configured`, `managed`, `filtered_path`).
+    pub lookup: String,
 }

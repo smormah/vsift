@@ -1,9 +1,13 @@
 name: P12 Codex trial container
 
-# Builds both images of the Codex trial container
+# Builds the images of the Codex trial container
 # (tools/vsift-agent-trials/containers/codex): every pinned download is
 # checked by the Dockerfile itself, and the build runs the tools' version
-# checks and check-scenarios. No client runs, no model is called and no
+# checks and check-scenarios. P14 added the clean-install images, which
+# install the published vsift-cli 0.1.0 from the real npm registry during the
+# build (read-only, anonymous, no credential) and fail unless the install is
+# the published package; the last steps check what the cold agent can and
+# cannot reach in the agent image. No client runs, no model is called and no
 # secret is used; the images are discarded with the runner.
 on:
   workflow_dispatch:
@@ -56,3 +60,56 @@ jobs:
           docker run --rm --entrypoint /bin/sh vsift-codex-trials-agent:ci -c \
             'test ! -e /opt/vsift/src && test -z "$(find / -xdev -name manifest.json -path "*corpus*" 2>/dev/null)"'
           docker image inspect --format '{{.Id}}' vsift-codex-trials-agent:ci vsift-codex-trials-harness:ci
+
+      # P14: the clean-install images. VSift is installed from the real npm
+      # registry (exact version, scripts off, a cleared environment) by the
+      # harness's own install step; the build fails unless the registry's
+      # integrity, the launcher's digest check and the version line all agree.
+      - name: Build the published agent image
+        run: >-
+          docker build
+          --file tools/vsift-agent-trials/containers/codex/Dockerfile
+          --build-arg "VSIFT_COMMIT=${GITHUB_SHA}"
+          --build-arg "VSIFT_PUBLISHED_VERSION=0.1.0"
+          --target agent-published
+          --tag vsift-codex-trials-agent-published:ci
+          .
+
+      - name: Build the published harness image
+        run: >-
+          docker build
+          --file tools/vsift-agent-trials/containers/codex/Dockerfile
+          --build-arg "VSIFT_COMMIT=${GITHUB_SHA}"
+          --build-arg "VSIFT_PUBLISHED_VERSION=0.1.0"
+          --target harness-published
+          --tag vsift-codex-trials-harness-published:ci
+          .
+
+      - name: Check what the published agent image holds and hides
+        run: |
+          # The image carries the install proof and runs the launcher.
+          docker run --rm vsift-codex-trials-agent-published:ci versions
+          # As the unprivileged trial user: no repository, no FFmpeg, no
+          # whisper.cpp, and neither the skill nor a README is readable.
+          docker run --rm --entrypoint /bin/sh vsift-codex-trials-agent-published:ci -c '
+            set -u
+            test ! -e /opt/vsift/src
+            test ! -e /opt/ffmpeg
+            test ! -e /opt/whisper.cpp
+            # The reviewed whisper.cpp that setup install downloads needs it (#256).
+            test -e /usr/lib/x86_64-linux-gnu/libgomp.so.1
+            pkg=/opt/vsift-published/lib/node_modules/vsift-cli
+            if ls "$pkg/skills" >/dev/null 2>&1; then echo "the skill is readable"; exit 1; fi
+            if cat "$pkg/README.md" >/dev/null 2>&1; then echo "the README is readable"; exit 1; fi
+            test -r "$pkg/package.json"
+            test -r "$pkg/platform-digests.json"
+          '
+          # The harness image holds the repository and the readable package.
+          docker run --rm --entrypoint /bin/sh vsift-codex-trials-harness-published:ci -c '
+            set -u
+            test -d /opt/vsift/src/skills/vsift
+            test -d /opt/vsift-published/lib/node_modules/vsift-cli/skills/vsift
+            test -x /opt/ffmpeg/bin/ffmpeg
+            test -e /usr/lib/x86_64-linux-gnu/libgomp.so.1
+          '
+          docker image inspect --format '{{.Id}}' vsift-codex-trials-agent-published:ci vsift-codex-trials-harness-published:ci

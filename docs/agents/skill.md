@@ -246,9 +246,16 @@ Prefer a review-tier model when the report must be right first time.
   after the #224 fix; the maintainer starts it
   ([L-095](../planning/known-limits.md#l-095)).
 - **A named-agent run from a clean installation** (P14, the release qualification; ADR
-  0023 decision H10). No agent has yet used the published pre-release. It includes a
+  0023 decision H10). No agent has yet used the published pre-release. The harness for it is
+  built (P14 PR 6): VSift is installed from the real npm registry into a fresh folder, a
+  skill trial copies the skill from the **installed package** (checked equal to the
+  repository's, which is where the grader reads the command table), and it includes a
   cold-agent variant (the CLI on `PATH`, no skill, no docs; maintainer decision
-  2026-10-02): no trial has yet tested an agent using the CLI from its own help alone.
+  2026-10-02), graded with safety as a hard gate and usefulness reported apart. Two
+  hold-out scenarios (one per transcript path) were written for it and nothing was tuned on
+  them. **No batch has run**: each waits for the maintainer's go
+  ([the P14 batches](trials.md#the-p14-batches)). No trial has yet tested an agent using the
+  CLI from its own help alone.
 - **Open readings and limits:** Sonnet's "previous value" slip (#219), Codex on Windows
   (#204, L-076) and L-078 to L-084 in the register.
 

@@ -72,6 +72,12 @@ pub struct ParsedScript {
     pub opaque: Option<String>,
     /// Whether an unquoted or double-quoted variable was expanded.
     pub expands_variables: bool,
+    /// The shell each `vsift` command ran in, in order: the innermost
+    /// wrapper that was unwrapped to reach it (`Posix` when none was). It
+    /// tells which of npm's command shims a call resolved to on Windows (P14,
+    /// #257); it is a reading of the command text, never serialised.
+    #[serde(skip)]
+    pub vsift_shells: Vec<Dialect>,
 }
 
 /// The base name of an executable path, lower case, without `.exe`,
@@ -143,6 +149,7 @@ fn parse_into(text: &str, dialect: Dialect, depth: usize, result: &mut ParsedScr
             writes_file: false,
             piped_from_previous: false,
         });
+        result.vsift_shells.push(dialect);
         return;
     }
     let tokens = match tokenize(text, dialect) {
@@ -159,8 +166,31 @@ fn parse_into(text: &str, dialect: Dialect, depth: usize, result: &mut ParsedScr
         match unwrap_shell(&command) {
             Unwrapped::Script(script, inner) => parse_into(&script, inner, depth + 1, result),
             Unwrapped::Opaque(reason) => result.opaque = Some(reason),
-            Unwrapped::Plain => result.commands.push(command),
+            Unwrapped::Plain => {
+                if command.program() == "vsift" {
+                    result.vsift_shells.push(shim_dialect(&command, dialect));
+                }
+                result.commands.push(command);
+            }
         }
+    }
+}
+
+/// The shell whose shim a `vsift` command resolves to: the command's own
+/// extension when it names one (`vsift.cmd` is the `cmd.exe` shim wherever it
+/// is typed, `vsift.ps1` the PowerShell one), otherwise the shell it ran in.
+fn shim_dialect(command: &SimpleCommand, shell: Dialect) -> Dialect {
+    // Windows path separators are read here whatever the host, as `program_name`
+    // does, so the extension is taken from the last component by hand.
+    let first = command.argv.first().map_or("", String::as_str);
+    let name = first.rsplit(['/', '\\']).next().unwrap_or(first);
+    let extension = name.rsplit_once('.').map_or("", |(_, extension)| extension);
+    if extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat") {
+        Dialect::Cmd
+    } else if extension.eq_ignore_ascii_case("ps1") {
+        Dialect::PowerShell
+    } else {
+        shell
     }
 }
 

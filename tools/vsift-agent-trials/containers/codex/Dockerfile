@@ -15,6 +15,25 @@
 # the repository. `harness` adds the repository for `prepare` and `grade`,
 # which run as separate containers before and after the agent.
 #
+# P14 adds two more targets, `agent-published` and `harness-published`, for the
+# clean-install and cold-agent trials: the same Codex, but VSift is installed
+# from the REAL npm registry at build time (`npm install --global
+# vsift-cli@<exact version>` into /opt/vsift-published, by the harness's own
+# `install` step, which records the registry integrity and the launcher's
+# digest check in /opt/vsift-published-proof.json), never copied from a
+# repository build:
+#
+#   docker build --file tools/vsift-agent-trials/containers/codex/Dockerfile \
+#     --build-arg VSIFT_COMMIT=<the commit under test> \
+#     --build-arg VSIFT_PUBLISHED_VERSION=<exact version, for example 0.1.0> \
+#     --target agent-published --tag vsift-codex-trials-agent-published:<tag> .
+#   (the same with --target harness-published)
+#
+# The published agent image has no FFmpeg, no whisper.cpp and no model: the
+# harness installs the managed tools into each trial with `setup install`, as
+# a user on Ubuntu does. FFmpeg exists only in the published harness image, to
+# build the loop and blur clips; the agent never runs in it.
+#
 # Every input is pinned and verified; nothing is taken from a moving tag:
 #   - Ubuntu 24.04, by image digest (the digest CI's strict-worker job uses);
 #   - Rust, by the toolchain in rust-toolchain.toml, installed by a rustup-init
@@ -26,6 +45,9 @@
 #     (docs/planning/p06-ubuntu-artifact-candidate.md);
 #   - codex-cli 0.155.0-alpha.16, the official openai/codex Linux package, by
 #     size and the SHA-256 GitHub publishes for the release asset.
+#   - Node.js 24.21.0 (the published images only), the linux-x64 tarball, by the
+#     SHA-256 nodejs.org publishes in SHASUMS256.txt (the version the release
+#     workflow publishes with).
 # The model is not in the image: the operator mounts the reviewed
 # ggml-base.bin read-only and the trial driver checks its digest.
 #
@@ -197,3 +219,105 @@ LABEL org.opencontainers.image.title="vsift-codex-trials-harness" \
       org.opencontainers.image.description="P12 Codex trials: prepare and grade, never a client (unpublished)" \
       org.opencontainers.image.revision="${VSIFT_COMMIT}"
 
+# ---------------------------------------------------------------------------
+# P14. Node.js, for npm and for the launcher: the official linux-x64 tarball of
+# the version the release workflow publishes with, by its published SHA-256.
+FROM build-base AS node-fetch
+ARG NODE_VERSION=24.21.0
+ARG NODE_SHA256=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
+RUN curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+      --max-filesize 80000000 --output /tmp/node.tar.xz \
+      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+ && echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum --check --strict \
+ && mkdir -p /out/opt/node \
+ && tar -xJf /tmp/node.tar.xz -C /out/opt/node --strip-components=1 --no-same-owner \
+ && test -x /out/opt/node/bin/node \
+ && test -f /out/opt/node/lib/node_modules/npm/bin/npm-cli.js \
+ && rm /tmp/node.tar.xz
+
+# ---------------------------------------------------------------------------
+# P14. What both published images share: Ubuntu, the trial operator, Node.js,
+# the harness, and VSift installed from the real registry. `install` runs npm
+# with a cleared environment and an empty .npmrc, then reads the install back:
+# the registry's integrity of each package against what npm installed, the
+# launcher's digest check redone, and `vsift --version` through the launcher.
+# It fails the build if the install is not the published package.
+#
+# libgomp1: the reviewed whisper.cpp build that `setup install` downloads needs
+# libgomp.so.1, which a minimal Ubuntu 24.04 image lacks, and the install then
+# fails with MISSING_CAPABILITY without naming the library (P14 PR 2's finding,
+# issue #256, known limit L-110). It is part of the system image here, as it is
+# on a user's Ubuntu: the harness plays the user's part and installs no
+# distribution package into a trial.
+FROM ${UBUNTU_IMAGE} AS published-runtime
+ARG VSIFT_PUBLISHED_VERSION
+ENV DEBIAN_FRONTEND=noninteractive
+COPY --from=build-base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN sed -i 's#http://#https://#g' /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get update \
+ && apt-get install --yes --no-install-recommends ca-certificates curl libgomp1 libssl3t64 \
+ && rm -rf /var/lib/apt/lists/* \
+ && test -e /usr/lib/x86_64-linux-gnu/libgomp.so.1
+RUN groupadd --gid 10001 trials \
+ && useradd --uid 10001 --gid 10001 --home-dir /home/trials --create-home --shell /bin/bash trials \
+ && install -d -o 10001 -g 10001 -m 0700 /trials /exports
+COPY --from=node-fetch /out/ /
+COPY --from=vsift-build /out/opt/vsift-trials /opt/vsift-trials
+RUN test -n "${VSIFT_PUBLISHED_VERSION}" \
+ && /opt/vsift-trials/bin/vsift-agent-trials install \
+      --version "${VSIFT_PUBLISHED_VERSION}" \
+      --prefix /opt/vsift-published \
+      --node /opt/node/bin/node \
+      --npm-cli /opt/node/lib/node_modules/npm/bin/npm-cli.js \
+      --proof /opt/vsift-published-proof.json \
+ && /opt/vsift-trials/bin/vsift-agent-trials verify-install --proof /opt/vsift-published-proof.json
+ENV VSIFT_PUBLISHED_VERSION=${VSIFT_PUBLISHED_VERSION}
+
+# ---------------------------------------------------------------------------
+# P14 `agent-published`: the image Codex and its agent run in for the
+# clean-install and cold-agent trials. VSift is the published package and
+# nothing else of VSift: no repository, no corpus, no scenarios, no FFmpeg, no
+# whisper.cpp, no model. The package ships the skill and a README; the cold
+# agent must not be able to read them, so their folders and files are made
+# unreadable to everyone but root (the bytes are unchanged: the launcher reads
+# neither, and the proof above was taken before). The skill a skill trial uses
+# is copied by `prepare` in the harness image.
+FROM published-runtime AS agent-published
+ARG VSIFT_COMMIT=unknown
+COPY --from=codex-fetch /out/ /
+COPY --chmod=0755 tools/vsift-agent-trials/containers/codex/trial-driver.sh /opt/vsift-trials/bin/trial-driver
+RUN chmod -R go-rwx /opt/vsift-published/lib/node_modules/vsift-cli/skills \
+ && find /opt/vsift-published/lib/node_modules -iname 'README*' -exec chmod go-rwx {} + \
+ && /opt/node/bin/node /opt/vsift-published/lib/node_modules/vsift-cli/bin/vsift.cjs --version \
+ && /opt/codex/bin/codex --version \
+ && test ! -e /opt/vsift/src \
+ && test ! -e /opt/ffmpeg \
+ && test ! -e /opt/whisper.cpp
+LABEL org.opencontainers.image.title="vsift-codex-trials-agent-published" \
+      org.opencontainers.image.description="P14 Codex trials from the published package: the image the agent runs in (unpublished)" \
+      org.opencontainers.image.revision="${VSIFT_COMMIT}"
+ENV VSIFT_COMMIT=${VSIFT_COMMIT}
+USER 10001:10001
+WORKDIR /trials
+ENTRYPOINT ["/opt/vsift-trials/bin/trial-driver"]
+CMD ["help"]
+
+# ---------------------------------------------------------------------------
+# P14 `harness-published`: the published install plus the repository at the
+# commit under test, for `prepare` and `grade` only. FFmpeg is here to build
+# the looped and blurred clips; the tools a trial sees come from `setup
+# install`, run by `prepare` as the user's part. No client ever runs in it.
+FROM published-runtime AS harness-published
+ARG VSIFT_COMMIT=unknown
+COPY --from=ffmpeg-fetch /out/ /
+COPY --chmod=0755 tools/vsift-agent-trials/containers/codex/trial-driver.sh /opt/vsift-trials/bin/trial-driver
+COPY --chown=root:root . /opt/vsift/src
+RUN /opt/vsift-trials/bin/vsift-agent-trials check-scenarios --repository /opt/vsift/src
+LABEL org.opencontainers.image.title="vsift-codex-trials-harness-published" \
+      org.opencontainers.image.description="P14 Codex trials from the published package: prepare and grade, never a client (unpublished)" \
+      org.opencontainers.image.revision="${VSIFT_COMMIT}"
+ENV VSIFT_COMMIT=${VSIFT_COMMIT}
+USER 10001:10001
+WORKDIR /trials
+ENTRYPOINT ["/opt/vsift-trials/bin/trial-driver"]
+CMD ["help"]

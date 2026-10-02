@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Builds the P12 Codex trial images and runs Codex trials in them.
+    Builds the Codex trial images and runs Codex trials in them (P12; P14 adds
+    the images that install VSift from the real npm registry).
 
 .DESCRIPTION
     Operator wrapper for docs/agents/trials.md, "Codex trials in a Linux
@@ -15,6 +16,22 @@
                   trial's folder, the model and the sign-in mounted;
       3. grade    (harness image) grades, records and exports afterwards.
 
+    Two families of images exist:
+      * the P12 images (default): VSift and the harness are built from the
+        checkout; the reviewed FFmpeg, whisper.cpp and the model are
+        registered by prepare;
+      * the P14 clean-install images (-Published -PublishedVersion <exact
+        version>): VSift is installed from the REAL npm registry at build
+        time and its proof (the registry's integrity, the launcher's digest
+        check, the version line) goes into every trial record; prepare plays
+        the user and runs `setup plan` and `setup install` for the managed
+        tools; no model file is mounted; the agent image holds no FFmpeg, no
+        whisper.cpp and no readable skill or README. Cold scenarios (C-*)
+        and hold-outs (H-*) are found by their ids.
+
+    No action here calls a model except trial, continue and debug, which are
+    the maintainer's runs; this script is never run by a test or by CI.
+
     Actions:
       build          docker build of both images at the checkout's HEAD.
       versions       tool versions and digests in the agent image.
@@ -24,13 +41,19 @@
       trial          one trial of -Scenario (its first phase). Its last line
                      of output is "trial-id <trial>", the folder name to pass
                      to continue -Trial and to find the exported records.
+                     Exits 75 (after printing "usage-limit") when Codex
+                     stopped at its usage limit: the phase is invalid, run
+                     it again after the limit lifts.
       continue       phase -Phase of the prepared trial -Trial (A-02's second
                      phase gets only the first phase's resume card).
+      regrade        grade a finished trial again, from its raw logs.
 
 .EXAMPLE
     .\codex-trial.ps1 build
     .\codex-trial.ps1 sandbox-check
     .\codex-trial.ps1 trial -Scenario A-08-f05-local-asr -Model gpt-6-astra
+    .\codex-trial.ps1 build -Published -PublishedVersion 0.1.0
+    .\codex-trial.ps1 trial -Published -PublishedVersion 0.1.0 -Scenario C-03-f03-missing-tools -Model gpt-6-sol
 #>
 [CmdletBinding()]
 param(
@@ -64,9 +87,21 @@ param(
     [ValidateRange(2, 9)]
     [int] $Phase = 2,
 
-    # The image tag suffix; default: the short HEAD commit.
+    # The image tag suffix; default: the short HEAD commit (and, for the
+    # published images, the version).
     [ValidatePattern('^[A-Za-z0-9._-]{1,64}$')]
     [string] $Tag,
+
+    # P14: use the clean-install images, which install VSift from the real
+    # npm registry, and the exact version they install (never a tag).
+    [switch] $Published,
+
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$')]
+    [string] $PublishedVersion,
+
+    # P14: a freeze file (vsift-agent-trials freeze write) that prepare checks
+    # against the repository inside the harness image before it prepares.
+    [string] $Freeze,
 
     # The Docker volume that holds the trial root (/trials). A volume, not a
     # Windows folder: VSift checks that its private folders are owned by the
@@ -81,7 +116,8 @@ param(
     # into the run container.
     [string] $ClientHome = 'C:\vsift-trials\.clients\codex',
 
-    # The reviewed ggml-base.bin, mounted read-only and checked by digest.
+    # The reviewed ggml-base.bin, mounted read-only and checked by digest
+    # (the P12 images only; a published image installs its own model).
     [string] $ModelFile = 'C:\tools\whisper.cpp\models\ggml-base.bin'
 )
 
@@ -92,6 +128,10 @@ $PSNativeCommandArgumentPassing = 'Standard'
 $here = $PSScriptRoot
 $repository = (Resolve-Path (Join-Path $here '..\..\..\..')).Path
 $seccomp = Join-Path $here 'seccomp-userns.json'
+
+# The exit status of the harness's `run` when the client stopped at its usage
+# limit (EX_TEMPFAIL).
+$usageLimitExit = 75
 
 function Invoke-Docker([string[]] $Arguments) {
     & docker @Arguments
@@ -111,37 +151,61 @@ function Assert-NeutralPath([string] $Path, [string] $What) {
     }
 }
 
-if (-not $Tag) { $Tag = (Get-Head).Substring(0, 12) }
-$agentImage = "vsift-codex-trials-agent:$Tag"
-$harnessImage = "vsift-codex-trials-harness:$Tag"
+if ($Published -and -not $PublishedVersion) { throw '-Published needs -PublishedVersion (an exact version such as 0.1.0, never a tag)' }
+if ($PublishedVersion -and -not $Published) { throw '-PublishedVersion needs -Published' }
+if ($Freeze -and $Action -ne 'trial' -and $Action -ne 'debug') { throw '-Freeze is for trial and debug' }
+
+if (-not $Tag) {
+    $Tag = (Get-Head).Substring(0, 12)
+    if ($Published) { $Tag = "$Tag-$PublishedVersion" }
+}
+if ($Published) {
+    $agentImage = "vsift-codex-trials-agent-published:$Tag"
+    $harnessImage = "vsift-codex-trials-harness-published:$Tag"
+    $agentTarget = 'agent-published'
+    $harnessTarget = 'harness-published'
+}
+else {
+    $agentImage = "vsift-codex-trials-agent:$Tag"
+    $harnessImage = "vsift-codex-trials-harness:$Tag"
+    $agentTarget = 'agent'
+    $harnessTarget = 'harness'
+}
 
 if ($Action -eq 'build') {
     $commit = Get-Head
     if (& git -C $repository status --porcelain) {
         Write-Warning 'The checkout has uncommitted changes: the images are not exactly HEAD.'
     }
-    foreach ($target in @(@('agent', $agentImage), @('harness', $harnessImage))) {
-        Invoke-Docker @(
+    foreach ($target in @(@($agentTarget, $agentImage), @($harnessTarget, $harnessImage))) {
+        $buildArguments = @(
             'build',
             '--file', (Join-Path $here 'Dockerfile'),
             '--build-arg', "VSIFT_COMMIT=$commit",
             '--target', $target[0],
-            '--tag', $target[1],
-            $repository
+            '--tag', $target[1]
         )
+        # The published images install the exact version from the real npm
+        # registry during the build; the build fails if it is not the published
+        # package (the harness's `install` step checks the registry's
+        # integrity, the launcher's digest and the version line).
+        if ($Published) { $buildArguments += @('--build-arg', "VSIFT_PUBLISHED_VERSION=$PublishedVersion") }
+        $buildArguments += $repository
+        Invoke-Docker $buildArguments
     }
     foreach ($image in @($agentImage, $harnessImage)) {
         $id = (& docker image inspect --format '{{.Id}}' $image).Trim()
         Write-Output "$image $id"
     }
     Write-Output "vsift commit $commit"
+    if ($Published) { Write-Output "vsift-cli $PublishedVersion installed from the registry" }
     exit 0
 }
 
 Assert-NeutralPath $Exports 'The exports folder'
 Assert-NeutralPath $ClientHome 'The Codex client home'
 New-Item -ItemType Directory -Force -Path $Exports | Out-Null
-if (-not (Test-Path -LiteralPath $ModelFile -PathType Leaf)) { throw "No model file at $ModelFile" }
+if (-not $Published -and -not (Test-Path -LiteralPath $ModelFile -PathType Leaf)) { throw "No model file at $ModelFile" }
 
 # Options every container gets: unprivileged, no capabilities, read-only
 # root, and the committed seccomp profile that lets Codex's bubblewrap
@@ -156,9 +220,13 @@ $common = @(
     '--read-only',
     '--tmpfs', '/tmp:rw,nosuid,nodev,size=2g,mode=1777',
     '--pids-limit', '1024',
-    '--memory', '8g',
-    '--mount', "type=bind,source=$ModelFile,target=/opt/models/ggml-base.bin,readonly"
+    '--memory', '8g'
 )
+# The reviewed model is mounted for the P12 images only: a published image's
+# prepare installs the managed model with `setup install`.
+if (-not $Published) {
+    $common += @('--mount', "type=bind,source=$ModelFile,target=/opt/models/ggml-base.bin,readonly")
+}
 
 function Get-TrialMount([string] $Relative) {
     # Only this trial's folder, at the path prepare recorded.
@@ -166,7 +234,13 @@ function Get-TrialMount([string] $Relative) {
 }
 
 function Invoke-Prepare([string[]] $DriverArguments) {
-    $arguments = $common + @('--mount', "type=volume,source=$TrialVolume,target=/trials", $harnessImage, 'prepare') + $DriverArguments
+    $arguments = $common + @('--mount', "type=volume,source=$TrialVolume,target=/trials")
+    if ($Freeze) {
+        if (-not (Test-Path -LiteralPath $Freeze -PathType Leaf)) { throw "No freeze file at $Freeze" }
+        $arguments += @('--mount', "type=bind,source=$Freeze,target=/run/freeze.json,readonly")
+        $DriverArguments += @('--freeze', '/run/freeze.json')
+    }
+    $arguments += @($harnessImage, 'prepare') + $DriverArguments
     $output = & docker @arguments
     if ($LASTEXITCODE -ne 0) { throw "prepare failed (docker exited with $LASTEXITCODE)" }
     $output | ForEach-Object { Write-Host $_ }
@@ -187,7 +261,14 @@ function Invoke-Run([string] $Relative, [int] $RunPhase, [string[]] $Extra) {
         $agentImage, 'run', '--trial', $Relative, '--phase', "$RunPhase", '--model', $Model,
         '--timeout-s', "$TimeoutSeconds"
     ) + $Extra
-    Invoke-Docker $arguments
+    & docker @arguments
+    if ($LASTEXITCODE -eq $usageLimitExit) {
+        # The client stopped at its usage limit: the phase is invalid, never
+        # counted. The campaign script waits and runs the scenario again.
+        Write-Output 'usage-limit'
+        exit $usageLimitExit
+    }
+    if ($LASTEXITCODE -ne 0) { throw "docker exited with $LASTEXITCODE" }
 }
 
 function Invoke-Grade([string] $Relative, [int] $GradePhase) {

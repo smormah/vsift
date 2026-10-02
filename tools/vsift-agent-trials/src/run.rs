@@ -74,13 +74,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     claude_trust::{TrustOutcome, trust_workspace},
+    cold::assert_cold_workspace,
     error::{TrialError, read_json, write_json},
     layout::{TrialLayout, TrialManifest},
     leak_check::{self, LeakCheck},
     roots::RootPolicy,
-    scenario::{ImagePolicy, Scenario},
+    scenario::{ImagePolicy, Scenario, TrialMode},
     skill::file_digest,
     trace::ClientKind,
+    usage_limit::{self, UsageLimit},
 };
 
 /// Environment variables a client needs from the harness's environment on
@@ -143,6 +145,9 @@ pub struct RunRequest {
     /// A prompt that replaces the scenario's, for a debug run (see the
     /// module documentation); `None` for a trial.
     pub debug_prompt: Option<String>,
+    /// Where the cold workspace check stops looking up the folder tree; see
+    /// [`crate::prepare::PrepareRequest::cold_scan_stop`]. `None` for a trial.
+    pub cold_scan_stop: Option<PathBuf>,
 }
 
 /// What `run` did, written to `harness/phase-<n>/run.json`.
@@ -176,6 +181,12 @@ pub struct RunRecord {
     /// written before this field existed.
     #[serde(default)]
     pub sign_in_leak_check: Option<LeakCheck>,
+    /// Whether the client stopped at its usage limit: the phase is then
+    /// invalid and is run again after the limit lifts
+    /// ([`crate::usage_limit`]). `None` in run records written before this
+    /// field existed.
+    #[serde(default)]
+    pub usage_limit: Option<UsageLimit>,
     /// The client home the run used, so `grade` can recognise the client's
     /// own spill files below it. `None` in run records written before this
     /// field existed (`grade --client-home` supplies it then). Local only:
@@ -336,7 +347,23 @@ pub fn client_path(
     extra: &[PathBuf],
     system: &[PathBuf],
 ) -> Result<OsString, TrialError> {
-    let mut directories: Vec<PathBuf> = vsift.parent().map(Path::to_path_buf).into_iter().collect();
+    let first: Vec<PathBuf> = vsift.parent().map(Path::to_path_buf).into_iter().collect();
+    client_path_from(first, extra, system)
+}
+
+/// [`client_path`] with the leading directories given: a clean-install
+/// trial's are npm's command folder and Node.js's, never the folder of the
+/// native executable the launcher runs.
+///
+/// # Errors
+///
+/// [`TrialError::Refused`] when a media tool is reachable on it.
+pub fn client_path_from(
+    first: Vec<PathBuf>,
+    extra: &[PathBuf],
+    system: &[PathBuf],
+) -> Result<OsString, TrialError> {
+    let mut directories = first;
     directories.extend(extra.iter().cloned());
     directories.extend(system.iter().cloned());
     for directory in &directories {
@@ -365,14 +392,20 @@ pub fn client_environment(
     layout: &TrialLayout,
     manifest: &TrialManifest,
 ) -> Result<Vec<(String, OsString)>, TrialError> {
-    let mut environment: Vec<(String, OsString)> = vec![(
-        "PATH".to_owned(),
+    let path = if manifest.client_path_directories.is_empty() {
         client_path(
             &manifest.vsift_executable,
             &request.path_directories,
             &request.system_path,
-        )?,
-    )];
+        )?
+    } else {
+        client_path_from(
+            manifest.client_path_directories.clone(),
+            &request.path_directories,
+            &request.system_path,
+        )?
+    };
+    let mut environment: Vec<(String, OsString)> = vec![("PATH".to_owned(), path)];
     if cfg!(windows) {
         for name in WINDOWS_PASSTHROUGH {
             if let Some(value) = env::var_os(name) {
@@ -421,6 +454,10 @@ pub fn client_environment(
 ///
 /// [`TrialError`] when the trial, root or client home is refused, or the
 /// client cannot be started or stopped.
+#[allow(
+    clippy::too_many_lines,
+    reason = "One function reads top to bottom as the order of a client run"
+)]
 pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     let layout = TrialLayout::new(&request.trial);
     request.root_policy.check(&request.trial)?;
@@ -432,6 +469,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     }
     let manifest = read_manifest(&layout)?;
     let scenario = Scenario::load(&layout.scenario())?;
+    check_before_start(request, &layout, &manifest)?;
     let prompt = match &request.debug_prompt {
         Some(prompt) => prompt.clone(),
         None => phase_prompt(&layout, &manifest, request.phase)?,
@@ -490,7 +528,16 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     };
     let wall_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let sign_in_leak_check = check_sign_in_leak(&request.client_home, &stdout_path, &stderr_path)?;
+    let (stdout_text, stderr_text) = (
+        fs::read(&stdout_path)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|error| TrialError::io_step("reading the raw log", &stdout_path, error))?,
+        fs::read(&stderr_path)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|error| TrialError::io_step("reading the raw log", &stderr_path, error))?,
+    );
     let record = RunRecord {
+        usage_limit: usage_limit::detect(request.client, &stdout_text, &stderr_text),
         client: request.client,
         client_version,
         model: request.model.clone(),
@@ -512,6 +559,36 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     };
     write_json(&layout.phase(request.phase).join("run.json"), &record)?;
     Ok(record)
+}
+
+/// What must still hold when the client is about to start: a clean-install
+/// trial runs the very executable `prepare` verified, and a cold trial's
+/// workspace and client home still hold no skill and no documentation.
+///
+/// # Errors
+///
+/// [`TrialError::Refused`] when either no longer holds.
+fn check_before_start(
+    request: &RunRequest,
+    layout: &TrialLayout,
+    manifest: &TrialManifest,
+) -> Result<(), TrialError> {
+    if manifest.install.is_some()
+        && file_digest(&manifest.vsift_executable)? != manifest.vsift_sha256
+    {
+        return Err(TrialError::Refused(
+            "the installed vsift executable is not the one prepare verified".to_owned(),
+        ));
+    }
+    if manifest.mode == TrialMode::Cold && request.debug_prompt.is_none() {
+        assert_cold_workspace(
+            &layout.workspace(),
+            request.cold_scan_stop.as_deref(),
+            &[request.client_home.as_path()],
+        )
+        .map_err(|error| TrialError::Refused(error.to_string()))?;
+    }
+    Ok(())
 }
 
 /// Scans the phase's raw logs for the client's sign-in values while the

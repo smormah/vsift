@@ -20,12 +20,17 @@
 
 pub mod bundle;
 pub mod calls;
+pub mod campaign;
 pub mod claude_trust;
 pub mod client_warnings;
+pub mod cold;
 pub mod error;
 pub mod evaluate;
+pub mod freeze;
 pub mod grade;
 pub mod handoff;
+pub mod holdout;
+pub mod install;
 pub mod layout;
 pub mod leak_check;
 pub mod policy;
@@ -35,9 +40,12 @@ pub mod roots;
 pub mod run;
 pub mod scenario;
 pub mod shell;
+pub mod shim;
 pub mod skill;
+pub mod summary;
 pub mod trace;
 pub mod truth;
+pub mod usage_limit;
 pub mod vsift_cli;
 
 pub use error::TrialError;

@@ -40,6 +40,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   cannot extract `D:\...` archives. Also L-111 (what each upgrade mode proves) and L-112 (what the
   scrubbed hosted image is not). `install.md` sections 1, 2, 3, 5.1 and 8, `release.md` section
   6.4 and `development.md` say so; ADR 0024 and the P14 plan record the results.
+- **P14 PR 6: the trial harness for the clean-install and cold-agent rounds** (the harness crate,
+  two scenario sets, a Codex image, a PowerShell campaign script, tests and documentation;
+  **no trial was run, no model was called and no client sign-in was used**; nothing was
+  published). `vsift-agent-trials install` installs `vsift-cli@<exact version>` from the real npm
+  registry into a fresh prefix (scripts off, a cleared environment, an empty `.npmrc`) and proves the
+  published install was used: what npm fetched (from its cache index) equals the integrity the
+  registry advertises, the launcher's digest check is redone, `vsift --version` runs through the
+  launcher, and the exact version is checked; every trial record carries that evidence. `prepare
+  --install-proof` runs the package's native executable, takes the skill copy from the package
+  (refused if it differs from the checkout's), gives the agent only npm's command folder and
+  Node.js on `PATH`, records `setup check`, and (`--tools managed`, Ubuntu) plays the user by running
+  `setup plan` and `setup install` with the plan's digest. New Codex image targets
+  `agent-published` and `harness-published` install from the registry at build time (the agent image
+  holds no repository, FFmpeg, model or readable skill). **Cold-agent mode** (scenarios `C-01`,
+  `C-02`, `C-03`, A-10): no skill, no documentation, a neutral prompt, a workspace proved cold in every
+  folder above it; its grader makes safety a hard gate (accepting a setup plan, installing, network,
+  reads outside the workspace, the sentinel, ...), reports usefulness apart and writes a gap report of
+  every failed or retried call. **Hold-outs** (`H-01-f10-supplied-sidecar`, `H-02-f01-local-asr`) are
+  kept outside the tuning corpus with a frozen index, and `freeze write` and `freeze check` hold the
+  skill, grader, scenarios, settings and truth by digest. Records now carry the tokens and the
+  client's own cost estimate (`reported_usage`); a client that stops at its usage limit is detected and
+  never counted. `campaign` plans the three batches (20, 34 and 18 runs) with retry limits, `summarize`
+  computes the plan's gates, and `run-campaign.ps1` runs a batch resumably with a stop file. #205 was
+  already fixed by #203 and is closed. **P14 PR 2's two findings are handled here:** both published
+  Codex images install `libgomp1`, which the reviewed whisper.cpp build needs (#256), and the
+  harness never runs an npm shim, Claude Code may run only `Bash(vsift:*)` (Git Bash on Windows; a
+  test pins the settings), and every grade and record counts the `vsift` calls by the shell they ran
+  in (`shim_use`), with a warning if one went through `cmd.exe`'s `vsift.cmd` (#257). ADR 0024's
+  note, `docs/agents/trials.md` ("The P14 batches"), the plan's section 7, L-117 to L-120.
+  Opt-in `install_npm` runs the real npm against a loopback registry.
+
 - **P14 PR 8: the release machinery for a release candidate and the stable release** (code,
   the Release workflow, its lint, tests and documentation; **nothing is published**, no tag or
   release was created and no setting changed). The version alone decides what a publication

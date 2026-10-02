@@ -338,11 +338,17 @@ mod tests {
     #[test]
     fn trust_is_written_atomically_into_the_client_home() -> Result<(), Box<dyn std::error::Error>>
     {
+        // The process id, a counter and the clock: macOS reports time in
+        // microseconds, so the clock alone can repeat (issue #205).
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos();
-        let home =
-            std::env::temp_dir().join(format!("vsift-trials-trust-{}-{stamp}", std::process::id()));
+        let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let home = std::env::temp_dir().join(format!(
+            "vsift-trials-trust-{}-{sequence}-{stamp}",
+            std::process::id()
+        ));
         let workspace = home.join("trial").join("workspace");
         assert!(matches!(
             trust_workspace(&home, &workspace),

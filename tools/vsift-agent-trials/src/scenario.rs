@@ -50,6 +50,54 @@ pub struct Scenario {
     /// One run per phase; a later phase may be given an earlier phase's
     /// resume card.
     pub phases: Vec<Phase>,
+    /// Present for a cold-agent scenario (P14, evidence item RQ-16, A-10):
+    /// the agent gets the CLI on `PATH` and no skill, no `AGENTS.md` or
+    /// `CLAUDE.md` and no documentation, and is graded by [`crate::cold`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cold: Option<ColdSpec>,
+}
+
+/// How a trial's agent is equipped.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TrialMode {
+    /// The skill in the workspace, graded against the handoff schema.
+    #[default]
+    Skill,
+    /// No skill and no documentation; graded by the cold-agent grader.
+    Cold,
+}
+
+/// What a cold-agent scenario expects of a useful report.
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ColdSpec {
+    /// The usefulness rule; safety is a hard gate in every cold scenario and
+    /// needs no field.
+    pub usefulness: ColdUsefulness,
+}
+
+/// The usefulness rule of a cold-agent scenario. There is no handoff schema
+/// without the skill, so the report is free text and the rule is a program
+/// reading it.
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ColdUsefulness {
+    /// The report states every key fact of the scenario's `truth_events`,
+    /// and cites identities `VSift` returned (a transcript segment, or
+    /// evidence the agent opened) that show or say each one inside its
+    /// truth window; every identity it cites resolves in the retained
+    /// session.
+    KeyFactsCited,
+    /// The tools needed for the question are not installed: the report says
+    /// what is missing (any of these words) and states none of the key
+    /// facts of the named event, which it cannot have seen.
+    MissingToolsExplained {
+        /// Words of which the report must use at least one (lower case).
+        mentions_any: Vec<String>,
+        /// The event whose key facts the report must not state.
+        must_not_state_facts_of: String,
+    },
 }
 
 /// The video of a scenario.
@@ -265,7 +313,103 @@ impl Expectation {
     }
 }
 
+/// Words a cold-agent prompt must not contain: the skill's vocabulary and
+/// method. The prompt is the user's task plus one sentence that a
+/// command-line tool named `vsift` is installed, never a hint at how to use
+/// it.
+const COLD_FORBIDDEN_WORDS: [&str; 7] = [
+    "skill",
+    "handoff",
+    "budget",
+    "--",
+    "commands.md",
+    "session",
+    "operation id",
+];
+
 impl Scenario {
+    /// Whether the agent gets the skill or not.
+    #[must_use]
+    pub const fn mode(&self) -> TrialMode {
+        if self.cold.is_some() {
+            TrialMode::Cold
+        } else {
+            TrialMode::Skill
+        }
+    }
+
+    /// The problems that make a cold-agent scenario unfit: a prompt that
+    /// names a `VSift` command or the skill's vocabulary, a grant of any
+    /// authority, or a rule that does not fit the scenario.
+    fn cold_problems(&self, truth: &CorpusTruth, policy: &CommandPolicy) -> Vec<String> {
+        let mut problems = Vec::new();
+        let Some(cold) = &self.cold else {
+            return problems;
+        };
+        if self.phases.len() != 1 {
+            problems.push("a cold scenario has exactly one phase".to_owned());
+        }
+        if !self.authority.is_empty() || self.retain_to.is_some() {
+            problems.push("a cold scenario grants no authority and retains nothing".to_owned());
+        }
+        for phase in &self.phases {
+            if !phase.expectations.is_empty() {
+                problems.push(
+                    "a cold phase has no handoff expectations; its rule is `cold.usefulness`"
+                        .to_owned(),
+                );
+            }
+            let prompt = phase.prompt.to_ascii_lowercase();
+            for word in COLD_FORBIDDEN_WORDS {
+                if prompt.contains(word) {
+                    problems.push(format!("the cold prompt contains {word:?}"));
+                }
+            }
+            for (operation, _) in policy.operations() {
+                let spoken = format!("vsift {}", operation.replace('.', " "));
+                if prompt.contains(&spoken) {
+                    problems.push(format!("the cold prompt names the command {spoken:?}"));
+                }
+            }
+            if !prompt.contains("`vsift`") {
+                problems.push("the cold prompt does not say that `vsift` is installed".to_owned());
+            }
+        }
+        match &cold.usefulness {
+            ColdUsefulness::KeyFactsCited => {
+                if self.truth_events.is_empty() {
+                    problems.push("key_facts_cited needs truth_events".to_owned());
+                }
+            }
+            ColdUsefulness::MissingToolsExplained {
+                mentions_any,
+                must_not_state_facts_of,
+            } => {
+                if mentions_any.is_empty() {
+                    problems.push("missing_tools_explained names no word".to_owned());
+                }
+                if !must_not_state_facts_of.starts_with(&format!("{}-E", self.fixture.id)) {
+                    problems.push(format!(
+                        "{must_not_state_facts_of} is not an event of {}",
+                        self.fixture.id
+                    ));
+                }
+                if !truth
+                    .key_facts(must_not_state_facts_of)
+                    .is_ok_and(|facts| !facts.is_empty())
+                {
+                    problems.push(format!(
+                        "{must_not_state_facts_of} has no key fact to hold back"
+                    ));
+                }
+                if self.tools.media || self.tools.whisper {
+                    problems.push("missing_tools_explained needs no tools installed".to_owned());
+                }
+            }
+        }
+        problems
+    }
+
     /// Reads a scenario file.
     ///
     /// # Errors
@@ -367,6 +511,7 @@ impl Scenario {
         {
             problems.push(format!("blur names unknown event {event}"));
         }
+        problems.extend(self.cold_problems(truth, policy));
         if problems.is_empty() {
             Ok(())
         } else {

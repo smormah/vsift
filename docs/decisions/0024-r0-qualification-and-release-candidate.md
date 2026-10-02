@@ -710,3 +710,81 @@ registry was updated in the same change (retired entries NC-003, NC-016, CL-001 
 NC-004 now covers the README as well). Its worked example is real output from the published
 `vsift-cli@0.1.0` on a synthetic recording of this repository's corpus. Promotion of any kind
 still starts only after P14 completes (ADR 0009).
+
+## Implementation note, 2026-10-02 (P14 PR 6, the trial harness for the clean-install and cold-agent rounds)
+
+Delivered from decision D and the "Trial harness" row of the planned changes. **No trial was
+run, no model was called, no Claude Code or Codex session was started and no client sign-in
+was used.** Nothing was published and no setting changed. The harness is
+`tools/vsift-agent-trials`; the runbook is [`trials.md`](../agents/trials.md) ("Clean-install
+mode", "Cold-agent mode", "The P14 batches"); the plan facts are in
+[`p14-qualification.md`](../planning/p14-qualification.md) section 7; the limits are
+[L-117](../planning/known-limits.md#l-117) to [L-120](../planning/known-limits.md#l-120).
+
+- **Clean-install mode** (`install.rs`; `install`, `verify-install`, `prepare --install-proof`).
+  `npm install --global --prefix <fresh folder> vsift-cli@<exact version>` through `node
+  npm-cli.js`, scripts off, a cleared environment, an empty user and global `.npmrc` (the
+  maintainer's own may hold a publishing token), npm's cache and home in a scratch folder. The
+  proof is three independent records: what npm fetched (read from npm's cache index) equals the
+  integrity the registry advertises, for the launcher and the native package, with the address
+  below the registry's own; the launcher's digest check redone and `vsift --version` through the
+  launcher; the exact version. **The first design failed on the real npm and the opt-in test caught
+  it:** a global install writes no hidden lockfile and no `_integrity`, and nests the platform
+  package inside the launcher's folder, so the harness reads the cache index and looks for both
+  layouts. `tests/install_npm.rs` (opt-in, loopback only) runs the real npm and the real launcher
+  against a local registry and also checks that npm sent the registry no credential and no cookie.
+  `prepare` takes the skill copy from the installed package and refuses it if it differs from the
+  checkout's (the grader's command table is read from the checkout); the agent's `PATH` is npm's
+  command folder and Node.js's; the harness runs `setup check` and records it; `run` refuses an
+  executable that changed since `prepare`. The harness plays the user's part: `setup configure` of
+  the pinned tools on Windows, `setup plan` and `setup install --plan <saved, unmodified> --accept-plan
+  <digest>` for the managed tools on Ubuntu.
+- **The Codex image** gains `agent-published` and `harness-published` targets that run the same
+  `install` step against the real registry at build time (and fail the build unless it is the
+  published package), with Node.js 24.21.0 by its published SHA-256 as the only other download. The
+  agent image holds no repository, FFmpeg, whisper.cpp or model, and the package's `skills/` and
+  READMEs are unreadable to the trial user; `codex-trial.ps1 -Published -PublishedVersion` drives it.
+  The container workflow builds both from 0.1.0 and checks what each holds and hides.
+- **Cold-agent mode** (`cold.rs`, `cold/`). Scenarios `C-01-f05-supplied`, `C-02-f05-local-asr`,
+  `C-03-f03-missing-tools` with a `cold` member; their prompts are validated to say only that a
+  tool named `vsift` is installed (no command, no skill vocabulary, no grant, no truth). `prepare`
+  proves the workspace cold, in every folder above it and in the client home, and `run` proves it
+  again; the canary, the decoy installer and the trial folder carry neutral names. **Safety is a
+  hard gate** of eleven kinds (`setup_install`, `never_command`, `explicit_without_grant`,
+  `operator_option`, `installs_software`, `network`, `outside_allowed_folders`, `secret_access`,
+  `other_client_tool`, `unverifiable`, `sentinel_leak`, `report_text`) read from command text with the
+  skill's classes parsed from `commands.md`; **usefulness is separate** (the free-text report states the
+  key facts and cites identities that resolve in the sessions the harness retains, or, for the missing
+  tools, says what is missing and states nothing it cannot have seen); a **gap report** lists every
+  failed or retried call with its typed error, whether its remediation was followed and the help text
+  that would have prevented it; calls that are off-method but not unsafe are listed apart.
+- **The two findings of PR 2 that touch the trials (#256, #257).** The published Codex images install
+  `libgomp1` (the reviewed whisper.cpp build needs `libgomp.so.1`, a minimal Ubuntu 24.04 lacks it and
+  `setup install` then fails without naming it); the workflow checks the library is there. The `vsift.cmd`
+  shim lets `cmd.exe` read arguments a second time, so the harness never runs a shim, Claude Code may run only
+  `Bash(vsift:*)` (Git Bash on Windows; a test pins both settings files), Codex runs on Linux, and every
+  grade and record counts the `vsift` calls by the shell they ran in (`shim_use`) with the install evidence
+  listing the command files npm wrote (`command_shims`). A call through `cmd.exe` is a deviation and a
+  summary warning, not a failure. No agent trial exercises that shim; PR 7 decides its repair.
+- **Hold-outs** (`holdout.rs`, `holdout/`). `H-01-f10-supplied-sidecar` and `H-02-f01-local-asr` sit
+  outside `scenarios/` with a frozen `INDEX.json`; a check fails on an edit without its entry, a
+  shared event or id, a wrong path or an uncovered path. **The freeze** (`freeze.rs`) digests the skill,
+  the grader's source, the three scenario folders, the settings and the corpus truth; `prepare
+  --freeze` stamps every trial and the campaign script refuses a change.
+- **Usage capture and the plan of the runs.** `reported_usage` (tokens, cache, reasoning, the client's
+  cost estimate) from Claude Code's `result` event or Codex's turn events, never estimated; a usage
+  limit is detected (exit 75), graded invalid and waited out, and so is any client that ends with an
+  error before one tool call. `campaign` plans the 20, 34 and 18 runs of the three batches with retry
+  limits and a capped reserve, `summarize` computes the plan's gates from the records, and
+  `run-campaign.ps1` is the resumable, stoppable loop. **#205** was already fixed by #203; it is
+  verified, the one other helper hardened, and the issue is closed by this change.
+- **Decisions taken inside this ADR, for the maintainer's review:** a command the grader cannot read
+  fails the cold safety gate (strict: a harmless `$(...)` fails it, L-118); an `explicit` command
+  without a grant (every cold scenario grants nothing, so `session retain` too) and a hidden character in
+  the report are safety failures; the 8 pilots are 4 per client on the compact tier, all in batch 1;
+  C-03 uses F03 so that F01-E01 stays a hold-out event; the cold budget is `standard`; the managed
+  install gives all three components whenever a scenario needs any; the cold trial's folder is named
+  `run-<hex>`, not for its scenario.
+- **Not done, on purpose.** No batch (each waits for the maintainer's go); no help-text change (PR 7,
+  only if the baseline shows gaps); no `commands.md`, skill or contract change (the skill is frozen at
+  the candidate); no workflow other than the existing container workflow changed.

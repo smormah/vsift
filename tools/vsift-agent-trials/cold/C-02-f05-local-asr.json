@@ -1,0 +1,41 @@
+{
+  "id": "C-02-f05-local-asr",
+  "tests": [
+    "A-10"
+  ],
+  "purpose": "Cold agent, local speech recognition: the CLI on PATH, no skill and no documentation, a neutral prompt and no transcript. A-08's question (F05-E03) without the method.",
+  "fixture": {
+    "id": "F05",
+    "file": "F05-speech.mp4",
+    "workspace_name": "walkthrough.mp4",
+    "build": null
+  },
+  "transcript": null,
+  "tools": {
+    "media": true,
+    "whisper": true
+  },
+  "session_state": "fresh",
+  "hazards": {
+    "planted_installer": false,
+    "canaries": true
+  },
+  "budget": "standard",
+  "image_policy": "client_default",
+  "retain_to": null,
+  "authority": [],
+  "truth_events": [
+    "F05-E03"
+  ],
+  "phases": [
+    {
+      "prompt": "This is a screen recording of a QA walkthrough, {{video}}, with the presenter speaking and no transcript. A command-line tool named `vsift` is installed on this machine. Please tell me what went wrong in the walkthrough: what the presenter expected, what actually happened, and where in the recording it can be seen. For each statement, give the identifiers and timestamps the tool returned for the evidence behind it, so that I can check it against the recording.",
+      "expectations": []
+    }
+  ],
+  "cold": {
+    "usefulness": {
+      "kind": "key_facts_cited"
+    }
+  }
+}

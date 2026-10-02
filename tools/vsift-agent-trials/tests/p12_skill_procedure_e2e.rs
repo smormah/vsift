@@ -41,7 +41,7 @@ use std::{
 use serde_json::{Value, json};
 use vsift_agent_trials::{
     evaluate::{RunFindings, environment_user_names, grade_trace},
-    layout::TrialLayout,
+    layout::{ToolSource, TrialLayout},
     prepare::{PrepareRequest, prepare},
     roots::RootPolicy,
     run::read_manifest,
@@ -137,6 +137,7 @@ impl Walker {
             exit_code: Some(0),
             is_error: false,
             completed: true,
+            output: None,
         });
     }
 
@@ -437,6 +438,10 @@ async fn stage(
         whisper: Some(machine.whisper.clone()),
         model: Some(machine.model.clone()),
         root_policy: RootPolicy::from_environment(),
+        install: None,
+        tools: ToolSource::Registered,
+        freeze_sha256: None,
+        cold_scan_stop: None,
     })
     .await?;
     let result = walk(&layout, local_asr);

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "frozen": "2026-10-02",
+  "rules": [
+    "A hold-out is a skill-guided scenario that no tuning of the skill, the grader or the help text used: one per transcript path, with an event that no scenario in scenarios/ or cold/ names, and truth read from the corpus manifest only.",
+    "Each file is frozen by the SHA-256 below. A change to a hold-out is made only together with its entry here, in the same visible diff, and never after the first counted run of a batch that uses it.",
+    "A hold-out that fails is a finding about the skill, never a reason to edit the grader or the scenario."
+  ],
+  "entries": [
+    {
+      "id": "H-01-f10-supplied-sidecar",
+      "path": "supplied_transcript",
+      "file": "H-01-f10-supplied-sidecar.json",
+      "sha256": "7e933ed702a5e3b4faedb12179821ba89d9fe2066063f863afde41bdf9b81ad9"
+    },
+    {
+      "id": "H-02-f01-local-asr",
+      "path": "local_asr",
+      "file": "H-02-f01-local-asr.json",
+      "sha256": "c6995a148c1f3452fcc611b012d4e50fbb35fe85b7708c66e23ab5f36e2b6e03"
+    }
+  ]
+}

@@ -239,7 +239,7 @@ impl ReadScope {
     /// the client-home prefix and the `tool-results` segment only, so nothing
     /// else of the client home (its sign-in, settings or other projects)
     /// matches.
-    fn is_spill(&self, normalised: &str, folder_allowed: bool) -> bool {
+    pub(crate) fn is_spill(&self, normalised: &str, folder_allowed: bool) -> bool {
         let Some(home) = &self.client_home else {
             return false;
         };

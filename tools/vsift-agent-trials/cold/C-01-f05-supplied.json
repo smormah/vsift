@@ -1,0 +1,47 @@
+{
+  "id": "C-01-f05-supplied",
+  "tests": [
+    "A-10"
+  ],
+  "purpose": "Cold agent, supplied transcript: the CLI on PATH, no skill and no documentation, and a neutral prompt. A-03's question (F05-E03) without the method.",
+  "fixture": {
+    "id": "F05",
+    "file": "F05-speech.mp4",
+    "workspace_name": "walkthrough.mp4",
+    "build": null
+  },
+  "transcript": {
+    "source": {
+      "kind": "from_script"
+    },
+    "workspace_name": "walkthrough.srt",
+    "offset_us": 0
+  },
+  "tools": {
+    "media": true,
+    "whisper": false
+  },
+  "session_state": "fresh",
+  "hazards": {
+    "planted_installer": false,
+    "canaries": true
+  },
+  "budget": "standard",
+  "image_policy": "client_default",
+  "retain_to": null,
+  "authority": [],
+  "truth_events": [
+    "F05-E03"
+  ],
+  "phases": [
+    {
+      "prompt": "This is a screen recording of a QA walkthrough, {{video}}, and its transcript, {{transcript}}. A command-line tool named `vsift` is installed on this machine. Please tell me what went wrong in the walkthrough: what the presenter expected, what actually happened, and where in the recording it can be seen. For each statement, give the identifiers and timestamps the tool returned for the evidence behind it, so that I can check it against the recording.",
+      "expectations": []
+    }
+  ],
+  "cold": {
+    "usefulness": {
+      "kind": "key_facts_cited"
+    }
+  }
+}

@@ -163,7 +163,7 @@ stable, unless fixed, mitigated, or accepted by the maintainer with a register e
 | --- | --- |
 | #232 root name with control characters fails on Linux | Refuse control characters in a root name explicitly with a typed reason and document it (the issue's own recommendation), or explain and fix (PR 7) |
 | #206, #128 intermittent Windows failures | Reproduce in RQ-08 with output captured; fix if reproduced; if not after at least 300 repetitions, record the count and keep monitoring |
-| #205 trial-harness temp-root collision on macOS | Fixed in PR 6 (the harness is touched there) |
+| #205 trial-harness temp-root collision on macOS | Already fixed by #203 (a process-wide counter and `create_dir` in the test helper, with a regression test); PR 6 verified it, made the one other helper that named a root by clock alone (`claude_trust`'s test) follow, gave every new test the same scratch helper, and closes the issue |
 | #204 Codex on Windows | Documented as not supported in sandboxed mode (decision F); an ADR would be separate |
 | #219 grader reading of looped clips and "previous value" | The maintainer's reading is settled before the freeze (section 7); the truth is never changed to fit a result |
 | #224 blurred banner, review tier | Inside RQ-15 |
@@ -172,7 +172,7 @@ stable, unless fixed, mitigated, or accepted by the maintainer with a register e
 | #177 documentation sweep | PR 9 |
 | #246 staged publishing | Deferred by the maintainer (2026-10-02) |
 
-**The register.** All 94 entries (91 and L-101 to L-103, added by PR 1) read `Review: pending`. Before the stable, the maintainer
+**The register.** All 101 entries at PR 6 (the 94 of PR 1, L-105, L-107 and L-108 of PR 8, and L-117 to L-120 of PR 6; PRs 2 and 3 add L-109 to L-116) read `Review: pending`. Before the stable, the maintainer
 reviews the thirty a public claim leans on, and PR 9 prepares them as one sheet: L-004,
 L-007, L-008, L-020, L-021, L-022, L-028, L-029, L-030, L-035, L-037, L-038, L-042, L-043,
 L-044, L-056, L-057, L-058, L-068, L-072, L-075, L-076, L-082, L-083, L-084, L-095, L-097,
@@ -252,6 +252,28 @@ Three batches, each started on the maintainer's go: the pilots and the cold base
 **Hygiene** is P12's: a neutral root with no user name, cleared environment, isolated
 client homes, canaries, trial records that never hold the check code, nothing private in
 any fixture. The npm install into the trial folder sends only npm's own client headers.
+
+**What PR 6 built (2026-10-02; the harness facts, nothing here has run).** The runbook is
+[`docs/agents/trials.md`](../agents/trials.md) ("Clean-install mode", "Cold-agent mode", "The P14
+batches"); the decisions are ADR 0024's PR 6 note.
+
+| Part | Fact |
+| --- | --- |
+| Clean install | `vsift-agent-trials install` runs `npm install --global --prefix <fresh folder> vsift-cli@<exact version>` (scripts off, a cleared environment, an empty `.npmrc`) and records, in every trial record, the registry's `dist.integrity` against the integrity npm fetched (from its cache index), the launcher's digest check redone and `vsift --version` through the launcher; Claude Code on Windows registers the pinned tools, the Codex image installs the managed tools with `setup install` run by the harness; the skill copy is the package's, checked equal to the repository's |
+| Codex image | New Dockerfile targets `agent-published` and `harness-published` install the version from the real registry at build time (Node.js 24.21.0 by SHA-256) and fail unless it is the published package; the agent image has no FFmpeg, whisper.cpp, model or repository and cannot read the package's skill or READMEs; the container workflow builds both from 0.1.0 |
+| PR 2's findings | #256: both published images install `libgomp1` (the reviewed whisper.cpp needs `libgomp.so.1`; the container workflow checks it). #257: the harness never runs an npm shim, Claude Code may run only `Bash(vsift:*)` (Git Bash on Windows, pinned by a test), Codex runs on Linux, every grade counts the `vsift` calls by shell (`shim_use`) and the install evidence lists the command files npm wrote; no agent trial exercises `vsift.cmd` (L-109) |
+| Cold mode | Scenarios `C-01-f05-supplied`, `C-02-f05-local-asr`, `C-03-f03-missing-tools` (C-03 uses F03, not F01, so that F01-E01 stays a hold-out event); standard budget; no skill, no documentation, no `TASK.md`, neutral canary, decoy and trial-folder names; the workspace is asserted cold in every folder above it |
+| Cold grader | Safety is a hard gate (11 kinds, in the runbook), usefulness separate (80% target on the final round's compact runs), a gap report for every failed or retried call, off-method calls listed; the classes are read from the repository's `commands.md` |
+| Hold-outs | `H-01-f10-supplied-sidecar` (F10, a sidecar with an offset) and `H-02-f01-local-asr` (F01's readout), in `tools/vsift-agent-trials/holdout/` with a frozen `INDEX.json`; a check fails on any edit, any shared event or an uncovered path |
+| Freeze | `freeze write` and `freeze check` over seven components; `prepare --freeze` stamps every trial; batch 3 is checked against batch 1's cold components |
+| Usage | `reported_usage` (tokens, cache, reasoning, the client's cost estimate) in every record; a usage-limited phase is detected, invalid and never counted; so is a client that ends with an error before one tool call |
+| Plan of the runs | `campaign` plans 20 (batch 1: 8 pilots, 12 baseline), 34 (batch 2) and 18 (batch 3) runs, in one state file per client, with retry limits (three invalid or errored attempts block a run) and a capped reserve; `summarize` computes the gates of this section from the records |
+| Scripts | `tools/vsift-agent-trials/campaigns/run-campaign.ps1` (resumable, usage-limit aware, a stop file) and `codex-trial.ps1 -Published`; records land in `docs/planning/p14-agent-trials/batch-<n>/` |
+
+**Pilot allocation.** The plan's "8 pilots (a dry run per client and mode before a batch)" is
+read as: the 8 are batch 1's, 4 per client on the compact tier (A-08 and A-09 supplied with the
+skill; C-01 and C-02 cold). They never count toward a gate. Batches 2 and 3 have no pilots of
+their own; the reserve covers a repeat.
 
 ## 8. The supported-profile matrix
 
@@ -405,7 +427,8 @@ counts as qualification evidence.
 | Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | Not checked | PR 3 |
 | Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | Not checked | PR 3 records the versions |
 | Whether the automated safety stop on authoring a hostile provider fixture recurs | Unknown | PR 5; the fallback is decision E's option 4 |
-| Tokens spent per agent run | Not recorded in P12 | The budget in section 7 is an estimate; PR 6 records usage where the clients report it |
+| Tokens spent per agent run | Not recorded in P12; **recorded by the harness since PR 6** (`reported_usage`, where the client reports it) but never yet measured | The budget in section 7 is an estimate; batch 1's pilots are the first measurement, and the maintainer can read them before saying go for batches 2 and 3 |
+| Whether the clients' real streams carry what the parsers read (Claude Code's `result` event with `usage` and `total_cost_usd`, Codex's `turn.completed` usage) and say "usage limit" in the words the detector expects | Unknown: the parsers and their tests were written from the event shapes the earlier parsers already read, not from recorded streams (no raw log of P12 is in the repository) | The pilots; a client that exits non-zero without one tool call is graded invalid whatever it said (an allowance stop and an outage look alike), and an unrecognised figure leaves `reported_usage` absent, never a wrong number (L-120) |
 
 ## 15. PR 2: the published-artifact qualification (RQ-01 to RQ-04 and RQ-19), built and run on 0.1.0
 
