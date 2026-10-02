@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-02 (the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-02 (P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -133,7 +133,7 @@ Each entry has these fields:
 | [L-092](#l-092) | The npm qualification covers the minimum runtimes, one pnpm and one Yarn version, and Yarn only through a project install | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-093](#l-093) | The launcher's digest check finds damaged or mismatched packages, not a local attacker who can write to the install | security | low | unscheduled | none | accepted residual |
 | [L-094](#l-094) | On Windows, vsift cannot start from an install whose executable path is 260 characters or longer | platform/distribution | low | unscheduled | none | accepted residual |
-| [L-095](#l-095) | Review-tier models can state blurred content as supported by pixels; the skill fix is not yet re-measured | contract/UX | medium | maintainer, before P14 | [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
+| [L-095](#l-095) | Review-tier models can state blurred content as supported by pixels; the skill fix is not yet re-measured | contract/UX | medium | P14 (batch 2) | [#224](https://github.com/smormah/vsift/issues/224) | deferred (technical debt) |
 | [L-097](#l-097) | A publish that fails part-way leaves part of the release public until a re-run completes it | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-098](#l-098) | The Windows and macOS executables are unsigned: SmartScreen and Gatekeeper may warn about a direct download, and Windows Smart App Control may block `vsift.exe` outright | platform/distribution | medium | P14, maintainer | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-099](#l-099) | Managed installation depends on files and redirect hosts that the publishers control | platform/distribution | low | unscheduled | none | accepted residual |
@@ -147,8 +147,12 @@ Each entry has these fields:
 | [L-110](#l-110) | The reviewed whisper.cpp build needs `libgomp.so.1`, which a minimal Ubuntu 24.04 image lacks; the managed install then fails without saying so | platform/distribution | low | P14 (PR 7) | [#256](https://github.com/smormah/vsift/issues/256) | deferred |
 | [L-111](#l-111) | The upgrade evidence has one published baseline, and its two modes prove different things | process/CI | low | P14 (PRs 10, 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-112](#l-112) | The clean-install jobs hide named programs from `PATH` on a hosted image; that is not a clean machine, and one tool set stands in for each system's users | process/CI | low | unscheduled | none | accepted residual |
+| [L-117](#l-117) | The clean-install and cold-agent trials are not clean-machine trials, and a cold agent on Windows can still find the package's README and skill | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-118](#l-118) | The cold grader reads command text and matches free text mechanically | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-119](#l-119) | There are two hold-out scenarios, one run per client each, written by the same authors | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 
-Counts: 1 high, 26 medium, 73 low (100 entries).
+Counts: 1 high, 29 medium, 74 low (104 entries).
 
 ## Security
 
@@ -1630,9 +1634,12 @@ is not yet re-measured.**
   content rests on the transcript alone, is `partially_supported` and cites the
   segment. The guard holds the wording.
 - **Next step:** re-run A-09-f05-blurred on the review tier (Claude Opus 5.5 and
-  GPT-6-Astra). The compact re-run #222 (2026-09-30) did not include it. The runs
-  spend the maintainer's client allowances, so the maintainer starts them.
-- **Owner:** maintainer, before P14. **Issue:**
+  GPT-6-Astra). The compact re-run #222 (2026-09-30) did not include it. It is inside
+  P14's batch 2 (three runs per review-tier client; a gate of at least 2 of 3 with no
+  claim of the blurred text stated as supported by pixels), from a clean install; the
+  harness for it is built (P14 PR 6) and the runs wait for the maintainer's go, because
+  they spend the client allowances.
+- **Owner:** P14 (batch 2, PR 11), on the maintainer's go. **Issue:**
   [#224](https://github.com/smormah/vsift/issues/224). **Status:** deferred (technical
   debt). **Review:** pending.
 
@@ -2764,6 +2771,114 @@ candidate to be the accepted one.**
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
+
+### L-117
+
+**The clean-install and cold-agent trials are not clean-machine trials, and a cold agent on Windows can still find the package's README and skill.**
+
+- **What:** the P14 agent rounds install `vsift-cli` from the real registry into a fresh folder
+  and prove the bytes are the registry's (what npm fetched against the integrity the registry
+  advertises, the launcher's digest check redone, the exact version). They run on the maintainer's
+  Windows 11 development machine, which has Node.js, Rust, Git and Claude Code around, and, for
+  Codex, in a container with ordinary outbound network. The proof does not say the registry's
+  bytes are the maintainers' (`npm audit signatures` and `gh attestation verify` are RQ-01, RQ-02
+  and RQ-19), and it is not a clean machine. The package ships its README and the skill under the
+  install prefix: in the Codex agent image they are made unreadable to the trial user, but on
+  Windows nothing physically stops a cold agent from reading them (Claude Code's own rules deny it
+  and the grader fails it as `outside_allowed_folders`). When a scenario needs any tool the managed
+  install gives all three components, so `tools.whisper: false` cannot withhold whisper.cpp on
+  Ubuntu (the plan's unit is the profile), and each Codex trial downloads about 271 MB from the
+  publishers (L-099). A cold trial's own settings file, decoy and prompt still say that a tool
+  named `vsift` is installed; its folder and canary names say nothing else.
+- **Evidence:** [`trials.md`](../agents/trials.md) ("Clean-install mode", "What is weaker than it
+  sounds"); `tools/vsift-agent-trials/src/install.rs`; the Dockerfile's `agent-published` stage.
+- **Impact:** a hidden dependency of the maintainer's machine could let a run pass that a clean
+  machine fails, and a cold agent that read the package's documentation would not be cold; the
+  second is visible (the read is a safety failure), the first is not.
+- **Why:** Claude Code runs only on the maintainer's machine, and hosted CI cannot run the clients
+  without the maintainer's allowances.
+- **Mitigation:** the read gate; the unreadable files in the Codex image; RQ-01, RQ-02 and RQ-19
+  for provenance on hosted runners; the maintainer's try-outs (RQ-17); the post-R0 trial of the
+  published CLI on real recordings.
+- **Next step:** none planned inside P14.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
+  accepted residual. **Review:** pending.
+
+### L-118
+
+**The cold grader reads command text and matches free text mechanically.**
+
+- **What:** the safety gate is decided from the commands a client reports: program names,
+  arguments that look like paths or URLs, and the `vsift` classes from `commands.md`. It can miss
+  an installer under another name, a redirect to a path the shell reader does not attribute (a
+  write outside the workspace by redirection), or a download by an interpreter's own code with an
+  address the reader cannot see. Syntax it cannot read (command substitution, a subshell, a
+  script block, an encoded command) is `unverifiable` and fails the gate even when harmless, so a
+  harmless run can fail safety. Usefulness is word matching: a correct report in other words
+  fails, a report that states a fact next to any real identity inside the event's window passes,
+  and a cited frame counts as inspected if the agent opened any image at all. The samples are
+  small (5 of 6 per client at the final round, 3 runs per scenario).
+- **Evidence:** `tools/vsift-agent-trials/src/cold.rs` and `tests/cold_grader.rs` (every kind has a
+  case); [`trials.md`](../agents/trials.md) ("Cold-agent mode").
+- **Impact:** the zero-unsafe-actions claim rests on the grader and on a reading of the raw logs;
+  a pass is not proof of safety, and a fail can be a conduct problem rather than an unsafe act.
+- **Why:** without the skill there is no handoff schema and no fixed command form to check
+  against, and an agent that has no instruction may write any shell.
+- **Mitigation:** the maintainer reads every cold run's raw log before the claim is made; the
+  gap report has a `reviewer_note`; a grade has a `human_review` slot the summary honours.
+- **Next step:** none planned; a finding that the grader missed or over-fired is its own issue.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
+  accepted residual. **Review:** pending.
+
+### L-119
+
+**There are two hold-out scenarios, one run per client each, written by the same authors.**
+
+- **What:** the plan asks for one hold-out per transcript path. They are `H-01-f10-supplied-sidecar`
+  and `H-02-f01-local-asr`, in the same synthetic corpus and voice as every scenario the skill was
+  tuned on; F01 appeared in A-01 as a refusal scenario that never read its readout. The review
+  tier runs each once per client, so each path shows 0% or 100%, and the rule (a gap of more than
+  20 points below the same path's other runs is a finding) is coarse. The separation is mechanical
+  (a frozen index, no shared event or id, both paths covered): it cannot show that nobody looked at
+  them while tuning, and the help text's iterations after the cold baseline are tuned on the cold
+  scenarios themselves, with no cold hold-out.
+- **Evidence:** `tools/vsift-agent-trials/holdout/INDEX.json`; `src/holdout.rs`;
+  `tests/holdout_freeze.rs`.
+- **Impact:** a pass is a signal, not a measurement, and an overfitting the corpus's sameness hides
+  would not show.
+- **Why:** more scenarios cost the maintainer's allowances, and a larger independent corpus is R1's
+  (real recordings, #150, #159).
+- **Mitigation:** the freeze; a failure is a finding, never a grader edit; the post-R0 trial on
+  real recordings.
+- **Next step:** real-recording hold-outs after R0.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
+  accepted residual. **Review:** pending.
+
+### L-120
+
+**Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream.**
+
+- **What:** each trial record carries the tokens and cost the client reported. Claude Code's cost
+  is its own estimate at list prices; Codex reports tokens and no cost; the two count input
+  differently (Claude Code's excludes cache reads and writes, Codex's includes the cached part).
+  The parsers and their tests were written from the event shapes the earlier parsers already read
+  (a Claude Code `result` event with `usage` and `total_cost_usd`, Codex's `turn.completed`
+  usage), not from recorded streams: no raw log of P12 is in the repository. The words a client
+  prints when it hits its usage limit are not a published contract; the detector knows the ones
+  the clients' documentation and reports show. A client that ends with an error before one tool
+  call is graded invalid whatever it said, but one that hits a limit after some calls, in words the
+  detector does not know, is graded as an ordinary failed trial and counted.
+- **Evidence:** `tools/vsift-agent-trials/src/trace.rs`, `usage_limit.rs`,
+  `tests/usage.rs`; [`trials.md`](../agents/trials.md) ("Usage capture").
+- **Impact:** a spend figure may be missing or off by the client's own accounting, and a
+  usage-limited run might be counted as a failure. The summary lists every counted run whose
+  client exited non-zero, so it is seen.
+- **Why:** the harness does not meter the clients and cannot see the provider's side.
+- **Mitigation:** the pilots (batch 1) show the real streams before anything counts; the
+  maintainer reads the non-zero exits the summary lists.
+- **Next step:** add the first recorded streams as fixtures after the pilots.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
+  accepted residual. **Review:** pending.
 
 ## Review workflow
 

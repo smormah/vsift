@@ -21,12 +21,13 @@ use vsift_agent_trials::{
     TrialError,
     claude_trust::{CLAUDE_STATE_FILE, project_key},
     error::write_json,
-    evaluate::{GradeOptions, grade_phase},
-    layout::{PreparedState, TrialLayout, TrialManifest},
+    evaluate::{GradeOptions, USAGE_LIMIT_REASON, grade_phase},
+    layout::{PreparedState, SkillSource, ToolSource, TrialLayout, TrialManifest},
     record::{MAX_RECORD_BYTES, write_record},
     roots::RootPolicy,
     run::{
-        CODEX_WINDOWS_SANDBOX, RunRequest, client_arguments, codex_writable_root, phase_prompt, run,
+        CODEX_WINDOWS_SANDBOX, RunRequest, client_arguments, client_environment,
+        codex_writable_root, phase_prompt, run,
     },
     scenario::Scenario,
     trace::ClientKind,
@@ -115,6 +116,16 @@ impl Trial {
             vsift_commit: "0".repeat(40),
             vsift_sha256: "0".repeat(64),
             vsift_executable: PathBuf::from(STUB),
+            mode: parsed.mode(),
+            holdout: false,
+            skill_source: SkillSource::Repository,
+            install: None,
+            install_prefix: None,
+            client_path_directories: Vec::new(),
+            tools_source: ToolSource::Registered,
+            setup_check: None,
+            freeze_sha256: None,
+            cold_assertions: Vec::new(),
             prompts: parsed
                 .phases
                 .iter()
@@ -153,6 +164,7 @@ impl Trial {
             system_path: Vec::new(),
             root_policy: RootPolicy::new(Vec::new(), Vec::new()),
             debug_prompt: None,
+            cold_scan_stop: self.root.parent().map(Path::to_path_buf),
         }
     }
 
@@ -646,5 +658,168 @@ fn a_later_phase_gets_the_earlier_resume_card() -> TestResult {
     let prompt = phase_prompt(&trial.layout, &manifest, 2)?;
     assert!(prompt.contains("\"session_id\":\"ses_0123456789abcdef\""));
     assert!(!prompt.contains("{{resume_card}}"));
+    Ok(())
+}
+
+/// The A-01 stream with the totals Claude Code's final event carries.
+fn a01_stream_with_usage() -> Result<String, Box<dyn Error>> {
+    let mut events: Vec<Value> = a01_stream()
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()?;
+    let last = events.last_mut().ok_or("an empty stream")?;
+    last["usage"] = json!({"input_tokens": 1_234, "output_tokens": 567,
+                           "cache_read_input_tokens": 8_900, "cache_creation_input_tokens": 400});
+    last["total_cost_usd"] = json!(0.4321);
+    Ok(events
+        .iter()
+        .map(Value::to_string)
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+#[tokio::test]
+async fn usage_the_client_reports_reaches_the_grade_and_the_record() -> TestResult {
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    trial.behave(
+        &json!({"replay": "replay.jsonl", "exit_code": 0}),
+        &a01_stream_with_usage()?,
+    )?;
+    run(&trial.request(ClientKind::ClaudeCode, Duration::from_secs(60))).await?;
+    let graded = grade_phase(&trial.layout, 1, &GradeOptions::default())?;
+    let usage = graded.reported_usage.ok_or("no usage was reported")?;
+    assert_eq!(
+        (
+            usage.input_tokens,
+            usage.output_tokens,
+            usage.cached_input_tokens
+        ),
+        (1_234, 567, 8_900)
+    );
+    assert_eq!(usage.cost_micro_usd, Some(432_100));
+
+    let output = trial.root.join("records").join("usage.json");
+    let record = write_record(&trial.layout, 1, &output, None, &[])?;
+    assert_eq!(record["reported_usage"]["input_tokens"], 1_234);
+    assert_eq!(record["reported_usage"]["cost_micro_usd"], 432_100);
+    assert_eq!(record["reported_usage"]["source"], "result_event");
+    // P12's measured usage keeps its place and shape.
+    assert_eq!(record["usage"]["tool_calls"], 1);
+    // The record never holds a tool's output, only the figures.
+    assert!(!record.to_string().contains("loaded"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_client_that_stops_at_its_usage_limit_is_never_a_trial() -> TestResult {
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    let stream = [
+        json!({"type": "system", "subtype": "init", "model": "compact-model", "claude_code_version": "stub"}),
+        json!({"type": "result", "subtype": "success", "is_error": true,
+               "result": "Claude AI usage limit reached|1790000000", "num_turns": 0,
+               "duration_ms": 100, "permission_denials": []}),
+    ]
+    .iter()
+    .map(Value::to_string)
+    .collect::<Vec<_>>()
+    .join("\n");
+    trial.behave(&json!({"replay": "replay.jsonl", "exit_code": 1}), &stream)?;
+    let record = run(&trial.request(ClientKind::ClaudeCode, Duration::from_secs(60))).await?;
+    let limit = record
+        .usage_limit
+        .ok_or("the usage limit was not recognised")?;
+    assert_eq!(limit.reset_unix_s, Some(1_790_000_000));
+
+    let graded = grade_phase(&trial.layout, 1, &GradeOptions::default())?;
+    assert!(!graded.is_valid());
+    assert!(
+        graded
+            .invalid_reasons
+            .iter()
+            .any(|reason| reason == USAGE_LIMIT_REASON),
+        "{:?}",
+        graded.invalid_reasons
+    );
+    let output = trial.root.join("records").join("limited.json");
+    let written = write_record(&trial.layout, 1, &output, None, &[])?;
+    assert_eq!(written["valid"], false);
+    assert_eq!(written["usage_limit"]["reset_unix_s"], 1_790_000_000);
+    Ok(())
+}
+
+#[test]
+fn a_clean_install_trial_gives_the_client_npms_command_folder_and_nodes() -> TestResult {
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    let mut manifest: TrialManifest = serde_json::from_str(&read_text(&trial.layout.manifest())?)?;
+    let (commands, node) = (trial.root.join("npm-bin"), trial.root.join("node-dir"));
+    manifest.client_path_directories = vec![commands.clone(), node.clone()];
+    let environment = client_environment(
+        &trial.request(ClientKind::ClaudeCode, Duration::from_secs(5)),
+        &trial.layout,
+        &manifest,
+    )?;
+    let path = environment
+        .iter()
+        .find(|(name, _)| name == "PATH")
+        .map(|(_, value)| value.clone())
+        .ok_or("no PATH")?;
+    let directories: Vec<PathBuf> = std::env::split_paths(&path).collect();
+    assert_eq!(directories, vec![commands, node.clone()]);
+    // The directory of the native executable is not on the PATH: the agent
+    // reaches it only through the launcher.
+    let native = manifest.vsift_executable.parent().ok_or("no parent")?;
+    assert!(!directories.iter().any(|directory| directory == native));
+
+    // A media tool next to Node.js is refused, as ever.
+    fs::create_dir_all(&node)?;
+    fs::write(node.join("ffprobe"), "x")?;
+    assert!(matches!(
+        client_environment(
+            &trial.request(ClientKind::ClaudeCode, Duration::from_secs(5)),
+            &trial.layout,
+            &manifest,
+        ),
+        Err(TrialError::Refused(_))
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_client_that_fails_before_any_tool_call_is_never_a_trial() -> TestResult {
+    use vsift_agent_trials::evaluate::NO_ACTION_REASON;
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    // Words the detector does not know: no usage limit is recognised, but the
+    // client exited with an error and acted on nothing.
+    let stream = [
+        json!({"type": "system", "subtype": "init", "model": "compact-model", "claude_code_version": "stub"}),
+        json!({"type": "result", "subtype": "error_during_execution", "is_error": true,
+               "result": "Something this harness has never seen", "num_turns": 0, "permission_denials": []}),
+    ]
+    .iter()
+    .map(Value::to_string)
+    .collect::<Vec<_>>()
+    .join("\n");
+    trial.behave(&json!({"replay": "replay.jsonl", "exit_code": 1}), &stream)?;
+    let record = run(&trial.request(ClientKind::ClaudeCode, Duration::from_secs(60))).await?;
+    assert!(record.usage_limit.is_none());
+    let graded = grade_phase(&trial.layout, 1, &GradeOptions::default())?;
+    assert!(!graded.is_valid());
+    assert_eq!(graded.invalid_reasons, vec![NO_ACTION_REASON.to_owned()]);
+
+    // A client that exits cleanly with a report and no tool call is a trial
+    // (it fails, but it counts): the rule is about errors, not about calls.
+    let trial = Trial::new("A-01-f01-missing-tools")?;
+    let stream = [
+        json!({"type": "system", "subtype": "init", "model": "compact-model", "claude_code_version": "stub"}),
+        json!({"type": "result", "subtype": "success", "is_error": false, "result": "I will not.",
+               "num_turns": 1, "permission_denials": []}),
+    ]
+    .iter()
+    .map(Value::to_string)
+    .collect::<Vec<_>>()
+    .join("\n");
+    trial.behave(&json!({"replay": "replay.jsonl", "exit_code": 0}), &stream)?;
+    run(&trial.request(ClientKind::ClaudeCode, Duration::from_secs(60))).await?;
+    assert!(grade_phase(&trial.layout, 1, &GradeOptions::default())?.is_valid());
     Ok(())
 }

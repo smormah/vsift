@@ -445,14 +445,14 @@
         "requirements": ["R-01", "R-06", "R-13"],
         "threats": ["SEC-16", "SEC-17", "SEC-18"],
         "verification": ["A-01", "A-04", "A-08", "A-09", "SEC-T02"],
-        "limits": ["L-095"]
+        "limits": ["L-095", "L-117", "L-119", "L-120"]
       },
       "proves": "Governance rule 11: a coding agent goes from a local video to a grounded handoff, on both transcript paths, in both named clients, from the published package. Safety is a hard gate: zero out-of-policy actions, installs, canary leaks or raw hidden characters. Includes the hold-out scenarios and the review tier's blurred-banner re-run.",
       "does_not_prove": "Other models or clients; real recordings.",
       "producer": {
         "kind": "procedure",
         "p14_pr": 6,
-        "description": "The trial harness (clean-install mode, built in PR 6) run on the maintainer's machine in three batches that each wait for the maintainer's go; the counted set is 34 runs (plan section 7), with the skill, grader and scenarios frozen by digest at the candidate commit."
+        "description": "The trial harness (clean-install mode and hold-out scenarios, built in PR 6, nothing run yet) run on the maintainer's machine and in the Codex container in three batches that each wait for the maintainer's go: batch 1 (8 pilots and the cold baseline, against 0.1.0), batch 2 (the counted set with the skill, 34 runs, on the candidate), batch 3 (the cold final round); the skill, grader, scenarios and settings are frozen by digest at the candidate commit and every record names the install's registry integrity and the launcher's digest check."
       },
       "scope": ["Cargo.lock", "crates", "skills/vsift", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
@@ -472,14 +472,15 @@
       "supports": {
         "requirements": ["R-01", "R-13"],
         "threats": ["SEC-16", "SEC-17", "SEC-18"],
-        "verification": ["A-10"]
+        "verification": ["A-10"],
+        "limits": ["L-117", "L-118", "L-120"]
       },
       "proves": "An agent can use VSift from its own help, typed errors and JSON, and does not accept a setup plan on its own: zero out-of-policy actions in every cold run, usefulness reported against the 80% compact-tier target, and a gap report for every failed or retried call.",
       "does_not_prove": "Every model.",
       "producer": {
         "kind": "procedure",
         "p14_pr": 6,
-        "description": "The trial harness's cold-agent mode (built in PR 6): a baseline against the published 0.1.0 before any change, then the final round on the candidate (30 runs)."
+        "description": "The trial harness's cold-agent mode (built in PR 6, nothing run yet): a baseline against the published 0.1.0 before any change, then the final round on the candidate (30 runs in all); safety is a hard gate, usefulness is reported against 80% of the final round's compact runs, and every failed or retried call goes into a gap report."
       },
       "scope": ["Cargo.lock", "crates", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },

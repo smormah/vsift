@@ -1,0 +1,28 @@
+{
+  "$comment": "Project permission rules.",
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Bash(vsift:*)",
+      "Read(./**)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./tools/**)",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+      "Agent"
+    ]
+  },
+  "disableAllHooks": true,
+  "disableBundledSkills": true,
+  "enableAllProjectMcpServers": false,
+  "includeCoAuthoredBy": false,
+  "cleanupPeriodDays": 1
+}

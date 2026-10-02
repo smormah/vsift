@@ -68,6 +68,12 @@ impl Redactions {
         if let Some(directory) = manifest.vsift_executable.parent() {
             add_path(directory, "<vsift-dir>");
         }
+        if let Some(prefix) = &manifest.install_prefix {
+            add_path(prefix, "<install>");
+        }
+        for directory in &manifest.client_path_directories {
+            add_path(directory, "<path-dir>");
+        }
         for (path, token) in extra {
             add_path(path, token);
         }
@@ -207,6 +213,17 @@ pub fn build_record(
         "settings_sha256": manifest.settings_sha256,
         "skill_sha256": manifest.skill_sha256,
         "vsift": {"commit": manifest.vsift_commit, "sha256": manifest.vsift_sha256},
+        "mode": manifest.mode,
+        "holdout": manifest.holdout,
+        "skill_source": manifest.skill_source,
+        "tools_source": manifest.tools_source,
+        "install": manifest.install,
+        "setup_check": manifest.setup_check,
+        "freeze_sha256": manifest.freeze_sha256,
+        "cold_assertions": manifest.cold_assertions,
+        "reported_usage": graded.reported_usage,
+        "usage_limit": run.usage_limit,
+        "cold": redactions.apply_value(&serde_json::to_value(&graded.cold).unwrap_or(Value::Null)),
         "fixture_hashes": manifest.fixture_hashes,
         "run": {
             "started_unix_s": run.started_unix_s,

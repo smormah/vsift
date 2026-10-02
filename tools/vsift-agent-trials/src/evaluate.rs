@@ -9,6 +9,7 @@
 //! did not keep.
 
 use std::{
+    collections::BTreeSet,
     env,
     path::{Path, PathBuf},
 };
@@ -19,6 +20,7 @@ use crate::{
     bundle::BundleIndex,
     calls::{ReadScope, normalise_path},
     client_warnings::configuration_warnings,
+    cold::{ColdInput, grade_cold},
     error::{TrialError, read_json, write_json},
     grade::{Expected, Grade, GradeInput, grade},
     handoff::{PrivateMarkers, extract},
@@ -119,30 +121,8 @@ fn bundle_for(
     commands: &[String],
     deviations: &mut Vec<String>,
 ) -> Option<BundleIndex> {
-    let validate = |directory: &Path, deviations: &mut Vec<String>| match cli.json(&arguments(&[
-        &"bundle",
-        &"validate",
-        &directory,
-        &"--json",
-    ])) {
-        Ok(outcome) if outcome.code == Some(0) => match BundleIndex::read(directory) {
-            Ok(index) => Some(index),
-            Err(error) => {
-                deviations.push(format!("the bundle could not be read: {error}"));
-                None
-            }
-        },
-        Ok(outcome) => {
-            deviations.push(format!(
-                "bundle validate refused the bundle: {}",
-                outcome.value["error"]["code"]
-            ));
-            None
-        }
-        Err(error) => {
-            deviations.push(format!("bundle validate did not run: {error}"));
-            None
-        }
+    let validate = |directory: &Path, deviations: &mut Vec<String>| {
+        validate_bundle(cli, directory, deviations)
     };
     if let Some(name) = &scenario.retain_to {
         let directory = layout.workspace().join(format!("{name}-phase-{phase}"));
@@ -192,6 +172,108 @@ fn bundle_for(
             None
         }
     }
+}
+
+/// Validates a retained bundle with `vsift bundle validate` and reads its
+/// records.
+fn validate_bundle(
+    cli: &VsiftCli,
+    directory: &Path,
+    deviations: &mut Vec<String>,
+) -> Option<BundleIndex> {
+    match cli.json(&arguments(&[&"bundle", &"validate", &directory, &"--json"])) {
+        Ok(outcome) if outcome.code == Some(0) => match BundleIndex::read(directory) {
+            Ok(index) => Some(index),
+            Err(error) => {
+                deviations.push(format!("the bundle could not be read: {error}"));
+                None
+            }
+        },
+        Ok(outcome) => {
+            deviations.push(format!(
+                "bundle validate refused the bundle: {}",
+                outcome.value["error"]["code"]
+            ));
+            None
+        }
+        Err(error) => {
+            deviations.push(format!("bundle validate did not run: {error}"));
+            None
+        }
+    }
+}
+
+/// The sessions a cold agent named, in order, once each, at most the last
+/// four: in its commands, then in its report.
+fn cold_sessions(trace: &Trace, final_text: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for text in shell_commands(trace)
+        .iter()
+        .map(String::as_str)
+        .chain(std::iter::once(final_text))
+    {
+        for session in session_identities(text) {
+            if !found.contains(&session) {
+                found.push(session);
+            }
+        }
+    }
+    let skip = found.len().saturating_sub(4);
+    found.split_off(skip)
+}
+
+/// Retains every session a cold agent named (the agent was told nothing
+/// about retaining) and merges their records, so that each identity its
+/// report cites can be looked up. The sessions that could be read are
+/// returned with the index.
+fn cold_bundle(
+    layout: &TrialLayout,
+    phase: usize,
+    cli: &VsiftCli,
+    sessions: &[String],
+    deviations: &mut Vec<String>,
+) -> (Option<BundleIndex>, BTreeSet<String>) {
+    let mut merged: Option<BundleIndex> = None;
+    let mut read = BTreeSet::new();
+    for (number, session) in sessions.iter().enumerate() {
+        let directory = layout
+            .phase(phase)
+            .join(format!("harness-bundle-{}", number + 1));
+        if !directory.is_dir() {
+            match cli.json(&arguments(&[
+                &"session",
+                &"retain",
+                session,
+                &"--output",
+                &directory,
+                &"--json",
+            ])) {
+                Ok(outcome) if outcome.code == Some(0) => deviations.push(
+                    "the harness retained a session the agent named to resolve its identities"
+                        .to_owned(),
+                ),
+                Ok(outcome) => {
+                    deviations.push(format!(
+                        "the harness could not retain a session the agent named: {}",
+                        outcome.value["error"]["code"]
+                    ));
+                    continue;
+                }
+                Err(error) => {
+                    deviations.push(format!("the harness could not retain a session: {error}"));
+                    continue;
+                }
+            }
+        }
+        if let Some(index) = validate_bundle(cli, &directory, deviations) {
+            read.insert(session.clone());
+            match merged.as_mut() {
+                Some(all) => all.merge(index),
+                None => merged = Some(index),
+            }
+        }
+    }
+    (merged, read)
 }
 
 /// What `run` and the client's own output say about a phase, beyond its
@@ -268,6 +350,10 @@ pub fn grade_trace(
     clippy::too_many_arguments,
     reason = "The inputs of one grading, kept explicit as in grade_trace"
 )]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Skill and cold grading share one entry so a re-grade takes one path"
+)]
 pub fn grade_trace_with(
     layout: &TrialLayout,
     phase: usize,
@@ -299,6 +385,42 @@ pub fn grade_trace_with(
     let references = SkillReferences::load(repository)?;
     let truth = CorpusTruth::load(&repository.join("fixtures").join("corpus"))?;
     let cli = VsiftCli::new(&manifest.vsift_executable, layout)?;
+    if scenario.cold.is_some() {
+        let final_text = trace.final_message.clone().unwrap_or_default();
+        let mut deviations = Vec::new();
+        let (bundle, sessions) = cold_bundle(
+            layout,
+            phase,
+            &cli,
+            &cold_sessions(trace, &final_text),
+            &mut deviations,
+        );
+        let graded = grade_cold(&ColdInput {
+            scenario: &scenario,
+            truth: &truth,
+            policy: &references.policy,
+            limits: references.budgets.limits(scenario.budget),
+            trace,
+            raw_output: raw,
+            scope: ReadScope {
+                workspace: layout.workspace(),
+                skill_directories: Vec::new(),
+                session_root: layout.session_root(),
+                client_home: findings.client_home,
+            },
+            canaries: &manifest.canaries,
+            canary_variable: manifest.canary_variable.as_deref(),
+            markers: private_markers(layout, user_names),
+            bundle: bundle.as_ref(),
+            sessions,
+            wall_time_s,
+            deviations,
+            client_warnings: findings.invalid_reasons,
+            sign_in_value_found: findings.sign_in_value_found,
+        });
+        write_json(&layout.phase(phase).join(file), &graded)?;
+        return Ok(graded);
+    }
     let handoff = trace
         .final_message
         .as_deref()
@@ -384,6 +506,13 @@ pub fn grade_trace_with(
 pub const DEBUG_RUN_REASON: &str =
     "harness: debug run; the operator replaced the scenario's prompt, so this is not a trial";
 
+/// Why a phase that ended at the client's usage limit is never a trial.
+pub const USAGE_LIMIT_REASON: &str = "harness: the client stopped at its usage limit; run it again after the limit lifts, do not count it";
+
+/// Why a phase whose client ended with an error before any tool call is
+/// never a trial.
+pub const NO_ACTION_REASON: &str = "harness: the client ended with an error before it made one tool call (a usage limit, an outage or a sign-in problem); run it again, do not count it";
+
 /// Grades a phase `run` finished.
 ///
 /// # Errors
@@ -401,6 +530,15 @@ pub fn grade_phase(
     let mut invalid_reasons = configuration_warnings(record.client, &stdout, &stderr);
     if record.debug_prompt {
         invalid_reasons.push(DEBUG_RUN_REASON.to_owned());
+    }
+    if record.usage_limit.is_some() {
+        invalid_reasons.push(USAGE_LIMIT_REASON.to_owned());
+    } else if trace.calls.is_empty() && record.exit_code != Some(0) {
+        // An allowance stop and an outage look alike, and the client's words
+        // for a usage limit are not a published contract: a client that ends
+        // with an error before it made one tool call says nothing about the
+        // agent, so it is run again, whatever it printed.
+        invalid_reasons.push(NO_ACTION_REASON.to_owned());
     }
     grade_trace_with(
         layout,

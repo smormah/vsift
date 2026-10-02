@@ -1,0 +1,18 @@
+{
+  "_comment": "Template for the campaign configuration read by run-campaign.ps1. Copy it OUTSIDE the repository (for example into the neutral trial root), edit the paths to this machine, and never commit the copy: it holds local paths. Every path is absolute. The trial root and every client home must be outside the user profile and the temporary folder and must not contain the operating-system user name (the harness refuses otherwise).",
+  "root": "C:\\vsift-trials",
+  "clientHome": "C:\\vsift-trials\\.clients\\claude",
+  "claudeExecutable": "C:\\vsift-trials\\.clients\\bin\\2.1.284\\claude.exe",
+  "claudeVersion": "2.1.284",
+  "codexVersion": "0.155.0-alpha.16",
+  "gitBashPath": "C:\\Program Files\\Git\\bin\\bash.exe",
+  "gitBashUsr": "C:\\Program Files\\Git\\usr\\bin",
+  "node": "C:\\Program Files\\nodejs\\node.exe",
+  "npmCli": "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js",
+  "ffmpeg": "C:\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+  "ffprobe": "C:\\tools\\ffmpeg\\bin\\ffprobe.exe",
+  "whisper": "C:\\tools\\whisper.cpp\\bin\\whisper-cli.exe",
+  "model": "C:\\tools\\whisper.cpp\\models\\ggml-base.bin",
+  "codexClientHome": "C:\\vsift-trials\\.clients\\codex",
+  "codexExports": "C:\\vsift-trials\\linux"
+}

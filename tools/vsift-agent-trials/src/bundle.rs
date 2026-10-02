@@ -117,6 +117,25 @@ impl BundleIndex {
         Ok(index)
     }
 
+    /// Adds the records of another retained bundle (a cold agent may open
+    /// more than one session; every identity it cites belongs to one of
+    /// them). The first bundle's session identity stays.
+    pub fn merge(&mut self, other: Self) {
+        if self.session_id.is_none() {
+            self.session_id = other.session_id;
+        }
+        self.segments.extend(other.segments);
+        for (id, selections) in other.selections {
+            self.selections.entry(id).or_default().extend(selections);
+        }
+        self.frames.extend(other.frames);
+        self.crops.extend(other.crops);
+        self.clips.extend(other.clips);
+        if self.source_duration_us.is_none() {
+            self.source_duration_us = other.source_duration_us;
+        }
+    }
+
     fn add_transcript(&mut self, record: &Value) {
         let revision = record["revision_id"]
             .as_str()

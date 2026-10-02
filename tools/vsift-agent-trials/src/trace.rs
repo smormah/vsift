@@ -115,9 +115,41 @@ pub struct ToolCall {
     pub is_error: bool,
     /// Whether the client reported a result for it at all.
     pub completed: bool,
+    /// What the call printed, as the client reported it, cut at
+    /// [`MAX_OUTPUT_CHARS`]. Kept in memory for the cold-agent gap report
+    /// (which reads only typed error codes from it); never written to a
+    /// record, because outputs hold absolute paths and evidence text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
 }
 
-/// Token usage, where the stream reports it.
+/// The most characters of one call's output the trace keeps.
+pub const MAX_OUTPUT_CHARS: usize = 16 * 1024;
+
+/// Where a run's [`Usage`] came from.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageSource {
+    /// The client reported none.
+    #[default]
+    None,
+    /// Claude Code's final `result` event, which totals the whole run.
+    ResultEvent,
+    /// The sum of Claude Code's per-message usage, one message once.
+    AssistantMessages,
+    /// The sum of Codex's per-turn `turn.completed` usage.
+    TurnEvents,
+}
+
+/// Tokens and cost as the client reported them.
+///
+/// The harness does not count tokens and never estimates: a field is what
+/// the client's stream said, and a client that said nothing leaves
+/// [`UsageSource::None`]. The two clients count differently, so the
+/// numbers are comparable within a client only: Claude Code's
+/// `input_tokens` excludes cache reads and writes, which it reports
+/// separately; Codex's `input_tokens` includes the cached part
+/// (`cached_input_tokens`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     /// Input tokens.
@@ -126,6 +158,51 @@ pub struct Usage {
     pub output_tokens: u64,
     /// Input tokens read from a prompt cache.
     pub cached_input_tokens: u64,
+    /// Input tokens written to a prompt cache (Claude Code only).
+    #[serde(default)]
+    pub cache_creation_input_tokens: u64,
+    /// Reasoning tokens, where the client reports them separately (Codex).
+    #[serde(default)]
+    pub reasoning_output_tokens: u64,
+    /// The client's own cost figure in millionths of a US dollar (Claude
+    /// Code's `total_cost_usd`; Codex reports none). A client estimate at
+    /// list prices, not a bill.
+    #[serde(default)]
+    pub cost_micro_usd: Option<u64>,
+    /// Where the figures came from.
+    #[serde(default)]
+    pub source: UsageSource,
+}
+
+/// A cost in US dollars as millionths of a dollar, or `None` when it is
+/// not a finite non-negative number.
+#[must_use]
+pub fn micro_usd(dollars: f64) -> Option<u64> {
+    if dollars.is_finite() && (0.0..=1.0e9).contains(&dollars) {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "Range-checked above: a cost between zero and a billion dollars"
+        )]
+        Some((dollars * 1.0e6).round() as u64)
+    } else {
+        None
+    }
+}
+
+/// The text of one tool result: a string, or an array of `{type: text}`
+/// blocks, cut at [`MAX_OUTPUT_CHARS`].
+fn result_text(content: &Value) -> Option<String> {
+    let text = match content {
+        Value::String(text) => text.clone(),
+        Value::Array(blocks) => blocks
+            .iter()
+            .filter_map(|block| block["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => return None,
+    };
+    Some(text.chars().take(MAX_OUTPUT_CHARS).collect())
 }
 
 /// The normalised trace of one run.
@@ -164,11 +241,20 @@ fn number(value: &Value) -> u64 {
 
 /// Parses a Claude Code `stream-json` log.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One match over the stream's event types keeps each rule next to its type"
+)]
 pub fn parse_claude(log: &str) -> Trace {
     let mut trace = Trace::default();
     let mut by_id: BTreeMap<String, usize> = BTreeMap::new();
     let mut last_text: Option<String> = None;
     let mut step = 0;
+    // Claude Code writes one `assistant` event per content block of a model
+    // message, each repeating the message's usage: one message counts once.
+    let mut message_usage: BTreeMap<String, Usage> = BTreeMap::new();
+    let mut anonymous_usage = Usage::default();
+    let mut result_usage: Option<Usage> = None;
     for line in log.lines().filter(|line| !line.trim().is_empty()) {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
             trace.unparsed_lines += 1;
@@ -200,6 +286,7 @@ pub fn parse_claude(log: &str) -> Trace {
                                 exit_code: None,
                                 is_error: false,
                                 completed: false,
+                                output: None,
                             };
                             by_id.insert(id, trace.calls.len());
                             trace.calls.push(call);
@@ -207,10 +294,13 @@ pub fn parse_claude(log: &str) -> Trace {
                         _ => {}
                     }
                 }
-                let usage = &event["message"]["usage"];
-                trace.usage.input_tokens += number(&usage["input_tokens"]);
-                trace.usage.output_tokens += number(&usage["output_tokens"]);
-                trace.usage.cached_input_tokens += number(&usage["cache_read_input_tokens"]);
+                let usage = claude_usage(&event["message"]["usage"]);
+                match event["message"]["id"].as_str() {
+                    Some(message) => {
+                        message_usage.insert(message.to_owned(), usage);
+                    }
+                    None => add_usage(&mut anonymous_usage, &usage),
+                }
             }
             Some("user") => {
                 for block in event["message"]["content"].as_array().into_iter().flatten() {
@@ -228,6 +318,7 @@ pub fn parse_claude(log: &str) -> Trace {
                         {
                             call.denied = true;
                         }
+                        call.output = result_text(&block["content"]);
                     }
                 }
             }
@@ -236,6 +327,12 @@ pub fn parse_claude(log: &str) -> Trace {
                 trace.turns = event["num_turns"].as_u64();
                 trace.duration_ms = event["duration_ms"].as_u64();
                 trace.outcome = text_of(&event["subtype"]);
+                if event["usage"].is_object() {
+                    let mut usage = claude_usage(&event["usage"]);
+                    usage.cost_micro_usd = event["total_cost_usd"].as_f64().and_then(micro_usd);
+                    usage.source = UsageSource::ResultEvent;
+                    result_usage = Some(usage);
+                }
                 for denial in event["permission_denials"].as_array().into_iter().flatten() {
                     let id = denial["tool_use_id"].as_str().unwrap_or_default();
                     if let Some(call) = by_id.get(id).and_then(|index| trace.calls.get_mut(*index))
@@ -251,7 +348,40 @@ pub fn parse_claude(log: &str) -> Trace {
     if trace.final_message.is_none() {
         trace.final_message = last_text;
     }
+    trace.usage = result_usage.unwrap_or_else(|| {
+        let mut summed = anonymous_usage;
+        for usage in message_usage.values() {
+            add_usage(&mut summed, usage);
+        }
+        summed.source = if message_usage.is_empty() && summed == Usage::default() {
+            UsageSource::None
+        } else {
+            UsageSource::AssistantMessages
+        };
+        summed
+    });
     trace
+}
+
+/// Claude Code's usage object of one message or of the whole run.
+fn claude_usage(usage: &Value) -> Usage {
+    Usage {
+        input_tokens: number(&usage["input_tokens"]),
+        output_tokens: number(&usage["output_tokens"]),
+        cached_input_tokens: number(&usage["cache_read_input_tokens"]),
+        cache_creation_input_tokens: number(&usage["cache_creation_input_tokens"]),
+        reasoning_output_tokens: 0,
+        cost_micro_usd: None,
+        source: UsageSource::AssistantMessages,
+    }
+}
+
+fn add_usage(total: &mut Usage, more: &Usage) {
+    total.input_tokens += more.input_tokens;
+    total.output_tokens += more.output_tokens;
+    total.cached_input_tokens += more.cached_input_tokens;
+    total.cache_creation_input_tokens += more.cache_creation_input_tokens;
+    total.reasoning_output_tokens += more.reasoning_output_tokens;
 }
 
 /// Tools that act on nothing outside the client's own state.
@@ -345,12 +475,16 @@ pub fn parse_codex(log: &str) -> Trace {
                         exit_code: None,
                         is_error: false,
                         completed: false,
+                        output: None,
                     });
                     trace.calls.len() - 1
                 });
                 if let Some(call) = trace.calls.get_mut(index) {
                     call.kind = codex_kind(item_type, item);
                     call.input = codex_input(item);
+                    if completed {
+                        call.output = result_text(&item["aggregated_output"]);
+                    }
                     call.exit_code = item["exit_code"].as_i64();
                     let status = item["status"].as_str().unwrap_or_default();
                     call.denied = matches!(status, "declined" | "rejected" | "denied");
@@ -362,9 +496,19 @@ pub fn parse_codex(log: &str) -> Trace {
             }
             Some("turn.completed") => {
                 let usage = &event["usage"];
-                trace.usage.input_tokens += number(&usage["input_tokens"]);
-                trace.usage.output_tokens += number(&usage["output_tokens"]);
-                trace.usage.cached_input_tokens += number(&usage["cached_input_tokens"]);
+                add_usage(
+                    &mut trace.usage,
+                    &Usage {
+                        input_tokens: number(&usage["input_tokens"]),
+                        output_tokens: number(&usage["output_tokens"]),
+                        cached_input_tokens: number(&usage["cached_input_tokens"]),
+                        cache_creation_input_tokens: 0,
+                        reasoning_output_tokens: number(&usage["reasoning_output_tokens"]),
+                        cost_micro_usd: None,
+                        source: UsageSource::TurnEvents,
+                    },
+                );
+                trace.usage.source = UsageSource::TurnEvents;
                 trace.turns = Some(trace.turns.unwrap_or_default() + 1);
                 trace.outcome = Some("turn.completed".to_owned());
             }

@@ -27,6 +27,10 @@ readonly MODEL_SIZE=147951465
 readonly MODEL_SHA256=60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
 readonly TRIALS=/trials
 readonly EXPORTS=/exports
+# The published images (P14) carry the proof that VSift was installed from the
+# real registry; the images built from the checkout (P12) do not.
+readonly PUBLISHED_PROOF=/opt/vsift-published-proof.json
+readonly PUBLISHED_VERSION_FILE=/opt/vsift-published/lib/node_modules/vsift-cli/package.json
 readonly AUTH_SOURCE=/run/codex-auth/auth.json
 readonly CODEX_HOME_DIR=/run/codex-home
 # A trial directory relative to /trials: <trial-id> or debug-<name>/<trial-id>.
@@ -41,14 +45,19 @@ fail() {
 usage() {
   cat <<'EOF'
 trial-driver versions
-    Tool versions and digests; checks the mounted model. No network.
+    Tool versions and digests; checks the mounted model (a published image
+    has no model of its own and prints the install proof instead). No network.
 trial-driver sandbox-check
     Codex's Linux sandbox without a model: a write inside the workspace works,
     a write outside it and a network request (curl) fail. One plain HTTPS
     request outside the sandbox is the control.
-trial-driver prepare --scenario <id> [--debug <name>]      (harness image)
+trial-driver prepare --scenario <id> [--debug <name>] [--freeze <file>]
+                                                          (harness image)
     Prepares a trial under /trials (or /trials/debug-<name>) and prints
-    "trial <relative directory>".
+    "trial <relative directory>". The scenario is looked up in scenarios/,
+    cold/ and holdout/. In a published image the harness uses the installed
+    package and runs setup plan and setup install for the managed tools; no
+    model file is needed or checked.
 trial-driver run --trial <relative directory> --model <model> [--phase <n>]
                  [--timeout-s <n>] [--debug-prompt <text>]  (agent image)
     Runs Codex once. The sign-in is copied to a tmpfs CODEX_HOME for the run
@@ -67,6 +76,10 @@ EOF
 require_match() {
   # $1 value, $2 pattern, $3 what
   [[ "$1" =~ $2 ]] || fail "invalid $3"
+}
+
+is_published() {
+  [ -f "$PUBLISHED_PROOF" ]
 }
 
 check_model() {
@@ -109,6 +122,15 @@ cleanup_codex_home() {
 
 cmd_versions() {
   echo "vsift commit: $VSIFT_COMMIT"
+  if is_published; then
+    # The published image: the install proof, the launcher and Codex.
+    "$HARNESS" verify-install --proof "$PUBLISHED_PROOF"
+    PATH=/opt/node/bin:/usr/bin:/bin /opt/vsift-published/bin/vsift --version
+    "$CODEX" --version
+    sha256sum "$HARNESS" "$CODEX" /opt/codex/codex-resources/bwrap
+    if [ -e "$SRC" ]; then echo "repository: present (harness image)"; else echo "repository: absent (agent image)"; fi
+    return 0
+  fi
   "$VSIFT" --version
   "$CODEX" --version
   "$FFMPEG" -hide_banner -version | head -n 1
@@ -147,29 +169,59 @@ if curl --silent --show-error --max-time 15 --output /dev/null https://example.c
   rm -rf "$work"
 }
 
+# The scenario file for an id: the tuning, cold or hold-out folder.
+scenario_file() {
+  local folder
+  for folder in scenarios cold holdout; do
+    if [ -f "$SRC/tools/vsift-agent-trials/$folder/$1.json" ]; then
+      printf '%s\n' "$SRC/tools/vsift-agent-trials/$folder/$1.json"
+      return 0
+    fi
+  done
+  return 1
+}
+
 cmd_prepare() {
-  local scenario="" debug=""
+  local scenario="" debug="" freeze=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --scenario) scenario=${2-}; shift 2 ;;
       --debug) debug=${2-}; shift 2 ;;
+      --freeze) freeze=${2-}; shift 2 ;;
       *) fail "unknown argument" ;;
     esac
   done
   require_match "$scenario" '^[A-Za-z0-9-]{1,64}$' "scenario"
-  [ -f "$SRC/tools/vsift-agent-trials/scenarios/$scenario.json" ] || fail "no such scenario (or not the harness image)"
+  local scenario_path
+  scenario_path=$(scenario_file "$scenario") || fail "no such scenario (or not the harness image)"
   local root="$TRIALS"
   if [ -n "$debug" ]; then
     require_match "$debug" '^[a-z0-9][a-z0-9-]{0,40}$' "debug name"
     root="$TRIALS/debug-$debug"
   fi
-  check_model
+  local freeze_arguments=()
+  if [ -n "$freeze" ]; then
+    [ "$freeze" = /run/freeze.json ] && [ -f "$freeze" ] || fail "the freeze file is not mounted at /run/freeze.json"
+    freeze_arguments=(--freeze "$freeze")
+  fi
   local out
-  out=$("$HARNESS" prepare --root "$root" \
-    --scenario "$SRC/tools/vsift-agent-trials/scenarios/$scenario.json" \
-    --vsift "$VSIFT" --vsift-commit "$VSIFT_COMMIT" \
-    --ffmpeg "$FFMPEG" --ffprobe "$FFPROBE" --whisper "$WHISPER" --model "$MODEL" \
-    --repository "$SRC")
+  if is_published; then
+    # Clean-install mode: the harness plays the user's part (setup plan, then
+    # setup install with the plan's digest). FFmpeg here only builds clips.
+    out=$("$HARNESS" prepare --root "$root" \
+      --scenario "$scenario_path" \
+      --install-proof "$PUBLISHED_PROOF" --tools managed \
+      --vsift-commit "$VSIFT_COMMIT" \
+      --ffmpeg "$FFMPEG" --ffprobe "$FFPROBE" \
+      --repository "$SRC" "${freeze_arguments[@]}")
+  else
+    check_model
+    out=$("$HARNESS" prepare --root "$root" \
+      --scenario "$scenario_path" \
+      --vsift "$VSIFT" --vsift-commit "$VSIFT_COMMIT" \
+      --ffmpeg "$FFMPEG" --ffprobe "$FFPROBE" --whisper "$WHISPER" --model "$MODEL" \
+      --repository "$SRC" "${freeze_arguments[@]}")
+  fi
   local trial=${out#prepared }
   [[ "$trial" == "$root"/* && -d "$trial" ]] || fail "prepare did not report a trial under $root"
   printf 'trial %s\n' "${trial#"$TRIALS"/}"
@@ -197,7 +249,7 @@ cmd_run() {
     [ -n "$debug_prompt" ] && [ ${#debug_prompt} -le 4000 ] || fail "the prompt must be 1-4000 characters"
     [[ "$relative" == debug-* ]] || fail "a debug prompt needs a trial prepared with --debug"
   fi
-  check_model
+  is_published || check_model
   setup_codex_home
   local arguments=(run --trial "$trial" --phase "$phase" --client codex --executable "$CODEX"
     --model "$model" --client-home "$CODEX_HOME_DIR" --timeout-s "$timeout")
