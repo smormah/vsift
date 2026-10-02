@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc" xml:space="preserve">
+<title id="title">VSift roadmap</title>
+<desc id="desc">Done: work packets P00 to P13, each with its evidence, and the 0.1.0 pre-release on npm under the next tag. Now: P14, the release qualification with trials and campaigns. Next: release candidates 0.2.0-rc.N under next, then 0.2.0, the R0 release on npm latest, then R1: cross-video indexing, enrichment and workers. Planned steps are plans, not dates.</desc>
+<style>
+.s{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif} .m{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+.t{fill:#e8eef6} .mu{fill:#9fb2c8} .di{fill:#62799a}
+text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
+@keyframes pulse{0%{transform:scale(1);opacity:.9}100%{transform:scale(2.2);opacity:0}}.pulse{transform-box:fill-box;transform-origin:center;animation:pulse 2.2s ease-out infinite}@media (prefers-reduced-motion: reduce){.pulse{animation:none;opacity:0}}</style>
+<rect width="1200" height="300" rx="20" fill="#0e1a2b"/><rect x="0.5" y="0.5" width="1199" height="299" rx="20" fill="none" stroke="#25405f"/>
+<text x="40" y="50" font-size="12.5" class="s b" text-anchor="start" fill="#2dd4bf" letter-spacing="1.6">ROADMAP</text>
+<text x="1160" y="50" font-size="12.5" class="s mu" text-anchor="end" >from the open delivery ledger and decision records</text>
+<line x1="110" y1="140" x2="502.0" y2="140" stroke="#2dd4bf" stroke-width="3"/>
+<line x1="502.0" y1="140" x2="1090" y2="140" stroke="#62799a" stroke-width="2" stroke-dasharray="4 6"/>
+<circle cx="110.0" cy="140" r="13" fill="#2dd4bf"/>
+<path d="M104.5 140 l4 4 l7.5 -8" fill="none" stroke="#0e1a2b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="110.0" y="186" font-size="17" class="s bb" text-anchor="middle" fill="#e8eef6">P00 – P13</text>
+<text x="110.0" y="212" font-size="13" class="s mu" text-anchor="middle" >14 work packets,</text>
+<text x="110.0" y="232" font-size="13" class="s mu" text-anchor="middle" >each with its evidence</text>
+<circle cx="306.0" cy="140" r="13" fill="#2dd4bf"/>
+<path d="M300.5 140 l4 4 l7.5 -8" fill="none" stroke="#0e1a2b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="306.0" y="186" font-size="17" class="s bb" text-anchor="middle" fill="#e8eef6">0.1.0</text>
+<text x="306.0" y="212" font-size="13" class="s mu" text-anchor="middle" >pre-release on npm</text>
+<text x="306.0" y="232" font-size="13" class="s mu" text-anchor="middle" >under the next tag</text>
+<circle class="pulse" cx="502.0" cy="140" r="13" fill="none" stroke="#f5b942" stroke-width="2"/>
+<circle cx="502.0" cy="140" r="13" fill="#0e1a2b" stroke="#f5b942" stroke-width="3"/>
+<circle cx="502.0" cy="140" r="5" fill="#f5b942"/>
+<rect x="478.0" y="90" width="48" height="22" rx="11" fill="#f5b942"/>
+<text x="502.0" y="105" font-size="11.5" class="s bb" text-anchor="middle" fill="#0e1a2b" letter-spacing="1">NOW</text>
+<text x="502.0" y="186" font-size="17" class="s bb" text-anchor="middle" fill="#e8eef6">P14</text>
+<text x="502.0" y="212" font-size="13" class="s mu" text-anchor="middle" >release qualification:</text>
+<text x="502.0" y="232" font-size="13" class="s mu" text-anchor="middle" >trials and campaigns</text>
+<circle cx="698.0" cy="140" r="12" fill="#0e1a2b" stroke="#62799a" stroke-width="2.5"/>
+<text x="698.0" y="186" font-size="17" class="s bb" text-anchor="middle" fill="#9fb2c8">0.2.0-rc.N</text>
+<text x="698.0" y="212" font-size="13" class="s mu" text-anchor="middle" >release candidate</text>
+<text x="698.0" y="232" font-size="13" class="s mu" text-anchor="middle" >under next</text>
+<line x1="600.0" y1="176" x2="600.0" y2="240" stroke="#25405f"/>
+<circle cx="894.0" cy="140" r="12" fill="#0e1a2b" stroke="#62799a" stroke-width="2.5"/>
+<text x="894.0" y="186" font-size="17" class="s bb" text-anchor="middle" fill="#9fb2c8">0.2.0</text>
+<text x="894.0" y="212" font-size="13" class="s mu" text-anchor="middle" >the R0 release,</text>
+<text x="894.0" y="232" font-size="13" class="s mu" text-anchor="middle" >on npm latest</text>
+<circle cx="1090.0" cy="140" r="12" fill="#0e1a2b" stroke="#62799a" stroke-width="2.5"/>
+<text x="1090.0" y="186" font-size="17" class="s bb" text-anchor="middle" fill="#9fb2c8">R1</text>
+<text x="1090.0" y="212" font-size="13" class="s mu" text-anchor="middle" >cross-video indexing,</text>
+<text x="1090.0" y="232" font-size="13" class="s mu" text-anchor="middle" >enrichment, workers</text>
+<text x="40" y="274" font-size="12.5" class="s di" text-anchor="start" >Planned steps are plans, not dates. R0 ends with P14; R1 starts after it.</text>
+</svg>

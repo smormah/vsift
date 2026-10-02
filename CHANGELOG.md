@@ -146,6 +146,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The README's graphics** (2026-10-02). Eight self-contained SVGs in `docs/assets/readme/`
+  replace the Mermaid diagram and dress the front page: a hero with the logo and tagline, an
+  animated terminal replaying the real, trimmed `vsift-cli@0.1.0` session, the evidence timeline
+  (speech, screen changes and the three real frames on one 0-14 s axis), the pipeline with an
+  "on your machine" boundary, a before-and-after panel, the architecture, the roadmap and the
+  logo. The full-size frames move into a collapsible section; a "Built in the open" section
+  links the decision records, qualification records, known limits, ledger, build provenance and
+  threat model; release and last-commit badges are added. The copy now speaks to anyone with a
+  video on their machine, with or without an AI assistant, rather than to coding agents only, and
+  a "Just want a transcript?" section shows the transcript commands. No claims-ladder wording
+  changed. Text inside the SVGs is not read by the claims check, so it was checked by hand
+  (known limit L-121; the asset notes in `docs/assets/readme/README.md` give the check and when
+  to redraw the roadmap).
 - **README rewritten as the project's front page** (2026-10-02). A tagline, badges, the
   problem in two paragraphs, a "See it work" walk-through with real commands and real output
   from the published `vsift-cli@0.1.0` on a synthetic recording (three extracted frames in

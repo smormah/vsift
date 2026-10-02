@@ -6,9 +6,10 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress: decisions A-H confirmed
 2026-10-02.** The plan is 14 pull requests (0-13). **PRs 0 (#250), 1 (#251), 2 (#255, the
-published-artifact qualification, run on 0.1.0) and 8 (#252, the release machinery) are merged.
-PR 6, the agent-trial harness for the clean-install and cold-agent rounds, is done in this
-change, awaiting review; PR 3 is being built in parallel.** The whole packet is not complete.
+published-artifact qualification, run on 0.1.0), 6 (#262, the agent-trial harness) and 8 (#252,
+the release machinery) are merged. PR 3 (#254) is open and needs a rebase; PR 4 (#259) is a
+draft.** The whole packet is not complete; token-heavy P14 work is paused until the maintainer's
+weekly allowance resets.
 Plan: `docs/planning/p14-qualification.md` (section 15: PR 2's record); ADR 0024 stays Proposed.
 **Evidence:** `docs/planning/p14-evidence-ledger.json`: RQ-01-RQ-04 and RQ-19 `passed` **for
 0.1.0 only**, 15 `planned`. **Public text:** `docs/planning/public-claims.json` (rung `now`).
@@ -34,10 +35,11 @@ The Windows client reaches `vsift` only through Git Bash, never `cmd.exe` (#257)
 records the shell. Weak points: L-117..L-120. **Batch 1** (8 pilots, 12-run cold baseline, on
 0.1.0) waits for the go.
 
-**0.1.0 today:** on npm under `next` (`latest` is the empty `0.0.0` placeholder) and a GitHub
+**README graphics** (`docs/assets/readme/`, not P14): SVG text is unscanned (L-121), so hand-check
+it (grep in that folder's README); redraw `roadmap.svg` with PRs 10 and 13. **0.1.0 today:** on npm under `next` (`latest` is the empty `0.0.0` placeholder) and a GitHub
 pre-release; not announced. The stable path (PR 8) has never run for real (L-105).
 
-## The P14 pull requests (0, 1, 2, 8 merged; 6 in review)
+## The P14 pull requests (0, 1, 2, 6, 8 merged; 3 open, 4 draft)
 
 **3** published-binary journeys on three systems; **4** long fuzz, stress, load, soak, malicious
 media, runbook walk; **5** SEC-T01 or the narrowing; **6** trial harness; **7** fixes for what
@@ -50,8 +52,7 @@ the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
 
 ## What the maintainer owes, and when
 
-- **Now:** review PR 6 (`trials.md` first; the cold grader's strictness, ADR 0024's "decisions
-  taken inside this ADR"). **The go for batch 1**, after PR 6 merges: edit a copy of
+- **Now:** **the go for batch 1** (PR 6 is merged): edit a copy of
   `campaigns/campaign.example.json`, then `run-campaign.ps1 -Batch 1 -Client claude|codex
   -Version 0.1.0 -MaxRuns 4` (the pilots), read them, then the rest; needs Claude Code 2.1.284
   and Docker; cost unknown until the pilots record tokens.
