@@ -1,0 +1,417 @@
+//! One test per rule of the claims check. The baseline registry and its one
+//! document pass; each test changes one thing.
+
+use std::error::Error;
+
+use serde_json::{Value, json};
+
+use super::check_registry;
+use crate::{
+    public_claims::schema::ClaimsRegistry,
+    release_evidence::fixture::{baseline_value, ledger},
+    repository::fixture::FixtureRepository,
+};
+
+type Outcome = Result<(), Box<dyn Error>>;
+
+const README: &str = "# VSift\n\nVSift 0.1.0 is not a stable or supported release. The managed\n\
+                      install is **qualified** on Ubuntu 24.04 only.\n";
+
+fn registry_value() -> Value {
+    json!({
+        "schema_version": "1",
+        "current_rung": "now",
+        "documents": ["README.md"],
+        "unscanned_documents": [
+            { "path": "docs/other.md", "owner": "P14 PR 9", "reason": "not yet worded" }
+        ],
+        "controlled_words": ["supported", "stable", "qualified"],
+        "banned_phrases": [
+            { "id": "BAN-01", "phrases": ["production ready"], "reason": "never claimed", "lifted_by": [] },
+            { "id": "BAN-02", "phrases": ["strict worker"], "reason": "until its evidence", "lifted_by": ["RQ-02"] }
+        ],
+        "statements": [
+            { "kind": "non_claim", "id": "NC-001", "documents": ["README.md"],
+              "text": "not a stable or supported release", "note": "A negation." },
+            { "kind": "claim", "id": "CL-001", "rung": "now", "documents": ["README.md"],
+              "text": "qualified on Ubuntu 24.04 only", "basis": ["docs/planning/p13-distribution.md"],
+              "note": "The P13 record." },
+            { "kind": "claim", "id": "CL-002", "rung": "candidate", "documents": ["README.md"],
+              "text": "is a release candidate under qualification", "requires": ["RQ-02"],
+              "note": "Only once the candidate is verified." },
+            { "kind": "claim", "id": "CL-003", "rung": "after_p14", "documents": ["README.md"],
+              "text": "Windows 11 is supported", "requires": ["RQ-01"],
+              "note": "The matrix cell." }
+        ]
+    })
+}
+
+fn repository(readme: &str) -> FixtureRepository {
+    FixtureRepository::new()
+        .with("README.md", readme)
+        .with("docs/other.md", "unscanned")
+        .with("docs/planning/p13-distribution.md", "record")
+}
+
+fn messages(registry: &Value, readme: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let registry: ClaimsRegistry = serde_json::from_value(registry.clone())?;
+    Ok(check_registry(
+        &registry,
+        &ledger(&baseline_value())?,
+        &repository(readme),
+    ))
+}
+
+fn assert_clean(registry: &Value, readme: &str) -> Outcome {
+    let found = messages(registry, readme)?;
+    assert!(found.is_empty(), "{found:#?}");
+    Ok(())
+}
+
+fn assert_flagged(registry: &Value, readme: &str, needle: &str) -> Outcome {
+    let found = messages(registry, readme)?;
+    assert!(
+        found.iter().any(|message| message.contains(needle)),
+        "expected a message containing {needle:?}, got {found:#?}"
+    );
+    Ok(())
+}
+
+/// Replaces the value at `path` of the baseline registry and expects `needle`.
+fn assert_edit_flagged(path: &str, replacement: Value, needle: &str) -> Outcome {
+    let mut registry = registry_value();
+    *registry
+        .pointer_mut(path)
+        .ok_or_else(|| format!("no value at {path}"))? = replacement;
+    assert_flagged(&registry, README, needle)
+}
+
+#[test]
+fn the_baseline_registry_and_document_are_clean() -> Outcome {
+    assert_clean(&registry_value(), README)
+}
+
+#[test]
+fn unknown_fields_and_kinds_fail_the_parse() {
+    let mut registry = registry_value();
+    registry["statements"][0]["kind"] = json!("opinion");
+    assert!(serde_json::from_value::<ClaimsRegistry>(registry).is_err());
+    let mut registry = registry_value();
+    registry["invented"] = json!(1);
+    assert!(serde_json::from_value::<ClaimsRegistry>(registry).is_err());
+    let mut registry = registry_value();
+    registry["current_rung"] = json!("launched");
+    assert!(serde_json::from_value::<ClaimsRegistry>(registry).is_err());
+}
+
+#[test]
+fn the_schema_version_must_be_one() -> Outcome {
+    assert_edit_flagged("/schema_version", json!("2"), "schema_version")
+}
+
+#[test]
+fn scanned_documents_must_exist_and_be_listed_once() -> Outcome {
+    assert_edit_flagged("/documents", json!([]), "documents must name at least one")?;
+    assert_edit_flagged(
+        "/documents",
+        json!(["README.md", "MISSING.md"]),
+        "scanned document MISSING.md does not exist",
+    )?;
+    assert_edit_flagged(
+        "/documents",
+        json!(["README.md", "README.md"]),
+        "scanned document README.md is listed twice",
+    )
+}
+
+#[test]
+fn unscanned_documents_exist_and_are_not_also_scanned() -> Outcome {
+    assert_edit_flagged(
+        "/unscanned_documents/0/path",
+        json!("docs/missing.md"),
+        "unscanned document docs/missing.md does not exist",
+    )?;
+    assert_edit_flagged(
+        "/unscanned_documents/0/path",
+        json!("README.md"),
+        "README.md is both scanned and listed as unscanned",
+    )?;
+    assert_edit_flagged(
+        "/unscanned_documents/0/owner",
+        json!(" "),
+        "needs an owner and a reason",
+    )
+}
+
+#[test]
+fn a_controlled_word_outside_a_registered_statement_is_flagged() -> Outcome {
+    assert_flagged(
+        &registry_value(),
+        &format!("{README}The command line is stable.\n"),
+        "\"stable\" is used outside a registered statement",
+    )?;
+    assert_flagged(
+        &registry_value(),
+        &format!("{README}Windows is supported.\n"),
+        "\"supported\" is used outside a registered statement",
+    )
+}
+
+#[test]
+fn a_controlled_word_inside_a_wrapped_marked_up_statement_is_covered() -> Outcome {
+    let readme = "VSift is **not a\n> stable** or [supported](#x) release. The managed install is \
+                  qualified\non Ubuntu 24.04-only.\n";
+    assert_clean(&registry_value(), readme)
+}
+
+#[test]
+fn the_controlled_words_are_single_words() -> Outcome {
+    assert_edit_flagged(
+        "/controlled_words",
+        json!([]),
+        "controlled_words must not be empty",
+    )?;
+    assert_edit_flagged(
+        "/controlled_words",
+        json!(["supported", "two words"]),
+        "controlled word \"two words\" must be a single word",
+    )
+}
+
+#[test]
+fn a_banned_phrase_is_flagged_unless_a_non_claim_excuses_it() -> Outcome {
+    let flagged = format!("{README}VSift is production-ready.\n");
+    assert_flagged(
+        &registry_value(),
+        &flagged,
+        "banned phrase \"production ready\" (BAN-01)",
+    )?;
+
+    let mut registry = registry_value();
+    registry["statements"]
+        .as_array_mut()
+        .ok_or("no statements")?
+        .push(json!({
+            "kind": "non_claim", "id": "NC-002", "documents": ["README.md"],
+            "text": "is not production ready", "note": "A negation."
+        }));
+    assert_clean(
+        &registry,
+        &format!("{README}VSift is not production-ready.\n"),
+    )
+}
+
+#[test]
+fn a_claim_cannot_excuse_a_banned_phrase() -> Outcome {
+    let mut registry = registry_value();
+    registry["statements"]
+        .as_array_mut()
+        .ok_or("no statements")?
+        .push(json!({
+            "kind": "claim", "id": "CL-004", "rung": "now", "documents": ["README.md"],
+            "text": "is production ready", "basis": ["docs/planning/p13-distribution.md"],
+            "note": "A claim that tries to excuse a banned phrase."
+        }));
+    assert_flagged(
+        &registry,
+        &format!("{README}VSift is production ready.\n"),
+        "banned phrase \"production ready\"",
+    )
+}
+
+#[test]
+fn a_ban_is_lifted_only_by_passed_evidence() -> Outcome {
+    // BAN-02 is lifted by RQ-02, which is passed in the baseline ledger.
+    assert_clean(
+        &registry_value(),
+        &format!("{README}The strict worker is on.\n"),
+    )?;
+    // RQ-01 is planned, so a ban it lifts stays.
+    let mut registry = registry_value();
+    registry["banned_phrases"][1]["lifted_by"] = json!(["RQ-01"]);
+    assert_flagged(
+        &registry,
+        &format!("{README}The strict worker is on.\n"),
+        "banned phrase \"strict worker\" (BAN-02)",
+    )?;
+    // A ban nothing lifts is never lifted.
+    registry["banned_phrases"][1]["lifted_by"] = json!([]);
+    assert_flagged(
+        &registry,
+        &format!("{README}The strict worker is on.\n"),
+        "banned phrase \"strict worker\" (BAN-02)",
+    )
+}
+
+#[test]
+fn banned_phrase_groups_are_well_formed() -> Outcome {
+    assert_edit_flagged(
+        "/banned_phrases/0/lifted_by",
+        json!(["RQ-99"]),
+        "BAN-01 is lifted by RQ-99, which is not an evidence item",
+    )?;
+    assert_edit_flagged(
+        "/banned_phrases/0/phrases",
+        json!([]),
+        "BAN-01 needs non-empty phrases",
+    )?;
+    assert_edit_flagged(
+        "/banned_phrases/0/reason",
+        json!(""),
+        "BAN-01 needs a reason",
+    )?;
+    assert_edit_flagged(
+        "/banned_phrases/1/id",
+        json!("BAN-01"),
+        "BAN-01 appears twice",
+    )
+}
+
+#[test]
+fn statements_are_well_formed() -> Outcome {
+    assert_edit_flagged(
+        "/statements/1/id",
+        json!("NC-001"),
+        "statement NC-001 appears twice",
+    )?;
+    assert_edit_flagged(
+        "/statements/0/text",
+        json!("supported"),
+        "a fragment of at least two words",
+    )?;
+    assert_edit_flagged(
+        "/statements/0/documents",
+        json!([]),
+        "NC-001: documents must not be empty",
+    )?;
+    assert_edit_flagged(
+        "/statements/0/documents",
+        json!(["docs/other.md"]),
+        "NC-001: docs/other.md is not a scanned document",
+    )
+}
+
+#[test]
+fn a_claim_names_its_evidence() -> Outcome {
+    assert_edit_flagged(
+        "/statements/2/requires",
+        json!(["RQ-99"]),
+        "CL-002: requires RQ-99, which is not an evidence item",
+    )?;
+    assert_edit_flagged(
+        "/statements/1/basis",
+        json!(["docs/planning/missing.md"]),
+        "CL-001: basis docs/planning/missing.md does not exist",
+    )?;
+    assert_edit_flagged(
+        "/statements/1/basis",
+        json!([]),
+        "CL-001: a claim names the evidence items it requires or the record it rests on",
+    )?;
+    let mut registry = registry_value();
+    registry["statements"][2]["requires"] = json!([]);
+    registry["statements"][2]["basis"] = json!(["docs/planning/p13-distribution.md"]);
+    assert_flagged(
+        &registry,
+        README,
+        "CL-002: a claim above the now rung requires at least one evidence item",
+    )
+}
+
+#[test]
+fn every_statement_carries_a_note() -> Outcome {
+    assert_edit_flagged(
+        "/statements/1/note",
+        json!("  "),
+        "CL-001: a statement needs a note",
+    )?;
+    assert_edit_flagged(
+        "/statements/0/note",
+        json!(""),
+        "NC-001: a statement needs a note",
+    )
+}
+
+#[test]
+fn a_non_claim_must_excuse_something() -> Outcome {
+    assert_edit_flagged(
+        "/statements/0/text",
+        json!("a statement with no controlled word"),
+        "NC-001: a non-claim excuses a controlled word or banned phrase",
+    )
+}
+
+#[test]
+fn a_statement_may_appear_only_in_the_documents_it_is_registered_for() -> Outcome {
+    let mut registry = registry_value();
+    registry["documents"] = json!(["README.md", "SECURITY.md"]);
+    let repository = repository(README).with(
+        "SECURITY.md",
+        "VSift is not a stable or supported release.\n",
+    );
+    let registry: ClaimsRegistry = serde_json::from_value(registry)?;
+    let found = check_registry(&registry, &ledger(&baseline_value())?, &repository);
+    assert!(
+        found.iter().any(|message| message.contains(
+            "SECURITY.md: statement NC-001 is used here but registered only for README.md"
+        )),
+        "{found:#?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_claim_above_the_current_rung_may_not_be_used() -> Outcome {
+    let readme = format!("{README}VSift 0.2.0-rc.1 is a release candidate under qualification.\n");
+    assert_flagged(
+        &registry_value(),
+        &readme,
+        "CL-002 is a candidate claim in use while the current rung is now",
+    )?;
+    let mut registry = registry_value();
+    registry["current_rung"] = json!("candidate");
+    assert_clean(&registry, &readme)
+}
+
+#[test]
+fn a_claim_in_use_needs_its_evidence_passed() -> Outcome {
+    // Every claim at or below the current rung is in use, or it would be stale.
+    let readme = format!(
+        "{README}VSift is a release candidate under qualification. Windows 11 is supported.\n"
+    );
+    let mut registry = registry_value();
+    registry["current_rung"] = json!("after_p14");
+    // CL-003 requires RQ-01, which is planned in the baseline ledger.
+    assert_flagged(
+        &registry,
+        &readme,
+        "CL-003 is in use but requires RQ-01 to be passed; it is planned",
+    )?;
+    registry["statements"][3]["requires"] = json!(["RQ-02"]);
+    assert_clean(&registry, &readme)
+}
+
+#[test]
+fn a_registered_statement_that_no_document_uses_is_stale() -> Outcome {
+    // NC-001 is gone from the document, and CL-001 (rung now) with it.
+    let found = messages(&registry_value(), "# VSift\n\nNothing to see.\n")?;
+    assert!(
+        found
+            .iter()
+            .any(|message| message.starts_with("NC-001 is registered but appears in none")),
+        "{found:#?}"
+    );
+    assert!(
+        found
+            .iter()
+            .any(|message| message.starts_with("CL-001 is registered but appears in none")),
+        "{found:#?}"
+    );
+    assert!(
+        !found
+            .iter()
+            .any(|message| message.starts_with("CL-002") || message.starts_with("CL-003")),
+        "claims above the current rung may wait: {found:#?}"
+    );
+    Ok(())
+}

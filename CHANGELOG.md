@@ -37,6 +37,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Known limits L-105 (the stable path never ran for real), L-106 (the evidence ledger is not
   checked by the workflow), L-107 and L-108; L-097 updated. ADR 0024 has the dated note;
   ADR 0023, the threat model (SEC-22) and verification point at it.
+- **The release evidence ledger and the public-claims registry, with their checks** (P14
+  PR 1; the governance tool and documentation only: no product code, workflow, package or
+  setting changed, nothing published, no new dependency). `docs/planning/p14-evidence-ledger.json`
+  holds one entry for each of the plan's twenty evidence items (RQ-01..RQ-20): what it proves
+  and does not prove, its producer and the P14 pull request that builds it, the requirements,
+  threats, verification rows and limits it supports, whether a stable release must repeat it or
+  may carry the candidate's, the paths whose change makes older evidence stale, its status and
+  its typed links, and earlier material that does not count. It is seeded from today's facts:
+  every item is `planned`, none is passed. `docs/planning/public-claims.json` holds the ladder of
+  decision G (now, candidate, after P14): the statements each public document may use, the
+  evidence items that must be passed before each, and the phrases never claimed. New `RQ-01..RQ-20`
+  and `A-10` rows in `docs/planning/verification.md`. `vsift-governance check` (the Governance
+  job) now also validates both files on every pull request; `release-evidence` and
+  `public-claims` run them on their own, and `release-evidence --complete-for <version>
+  [--commit <sha>]` is the completeness check, which fails unless everything the release needs is
+  passed, carried forward because nothing in its scope changed (asked of Git), waived by a
+  recorded maintainer decision or not applicable (a stable release also needs the delta record that
+  PR 8 will write). The checks prove that recorded evidence exists and banned words are absent,
+  not that a run passed or a sentence is true (known limit L-101). Known limits: L-101, L-102
+  (the generated release notes, and the published v0.1.0 page, say "Supported machines"; the
+  template is not yet under the claims check) and L-103 (carried-forward evidence rests on
+  hand-written scopes and Git history). ADR 0024 has a note for this change.
 - **P14 starts: the plan and its kickoff** (P14 PR 0; documentation, the ledger line and
   the handoff files only: no code, workflow, package or setting changed, nothing published).
   The maintainer confirmed eight decisions and started P14 on 2026-10-02; the ledger marks it
@@ -54,6 +76,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Public wording the new claims check flagged** (P14 PR 1; wording only): the skill guide's
+  "Supported models" section is now "Models and clients trialled" (its table is unchanged),
+  `install.md`'s exit-127 advice says "on one of the machines in section 1" instead of "on a
+  supported machine", and the README no longer says the release qualification (P14) has not
+  started. The governance tool's failure header now reads "governance check failed".
 - **P13 is complete: the first publish is recorded** (P13 PR 12; documentation, ledger
   and memory only, no product code, workflow or package changed). The maintainer's
   publish of 0.1.0 on 2026-10-01 (Release run 36931487439 on the tag `v0.1.0`, after a

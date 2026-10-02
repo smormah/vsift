@@ -4,7 +4,7 @@ Status: P12 complete (2026-09-30). The skill's command and schema references are
 to the CLI by tests, and it has been through named-client trials (A-01..A-09 and
 SEC-T02, [runbook](trials.md)). It is **qualified for the review tier and, since the
 compact re-run (#222, 2026-09-30), for the compact tier**; see
-[Supported models](#supported-models). Design:
+[Models and clients trialled](#models-and-clients-trialled). Design:
 [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md) (Accepted).
 Results: [P12 qualification record](../planning/p12-agent-qualification.md).
 
@@ -205,7 +205,7 @@ time reading the code with the same letter missing, so P12 PR 3i redrew it
   the image each trial's workspace received, so older trials still grade against the
   code they were shown.
 
-## Supported models
+## Models and clients trialled
 
 Qualified by the P12 trials (2026-09-30) through the same skill, prompts and compact
 budget; the compact tier by the re-run on `a0bfb06` after P12's fixes (#222). The full

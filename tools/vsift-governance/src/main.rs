@@ -6,13 +6,17 @@ use std::{
     collections::{HashMap, HashSet},
     error::Error,
     fmt, fs,
-    path::{Path, PathBuf},
+    path::Path,
     process::ExitCode,
 };
 
 use serde::Deserialize;
 
+mod command;
 mod npm_packages;
+mod public_claims;
+mod release_evidence;
+mod repository;
 mod workflows;
 
 const DEFAULT_LEDGER: &str = "docs/planning/delivery-ledger.json";
@@ -190,7 +194,7 @@ struct GovernanceError {
 
 impl fmt::Display for GovernanceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(formatter, "delivery ledger validation failed:")?;
+        writeln!(formatter, "governance check failed:")?;
         for message in &self.messages {
             writeln!(formatter, "- {message}")?;
         }
@@ -202,8 +206,8 @@ impl Error for GovernanceError {}
 
 fn main() -> ExitCode {
     match run() {
-        Ok(()) => {
-            println!("VSift delivery ledger is valid.");
+        Ok(success) => {
+            println!("{success}");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -213,22 +217,28 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
-    let mut arguments = std::env::args().skip(1);
-    let command = arguments.next();
-    let ledger_path = arguments
-        .next()
-        .map_or_else(|| PathBuf::from(DEFAULT_LEDGER), PathBuf::from);
+/// The repository root of the commands that take no ledger path: the
+/// directory they are run from, as `check`'s default ledger path assumes.
+const WORKING_ROOT: &str = ".";
 
-    if command.as_deref() != Some("check") || arguments.next().is_some() {
-        return Err(Box::new(GovernanceError {
-            messages: vec![String::from(
-                "usage: cargo run -p vsift-governance -- check [ledger-path]",
-            )],
-        }));
+/// Runs the command line and returns the sentence that says what passed.
+fn run() -> Result<String, Box<dyn Error>> {
+    let command = command::parse(std::env::args().skip(1)).map_err(command::UsageError)?;
+    match command {
+        command::Command::Check { ledger } => run_check(&ledger),
+        command::Command::ReleaseEvidence { completeness } => {
+            release_evidence::run_release_evidence(Path::new(WORKING_ROOT), completeness.as_ref())
+                .map_err(|messages| Box::new(GovernanceError { messages }) as Box<dyn Error>)
+        }
+        command::Command::PublicClaims => public_claims::run_public_claims(Path::new(WORKING_ROOT))
+            .map_err(|messages| Box::new(GovernanceError { messages }) as Box<dyn Error>),
     }
+}
 
-    let text = fs::read_to_string(&ledger_path)?;
+/// `check`: the delivery ledger and every control that runs on each pull
+/// request.
+fn run_check(ledger_path: &Path) -> Result<String, Box<dyn Error>> {
+    let text = fs::read_to_string(ledger_path)?;
     let ledger: DeliveryLedger = serde_json::from_str(&text)?;
     let repository_root = ledger_path
         .parent()
@@ -240,7 +250,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let messages = validate(&ledger, &corpus, repository_root);
 
     if messages.is_empty() {
-        Ok(())
+        Ok(String::from("VSift delivery ledger is valid."))
     } else {
         Err(Box::new(GovernanceError { messages }))
     }
@@ -292,6 +302,9 @@ fn validate(
     validate_fault_injection_features(&mut messages, repository_root);
     workflows::validate_workflows(&mut messages, repository_root);
     npm_packages::validate_npm_packages(&mut messages, repository_root);
+    let repository = repository::DiskRepository::new(repository_root);
+    release_evidence::validate_release_evidence(&mut messages, &repository);
+    public_claims::validate_public_claims(&mut messages, &repository);
 
     messages
 }

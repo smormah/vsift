@@ -45,7 +45,9 @@ Read these documents together:
 12. [P14 qualification plan](p14-qualification.md): the release-qualification evidence
     items, traceability, budgets, supported-profile matrix and public-claims policy
     (2026-10-02, with [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md);
-    its decisions were confirmed by the maintainer, who started P14).
+    its decisions were confirmed by the maintainer, who started P14), with its machine-checked
+    [evidence ledger](p14-evidence-ledger.json) and
+    [public-claims registry](public-claims.json) (P14 PR 1).
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
 ledger describe approved direction. Existing ADRs remain intact. A reviewed design
