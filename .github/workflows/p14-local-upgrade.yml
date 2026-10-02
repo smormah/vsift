@@ -1,0 +1,295 @@
+name: P14 local upgrade
+
+# P14 PR 2, evidence item RQ-04, LOCAL REGISTRY MODE (ADR 0024; docs/planning/p14-qualification.md
+# section 2). This is a separate, clearly labelled workflow because it does NOT
+# test a published version against a published version:
+#
+#   - the published `from_version` (0.1.0 by default) is installed from the REAL
+#     registry and used (a session, a bundle, a configuration);
+#   - the pull request's own build of `vsift` is packed as vsift-cli under a
+#     throwaway higher version (99.0.0-p14local.1), served by a loopback-only
+#     registry (Verdaccio on 127.0.0.1, no uplink) that exists for this job alone;
+#   - the package manager upgrades the first to the second; the check requires
+#     the session, the bundle and the configuration to survive, and walks the
+#     uninstall steps of install.md section 8.
+#
+# What it proves: a newer build reads what a published build wrote, and the
+# upgrade path of the package manager. What it does not prove: the release
+# packaging (the packages are assembled by tools/p14-published/assemble-local-packages.cjs
+# from the published skeleton, not by `vsift-release`), or anything about a
+# version that has been published. The real-registry mode is the `upgrade` job of
+# `P14 published artifacts`.
+#
+# Nothing here can publish to a public registry: the only `npm publish` is
+# tools/p14-published/lib/local-registry.cjs's, which is given the loopback
+# registry and a throwaway token, and no job has an OIDC token or a secret.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-local-upgrade.yml
+      - tools/p14-published/**
+      - crates/**
+      - schemas/**
+      - skills/vsift/**
+      - npm/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+  workflow_dispatch:
+    inputs:
+      from_version:
+        description: The published version the upgrade starts from. Empty means 0.1.0.
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: p14-local-upgrade-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: never
+  # The pins of the P13 npm qualification (release.yml `env`); see
+  # tools/p14-published/test/pins.test.cjs.
+  NODE_VERSION: "22.23.3"
+  VERDACCIO_VERSION: "6.10.4"
+  # The throwaway version the pull request's build is published under, to the
+  # loopback registry only. It is higher than any real version.
+  LOCAL_VERSION: "99.0.0-p14local.1"
+
+jobs:
+  resolve:
+    name: Choose the baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      from_version: ${{ steps.resolve.outputs.from_version }}
+      from_commit: ${{ steps.resolve.outputs.from_commit }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Read the published versions and the tags' commits
+        id: resolve
+        env:
+          INPUT_VERSION: ""
+          INPUT_FROM_VERSION: ${{ inputs.from_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/p14-published/resolve-release.cjs --work "${RUNNER_TEMP}/resolve"
+
+  # The pull request's own executable per target, built as the release builds it
+  # (the same command and the Windows static runtime), once each: this job does
+  # not check reproducibility, which the Release workflow does.
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+            executable: vsift.exe
+            rustflags: -C target-feature=+crt-static -C link-arg=/Brepro
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            executable: vsift
+            rustflags: ""
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+            executable: vsift
+            rustflags: ""
+    env:
+      TARGET: ${{ matrix.target }}
+      EXECUTABLE: ${{ matrix.executable }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build vsift
+        run: cargo build --release --locked -p vsift-cli --bin vsift --target "${TARGET}"
+
+      - name: Record the version line the build prints
+        run: |
+          set -euo pipefail
+          mkdir -p local-build
+          cp "target/${TARGET}/release/${EXECUTABLE}" "local-build/${EXECUTABLE}"
+          "local-build/${EXECUTABLE}" --version | tr -d '\r' > local-build/version-line.txt
+          cat local-build/version-line.txt
+
+      - name: Keep the executable and its version line
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-build-${{ matrix.target }}
+          path: local-build
+          if-no-files-found: error
+          retention-days: 3
+
+  package:
+    name: Pack the local packages
+    needs:
+      - resolve
+      - build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Fetch the executables
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: local-build-*
+          path: executables
+
+      - name: Assemble and pack the four packages under the throwaway version
+        env:
+          FROM_VERSION: ${{ needs.resolve.outputs.from_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p local-packages
+          node tools/p14-published/assemble-local-packages.cjs \
+            --version "${LOCAL_VERSION}" \
+            --skeleton-version "${FROM_VERSION}" \
+            --repo "${GITHUB_WORKSPACE}" \
+            --work "${RUNNER_TEMP}/assemble" \
+            --out local-packages \
+            --binary "linux-x64=executables/local-build-x86_64-unknown-linux-gnu/vsift" \
+            --binary "darwin-arm64=executables/local-build-aarch64-apple-darwin/vsift" \
+            --binary "win32-x64=executables/local-build-x86_64-pc-windows-msvc/vsift.exe"
+
+      - name: Keep the local packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: local-packages
+          path: local-packages
+          if-no-files-found: error
+          retention-days: 3
+
+  upgrade:
+    name: RQ-04 local upgrade (${{ matrix.os }})
+    needs:
+      - resolve
+      - package
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Fetch the local packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: local-packages
+          path: ${{ runner.temp }}/local-packages
+
+      - name: Fetch the version line of this target's build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: local-build-${{ matrix.target }}
+          path: ${{ runner.temp }}/local-build
+
+      # The loopback registry: Verdaccio with no uplink, installed from the
+      # public registry with scripts disabled.
+      - name: Install the pinned local registry
+        run: npm install --prefix "${RUNNER_TEMP}/tools" --ignore-scripts --no-audit --no-fund "verdaccio@${VERDACCIO_VERSION}"
+        env:
+          npm_config_update_notifier: "false"
+
+      - name: Stage the pinned FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          cd tools
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import p07_local_asr_tools as tools
+          staging = Path(os.environ["RUNNER_TEMP"]) / "ffmpeg-staging"
+          staging.mkdir(mode=0o700, parents=True, exist_ok=False)
+          ffmpeg_bin, _whisper = tools.stage_windows(staging)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"FFMPEG_BIN={ffmpeg_bin}\n")
+          PY
+
+      - name: Install FFmpeg (macOS, Homebrew)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          brew install ffmpeg
+          echo "FFMPEG_BIN=$(dirname "$(command -v ffmpeg)")" >> "$GITHUB_ENV"
+
+      - name: Upgrade the published version to the pull request's build
+        env:
+          FROM_VERSION: ${{ needs.resolve.outputs.from_version }}
+          FROM_COMMIT: ${{ needs.resolve.outputs.from_commit }}
+        run: |
+          set -euo pipefail
+          ffmpeg_args=()
+          if [ -n "${FFMPEG_BIN:-}" ]; then
+            ffmpeg_args=(--ffmpeg-bin "${FFMPEG_BIN}")
+          fi
+          node tools/p14-published/upgrade.cjs \
+            --mode local \
+            --from-version "${FROM_VERSION}" \
+            --from-commit "${FROM_COMMIT}" \
+            --to-version "${LOCAL_VERSION}" \
+            --to-version-line "$(cat "${RUNNER_TEMP}/local-build/version-line.txt")" \
+            --packages "${RUNNER_TEMP}/local-packages" \
+            --verdaccio "${RUNNER_TEMP}/tools/node_modules/verdaccio/bin/verdaccio" \
+            --work "${RUNNER_TEMP}/rq04-local" \
+            --repo "${GITHUB_WORKSPACE}" \
+            ${ffmpeg_args[@]+"${ffmpeg_args[@]}"}

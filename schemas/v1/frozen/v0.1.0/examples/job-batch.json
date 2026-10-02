@@ -1,0 +1,37 @@
+{
+  "command": "job.batch",
+  "coverage": null,
+  "data": {
+    "counts": {
+      "cancelled": 0,
+      "complete": 2,
+      "failed": 0,
+      "partial": 0,
+      "rejected": 0
+    },
+    "items": [
+      {
+        "code": null,
+        "line": 2,
+        "operation_id": "op_9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
+        "rejection": null,
+        "status": "complete"
+      },
+      {
+        "code": null,
+        "line": 1,
+        "operation_id": "op_7c2d4e6f8a0b1c3d5e7f9a1b3c5d7e9f",
+        "rejection": null,
+        "status": "complete"
+      }
+    ],
+    "not_started_from_line": null,
+    "termination_reason": "end_of_input"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

@@ -1,0 +1,63 @@
+name: P14 compatibility
+
+# P14 PR 2, evidence item RQ-04 (ADR 0024): the current build accepts what
+# 0.1.0 published. Two tests (crates/vsift-contract/tests/published_compatibility.rs
+# and crates/vsift-infrastructure/tests/published_v0_1_0_records.rs) hold the
+# frozen copy of 0.1.0's JSON examples (schemas/v1/frozen/v0.1.0/examples/) to the
+# CURRENT v1 schemas and the current stored-record readers. They run in every
+# pull request's Quality job already, on three operating systems, with the
+# checked-in copy. This workflow adds what a shallow checkout cannot do: it
+# fetches the history and the tag and requires the checked-in copy to be the
+# tag's bytes, file for file (VSIFT_REQUIRE_RELEASE_TAG makes a missing tag a
+# failure instead of a notice).
+#
+# It runs when the schemas, the contract or the record readers change, and on
+# dispatch. It runs no published artifact and needs no network beyond the
+# repository itself.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-compatibility.yml
+      - schemas/**
+      - crates/vsift-contract/**
+      - crates/vsift-infrastructure/**
+      - crates/vsift-domain/**
+      - Cargo.lock
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: p14-compatibility-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  compatibility:
+    name: 0.1.0 compatibility (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository with its history and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: The tag is there and names the commit that was published
+        run: |
+          set -euo pipefail
+          git rev-parse --verify "v0.1.0^{commit}"
+          test "$(git rev-parse "v0.1.0^{commit}")" = "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa"
+
+      - name: The frozen examples hold the current schemas to what 0.1.0 published
+        env:
+          VSIFT_REQUIRE_RELEASE_TAG: v0.1.0
+        run: cargo test --locked -p vsift-contract --test published_compatibility -- --nocapture
+
+      - name: The current readers decode the stored records of 0.1.0
+        run: cargo test --locked -p vsift-infrastructure --test published_v0_1_0_records -- --nocapture

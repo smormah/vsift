@@ -1,0 +1,61 @@
+{
+  "command": "job.run",
+  "coverage": null,
+  "data": {
+    "attempt": 2,
+    "controls": {
+      "admission_capacity": 8,
+      "concurrency": 2,
+      "free_space_reserve": "enforced",
+      "isolation": "strict_linux",
+      "resource_limits": "host_cgroup"
+    },
+    "failure": null,
+    "lifecycle": {
+      "expires_at": "2026-10-05T12:00:00Z",
+      "mode": "durable_worker"
+    },
+    "operation_id": "op_2a4c6e8f0b1d3f5a7c9e1b3d5f7a9c1e",
+    "publication": "os_crash_durable",
+    "replayed": false,
+    "request_digest": "47d7a0170ac5826404c84e1a3ec6b8661d8f4dc5154ee7a1f0fb5a9ec8ba10d6",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_id": "src_sha256_f8222a928243160c8dbf5b1a9bc24277e49ac47c11fe5526826462877678e881",
+    "status": "partial",
+    "steps": [
+      {
+        "admission_wait_ms": 1250,
+        "coverage": {
+          "gaps": [
+            "60000000-120000000"
+          ],
+          "reasons": [
+            "undecodable"
+          ],
+          "truncated": true
+        },
+        "elapsed_ms": 9870,
+        "failure": null,
+        "job_id": null,
+        "kind": "candidates",
+        "outputs": {
+          "candidate_count": 3,
+          "generation": 4,
+          "visual_index_id": "vix_5278827a5eb80d85a88983f2e69a5cba"
+        },
+        "status": "partial"
+      }
+    ]
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-10-05T12:00:00Z",
+    "mode": "durable_worker"
+  },
+  "operation_id": "op_2a4c6e8f0b1d3f5a7c9e1b3d5f7a9c1e",
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "The request completed with a stated gap; see the coverage of each partial step."
+  ]
+}

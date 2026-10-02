@@ -619,3 +619,83 @@ lint rule or a test, and the shell that publishes is executed against stubs, not
   version npm already holds under another tag rather than adopting it; that a dispatch on the
   tag is enforced even as a dry run; the stable release notes' wording, which is frozen at
   the candidate.
+
+## Implementation note, 2026-10-02 (P14 PR 2, the published-artifact qualification)
+
+Pull request #255. Delivered from "What P14 delivers" item 2: evidence items RQ-01 to RQ-04 and
+RQ-19, built and **run on the published 0.1.0**. No product code changed, nothing was published or
+tagged, no repository, environment, ruleset or npm setting changed, no secret was used and no
+dependency was added (the change was rebased onto PR 8's merge, #252, and keeps its content). The results and what each job proves and does not prove are in
+[`p14-qualification.md`](../planning/p14-qualification.md) section 15; the decisions taken inside
+this ADR:
+
+- **Four workflows, all read-only**, because each answers a different question and has a different
+  trigger: `P14 published artifacts` (RQ-01, RQ-02, RQ-03 and the real-registry mode of RQ-04),
+  `P14 local upgrade` (RQ-04's local mode, which builds from source), `P14 verify release` (RQ-19)
+  and `P14 compatibility` (the tag check of the compatibility test). Each has `contents: read`,
+  `attestations: read` where `gh attestation verify` runs, no secret, no OIDC token, and no step
+  that writes. The governance workflow lint was **not changed** and accepts them; a test
+  (`tools/p14-published/test/pins.test.cjs`) additionally refuses an `id-token`, a secret, a write
+  scope, an environment, an npm publishing or account command, a writing `gh` command or a tag push
+  in any of them or in any tool, and holds their tool pins and action pins equal to the Release
+  workflow's. A pull request that changes a workflow or `tools/p14-published/` runs the first three,
+  so a change is exercised before it merges; a dispatch needs the workflow on the default branch.
+- **The tools are Node.js, in `tools/p14-published/`, not under `npm/`**, so that a change to them
+  does not start the Release workflow (its path filters include `npm/**`). Zero dependencies; 50
+  tests that need no network. `invoke.ps1` is a copy of the P13 helper with one change: the
+  arguments travel in the environment as Base64, because `pwsh -File script.ps1 --file=C:\x` splits
+  that token at its colon on pwsh's own command line, which would have made every
+  `--option=<drive path>` case fail for a reason that is not VSift's.
+- **The scrub is a `PATH` rewrite, asserted before anything is installed** (section 15.2): the
+  hidden names do not resolve, which is what "no hidden dependency on a toolchain" can mean on a
+  hosted image. The plan's list (`cargo`, `rustc`, `git`, `python`) gained `rustup`, `rustdoc`,
+  `pip` and `py`. The limits are L-112.
+- **SEC-02 is asserted as what the code promises, not as what the plan's wording suggests.** Reading
+  `executable.rs` and trying it: a tool planted in the working directory, and relative and empty
+  `PATH` entries, are never selected or run (gated); a tool in an **absolute** `PATH` directory is
+  looked up and run once as a probe, because the user's own tools on `PATH` are found
+  automatically (install.md section 5.2), so that is recorded as an observation; what is gated is
+  that such a pair is **never trusted for media work** (`ingest` ends in `MISSING_CAPABILITY`: the
+  media-tool check refuses it), and that a **registered** tool wins over `PATH` and the planted one
+  never runs. "A planted file is not selected" cannot be asserted for an absolute `PATH` directory.
+- **Hostile names and arguments are gated per shim, by what a user's shell runs.** `--file` takes an
+  absolute path only (a relative one is `INVALID_ARGUMENT`), so file names are given absolute, two
+  ways; leading dashes are covered as values after `--`. The shim a Windows shell does not choose
+  first, npm's and pnpm's `vsift.cmd`, is an **observation** and a finding (#257, L-109), not a
+  gate.
+- **RQ-03 uses the pinned Ubuntu image of `ci.yml`.** The minimal image lacks `libgomp.so.1`, which
+  the reviewed whisper.cpp build needs; the tool reads it from `ldd`, gives the image exactly that
+  package and records the finding (#256, L-110) instead of hiding it.
+- **RQ-04 has two modes, and the docs say what each proves** (L-111). While only 0.1.0 is
+  published, the real-registry mode upgrades 0.1.0 to 0.1.0; the local mode serves the pull
+  request's own build, packed by `assemble-local-packages.cjs` (the checkout's launcher over the
+  published platform packages as a skeleton, not `vsift-release`, which needs the archives, notices
+  and SBOMs), as `99.0.0-p14local.1` from a loopback-only Verdaccio. The Rust version is not bumped:
+  `--version` names the commit.
+- **The compatibility test freezes the 0.1.0 examples in the tree and checks the copy against Git.**
+  `schemas/v1/frozen/v0.1.0/examples/` is the tag's 52 files, byte for byte;
+  `published_compatibility` validates each against the current v1 schemas (and every error code
+  against the current envelope) in every Quality job, with no history; the same file proves the copy
+  is the tag's when Git can read the tag, and `P14 compatibility` fetches the history and sets
+  `VSIFT_REQUIRE_RELEASE_TAG` so a missing tag fails there. `published_v0_1_0_records` decodes the
+  four stored session records with the current readers. Reading the tag at test time was rejected:
+  CI's default checkout has no tags, and the live `examples/` may grow, so they cannot stand in.
+- **RQ-19 reads the kind of publish from the facts**, not from the version alone: the version and
+  the GitHub release's pre-release flag are cross-checked (`channelOf`). Under PR 8's rule a
+  suffix means a pre-release published under `next` and no suffix means stable; 0.1.0, published
+  before that rule as a pre-release, is the one named exception. **Room for the stable's checks:**
+  a stable version needs `candidate-to-stable-delta` (read from the `release-delta.json` that
+  PR 8's enforced stable plan writes into the Release run's `publish-plan` artifact, kept seven
+  days; the verifier passes the run's id, taken from npm's provenance, in its context) and
+  `latest-on-all-four-packages`. Neither can be tried on real bytes before a stable release
+  exists, so they are not built here: `STABLE_CHECKS` in `tools/p14-published/lib/verify.cjs` is
+  where they register, before the stable publish (PR 12's preparation), and until they do a
+  stable version **fails by name** (tested), so a stable publish cannot be verified green without
+  them.
+- **The ledger.** RQ-01 to RQ-04 and RQ-19 are `passed` **for 0.1.0 at its commit only**, each with
+  its runs. The version bump changes `Cargo.toml` and `npm/`, which are in every one of these
+  scopes, so none counts for `0.2.0-rc.1`; each is `repeat` for the stable. Nothing the checker
+  reads changed.
+- **Found and fixed in documentation, not product code:** `install.md` now names the Windows `.cmd`
+  shim (#257), `libgomp.so.1` (#256), Git's `tar` on Windows, the configuration folder's second
+  content and the Linux data folder's parent. The known limits are L-109 to L-112.

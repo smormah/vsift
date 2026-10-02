@@ -1,0 +1,79 @@
+{
+  "command": "handoff.check",
+  "coverage": null,
+  "data": {
+    "case_notes": [
+      {
+        "allowed": [
+          "partial"
+        ],
+        "line": null,
+        "message": "This closed value was read in the schema's letter case; write it exactly as listed.",
+        "pointer": "/status",
+        "rule": "letter_case"
+      }
+    ],
+    "errors": [
+      {
+        "allowed": null,
+        "line": null,
+        "message": "This required member is missing; add it.",
+        "pointer": "/citations/1/pixels_inspected",
+        "rule": "member_missing"
+      },
+      {
+        "allowed": [
+          "transcript",
+          "visual",
+          "audio",
+          "image_access",
+          "dependency",
+          "budget",
+          "lifecycle"
+        ],
+        "line": null,
+        "message": "This closed value is not allowed; write exactly one of the allowed values.",
+        "pointer": "/gaps/0/kind",
+        "rule": "value_not_allowed"
+      },
+      {
+        "allowed": null,
+        "line": 3,
+        "message": "This line holds a web link; write an address seen in evidence only defanged (hxxps) in a code span of the Markdown, and never in the JSON.",
+        "pointer": null,
+        "rule": "web_link"
+      },
+      {
+        "allowed": null,
+        "line": null,
+        "message": "This evidence id is not in the session's evidence records; copy the evidence_id from the command that extracted it.",
+        "pointer": "/citations/1/evidence_id",
+        "rule": "evidence_not_in_session"
+      }
+    ],
+    "handoff_version": "1",
+    "session": {
+      "gap": null,
+      "identities_checked": 2,
+      "resolved": true,
+      "session_id": "ses_0123456789abcdef0123456789abcdef"
+    },
+    "truncated": false,
+    "valid": false,
+    "warnings": [
+      {
+        "allowed": null,
+        "line": null,
+        "message": "No claim or instruction uses this citation; cite it or leave it out.",
+        "pointer": "/citations/1",
+        "rule": "citation_unused"
+      }
+    ]
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

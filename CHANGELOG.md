@@ -8,6 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Published-artifact qualification on hosted runners** (P14 PR 2; evidence items RQ-01 to
+  RQ-04 and RQ-19; no product code changed, nothing published, tagged or configured, no secret,
+  no new dependency). Four workflows, each read-only (`contents: read`, and `attestations: read`
+  for `gh attestation verify`) and held to that by the governance workflow lint and a test:
+  `P14 published artifacts` installs the **published** `vsift-cli` from the **real registry**
+  with npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu in a scrubbed environment
+  (`cargo`, `rustc`, `rustup`, `git` and `python` do not resolve, asserted first), globally and
+  one-shot with install scripts disabled and optional dependencies omitted, with hostile file
+  names and arguments through every shim, a fake `ffmpeg` planted in the working directory and on
+  `PATH` (SEC-02), `npm audit signatures` and `gh attestation verify`; extracts the three release
+  archives with no Node.js on `PATH`; installs the real reviewed artifacts offline with
+  `--artifact-dir` in a container with no network, with a tamper, a missing-file and a
+  relative-folder refusal; and upgrades the published version over the real registry keeping a
+  session, a bundle and a configuration, then walks `install.md` section 8. `P14 local upgrade`
+  upgrades the published 0.1.0 to the pull request's own build, served by a loopback-only registry
+  as a throwaway higher version. `P14 verify release` is the credential-free second verification
+  of a publish (dist-tags, npm provenance, signatures, ten files and four tarballs attested,
+  checksums, release flags); a stable version fails it by name until the two checks it adds
+  (the candidate-to-stable delta, from PR 8's `release-delta.json`, and `latest` on all four
+  packages) are registered before the stable publish. `P14 compatibility` fetches the history and
+  requires the checked-in copy of 0.1.0's JSON examples to be the tag's bytes. The tools are
+  `tools/p14-published/` (Node.js, no dependency, 50 tests). **New tests:**
+  `schemas/v1/frozen/v0.1.0/examples/` is a byte-for-byte copy of the 52 examples as the tag
+  `v0.1.0` published them; `vsift-contract`'s `published_compatibility` validates every one against
+  the current v1 schemas, and `vsift-infrastructure`'s `published_v0_1_0_records` decodes the four
+  stored session records with the current readers (both run in every Quality job). **Findings,
+  each with a documentation fix and a known limit:** the `vsift.cmd` shim of npm and pnpm lets
+  cmd.exe re-read arguments on Windows (L-109, #257); the reviewed whisper.cpp build needs
+  `libgomp.so.1`, which a minimal Ubuntu 24.04 image lacks (L-110, #256); Git for Windows' `tar`
+  cannot extract `D:\...` archives. Also L-111 (what each upgrade mode proves) and L-112 (what the
+  scrubbed hosted image is not). `install.md` sections 1, 2, 3, 5.1 and 8, `release.md` section
+  6.4 and `development.md` say so; ADR 0024 and the P14 plan record the results.
 - **P14 PR 8: the release machinery for a release candidate and the stable release** (code,
   the Release workflow, its lint, tests and documentation; **nothing is published**, no tag or
   release was created and no setting changed). The version alone decides what a publication

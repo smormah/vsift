@@ -535,6 +535,26 @@ The release must be a pre-release that is not marked latest, with ten assets: th
 archives, `SHA256SUMS`, three SBOMs and three notices files. For the **stable** release
 the checks differ in four places, listed in 6.7.
 
+**The same checks, from a runner that holds no publishing credential.** The workflow
+`P14 verify release` (`.github/workflows/p14-verify-release.yml`, P14 PR 2, evidence item RQ-19)
+does all of the above from a hosted runner after each publish: dispatch it from the Actions tab
+with the published `version` (empty means the highest on the registry). It reads the four
+packages' dist-tags and npm provenance (the attestation must name `release.yml`, the tag, the
+tag's commit and a GitHub-hosted builder), runs `npm audit signatures`, runs `gh attestation
+verify` on all ten release files and all four tarballs, checks the checksums and GitHub's own
+digest of each file, and checks the release's flags and its ten file names. It has
+`contents: read` and `attestations: read`, no secret and no OIDC token, and cannot change
+anything. A pull request that changes the workflow or `tools/p14-published/` runs it too. A
+stable version fails it by name for now: the two checks it adds (the delta between the
+candidate and the stable release, which reads the `release-delta.json` of 6.7 from the Release
+run's `publish-plan` artifact, and `latest` on all four packages) are registered in
+`tools/p14-published/lib/verify.cjs` before the stable publish, and a verification that skipped
+them would be green about the wrong thing. Run 36965744249 verified 0.1.0: ten of ten files and four of four tarballs
+attested, the provenance of all four packages read, and `npm audit signatures` verified the two
+packages a Linux runner installs (the launcher and `@vsift/linux-x64`, npm 10.9.9; the count
+npm reports depends on its version, which is why the provenance check reads all four packages
+itself).
+
 A version that `npm publish` has just reported can take a minute or more to appear in
 `npm view` ("Your package is being processed and may take a few minutes to become
 available"); on 2026-10-01 the publish job's check for `next` polled three times, 30

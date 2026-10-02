@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "command": "setup.check",
+  "profile": "desktop",
+  "status": "ready",
+  "verification_scope": "executable_probe_only",
+  "local_asr_model": "not_checked",
+  "dependencies": [
+    { "dependency": "ffmpeg", "capability": "media_processing", "status": "available", "detail": "ffmpeg version n9.0.1-11-ge47273f4d9-20260831 Copyright (c) 2000-2026 the FFmpeg developers", "lookup": "configured_user_path", "validation": "executable_probe_only", "remediation": null },
+    { "dependency": "ffprobe", "capability": "media_processing", "status": "available", "detail": "ffprobe version n9.0.1-11-ge47273f4d9-20260831 Copyright (c) 2007-2026 the FFmpeg developers", "lookup": "configured_user_path", "validation": "executable_probe_only", "remediation": null },
+    { "dependency": "whisper", "capability": "transcription", "status": "available", "detail": "whisper.cpp v1.9.2 (reviewed build)", "lookup": "configured_user_path", "validation": "executable_probe_only", "remediation": null }
+  ],
+  "local_asr": {
+    "model": { "status": "known_pinned", "profile": "base" },
+    "verification": { "status": "verified", "source": "ran_now", "not_run_reason": null, "check": null, "reason": null }
+  }
+}

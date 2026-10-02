@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "command": "ingest",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "MISSING_CAPABILITY",
+    "message": "A required local capability is unavailable.",
+    "retryable": false,
+    "retry_after_ms": null,
+    "affected_ids": [],
+    "remediation": [
+      {
+        "summary": "The selected FFmpeg and FFprobe failed VSift's media-tool check at the probe step (provider_rejected). A tool rejected the request or could not decode the reviewed test video built into VSift, for example because the selected FFprobe is another program. Nothing was changed. Reinstall FFmpeg and FFprobe from a trusted build, or register a working pair with setup configure ffmpeg --executable <path> and setup configure ffprobe --executable <path>, then retry; the check runs again automatically.",
+        "required_authority": "none",
+        "command": null
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

@@ -1,0 +1,89 @@
+name: P14 verify release
+
+# P14 PR 2, evidence item RQ-19 (ADR 0024; docs/planning/p14-qualification.md
+# section 2): a second verification of a publish, from a hosted runner that holds
+# no publishing credential. Run it after each publish, with the version that was
+# published. It reads the public registry and the GitHub release as an outsider
+# does and checks that what was published is what the Release workflow built
+# from the tag:
+#
+#   - the dist-tags and npm provenance of all four packages (the provenance
+#     names this repository's Release workflow, the tag and the tag's commit);
+#   - `npm audit signatures`;
+#   - `gh attestation verify` of every release file (ten) and every npm tarball
+#     (four), and the checksums;
+#   - the release's flags (not a draft; a pre-release exactly when the version
+#     is one, and not the latest release then) and its ten files.
+#
+# A stable version also needs the candidate-to-stable delta check (the record
+# P14 PR 8's enforced stable plan writes, `release-delta.json`, in the Release
+# run's publish-plan artifact) and the `latest` move on all four packages.
+# Neither can be tried before a stable release exists, so they are registered in
+# tools/p14-published/lib/verify.cjs (STABLE_CHECKS) before the stable publish;
+# until then a stable version fails here by name, rather than passing without them.
+#
+# The only token in reach is the job's default read-only one, which only `gh`
+# sees. No job here can publish, tag or change anything: contents: read and
+# attestations: read, no secret, no OIDC token.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-verify-release.yml
+      - tools/p14-published/**
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The published version of vsift-cli to verify. Empty means the highest version on the registry.
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: p14-verify-release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # The pin of the P13 npm qualification (release.yml `env`).
+  NODE_VERSION: "22.23.3"
+
+jobs:
+  verify:
+    name: Verify the publish (RQ-19)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Choose the version
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_FROM_VERSION: ""
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/p14-published/resolve-release.cjs --work "${RUNNER_TEMP}/resolve"
+
+      - name: Verify the publish from outside
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          npm_config_update_notifier: "false"
+        run: node tools/p14-published/verify-release.cjs --version "${VERSION}" --work "${RUNNER_TEMP}/rq19"

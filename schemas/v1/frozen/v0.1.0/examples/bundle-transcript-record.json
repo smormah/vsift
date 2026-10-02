@@ -1,0 +1,63 @@
+{
+  "format": "vsift.transcript_record",
+  "language": null,
+  "offset_us": 500000,
+  "origin": "imported_srt",
+  "revision": 1,
+  "revision_id": "trv_663ae41bbedc740b651fe61999d395b0",
+  "schema_version": 1,
+  "segments": [
+    {
+      "cue_end_us": 3500000,
+      "cue_line": 2,
+      "cue_ordinal": 1,
+      "cue_start_us": 500000,
+      "end_us": 4000000,
+      "id": "tsg_e88330d57e140d6e7e2ed4447950c5b8",
+      "ordinal": 1,
+      "original_text": null,
+      "speaker": null,
+      "start_us": 1000000,
+      "text": "This synthetic sidecar is aligned with\nan explicit 500 millisecond offset."
+    },
+    {
+      "cue_end_us": 8500000,
+      "cue_line": 7,
+      "cue_ordinal": 2,
+      "cue_start_us": 4500000,
+      "end_us": 9000000,
+      "id": "tsg_f9644c630cd9023d38e2eb89741c9b7e",
+      "ordinal": 2,
+      "original_text": null,
+      "speaker": null,
+      "start_us": 5000000,
+      "text": "Dialog R-17 is displayed now."
+    },
+    {
+      "cue_end_us": 11000000,
+      "cue_line": 11,
+      "cue_ordinal": 3,
+      "cue_start_us": 9000000,
+      "end_us": 11500000,
+      "id": "tsg_a394939677bf53f290007e39739ab6fd",
+      "ordinal": 3,
+      "original_text": null,
+      "speaker": null,
+      "start_us": 9500000,
+      "text": "End of the synthetic imported transcript."
+    }
+  ],
+  "sidecar": {
+    "bytes": 245,
+    "sha256": "2a4ee37d826754eac43da03e7cc63f718b16aed4d3ce163c380ebd8ab9630847"
+  },
+  "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4",
+  "source_segment": {
+    "end_us": 12000000,
+    "id": "sgm_813c2dbd740e3afc0f67a52278553bf6",
+    "index": 0,
+    "start_us": 0,
+    "state": "closed"
+  },
+  "warnings": []
+}

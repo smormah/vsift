@@ -1,0 +1,374 @@
+name: P14 published artifacts
+
+# P14 PR 2 (ADR 0024, "What P14 delivers" item 2; docs/planning/p14-qualification.md
+# section 2): the PUBLISHED packages and archives, installed and run on hosted
+# runners, with nothing built from source. Evidence items RQ-01, RQ-02, RQ-03
+# and RQ-04 (its real-registry mode; the local-registry mode is the separate
+# `P14 local upgrade` workflow, and the second verification of a publish,
+# RQ-19, is `P14 verify release`).
+#
+#   clean-install    RQ-01: npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu,
+#                    from the REAL registry, in a scrubbed environment.
+#   archive          RQ-02: the three release archives, extracted and run, with no
+#                    Node.js on PATH.
+#   offline-install  RQ-03: the real reviewed artifacts installed with
+#                    --artifact-dir inside a container with no network.
+#   upgrade          RQ-04: the published from-version upgraded over the real
+#                    registry with a session and a configuration kept, then
+#                    install.md section 8 walked.
+#
+# It cannot publish anything: every job has contents: read (and attestations:
+# read for `gh attestation verify`) and nothing else, no job has an OIDC token or
+# a secret, no job runs npm publish, npm dist-tag, npm login or any `gh`
+# command that writes, and the governance workflow lint (rules 1 to 5) holds the
+# file to that. The tools are in tools/p14-published/ and have their own tests.
+#
+# Triggers: a pull request that changes this workflow or its tools (so a change
+# is exercised before it merges), and a manual dispatch. Both qualify the
+# highest published version unless `version` is given.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-published-artifacts.yml
+      - tools/p14-published/**
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The published version of vsift-cli to qualify. Empty means the highest version on the registry.
+        type: string
+        default: ""
+      from_version:
+        description: The published version the upgrade starts from. Empty means 0.1.0.
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: p14-published-artifacts-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # The pins of the P13 npm qualification (release.yml `env`, reviewed
+  # 2026-09-30): a test holds these equal (tools/p14-published/test/pins.test.cjs).
+  NODE_VERSION: "22.23.3"
+  BUN_VERSION: "1.2.23"
+  PNPM_VERSION: "12.8.1"
+  YARN_VERSION: "4.18.1"
+  # The Ubuntu 24.04 image the strict-worker job of ci.yml already pins.
+  UBUNTU_IMAGE: ubuntu@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61
+
+jobs:
+  tooling-tests:
+    name: Tooling tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - macos-15
+          - ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Test the tools
+        run: node --test "tools/p14-published/test/*.test.cjs"
+
+  resolve:
+    name: Choose the versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      from_version: ${{ steps.resolve.outputs.from_version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      commit: ${{ steps.resolve.outputs.commit }}
+      from_commit: ${{ steps.resolve.outputs.from_commit }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      # Inputs reach the script through the environment, never the command line.
+      - name: Read the published versions and the tags' commits
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_FROM_VERSION: ${{ inputs.from_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/p14-published/resolve-release.cjs --work "${RUNNER_TEMP}/resolve"
+
+  clean-install:
+    name: RQ-01 clean install (${{ matrix.os }}, ${{ matrix.manager }})
+    needs:
+      - resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      attestations: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - macos-15
+          - ubuntu-24.04
+        manager:
+          - npm
+          - pnpm
+          - yarn
+          - bun
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out the tag that was published
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          path: tag
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Set up the pinned Bun
+        if: matrix.manager == 'bun'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+          no-cache: true
+
+      # From the public registry, read-only and without credentials. The package
+      # manager goes into a prefix of its own, ahead of any copy the runner image
+      # carries (Windows images ship Yarn 1 in npm's prefix). pnpm needs its
+      # install script to link its executable.
+      - name: Install the pinned package manager
+        run: |
+          set -euo pipefail
+          case "${MANAGER}" in
+            pnpm) npm install --prefix "${RUNNER_TEMP}/manager" --no-audit --no-fund "pnpm@${PNPM_VERSION}" ;;
+            yarn) npm install --prefix "${RUNNER_TEMP}/manager" --ignore-scripts --no-audit --no-fund "@yarnpkg/cli-dist@${YARN_VERSION}" ;;
+          esac
+          if [ -d "${RUNNER_TEMP}/manager/node_modules/.bin" ]; then
+            echo "${RUNNER_TEMP}/manager/node_modules/.bin" >> "$GITHUB_PATH"
+          fi
+        env:
+          MANAGER: ${{ matrix.manager }}
+          npm_config_update_notifier: "false"
+
+      - name: Clean install of the published packages from the real registry
+        env:
+          MANAGER: ${{ matrix.manager }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          COMMIT: ${{ needs.resolve.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+          npm_config_update_notifier: "false"
+        run: |
+          set -euo pipefail
+          node tools/p14-published/clean-install.cjs \
+            --manager "${MANAGER}" \
+            --version "${VERSION}" \
+            --commit "${COMMIT}" \
+            --work "${RUNNER_TEMP}/rq01" \
+            --repo "${GITHUB_WORKSPACE}" \
+            --tag-skill "${GITHUB_WORKSPACE}/tag/skills/vsift"
+
+  archive:
+    name: RQ-02 extracted archive (${{ matrix.os }})
+    needs:
+      - resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      attestations: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - macos-15
+          - ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out the tag that was published
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.resolve.outputs.tag }}
+          path: tag
+          persist-credentials: false
+
+      # The driver is Node.js; it hides Node.js (and the toolchain) from every
+      # program it runs, which is the point of this job.
+      - name: Set up the pinned Node.js (the driver only)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Download, check, extract and run the native archives
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          COMMIT: ${{ needs.resolve.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node tools/p14-published/archive.cjs \
+            --version "${VERSION}" \
+            --commit "${COMMIT}" \
+            --work "${RUNNER_TEMP}/rq02" \
+            --tag-skill "${GITHUB_WORKSPACE}/tag/skills/vsift"
+
+  offline-install:
+    name: RQ-03 offline artifact-directory install (Ubuntu 24.04, no network)
+    needs:
+      - resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js (the driver only)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      # The published binary's own plan names the three reviewed artifacts; the
+      # driver downloads them (size and SHA-256 checked as they arrive, a neutral
+      # user agent, no credential), then runs the install in a container that has
+      # no network at all.
+      - name: Install the real artifacts from a folder, offline
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          COMMIT: ${{ needs.resolve.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node tools/p14-published/offline-install.cjs \
+            --version "${VERSION}" \
+            --commit "${COMMIT}" \
+            --work "${RUNNER_TEMP}/rq03" \
+            --image "${UBUNTU_IMAGE}"
+
+  upgrade:
+    name: RQ-04 upgrade over the real registry (${{ matrix.os }})
+    needs:
+      - resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - macos-15
+          - ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      # VSift needs FFmpeg and FFprobe to make a session. On Ubuntu it installs
+      # its own (the managed install, part of the check); elsewhere the job
+      # stages tools as a user would and registers them with setup configure.
+      - name: Stage the pinned FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          cd tools
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import p07_local_asr_tools as tools
+          staging = Path(os.environ["RUNNER_TEMP"]) / "ffmpeg-staging"
+          staging.mkdir(mode=0o700, parents=True, exist_ok=False)
+          ffmpeg_bin, _whisper = tools.stage_windows(staging)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"FFMPEG_BIN={ffmpeg_bin}\n")
+          PY
+
+      - name: Install FFmpeg (macOS, Homebrew)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          brew install ffmpeg
+          echo "FFMPEG_BIN=$(dirname "$(command -v ffmpeg)")" >> "$GITHUB_ENV"
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
+      - name: Upgrade the published version, keeping a session and a configuration
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          COMMIT: ${{ needs.resolve.outputs.commit }}
+          FROM_VERSION: ${{ needs.resolve.outputs.from_version }}
+          FROM_COMMIT: ${{ needs.resolve.outputs.from_commit }}
+        run: |
+          set -euo pipefail
+          ffmpeg_args=()
+          if [ -n "${FFMPEG_BIN:-}" ]; then
+            ffmpeg_args=(--ffmpeg-bin "${FFMPEG_BIN}")
+          fi
+          node tools/p14-published/upgrade.cjs \
+            --mode registry \
+            --from-version "${FROM_VERSION}" \
+            --from-commit "${FROM_COMMIT}" \
+            --to-version "${VERSION}" \
+            --to-version-line "vsift ${VERSION} (${COMMIT:0:12})" \
+            --work "${RUNNER_TEMP}/rq04" \
+            --repo "${GITHUB_WORKSPACE}" \
+            ${ffmpeg_args[@]+"${ffmpeg_args[@]}"}

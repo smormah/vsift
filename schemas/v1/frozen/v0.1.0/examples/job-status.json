@@ -1,0 +1,36 @@
+{
+  "command": "job.status",
+  "coverage": null,
+  "data": {
+    "attempts": 1,
+    "failure": {
+      "code": "CANCELLED",
+      "retryable": false
+    },
+    "job_id": "job_8d3e1f0a2b4c6d8e0f1a2b3c4d5e6f70",
+    "kind": "retranscribe",
+    "live_owner": false,
+    "operation_id": "op_4f0c2b8e9a1d3c5e7f60718293a4b5c6",
+    "progress": {
+      "chunks_checkpointed": 0,
+      "chunks_total": 1
+    },
+    "request": {
+      "range": {
+        "from_us": 5500000,
+        "to_us": 6000000
+      }
+    },
+    "result": null,
+    "resumable": true,
+    "resumable_reason": "interrupted",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "state": "interrupted"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

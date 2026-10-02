@@ -11,18 +11,26 @@
         "requirements": ["R-14"],
         "threats": ["SEC-01", "SEC-02", "SEC-12", "SEC-13", "SEC-14", "SEC-15", "SEC-22", "SEC-23"],
         "verification": ["R-SEC02", "C-04", "P-02"],
-        "limits": ["L-035"]
+        "limits": ["L-035", "L-109", "L-112"]
       },
       "proves": "Names, scope, provenance and Yarn's one-day gate work on the real registry; no hidden toolchain dependency; the guide's commands work.",
-      "does_not_prove": "A never-used operating system; a user's proxy or policy; Smart App Control.",
+      "does_not_prove": "A never-used operating system; a user's proxy or policy; Smart App Control; the Windows vsift.cmd shim from cmd.exe (L-109); that hosted images are clean machines (L-112).",
       "producer": {
         "kind": "workflow",
         "p14_pr": 2,
         "description": "Hosted dispatch workflow with a version input: npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu, global and one-shot, scripts disabled, optional dependencies omitted, hostile file names and a fake ffmpeg on PATH through the launcher, npm audit signatures and gh attestation verify in the same job, in a scrubbed environment (cargo, rustc, git and python must not resolve)."
       },
-      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml"],
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "date": "2026-10-02",
+          "note": "The twelve clean-install jobs (npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu) of this run at c83daf3: vsift-cli 0.1.0 installed from the real registry with cargo, rustc, rustup, git and python not resolving (asserted first); global (Yarn: project) and one-shot installs with scripts disabled; --version names 0.1.0 and the tag commit; hostile file names and arguments through the PowerShell, shell and Bun shims; a fake ffmpeg planted in the working directory and on PATH (SEC-02); optional dependencies omitted fail with exit 127; npm audit signatures and gh attestation verify. For 0.1.0 only. Yarn held 0.1.0 back for its first day and the documented exemption passed; the Windows vsift.cmd shim is an observation, not a pass (L-109, #257)."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 36786019996 },
@@ -58,9 +66,17 @@
         "p14_pr": 2,
         "description": "Hosted dispatch workflow, three jobs, one per target."
       },
-      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml"],
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "date": "2026-10-02",
+          "note": "The three archive jobs of this run at c83daf3: the three archives and SHA256SUMS downloaded from the v0.1.0 release, checksums and attestations verified, extracted, each executable in the right format, the system's own run with --version (0.1.0 and the tag commit) and setup check --json with no Node.js, Rust, Git or Python on PATH, and the shipped skill byte-identical to the tag's. For 0.1.0 only; no browser download (RQ-17)."
+        }
+      ],
       "date": "2026-10-02"
     },
     {
@@ -69,7 +85,7 @@
       "supports": {
         "requirements": ["R-03"],
         "verification": ["D-02", "D-07"],
-        "limits": ["L-037"]
+        "limits": ["L-037", "L-110"]
       },
       "proves": "D-07's offline path with real bytes: components activated, setup check ready, a tampered file refused.",
       "does_not_prove": "A publisher's future file retention (L-099).",
@@ -78,9 +94,17 @@
         "p14_pr": 2,
         "description": "Hosted Ubuntu 24.04 job: a download step, then a container with --network none that runs setup install with --artifact-dir."
       },
-      "scope": ["Cargo.toml", "Cargo.lock", "crates"],
+      "scope": ["Cargo.toml", "Cargo.lock", "crates", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "date": "2026-10-02",
+          "note": "The offline-install job of this run at c83daf3: the three real reviewed artifacts downloaded by the published binary's own plan (size and SHA-256 checked) and installed with --artifact-dir in a container with --network none: all three components activated, setup check ready, a rerun already_current; the same install without the folder failed as offline; a changed byte was INTEGRITY_FAILURE (digest_mismatch), a missing file INVALID_ARGUMENT (artifact_missing), a relative folder INVALID_ARGUMENT. The minimal Ubuntu image was given libgomp1, which the whisper.cpp build needs (L-110, #256). For 0.1.0 only."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p13-distribution.md" },
@@ -96,18 +120,36 @@
       "supports": {
         "requirements": ["R-02", "R-03", "R-07"],
         "verification": ["C-08"],
-        "limits": ["L-044"]
+        "limits": ["L-044", "L-111"]
       },
       "proves": "The additive-only rule holds against the one published baseline: the candidate accepts every 0.1.0 frozen JSON example and reads a 0.1.0 session, a session survives an upgrade over the real registry, and install.md's upgrade and uninstall text leaves only what it says.",
-      "does_not_prove": "Downgrade (not supported, L-044).",
+      "does_not_prove": "Downgrade (not supported, L-044). While only 0.1.0 is published, the real-registry mode installs the same version again, so it proves the procedure and persistence and not a newer version reading older data (L-111).",
       "producer": {
         "kind": "workflow",
         "p14_pr": 2,
         "description": "Hosted dispatch workflow, three jobs: upgrade from 0.1.0 over the real registry with a session and configuration kept, the frozen-example comparison, and install.md section 8 walked."
       },
-      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "schemas", "docs/contracts/cli-v1.md"],
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "schemas", "docs/contracts/cli-v1.md", "tools/p14-published", ".github/workflows/p14-published-artifacts.yml", ".github/workflows/p14-local-upgrade.yml", ".github/workflows/p14-compatibility.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "date": "2026-10-02",
+          "note": "The three upgrade jobs (real-registry mode, 0.1.0 over 0.1.0) of this run at c83daf3: sessions, a retained bundle and a configuration kept (configuration byte-identical, session reads as before, a new session works), then install.md section 8 walked: nothing left but the folders the guide names. The procedure and persistence only (L-111)."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 local upgrade", "run_id": 36966243840 },
+          "date": "2026-10-02",
+          "note": "The three local-mode jobs of this run at c83daf3: the published 0.1.0 installed from the real registry and upgraded to the pull request's own build served by a loopback-only registry as 99.0.0-p14local.1: sessions, bundle and configuration read by the newer build, then the uninstall walk. Not the release packaging (L-111)."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 compatibility", "run_id": 36966243883 },
+          "date": "2026-10-02",
+          "note": "With the full history and VSIFT_REQUIRE_RELEASE_TAG=v0.1.0: the frozen copy of 0.1.0's 52 JSON examples is the tag's bytes, every one validates against the current v1 schemas, and the current readers decode the four stored session records (the same tests run in every Quality job)."
+        }
+      ],
       "date": "2026-10-02"
     },
     {
@@ -506,9 +548,17 @@
         "p14_pr": 2,
         "description": "A hosted dispatch workflow with no credentials, run after each publish."
       },
-      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml"],
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "tools/p14-published", ".github/workflows/p14-verify-release.yml"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 verify release", "run_id": 36966243886 },
+          "date": "2026-10-02",
+          "note": "From a hosted runner holding no publishing credential: the dist-tags and npm provenance of all four packages (the attestation names release.yml, the tag, the tag's commit and a GitHub-hosted builder), npm audit signatures, gh attestation verify for ten of ten release files and four of four tarballs, the checksums against GitHub's digests, the release flags (a pre-release, not a draft, not the latest release) and its ten files. For 0.1.0 only; the two checks a stable version adds (the candidate-to-stable delta and latest on all four packages) are registered before the stable publish."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p13-distribution.md" },

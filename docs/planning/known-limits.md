@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-02 (P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-02 (P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -144,8 +144,12 @@ Each entry has these fields:
 | [L-105](#l-105) | The stable publish path has never run against the real services | platform/distribution | medium | P14 (PR 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-107](#l-107) | The candidate-to-stable check compares paths and bytes, not meaning, and takes the highest candidate to be the accepted one | process/CI | low | unscheduled | none | accepted residual |
 | [L-108](#l-108) | After a stable release `next` still names the candidate, an older build than `latest` | platform/distribution | low | P14 (PR 12) | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-109](#l-109) | On Windows, the `vsift.cmd` shim that npm and pnpm create lets cmd.exe re-read arguments: percent expansion, dropped quotes and a redirection without whitespace that runs | security | low | P14 (PR 7) | [#257](https://github.com/smormah/vsift/issues/257) | deferred |
+| [L-110](#l-110) | The reviewed whisper.cpp build needs `libgomp.so.1`, which a minimal Ubuntu 24.04 image lacks; the managed install then fails without saying so | platform/distribution | low | P14 (PR 7) | [#256](https://github.com/smormah/vsift/issues/256) | deferred |
+| [L-111](#l-111) | The upgrade evidence has one published baseline, and its two modes prove different things | process/CI | low | P14 (PRs 10, 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-112](#l-112) | The clean-install jobs hide named programs from `PATH` on a hosted image; that is not a clean machine, and one tool set stands in for each system's users | process/CI | low | unscheduled | none | accepted residual |
 
-Counts: 1 high, 26 medium, 70 low (97 entries).
+Counts: 1 high, 26 medium, 74 low (101 entries).
 
 ## Security
 
@@ -2687,6 +2691,112 @@ candidate to be the accepted one.**
 - **Owner:** P14 (PR 12, the maintainer's choice). **Issue:**
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** accepted residual.
   **Review:** pending.
+### L-109
+
+**On Windows, the `vsift.cmd` shim that npm and pnpm create lets cmd.exe re-read arguments: percent expansion, dropped quotes and a redirection without whitespace that runs.**
+
+- **What:** npm and pnpm install three files for the `vsift` command on Windows: `vsift.cmd`,
+  `vsift.ps1` and an extensionless shell script. Started from PowerShell, the `.cmd` file
+  makes cmd.exe re-read the command line. With a stub package that prints its arguments (the
+  same shim generator, no registry), `%COMSPEC%` and `%PATH%` were expanded before the program
+  saw them and the double quote of `a"&echo x>marker&"b` was dropped. With the published 0.1.0 on
+  a hosted runner, the argument `a;echo,x>pwned-marker`, which has no whitespace and so is not
+  quoted, created the file `pwned-marker`: a command it spelled ran. The `.ps1` shim and Bun's
+  `vsift.exe` did not misbehave: for 14 hostile file names (each had to open the file) and 11
+  hostile arguments (each had to run no command), `vsift` answered exactly as when `vsift.exe` is
+  started directly. (VSift's typed failure does not echo an argument, so a changed argument that
+  changes nothing visible is seen only with the stub.) Found on 2026-10-02.
+- **Evidence:** the P14 PR 2 `clean-install` job of `P14 published artifacts` (the cmd.exe shim
+  is an observation there, not a gate), `tools/p14-published/lib/hostile.cjs`,
+  [`install.md`](../operations/install.md) section 2; threat SEC-01.
+- **Impact:** a program on Windows that starts `vsift.cmd` with text it did not write (a query
+  taken from a transcript, a path from a file name) can have that text acted on by cmd.exe.
+  Typing `vsift` in PowerShell runs the `.ps1` shim and is not affected.
+- **Why:** the `.cmd` file is generated by npm (cmd-shim) and pnpm for every `bin` entry; VSift's
+  launcher is the node script behind it and never sees the original line.
+- **Mitigation:** `install.md` says to run `vsift` from PowerShell, or the platform package's
+  `vsift.exe`, when an argument holds text you did not write; the archive install and Bun have no
+  `.cmd`.
+- **Next step:** P14 PR 7 decides whether documenting it is enough, whether the agent skill should
+  say how to start `vsift` on Windows, and whether the launcher's README says it.
+- **Owner:** P14 (PR 7). **Issue:** [#257](https://github.com/smormah/vsift/issues/257).
+  **Status:** deferred. **Review:** pending.
+
+### L-110
+
+**The reviewed whisper.cpp build needs `libgomp.so.1`, which a minimal Ubuntu 24.04 image lacks; the managed install then fails without saying so.**
+
+- **What:** in the pinned minimal `ubuntu:24.04` container image, `vsift setup install` installs
+  FFmpeg and then stops at whisper.cpp with `MISSING_CAPABILITY` (the banner check,
+  `provider_failed`); running the reviewed `whisper-cli` there prints `error while loading shared
+  libraries: libgomp.so.1`. With the Ubuntu package `libgomp1` added to the image, the offline
+  install of the real artifacts activates all three components and `setup check` is ready. A
+  hosted Ubuntu 24.04 runner has the library. `install.md` named only glibc and OpenSSL 3.
+- **Evidence:** the `offline-install` job of `P14 published artifacts` (RQ-03, which records the
+  missing library and the package it added); [`install.md`](../operations/install.md) sections 1
+  and 5.1; issue #256.
+- **Impact:** a user on a minimal image or container (not a normal Ubuntu install) meets a typed
+  failure that does not name the library; the guide now does.
+- **Why:** the failure text reports the check that failed, not why the program could not start.
+- **Mitigation:** `sudo apt-get install libgomp1` and the same `setup install` again; the guide.
+- **Next step:** P14 PR 7 decides whether the remediation text or `setup plan` should name the
+  OpenMP runtime (a public failure's text needs the skill and the contract updated with it).
+- **Owner:** P14 (PR 7). **Issue:** [#256](https://github.com/smormah/vsift/issues/256).
+  **Status:** deferred. **Review:** pending.
+
+### L-111
+
+**The upgrade evidence has one published baseline, and its two modes prove different things.**
+
+- **What:** RQ-04 upgrades from 0.1.0, the only published release. While only 0.1.0 is
+  published, the **real-registry** mode installs the same version again over an install holding
+  two sessions, a retained bundle and a configuration: it proves the guide's procedure and that
+  the procedure disturbs nothing the user kept, and no newer version reads an older one's data
+  there. The **local-registry** mode (`P14 local upgrade`) upgrades the published 0.1.0 to the pull
+  request's own build, packed as `vsift-cli@99.0.0-p14local.1` by a script that follows the
+  launcher's layout and served by a loopback registry: it proves a newer build reads a published
+  build's sessions, bundle and configuration and that the package manager upgrades, and not the
+  release packaging (`vsift-release npm` needs the archives, notices and SBOMs). The JSON
+  compatibility test and the stored-record test cover 0.1.0's examples and records only, and a
+  downgrade is not supported ([L-044](#l-044)). Only npm is used for the upgrade, on three systems.
+- **Evidence:** [`p14-qualification.md`](p14-qualification.md) section 15; the two workflows;
+  `schemas/v1/frozen/v0.1.0/`.
+- **Impact:** until the candidate (`0.2.0-rc.1`) is published and the real-registry mode runs
+  from 0.1.0 to it, no run shows a published version reading an older published version.
+- **Why:** there is one published baseline; the release packaging cannot be reproduced without
+  its inputs in a job that must stay small.
+- **Mitigation:** the candidate's qualification runs the real-registry mode from 0.1.0
+  (`from_version`), and each later release is frozen the same way (a folder `frozen/<tag>/`).
+- **Next step:** PR 11 records the real-registry run on the candidate; PR 12 on the stable.
+- **Owner:** P14 (PRs 10, 12). **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
+  **Status:** deferred. **Review:** pending.
+
+### L-112
+
+**The clean-install jobs hide named programs from `PATH` on a hosted image; that is not a clean machine, and one tool set stands in for each system's users.**
+
+- **What:** the `P14 published artifacts` jobs run every install and every `vsift` command with a
+  `PATH` that no longer resolves `cargo`, `rustc`, `rustup`, `git` or `python` (and, for the
+  archive job, Node.js and its package managers), a fresh user state and no token, and assert
+  that before installing anything. On Linux and macOS a shared directory such as `/usr/bin` is
+  replaced by links to everything in it but those programs; on Windows a directory that holds one
+  of them is dropped whole. The runner image still carries the programs elsewhere, the registry
+  and environment settings it ships, a different Windows build than a user's, Homebrew's FFmpeg on
+  macOS and a pinned FFmpeg build on Windows, which no one reviewed as a user's tools. Proxies,
+  antivirus, Smart App Control and signed-software policies are absent. A planted tool on `PATH`
+  is probed by `setup check` (documented trust in the user's own `PATH`) and refused for media
+  work by the media-tool check; one in the working directory is never looked at.
+- **Evidence:** `tools/p14-published/lib/scrub.cjs` and its tests; the first lines of each
+  `clean-install` job summary (what the runner carried before the scrub);
+  [`p14-qualification.md`](p14-qualification.md) section 15.
+- **Impact:** a pass shows no hidden dependency on those programs, a checkout or the developer's
+  `PATH`; it does not show a user's machine ([L-098](#l-098), RQ-17).
+- **Why:** hosted runners are what a repository can run on every change; real machines are the
+  maintainer's try-outs.
+- **Mitigation:** the plan says so wherever it claims more; the try-outs are RQ-17.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
 
 ## Review workflow
 

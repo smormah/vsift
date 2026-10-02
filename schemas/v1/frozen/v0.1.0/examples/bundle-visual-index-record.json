@@ -1,0 +1,76 @@
+{
+  "displayed_dimensions": {
+    "height": 720,
+    "width": 1280
+  },
+  "duration_us": 12000000,
+  "format": "vsift.visual_index_record",
+  "index_id": "vix_31b0dcc02c3694707c889ba38d140c4f",
+  "profile": "r0-visual-v1",
+  "revision": 1,
+  "schema_version": 1,
+  "session_id": "ses_0000000000000000visual",
+  "source_id": "src_sha256_aec1a03817bbe77366bd29ca7b8254537de50b6f941b0b262fadd82cb652ea60",
+  "stream_index": 0,
+  "windows": [
+    {
+      "candidates": [
+        {
+          "change": null,
+          "id": "vcd_00f513cd36f0d5f4962333e3af6775f6",
+          "reason": "first_frame",
+          "representative_us": 0,
+          "sample_count": 8,
+          "span_end_us": 4000000,
+          "stability": "settled",
+          "visual_hash": "6000587840005000"
+        },
+        {
+          "change": {
+            "changed_blocks": 6,
+            "max_block_delta": 21,
+            "previous_sample_us": 3500000
+          },
+          "id": "vcd_e307b95c82f5649e26523e7dae82c703",
+          "reason": "visual_change",
+          "representative_us": 4000000,
+          "sample_count": 8,
+          "span_end_us": 8000000,
+          "stability": "settled",
+          "visual_hash": "6000587840005800"
+        },
+        {
+          "change": {
+            "changed_blocks": 17,
+            "max_block_delta": 21,
+            "previous_sample_us": 7500000
+          },
+          "id": "vcd_01be1d825883b9fe53e6b597cc56adb6",
+          "reason": "visual_change",
+          "representative_us": 8000000,
+          "sample_count": 4,
+          "span_end_us": 10000000,
+          "stability": "settled",
+          "visual_hash": "6000587840006c00"
+        },
+        {
+          "change": null,
+          "id": "vcd_6766d3f4056cb0d69579a98378ee31c1",
+          "reason": "periodic_coverage",
+          "representative_us": 10000000,
+          "sample_count": 4,
+          "span_end_us": 12000000,
+          "stability": "settled",
+          "visual_hash": "6000587840006c00"
+        }
+      ],
+      "dropped_candidates": 0,
+      "end_us": 12000000,
+      "frameless_cells": [],
+      "ordinal": 0,
+      "sample_count": 24,
+      "start_us": 0,
+      "state": "analysed"
+    }
+  ]
+}
