@@ -1,6 +1,6 @@
 <div align="center">
 
-# VSift
+<img src="docs/assets/readme/hero.svg" alt="VSift. Screen recordings in, evidence your agent can cite, out: three frames of a recording pass through a sieve and come out as cited speech, screen-change and frame evidence." width="100%">
 
 ### Hand your coding agent a screen recording. Get back evidence it can cite.
 
@@ -8,10 +8,18 @@ VSift turns a local video into **timestamped speech**, **the moments the screen 
 
 [![CI](https://github.com/smormah/vsift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/smormah/vsift/actions/workflows/ci.yml)
 [![npm (next)](https://img.shields.io/npm/v/vsift-cli/next?label=vsift-cli%40next&color=cb3837)](https://www.npmjs.com/package/vsift-cli)
+[![Release](https://img.shields.io/github/v/release/smormah/vsift?include_prereleases&label=release&color=2a4a73)](https://github.com/smormah/vsift/releases)
+[![Last commit](https://img.shields.io/github/last-commit/smormah/vsift/main?color=2dd4bf)](https://github.com/smormah/vsift/commits/main)
 [![Licence](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue)](#licence)
 ![Status](https://img.shields.io/badge/status-pre--release-orange)
 
-[**See it work**](#see-it-work) · [**Quick start**](#quick-start) · [**Use it with your agent**](#use-it-with-your-coding-agent) · [**Documentation**](#documentation) · [**Status**](#honest-status)
+[**See it work**](#see-it-work) · [**How it works**](#how-it-works) · [**Quick start**](#quick-start) · [**Use it with your agent**](#use-it-with-your-coding-agent) · [**Built in the open**](#built-in-the-open) · [**Status**](#honest-status)
+
+<br>
+
+<img src="docs/assets/readme/demo-terminal.svg" alt="An animated terminal replaying real, trimmed output from vsift-cli 0.1.0: ingest opens a session, local speech recognition transcribes the recording, a search for 1017 finds the narration from 0 to 7 seconds, candidates lists screen changes at 0, 7 and 10 seconds, and frame get returns the frame at 10 seconds with its hash." width="100%">
+
+<sub>Real output from the published <code>vsift-cli@0.1.0</code>, trimmed for length, on a 14-second synthetic test clip from this repository's corpus. <a href="#see-it-work">The full walk-through is below.</a></sub>
 
 </div>
 
@@ -23,9 +31,19 @@ A tester records a bug. An engineer, or an agent, has to work out what the recor
 
 VSift does that part. It runs on your machine, reads the recording, and gives the agent small, structured, **cited** pieces of evidence: what was said and when, what changed on screen and when, and the original frames behind each claim.
 
+<p align="center">
+  <img src="docs/assets/readme/before-after.svg" alt="By hand: play, pause and scrub; screenshot the moments that seem to matter; type up what was said from memory; paste it into the agent, which gets what someone remembered to write down. With VSift: ingest the recording once, search timestamped speech, list the moments the screen changed, fetch the exact frame, crop or audio clip; every claim points at an id, a time and a hash." width="100%">
+</p>
+
 ## See it work
 
-A 14-second recording of a scrolling table. The narrator says what happens, and the question for the agent is: *what happens to order 1017, and does the header stay put?* These are real commands and real output from the published `vsift-cli@0.1.0`, trimmed for length, with the file name shortened (the recording is a synthetic test clip from this repository's corpus).
+A 14-second recording of a scrolling table. The narrator says what happens, and the question for the agent is: *what happens to order 1017, and does the header stay put?* Here is everything VSift found, on one timeline:
+
+<p align="center">
+  <a href="#the-frames-at-full-size"><img src="docs/assets/readme/evidence-timeline.svg" alt="A 0 to 14 second timeline of a real VSift session. Speech from 0 to 7 seconds says order 1017 changes from queued to failed while the header stays fixed. Screen changes are marked at 0, 7 and 10 seconds. The three real frames above them show 1001 QUEUED, 1017 QUEUED and 1017 FAILED in red, with the ORDER and STATUS header fixed in each, each labelled with its evidence id." width="100%"></a>
+</p>
+
+And here is how it got there. These are real commands and real output from the published `vsift-cli@0.1.0`, trimmed for length, with the file name shortened (the recording is a synthetic test clip from this repository's corpus).
 
 ```console
 $ vsift ingest ./walkthrough.mp4
@@ -68,6 +86,10 @@ $ vsift frame get ses_1179db5b… --candidate vcd_93d23d5e…
   Image 1440x900, 25741 bytes, sha256 eb8702ef…
 ```
 
+<details>
+<summary><b id="the-frames-at-full-size">The frames at full size</b>: what <code>frame get</code> returned at 0, 7 and 10 seconds</summary>
+<br>
+
 <table>
   <tr>
     <td align="center"><img src="docs/assets/readme/frame-0s-queued.png" alt="Frame at 0 seconds: the table shows order 1001 with status QUEUED under a fixed ORDER and STATUS header" width="100%"><br><sub><b>0.000 s</b> · first frame<br><code>1001 QUEUED</code></sub></td>
@@ -75,6 +97,8 @@ $ vsift frame get ses_1179db5b… --candidate vcd_93d23d5e…
     <td align="center"><img src="docs/assets/readme/frame-10s-failed.png" alt="Frame at 10 seconds: order 1017 now shows status FAILED in red, the header unchanged" width="100%"><br><sub><b>10.000 s</b> · visual change<br><code>1017 FAILED</code></sub></td>
   </tr>
 </table>
+
+</details>
 
 **Cite it.** What the agent can now write, with every statement tied to evidence it can point at:
 
@@ -97,18 +121,11 @@ Each frame records the time you asked for and the time you got, and carries a ha
 
 ## How it works
 
-```mermaid
-flowchart LR
-    V["🎬 Local video"] --> I["vsift ingest"]
-    T["📝 Transcript<br/>(.srt / .vtt, optional)"] -.-> I
-    I --> S[("Disposable<br/>session")]
-    S --> SP["Speech<br/>transcript · search"]
-    S --> VC["Screen changes<br/>visual candidates"]
-    VC --> F["Frames · crops · audio<br/>with hashes"]
-    SP --> A(("AI coding<br/>agent"))
-    F --> A
-    A --> H["Grounded, cited<br/>handoff"]
-```
+<p align="center">
+  <img src="docs/assets/readme/pipeline.svg" alt="Inside a dashed boundary labelled on your machine, VSift uploads nothing: a local video and an optional transcript go into vsift ingest, which opens a disposable session. The session yields speech (transcript and search) and screen changes (visual candidates), which lead to frames, crops and audio with hashes. Outside the boundary, your coding agent reads that cited evidence; what it does next is up to the agent. Its draft report goes back through vsift handoff check and comes out as a cited handoff." width="100%">
+</p>
+
+VSift itself uploads nothing. Your coding agent reads the evidence through the command line, and what it does with it after that, including any model it sends text to, is up to the agent and how you have set it up.
 
 VSift is a native Rust command-line tool. FFmpeg, FFprobe and whisper.cpp run as isolated external processes, and the original video stays the authority: generated metadata is evidence assistance, never a replacement for the source.
 
@@ -146,6 +163,29 @@ In named-client trials on this repository's synthetic recordings, the smaller mo
 - **Provider neutral.** FFmpeg, speech recognition and future integrations sit behind explicit boundaries.
 - **Careful by construction.** Shell-free processes, verified and size-bounded downloads, bounded execution, and contained cleanup. Releases carry npm provenance and Sigstore attestations for every file.
 
+<p align="center">
+  <img src="docs/assets/readme/architecture.svg" alt="Five Rust crates with dependencies pointing inward: vsift-cli depends on the vsift engine, which depends on vsift-infrastructure, then vsift-application, then vsift-domain at the centre. The vsift-contract crate sits beside the engine, and hosts depend only on vsift and vsift-contract. FFmpeg, FFprobe and whisper.cpp run as separate external processes. Rules: no shell, no unsafe code, typed errors, verified and size-bounded downloads." width="100%">
+</p>
+
+The [architecture overview](docs/architecture.md) explains each layer and the boundaries between them.
+
+## Built in the open
+
+VSift is built in public, with its reasoning written down. The claims on this page point at records you can read.
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><b>📜 Decision records</b><br><sub>Every architectural choice, with the options that were weighed and why one won.</sub><br><a href="docs/decisions/README.md">Read the decisions</a></td>
+    <td width="33%" valign="top"><b>🧪 Qualification records</b><br><sub>The evidence behind each work packet, misses and limits included.</sub><br><a href="docs/planning/README.md">Read the records</a></td>
+    <td width="33%" valign="top"><b>🚧 Known limits</b><br><sub>What is not proven yet, written down before anyone has to ask.</sub><br><a href="docs/planning/known-limits.md">Read the limits</a></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>📒 Delivery ledger</b><br><sub>The plan as data: every packet, requirement and test, checked on every pull request.</sub><br><a href="docs/planning/delivery-ledger.json">Open the ledger</a></td>
+    <td valign="top"><b>🔏 Build provenance</b><br><sub>Every release file has a checksum and a Sigstore build-provenance attestation; the npm packages carry npm provenance.</sub><br><a href="docs/operations/install.md">Verify a download</a></td>
+    <td valign="top"><b>🛡️ Threat model</b><br><sub>What VSift defends against, and how to report a vulnerability.</sub><br><a href="docs/planning/security-threat-model.md">Threat model</a> · <a href="SECURITY.md">Security policy</a></td>
+  </tr>
+</table>
+
 ## Honest status
 
 VSift is at **0.1.0, a pre-release**: the first release of R0, whose full qualification (P14) is in progress. It is not a stable release, and no platform is "supported" yet.
@@ -156,7 +196,11 @@ VSift is at **0.1.0, a pre-release**: the first release of R0, whose full qualif
 - **The executables are not code-signed or notarized.** Windows SmartScreen or macOS Gatekeeper may warn about a file you download directly; the [installation guide](docs/operations/install.md) says what to expect and how to verify a download instead.
 - **What is next:** R0 completes with P14, the release qualification. [R1](docs/planning/r1-industrial-capability-expansion.md) then adds managed cross-video indexing, enrichment, reconstruction and operated worker growth.
 
-The delivery ledger, the architecture decisions and every qualification record are in the open: [planning blueprint](docs/planning/README.md), [delivery ledger](docs/planning/delivery-ledger.json), [decision records](docs/decisions/README.md), [known limits](docs/planning/known-limits.md) and the [v1 CLI contract](docs/contracts/cli-v1.md).
+<p align="center">
+  <img src="docs/assets/readme/roadmap.svg" alt="Roadmap. Done: work packets P00 to P13, each with its evidence, and the 0.1.0 pre-release on npm under the next tag. Now: P14, the release qualification with trials and campaigns. Next: release candidates 0.2.0-rc.N under next, then 0.2.0, the R0 release on npm latest, then R1: cross-video indexing, enrichment and workers. Planned steps are plans, not dates." width="100%">
+</p>
+
+The roadmap comes from the [delivery ledger](docs/planning/delivery-ledger.json), [ADR 0024](docs/decisions/0024-r0-qualification-and-release-candidate.md) for the release steps and the [R1 plan](docs/planning/r1-industrial-capability-expansion.md).
 
 ## Documentation
 

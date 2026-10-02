@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-labelledby="title desc" xml:space="preserve">
+<title id="title">VSift: screen recordings in, evidence your agent can cite, out</title>
+<desc id="desc">The VSift logo and wordmark. Three frames of a recording pass through a sieve and come out as three cited evidence cards: speech from 0 to 7 seconds, a screen change at 10 seconds, and the frame showing order 1017 failed.</desc>
+<style>
+.s{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif} .m{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+.t{fill:#e8eef6} .mu{fill:#9fb2c8} .di{fill:#62799a}
+text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
+</style>
+<rect width="1280" height="420" rx="28" fill="#0e1a2b"/><rect x="0.5" y="0.5" width="1279" height="419" rx="28" fill="none" stroke="#25405f"/>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9fb2c8"/></marker><marker id="aht" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2dd4bf"/></marker></defs>
+<defs>
+<radialGradient id="glow" cx="80%" cy="20%" r="60%"><stop offset="0" stop-color="#2dd4bf" stop-opacity="0.16"/><stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/></radialGradient>
+<pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.1" fill="#25405f"/></pattern>
+</defs>
+<rect width="1280" height="420" rx="28" fill="url(#dots)" opacity="0.6"/>
+<rect width="1280" height="420" rx="28" fill="url(#glow)"/>
+<g transform="translate(72,74) scale(0.9583333333333334)">
+<rect width="96" height="96" rx="24" fill="#172a44" stroke="#25405f" stroke-width="1.5"/>
+<rect x="17" y="13" width="30" height="20" rx="4" fill="none" stroke="#62799a" stroke-width="3"/>
+<rect x="33" y="17" width="30" height="20" rx="4" fill="#172a44" stroke="#9fb2c8" stroke-width="3"/>
+<rect x="49" y="21" width="30" height="20" rx="4" fill="#172a44" stroke="#2dd4bf" stroke-width="3"/>
+<path d="M14 47 H82 L58 67 H38 Z" fill="none" stroke="#e8eef6" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M26 54 H70 M33 60 H63" stroke="#e8eef6" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>
+<rect x="33" y="72" width="30" height="13" rx="3.5" fill="#2dd4bf"/>
+<path d="M39 78.5 l3.5 3.5 l7 -7" fill="none" stroke="#0e1a2b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="56" cy="78.5" r="2.4" fill="#0e1a2b"/>
+</g>
+<text x="186" y="146" font-size="80" class="s t bb" text-anchor="start" letter-spacing="-1.5">VSift</text>
+<text x="74" y="232" font-size="36" class="s t b" text-anchor="start" >Screen recordings in.</text>
+<text x="74" y="278" font-size="36" class="s b" text-anchor="start" fill="#2dd4bf">Evidence your agent can cite, out.</text>
+<text x="74" y="330" font-size="19" class="s mu" text-anchor="start" >Timestamped speech, the moments the screen changed</text>
+<text x="74" y="356" font-size="19" class="s mu" text-anchor="start" >and the exact frames behind them. Local and disposable.</text>
+<g transform="translate(730,82)" opacity="0.55">
+<rect width="168" height="105.0" rx="6" fill="#0f1a2e" stroke="#25405f" stroke-width="1.5"/>
+<rect x="0" y="0" width="168" height="8.2" rx="6" fill="#1e2f4c"/>
+<rect x="11.7" y="15.2" width="144.7" height="8.2" fill="#2a4a73"/>
+<text x="15.2" y="21.0" font-size="5.1" class="m t">ORDER</text>
+<text x="53.7" y="21.0" font-size="5.1" class="m t">STATUS</text>
+<text x="18.7" y="40.8" font-size="7.0" class="m" fill="#e8eef6">1001 QUEUED</text>
+</g>
+<g transform="translate(752,158)" opacity="0.8">
+<rect width="168" height="105.0" rx="6" fill="#0f1a2e" stroke="#25405f" stroke-width="1.5"/>
+<rect x="0" y="0" width="168" height="8.2" rx="6" fill="#1e2f4c"/>
+<rect x="11.7" y="15.2" width="144.7" height="8.2" fill="#2a4a73"/>
+<text x="15.2" y="21.0" font-size="5.1" class="m t">ORDER</text>
+<text x="53.7" y="21.0" font-size="5.1" class="m t">STATUS</text>
+<text x="18.7" y="40.8" font-size="7.0" class="m" fill="#e8eef6">1017 QUEUED</text>
+</g>
+<g transform="translate(774,234)" opacity="1.0">
+<rect width="168" height="105.0" rx="6" fill="#0f1a2e" stroke="#25405f" stroke-width="1.5"/>
+<rect x="0" y="0" width="168" height="8.2" rx="6" fill="#1e2f4c"/>
+<rect x="11.7" y="15.2" width="144.7" height="8.2" fill="#2a4a73"/>
+<text x="15.2" y="21.0" font-size="5.1" class="m t">ORDER</text>
+<text x="53.7" y="21.0" font-size="5.1" class="m t">STATUS</text>
+<text x="18.7" y="40.8" font-size="7.0" class="m" fill="#e5535a">1017 FAILED</text>
+</g>
+<path d="M972 100 L1040 178 L1040 262 L972 340 Z" fill="#172a44" fill-opacity="0.7" stroke="#e8eef6" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M995 136 V304 M1018 160 V280" stroke="#e8eef6" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+<path d="M948 220 H966" stroke="#9fb2c8" stroke-width="2" marker-end="url(#ah)"/>
+<path d="M1044 220 C1052 220 1052 142 1062 142" fill="none" stroke="#62799a" stroke-width="1.5"/>
+<rect x="1062" y="118" width="176" height="50" rx="10" fill="#172a44" stroke="#2dd4bf" stroke-opacity="0.65" stroke-width="1.5"/>
+<circle cx="1078" cy="135" r="4" fill="#2dd4bf"/>
+<text x="1088" y="139" font-size="11" class="s b" text-anchor="start" fill="#2dd4bf" letter-spacing="0.8">SPEECH</text>
+<text x="1076" y="157" font-size="12" class="s t" text-anchor="start" >0.0 – 7.0 s</text>
+<text x="1230" y="157" font-size="10.5" class="m mu" text-anchor="end" >tsg_064d9d71…</text>
+<path d="M1044 220 C1052 220 1052 220 1062 220" fill="none" stroke="#62799a" stroke-width="1.5"/>
+<rect x="1062" y="196" width="176" height="50" rx="10" fill="#172a44" stroke="#f5b942" stroke-opacity="0.65" stroke-width="1.5"/>
+<circle cx="1078" cy="213" r="4" fill="#f5b942"/>
+<text x="1088" y="217" font-size="11" class="s b" text-anchor="start" fill="#f5b942" letter-spacing="0.8">SCREEN CHANGE</text>
+<text x="1076" y="235" font-size="12" class="s t" text-anchor="start" >at 10.0 s</text>
+<text x="1230" y="235" font-size="10.5" class="m mu" text-anchor="end" >vcd_93d23d5e…</text>
+<path d="M1044 220 C1052 220 1052 298 1062 298" fill="none" stroke="#62799a" stroke-width="1.5"/>
+<rect x="1062" y="274" width="176" height="50" rx="10" fill="#172a44" stroke="#e5535a" stroke-opacity="0.65" stroke-width="1.5"/>
+<circle cx="1078" cy="291" r="4" fill="#e5535a"/>
+<text x="1088" y="295" font-size="11" class="s b" text-anchor="start" fill="#e5535a" letter-spacing="0.8">FRAME</text>
+<text x="1076" y="313" font-size="12" class="s t" text-anchor="start" >1017 FAILED</text>
+<text x="1230" y="313" font-size="10.5" class="m mu" text-anchor="end" >evd_efa4af05…</text>
+</svg>

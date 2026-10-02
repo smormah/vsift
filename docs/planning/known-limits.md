@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-02 (P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-02 (the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -151,6 +151,7 @@ Each entry has these fields:
 | [L-118](#l-118) | The cold grader reads command text and matches free text mechanically | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-119](#l-119) | There are two hold-out scenarios, one run per client each, written by the same authors | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
 
 Counts: 1 high, 29 medium, 74 low (104 entries).
 
@@ -2884,6 +2885,29 @@ candidate to be the accepted one.**
 - **Next step:** add the first recorded streams as fixtures after the pilots.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
   accepted residual. **Review:** pending.
+
+### L-121
+
+**Text drawn inside the README's SVG graphics is public text the claims check cannot read.**
+
+- **What:** the README shows eight hand-made SVG graphics (`docs/assets/readme/`): a hero, an
+  animated terminal, the evidence timeline, the pipeline, a before-and-after panel, the
+  architecture and the roadmap, and the logo. Their words are public, but
+  `vsift-governance public-claims` reads only the listed Markdown documents, so a controlled word
+  or a banned phrase inside an SVG passes the Governance job. The roadmap graphic also states the
+  current rung (P14 "now", `0.2.0-rc.N` and `0.2.0` planned), so it goes stale when a rung moves.
+- **Evidence:** [`docs/assets/readme/README.md`](../assets/readme/README.md) (the hand check and
+  when to redraw); `docs/planning/public-claims.json` (`documents`).
+- **Impact:** a careless edit to a graphic could claim more than the ladder allows, and the
+  roadmap could show an old step as current; neither would fail CI.
+- **Why:** the check reads plain text and the graphics are XML whose words are split across
+  elements; teaching it SVG was not worth it for one README change.
+- **Mitigation:** every word in the graphics was checked by hand against the controlled words
+  and banned phrases when they were made (2026-10-02); the asset notes give the grep to repeat.
+- **Next step:** add `docs/assets/readme/*.svg` to the scanned documents, reading the text
+  content of `<text>` elements; redraw the roadmap with P14 PRs 10 and 13.
+- **Owner:** unscheduled (P14 PR 9 is the natural home). **Issue:** none. **Status:** open.
+  **Review:** pending.
 
 ## Review workflow
 

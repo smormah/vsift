@@ -26,7 +26,7 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
   check`); refuse to claim strict worker isolation unless the Linux kernel attests it;
 - be installed without Rust: **the 0.1.0 pre-release is published** (2026-10-01): `npm install
   --global vsift-cli@next`, and archives on a GitHub pre-release, each with a Sigstore
-  attestation and npm provenance.
+  attestation and npm provenance. The README shows its real output (graphics: L-121).
 
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an investigation with
 the CLI and write a cited report. P12's named-client trials qualified it:
@@ -41,8 +41,8 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PR 0 (#250), PR 1
-(#251), PR 2 (#255, the published-artifact qualification) and PR 8 (#252) are merged; PR 6, the
-agent-trial harness, is done in this change, awaiting review; PR 3 is being built in parallel; the
+(#251), PR 2 (#255, the published-artifact qualification), PR 6 (#262, the agent-trial harness)
+and PR 8 (#252) are merged; PR 3 (#254) is open and needs a rebase, PR 4 (#259) is a draft; the
 whole packet is not complete.** What it must show, and what is weaker than it sounds today:
 - **No published artifact has run on a video:** every real-tool test runs a Cargo-built `vsift`.
   PR 2 installed 0.1.0 from the real registry on clean hosted runners, but ran no media
@@ -78,7 +78,7 @@ decides the channel: a suffix means `next` (a candidate is `-rc.N`), none is sta
 complete ledger (L-103). **Not done:** a real stable publish (L-105). **Frozen at the candidate
 cut:** the allowed lists, the notes, the workflow, the skill.
 
-**PR 6 (this change; awaiting review; runbook `docs/agents/trials.md`).** **No trial was run, no
+**PR 6 (#262, merged; runbook `docs/agents/trials.md`).** **No trial was run, no
 model was called, nothing was published.** `tools/vsift-agent-trials` now:
 - **installs the published package** (`install`: `npm install --global vsift-cli@<exact>` into a
   fresh prefix, scripts off, cleared environment) and **proves it** in every record: what npm
@@ -130,7 +130,7 @@ macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PR 0 (#250), PR 1 (#251), PR 2 (#255) and PR 8 (#252) merged; PR 6 (trial harness) done in this change; PR 3 in parallel |
+| P14 | **In progress** (started 2026-10-02): PR 0 (#250), PR 1 (#251), PR 2 (#255), PR 6 (#262) and PR 8 (#252) merged; PR 3 (#254) open, PR 4 (#259) draft |
 
 ## Architecture snapshot
 
