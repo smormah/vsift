@@ -1,9 +1,10 @@
 # ADR 0024: R0 qualification and the release candidate
 
-- Status: **Proposed** (2026-10-02). This is the P14 plan. The maintainer has not yet
-  confirmed it: the lettered decisions below are recommendations until they do, and P14
-  stays `planned` in the delivery ledger until then (governance rule 10). Like ADR 0021,
-  ADR 0022 and ADR 0023, it becomes Accepted when P14 completes.
+- Status: **Proposed** (2026-10-02). This is the P14 plan. The maintainer **confirmed all
+  eight decisions, A to H, on 2026-10-02, exactly as recommended**, and started P14 that
+  day: the delivery ledger marks it `in_progress` (governance rule 10 was met by the
+  maintainer's word). The ADR itself stays Proposed until P14 completes, when it becomes
+  Accepted, as ADR 0021, ADR 0022 and ADR 0023 did.
 - Date: 2026-10-02
 - Tracking: [P14 / issue #17](https://github.com/smormah/vsift/issues/17)
 - Refines: [ADR 0005](0005-r0-scope-and-qualification-profiles.md) (public support begins
@@ -75,7 +76,9 @@ records named, not assumed.
 8. **Load is a partial ladder.** Concurrency 1, 2 and 4 ran once on Windows; the 8-job rung,
    the 100-request batch and the soak did not. Fuzzing is weekly, five minutes per target.
 9. **Unsigned executables are untried on a real protected machine** (L-098): no Smart App
-   Control, no Gatekeeper browser download.
+   Control, no Gatekeeper browser download. The maintainer's own Windows 11 machine has
+   Smart App Control Off (read 2026-10-02), so the 0.1.0 install and run there says nothing
+   about it.
 10. **The offline install has run with stand-ins only** (D-07), and nothing watches the
     publishers' files between releases except a manual dispatch (L-099, L-042).
 11. **The register is unreviewed.** Every one of the 91 known-limit entries says `Review:
@@ -95,10 +98,11 @@ Gatekeeper, Codex on Windows, the open readings). Deferred and not in P14: stage
 publishing ([#246](https://github.com/smormah/vsift/issues/246), until after R1 or the public
 announcements) and using the published CLI ourselves, which happens at the completion of R0.
 
-## Decisions for the maintainer
+## Decisions for the maintainer (all eight confirmed on 2026-10-02)
 
-Eight decisions, in plain English. Each has the options, a recommendation with the reason,
-and what it costs you. The recommendation is what the rest of this ADR and the plan assume.
+Eight decisions, in plain English. Each has the options that were put to the maintainer, the
+option **decided** (every one the recommended option), the reason and what it costs the
+maintainer. The rest of this ADR and the plan are built on these decisions.
 
 ### A. Which version is R0, and how does a release become "stable"?
 
@@ -106,7 +110,7 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
   codes and v1 JSON (additive-only since 0.1.0) and nothing else; 1.0.0 is chosen later. (2)
   `1.0.0` now, with the same promise under SemVer's "1". (3) Stay on 0.x pre-releases under
   `next` and never move `latest`.
-- **Recommendation: 1.** Everything measured about accuracy comes from a synthetic corpus,
+- **Decided: option 1.** Everything measured about accuracy comes from a synthetic corpus,
   and the first real recordings come with the post-R0 trial. 1.0.0 should mean "we support
   this surface"; announcing it before real recordings have been tried risks a 2.0.0 soon
   after. Moving to 1.0.0 later costs a version number if no contract change is needed.
@@ -129,7 +133,7 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
   under `next`, built and published exactly as 0.1.0 was; the whole qualification runs
   against it. (2) Call the existing 0.1.0 the candidate. (3) A candidate that is built but
   never published.
-- **Recommendation: 1.** The clean install "from the real registry" needs a published
+- **Decided: option 1.** The clean install "from the real registry" needs a published
   version; 0.1.0 predates every change P14 will make; an unpublished build cannot be
   installed from the registry. The freeze rule: from the cut, only fixes for findings; no
   features; at most two candidates planned, a third is your call. A candidate is never
@@ -143,7 +147,7 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
 - **Options.** (1) Keep them unsigned, as ADR 0023 decision C chose for the pre-release,
   and revisit on evidence. (2) Sign the Windows executable only. (3) Sign Windows and
   notarize macOS.
-- **Recommendation: 1, with a trigger agreed now.** If the try-outs of decision H show that
+- **Decided: option 1, with a trigger agreed now.** If the try-outs of decision H show that
   Smart App Control or Gatekeeper blocks an npm-installed VSift on a default machine with
   no way through short of turning protection off, you then choose between a documented
   limitation and signing before the stable release. Signing costs recurring fees (a
@@ -161,7 +165,7 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
   cold-agent variant (30), pilots (8) and a reserve (12): about 84 runs. *Full:* repeat
   P12's whole corpus (78 counted runs) from a clean install, plus the cold-agent variant and
   pilots: about 125.
-- **Recommendation: Recommended.** It meets governance rule 11 on both transcript paths with
+- **Decided: the "Recommended" plan.** It meets governance rule 11 on both transcript paths with
   both named clients, adds one scenario per path that no earlier round has seen, includes
   the review tier's blurred-banner re-run (L-095), and runs the cold agent twice (before
   and after any `vsift --help` change). It is about one and a half of P12's compact rounds.
@@ -182,7 +186,7 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
   containment suite (B). (3) An external review (C), later. (4) Narrow the claim: R0 ships
   with no claim that the strict profile contains a hostile decoder, the worker host stays a
   "qualification target", and #188 moves to R1.
-- **Recommendation: 1, with 4 as the fallback.** The worker host is in R0's scope and
+- **Decided: option 1, with option 4 as the fallback.** The worker host is in R0's scope and
   DEC-11 says the strict profile is qualified first; the adversarial half is what is
   missing. The fixture is small and runs in a disposable container. The deferral began
   because an automated safety check stopped the session that was authoring it: if that
@@ -197,7 +201,7 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
 - **Options.** (1) "Supported" per cell, earned by rules fixed now (below); managed install
   stays Ubuntu 24.04 x64 only. (2) Call every R0 target supported. (3) Call only the
   platform the trials ran on supported.
-- **Recommendation: 1.** A cell is supported when the published packages install from the
+- **Decided: option 1.** A cell is supported when the published packages install from the
   real registry on a scrubbed image with every package manager, the extracted archive runs,
   the published binary completes the supplied-transcript journey and the local-ASR journey
   with that platform's documented tools, and the install, upgrade and uninstall steps in
@@ -216,7 +220,7 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
   each with a fixed list of allowed statements, checked mechanically against recorded
   evidence. (2) Update the wording by hand at the end. (3) Make no claims beyond the
   install guide until after R1.
-- **Recommendation: 1.** Allowed now: the existing pre-release wording, no "supported" and
+- **Decided: option 1.** Allowed now: the existing pre-release wording, no "supported" and
   no announcement. At the candidate: "release candidate under qualification", the evidence
   summary and nothing about support. After P14 completes: matrix-backed "supported" per
   cell, the qualified models per client, the measured numbers with their conditions
@@ -231,27 +235,33 @@ and what it costs you. The recommendation is what the rest of this ADR and the p
 
 ### H. What only you can do, and what blocks the stable release?
 
-- **Your hands.** Read your Smart App Control setting (a minute: Settings, Windows
-  Security, App and browser control); a Smart App Control try-out needs a Windows 11 machine
-  or virtual machine where it is On (we do not know what state a fresh machine will show,
-  so the try-out records it); a browser-download try-out needs a Mac with macOS 15 (unknown
-  whether you have one); starting each agent-trial batch; the A-09 blurred re-run (inside
-  decision D); reviewing the SEC-T01 fixture (E); each publish session (B, A); one pass over
-  the register entries the public claims lean on (about thirty, listed in the plan) and the
-  readings in `memory/TODO.md`; merging the pull requests.
+- **Your hands.** A Smart App Control try-out needs a Windows 11 machine or virtual machine
+  where it is On; a browser-download try-out needs a Mac with macOS 15; starting each
+  agent-trial batch; the A-09 blurred re-run (inside decision D); reviewing the SEC-T01
+  fixture (E); each publish session (B, A); one pass over the register entries the public
+  claims lean on (about thirty, listed in the plan) and the readings in `memory/TODO.md`;
+  merging the pull requests.
+- **What is known since the decision (2026-10-02).** Smart App Control is **Off** on the
+  maintainer's Windows 11 Pro machine (registry value `VerifiedAndReputablePolicyState` is
+  0, read that day), so the 0.1.0 install and run there says nothing about it and the
+  try-out needs a fresh Windows 11 virtual machine or another PC (a fresh Windows install
+  starts Smart App Control in evaluation mode). Not known: whether Windows Sandbox is
+  available (it could not be read without elevation), whether the maintainer owns a Mac, and
+  whether hosted-runner minutes are free for the account (the plan's unknowns table).
 - **Options for what blocks the stable.** (1) The try-outs block the stable only until an
   observation is recorded, whatever it shows; a result that triggers decision C is handled
   there; an item you cannot do ships documented as "untried". (2) Every try-out must also
   pass. (3) None blocks.
-- **Recommendation: 1.** A failed try-out changes what we say or sign, not whether the
+- **Decided: option 1.** A failed try-out changes what we say or sign, not whether the
   facts are known. Untried hardware is stated, never hidden.
 - **Cost to you.** Roughly eight to twelve hours across the packet for the hands-on items,
   not counting pull-request review. A rough figure: it is not measured.
 
 ## Decision
 
-Each item is the recommendation above as a rule. All stay proposals until the maintainer
-confirms them.
+Each item is the maintainer's decision of 2026-10-02 (all eight confirmed exactly as
+recommended), stated as a rule. The ADR's own status stays Proposed until P14 completes, as
+ADR 0023's did until P13 completed.
 
 **A. Version.** R0 ships as `0.2.0` on `latest`. Stable means a version with no pre-release
 suffix. The stable commit differs from the accepted candidate only in version strings and in

@@ -4,7 +4,8 @@ Status: accepted R0 sequence with scoped R1 packets, re-planned by
 [ADR 0015](../decisions/0015-r0-delivery-replan.md) and
 [ADR 0016](../decisions/0016-embeddable-engine-and-evidence-contract.md) on 2026-09-23.
 P00-P13 are complete (P13 started 2026-09-30 and published the 0.1.0 pre-release on
-2026-10-01, see "P13 scope and pull requests"); P14 is not started. P06 closed on detection, bring-your-own selection, verification and
+2026-10-01, see "P13 scope and pull requests"); P14 is in progress (started by the
+maintainer on 2026-10-02, see "P14 scope and pull requests"). P06 closed on detection, bring-your-own selection, verification and
 guidance; managed installation moved to P13. Tests reference
 [verification](verification.md), and CI enforces the [delivery ledger](delivery-ledger.json).
 Each packet becomes one or more focused issues/PRs before implementation. Splitting
@@ -82,7 +83,7 @@ This cross-packet test work does not authorize implementing a later packet early
 | P11 — Worker and batch host | Versioned JobRequest/Result; explicit durable workspace, finite batch reader, process-wide and cross-process admission, graceful shutdown, structured events | P02/P03/P10 | X-07..11, O-01..04, SEC-T01; strict Linux worker profile qualifies only after P10 durable evidence; repeated external-delivery simulation passes |
 | P12 — Agent skill | Generic procedure, model budgets, host image capability check, complete local-video investigation, grounded QA template, checkpoint/resume instructions | P06..P11 | A-01..09; named Codex and Claude Code end-to-end trials plus compact-model gates; no tool permission expansion; no embedded processing logic. Closed 2026-09-30 by maintainer decision ([ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md), Accepted; [qualification record](p12-agent-qualification.md)): the skill `skills/vsift/` and its CLI contract guard, the trial harness, and named-client trials on both clients. The review tier is qualified; the compact tier passed 82%, below the 90% target (L-085). The compact re-run after the debt fixes (#222, 2026-09-30, on `a0bfb06`) met it: 93% and 100%; L-085 closed |
 | P13 — Distribution and managed installation | Native artifacts and thin npm launcher over per-platform optional packages with no install scripts (see "P13 launcher boundary"); package-name checklist held before release (see "P13 name checklist"); architecture selection, notices, SBOM/provenance, signed release plan, upgrade/uninstall docs. Managed dependency installation from ADR 0007/0014: accepted-plan transaction, direct download, staging, smoke before activation, atomic activation, `setup install/repair/list/rollback/remove`, bounded version cleanup, interruption/power-loss qualification, at least one qualified managed-install target. Human-readable terminal output for every command (ADR 0008; the readable terminal text of `cli-v1.md`), assigned 2026-09-26. Since 2026-09-30 also L-071's parse remediation and `vsift handoff check` (#213, R-13); scope, decisions and pull requests in "P13 scope and pull requests" ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md), Accepted 2026-10-01). **Complete (2026-10-01):** pull requests 0-11 and the release-prep change are merged, the maintainer published the 0.1.0 pre-release under npm's `next` and on GitHub Releases, and the completion change (PR 12) records it ([qualification record](p13-distribution.md)) | P06/P11/P12 | Fresh OS install without Rust; install and run through npm, pnpm, Yarn and Bun on every supported target; offline/script-disabled recovery; signal/exit forwarding; D-02..D-08; R-SEC01/R-SEC02; SEC-T02 over human output |
-| P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate; the named-agent clean-install run includes a cold-agent variant (CLI on `PATH`, no skill, no docs; maintainer decision 2026-10-02). Plan, proposed 2026-10-02 and awaiting the maintainer's confirmation: "P14 scope and pull requests" below and [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
+| P14 — R0 qualification | Release evidence ledger, fuzz/race/fault/soak runs, findings triage, supported-profile matrix, operator/user docs and release candidate; the named-agent clean-install run includes a cold-agent variant (CLI on `PATH`, no skill, no docs; maintainer decision 2026-10-02). **In progress since 2026-10-02** (the maintainer confirmed decisions A-H and started it): scope and pull requests in "P14 scope and pull requests" below, decisions in [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) (Proposed until completion) | P00..P13 | All R0 proof links; R-SEC03 and all release gates; public claims match measured support |
 
 ### P00/P03 feasibility decisions
 
@@ -311,10 +312,14 @@ debt #218-#224.
 
 ### P14 scope and pull requests
 
-2026-10-02: the plan below is **proposed and awaiting the maintainer's confirmation**;
-P14 is `planned` in the ledger and stays so until then (governance rule 10). The decisions
-(A-H), the reasons and their costs are in
-[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) (Proposed); the
+2026-10-02 (maintainer): P14 started, and the maintainer confirmed all eight decisions,
+A to H, exactly as recommended (version `0.2.0`, a published release candidate, no signing
+unless the try-outs trigger it, the recommended 84-run trial plan, SEC-T01 by a reviewed
+fixture with the narrowed claim as the fallback, the per-cell support matrix, the claims
+ladder, and try-outs that block the stable only until an observation is recorded). The
+ledger marks P14 `in_progress`. The decisions, the reasons and their costs are in
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) (Proposed until
+the packet completes, as ADR 0023 was); the
 traceability tables, the evidence items (`RQ-01..RQ-20`), the campaign and trial budgets,
 the matrix and the claims policy are in [p14-qualification.md](p14-qualification.md), which
 becomes the qualification record when the packet completes. The ledger maps P14 to
@@ -356,7 +361,7 @@ maintainer and usage limits. Both are rough (plus or minus half) and not measure
 
 | PR | Content | Depends on | Effort / wall |
 | --- | --- | --- | --- |
-| 0 | ADR 0024 and the plan (this change as a draft); after the maintainer confirms: the decisions marked confirmed, the ledger `in_progress`, a note on issue #17 | P13 complete; the maintainer's confirmation | 0.5 d / the maintainer's reply |
+| 0 | ADR 0024 and the plan, the decisions marked confirmed, the ledger `in_progress`, the packet issue #17 synced, the two handoff files rewritten (#250) | P13 complete; the maintainer's confirmation (given 2026-10-02) | 0.5 d / 1 d; done once it merges |
 | 1 | The evidence ledger and its completeness check, the claims registry and its check (seeded with today's claims), the `RQ-nn` and `A-10` rows in `verification.md` | 0 | 2-3 d / 4 d |
 | 2 | Published-artifact qualification workflow: RQ-01 (clean install, four managers, three systems, real registry), RQ-02 (archive), RQ-03 (offline with real artifacts), RQ-04 (upgrade from 0.1.0, 0.1.0 JSON compatibility, uninstall), RQ-19 (second verifier); runs against 0.1.0, which is published | 1 | 4-5 d / 8 d |
 | 3 | The journeys on the published binary: a binary override for the real-tool checkpoints, the `P14 journeys` workflow on Ubuntu 24.04 (managed tools), Windows (pinned) and macOS 15 (Homebrew) (RQ-05), RQ-06 and its weekly schedule | 1 | 5-6 d / 8 d |

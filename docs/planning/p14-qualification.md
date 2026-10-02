@@ -1,9 +1,10 @@
 # P14 R0 qualification: plan, traceability and budgets
 
-Status: **plan, 2026-10-02, awaiting the maintainer's confirmation.** P14 is `planned` in the
-[delivery ledger](delivery-ledger.json) and does not start on its own (governance rule 10).
-Design and decisions: [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)
-(Proposed); the pull-request sequence is "P14 scope and pull requests" in
+Status: **plan, 2026-10-02; the maintainer confirmed decisions A to H on 2026-10-02 and
+started P14** (the [delivery ledger](delivery-ledger.json) marks it `in_progress`). Design
+and decisions: [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md)
+(Proposed until P14 completes, as ADR 0023 was); the pull-request sequence is "P14 scope and
+pull requests" in
 [implementation-work-packets](implementation-work-packets.md). This file becomes the P14
 qualification record when the packet completes: until then every "Evidence that exists"
 cell is what the earlier records show, every "P14 adds" cell is a plan, and nothing here is
@@ -51,7 +52,7 @@ a developer's `PATH`. Real clean-machine evidence is the maintainer's try-outs (
 | RQ-14 | SEC-T01 per decision E: an adversarial stand-in provider in the hardened container, or a recorded narrowing | Hosted container (option 1) | Each prohibited action contained, typed, bounded and leak-free | The strict profile contains the listed behaviours | A kernel or container-runtime escape |
 | RQ-15 | The named-agent rounds from a clean install, with the skill (section 7) | The maintainer's machine, three batches | Section 7 gates | Rule 11: a coding agent goes from a local video to a grounded handoff, on both paths, in both named clients, from the published package | Other models or clients; real recordings |
 | RQ-16 | The cold-agent variant (A-10): the CLI on `PATH`, no skill, no docs | Same | Section 7 gates | An agent can use VSift from its own help, typed errors and JSON, and does not accept a setup plan on its own | Every model |
-| RQ-17 | The maintainer's try-outs: Smart App Control (read the setting; an On machine), a Windows archive download, a macOS 15 browser download | The maintainer; a hosted macOS `spctl` check as partial support only | An observation recorded, whatever it shows | What users of unsigned files meet (L-098) | Other policies (AppLocker) |
+| RQ-17 | The maintainer's try-outs: Smart App Control (the maintainer's machine has it Off, read 2026-10-02, so an On machine means a fresh Windows 11 virtual machine or another PC), a Windows archive download, a macOS 15 browser download | The maintainer; a hosted macOS `spctl` check as partial support only | An observation recorded, whatever it shows | What users of unsigned files meet (L-098) | Other policies (AppLocker) |
 | RQ-18 | The supported-profile matrix and the claims check (sections 8 and 9) | Governance job | Every claim in the registry names recorded evidence; no banned word | Public claims match what was measured | That a sentence is true |
 | RQ-19 | A second verification of each publish, from a hosted runner with no credentials: dist-tags and provenance of all four packages, `npm audit signatures`, `gh attestation verify` of every release file and tarball, checksums, the release's flags and asset count; for the stable also the candidate-to-stable delta (only version strings and documents that ship inside the artifacts) and `latest` on all four | Hosted, dispatch | All green | The publish is what was qualified, checked by something other than the publisher's session | A compromised GitHub or npm |
 | RQ-20 | The evidence ledger's completeness check on the candidate | Governance | Every requirement, threat, verification row and P14-owned limit has evidence for the candidate's commit or artifacts, a carried-forward entry whose scope did not change, or a recorded waiver | Nothing was forgotten | That each entry is correct |
@@ -292,9 +293,9 @@ absent. It does not prove that a sentence is true.
 
 | Item | What | If it cannot be done |
 | --- | --- | --- |
-| Confirm the plan | The eight decisions of ADR 0024; then "start" | P14 stays planned |
-| Smart App Control, first look | Read Settings, Windows Security, App and browser control on the Windows 11 machine: one minute | Record "not read" |
-| Smart App Control, On | A Windows 11 machine or virtual machine where it is On: npm install, `vsift --version`, `setup check`, then a browser download of the archive. We do not know which state a fresh machine shows, so record it | Ship with "untried"; the Windows row carries the caveat |
+| Confirm the plan | Done 2026-10-02: the eight decisions of ADR 0024, and "start" | n/a |
+| Smart App Control, first look | Done 2026-10-02: it is **Off** on the maintainer's Windows 11 Pro machine (registry value `VerifiedAndReputablePolicyState` is 0). The 0.1.0 install and run there therefore says nothing about Smart App Control | n/a |
+| Smart App Control, On | A fresh Windows 11 virtual machine or another PC (a fresh Windows install starts Smart App Control in evaluation mode; what state a given install shows is unknown, so record it): npm install, `vsift --version`, `setup check`, then a browser download of the archive | Ship with "untried"; the Windows row carries the caveat |
 | macOS Gatekeeper | A Mac with macOS 15: browser download, first run | Ship with "untried" (unknown whether a Mac is available); a hosted `spctl` check is partial support |
 | Agent batches | Say go for each of three batches; the blurred-banner re-run is inside them | The packet waits; counts are not reduced silently |
 | SEC-T01 | Review the fixture and its CI job, or choose the fallback | Narrow the claim (decision E) |
@@ -317,9 +318,10 @@ Read from `tools/vsift-governance/src/main.rs` on 2026-10-02:
   `A-10` are P14's own IDs (verification's `Q-` IDs belong to R1). P14's `tests` stay
   `ALL-R0` and `R-SEC03`.
 - Setting P14 `in_progress` is accepted once P13 is complete (it is) and no other packet is
-  in progress: one line, made by the kickoff after the maintainer confirms.
-- `memory/TODO.md` is limited to 100 lines (96 today) and `memory/project_current_status.md`
-  to 150 (145 today): every P14 pull request rewrites both, so they are tight.
+  in progress: one line, made by this kickoff after the maintainer's confirmation. P14's
+  `verification` stays empty and its `merge_commit` null (the checker runs green with both).
+- `memory/TODO.md` is limited to 100 lines and `memory/project_current_status.md` to 150:
+  every P14 pull request rewrites both, so they are tight.
 - Every workflow file is linted: pinned actions, no `pull_request_target`, minimal
   permissions, no untrusted expressions in `run`, `id-token` only for attest and publish.
   New workflows must pass; the changes to `release.yml` and the lint's rule 7 (always
@@ -334,8 +336,8 @@ At the completion of R0 the maintainer plans to use the published CLI as a trial
 notes reviewed in batches. P14's completion carries only the neutral handoff: the work
 record states that the checkpoint is met when P14 is complete (the stable is published and
 verified, the named-agent run from a clean install passed, no open high-severity limit
-blocks the investigate-a-video journey on the maintainer's Windows 11 machine, with Smart
-App Control read first); that it is raised once; and that nothing is installed, copied or
+blocks the investigate-a-video journey on the maintainer's Windows 11 machine; Smart App
+Control was read first and is Off there, 2026-10-02); that it is raised once; and that nothing is installed, copied or
 configured on the maintainer's machine before the maintainer agrees. The trial never
 counts as qualification evidence.
 
@@ -353,3 +355,18 @@ counts as qualification evidence.
 | Hidden fixes found late | A candidate with findings costs a publish session and a re-run | At most two candidates planned; path-scoped re-runs |
 | Publisher files disappear | Managed install fails typed | Weekly drift run, `--artifact-dir`, L-099 |
 | The handoff files are near their limits | Every pull request must rewrite two short files | Keep status text short; remove history, not facts |
+
+## 14. Unknowns (as of 2026-10-02)
+
+| Question | State | How it is settled, and what follows |
+| --- | --- | --- |
+| Smart App Control on the maintainer's machine | **Known: Off** (registry value `VerifiedAndReputablePolicyState` is 0, read 2026-10-02) | The 0.1.0 install-and-run observation of 2026-10-01 says nothing about Smart App Control. The try-out (RQ-17) needs a fresh Windows 11 virtual machine or another PC |
+| What Smart App Control state a fresh Windows 11 install shows | Unknown (a fresh install starts in evaluation mode) | The try-out records the state it finds; decision C's trigger applies to what it shows |
+| Whether Windows Sandbox is available on the maintainer's machine | Unknown: it could not be read without elevation | Not needed if a virtual machine or another PC is used; the maintainer may check |
+| Whether the maintainer owns a Mac (macOS 15) | Unknown; the supervisor has asked | If not: the macOS Gatekeeper try-out ships "untried", with a hosted `spctl` check as partial support (decision H) |
+| Whether hosted-runner minutes are free for the account | Unknown; the supervisor has asked. The repository is public and GitHub documents standard runners as free for public repositories (not re-checked for this account) | Section 5 lists runner-hours either way; a cost would change the soak and fuzz budgets, not the gates |
+| Whether any test compares a build with the published 0.1.0 schemas | None found by reading | PR 2 confirms and adds one |
+| Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | Not checked | PR 3 |
+| Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | Not checked | PR 3 records the versions |
+| Whether the automated safety stop on authoring a hostile provider fixture recurs | Unknown | PR 5; the fallback is decision E's option 4 |
+| Tokens spent per agent run | Not recorded in P12 | The budget in section 7 is an estimate; PR 6 records usage where the clients report it |

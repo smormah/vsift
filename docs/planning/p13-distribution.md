@@ -57,7 +57,10 @@ and what is and is not known about the cause, is under "First publish".
 - The Windows and macOS prompts for an unsigned download are described from the operating
   systems' documentation; none has been observed on a VSift archive. One `npx vsift
   --version` ran on Windows 11 with no block or prompt, but that machine's Smart App Control
-  state was not checked, so it does not settle [L-098](known-limits.md#l-098).
+  state was not checked at the time. *Read on 2026-10-02 (P14 PR 0): it is Off (registry
+  value `VerifiedAndReputablePolicyState` is 0), so that run says nothing about Smart App
+  Control and does not settle [L-098](known-limits.md#l-098); the try-out needs a fresh
+  Windows 11 virtual machine or another PC.*
 - The trusted-publisher settings are proved only by the second run working, not by reading
   them: npm shows them only to the package owner. The `release` environment and the tag
   ruleset were read back with `gh api` (below); "disallow bypass 2FA tokens" is the
@@ -229,7 +232,7 @@ What matters at release; each entry in [known limits](known-limits.md) has the d
 | L-097 | A part-way publish is public until a re-run completes it | Accepted. Not exercised: the first approved run stopped before any publish and the second published everything, so the skip-what-is-published path has never run |
 | L-100 (new) | npm prints only `ENEEDAUTH`, with no reason, when a trusted publisher is missing or wrong | Accepted; mitigated by the runbook's preflight (`release.md` 6.2) |
 | L-037 | Managed install on Ubuntu 24.04 x64 only; power-loss claim for ext4 only | Accepted by decision E |
-| L-098 (new) | Unsigned executables meet SmartScreen and Gatekeeper; Smart App Control may block `vsift.exe` | To be tried on real machines before a stable release (one `npx vsift --version` on Windows 11 ran unblocked; Smart App Control's state there was not checked) |
+| L-098 (new) | Unsigned executables meet SmartScreen and Gatekeeper; Smart App Control may block `vsift.exe` | To be tried on real machines before a stable release (one `npx vsift --version` on Windows 11 ran unblocked; Smart App Control's state there was not checked, and is Off, read 2026-10-02: the run says nothing about it) |
 | L-099 (new) | Managed install depends on the publishers' files and redirect hosts | Fails safe; the manual path is the fallback |
 | L-087, L-088, L-090 | Rehash cost, `407` recognised by text, unprovable content left for the user | Monitoring or accepted |
 | L-089 | SBOM `bom-ref` values name the runner's checkout path | Accepted |
@@ -377,7 +380,7 @@ and the machine is a development machine, not a clean one.
 | --- | --- |
 | `npm view` of the four packages | Each has `latest` `0.0.0` and `next` `0.1.0` (re-read in PR 12); `vsift-cli@0.1.0` has the `vsift` command; all four versions carry an npm provenance statement (a SLSA provenance v1 predicate in `dist.attestations`) |
 | `npm install vsift-cli@next`, then `npm audit signatures` | "4 packages have verified registry signatures" and "4 packages have verified attestations" |
-| `npx vsift --version` | `vsift 0.1.0 (011bc4da1af6)`; it ran with no block or prompt. The machine's Smart App Control state was not checked, so this is one observation and does not settle [L-098](known-limits.md#l-098) |
+| `npx vsift --version` | `vsift 0.1.0 (011bc4da1af6)`; it ran with no block or prompt. The machine's Smart App Control state was not checked at the time (it is Off, read 2026-10-02), so this is one observation that says nothing about Smart App Control and does not settle [L-098](known-limits.md#l-098) |
 | `gh release download v0.1.0`, then `sha256sum --check --strict SHA256SUMS` | All three archives OK |
 | `gh attestation verify` with `--repo smormah/vsift --signer-workflow smormah/vsift/.github/workflows/release.yml --source-ref refs/tags/v0.1.0 --deny-self-hosted-runners` | 10 of 10 release files and 4 of 4 npm tarballs (fetched with `npm pack`) verified |
 | Reproducibility across runs | The first 16 hex digits of each tarball's SHA-256 equal the dry-run plan's: `vsift-cli` `0492534f5300ed04`, `@vsift/darwin-arm64` `70377a8e329a0e10`, `@vsift/linux-x64` `1698b2e4342b07d1`, `@vsift/win32-x64` `63365812eaf75402` |
