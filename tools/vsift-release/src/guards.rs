@@ -16,7 +16,9 @@
 //!    is a re-run completing a partial publish), and that this version is not
 //!    on npm under another dist-tag or with other bytes;
 //! 5. that the registry could be read at all;
-//! 6. what is not checked here: the evidence ledger's completeness.
+//! 6. that the **evidence ledger is complete for that candidate** (RQ-20): the
+//!    plan job ran `vsift-governance release-evidence --complete-for` for it and
+//!    this reads its answer (see the `evidence` module).
 //!
 //! A plan for a pre-release states that `latest` is not touched, and checks
 //! the little the registry can say about it (the version is not already
@@ -29,7 +31,8 @@
 //! version has no candidate yet does not fail every pull request.
 
 use crate::{
-    candidate::CandidateObservation,
+    candidate::{CandidateObservation, CheckRecord, short},
+    evidence::EvidenceObservation,
     publish::{Channel, NpmPublication, ReleaseVersion, publication_order},
     registry::{PackageRecord, PackageState, RegistryObservation},
 };
@@ -102,6 +105,11 @@ pub(crate) struct Observations {
     pub registry: RegistryObservation,
     /// The comparison with the accepted candidate (stable versions only).
     pub candidate: CandidateObservation,
+    /// The evidence ledger's answer for that candidate (stable versions
+    /// only).
+    pub evidence: EvidenceObservation,
+    /// The run and date a delta record would name, if the plan was given them.
+    pub check: Option<CheckRecord>,
 }
 
 impl Observations {
@@ -111,6 +119,8 @@ impl Observations {
         Self {
             registry: RegistryObservation::NotRead,
             candidate: CandidateObservation::NotApplicable,
+            evidence: EvidenceObservation::NotRun,
+            check: None,
         }
     }
 }
@@ -181,14 +191,62 @@ fn stable_guards(
         registry_read_guard(&observations.registry),
         candidate_published_guard(&observations.registry, candidate_version),
         latest_forward_guard(version, npm, &observations.registry),
-        Guard::new(
-            "Evidence ledger",
-            GuardOutcome::NotEnforced,
-            "this workflow does not check the evidence ledger's completeness for the candidate \
-             (known limit L-106); run that check and read its result before dispatching \
-             (release.md section 6.7)",
-        ),
+        evidence_guard(&observations.candidate, &observations.evidence),
     ]
+}
+
+/// The evidence ledger must be complete for the accepted candidate (RQ-20): the
+/// plan job ran `vsift-governance release-evidence --complete-for <candidate>
+/// --commit <candidate commit>` and this reads its answer. A success counts
+/// only if it names this candidate and commit, and an answer that was never
+/// recorded is a failure, not a pass.
+fn evidence_guard(candidate: &CandidateObservation, evidence: &EvidenceObservation) -> Guard {
+    const NAME: &str = "Evidence ledger";
+    let CandidateObservation::Checked(report) = candidate else {
+        return Guard::failed(
+            NAME,
+            "there is no accepted candidate whose evidence could be checked",
+        );
+    };
+    let version = report.candidate_version.as_str();
+    let expected = format!(
+        "VSift release evidence is complete for {version} at {}.",
+        short(&report.candidate_commit)
+    );
+    match evidence {
+        EvidenceObservation::NotRun => Guard::failed(
+            NAME,
+            format!(
+                "the evidence check did not run for `{version}`: the plan job runs \
+                 `vsift-governance release-evidence --complete-for` before `publish-plan` \
+                 (release.md section 6.7)"
+            ),
+        ),
+        EvidenceObservation::Ran {
+            succeeded: true,
+            lines,
+        } if lines.contains(&expected) => Guard::passed(NAME, expected),
+        EvidenceObservation::Ran {
+            succeeded: true, ..
+        } => Guard::failed(
+            NAME,
+            format!("the evidence check succeeded but did not say `{expected}`"),
+        ),
+        EvidenceObservation::Ran {
+            succeeded: false,
+            lines,
+        } => Guard::failed(
+            NAME,
+            format!(
+                "the evidence ledger is not complete for `{version}`: {}",
+                if lines.is_empty() {
+                    String::from("the check failed and said nothing")
+                } else {
+                    lines.join("; ")
+                }
+            ),
+        ),
+    }
 }
 
 fn candidate_guard(candidate: &CandidateObservation) -> Guard {
@@ -545,6 +603,7 @@ mod tests {
     use super::{Guard, GuardOutcome, Observations, Standing, evaluate, standing, tag_text};
     use crate::{
         candidate::{CandidateObservation, CandidateReport, ChangeClass, ChangedPath},
+        evidence::EvidenceObservation,
         publish::{Digested, NpmPublication, ReleaseVersion, publication_order},
         registry::{PackageObservation, PackageRecord, PackageState, RegistryObservation},
     };
@@ -618,6 +677,16 @@ mod tests {
         }))
     }
 
+    /// The evidence check's answer when the ledger is complete for `report()`'s candidate.
+    fn complete_evidence() -> EvidenceObservation {
+        EvidenceObservation::Ran {
+            succeeded: true,
+            lines: vec![String::from(
+                "VSift release evidence is complete for 0.2.0-rc.1 at aaaaaaaaaaaa.",
+            )],
+        }
+    }
+
     fn guard<'a>(guards: &'a [Guard], name: &str) -> Option<&'a Guard> {
         guards.iter().find(|guard| guard.name == name)
     }
@@ -631,12 +700,13 @@ mod tests {
     }
 
     #[test]
-    fn a_healthy_stable_plan_passes_every_guard_but_the_evidence_ledger()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn a_healthy_stable_plan_passes_every_guard() -> Result<(), Box<dyn std::error::Error>> {
         let version = ReleaseVersion::parse("0.2.0")?;
         let observations = Observations {
             registry: healthy_registry(),
             candidate: report(false),
+            evidence: complete_evidence(),
+            ..Observations::none()
         };
         let evaluation = evaluate(&version, &publications(), &observations);
         let outcomes: Vec<(&str, GuardOutcome)> = evaluation
@@ -652,7 +722,7 @@ mod tests {
                 ("Registry read", GuardOutcome::Passed),
                 ("Candidate published", GuardOutcome::Passed),
                 ("`latest` moves forward", GuardOutcome::Passed),
-                ("Evidence ledger", GuardOutcome::NotEnforced),
+                ("Evidence ledger", GuardOutcome::Passed),
             ]
         );
         assert_eq!(evaluation.moves.len(), 4);
@@ -662,6 +732,83 @@ mod tests {
             assert_eq!(moved.to, "0.2.0");
             assert_eq!(moved.untouched_tag, "next");
             assert_eq!(moved.untouched, "0.2.0-rc.1");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn the_evidence_guard_passes_only_on_a_recorded_success_for_this_candidate()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let version = ReleaseVersion::parse("0.2.0")?;
+        let outcome = |candidate: CandidateObservation, evidence: EvidenceObservation| {
+            let observations = Observations {
+                registry: healthy_registry(),
+                candidate,
+                evidence,
+                ..Observations::none()
+            };
+            let evaluation = evaluate(&version, &publications(), &observations);
+            guard(&evaluation.guards, "Evidence ledger").map_or_else(
+                || (GuardOutcome::NotEnforced, String::from("no such guard")),
+                |guard| (guard.outcome, guard.detail.clone()),
+            )
+        };
+        let ran = |succeeded: bool, lines: &[&str]| EvidenceObservation::Ran {
+            succeeded,
+            lines: lines.iter().map(|line| (*line).to_owned()).collect(),
+        };
+        // The recorded success for this candidate and commit.
+        assert_eq!(
+            outcome(report(false), complete_evidence()),
+            (
+                GuardOutcome::Passed,
+                String::from("VSift release evidence is complete for 0.2.0-rc.1 at aaaaaaaaaaaa.")
+            )
+        );
+        // No answer, or no candidate to ask about.
+        for (candidate, evidence, expected) in [
+            (report(false), EvidenceObservation::NotRun, "did not run"),
+            (
+                CandidateObservation::Failed(String::from("no release candidate tag")),
+                complete_evidence(),
+                "no accepted candidate",
+            ),
+            (
+                CandidateObservation::NotApplicable,
+                complete_evidence(),
+                "no accepted candidate",
+            ),
+        ] {
+            let (result, detail) = outcome(candidate, evidence);
+            assert_eq!(result, GuardOutcome::Failed);
+            assert!(detail.contains(expected), "{detail}");
+        }
+        // A failure carries what the check said; a failure that says nothing says so.
+        let (result, detail) = outcome(
+            report(false),
+            ran(
+                false,
+                &["RQ-05: is planned; it must be passed", "RQ-09: is planned"],
+            ),
+        );
+        assert_eq!(result, GuardOutcome::Failed);
+        assert!(detail.contains("not complete for `0.2.0-rc.1`"), "{detail}");
+        assert!(detail.contains("RQ-05: is planned; it must be passed; RQ-09: is planned"));
+        assert!(
+            outcome(report(false), ran(false, &[]))
+                .1
+                .contains("said nothing")
+        );
+        // A success that names another candidate or commit, or nothing, does not count.
+        for lines in [
+            &["VSift release evidence is complete for 0.2.0-rc.2 at aaaaaaaaaaaa."][..],
+            &["VSift release evidence is complete for 0.2.0-rc.1 at bbbbbbbbbbbb."],
+            &["VSift release evidence ledger is valid."],
+            &[],
+        ] {
+            let (result, detail) = outcome(report(false), ran(true, lines));
+            assert_eq!(result, GuardOutcome::Failed, "{lines:?}");
+            assert!(detail.contains("did not say"), "{detail}");
         }
         Ok(())
     }
@@ -679,7 +826,8 @@ mod tests {
         assert!(failing(
             &Observations {
                 registry: healthy.clone(),
-                candidate: report(true)
+                candidate: report(true),
+                ..Observations::none()
             },
             "Accepted candidate"
         ));
@@ -691,7 +839,8 @@ mod tests {
             assert!(failing(
                 &Observations {
                     registry: healthy.clone(),
-                    candidate
+                    candidate,
+                    ..Observations::none()
                 },
                 "Accepted candidate"
             ));
@@ -709,6 +858,7 @@ mod tests {
             let observations = Observations {
                 registry: unread,
                 candidate: report(false),
+                ..Observations::none()
             };
             for name in [
                 "Registry read",
@@ -725,6 +875,7 @@ mod tests {
         let observations = Observations {
             registry: registry(&records),
             candidate: report(false),
+            ..Observations::none()
         };
         assert!(failing(&observations, "Candidate published"));
         Ok(())
@@ -793,6 +944,7 @@ mod tests {
         let observations = Observations {
             registry: registry(&[published.clone(), published, waiting.clone(), waiting]),
             candidate: report(false),
+            ..Observations::none()
         };
         let evaluation = evaluate(&version, &publications(), &observations);
         let forward = guard(&evaluation.guards, "`latest` moves forward");
@@ -819,6 +971,7 @@ mod tests {
             &Observations {
                 registry: healthy,
                 candidate: CandidateObservation::NotApplicable,
+                ..Observations::none()
             },
         );
         assert!(
@@ -854,6 +1007,7 @@ mod tests {
                 &Observations {
                     registry: all_found(&bad),
                     candidate: CandidateObservation::NotApplicable,
+                    ..Observations::none()
                 },
             );
             assert!(
@@ -874,6 +1028,7 @@ mod tests {
                     PackageState::Found(record("0.0.0", None, &[])),
                 ]),
                 candidate: CandidateObservation::NotApplicable,
+                ..Observations::none()
             },
         );
         assert!(

@@ -614,6 +614,35 @@ jobs:
             echo "${package}: HTTP ${status:-000}"
           done
 
+      # The accepted release candidate of a stable version (the highest
+      # v<X.Y.Z>-rc.<N> tag, found by the code the plan itself uses): its
+      # version and commit, or nothing for any other version or when there is
+      # no candidate. The evidence step below runs only when they are there.
+      - name: Find the accepted release candidate
+        id: candidate
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cargo run --quiet --locked -p vsift-release -- candidate-delta --github-output --stable-commit "${SOURCE_COMMIT}" >> "$GITHUB_OUTPUT"
+
+      # RQ-20: the evidence ledger must be complete for that candidate. The
+      # governance tool's exit status and output are kept, not acted on here:
+      # `publish-plan` reads them and refuses a stable plan wherever it is
+      # enforced, and shows the findings wherever it only reports.
+      - name: Check the evidence ledger for the accepted candidate
+        if: steps.candidate.outputs.candidate-version != ''
+        env:
+          CANDIDATE_VERSION: ${{ steps.candidate.outputs.candidate-version }}
+          CANDIDATE_COMMIT: ${{ steps.candidate.outputs.candidate-commit }}
+        run: |
+          set -euo pipefail
+          mkdir "${RUNNER_TEMP}/evidence"
+          status=0
+          cargo run --quiet --locked -p vsift-governance -- release-evidence --complete-for "${CANDIDATE_VERSION}" --commit "${CANDIDATE_COMMIT}" > "${RUNNER_TEMP}/evidence/result.txt" 2>&1 || status=$?
+          echo "${status}" > "${RUNNER_TEMP}/evidence/status"
+          cat "${RUNNER_TEMP}/evidence/result.txt"
+
       # A refused plan still writes its explanation, so the summary shows why
       # the run stops; the step then fails.
       - name: Plan the release
@@ -624,6 +653,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
           SOURCE_COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           archives=()
@@ -639,7 +669,8 @@ jobs:
           cargo run --quiet --locked -p vsift-release -- publish-plan "${archives[@]}" \
             --checksums dist/SHA256SUMS "${tarballs[@]}" --event "${EVENT_NAME}" --ref "${GIT_REF}" \
             --repository "${REPOSITORY}" --dry-run-input "${DRY_RUN_INPUT}" --commit "${SOURCE_COMMIT}" \
-            --registry "${RUNNER_TEMP}/registry" \
+            --registry "${RUNNER_TEMP}/registry" --evidence "${RUNNER_TEMP}/evidence" \
+            --run-id "${RUN_ID}" --date "$(date -u +%F)" \
             --out-dir publish-plan > "${RUNNER_TEMP}/plan-outputs" || status=$?
           if [ -f publish-plan/publish-plan.md ]; then
             cat publish-plan/publish-plan.md >> "$GITHUB_STEP_SUMMARY"

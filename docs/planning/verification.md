@@ -404,8 +404,21 @@ an agent trial.
   working is the proof for the first). L-096 is closed; the first attempt's `ENEEDAUTH` is
   L-100 ([P13 record](p13-distribution.md), "First publish").
   *P14 PR 8 (2026-10-02, the stable path and `latest`):* the lint gains rule 8 (no workflow
-  moves a dist-tag or publishes outside the `publish` job) and the channel rules (explicit`n  `--tag next` or `--tag latest`; each publishing or releasing step serves one channel and
-  runs only under the plan's `channel` output, with its shape check; the stable step's`n  forward-only check, the dist-tag record and read-back and the latest-release confirmation;`n  `curl` read-only and only to npm's registry; the plan job's full-history checkout, `channel`,`n  `--registry`): 61 deliberately broken copies of the real workflow are refused, 33 of them new,`n  and each rule was removed in turn to confirm a test then fails. `tools/vsift-release` tests`n  the version kinds (suffix decides: `0.2.0` is stable), the plan for each (the dist-tag moves,`n  the guards, the refusals), the registry reader (only tags and integrities are kept), the`n  candidate-to-stable check (allowed and refused deltas, on real throwaway repositories) and the`n  release notes' wording per kind; `tests/publish-steps.sh` (the Rust test `publish_steps`, on`n  Linux) executes the publishing shell against stub commands (46 checks). Not shown: any`n  real stable publish ([L-105](known-limits.md#l-105)).
+  moves a dist-tag or publishes outside the `publish` job) and the channel rules (explicit
+  `--tag next` or `--tag latest`; each publishing or releasing step serves one channel and
+  runs only under the plan's `channel` output, with its shape check; the stable step's
+  forward-only check, the dist-tag record and read-back and the latest-release confirmation;
+  `curl` read-only and only to npm's registry; the plan job's full-history checkout, `channel`,
+  `--registry`, and its candidate and evidence steps with `--evidence`, `--run-id` and `--date`):
+  65 deliberately broken copies of the real workflow are refused, 37 of them new,
+  and each rule was removed in turn to confirm a test then fails. `tools/vsift-release` tests
+  the version kinds (suffix decides: `0.2.0` is stable), the plan for each (the dist-tag moves,
+  the guards, the refusals), the registry reader (only tags and integrities are kept), the
+  candidate-to-stable check (allowed and refused deltas, on real throwaway repositories), the
+  evidence guard (a failed, a missing and a passing answer) and the release notes' wording per
+  kind (the Markdown templates are also scanned by the public-claims check); `tests/publish-steps.sh` (the Rust test `publish_steps`, on
+  Linux) executes the publishing shell against stub commands (56 checks). Not shown: any
+  real stable publish ([L-105](known-limits.md#l-105)).
 - R-SEC02: native/npm artifact matches protected commit; verify signatures/provenance,
   dependency/model inventory, malicious archive rejection and wrong-target behavior.
   *P13 PR 9 (2026-09-30): the npm packages are assembled only from canonical release

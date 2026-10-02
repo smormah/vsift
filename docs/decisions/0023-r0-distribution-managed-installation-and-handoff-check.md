@@ -1181,7 +1181,9 @@ real run is the maintainer's at P13 completion
   `npm publish` only in `publish`, always with `--provenance` and `--tag next`, never
   `latest`; `gh release` only there, a pre-release on an existing tag not marked latest;
   no `npm dist-tag`, `npm unpublish`, `npm deprecate`, `gh release delete`, `git tag` or
-  `git push` anywhere (*amended 2026-10-02, P14 PR 8: `npm publish` takes an explicit`n  `--tag next` or `--tag latest` by channel, a pre-release is still never `latest`, and the`n  `npm dist-tag` rule now holds for every workflow; see ADR 0024*); `tarball-sums` exported and checked with `sha256sum --check
+  `git push` anywhere (*amended 2026-10-02, P14 PR 8: `npm publish` takes an explicit
+  `--tag next` or `--tag latest` by channel, a pre-release is still never `latest`, and the
+  `npm dist-tag` rule now holds for every workflow; see ADR 0024*); `tarball-sums` exported and checked with `sha256sum --check
   --strict` by `npm-qualify`, `plan`, `attest` and `publish`; the privileged jobs use
   only their reviewed actions, download only this run's three artifacts and build, pack
   or install nothing; no secret but `NPM_BOOTSTRAP_TOKEN`, and that only in `publish`.

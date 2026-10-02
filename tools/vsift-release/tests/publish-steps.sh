@@ -94,6 +94,25 @@ case "${CURL_MODE}" in
 esac
 STUB
 chmod +x "${BIN}/curl"
+cat > "${BIN}/cargo" <<'STUB'
+#!/usr/bin/env bash
+# Stands in for `cargo run -p vsift-release -- candidate-delta ...` and
+# `cargo run -p vsift-governance -- release-evidence ...`, as CANDIDATE_MODE
+# and EVIDENCE_MODE say.
+echo "cargo $*" >> "${STATE}/cargo.log"
+case "$*" in
+  *vsift-release*candidate-delta*)
+    if [ "${CANDIDATE_MODE}" = found ]; then
+      printf 'candidate-version=0.2.0-rc.1\ncandidate-commit=%s\n' "${CANDIDATE_SHA}"
+    fi ;;
+  *vsift-governance*release-evidence*)
+    case "${EVIDENCE_MODE}" in
+      complete) echo "VSift release evidence is complete for 0.2.0-rc.1 at ${CANDIDATE_SHA:0:12}." ;;
+      incomplete) echo "docs/planning/p14-evidence-ledger.json: incomplete for 0.2.0-rc.1: RQ-01: is planned" >&2; exit 1 ;;
+    esac ;;
+esac
+STUB
+chmod +x "${BIN}/cargo"
 export PATH="${BIN}:${PATH}"
 
 # --- extract a step's script from the workflow -----------------------------
@@ -111,7 +130,9 @@ extract "Require next to be this version and latest to be untouched" > "${WORK}/
 extract "Require latest to be this version and next to be untouched" > "${WORK}/verify-latest.sh"
 extract "Create the GitHub release (stable) and mark it latest" > "${WORK}/release-stable.sh"
 extract "Read npm's public metadata of the four packages" > "${WORK}/registry.sh"
-for script in record publish-next publish-latest verify-next verify-latest release-stable registry; do
+extract "Find the accepted release candidate" > "${WORK}/candidate.sh"
+extract "Check the evidence ledger for the accepted candidate" > "${WORK}/evidence.sh"
+for script in record publish-next publish-latest verify-next verify-latest release-stable registry candidate evidence; do
   [ -s "${WORK}/${script}.sh" ] || { echo "FAIL: could not extract ${script}"; exit 1; }
 done
 
@@ -259,6 +280,30 @@ check "the scoped package is requested with an encoded slash" 0 "$(grep -q 'http
 check "the launcher is requested by name" 0 "$(grep -q 'https://registry.npmjs.org/vsift-cli' "${STATE}/curl.log"; echo $?)"
 check "no request carries a credential, header or body" 0 "$(! grep -q -e '-H' -e '--header' -e '--data' -e '-X' -e '--user' "${STATE}/curl.log"; echo $?)"
 
+echo "== the plan job names the accepted candidate and records the evidence check's answer"
+CANDIDATE_SHA=1111111111111111111111111111111111111111; export CANDIDATE_SHA
+setup 0.2.0 0.0.0 none
+export SOURCE_COMMIT=2222222222222222222222222222222222222222 GITHUB_OUTPUT="${RUNNER_TEMP}/github-output"
+: > "${GITHUB_OUTPUT}"
+export CANDIDATE_MODE=found
+check "candidate step (found)" 0 "$(run candidate)"
+check "the candidate's version and commit reach GITHUB_OUTPUT" 0 "$([ "$(cat "${GITHUB_OUTPUT}")" = "$(printf 'candidate-version=0.2.0-rc.1\ncandidate-commit=%s' "${CANDIDATE_SHA}")" ]; echo $?)"
+check "the candidate comparison is run for the commit under test" 0 "$(grep -q -- "candidate-delta --github-output --stable-commit ${SOURCE_COMMIT}" "${STATE}/cargo.log"; echo $?)"
+: > "${GITHUB_OUTPUT}"
+export CANDIDATE_MODE=none
+check "candidate step (none)" 0 "$(run candidate)"
+check "nothing reaches GITHUB_OUTPUT without a candidate" 0 "$([ ! -s "${GITHUB_OUTPUT}" ]; echo $?)"
+
+export CANDIDATE_VERSION=0.2.0-rc.1 CANDIDATE_COMMIT="${CANDIDATE_SHA}" EVIDENCE_MODE=complete
+setup 0.2.0 0.0.0 none
+export GITHUB_OUTPUT="${RUNNER_TEMP}/github-output"
+check "evidence step (complete)" 0 "$(run evidence)"
+check "the check is run for the candidate at its commit" 0 "$(grep -q -- "release-evidence --complete-for ${CANDIDATE_VERSION} --commit ${CANDIDATE_SHA}" "${STATE}/cargo.log"; echo $?)"
+check "status 0 and the complete message are recorded" 0 "$([ "$(cat "${RUNNER_TEMP}/evidence/status")" = 0 ] && grep -q 'is complete for 0.2.0-rc.1 at 111111111111' "${RUNNER_TEMP}/evidence/result.txt"; echo $?)"
+export EVIDENCE_MODE=incomplete
+setup 0.2.0 0.0.0 none
+check "evidence step (incomplete) records the failure and does not fail the job" 0 "$(run evidence)"
+check "status 1 and the finding are recorded" 0 "$([ "$(cat "${RUNNER_TEMP}/evidence/status")" = 1 ] && grep -q 'RQ-01: is planned' "${RUNNER_TEMP}/evidence/result.txt"; echo $?)"
 echo
 echo "passed ${PASS}, failed ${FAIL}"
 [ "${FAIL}" = 0 ]

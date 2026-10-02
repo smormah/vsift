@@ -44,6 +44,7 @@
 mod archive;
 mod candidate;
 mod checksums;
+mod evidence;
 mod guards;
 mod notes;
 mod npm;
@@ -67,8 +68,11 @@ use crate::{
         ArchiveContents, ArchiveError, LICENCE_FILES, SKILL_DIRECTORY, archive_file_name,
         is_plain_relative_path, read_archive, verify_archive, write_archive,
     },
-    candidate::{CandidateObservation, head_commit, observe},
+    candidate::{
+        CandidateObservation, CheckRecord, github_output as candidate_output, head_commit, observe,
+    },
     checksums::{ChecksumError, checksum_list},
+    evidence::{EvidenceObservation, read_directory as read_evidence},
     guards::Observations,
     npm::{
         LAUNCHER_DIRECTORY, LAUNCHER_LIBRARY, LAUNCHER_MANIFEST, LAUNCHER_README, LAUNCHER_SCRIPT,
@@ -166,6 +170,11 @@ enum Command {
         /// The stable commit, as a full lowercase SHA; defaults to `HEAD`.
         #[arg(long)]
         stable_commit: Option<String>,
+        /// Print only `candidate-version=` and `candidate-commit=` lines for
+        /// `$GITHUB_OUTPUT` (nothing when there is no accepted candidate), and
+        /// never fail: the plan job's evidence step runs when they are there.
+        #[arg(long)]
+        github_output: bool,
     },
 }
 
@@ -203,6 +212,19 @@ struct PlanArguments {
     /// wherever it is enforced.
     #[arg(long)]
     registry: Option<PathBuf>,
+    /// The directory the plan job saved the evidence ledger's answer for the
+    /// accepted candidate in (`status` and `result.txt`). Without it a stable
+    /// plan says the check did not run, and is refused wherever it is
+    /// enforced.
+    #[arg(long)]
+    evidence: Option<PathBuf>,
+    /// `github.run_id`, which the evidence ledger's `release_delta` record
+    /// names as the run that made the candidate comparison.
+    #[arg(long)]
+    run_id: Option<u64>,
+    /// The date of the run, `YYYY-MM-DD` in UTC, for the same record.
+    #[arg(long)]
+    date: Option<String>,
     /// An existing directory; the plan's files must not exist in it yet.
     #[arg(long)]
     out_dir: PathBuf,
@@ -350,7 +372,10 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli.command, Path::new(".")) {
         Ok(outcome) => {
-            println!("{outcome}");
+            let text = outcome.to_string();
+            if !text.is_empty() {
+                println!("{text}");
+            }
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -418,9 +443,10 @@ fn run(command: Command, repository_root: &Path) -> Result<Outcome, ReleaseError
             ))
         }
         Command::PublishPlan(arguments) => write_publish_plan(arguments, repository_root),
-        Command::CandidateDelta { stable_commit } => {
-            candidate_delta(stable_commit, repository_root)
-        }
+        Command::CandidateDelta {
+            stable_commit,
+            github_output,
+        } => candidate_delta(stable_commit, github_output, repository_root),
     }
 }
 
@@ -457,9 +483,22 @@ fn write_publish_plan(
         Some(directory) => read_directory(directory, &publication_order()),
         None => RegistryObservation::NotRead,
     };
+    let evidence = match &arguments.evidence {
+        Some(directory) => read_evidence(directory),
+        None => EvidenceObservation::NotRun,
+    };
+    let check = match (arguments.run_id, arguments.date) {
+        (Some(run_id), Some(date)) if CheckRecord::is_date(&date) => {
+            Some(CheckRecord { run_id, date })
+        }
+        (Some(_), Some(date)) => return Err(ReleaseError::Publish(PublishError::Date(date))),
+        _ => None,
+    };
     let observations = Observations {
         registry,
         candidate: observe(repository_root, &context.commit, &version),
+        evidence,
+        check,
     };
     let plan = plan(
         &version,
@@ -488,6 +527,7 @@ fn write_publish_plan(
 /// reports whether only version strings and the launcher's README differ.
 fn candidate_delta(
     stable_commit: Option<String>,
+    github_output: bool,
     repository_root: &Path,
 ) -> Result<Outcome, ReleaseError> {
     let version = ReleaseVersion::parse(VERSION)?;
@@ -495,7 +535,11 @@ fn candidate_delta(
         Some(commit) => commit,
         None => head_commit(repository_root).map_err(ReleaseError::Candidate)?,
     };
-    match observe(repository_root, &commit, &version) {
+    let observation = observe(repository_root, &commit, &version);
+    if github_output {
+        return Ok(Outcome::Report(candidate_output(&observation)));
+    }
+    match observation {
         CandidateObservation::NotApplicable => Err(ReleaseError::Candidate(format!(
             "{VERSION} has a pre-release suffix, so it has no release candidate to compare with"
         ))),
@@ -844,12 +888,15 @@ mod tests {
             return Err("not publish-plan".into());
         };
         assert_eq!(arguments.registry, Some(PathBuf::from("registry")));
-        let Command::CandidateDelta { stable_commit } =
-            Cli::try_parse_from(["vsift-release", "candidate-delta"])?.command
+        let Command::CandidateDelta {
+            stable_commit,
+            github_output,
+        } = Cli::try_parse_from(["vsift-release", "candidate-delta"])?.command
         else {
             return Err("not candidate-delta".into());
         };
         assert_eq!(stable_commit, None);
+        assert!(!github_output);
         Ok(())
     }
 
@@ -1138,6 +1185,9 @@ mod tests {
                 dry_run_input: dry_run.to_owned(),
                 commit: String::from("0123456789abcdef0123456789abcdef01234567"),
                 registry: None,
+                evidence: None,
+                run_id: None,
+                date: None,
                 out_dir,
             })
         };
@@ -1314,6 +1364,9 @@ mod tests {
                 dry_run_input: String::from("true"),
                 commit: String::from("0123456789abcdef0123456789abcdef01234567"),
                 registry: None,
+                evidence: None,
+                run_id: None,
+                date: None,
                 out_dir: out.clone(),
             }),
             &root,
@@ -1378,6 +1431,9 @@ mod tests {
                 dry_run_input: String::new(),
                 commit: String::from("0123456789abcdef0123456789abcdef01234567"),
                 registry: Some(registry),
+                evidence: None,
+                run_id: None,
+                date: None,
                 out_dir: out.clone(),
             }),
             &root,
@@ -1401,12 +1457,12 @@ mod tests {
         // Whatever this checkout holds, the answer is a report or a typed
         // refusal, never a crash: no candidate tag, a pre-release version, or
         // (after the stable's own commit) the real comparison.
-        let result = candidate_delta(None, &repository_root());
+        let result = candidate_delta(None, false, &repository_root());
         assert!(
             matches!(result, Ok(_) | Err(ReleaseError::Candidate(_))),
             "{result:?}"
         );
-        let absent = candidate_delta(Some(String::from("main")), &repository_root());
+        let absent = candidate_delta(Some(String::from("main")), false, &repository_root());
         assert!(
             matches!(absent, Err(ReleaseError::Candidate(_))),
             "{absent:?}"

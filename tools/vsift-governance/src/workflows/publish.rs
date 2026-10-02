@@ -47,8 +47,12 @@
 //! 9. **The stable path's inputs.** The `plan` job checks out the full
 //!    history (the candidate comparison needs the candidate's tag), reads the
 //!    registry with plain GETs of `https://registry.npmjs.org/` only, and
-//!    passes the result to `publish-plan` with `--registry`. A `curl` anywhere
-//!    in the workflow takes only the reviewed read-only flags.
+//!    passes the result to `publish-plan` with `--registry`. It also names the
+//!    accepted release candidate (`candidate-delta --github-output`), checks the
+//!    evidence ledger for it (`vsift-governance release-evidence --complete-for
+//!    ... --commit ...`, RQ-20) and hands the answer, the run id and the date to
+//!    `publish-plan` (`--evidence`, `--run-id`, `--date`). A `curl` anywhere in
+//!    the workflow takes only the reviewed read-only flags.
 
 use yaml_rust2::{Yaml, yaml::Hash};
 
@@ -804,6 +808,11 @@ fn check_channel_steps(lint: &mut Lint<'_>, job: &Hash) {
     }
 }
 
+/// The arguments every `vsift-release publish-plan` of the `plan` job carries (P14 PR 8):
+/// the saved registry metadata, the evidence check's answer, and the run and date a delta
+/// record names.
+const PUBLISH_PLAN_ARGUMENTS: [&str; 4] = ["--registry", "--evidence", "--run-id", "--date"];
+
 /// The `plan` job's inputs for the stable path (P14 PR 8): it exports the
 /// channel, fetches the full history so the candidate's tag is there, and
 /// hands `publish-plan` the registry files it saved.
@@ -834,24 +843,56 @@ fn check_plan_job(lint: &mut Lint<'_>, plan: &Hash) {
         );
     }
     let mut plans = 0_usize;
-    let mut with_registry = 0_usize;
+    let mut complete_plans = 0_usize;
+    let mut finds_candidate = false;
+    let mut checks_evidence = false;
     for step in steps(plan) {
         if let Some(Yaml::String(script)) = get(step, "run") {
             for command in logical_lines(script) {
                 let words: Vec<&str> = command.split_whitespace().collect();
                 if words.contains(&"vsift-release") && words.contains(&"publish-plan") {
                     plans += 1;
-                    if words.contains(&"--registry") {
-                        with_registry += 1;
+                    if PUBLISH_PLAN_ARGUMENTS
+                        .iter()
+                        .all(|argument| words.contains(argument))
+                    {
+                        complete_plans += 1;
                     }
+                }
+                if words.contains(&"vsift-release")
+                    && words.contains(&"candidate-delta")
+                    && words.contains(&"--github-output")
+                {
+                    finds_candidate = true;
+                }
+                if words.contains(&"vsift-governance")
+                    && words.contains(&"release-evidence")
+                    && words.contains(&"--complete-for")
+                    && words.contains(&"--commit")
+                {
+                    checks_evidence = true;
                 }
             }
         }
     }
-    if plans == 0 || with_registry != plans {
+    if plans == 0 || complete_plans != plans {
+        lint.report(&format!(
+            "job `plan` must run `vsift-release publish-plan` with {PUBLISH_PLAN_ARGUMENTS:?}, so \
+             a stable plan states and checks the registry and the evidence ledger before `latest` \
+             may move, and names the run in the delta record"
+        ));
+    }
+    if !finds_candidate {
         lint.report(
-            "job `plan` must run `vsift-release publish-plan` with `--registry`, so a stable plan \
-             states and checks the registry before `latest` may move",
+            "job `plan` must run `vsift-release candidate-delta --github-output`, which names the \
+             accepted release candidate the evidence check is run for",
+        );
+    }
+    if !checks_evidence {
+        lint.report(
+            "job `plan` must run `vsift-governance release-evidence --complete-for <candidate> \
+             --commit <commit>`: a stable version is published only when the evidence ledger is \
+             complete for its accepted candidate (RQ-20)",
         );
     }
 }
@@ -1601,11 +1642,51 @@ mod tests {
                 "a plan that is not given the registry",
                 mutate(
                     &text,
-                    "            --registry \"${RUNNER_TEMP}/registry\" \\\n",
+                    "--registry \"${RUNNER_TEMP}/registry\" --evidence",
+                    "--evidence",
+                    1,
+                )?,
+                "must run `vsift-release publish-plan` with",
+            ),
+            (
+                "a plan that ignores the evidence ledger's answer",
+                mutate(
+                    &text,
+                    " --evidence \"${RUNNER_TEMP}/evidence\" \\\n",
+                    " \\\n",
+                    1,
+                )?,
+                "must run `vsift-release publish-plan` with",
+            ),
+            (
+                "a plan that does not name the run in its delta record",
+                mutate(
+                    &text,
+                    "            --run-id \"${RUN_ID}\" --date \"$(date -u +%F)\" \\\n",
                     "",
                     1,
                 )?,
-                "with `--registry`",
+                "must run `vsift-release publish-plan` with",
+            ),
+            (
+                "a plan job that does not find the accepted candidate",
+                mutate(
+                    &text,
+                    "candidate-delta --github-output --stable-commit",
+                    "candidate-delta --stable-commit",
+                    1,
+                )?,
+                "must run `vsift-release candidate-delta --github-output`",
+            ),
+            (
+                "a plan job that does not check the evidence ledger",
+                mutate(
+                    &text,
+                    "release-evidence --complete-for \"${CANDIDATE_VERSION}\" --commit \"${CANDIDATE_COMMIT}\"",
+                    "release-evidence",
+                    1,
+                )?,
+                "must run `vsift-governance release-evidence --complete-for",
             ),
             (
                 "a dist-tag move with extra spaces",

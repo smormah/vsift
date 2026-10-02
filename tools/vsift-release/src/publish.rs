@@ -39,7 +39,7 @@ use serde_json::{Value, json};
 
 use crate::{
     archive::archive_file_name,
-    candidate::{CandidateObservation, CandidateReport},
+    candidate::{CandidateObservation, CandidateReport, release_delta},
     checksums::checksum_list,
     guards::{DistTagMove, Evaluation, Guard, GuardOutcome, Observations, evaluate},
     notes::release_notes,
@@ -83,6 +83,9 @@ pub(crate) const RELEASE_NOTES: &str = "release-notes.md";
 pub(crate) const SUBJECTS_LIST: &str = "attestation-subjects.sha256";
 /// Every asset of the GitHub release, in `sha256sum` format.
 pub(crate) const ASSETS_LIST: &str = "release-assets.sha256";
+/// The record of the candidate comparison in the evidence ledger's `release_delta`
+/// shape, written for an enforced stable plan that passed every guard.
+pub(crate) const RELEASE_DELTA: &str = "release-delta.json";
 
 /// Which of the two publications a version gets. The pairing of a channel
 /// with its dist-tag and its GitHub flags is made here and nowhere else; the
@@ -440,6 +443,8 @@ pub(crate) enum PublishError {
     /// The tarballs are not exactly one per package, named as `npm pack`
     /// names them.
     Tarballs(String),
+    /// The date given for the delta record is not YYYY-MM-DD.
+    Date(String),
     /// An enforced plan failed at least one guard.
     Refused(Vec<String>),
     /// The plan could not be written as JSON.
@@ -479,6 +484,7 @@ impl fmt::Display for PublishError {
                 "SHA256SUMS does not list exactly the release archives with their digests"
             ),
             Self::Tarballs(reason) => write!(formatter, "the npm tarballs are wrong: {reason}"),
+            Self::Date(date) => write!(formatter, "{date:?} is not a date written YYYY-MM-DD"),
             Self::Refused(reasons) => write!(
                 formatter,
                 "the plan is refused, nothing may be published: {}",
@@ -696,6 +702,9 @@ pub(crate) struct PublishPlan {
     pub moves: Vec<DistTagMove>,
     /// The comparison with the accepted candidate, for a stable version.
     pub candidate: Option<Box<CandidateReport>>,
+    /// The evidence ledger's `release_delta` record, for an enforced stable plan
+    /// whose guards all passed and that was given the run and date to name.
+    pub release_delta: Option<serde_json::Value>,
 }
 
 /// The file `npm pack` writes for `package` at `version`: the name without
@@ -728,28 +737,13 @@ pub(crate) fn publication_order() -> Vec<&'static str> {
         .collect()
 }
 
-/// Makes the plan from checked inputs: the version, the run, one canonical
-/// archive per target, the `SHA256SUMS` file as the `package` job wrote it,
-/// one verified tarball per package, and what the plan job observed outside
-/// them (the registry and the accepted candidate).
-pub(crate) fn plan(
+/// Requires exactly one archive per target, named for the version, and the
+/// `SHA256SUMS` file to be the one those archives produce.
+fn check_archives(
     version: &ReleaseVersion,
-    context: RunContext,
     archives: &[ReleaseArchive],
     checksums: &[u8],
-    tarballs: &[PackedPackage],
-    observations: &Observations,
-) -> Result<PublishPlan, PublishError> {
-    if version.is_placeholder() {
-        return Err(PublishError::PlaceholderVersion);
-    }
-    if !is_full_commit(&context.commit) {
-        return Err(PublishError::Commit(context.commit.clone()));
-    }
-    let mode = decide_mode(&context, version)?;
-    let enforcement = enforcement(&context, version, mode);
-    let channel = version.kind().channel();
-
+) -> Result<(), PublishError> {
     for target in ReleaseTarget::ALL {
         let expected = archive_file_name(version.as_str(), target);
         let count = archives
@@ -776,7 +770,15 @@ pub(crate) fn plan(
     if listed.as_bytes() != checksums {
         return Err(PublishError::Checksums);
     }
+    Ok(())
+}
 
+/// One publication per package, in publication order, from exactly one
+/// correctly named tarball each.
+fn npm_publications(
+    version: &ReleaseVersion,
+    tarballs: &[PackedPackage],
+) -> Result<Vec<NpmPublication>, PublishError> {
     let mut npm = Vec::new();
     for package in publication_order() {
         let expected = npm_tarball_name(package, version.as_str());
@@ -803,6 +805,33 @@ pub(crate) fn plan(
             "a tarball is not one of the packages",
         )));
     }
+    Ok(npm)
+}
+
+/// Makes the plan from checked inputs: the version, the run, one canonical
+/// archive per target, the `SHA256SUMS` file as the `package` job wrote it,
+/// one verified tarball per package, and what the plan job observed outside
+/// them (the registry and the accepted candidate).
+pub(crate) fn plan(
+    version: &ReleaseVersion,
+    context: RunContext,
+    archives: &[ReleaseArchive],
+    checksums: &[u8],
+    tarballs: &[PackedPackage],
+    observations: &Observations,
+) -> Result<PublishPlan, PublishError> {
+    if version.is_placeholder() {
+        return Err(PublishError::PlaceholderVersion);
+    }
+    if !is_full_commit(&context.commit) {
+        return Err(PublishError::Commit(context.commit.clone()));
+    }
+    let mode = decide_mode(&context, version)?;
+    let enforcement = enforcement(&context, version, mode);
+    let channel = version.kind().channel();
+
+    check_archives(version, archives, checksums)?;
+    let npm = npm_publications(version, tarballs)?;
 
     let mut extracted = Vec::new();
     let mut assets = vec![digested("SHA256SUMS", checksums)];
@@ -825,6 +854,17 @@ pub(crate) fn plan(
         CandidateObservation::Checked(report) if channel == Channel::Stable => Some(report.clone()),
         _ => None,
     };
+    let release_delta = match (&candidate, &observations.check) {
+        (Some(report), Some(check))
+            if enforcement == Enforcement::Enforced
+                && guards
+                    .iter()
+                    .all(|guard| guard.outcome != GuardOutcome::Failed) =>
+        {
+            Some(release_delta(report, version.as_str(), check))
+        }
+        _ => None,
+    };
     let release = GithubRelease {
         channel,
         tag: version.git_tag(),
@@ -843,6 +883,7 @@ pub(crate) fn plan(
         guards,
         moves,
         candidate,
+        release_delta,
     })
 }
 
@@ -916,6 +957,14 @@ impl PublishPlan {
                 sha256sum_lines(&self.release.assets).into_bytes(),
             ),
         ];
+        if let Some(delta) = &self.release_delta {
+            let text = serde_json::to_string_pretty(delta)
+                .map_err(|error| PublishError::Json(error.to_string()))?;
+            files.push((
+                String::from(RELEASE_DELTA),
+                format!("{text}\n").into_bytes(),
+            ));
+        }
         files.extend(self.extracted.iter().cloned());
         Ok(files)
     }
@@ -1005,6 +1054,7 @@ impl PublishPlan {
             "dist_tags": dist_tags,
             "guards": guards,
             "candidate": candidate,
+            "release_delta": self.release_delta,
             "attestation_subjects": digests(&self.subjects),
             "npm": npm,
             "github_release": {
@@ -1105,9 +1155,20 @@ impl PublishPlan {
     /// published and released, what moves which dist-tag, which guards held,
     /// and whether this run does it.
     pub(crate) fn markdown(&self) -> String {
+        let mut text = self.banner();
+        self.write_summary(&mut text);
+        if self.refusal().is_some() {
+            return text;
+        }
+        self.write_commands(&mut text);
+        text
+    }
+
+    /// The run, what happens to each dist-tag, the guards and, when the plan
+    /// passed an enforced run, the record for the evidence ledger.
+    fn write_summary(&self, text: &mut String) {
         let version = self.version.as_str();
         let channel = self.channel();
-        let mut text = self.banner();
         let _ = writeln!(
             text,
             "\n### This run\n\n- Version `{version}` ({}), npm dist-tag `{}`, Git tag `{}`\n\
@@ -1156,9 +1217,23 @@ impl PublishPlan {
                 cell(&guard.detail)
             );
         }
-        if self.refusal().is_some() {
-            return text;
+        if let Some(delta) = &self.release_delta {
+            let rendered = serde_json::to_string_pretty(delta).unwrap_or_default();
+            let _ = writeln!(
+                text,
+                "\n### The evidence ledger's `release_delta` record\n\n\
+                 Copy this into `docs/planning/p14-evidence-ledger.json` after the publish \
+                 (release.md section 6.7); the plan's artifact `{RELEASE_DELTA}` holds it for 7 \
+                 days.\n\n```json\n{rendered}\n```"
+            );
         }
+    }
+
+    /// What `attest` and `publish` would do: the files to attest, the four
+    /// `npm publish` commands and the GitHub release commands.
+    fn write_commands(&self, text: &mut String) {
+        let version = self.version.as_str();
+        let channel = self.channel();
         let _ = writeln!(
             text,
             "\n### 1. Sigstore build provenance (job `attest`)\n\n| File | SHA-256 |\n| --- | --- |"
@@ -1196,7 +1271,6 @@ impl PublishPlan {
         for asset in &self.release.assets {
             let _ = writeln!(text, "| `{}` | `{}` |", asset.name, asset.sha256);
         }
-        text
     }
 
     /// The GitHub release's notes. They name no person.

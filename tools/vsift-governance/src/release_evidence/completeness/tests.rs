@@ -229,6 +229,25 @@ fn a_stable_with_repeated_items_and_an_allowed_delta_is_complete() -> Outcome {
     Ok(())
 }
 
+/// The record `vsift-release publish-plan` writes (`release-delta.json`), as
+/// its own test pins it: the release tool and this check share one example, so
+/// the stable check accepts exactly what the plan job writes.
+#[test]
+fn the_release_tools_delta_record_is_accepted_as_it_is() -> Outcome {
+    let example = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../vsift-release/tests/release-delta.example.json"),
+    )?;
+    let mut value = stable_ready()?;
+    set(
+        &mut value,
+        "/release_delta",
+        serde_json::from_str(&example)?,
+    )?;
+    let found = check(&value, &stable("0.2.0", LATER_COMMIT)?, &unchanged())?;
+    assert!(found.is_empty(), "{found:#?}");
+    Ok(())
+}
 #[test]
 fn a_stable_cannot_carry_without_a_recorded_delta() -> Outcome {
     let mut value = stable_ready()?;

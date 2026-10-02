@@ -217,15 +217,82 @@ pub(crate) enum CandidateObservation {
     Failed(String),
 }
 
-fn short(commit: &str) -> &str {
+pub(crate) fn short(commit: &str) -> &str {
     commit.get(..12).unwrap_or(commit)
+}
+
+/// The lines `vsift-release candidate-delta --github-output` prints for
+/// `$GITHUB_OUTPUT`: the accepted candidate's version and commit when one was
+/// found, nothing otherwise. The plan job's evidence step runs only when they
+/// are there.
+pub(crate) fn github_output(observation: &CandidateObservation) -> String {
+    match observation {
+        CandidateObservation::Checked(report) => format!(
+            "candidate-version={}\ncandidate-commit={}",
+            report.candidate_version, report.candidate_commit
+        ),
+        CandidateObservation::NotApplicable | CandidateObservation::Failed(_) => String::new(),
+    }
+}
+
+/// When and in which run a candidate comparison was made: what the evidence
+/// ledger's `release_delta` records beside the comparison.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CheckRecord {
+    /// The workflow run (`github.run_id`).
+    pub run_id: u64,
+    /// The date, `YYYY-MM-DD`, in UTC.
+    pub date: String,
+}
+
+impl CheckRecord {
+    /// Whether `text` is shaped like `YYYY-MM-DD`. The evidence ledger's own
+    /// check holds the calendar rules.
+    pub(crate) fn is_date(text: &str) -> bool {
+        let parts: Vec<&str> = text.split('-').collect();
+        matches!(parts.as_slice(), [year, month, day]
+            if year.len() == 4 && month.len() == 2 && day.len() == 2
+                && [year, month, day].iter().all(|part| part.bytes().all(|byte| byte.is_ascii_digit())))
+    }
+}
+
+/// The `release_delta` record of the evidence ledger
+/// (`docs/planning/p14-evidence-ledger.json`) for a comparison: the accepted
+/// candidate, the stable version and commit, the verdict and the run that made
+/// it. The maintainer copies it into the ledger after the stable is published;
+/// the ledger's completeness check for the stable release refuses to carry
+/// candidate evidence without it. The shape is held by a shared example that
+/// the governance tool parses (`tools/vsift-release/tests/release-delta.example.json`).
+pub(crate) fn release_delta(
+    report: &CandidateReport,
+    stable_version: &str,
+    record: &CheckRecord,
+) -> serde_json::Value {
+    let verdict = if report.violations().is_empty() {
+        "allowed"
+    } else {
+        "rejected"
+    };
+    serde_json::json!({
+        "candidate_version": report.candidate_version,
+        "candidate_commit": report.candidate_commit,
+        "stable_version": stable_version,
+        "stable_commit": report.stable_commit,
+        "verdict": verdict,
+        "check": {
+            "type": "workflow_run",
+            "workflow": "Release",
+            "run_id": record.run_id,
+        },
+        "date": record.date,
+    })
 }
 
 /// A path as it may be printed in a report: ASCII graphic characters and
 /// spaces only (anything else becomes `?`), without a backtick, at most
 /// [`MAXIMUM_PRINTED_PATH`] characters. Paths come from the checked-out
 /// commit, which a fork's pull request controls.
-fn printable(path: &str) -> String {
+pub(crate) fn printable(path: &str) -> String {
     path.chars()
         .take(MAXIMUM_PRINTED_PATH)
         .map(|character| {
@@ -311,8 +378,8 @@ fn classify(
     let document = SHIPPED_DOCUMENT_FILES.contains(&path);
     if !version_file && !document {
         return Err(String::from(
-            "may not differ between the candidate and the stable: only version strings and the \
-             launcher's README may",
+            "may not differ between the candidate and the stable release: only version strings \
+             and the launcher's README may",
         ));
     }
     if !ordinary_edit {
@@ -560,8 +627,9 @@ mod tests {
     use std::{error::Error, fs, path::Path, path::PathBuf, process::Command};
 
     use super::{
-        CandidateObservation, Change, ChangeClass, SHIPPED_DOCUMENT_FILES, VERSION_STRING_FILES,
-        candidate_tags, evaluate, observe, parse_raw_diff, printable, replace_all,
+        CandidateObservation, CandidateReport, Change, ChangeClass, ChangedPath, CheckRecord,
+        SHIPPED_DOCUMENT_FILES, VERSION_STRING_FILES, candidate_tags, evaluate, github_output,
+        observe, parse_raw_diff, printable, release_delta, replace_all,
     };
     use crate::publish::ReleaseVersion;
 
@@ -808,6 +876,80 @@ mod tests {
         }
         assert!(parse_raw_diff(&[0xff, 0xfe]).is_err());
         Ok(())
+    }
+
+    /// The record the plan writes is exactly the shape the evidence ledger's
+    /// `release_delta` reads: this example is parsed by the governance tool's
+    /// own tests too (`completeness` and `structure`), so neither side can
+    /// change the shape alone.
+    #[test]
+    fn the_release_delta_record_is_the_shared_example() -> Result<(), Box<dyn Error>> {
+        let report = CandidateReport {
+            candidate_tag: String::from("v0.2.0-rc.1"),
+            candidate_version: String::from(CANDIDATE),
+            candidate_commit: "1".repeat(40),
+            stable_commit: "2".repeat(40),
+            ancestor: true,
+            changes: vec![ChangedPath {
+                path: String::from("Cargo.toml"),
+                verdict: Ok(ChangeClass::VersionString),
+            }],
+        };
+        let record = CheckRecord {
+            run_id: 36_959_682_491,
+            date: String::from("2026-11-01"),
+        };
+        let written = release_delta(&report, STABLE, &record);
+        let example: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/release-delta.example.json"),
+        )?)?;
+        assert_eq!(written, example);
+        // A comparison that found something else is a rejected delta.
+        let mut rejected = report.clone();
+        rejected.changes.push(ChangedPath {
+            path: String::from("crates/x.rs"),
+            verdict: Err(String::from("may not differ")),
+        });
+        assert_eq!(
+            release_delta(&rejected, STABLE, &record)["verdict"],
+            "rejected"
+        );
+        assert!(CheckRecord::is_date("2026-11-01"));
+        for bad in [
+            "",
+            "2026-1-01",
+            "26-11-01",
+            "2026/11/01",
+            "2026-11-01x",
+            "2026-11",
+        ] {
+            assert!(!CheckRecord::is_date(bad), "{bad:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn the_github_output_names_the_accepted_candidate_or_nothing() {
+        let report = CandidateReport {
+            candidate_tag: String::from("v0.2.0-rc.3"),
+            candidate_version: String::from("0.2.0-rc.3"),
+            candidate_commit: "a".repeat(40),
+            stable_commit: "b".repeat(40),
+            ancestor: true,
+            changes: Vec::new(),
+        };
+        assert_eq!(
+            github_output(&CandidateObservation::Checked(Box::new(report))),
+            format!(
+                "candidate-version=0.2.0-rc.3\ncandidate-commit={}",
+                "a".repeat(40)
+            )
+        );
+        assert_eq!(github_output(&CandidateObservation::NotApplicable), "");
+        assert_eq!(
+            github_output(&CandidateObservation::Failed(String::from("no tag"))),
+            ""
+        );
     }
 
     // The tests below run git on throwaway repositories. Their identity is

@@ -43,7 +43,9 @@ The second form is the completeness check (evidence item RQ-20): it fails unless
 the release needs is passed for that version and commit, carried forward because nothing in its
 scope changed (it asks Git, so it needs history), waived by a recorded maintainer decision or
 not applicable; for the stable version it also needs a recorded candidate-to-stable delta, which
-P14 PR 8 builds. These checks prove that recorded evidence exists and that banned words are
+P14 PR 8's `vsift-release candidate-delta` computes and the stable plan writes as `release-delta.json`
+(the maintainer copies it into the ledger after the publish, L-103); the Release workflow runs this
+check for the accepted candidate and refuses a stable plan when it fails (RQ-20). These checks prove that recorded evidence exists and that banned words are
 absent; they do not fetch a run or judge a sentence (known limits L-101 and L-103). A pull
 request that changes a quoted public sentence updates the registry with it; one that changes an
 item's status updates the ledger.

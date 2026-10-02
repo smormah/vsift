@@ -10,8 +10,9 @@ use super::{
 };
 use crate::{
     archive::archive_file_name,
-    candidate::{CandidateObservation, CandidateReport, ChangeClass, ChangedPath},
+    candidate::{CandidateObservation, CandidateReport, ChangeClass, ChangedPath, CheckRecord},
     checksums::checksum_list,
+    evidence::EvidenceObservation,
     guards::{GuardOutcome, Observations},
     npm::LAUNCHER_PACKAGE,
     registry::{
@@ -142,10 +143,22 @@ fn clean_candidate() -> CandidateObservation {
     }))
 }
 
+/// The evidence check's answer when the ledger is complete for `clean_candidate()`.
+fn complete_evidence() -> EvidenceObservation {
+    EvidenceObservation::Ran {
+        succeeded: true,
+        lines: vec![String::from(
+            "VSift release evidence is complete for 0.2.0-rc.1 at aaaaaaaaaaaa.",
+        )],
+    }
+}
+
 fn healthy_stable_observations() -> Observations {
     Observations {
         registry: registry_before_the_stable(),
         candidate: clean_candidate(),
+        evidence: complete_evidence(),
+        check: None,
     }
 }
 
@@ -594,7 +607,9 @@ fn the_pre_release_plan_lists_every_command_and_file_exactly() -> Result<(), Box
     assert!(summary.contains("`latest` is not touched"));
     assert!(!summary.contains("moves npm's `latest`"));
     let notes = file("release-notes.md");
-    assert!(notes.contains("release candidate under qualification"));
+    assert!(
+        notes.starts_with("VSift 0.2.0-rc.1 is a release candidate. It is under qualification")
+    );
     assert!(notes.contains("npm install --global vsift-cli@next"));
     assert!(notes.contains("--source-ref refs/tags/v0.2.0-rc.1"));
     assert!(notes.contains(COMMIT));
@@ -659,7 +674,7 @@ fn the_stable_plan_says_loudly_that_latest_moves_and_lists_what_moves_it()
         "| Accepted candidate | passed | against `v0.2.0-rc.1`",
         "| Candidate published | passed |",
         "| `latest` moves forward | passed |",
-        "| Evidence ledger | not enforced |",
+        "| Evidence ledger | passed | VSift release evidence is complete for 0.2.0-rc.1 at aaaaaaaaaaaa. |",
         "`npm publish ./npm-packages/vsift-cli-0.2.0.tgz --tag latest",
         "as the release marked latest",
     ] {
@@ -691,10 +706,95 @@ fn the_stable_plan_says_loudly_that_latest_moves_and_lists_what_moves_it()
     assert_eq!(json["dist_tags"][0]["untouched"], "0.2.0-rc.1");
     assert_eq!(json["guards"].as_array().map(Vec::len), Some(6));
     let notes = plan.release_notes();
-    assert!(notes.starts_with("VSift 0.2.0 is a stable release."));
+    assert!(notes.starts_with("VSift 0.2.0 is published to npm under the dist-tag `latest`"));
+    assert!(notes.contains("it is the latest GitHub release"));
     Ok(())
 }
 
+#[test]
+fn an_enforced_stable_plan_that_passes_writes_the_release_delta_record()
+-> Result<(), Box<dyn Error>> {
+    let observations = Observations {
+        check: Some(CheckRecord {
+            run_id: 36_959_682_491,
+            date: String::from("2026-10-20"),
+        }),
+        ..healthy_stable_observations()
+    };
+    let plan = planned(
+        STABLE,
+        release_dispatch(STABLE, DryRunInput::Cleared),
+        &observations,
+    )?;
+    let files = plan.files()?;
+    let delta = files
+        .iter()
+        .find(|(name, _)| name == "release-delta.json")
+        .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+        .ok_or("no release-delta.json")?;
+    let record: Value = serde_json::from_str(&delta)?;
+    assert_eq!(record["candidate_version"], PRE);
+    assert_eq!(record["candidate_commit"], "a".repeat(40));
+    assert_eq!(record["stable_version"], STABLE);
+    assert_eq!(record["stable_commit"], COMMIT);
+    assert_eq!(record["verdict"], "allowed");
+    assert_eq!(record["check"]["type"], "workflow_run");
+    assert_eq!(record["check"]["workflow"], "Release");
+    assert_eq!(record["check"]["run_id"], 36_959_682_491_u64);
+    assert_eq!(record["date"], "2026-10-20");
+    assert_eq!(record.as_object().map(serde_json::Map::len), Some(7));
+    // The summary shows it too, and the plan's own JSON carries it.
+    let markdown = plan.markdown();
+    assert!(markdown.contains("### The evidence ledger's `release_delta` record"));
+    assert!(markdown.contains("\"run_id\": 36959682491"));
+    let json: Value = serde_json::from_str(
+        &files
+            .iter()
+            .find(|(name, _)| name == "publish-plan.json")
+            .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+            .unwrap_or_default(),
+    )?;
+    assert_eq!(json["release_delta"]["verdict"], "allowed");
+
+    // No record without the run and date; none for a plan that only reports
+    // (a pull request), a pre-release or a refused plan.
+    let without_check = planned(
+        STABLE,
+        release_dispatch(STABLE, DryRunInput::Cleared),
+        &healthy_stable_observations(),
+    )?;
+    assert!(without_check.release_delta.is_none());
+    let pull_request = planned(
+        STABLE,
+        context(
+            TriggerEvent::PullRequest,
+            "refs/pull/9/merge",
+            DryRunInput::Absent,
+        ),
+        &observations,
+    )?;
+    assert!(pull_request.release_delta.is_none());
+    let pre_release = planned(
+        PRE,
+        release_dispatch(PRE, DryRunInput::Cleared),
+        &Observations {
+            check: observations.check.clone(),
+            ..Observations::none()
+        },
+    )?;
+    assert!(pre_release.release_delta.is_none());
+    let refused = planned(
+        STABLE,
+        release_dispatch(STABLE, DryRunInput::Cleared),
+        &Observations {
+            evidence: EvidenceObservation::NotRun,
+            ..observations
+        },
+    )?;
+    assert!(refused.release_delta.is_none());
+    assert!(refused.refusal().is_some());
+    Ok(())
+}
 #[test]
 fn a_stable_plan_on_a_pull_request_reports_what_would_refuse_it_and_carries_on()
 -> Result<(), Box<dyn Error>> {
@@ -710,6 +810,7 @@ fn a_stable_plan_on_a_pull_request_reports_what_would_refuse_it_and_carries_on()
         &Observations {
             registry: RegistryObservation::NotRead,
             candidate: CandidateObservation::Failed(String::from("no release candidate tag")),
+            ..Observations::none()
         },
     )?;
     assert_eq!(plan.enforcement, Enforcement::ReportOnly);
@@ -746,6 +847,7 @@ fn an_enforced_stable_plan_with_a_failed_guard_is_refused_and_shows_no_command()
             &Observations {
                 registry: registry_before_the_stable(),
                 candidate: CandidateObservation::Failed(String::from("no release candidate tag")),
+                ..Observations::none()
             },
         )?;
         let reasons = plan.refusal().ok_or("the plan was not refused")?;
@@ -753,7 +855,8 @@ fn an_enforced_stable_plan_with_a_failed_guard_is_refused_and_shows_no_command()
             reasons,
             [
                 "Accepted candidate: no release candidate tag",
-                "Candidate published: there is no accepted candidate to look for on npm"
+                "Candidate published: there is no accepted candidate to look for on npm",
+                "Evidence ledger: there is no accepted candidate whose evidence could be checked"
             ]
         );
         let markdown = plan.markdown();
@@ -837,6 +940,7 @@ fn a_stable_plan_is_refused_for_each_registry_and_candidate_violation() -> Resul
             &Observations {
                 registry,
                 candidate: clean_candidate(),
+                ..Observations::none()
             },
         )?;
         let reasons = plan
@@ -887,6 +991,7 @@ fn a_pre_release_plan_is_enforced_only_for_what_could_make_the_publish_wrong()
         &Observations {
             registry,
             candidate: CandidateObservation::NotApplicable,
+            ..Observations::none()
         },
     )?;
     assert!(refused.refusal().is_some());

@@ -46,6 +46,21 @@ fn the_baseline_ledger_is_clean() -> Outcome {
     assert_clean(&baseline_value())
 }
 
+/// The release tool's example `release_delta` record passes the structure rules.
+#[test]
+fn the_release_tools_delta_record_is_structurally_valid() -> Outcome {
+    let example = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../vsift-release/tests/release-delta.example.json"),
+    )?;
+    let mut value = baseline_value();
+    set(
+        &mut value,
+        "/release_delta",
+        serde_json::from_str(&example)?,
+    )?;
+    assert_clean(&value)
+}
 #[test]
 fn unknown_fields_and_values_fail_the_parse() -> Outcome {
     for (path, replacement, what) in [

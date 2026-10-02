@@ -10,13 +10,14 @@ the stable release and the release candidate). **0.1.0 was published with it on 
 publish"). **The stable path (section 6.7) has been built and tested but has never run
 against the real services: no stable version is published, and `latest` is still the empty
 `0.0.0` placeholder on all four packages.** The workflow described here builds, checks and
-packages the archives, assembles and qualifies the npm packages (section 5), and on every run
-writes the publish plan and shows it (a dry run). It publishes only when the maintainer
+packages the archives, assembles the npm packages and runs their qualification (section 5),
+and on every run writes the publish plan and shows it (a dry run). It publishes only when the maintainer
 dispatches it on a release tag with `dry_run` cleared and then approves the protected
 `release` environment (section 6). The version decides what a publication does: a version
 with a pre-release suffix (`0.2.0-rc.1`) goes under `next`; a version without one (`0.2.0`)
-is *stable*, goes under `latest` and moves it on all four packages. The maintainer's
-one-time setup, the candidate and the stable procedures are section 6. The installation guide
+is a stable version, goes under `latest` and moves it on all four packages. The
+maintainer's one-time setup, the candidate procedure and the stable release procedure are
+section 6. The installation guide
 for users is [`install.md`](install.md).
 
 ## 1. What the release workflow does
@@ -76,14 +77,14 @@ person types can change it.
 | --- | --- | --- | --- | --- |
 | `0.2.0-rc.1`, `0.2.0-rc.12` (`rc.` and a positive number) | release candidate | `--tag next`; `latest` untouched | pre-release, not marked latest | "a release candidate under qualification", not announced, no claim of support |
 | `0.3.0-beta.1`, `1.0.0-rc.0` (any other suffix) | pre-release | `--tag next`; `latest` untouched | pre-release, not marked latest | "a pre-release" |
-| `0.2.0`, `1.0.0`, `0.1.0` (no suffix; a 0.x version too) | **stable** | `--tag latest`; **`latest` moves on all four packages**; `next` untouched | the release marked latest | what a stable release promises (the CLI grammar, exit codes and v1 JSON, additively) and nothing more |
+| `0.2.0`, `1.0.0`, `0.1.0` (no suffix; a 0.x version too) | **stable version** | `--tag latest`; **`latest` moves on all four packages**; `next` untouched | the release marked latest | what the stable release promises (the CLI grammar, exit codes and v1 JSON, additively) and nothing more |
 | `0.0.0` | the placeholder every package already holds | refused in every mode | refused | refused |
 
 Anything npm would rewrite or read as another version is refused: build metadata (`+...`),
 a leading `v`, leading zeros, an empty identifier, whitespace. A pre-release is *never*
 published under `latest`, and a stable version is *never* published under `next`. `0.1.0`
-was published before this rule, as a pre-release under `next`; by shape it is stable, so a
-plan for it is refused by the registry guards (npm already holds it under another tag).
+was published before this rule, as a pre-release under `next`; by shape it is a stable
+version, so a plan for it is refused by the registry guards (npm already holds it under another tag).
 While the workspace version is `0.1.0`, every pull request's dry run therefore shows the
 stable plan as "would be refused" (no candidate, `0.1.0` already on npm): that is the plan
 working, not a failure, and it ends when the version becomes a candidate.
@@ -166,19 +167,22 @@ every file in `.github/workflows/` and fails when a workflow:
    - (P14 PR 8, the channels) the `plan` job does not export `channel`; a step that runs
      `npm publish` or `gh release create` or `edit` serves both channels, or does not run
      only under `needs.plan.outputs.channel == 'prerelease'` for `--tag next` and a
-     `--prerelease --latest=false` release, or only under `... == 'stable'` for `--tag
+     `--prerelease --latest=false` release, or only under the channel `stable` for `--tag
      latest`, a release created without `--prerelease` and an edit with `--latest`, or its
      condition holds `||` or another bypass; an `npm publish` step does not open with the
      shape check of its channel (`[[ "${VERSION}" =~ ... ]]`: a suffix for `next`, none
-     for `latest`); a stable release is marked latest when the draft is created rather
-     than by the edit that publishes it; the stable `npm publish` step does not first
-     require every package's `latest` to be at or below the version published
+     for `latest`); the stable release is marked latest when the draft is created rather
+     than by the edit that publishes it; the `npm publish` step of the stable release does not
+     first require every package's `latest` to be at or below the version published
      (`sort -V`); the `publish` job does not record the dist-tags before publishing, does
      not read both tags back after each channel's publish, or does not confirm that
      GitHub's latest release is the stable tag;
    - (P14 PR 8, the stable path's inputs) the `plan` job does not check out with
-     `fetch-depth: 0`, or does not run `vsift-release publish-plan` with `--registry`; a
-     `curl` takes any flag but the reviewed read-only ones (`--silent`, `--show-error`,
+     `fetch-depth: 0`, or does not run `vsift-release publish-plan` with `--registry`,
+     `--evidence`, `--run-id` and `--date`, or does not run `vsift-release candidate-delta
+     --github-output` (which names the accepted candidate) or `vsift-governance
+     release-evidence --complete-for <candidate> --commit <candidate commit>` (the evidence
+     ledger's completeness check, RQ-20); a `curl` takes any flag but the reviewed read-only ones (`--silent`, `--show-error`,
      `--proto`, `--max-time`, `--retry`, `--output`, `--write-out`) or any URL but
      `https://registry.npmjs.org/...`; `attest` or `publish` runs `curl` or `wget`;
    - `npm-package` does not export `tarball-sums`, or `npm-qualify`, `plan`, `attest` or
@@ -202,8 +206,8 @@ The lint reads the YAML tree, so flow mappings and aliases are seen, and it refu
 merge keys (`<<`). Comments are not part of the tree. Its tests are in
 `tools/vsift-governance/src/workflows.rs` (rule 8 included) and, for rule 7,
 `workflows/publish.rs`, which checks the real `release.yml` and a mutation of it for
-every rule: 61 deliberately broken copies, 28 for the P13 rules and 33 for the channels
-and the stable path's inputs, each of which the lint must name.
+every rule: 65 deliberately broken copies, 28 for the P13 rules and 37 for the channels,
+the stable path's inputs and the evidence step, each of which the lint must name.
 
 *Why the dispatch input is compared as a string:* GitHub compares values of different
 types loosely, turning `null` and `false` both into 0, so `inputs.dry_run == false` is
@@ -236,15 +240,15 @@ A dry-run archive is unsigned and unattested. Do not distribute one.
 
 ## 5. The npm packages and their qualification (P13 PR 9)
 
-The same workflow turns the archives into the four npm packages and qualifies them. Both
-jobs run after `package`, and neither can publish: they have `contents: read`, no OIDC
+The same workflow turns the archives into the four npm packages and runs their
+qualification. Both jobs run after `package`, and neither can publish: they have `contents: read`, no OIDC
 token and no secret, and the only registry they write to runs on the job's own loopback
 address and is gone when the job ends.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
 | `npm-package` | `ubuntu-24.04` | `vsift-release npm` reads the three archives back (each must be canonical) and writes the package folders; `npm pack` packs each twice and the two tarballs must be identical; `vsift-release npm-verify` checks every tarball against a fresh assembly; keeps the four tarballs as the run's `npm-packages` artifact for 7 days. |
-| `npm-qualify` | `windows-2025`, `macos-15`, `ubuntu-24.04`, each with npm, pnpm, Yarn and Bun (12 jobs) | Installs the pinned Verdaccio and package manager from the public registry (read-only, no credentials), then runs `npm/qualification/qualify.cjs`, which publishes the tarballs to Verdaccio on `127.0.0.1:4873` and qualifies the package manager against it (ADR 0023, PR 9 note). The job summary lists every check. |
+| `npm-qualify` | `windows-2025`, `macos-15`, `ubuntu-24.04`, each with npm, pnpm, Yarn and Bun (12 jobs) | Installs the pinned Verdaccio and package manager from the public registry (read-only, no credentials), then runs the driver in `npm/qualification/`, which publishes the tarballs to Verdaccio on `127.0.0.1:4873` and checks the package manager against it (ADR 0023, PR 9 note). The job summary lists every check. |
 
 **The packages.**
 
@@ -296,7 +300,7 @@ the maintainer's placeholder, is `latest` until a stable version is published; a
 pre-release is published with `--tag next`, so its release notes tell users to install
 `vsift-cli@next`, and a stable version is published with `--tag latest`, so its notes tell
 them to install `vsift-cli`. Yarn 4.18 holds every new version back for a day
-(`npmMinimalAgeGate`), for `vsift-cli` and `@vsift/*` alike (a stable release included:
+(`npmMinimalAgeGate`), for `vsift-cli` and `@vsift/*` alike (the stable release included:
 users of `latest` on Yarn get it a day after it is published): the release notes say so,
 with the `npmPreapprovedPackages` workaround of `install.md`.
 
@@ -310,7 +314,7 @@ and 6.5) and the verification. They are written below as the steps for the next 
 **Sections 6.7 to 6.9 (P14 PR 8) are the stable path, the rule that holds a stable version
 to its candidate and the test of the publishing shell; they have not run against the real
 services.** The release candidate `0.2.0-rc.1` (P14 PR 10) is their first real use, with
-section 6.3, and the stable `0.2.0` (PR 12) the second.
+section 6.3, and the stable release `0.2.0` (PR 12) the second.
 Every setting below is the maintainer's to make (ADR 0023, "Maintainer-only actions"); no
 agent or workflow changes them. Nothing here needs an e-mail address or other personal
 detail beyond the public GitHub owner `smormah` and repository `vsift`, and no step asks
@@ -320,16 +324,16 @@ for one.
 
 | Job | Runs | Permissions | What it does |
 | --- | --- | --- | --- |
-| `plan` | every run, after all twelve `npm-qualify` jobs | `contents: read` | Requires the downloaded archives to equal `package`'s `SHA256SUMS` output and the tarballs to equal `npm-package`'s `tarball-sums` output, by SHA-256. Reads npm's public metadata of the four packages with anonymous GETs (`https://registry.npmjs.org/<package>`, status and body kept in the runner's temporary folder; of the body only the dist-tags and each version's integrity are used, and nothing of it is printed or uploaded). Runs `vsift-release publish-plan`, which reads every archive back, re-assembles the npm packages and requires each tarball to be its package byte for byte, decides the mode and the channel (below), checks the guards of the channel and writes the plan: `publish-plan.md` (added to the job summary, even when the plan is refused), `publish-plan.json`, the release notes, the SBOM and notices of each target as separate release assets, and the digest lists of the release assets and of every file to attest. Checks out the full history, which the candidate comparison of a stable plan needs. Outputs `mode` (`dry-run` or `publish`), `version`, `tag`, `channel` (`prerelease` or `stable`) and the plan's own digests. |
+| `plan` | every run, after all twelve `npm-qualify` jobs | `contents: read` | Requires the downloaded archives to equal `package`'s `SHA256SUMS` output and the tarballs to equal `npm-package`'s `tarball-sums` output, by SHA-256. Reads npm's public metadata of the four packages with anonymous GETs (`https://registry.npmjs.org/<package>`, status and body kept in the runner's temporary folder; of the body only the dist-tags and each version's integrity are used, and nothing of it is printed or uploaded). Runs `vsift-release publish-plan`, which reads every archive back, re-assembles the npm packages and requires each tarball to be its package byte for byte, decides the mode and the channel (below), checks the guards of the channel and writes the plan: `publish-plan.md` (added to the job summary, even when the plan is refused), `publish-plan.json`, the release notes, the SBOM and notices of each target as separate release assets, and the digest lists of the release assets and of every file to attest. Checks out the full history, which the candidate comparison of a stable plan needs. Before the plan it names the accepted candidate (`vsift-release candidate-delta --github-output`) and, when there is one, runs the evidence ledger's completeness check for it (`vsift-governance release-evidence --complete-for <candidate> --commit <candidate commit>`), keeping the check's exit status and output in the runner's temporary folder for the plan to read (`--evidence`); the plan also receives the run's id and the date (`--run-id`, `--date`), which a stable plan that passes records in `release-delta.json` (6.7). Outputs `mode` (`dry-run` or `publish`), `version`, `tag`, `channel` (`prerelease` for a pre-release; for a stable version, the channel `stable`) and the plan's own digests. |
 | `attest` | only when publishing | `id-token: write`, `attestations: write` | Downloads the archives, tarballs and plan, requires each to match the earlier jobs' outputs, and creates a Sigstore build-provenance attestation (`actions/attest-build-provenance` v4.2.2, pinned by commit) for every archive, `SHA256SUMS`, SBOM, notices file and npm tarball, named in the plan's `attestation-subjects.sha256`. |
-| `publish` | only when publishing, after `attest`, in the `release` environment | `id-token: write`, `contents: write` | Waits for the maintainer's approval. Checks every file again, records the four packages' dist-tags, then with the npm of Node.js 24.21.0 (npm 11.19.0; trusted publishing needs 11.5.1 or later) runs, in this order, `npm publish ./npm-packages/<tarball> --access public --provenance --ignore-scripts` with `--tag next` (channel `prerelease`) or `--tag latest` (channel `stable`) for `@vsift/darwin-arm64`, `@vsift/win32-x64`, `@vsift/linux-x64` and then `vsift-cli`. Each channel has its own step, written out in full and run only for its channel; each checks the version's shape itself first, and the stable one also requires every package's `latest` to be a stable version at or below the one published. It then reads both dist-tags of every package back: a pre-release moved `next` and left `latest` where it was, a stable version moved `latest` and left `next`. Last, `gh release create v<version> --verify-tag --draft` with the archives, `SHA256SUMS`, SBOMs and notices and the plan's notes (`--prerelease --latest=false` for a pre-release), and `gh release edit` publishes the draft (`--latest` for a stable release, which is then confirmed to be GitHub's latest release). |
+| `publish` | only when publishing, after `attest`, in the `release` environment | `id-token: write`, `contents: write` | Waits for the maintainer's approval. Checks every file again, records the four packages' dist-tags, then with the npm of Node.js 24.21.0 (npm 11.19.0; trusted publishing needs 11.5.1 or later) runs, in this order, `npm publish ./npm-packages/<tarball> --access public --provenance --ignore-scripts` with `--tag next` (channel `prerelease`) or `--tag latest` (channel `stable`) for `@vsift/darwin-arm64`, `@vsift/win32-x64`, `@vsift/linux-x64` and then `vsift-cli`. Each channel has its own step, written out in full and run only for its channel; each checks the version's shape itself first, and the step of the stable release also requires every package's `latest` to be a stable version at or below the one published. It then reads both dist-tags of every package back: a pre-release moved `next` and left `latest` where it was, a stable version moved `latest` and left `next`. Last, `gh release create v<version> --verify-tag --draft` with the archives, `SHA256SUMS`, SBOMs and notices and the plan's notes (`--prerelease --latest=false` for a pre-release), and `gh release edit` publishes the draft (`--latest` for the stable release, which is then confirmed to be GitHub's latest release). |
 
 **The mode and the channel.** `vsift-release publish-plan` answers `publish` only for a
 `workflow_dispatch` with `dry_run` cleared, in `smormah/vsift`, on the ref
 `refs/tags/v<workspace version>`. Pull requests and pushes are dry runs, and so is a
 dispatch with `dry_run` set. A dispatch with `dry_run` cleared anywhere else fails the plan
 job and names the reason. The channel comes from the version (section 1): with a
-pre-release suffix it is `prerelease`, without one it is `stable`.
+pre-release suffix it is `prerelease`, without one it is the channel `stable`.
 
 **What a plan enforces.** A stable plan lists guards (section 6.7) and a failed guard stops
 the run only where the plan is *enforced*: a publish, and a dispatch on the version's own
@@ -339,7 +343,7 @@ findings under "A real publication of this plan would be refused, because:" and 
 A refused plan still writes its explanation to the job summary and writes no attestation
 list, release notes or command.
 
-**What is published is what was qualified.** `npm-package` packs the tarballs once and
+**What is published is what the npm jobs checked.** `npm-package` packs the tarballs once and
 exports their SHA-256 list as a job output, which no later job can change. Every
 `npm-qualify` job requires the tarballs it installs to match that list, and so do
 `plan`, `attest` and `publish`, which download only this run's artifacts. `attest` and
@@ -528,7 +532,7 @@ npm pack vsift-cli@0.2.0-rc.1 @vsift/win32-x64@0.2.0-rc.1 @vsift/darwin-arm64@0.
 ```
 
 The release must be a pre-release that is not marked latest, with ten assets: three
-archives, `SHA256SUMS`, three SBOMs and three notices files. For a **stable** release
+archives, `SHA256SUMS`, three SBOMs and three notices files. For the **stable** release
 the checks differ in four places, listed in 6.7.
 
 A version that `npm publish` has just reported can take a minute or more to appear in
@@ -592,15 +596,15 @@ matched.
   `gh release edit v<version> --repo smormah/vsift --latest`, then confirm with `gh api
   repos/smormah/vsift/releases/latest --jq .tag_name`. Do not re-run the job (the release
   exists).
-- **A published version is bad** (a release candidate or a stable): never unpublish it (npm
+- **A published version is bad** (a release candidate or the stable release): never unpublish it (npm
   refuses to reuse the version number, and the attestations name its bytes). Deprecate it
   on all four packages yourself (`npm deprecate <package>@<version> "<what is wrong and
   which version replaces it>"`, two-factor authentication), edit the GitHub release's notes
-  to say so (do not delete the release or the tag), and publish a fixed version. A fixed
-  stable is a new stable version (`0.2.1`), which follows its own candidate (`0.2.1-rc.1`):
+  to say so (do not delete the release or the tag), and publish a fixed version. A fix
+  of the stable release is a new stable version (`0.2.1`), which follows its own candidate (`0.2.1-rc.1`):
   the same procedure, nothing skipped. Until it is published, `latest` still names the bad
-  stable. If it is dangerous, point `latest` back with `npm dist-tag add <package>@<good
-  version> latest` for each package (two-factor authentication); for the first stable the
+  stable version. If it is dangerous, point `latest` back with `npm dist-tag add <package>@<good
+  version> latest` for each package (two-factor authentication); for the first stable version the
   only earlier `latest` is the empty `0.0.0` placeholder, a package with no command, which
   is safe and useless: that is your choice, made at the time. Record what happened in the
   evidence ledger and the known-limits register.
@@ -627,18 +631,24 @@ matched.
   job is where a change to the stable path shows its dry run; making it required would
   also block a pull request on an infrastructure failure, so it stays optional until you
   decide.
-- Settled (2026-10-01): the generated release notes (`tools/vsift-release/src/notes.rs`,
-  `publish.rs` before P14 PR 8) no longer say that installing through npm avoids the
+- Settled (2026-10-01): the generated release notes (rendered by
+  `tools/vsift-release/src/notes.rs` from the Markdown templates in
+  `tools/vsift-release/notes/` since P14 PR 8; `publish.rs` before that) no longer say that installing through npm avoids the
   warnings outright. They say that files installed through npm do not carry the download
   mark that triggers SmartScreen and Gatekeeper, and that Windows Smart App Control, where
   it is on, can still block an unsigned program however it was installed, with a pointer
   to the installation guide ([L-098](../planning/known-limits.md#l-098), `install.md`
   section 4). The paragraph is the same in the candidate's, the pre-release's and the
-  stable release's notes.
+  stable release's notes. Since P14 PR 8 the templates and this runbook are scanned by the
+  public-claims check (`docs/planning/public-claims.json`), and the notes name the three
+  machines as the R0 targets the executables are built for rather than with the word the
+  claims ladder reserves for the release matrix
+  ([L-102](../planning/known-limits.md#l-102)): a wording change is a change to a scanned
+  document.
 - Settled (2026-10-02, ADR 0024 decisions A, B and C): R0 ships as `0.2.0` on `latest`,
   after a published release candidate `0.2.0-rc.N` under `next`, and without signing
   unless the try-outs show a block with no way through. Not decided: whether `next` should
-  follow the stable (6.7: it does not; it is yours to move).
+  follow the stable release (6.7: it does not; it is yours to move).
 
 ### 6.7 The stable release (P14 PR 8; first used for `0.2.0`, P14 PR 12)
 
@@ -650,7 +660,7 @@ a dispatch on the tag, and your approval. It is the same workflow, dispatch, env
 and approval as 6.3; what differs is the channel (`--tag latest`, the release marked
 latest), the guards, and what you check before and after.
 
-**When a version is stable.** When it has no pre-release suffix (section 1): the version in
+**What makes a version a stable version.** It has no pre-release suffix (section 1): the version in
 `Cargo.toml` at the tag decides, and nothing you type does. A stable version is published
 only from a tag `v<version>` that equals that version, only by a dispatch with `dry_run`
 cleared, only in `smormah/vsift`, only after you approve the `release` environment.
@@ -659,12 +669,12 @@ cleared, only in `smormah/vsift`, only after you approve the `release` environme
 
 | Guard | What it checks | Held by |
 | --- | --- | --- |
-| Stable version | the version has no suffix, so the channel is `stable` and the dist-tag `latest`; never `next` | `publish.rs` (`Channel`, tests of every version kind); the lint's channel rules (the step's `if`, its shape check) |
+| Stable version | the version has no suffix, so it takes the channel `stable` and the dist-tag `latest`; never `next` | `publish.rs` (`Channel`, tests of every version kind); the lint's channel rules (the step's `if`, its shape check) |
 | Accepted candidate | the highest `v<X.Y.Z>-rc.<N>` tag is an ancestor of this commit and differs from it only in version strings and the launcher's README (6.8) | `candidate.rs`; the plan job's full-history checkout (lint) |
 | Registry read | npm answered for all four packages (a missing package or an unreadable answer fails it) | `registry.rs`; the registry step and `--registry` (lint) |
 | Candidate published | that candidate version is on npm for all four packages | `guards.rs` |
 | `latest` moves forward | on every package `latest` is now a stable version below this one (or already this version with the same bytes: a re-run completing a partial publish); this version is on none of them under another tag or with other bytes | `guards.rs`; the publish job's own check just before publishing (lint: `sort -V` line) |
-| Evidence ledger | **not enforced here** (L-106): the completeness check for the candidate is yours to run (preflight below) | nothing mechanical yet |
+| Evidence ledger | the ledger is complete for the candidate (`vsift-governance release-evidence --complete-for <candidate> --commit <candidate commit>`, RQ-20): the plan shows its first lines, and an answer that is missing counts as a failure | `evidence.rs`, `guards.rs`; the plan job's candidate and evidence steps and the plan's `--evidence` argument (lint) |
 
 A failed guard refuses an *enforced* plan (a publish, or a dispatch on the tag with
 `dry_run` set); any other run shows it and carries on (section 6.1).
@@ -688,14 +698,20 @@ commit and digests). The part to read before approving, for a stable plan that p
 | Registry read | passed | npm's public metadata of all 4 packages was read |
 | Candidate published | passed | `0.2.0-rc.1` is published on all four packages |
 | `latest` moves forward | passed | `latest` is `0.0.0` on all four packages, a stable version below `0.2.0`, and this version is on none of them |
-| Evidence ledger | not enforced | this workflow does not check the evidence ledger's completeness ... (L-106) |
+| Evidence ledger | passed | VSift release evidence is complete for 0.2.0-rc.1 at aaaaaaaaaaaa. |
 ```
+
+An enforced stable plan that passes also writes `release-delta.json` into the plan artifact:
+the comparison of the candidate with the stable release, in the shape of the evidence
+ledger's `release_delta` record (the versions and commits of both, the verdict, this run's id and the date). Copy it
+into `docs/planning/p14-evidence-ledger.json` after the publish (the follow-up, P14 PR 13);
+nothing copies it for you ([L-103](../planning/known-limits.md#l-103)).
 
 A plan that fails a guard starts with `## Publish plan: REFUSED, nothing is published`, then
 "Refused because:" and one line per failed guard, for example:
 
 ```text
-- Accepted candidate: `crates/vsift-cli/src/main.rs` may not differ between the candidate and the stable: only version strings and the launcher's README may
+- Accepted candidate: `crates/vsift-cli/src/main.rs` may not differ between the candidate and the stable release: only version strings and the launcher's README may
 - `latest` moves forward: `0.1.0` is already on npm, and not with these bytes (on all four packages)
 ```
 
@@ -716,19 +732,23 @@ not skip an item because the candidate's publish went well.
    approval is "all external contributors".
 3. **What npm holds now**, from a machine with no npm credentials: `npm view vsift-cli
    dist-tags` and the same for `@vsift/win32-x64`, `@vsift/darwin-arm64` and
-   `@vsift/linux-x64` show `latest: '0.0.0'` (or the previous stable) and `next` at the
+   `@vsift/linux-x64` show `latest: '0.0.0'` (or the previous stable version) and `next` at the
    candidate; `npm view <package> versions` lists the candidate and not the stable version.
 4. **The candidate is the one you mean.** `git tag --list 'v<X.Y.Z>-rc.*'` (after `git
-   fetch --tags`) ends with the candidate you qualified: the highest number is the accepted
+   fetch --tags`) ends with the candidate you accepted: the highest number is the accepted
    one, and a later candidate you decided not to accept must be dealt with before (it
    cannot be deleted without bypassing the ruleset).
 5. **The delta check, locally, at the stable commit** (6.8): `cargo run --locked -p
    vsift-release -- candidate-delta`. Every file it lists is a version string or the
    launcher's README, and nothing is marked REFUSED.
-6. **The evidence ledger** is complete for the candidate (P14 PR 1's check; read its result
-   and the waivers it records), the maintainer's try-outs have a recorded observation, and
-   the hosted qualification (the published-artifact workflows) passed on the candidate.
-   The Release workflow does not check any of this.
+6. **The evidence ledger** is complete for the candidate. The plan job runs P14 PR 1's check
+   (`vsift-governance release-evidence --complete-for <candidate> --commit <candidate
+   commit>`) and the plan refuses the run if it fails, so a pass is a precondition rather
+   than something to remember; still read the check's output in the plan summary and the
+   waivers it records, and confirm that the maintainer's try-outs have a recorded
+   observation and that the hosted qualification (the published-artifact workflows)
+   passed on the candidate: the check says the ledger's records are complete, not that
+   the evidence is good enough to ship ([L-103](../planning/known-limits.md#l-103)).
 7. **What ships is what you want to ship.** Read the launcher's `README.md` and the release
    notes the dry run produces (`publish-plan/release-notes.md` in the run's `publish-plan`
    artifact): both reach the public at the moment `latest` moves, and the notes are code,
@@ -743,10 +763,10 @@ not skip an item because the candidate's publish went well.
    first lines must say "A real publication of this plan would move npm's `latest`" (a dry
    run) and the table "What this publication does to the dist-tags" must show, for each of
    the four packages, `latest` from `0.0.0` to `0.2.0` and `next` staying at the candidate;
-   every guard must be "passed" except "Evidence ledger: not enforced". If it says
+   every guard must be "passed", the evidence ledger's included. If it says
    **REFUSED**, read "Refused because:", fix the cause (6.5), and repeat.
 3. **Publish.** Dispatch again on the same tag with **dry_run cleared**. The plan must say
-   **PUBLISH a STABLE release**, `attest` runs and `publish` waits for the environment.
+   **PUBLISH** and name the stable release (in capitals), `attest` runs and `publish` waits for the environment.
    Read the summary one last time (the dist-tag table; the four `npm publish ... --tag
    latest` commands in order; `gh release edit ... --latest`), then **Review deployments**,
    tick `release`, **Approve and deploy**. Approve within a week (6.3 step 4).
@@ -771,9 +791,10 @@ not skip an item because the candidate's publish went well.
    api repos/smormah/vsift/releases/latest --jq .tag_name` prints `v0.2.0`.
 4. The checksums and `gh attestation verify` of the ten files and four tarballs (6.4 with
    `--source-ref refs/tags/v0.2.0`).
-5. Re-run the hosted qualification on the stable bytes (ADR 0024 decision A) and put the
+5. Re-run the hosted qualification on the stable release's bytes (ADR 0024 decision A) and put the
    run's link, the commands' output and anything that failed or was re-run in the evidence
-   ledger.
+   ledger, with the plan's `release-delta.json` as the `release_delta` of the carried items
+   (download the run's `publish-plan` artifact within its 7 days).
 
 **What changes for users.** From the moment the four packages are published, `npm install
 vsift-cli`, `npx vsift-cli`, `pnpm dlx vsift-cli`, `bunx vsift-cli` and `yarn dlx` without a
@@ -782,36 +803,36 @@ package with no command. Yarn 4 holds every new version back for a day
 (`npmMinimalAgeGate`), so Yarn users of `latest` get it a day after the publish; the
 workaround is the `npmPreapprovedPackages` setting of `install.md`, and the release notes
 say so. `next` is not touched, so it keeps naming the candidate, an older build than the
-stable, until the next pre-release moves it; moving it yourself (`npm dist-tag add
+stable release, until the next pre-release moves it; moving it yourself (`npm dist-tag add
 vsift-cli@0.2.0 next` for each package, with two-factor authentication) is your choice, and
 the workflow never does it ([L-108](../planning/known-limits.md#l-108)).
 
 **Never,** whatever goes wrong: unpublish a version, move or delete a `v*` tag, or delete the
 GitHub release (6.5 says what to do instead).
 
-### 6.8 The candidate rule and the candidate-to-stable check (P14 PR 8)
+### 6.8 The candidate rule and the candidate-to-stable-version check (P14 PR 8)
 
 **The rule** (ADR 0024 decision B). From the cut of a release candidate only fixes for
 findings may change the code: no features, no refactors, no unrelated cleanup. A fix that
 changes code means a new candidate (`rc.2`) and the qualification of what it touches; the
-stable is built on the last candidate. **The check** (decision A) is the mechanical form:
-the stable commit must differ from its accepted candidate only in the stable's own version
-strings and the documents that ship inside the artifacts.
+stable release is built on the last candidate. **The check** (decision A) is the
+mechanical form: the stable commit must differ from its accepted candidate only in the stable
+release's own version strings and the documents that ship inside the artifacts.
 
-- **The accepted candidate** is the highest-numbered `v<X.Y.Z>-rc.<N>` tag for the stable's
-  own `X.Y.Z`; any other tag is ignored. Only you can create a `v*` tag (the tag ruleset).
-- **Version-string files** (the stable's content must equal the candidate's with *every*
-  occurrence of the candidate's version text replaced by the stable's, byte for byte):
+- **The accepted candidate** is the highest-numbered `v<X.Y.Z>-rc.<N>` tag for the stable
+  release's own `X.Y.Z`; any other tag is ignored. Only you can create a `v*` tag (the tag ruleset).
+- **Version-string files** (the stable release's content must equal the candidate's with *every*
+  occurrence of the candidate's version text replaced by the stable release's, byte for byte):
   `Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`,
   `npm/vsift-cli/package.json`, `CHANGELOG.md`. A listed file you leave unchanged is not a
   difference. The changelog is the one that may hold prose beyond headings: if renaming its
   heading is not all you changed, leave it alone in the stable commit and rename it in the
   ledger follow-up (P14 PR 13) instead.
 - **Shipped documents** (any change allowed): `npm/vsift-cli/README.md`, the launcher
-  package's README, whose install instructions differ between a candidate and a stable
+  package's README, whose install instructions differ between a candidate and the stable
   release. The skill (`skills/vsift/`) is *not* in the list: its bytes are what the
-  named-client trials qualified, and a change after the candidate would ship an unqualified
-  skill. The release notes and the platform packages' README are generated from this
+  named-client trials ran against, and a change after the candidate would ship a skill they
+  never saw. The release notes and the platform packages' README are generated from this
   repository's code, which is frozen at the candidate too.
 - **Everything else is refused**, and so is a listed path that is added, deleted, linked,
   re-moded or renamed rather than edited. So are a candidate that is not an ancestor of the
@@ -819,7 +840,7 @@ strings and the documents that ship inside the artifacts.
 - The lists are constants in `tools/vsift-release/src/candidate.rs`, and a test spells them
   out, so changing one is visible in a diff. They are code, and code is frozen at the cut:
   change them before the candidate is cut or cut another candidate. Every other repository
-  page (the documentation, `README.md`, the work records) changes after the stable is
+  page (the documentation, `README.md`, the work records) changes after the stable release is
   published, in the ledger follow-up (P14 PR 13), not in the stable commit.
 - Run it by hand with `cargo run --locked -p vsift-release -- candidate-delta
   [--stable-commit <sha>]` from a clone that has the tags (`git fetch --tags`): it prints
@@ -843,11 +864,13 @@ pre-release moves `next` and leaves `latest`; that a stable version moves `lates
 four packages, leaves `next`, publishes with `--tag latest` four times and never with `--tag
 next`; that each step refuses the other channel's version before anything is published;
 that `latest` ahead of the version, a pre-release as `latest` or no `latest` refuses the
-stable (and that `0.9.0` is below `0.10.0`); that a re-run after a partial stable publish
+stable version (and that `0.9.0` is below `0.10.0`); that a re-run after a partial stable publish
 publishes only what is missing; that other bytes for a published version stop the publish;
-that a stable which moved `next` fails its verification; that the stable release must be
-GitHub's latest; and that the registry step records one status per package and never fails
-the job, whatever curl does. Run it with `bash tools/vsift-release/tests/publish-steps.sh
+that a stable version which moved `next` fails its verification; that the stable release must be
+GitHub's latest; that the registry step records one status per package and never fails
+the job, whatever curl does; and that the candidate step names a candidate only when there is
+one and the evidence step records the check's exit status and output without failing the job,
+whatever the check answers (56 checks in all). Run it with `bash tools/vsift-release/tests/publish-steps.sh
 .github/workflows/release.yml` (Linux, or Git Bash on Windows); the Rust test
 `publish_steps` runs it on Linux in CI. No real service is contacted. It cannot prove that
 npm's trusted publishing accepts `--tag latest`, or that `gh release edit --latest` marks a

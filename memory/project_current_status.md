@@ -10,10 +10,9 @@ the evidence in a video. Under
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md) it is also an
 embeddable engine library (`vsift`) that the CLI, and later other hosts, use. Today it can:
 - check and register its dependencies, show a read-only setup plan, report whether local speech
-  recognition really works here (`setup check` `local_asr`), and on Ubuntu 24.04 x86-64 install
-  the reviewed FFmpeg, whisper.cpp and model itself (`setup install`), then list, roll back,
-  remove and diagnose them (`setup list/rollback/remove/repair`); that store survives kills at
-  every step and, on Ubuntu 24.04 with ext4, power loss;
+  recognition really works here (`setup check`), and on Ubuntu 24.04 x86-64 install the reviewed
+  FFmpeg, whisper.cpp and model itself, then list, roll back, remove and repair them; that store
+  survives kills at every step and, on Ubuntu 24.04 with ext4, power loss;
 - copy a video into a private, disposable session;
 - import an existing SRT or WebVTT transcript with the video, aligned by an offset;
 - transcribe the video's speech itself with whisper.cpp (`transcript retranscribe`), continue an
@@ -46,13 +45,14 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed as recommended). Its plan is 14 pull requests (0-13); **PR 0
-(#250) is merged; PR 8, the release machinery for a candidate and the stable (#252), is done in
-this change, awaiting review; PR 1 is being built in parallel; the whole packet is not complete.**
-What it must show, and what is weaker than it sounds today:
+(#250) and PR 1 (#251, the evidence ledger and claims registry) are merged; PR 8, the release
+machinery for a candidate and the stable (#252), is done in this change, awaiting review; PR 2 is
+next; the whole packet is not complete.** What it must show, and what is weaker than it sounds
+today:
 - **No checkpoint has run the published artifact on a video:** every real-tool test runs a
-  Cargo-built `vsift`, and no install has run on a clean machine (hosted runners carry Rust).
-  The one real-registry install was npm on the maintainer's Windows 11 machine, where Smart App
-  Control is Off (read 2026-10-02), so it says nothing about that (L-098).
+  Cargo-built `vsift`, and no install has run on a clean machine (hosted runners carry Rust). The
+  one real-registry install, npm on the maintainer's Windows 11 machine, had Smart App Control Off
+  (L-098).
 - **One real platform:** the P08/P09/P11 numbers and the Claude Code trials are Windows 11;
   Ubuntu 24.04 has local ASR, the managed install and the A-08 journey; macOS has no media,
   speech or evidence run (L-035).
@@ -62,55 +62,58 @@ What it must show, and what is weaker than it sounds today:
 - **SEC-T01 is half done** (L-068, #188) and dangerous media has never been run; the load
   ladder stopped at 4 jobs; fuzzing is weekly at five minutes per target.
 - **`latest` has never moved.** The path that moves it is built and tested (PR 8) but has never
-  run for real (L-105); the Release workflow does not check the evidence ledger (L-106).
+  run for real (L-105); its plan refuses unless the evidence ledger is complete for the candidate.
 
-**Decisions (ADR 0024, Proposed until P14 completes):** all eight confirmed as recommended on
-2026-10-02; the list is in `memory/TODO.md` (R0 ships as `0.2.0` on `latest` after a published
-`0.2.0-rc.N`; no signing unless the try-outs show a block; 84 agent runs; "supported" per cell).
+**Decisions A-H** (ADR 0024, Proposed until P14 completes) are listed in `memory/TODO.md`.
 
-## P14 PR 8 in one view (done in this change)
+## P14 PR 1 and PR 8 in one view
 
-[ADR 0024](../docs/decisions/0024-r0-qualification-and-release-candidate.md)'s note of 2026-10-02;
-the runbook is `docs/operations/release.md` 6.7-6.9. **Nothing was published.** The version alone
-decides the channel: a suffix publishes under `next` (a candidate is `-rc.N`), none is stable and
-moves `latest` on all four packages (`0.0.0` and ambiguous versions are refused). A stable plan
-states what moves and is guarded: the accepted candidate (highest `v<X.Y.Z>-rc.<N>`, an ancestor,
-differing only in version strings and the launcher's README), the candidate on npm, `latest`
-forward-only; enforced on a publish and on a dispatch of the tag even as a dry run. No workflow may
-run `npm dist-tag` (lint rule 8); 61 lint mutations; the shell runs against stubs in CI. **Not done:**
-a real stable publish (L-105); the evidence-ledger guard (L-106, before PR 10). **Frozen at the
-candidate cut:** the allowed lists, the release notes, the workflow, the skill. `0.1.0` is stable by
-shape, so every pull request's plan says it would be refused.
+**PR 1 (merged, #251; governance tool and documents only):** the evidence ledger
+(`docs/planning/p14-evidence-ledger.json`: RQ-01..RQ-20, **all `planned`, none passed**) and the
+claims registry (`docs/planning/public-claims.json`, rung `now`: what public documents may say),
+both checked on every pull request; `release-evidence --complete-for <version>` is the
+completeness check. Neither proves a run passed or a sentence true (L-101).
+
+**PR 8 (this change; awaiting review).** ADR 0024's note of 2026-10-02; the runbook is
+`docs/operations/release.md` 6.7-6.9. **Nothing was published.** The version alone decides the
+channel: a suffix publishes under `next` (a candidate is `-rc.N`), none is stable and moves
+`latest` on all four packages. A stable plan states what moves and is guarded: the accepted
+candidate (highest `v<X.Y.Z>-rc.<N>`, an ancestor, differing only in version strings and the
+launcher's README), the candidate on npm, `latest` forward-only, the evidence ledger complete for
+the candidate; enforced on a publish and on a dispatch of the tag even as a dry run. It writes
+`release-delta.json` for the ledger (copied by hand, L-103). No workflow may run `npm dist-tag`;
+65 lint mutations; the shell runs against stubs in CI. The release notes are Markdown templates,
+claims-checked with `release.md` (no "Supported machines"; the published v0.1.0 page still says
+it, L-102). **Not done:** a real stable publish (L-105). **Frozen at the candidate cut:** the
+allowed lists, the notes, the workflow, the skill. `0.1.0` is stable by shape: every pull
+request's plan says it would be refused.
 
 ## P13 in one view (complete)
 
 [ADR 0023](../docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)
-(**Accepted** 2026-10-01); the record is `docs/planning/p13-distribution.md`, the guide for users
-`docs/operations/install.md`, the maintainer's runbook `docs/operations/release.md`.
+(**Accepted** 2026-10-01); record `p13-distribution.md`, guide `install.md`, runbook `release.md`.
 - **Delivered:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux x64) with
-  SBOMs, notices, checksums and Sigstore provenance; the npm launcher `vsift-cli` over
-  `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64`; managed installation on Ubuntu
-  24.04 x64; human output; `handoff check`; the 0.1.0 pre-release (2026-10-01, tag `v0.1.0` on
-  `011bc4d`; the first dispatch failed with `ENEEDAUTH` before anything was published, L-100; the
-  second published by trusted publishing, no token). Verified once: `npm audit signatures` 4 and 4,
-  `gh attestation verify` 10 of 10 files and 4 of 4 tarballs. Hosted: the managed smoke and
-  power-loss runs on Ubuntu 24.04, the twelve-job npm matrix (a local registry, runners with Rust).
+  SBOMs, notices, checksums and Sigstore provenance; the npm launcher `vsift-cli` over three
+  platform packages; managed installation on Ubuntu 24.04 x64; human output; `handoff check`; the
+  0.1.0 pre-release (tag `v0.1.0` on `011bc4d`; the first dispatch failed with `ENEEDAUTH` before
+  anything was published, L-100; the second published, no token). Verified once: `npm audit
+  signatures` 4 and 4, `gh attestation verify` 10 of 10 files and 4 of 4 tarballs.
 - **Not proved:** a clean-machine install; pnpm, Yarn or Bun on the real registry; an extracted
   archive run; the offline install with real artifacts; Smart App Control and the macOS prompts
   (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
+
 ## What works (public CLI)
 
-- `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`;
-  `setup install` on Ubuntu 24.04 x86-64; `setup list/rollback/remove/repair` on every OS.
-- `ingest <video> [--transcript <file> [--transcript-offset <signed us>]]`.
-- `transcript retranscribe`, `transcript get`, `job status|resume|cancel|run|batch`,
-  `search`, `candidates`, `frame get/neighbours/burst`, `crop`, `audio`.
-- `session list/status/renew/close/retain/clean/init-workspace` and `bundle validate`.
+- `setup check|configure|configure-model|plan`; `setup install` on Ubuntu 24.04 x86-64;
+  `setup list|rollback|remove|repair` on every OS; `ingest <video> [--transcript <file>
+  [--transcript-offset <signed us>]]`; `transcript retranscribe|get`; `job status|resume|cancel|
+  run|batch`; `search`, `candidates`, `frame get|neighbours|burst`, `crop`, `audio`; `session
+  list|status|renew|close|retain|clean|init-workspace`; `bundle validate`.
 - `handoff check`: a draft from stdin or `--file`. A release build's `--version` names its
   source commit (`vsift 0.1.0 (<12 hex>)`).
 - Global `--session-root`, `--host-isolation`, `--json`, `--events jsonl`. A command line that
-  does not parse names its mistake and the `--help` to read.
-- Readable terminal text without `--json` for every command (unstable, not for parsing).
+  does not parse names its mistake and the `--help` to read. Readable terminal text without
+  `--json` for every command (unstable, not for parsing).
 
 ## Packet status
 
@@ -125,24 +128,23 @@ shape, so every pull request's plan says it would be refused.
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PR 0 merged (#250); PR 8 done in this change (#252); PR 1 in parallel; the rest follow |
+| P14 | **In progress** (started 2026-10-02): PR 0 (#250) and PR 1 (#251) merged; PR 8 done in this change (#252); PR 2 is next |
 
 ## Architecture snapshot
 
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <-
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine) <-
 `vsift-cli` (parse, present, signals). `vsift-contract` sits beside the engine and owns the wire
-types. The worker lives in the engine; the CLI only presents. The skill (`skills/vsift/`) only
-calls the `vsift` binary; its guard is a `vsift-cli` test module. The trial harness depends only
-on `vsift` and `vsift-contract`; `tools/vsift-release` (never shipped) packages the release
-archives, assembles the npm packages and plans their publication (a version without a suffix is
-stable and moves `latest`; guards, the candidate comparison and release notes live there); `npm/` holds the launcher and its qualification.
+types. The skill (`skills/vsift/`) only calls the `vsift` binary. The trial harness depends only
+on `vsift` and `vsift-contract`; `tools/vsift-release` (never shipped) packages the archives,
+assembles the npm packages and plans their publication; `npm/` holds the launcher and its
+qualification.
 
 ## Quality evidence
 
 - **Local gates** (in each PR description): fmt, strict Clippy, workspace tests, warning-denied
-  rustdoc and governance. **CI on every PR:** Quality on Ubuntu, macOS and Windows;
-  Documentation, Governance, fuzz harness replay, the strict worker boundary, dependency
-  policy, CodeQL and the npm launcher tests; the Release dry run on archive/npm changes.
+  rustdoc, governance. **CI on every PR:** Quality (three OS), Documentation, Governance, fuzz
+  replay, the strict worker boundary, dependency policy, CodeQL, the npm launcher tests; the
+  Release dry run on archive/npm changes.
 - **Required on `main`:** Quality (three OS), Documentation, Dependency policy and review,
   Analyze Rust, Governance. Squash merges; history in git, `CHANGELOG.md`, `docs/history/`.

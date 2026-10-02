@@ -512,8 +512,8 @@ lint rule or a test, and the shell that publishes is executed against stubs, not
   guards; then the commands. A stable plan checks the accepted candidate (below), that the
   candidate is published on all four packages, that `latest` on each is a stable version
   below this one (or this version with the same bytes: a re-run completing a partial
-  publish) and that this version is not on npm under another tag or with other bytes. The
-  registry is read by the plan job with four anonymous GETs (`curl`, no credential, header or
+  publish), that this version is not on npm under another tag or with other bytes and that
+  the evidence ledger is complete for the candidate (RQ-20, below). The registry is read by the plan job with four anonymous GETs (`curl`, no credential, header or
   body; a status and the metadata kept in the runner's temporary folder) and parsed by
   `registry.rs`, which takes only the dist-tags and each version's integrity: the metadata
   names the package's maintainers, so none of it is printed or uploaded. A guard fails a plan
@@ -521,6 +521,19 @@ lint rule or a test, and the shell that publishes is executed against stubs, not
   `dry_run` set (the rehearsal), which therefore fails whenever the real run would. Other runs
   report the same findings and carry on. A refused plan still writes its explanation to the
   job summary.
+- **The evidence guard** (RQ-20; P14 PR 1's check, wired after it merged). The plan job
+  names the accepted candidate (`vsift-release candidate-delta --github-output`, which runs
+  the plan's own code) and, when there is one, runs `vsift-governance release-evidence
+  --complete-for <candidate> --commit <candidate commit>`, keeping its exit status and output
+  in the runner's temporary folder; `publish-plan --evidence` reads them (`evidence.rs`) and
+  the guard shows the check's first lines. A missing answer counts as a failure, so a stable
+  plan whose evidence step was removed is refused wherever the plan is enforced. The lint
+  holds the candidate step, the evidence step and the plan's `--evidence`, `--run-id` and
+  `--date` arguments; the shell harness runs both steps against stubs. The plan also writes
+  `release-delta.json`, the comparison in the shape of the ledger's `release_delta` record
+  (a test parses a shared example in both tools), for the maintainer to copy into the ledger
+  after the publish: the workflow never commits, so the copy is manual
+  ([L-103](../planning/known-limits.md#l-103)).
 - **The workflow** (`release.yml`). The plan job exports `channel` (`prerelease` or
   `stable`), checks out the full history and passes `--registry`. The publish job has one
   step per channel, each written out in full with its own `--tag`, each run only for its
@@ -544,15 +557,16 @@ lint rule or a test, and the shell that publishes is executed against stubs, not
   flags and `gh api` to one read; the stable step's forward check, the dist-tag record and
   read-back and the latest-release confirmation present; `curl` limited to read-only GETs of
   `https://registry.npmjs.org/` (and not at all in `attest` and `publish`); the plan job's
-  full-history checkout, `channel` output and `--registry`. Each is held by a deliberately
-  broken copy of the real workflow that the lint must name: 61 in all (28 from P13, 33
+  full-history checkout, `channel` output and `--registry`, and the candidate and evidence
+  steps and the plan's `--evidence`, `--run-id` and `--date`. Each is held by a deliberately
+  broken copy of the real workflow that the lint must name: 65 in all (28 from P13, 37
   new), plus the general rule's spellings, and each lint rule was also removed in turn to
   confirm that a test then fails. `tools/vsift-release`'s tests hold the workflow's `npm
   publish` and `gh release` lines to the plan's commands word for word for both channels and
   hold the two publishing steps to be the same script but for their guards and `--tag`.
 - **The shell is executed** (`tools/vsift-release/tests/publish-steps.sh`, run on Linux by
   the Rust test `publish_steps`): each publishing step and the registry step are extracted
-  from `release.yml` and run against stub `npm`, `gh`, `curl` and `sleep`: 46 checks of
+  from `release.yml` and run against stub `npm`, `gh`, `curl`, `sleep` and `cargo`: 56 checks of
   the channels, the refusals before any publish, `latest` only moving forward (`0.9.0` is
   below `0.10.0`), a re-run completing a partial stable publish, other bytes stopping the
   publish and the read-back failing if the other tag moved. Removing the forward check from
@@ -574,23 +588,29 @@ lint rule or a test, and the shell that publishes is executed against stubs, not
   reviewed change before the candidate is cut. One supporting change: `cli_contract.rs`
   asserted `vsift 0.1.0` literally; it now reads the workspace version, so a bump touches
   only manifests.
-- **Release notes** (`tools/vsift-release/src/notes.rs`): a candidate says it is a
-  *release candidate under qualification*, not announced and no statement of support or
-  stability; another pre-release says it is a pre-release; a stable release says what it
-  promises (the command-line grammar, the exit codes and the v1 JSON, additively) and
-  nothing more, with the measured-on-a-synthetic-corpus caveat and a link to the register.
-  None says "supported" (the old "Supported machines" line is now "The executables are
-  built for ..."); the Smart App Control, SmartScreen and Gatekeeper paragraph is the
-  same in all three. A test refuses "supported" and "production".
+- **Release notes** (`tools/vsift-release/src/notes.rs`, rendered from the Markdown
+  templates in `tools/vsift-release/notes/`; L-102): a candidate says it is a *release
+  candidate*, under qualification, not announced and no statement of support or stability;
+  another pre-release says it is a pre-release; a stable release says what it promises (the
+  command-line grammar, the exit codes and the v1 JSON, additively) and nothing more, with
+  the measured-on-a-synthetic-corpus caveat and a link to the register. None says
+  "supported": the old "Supported machines" line is now "The executables are built for the
+  three R0 targets ...", decision G's wording until the matrix decides. The Smart App Control,
+  SmartScreen and Gatekeeper paragraph is the same in all three, word for word (a test holds
+  it). The four templates and `release.md` are scanned by the claims check
+  (`docs/planning/public-claims.json`), which fails on a controlled word in a template: the
+  release page of every later version is checked before it exists. The published v0.1.0 page
+  keeps its old line unless the maintainer edits it (L-102).
 - **Resolved from "Details left to their pull requests":** `next` does *not* follow the
   stable: it keeps naming the candidate until the next pre-release moves it, and moving it
   is a manual `npm dist-tag` by the maintainer (release.md 6.7), so the lint's rule stands
   ([L-108](../planning/known-limits.md#l-108)). The Release workflow stays an optional
   check (release.md 6.6).
-- **Not done, on purpose.** The evidence ledger's completeness for the candidate is *not*
-  enforced by the workflow: P14 PR 1's check did not exist on `main` when this was built, and
-  the plan says so on every stable plan ([L-106](../planning/known-limits.md#l-106)); wiring
-  it as a guard is a small follow-up once it exists. No signing was added (decision C).
+- **Not done, on purpose.** No signing was added (decision C). Nothing ran against the real
+  services ([L-105](../planning/known-limits.md#l-105)): the first real use of a stable
+  publish is the maintainer's. The guard for the evidence ledger was built after P14 PR 1
+  merged and is part of this change, so the workflow checks it before the candidate is cut
+  (the workflow is code, and code is frozen at the cut).
 - **For the maintainer's review (a high-risk seam; please read these first):** the
   version-string and document lists above (the skill's exclusion especially); that `0.1.0` is
   stable by shape; that `--tag latest` is covered by the trusted publisher's "npm publish"

@@ -343,7 +343,8 @@ the shell check by hand on Linux or in Git Bash:
 bash tools/vsift-release/tests/publish-steps.sh .github/workflows/release.yml
 ```
 
-It runs each publishing step of `release.yml` against stub `npm`, `gh` and `curl` (CI runs it
+It runs each publishing step of `release.yml`, and the plan job's registry, candidate and evidence
+steps, against stub `npm`, `gh`, `curl` and `cargo` (CI runs it
 through `cargo test -p vsift-release` on Linux); no real service is touched. To see what a stable
 version would be held to, run `cargo run --locked -p vsift-release -- candidate-delta` at its
 commit in a clone that has the tags. Bumping the workspace version touches only the files of
@@ -402,8 +403,9 @@ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-
   `repeat`, `carry` or `not_required`), `status` (`planned`, `running`, `passed`, `failed`,
   `waived`, `not_applicable`), `applies_to` (`version`, `commit`), `evidence` and `prior` (each a
   typed `reference` of `workflow_run`, `pull_request`, `issue` or `record`, with a `date` and a
-  `note`), `issues`, `decision`, `reason` and `date`. `release_delta` stays null until P14 PR 8's
-  delta check records it.
+  `note`), `issues`, `decision`, `reason` and `date`. `release_delta` stays null until
+  the maintainer copies the stable plan's `release-delta.json` (P14 PR 8's delta check) into it
+  after the publish.
 - **Changing an evidence item's status** is a change to the ledger: set `status`, give the
   version and commit it is for (`applies_to`) and at least one typed link (a workflow run, a
   pull request, a repository record), move what no longer counts into `prior`, and add the
