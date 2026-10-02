@@ -97,17 +97,10 @@
       "text": "earns the word \"supported\"",
       "note": "Says the release matrix is what will earn the word; the word is not applied to anything."
     },
-    {
-      "kind": "non_claim",
-      "id": "NC-003",
-      "documents": ["README.md"],
-      "text": "not a stable or supported release",
-      "note": "A negation about the 0.1.0 pre-release."
-    },
-    {
+{
       "kind": "non_claim",
       "id": "NC-004",
-      "documents": ["docs/operations/install.md"],
+      "documents": ["README.md", "docs/operations/install.md"],
       "text": "not a stable release, and no platform is \"supported\" yet",
       "note": "A negation about the 0.1.0 pre-release and every platform."
     },
@@ -188,14 +181,7 @@
       "text": "stable Rust toolchain",
       "note": "Names the Rust release channel, not a property of VSift."
     },
-    {
-      "kind": "non_claim",
-      "id": "NC-016",
-      "documents": ["README.md"],
-      "text": "where that component/target is qualified",
-      "note": "A condition: a managed install is offered only where an artifact was reviewed; it names no platform."
-    },
-    {
+{
       "kind": "non_claim",
       "id": "NC-017",
       "documents": ["docs/agents/skill.md"],
@@ -272,16 +258,7 @@
       "text": "npm qualify",
       "note": "The name of the Release workflow's twelve npm install-and-check jobs (`npm-qualify`); naming the job claims no platform or package manager is qualified."
     },
-    {
-      "kind": "claim",
-      "id": "CL-001",
-      "rung": "now",
-      "documents": ["README.md"],
-      "text": "named-client trials qualify it for strong models",
-      "basis": ["docs/planning/p12-agent-qualification.md"],
-      "note": "P12's trials of the review-tier models, run on a source build with the skill present; the README gives the numbers and points to the record. Not a claim about a clean install of the published package (that is RQ-15)."
-    },
-    {
+{
       "kind": "claim",
       "id": "CL-002",
       "rung": "now",
@@ -290,16 +267,7 @@
       "basis": ["docs/contracts/cli-v1.md"],
       "note": "The v1 JSON contract is versioned, additive-only since 0.1.0 and held by contract tests; it is not a statement that the readable text is stable, and no 1.0 promise is made."
     },
-    {
-      "kind": "claim",
-      "id": "CL-003",
-      "rung": "now",
-      "documents": ["README.md"],
-      "text": "target a stable grammar",
-      "basis": ["docs/contracts/cli-v1.md"],
-      "note": "The command grammar of the v1 contract; the same limits as CL-002."
-    },
-    {
+{
       "kind": "claim",
       "id": "CL-004",
       "rung": "now",

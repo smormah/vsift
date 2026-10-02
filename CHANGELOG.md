@@ -115,6 +115,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **README rewritten as the project's front page** (2026-10-02). A tagline, badges, the
+  problem in two paragraphs, a "See it work" walk-through with real commands and real output
+  from the published `vsift-cli@0.1.0` on a synthetic recording (three extracted frames in
+  `docs/assets/readme/`), a feature table, a diagram, a quick start, how to use VSift with a
+  coding agent, the principles, an honest-status section and a documentation index. The old
+  status log is gone from the README (its history is in this changelog, the ADRs and the
+  qualification records). Claims stay on the "now" rung of the claims ladder: no platform is
+  called "supported", and the public-claims registry was updated with the README (retired
+  entries NC-003, NC-016, CL-001 and CL-003; NC-004 now covers the README too).
+- **The published v0.1.0 release page** now says "Machines this release targets" where it said
+  "Supported machines" (edited by the maintainer's instruction, 2026-10-02); known limit L-102
+  is closed.
 - **Public wording the new claims check flagged** (P14 PR 1; wording only): the skill guide's
   "Supported models" section is now "Models and clients trialled" (its table is unchanged),
   `install.md`'s exit-127 advice says "on one of the machines in section 1" instead of "on a
