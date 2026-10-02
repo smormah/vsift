@@ -1,6 +1,6 @@
 # Contributing to VSift
 
-Thank you for helping make technical video evidence accessible to AI coding agents.
+Thank you for helping make the evidence in videos accessible to people and their AI assistants.
 
 ## Before starting
 

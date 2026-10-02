@@ -1,7 +1,7 @@
 {
   "name": "vsift-cli",
   "version": "0.1.0",
-  "description": "Local, source-grounded video evidence for AI coding agents: the vsift command-line tool.",
+  "description": "Local, source-grounded video evidence for you or your AI assistant: transcripts, screen changes and exact frames. The vsift command-line tool.",
   "license": "MIT OR Apache-2.0",
   "homepage": "https://github.com/smormah/vsift",
   "repository": {

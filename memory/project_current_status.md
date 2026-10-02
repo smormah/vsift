@@ -5,8 +5,8 @@ open decisions are in `memory/TODO.md`.
 
 ## In plain English
 
-VSift is a Rust command-line tool that gives AI coding agents local, source-grounded access to
-the evidence in a video. Under
+VSift is a Rust command-line tool that gives anyone, and their AI assistant, local,
+source-grounded access to the evidence in a video. Under
 [ADR 0016](../docs/decisions/0016-embeddable-engine-and-evidence-contract.md) it is also an
 embeddable engine library (`vsift`) that the CLI, and later other hosts, use. Today it can:
 - check and register its dependencies, show a read-only setup plan, report whether local speech

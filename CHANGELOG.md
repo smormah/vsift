@@ -146,6 +146,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The npm package's README and description, and `CONTRIBUTING.md`, speak to anyone with a
+  video** (2026-10-02), not to AI coding agents only, matching the front page. npm shows the new
+  text from the next publish; the GitHub repository's About text was changed the same day.
 - **The README's graphics** (2026-10-02). Eight self-contained SVGs in `docs/assets/readme/`
   replace the Mermaid diagram and dress the front page: a hero with the logo and tagline, an
   animated terminal replaying the real, trimmed `vsift-cli@0.1.0` session, the evidence timeline
