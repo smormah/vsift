@@ -500,7 +500,9 @@ matched.
 - npm's staged publishing (a trusted publisher allowed only `npm stage publish`, each
   version then approved on npmjs.com with two-factor authentication) as a second gate
   after the environment's approval: not wired; it would change the publish command. To
-  be decided before a stable release ([issue #246](https://github.com/smormah/vsift/issues/246)).
+  be decided later: the maintainer deferred it on 2026-10-02 until after R1 or the public
+  announcements ([issue #246](https://github.com/smormah/vsift/issues/246)); until then the
+  workflow publishes directly, behind the `release` environment's approval.
 - GitHub's release immutability (Settings, General, Releases): compatible with the
   draft-then-publish flow above.
 - Whether the Release workflow becomes a required check (main's required checks today are

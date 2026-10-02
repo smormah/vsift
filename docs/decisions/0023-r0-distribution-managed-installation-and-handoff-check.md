@@ -1315,8 +1315,8 @@ note changes no accepted decision.
   extracted archive was not run.
 
 **What stays open.** [Issue #246](https://github.com/smormah/vsift/issues/246): whether to
-move to npm's staged publishing before a stable release (the workflow publishes directly
-today). P14 (release qualification: a stable release, the clean-machine install with each
+move to npm's staged publishing (the workflow publishes directly today); the maintainer
+deferred it on 2026-10-02 until after R1 or the public announcements. P14 (release qualification: a stable release, the clean-machine install with each
 package manager, the named-agent run from a clean install under decision H10, the Smart App
 Control and macOS prompts try-out, and the `latest` dist-tag) has not started and does not
 start automatically. The readings each pull request's note flagged for the maintainer remain

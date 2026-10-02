@@ -1045,3 +1045,16 @@ instead of running them. The skill ships byte-identical inside the npm package a
 native archive (PRs 8 and 9: `vsift-release verify` and `npm-verify` read each back). No
 named-agent run from a clean installation is part of P13 (ADR 0023 decision H10); it is
 the next packet's checkpoint. The skill guide is [`../agents/skill.md`](../agents/skill.md).
+
+## Note, 2026-10-02: a cold-agent variant of the clean-install run
+
+The maintainer decided that P14's named-agent run from a clean installation (ADR 0023
+decision H10) includes a **cold-agent variant**: the published CLI on `PATH`, with no
+skill and no documentation. The reason is a prerequisite the maintainer stated: an agent
+must be able to use VSift from the CLI's own help, typed errors and JSON output alone,
+with no skill and no MCP. No trial has tested this, because every P12 trial loaded the
+skill. If the variant shows gaps, the cheap fix is a short "typical investigation"
+section in `vsift --help`, a help-text change and not a JSON contract change. The
+skill's investigation method and safety conventions (never `setup install`, budgets,
+marking unverified claims) are what the CLI alone does not carry, so the variant also
+checks that an agent without the skill does not accept a setup plan on its own.
