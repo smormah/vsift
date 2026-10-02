@@ -1131,7 +1131,8 @@ real run is the maintainer's at P13 completion
   the `attest` and `publish` jobs' conditions, and `vsift-release publish-plan`, which
   refuses a cleared `dry_run` anywhere else (the plan job fails rather than quietly
   dry-running) and refuses a stable version in every mode (its `latest` and release are
-  P14's). `publish` then waits for the environment's approval.
+  P14's; *superseded 2026-10-02: P14 PR 8 added the stable path, see its note in ADR 0024*).
+  `publish` then waits for the environment's approval.
 - **`plan` (every run, `contents: read`).** After all twelve `npm-qualify` jobs:
   requires the archives to equal `package`'s new `archive-sums` output and the tarballs
   `npm-package`'s new `tarball-sums` output; `vsift-release publish-plan` reads each
@@ -1156,7 +1157,7 @@ real run is the maintainer's at P13 completion
   version npm already holds with the same `sha512` integrity is skipped, so a re-run
   completes a partial publish ([L-097](../planning/known-limits.md#l-097)). It then
   requires `vsift-cli`'s `next` to be the new version and `latest` not to be (it stays
-  the placeholder), and creates the GitHub release on the existing tag as a draft
+  the placeholder; *P14 PR 8 reads both tags of all four packages back, per channel*), and creates the GitHub release on the existing tag as a draft
   (`--verify-tag --draft --prerelease --latest=false`) with the archives, `SHA256SUMS`,
   SBOMs and notices and the plan's notes, then publishes the draft. The job checks out no
   code and builds nothing: its commands are a few lines of shell, which a
@@ -1180,7 +1181,7 @@ real run is the maintainer's at P13 completion
   `npm publish` only in `publish`, always with `--provenance` and `--tag next`, never
   `latest`; `gh release` only there, a pre-release on an existing tag not marked latest;
   no `npm dist-tag`, `npm unpublish`, `npm deprecate`, `gh release delete`, `git tag` or
-  `git push` anywhere; `tarball-sums` exported and checked with `sha256sum --check
+  `git push` anywhere (*amended 2026-10-02, P14 PR 8: `npm publish` takes an explicit`n  `--tag next` or `--tag latest` by channel, a pre-release is still never `latest`, and the`n  `npm dist-tag` rule now holds for every workflow; see ADR 0024*); `tarball-sums` exported and checked with `sha256sum --check
   --strict` by `npm-qualify`, `plan`, `attest` and `publish`; the privileged jobs use
   only their reviewed actions, download only this run's three artifacts and build, pack
   or install nothing; no secret but `NPM_BOOTSTRAP_TOKEN`, and that only in `publish`.

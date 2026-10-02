@@ -36,21 +36,19 @@ embeddable engine library (`vsift`) that the CLI, and later other hosts, use. To
 **The agent skill** (`skills/vsift/`) teaches Claude Code or Codex to run an investigation with
 the CLI and write a cited report. P12's named-client trials qualified it:
 - **Review tier:** Claude Opus 5.5 in Claude Code and GPT-6-Astra in Codex each passed 11 of 11
-  trials mechanically and 9 of 11 fully.
-- **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol: 82% in P12; the re-run after the fixes
-  (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
+  trials mechanically and 9 of 11 fully. **Compact tier:** Claude Sonnet 5.5 and GPT-6-Sol: 82% in
+  P12; the re-run (#222) meets the 90% target, Sonnet 26 of 28 and Sol 28 of 28 (23 as run).
 - **Safety:** no agent leaked a secret, installed anything, acted on injected text or copied a
-  hidden character into a report. Codex ran in a Linux container (L-076, #204).
-- **Not yet tried:** an agent with no skill (the cold-agent variant is in P14), and any agent
-  against the published package.
+  hidden character into a report. Codex ran in a Linux container (L-076, #204). **Not yet tried:**
+  an agent with no skill (the cold-agent variant is in P14), and any agent on the published package.
 
 ## Where the project stands
 
-**P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (the maintainer
-started it on 2026-10-02, confirming decisions A-H of ADR 0024 exactly as recommended). Its
-plan is 14 pull requests (0-13); **PR 0 (the plan, the decisions, the ledger line, the packet
-issue and these files, #250) is done once it merges; the whole packet is not complete.** What it
-must show, and what is weaker than it sounds today:
+**P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
+decisions A-H of ADR 0024 confirmed as recommended). Its plan is 14 pull requests (0-13); **PR 0
+(#250) is merged; PR 8, the release machinery for a candidate and the stable (#NNN), is done in
+this change, awaiting review; PR 1 is being built in parallel; the whole packet is not complete.**
+What it must show, and what is weaker than it sounds today:
 - **No checkpoint has run the published artifact on a video:** every real-tool test runs a
   Cargo-built `vsift`, and no install has run on a clean machine (hosted runners carry Rust).
   The one real-registry install was npm on the maintainer's Windows 11 machine, where Smart App
@@ -63,19 +61,26 @@ must show, and what is weaker than it sounds today:
   blurred-banner re-run is missing (L-095).
 - **SEC-T01 is half done** (L-068, #188) and dangerous media has never been run; the load
   ladder stopped at 4 jobs; fuzzing is weekly at five minutes per target.
-- **`latest` has never moved** and the publish path that moves it has never run; `release.yml`
-  refuses a stable version by design.
+- **`latest` has never moved.** The path that moves it is built and tested (PR 8) but has never
+  run for real (L-105); the Release workflow does not check the evidence ledger (L-106).
 
-**Decisions (ADR 0024, Proposed until P14 completes):** R0 ships as `0.2.0` on `latest` after a
-published `0.2.0-rc.N` under `next` (two planned); no signing unless the try-outs show a block
-with no way through; 84 agent runs in three batches (34 with the skill, 30 cold-agent, 8 pilots,
-12 reserve); SEC-T01 by a reviewed adversarial fixture, narrowing the claim as the fallback;
-"supported" per cell by fixed rules (Windows 11 and Ubuntu 24.04; macOS only if the hosted run
-passes; managed install Ubuntu-only; Codex on Windows documented unsupported); a claims ladder
-checked against recorded evidence; a try-out blocks the stable only until an observation is
-recorded. Also decided: the cold-agent variant is in P14, we use the published CLI ourselves as
-a trial at the completion of R0, and staged publishing (#246) waits until after R1 or the
-public announcements.
+**Decisions (ADR 0024, Proposed until P14 completes):** all eight confirmed as recommended on
+2026-10-02; the list is in `memory/TODO.md` (R0 ships as `0.2.0` on `latest` after a published
+`0.2.0-rc.N`; no signing unless the try-outs show a block; 84 agent runs; "supported" per cell).
+
+## P14 PR 8 in one view (done in this change)
+
+[ADR 0024](../docs/decisions/0024-r0-qualification-and-release-candidate.md)'s note of 2026-10-02;
+the runbook is `docs/operations/release.md` 6.7-6.9. **Nothing was published.** The version alone
+decides the channel: a suffix publishes under `next` (a candidate is `-rc.N`), none is stable and
+moves `latest` on all four packages (`0.0.0` and ambiguous versions are refused). A stable plan
+states what moves and is guarded: the accepted candidate (highest `v<X.Y.Z>-rc.<N>`, an ancestor,
+differing only in version strings and the launcher's README), the candidate on npm, `latest`
+forward-only; enforced on a publish and on a dispatch of the tag even as a dry run. No workflow may
+run `npm dist-tag` (lint rule 8); 61 lint mutations; the shell runs against stubs in CI. **Not done:**
+a real stable publish (L-105); the evidence-ledger guard (L-106, before PR 10). **Frozen at the
+candidate cut:** the allowed lists, the release notes, the workflow, the skill. `0.1.0` is stable by
+shape, so every pull request's plan says it would be refused.
 
 ## P13 in one view (complete)
 
@@ -84,21 +89,15 @@ public announcements.
 `docs/operations/install.md`, the maintainer's runbook `docs/operations/release.md`.
 - **Delivered:** native archives and `release.yml` (Windows x64, macOS 15 arm64, Linux x64) with
   SBOMs, notices, checksums and Sigstore provenance; the npm launcher `vsift-cli` over
-  `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64`; managed installation on
-  Ubuntu 24.04 x64; human output; `handoff check`; the 0.1.0 pre-release.
-- **The first publish (2026-10-01):** tag `v0.1.0` on `011bc4d`; the first real dispatch failed
-  with `ENEEDAUTH` before anything was published (trusted-publisher connections were not
-  complete; L-100); the second published all four packages by trusted publishing, no token.
-  `latest` is still the `0.0.0` placeholder on all four packages.
-- **Verified once:** `npm audit signatures` 4 and 4; `npx vsift --version` printed `vsift 0.1.0
-  (011bc4da1af6)`; checksums OK; `gh attestation verify` 10 of 10 files and 4 of 4 tarballs.
-- **Hosted evidence** (Ubuntu 24.04): `P13 managed smoke` and `install-e2e`, `P13 managed power
-  loss` (0 lost, 0 damaged; negative control 36 lost); the twelve-job npm matrix (a local
-  registry, runners with Rust on `PATH`).
+  `@vsift/win32-x64`, `@vsift/darwin-arm64` and `@vsift/linux-x64`; managed installation on Ubuntu
+  24.04 x64; human output; `handoff check`; the 0.1.0 pre-release (2026-10-01, tag `v0.1.0` on
+  `011bc4d`; the first dispatch failed with `ENEEDAUTH` before anything was published, L-100; the
+  second published by trusted publishing, no token). Verified once: `npm audit signatures` 4 and 4,
+  `gh attestation verify` 10 of 10 files and 4 of 4 tarballs. Hosted: the managed smoke and
+  power-loss runs on Ubuntu 24.04, the twelve-job npm matrix (a local registry, runners with Rust).
 - **Not proved:** a clean-machine install; pnpm, Yarn or Bun on the real registry; an extracted
   archive run; the offline install with real artifacts; Smart App Control and the macOS prompts
   (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
-
 ## What works (public CLI)
 
 - `setup check`, `setup configure`, `setup configure-model`, the read-only `setup plan`;
@@ -126,7 +125,7 @@ public announcements.
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PR 0 done on merge of #250; PRs 1-13 follow |
+| P14 | **In progress** (started 2026-10-02): PR 0 merged (#250); PR 8 done in this change (#NNN); PR 1 in parallel; the rest follow |
 
 ## Architecture snapshot
 
@@ -136,8 +135,8 @@ public announcements.
 types. The worker lives in the engine; the CLI only presents. The skill (`skills/vsift/`) only
 calls the `vsift` binary; its guard is a `vsift-cli` test module. The trial harness depends only
 on `vsift` and `vsift-contract`; `tools/vsift-release` (never shipped) packages the release
-archives, assembles the npm packages and plans their publication; `npm/` holds the launcher and
-its qualification.
+archives, assembles the npm packages and plans their publication (a version without a suffix is
+stable and moves `latest`; guards, the candidate comparison and release notes live there); `npm/` holds the launcher and its qualification.
 
 ## Quality evidence
 

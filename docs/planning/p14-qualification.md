@@ -325,7 +325,10 @@ Read from `tools/vsift-governance/src/main.rs` on 2026-10-02:
 - Every workflow file is linted: pinned actions, no `pull_request_target`, minimal
   permissions, no untrusted expressions in `run`, `id-token` only for attest and publish.
   New workflows must pass; the changes to `release.yml` and the lint's rule 7 (always
-  `--tag next`, never `latest`) need new mutation tests for every rule they touch.
+  `--tag next`, never `latest`) need new mutation tests for every rule they touch. *Done in PR 8
+  (2026-10-02): rule 7 pairs `--tag next` and `--tag latest` with their channel, rule 8 refuses
+  `npm dist-tag` and publishing outside the `publish` job in every workflow, and every new rule has
+  a mutation test (61 in all); see ADR 0024's PR 8 note and `release.md` 6.7 to 6.9.*
 - At completion the ledger names the stable release commit, as P13's names the commit its
   pre-release was built from (the last implementation change), because a documentation,
   ledger and memory change cannot know its own merge commit.

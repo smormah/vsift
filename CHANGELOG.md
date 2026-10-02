@@ -8,6 +8,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **P14 PR 8: the release machinery for a release candidate and the stable release** (code,
+  the Release workflow, its lint, tests and documentation; **nothing is published**, no tag or
+  release was created and no setting changed). The version alone decides what a publication
+  does: a suffix (`0.2.0-rc.1`, any other) publishes under `next` as a GitHub pre-release and
+  never touches `latest`; no suffix (`0.2.0`, a 0.x version too) is *stable*, publishes under
+  `latest` and moves it on all four packages, as the release marked latest; `0.0.0` and
+  ambiguous versions are refused. `vsift-release publish-plan` states at the top whether
+  `latest` moves, tabulates each package's dist-tag from what to what, and for a stable
+  version guards it: the accepted release candidate (the highest `v<X.Y.Z>-rc.<N>` tag) is an
+  ancestor and differs from the commit only in version strings and the launcher's README,
+  the candidate is published on npm, `latest` is a stable version below this one and this
+  version is not on npm under another tag or with other bytes (the plan job reads the four
+  packages' public metadata with anonymous GETs; nothing of it but tags and integrities is
+  used). A failed guard refuses a publish and a dispatch on the tag even as a dry run; other
+  runs report it. New `vsift-release candidate-delta` runs the comparison by hand. The workflow
+  has one publishing step per channel with its own explicit `--tag`, each gated on the plan's
+  `channel` output and checking the version's shape in shell; the stable step requires `latest`
+  never to move backwards, the job records the dist-tags before and reads both back after,
+  and the stable GitHub release must be GitHub's latest. **The workflow still never runs
+  `npm dist-tag`**, and the lint now refuses it, and any publishing outside the `publish`
+  job, in every workflow. Release notes say "a release candidate under qualification" for a
+  candidate, "a pre-release" for another, and what a stable release promises for a stable
+  one; none says "supported". 33 new lint mutations (61 in all) and tests of every guard;
+  `tools/vsift-release/tests/publish-steps.sh` executes the publishing shell against stub
+  commands (46 checks, run on Linux in CI). `cli_contract.rs` no longer hard-codes the
+  version. Runbook: `docs/operations/release.md` (sections 1, 3 and 6; 6.7 to 6.9 are new).
+  Known limits L-105 (the stable path never ran for real), L-106 (the evidence ledger is not
+  checked by the workflow), L-107 and L-108; L-097 updated. ADR 0024 has the dated note;
+  ADR 0023, the threat model (SEC-22) and verification point at it.
 - **P14 starts: the plan and its kickoff** (P14 PR 0; documentation, the ledger line and
   the handoff files only: no code, workflow, package or setting changed, nothing published).
   The maintainer confirmed eight decisions and started P14 on 2026-10-02; the ledger marks it

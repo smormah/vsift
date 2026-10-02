@@ -15,7 +15,9 @@ least-privilege `permissions`, `id-token` only for release attestation and publi
 no untrusted expressions in `run` scripts, and no feature selection in release builds;
 since P13 PR 10 also the release workflow's publishing rules: publishing only from a
 dispatch of the release tag with `dry_run` cleared, in the protected `release`
-environment, with npm provenance under `next`, and only the qualified tarballs by
+environment, with npm provenance under `next` (or, since P14 PR 8, `latest` for a stable
+version, held by channel rules, a stable plan's guards and a ban on moving a dist-tag in any
+workflow), and only the qualified tarballs by
 digest; see [`../operations/release.md`](../operations/release.md)). A packet marked complete requires a full merge
 commit and nonempty verification record. The checker deliberately fixes the R0
 objective; changing it requires an explicit reviewed code, ledger and ADR change.

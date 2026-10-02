@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-02 (P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-02 (P14 PR 8, the stable path and `latest`: L-105 to L-108 added, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -138,8 +138,12 @@ Each entry has these fields:
 | [L-098](#l-098) | The Windows and macOS executables are unsigned: SmartScreen and Gatekeeper may warn about a direct download, and Windows Smart App Control may block `vsift.exe` outright | platform/distribution | medium | P14, maintainer | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-099](#l-099) | Managed installation depends on files and redirect hosts that the publishers control | platform/distribution | low | unscheduled | none | accepted residual |
 | [L-100](#l-100) | npm prints only `ENEEDAUTH`, with no reason, when a trusted publisher is missing or set wrongly | process/CI | low | unscheduled | none | accepted residual |
+| [L-105](#l-105) | The stable publish path has never run against the real services | platform/distribution | medium | P14 (PR 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-106](#l-106) | The Release workflow does not check that the evidence ledger is complete for the candidate | process/CI | low | P14 (before PR 10) | [#17](https://github.com/smormah/vsift/issues/17) | open |
+| [L-107](#l-107) | The candidate-to-stable check compares paths and bytes, not meaning, and takes the highest candidate to be the accepted one | process/CI | low | unscheduled | none | accepted residual |
+| [L-108](#l-108) | After a stable release `next` still names the candidate, an older build than `latest` | platform/distribution | low | P14 (PR 12) | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 
-Counts: 1 high, 25 medium, 65 low (91 entries).
+Counts: 1 high, 26 medium, 68 low (95 entries).
 
 ## Security
 
@@ -1818,6 +1822,12 @@ it cannot be packaged for crates.io as it is.**
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
 
+*Since P14 PR 8 (2026-10-02):* the same holds for a stable version, and latest is what a
+ part-way publish leaves half moved: the packages published so far already have latest at the
+ new version, and sift-cli, published last and the one users install, still has the old one
+ until the re-run completes. The re-run's pre-check accepts latest being the version itself.
+ The stable path itself is [L-105](#l-105).
+
 ### L-098
 
 **The Windows and macOS executables are unsigned: SmartScreen and Gatekeeper may warn
@@ -2494,6 +2504,114 @@ wrongly or lacks "npm publish", and nothing in the workflow's default output say
   `vsift-release` test and the governance lint.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
+
+### L-105
+
+**The stable publish path has never run against the real services.**
+
+- **What:** P14 PR 8 built the path that publishes a stable version under `latest` and tested
+  it as far as the repository can: the version kinds, the plan and its guards, the
+  candidate-to-stable check, 61 lint mutations and the publishing shell executed against
+  stub commands. Three things only the real services can show have not been tried: (1)
+  that npm's trusted publishing accepts `npm publish --tag latest` under the allowed action
+  "npm publish" (only `--tag next` has gone through it, for 0.1.0); (2) that `gh release
+  edit --draft=false --latest` marks a draft release as GitHub's latest (the job then
+  requires `gh api repos/smormah/vsift/releases/latest` to name the tag, so a failure is
+  loud, not silent); (3) how long npm takes to show a new `latest` (the read-back waits up to
+  five minutes per attempt set; for 0.1.0 `next` took about a minute and a half). The plan
+  job's registry reading does run against the real npm on every pull request's dry run, so
+  it is exercised; a real publish is not.
+- **Evidence:** `.github/workflows/release.yml` job `publish`, its stable steps;
+  `tools/vsift-release/tests/publish-steps.sh`; [`release.md`](../operations/release.md)
+  section 6.7.
+- **Impact:** the first stable publish may stop. Each way it can is recoverable: a failure of
+  (1) is `ENEEDAUTH` at the first `npm publish`, with nothing published; of (2) leaves the
+  release published and unmarked while npm is already correct (`gh release edit v<version>
+  --latest`); of (3) fails the read-back after the packages are published (re-run the job: the
+  versions are skipped and the checks run again). A stable version that moved `latest` wrongly
+  cannot be unpublished; `release.md` 6.5 says what to do.
+- **Why:** nothing but a publish exercises trusted publishing, and a dry run must not
+  publish.
+- **Mitigation:** the release candidate (P14 PR 10) exercises every step of the workflow but
+  the two commands above; the dry run on the stable tag is enforced (it fails whenever the real
+  run would); the preflight in `release.md` 6.7 re-checks the trusted publishers and the
+  registry first.
+- **Next step:** the maintainer's first stable publish (P14 PR 12); record what happened here
+  or delete this entry if all three held.
+- **Owner:** P14 (PR 12, the maintainer's publish). **Issue:**
+  [#17](https://github.com/smormah/vsift/issues/17). **Status:** deferred. **Review:**
+  pending.
+
+### L-106
+
+**The Release workflow does not check that the evidence ledger is complete for the
+candidate.**
+
+- **What:** a stable version needs a candidate whose evidence is complete (ADR 0024
+  decision A, RQ-20). The completeness check belongs to P14 PR 1, which did not exist on
+  `main` when the stable path was built, so the workflow checks the candidate's commit, its
+  publication and `latest` and does not look at the evidence. Every stable plan prints
+  "Evidence ledger: not enforced" in its guard table.
+- **Evidence:** `tools/vsift-release/src/guards.rs` (the "Evidence ledger" guard);
+  [`release.md`](../operations/release.md) 6.7 (preflight item 6).
+- **Impact:** a stable version could be published on an incomplete ledger if the maintainer
+  does not run the check by hand. The maintainer's own dispatch and approval are the control
+  until it is wired.
+- **Why:** the check did not exist; guessing its interface would have invented a contract.
+- **Mitigation:** the plan says so on every stable plan; the preflight lists it.
+- **Next step:** when PR 1's check is on `main`, wire it into the stable plan as a guard (the
+  plan job runs it and the plan reads its verdict, with a lint rule and a mutation test). The
+  workflow is code and code is frozen at the candidate's cut (`release.md` 6.8), so this must
+  land before the candidate (PR 10), or the candidate must be cut again.
+- **Owner:** P14 (after PR 1, before PR 10). **Issue:**
+  [#17](https://github.com/smormah/vsift/issues/17). **Status:** open. **Review:** pending.
+
+### L-107
+
+**The candidate-to-stable check compares paths and bytes, not meaning, and takes the highest
+candidate to be the accepted one.**
+
+- **What:** the stable commit may differ from its candidate only in six version-string files
+  (whose content must equal the candidate's with the version text replaced) and in the
+  launcher's README (any change). The check cannot tell that the README is right, that a
+  replaced version text was the only intent, or that the highest `v<X.Y.Z>-rc.<N>` tag is
+  the candidate that was qualified: it takes it to be, because only the maintainer can
+  create a `v*` tag and a stable should never be built on an older candidate than the last
+  one cut. The skill and the release notes are frozen with the code at the cut, so the stable
+  release notes' wording must be right in the candidate.
+- **Evidence:** `tools/vsift-release/src/candidate.rs`; [`release.md`](../operations/release.md)
+  6.8.
+- **Impact:** a wrong word in the launcher's README, or a stable built on a candidate the
+  maintainer meant to reject, would pass the check. Changing the allowed lists after the
+  candidate is cut makes the stable fail the check (the lists are code).
+- **Why:** a mechanical check can prove what did not change, not what is right.
+- **Mitigation:** the plan prints every changed path and its class; the maintainer reads the
+  README's diff and the delta check's output in the preflight (6.7 items 4 and 5).
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-108
+
+**After a stable release `next` still names the candidate, an older build than `latest`.**
+
+- **What:** a stable version is published under `latest` and leaves `next` alone: the
+  workflow never runs `npm dist-tag`, so it cannot move it. Until the next pre-release, or
+  until the maintainer moves it by hand, `vsift-cli@next` installs the last release
+  candidate (before any candidate it installs 0.1.0).
+- **Evidence:** [`release.md`](../operations/release.md) 6.7 ("What changes for users");
+  ADR 0024's note of P14 PR 8.
+- **Impact:** a user who follows an older instruction (`npm install vsift-cli@next`, the
+  text of the 0.1.0 pre-release and its README) gets a build older than the stable.
+- **Why:** the lint forbids moving a dist-tag from any workflow, deliberately.
+- **Mitigation:** the repository-only pages (`install.md`, the README) flip to the stable
+  instructions in the ledger follow-up (P14 PR 13), and the launcher's README, which ships
+  in the package, is a shipped document the stable may change; the maintainer may move
+  `next` by hand (`npm dist-tag add vsift-cli@<stable> next` for each package).
+- **Next step:** decide at the stable whether to move `next`.
+- **Owner:** P14 (PR 12, the maintainer's choice). **Issue:**
+  [#17](https://github.com/smormah/vsift/issues/17). **Status:** accepted residual.
+  **Review:** pending.
 
 ## Review workflow
 
