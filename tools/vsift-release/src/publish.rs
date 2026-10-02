@@ -1097,7 +1097,6 @@ impl PublishPlan {
             for reason in failed {
                 let _ = writeln!(text, "- {reason}");
             }
-            let _ = writeln!(text);
         }
         text
     }
@@ -1111,7 +1110,7 @@ impl PublishPlan {
         let mut text = self.banner();
         let _ = writeln!(
             text,
-            "\n- Version `{version}` ({}), npm dist-tag `{}`, Git tag `{}`\n\
+            "\n### This run\n\n- Version `{version}` ({}), npm dist-tag `{}`, Git tag `{}`\n\
              - Commit `{}`, event `{}` on `{}` in `{}`\n\
              - The plan is {}",
             self.version.kind().words(),
