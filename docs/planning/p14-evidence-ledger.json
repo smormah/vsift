@@ -496,7 +496,8 @@
       "supports": {
         "requirements": ["R-14"],
         "threats": ["SEC-12", "SEC-13", "SEC-14", "SEC-15", "SEC-22", "SEC-23"],
-        "verification": ["R-SEC01", "R-SEC02"]
+        "verification": ["R-SEC01", "R-SEC02"],
+        "limits": ["L-105", "L-108"]
       },
       "proves": "The publish is what was qualified, checked by something other than the publisher's session: dist-tags and provenance of all four packages, npm audit signatures, gh attestation verify of every release file and tarball, checksums, the release's flags and asset count; for the stable also the candidate-to-stable delta and latest on all four.",
       "does_not_prove": "A compromised GitHub or npm.",

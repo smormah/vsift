@@ -329,7 +329,27 @@ the build is kept reproducible and how to check a run's archives is in
 the governance check (`cargo run --locked -p vsift-governance -- check`) fails a
 `release.yml` that does, and a workflow that breaks its lint (pinned actions, no
 `pull_request_target`, read-only top-level `permissions`, `id-token` only for the
-release attest and publish jobs, no untrusted `${{ }}` in a `run` script).
+release attest and publish jobs, no untrusted `${{ }}` in a `run` script, and, in every
+workflow, nothing that moves a dist-tag or publishes outside the `publish` job).
+
+A version without a pre-release suffix is **stable** and moves npm's `latest`; a version
+with one is published under `next` (P14 PR 8; `operations/release.md` sections 1 and 6.7). Changing
+the release tool, the Release workflow or its lint is the highest-risk change in the repository, so
+it comes with all of: a lint rule and a deliberately broken copy of the workflow that it must name
+(`tools/vsift-governance/src/workflows/publish.rs`), the tool's tests, and a check of the shell. Run
+the shell check by hand on Linux or in Git Bash:
+
+```console
+bash tools/vsift-release/tests/publish-steps.sh .github/workflows/release.yml
+```
+
+It runs each publishing step of `release.yml`, and the plan job's registry, candidate and evidence
+steps, against stub `npm`, `gh`, `curl` and `cargo` (CI runs it
+through `cargo test -p vsift-release` on Linux); no real service is touched. To see what a stable
+version would be held to, run `cargo run --locked -p vsift-release -- candidate-delta` at its
+commit in a clone that has the tags. Bumping the workspace version touches only the files of
+`operations/release.md` 6.8, and a test that hard-codes the version defeats that check: read
+`env!("CARGO_PKG_VERSION")` instead.
 
 `vsift --version` prints `vsift <version> (<commit>)` when `VSIFT_SOURCE_COMMIT` holds
 the full commit SHA at build time, as the release workflow sets it; a build without it
@@ -353,7 +373,8 @@ They copy the Node.js executable into fake package layouts as a stand-in for `vs
 Ctrl-Break with `tools/send-console-ctrl.ps1`. No package may have `scripts`, a
 `gypfile`, a `binding.gyp` or a person in its manifest; the governance check fails
 otherwise. Bumping the workspace version means changing `npm/vsift-cli/package.json`'s
-`version` and its three optional dependencies with it. The full qualification with npm,
+`version` and its three optional dependencies with it, and the other files that hold the
+version (`operations/release.md` section 6.3, step 1, lists them). The full qualification with npm,
 pnpm, Yarn and Bun against a loopback Verdaccio runs in the Release workflow; to run it
 yourself, see the same runbook section. It never publishes to a public registry, and
 nothing in this repository may.
@@ -382,8 +403,9 @@ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-
   `repeat`, `carry` or `not_required`), `status` (`planned`, `running`, `passed`, `failed`,
   `waived`, `not_applicable`), `applies_to` (`version`, `commit`), `evidence` and `prior` (each a
   typed `reference` of `workflow_run`, `pull_request`, `issue` or `record`, with a `date` and a
-  `note`), `issues`, `decision`, `reason` and `date`. `release_delta` stays null until P14 PR 8's
-  delta check records it.
+  `note`), `issues`, `decision`, `reason` and `date`. `release_delta` stays null until
+  the maintainer copies the stable plan's `release-delta.json` (P14 PR 8's delta check) into it
+  after the publish.
 - **Changing an evidence item's status** is a change to the ledger: set `status`, give the
   version and commit it is for (`applies_to`) and at least one typed link (a workflow run, a
   pull request, a repository record), move what no longer counts into `prior`, and add the

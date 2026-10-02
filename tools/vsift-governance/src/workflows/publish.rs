@@ -18,10 +18,11 @@
 //! 4. **Environment.** `publish`, and no other job, runs in the protected
 //!    `release` environment, and is never cancelled part-way; nor is the run.
 //! 5. **Commands.** `npm publish` appears only in `publish`, always with
-//!    `--provenance` and `--tag next`, never `latest`; `gh release` only in
-//!    `publish`, creating a pre-release on an existing tag that is not marked
-//!    latest; nothing moves dist-tags, unpublishes, deletes a release or
-//!    creates or pushes a tag.
+//!    `--provenance` and an explicit `--tag next` or `--tag latest`; `gh
+//!    release` only in `publish`, creating a draft on an existing tag; `gh
+//!    api` only to read the latest release; nothing deprecates, unpublishes,
+//!    deletes a release or creates or pushes a tag, and no workflow moves a
+//!    dist-tag (the general rule 8 of the parent module).
 //! 6. **Qualified inputs.** `npm-package` exports the tarballs' digests, and
 //!    `npm-qualify`, `plan`, `attest` and `publish` each check the tarballs
 //!    they use against them. `attest` and `publish` use only their few
@@ -31,6 +32,27 @@
 //! 7. **Secrets.** The only secret the workflow names is
 //!    `NPM_BOOTSTRAP_TOKEN`, and only in `publish` (the first publish of a
 //!    package without a trusted publisher, release.md section 6).
+//! 8. **Channels** (P14 PR 8, ADR 0024 decisions A and B). The `plan` job
+//!    exports the version's `channel` (`prerelease` or `stable`). Every step of
+//!    the release workflow that publishes or releases serves exactly one
+//!    channel and runs only when the plan says so: `--tag next`, `gh release
+//!    create ... --prerelease --latest=false` and the pre-release's `gh release
+//!    edit` only in a step whose `if` is `needs.plan.outputs.channel ==
+//!    'prerelease'`; `--tag latest`, a `gh release create` without
+//!    `--prerelease` and a `gh release edit ... --latest` only in a step whose
+//!    `if` is `needs.plan.outputs.channel == 'stable'`. Each `npm publish`
+//!    step checks the version's own shape in shell first (a suffix for `next`,
+//!    none for `latest`), so a pre-release can never reach `latest` and a
+//!    stable version never `next`, by two independent paths.
+//! 9. **The stable path's inputs.** The `plan` job checks out the full
+//!    history (the candidate comparison needs the candidate's tag), reads the
+//!    registry with plain GETs of `https://registry.npmjs.org/` only, and
+//!    passes the result to `publish-plan` with `--registry`. It also names the
+//!    accepted release candidate (`candidate-delta --github-output`), checks the
+//!    evidence ledger for it (`vsift-governance release-evidence --complete-for
+//!    ... --commit ...`, RQ-20) and hands the answer, the run id and the date to
+//!    `publish-plan` (`--evidence`, `--run-id`, `--date`). A `curl` anywhere in
+//!    the workflow takes only the reviewed read-only flags.
 
 use yaml_rust2::{Yaml, yaml::Hash};
 
@@ -83,7 +105,7 @@ const BOOTSTRAP_SECRET: &str = "secrets.NPM_BOOTSTRAP_TOKEN";
 
 /// Text a privileged job's scripts never contain: it neither builds, packs
 /// nor installs anything, so it publishes the qualified bytes.
-const PRIVILEGED_FORBIDDEN_COMMANDS: [&str; 8] = [
+const PRIVILEGED_FORBIDDEN_COMMANDS: [&str; 10] = [
     "cargo",
     "vsift-release",
     "npm pack",
@@ -92,17 +114,91 @@ const PRIVILEGED_FORBIDDEN_COMMANDS: [&str; 8] = [
     "npx",
     "pnpm",
     "yarn",
+    "curl",
+    "wget",
 ];
 
-/// Commands only the maintainer runs by hand, never this workflow.
-const MAINTAINER_COMMANDS: [&str; 6] = [
-    "npm dist-tag",
+/// Commands only the maintainer runs by hand, never this workflow. (`npm
+/// dist-tag` is the parent module's rule for every workflow: `latest` moves
+/// only by publishing a stable version.)
+const MAINTAINER_COMMANDS: [&str; 5] = [
     "npm unpublish",
     "npm deprecate",
     "gh release delete",
     "git tag",
     "git push",
 ];
+
+/// The two channels of a release (P14 PR 8). The plan job's `channel` output
+/// names one; each step that publishes or releases serves one and says so in
+/// its `if`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Channel {
+    /// A version with a pre-release suffix: `--tag next`, a GitHub
+    /// pre-release.
+    PreRelease,
+    /// A version without one: `--tag latest`, the release marked latest.
+    Stable,
+}
+
+impl Channel {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::PreRelease => "prerelease",
+            Self::Stable => "stable",
+        }
+    }
+
+    /// The condition a step of this channel runs under.
+    const fn condition(self) -> &'static str {
+        match self {
+            Self::PreRelease => "needs.plan.outputs.channel == 'prerelease'",
+            Self::Stable => "needs.plan.outputs.channel == 'stable'",
+        }
+    }
+
+    const fn other(self) -> Self {
+        match self {
+            Self::PreRelease => Self::Stable,
+            Self::Stable => Self::PreRelease,
+        }
+    }
+
+    /// The line an `npm publish` step of this channel opens with, so the
+    /// version's own shape is checked in the privileged job as well as in the
+    /// plan: a suffix for `next`, none for `latest`.
+    const fn shape_check(self) -> &'static str {
+        match self {
+            Self::PreRelease => r#"[[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]"#,
+            Self::Stable => r#"[[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]"#,
+        }
+    }
+}
+
+/// The only `curl` flags the release workflow uses: a read-only GET with a
+/// bounded time and no header, body, credential, configuration or redirect.
+const CURL_FLAGS: [&str; 7] = [
+    "--silent",
+    "--show-error",
+    "--proto",
+    "--max-time",
+    "--retry",
+    "--output",
+    "--write-out",
+];
+
+/// Where `curl` may go: npm's public registry, nowhere else.
+const REGISTRY_URL: &str = "https://registry.npmjs.org/";
+
+/// The one thing `gh api` may read in the release workflow.
+const LATEST_RELEASE_PATH: &str = "repos/smormah/vsift/releases/latest";
+
+/// The flags a `gh release edit` may carry besides its tag.
+const RELEASE_EDIT_FLAGS: [&str; 3] = ["--repo", "--draft=false", "--latest"];
+
+/// The `gh release` subcommands the workflow may run: it never uploads to a
+/// published release or changes one but to publish its own draft.
+const RELEASE_SUBCOMMANDS: [&str; 3] = ["create", "edit", "view"];
 
 /// Checks the publishing rules of the release workflow.
 pub(super) fn check_publishing(lint: &mut Lint<'_>, workflow: &Hash) {
@@ -139,6 +235,7 @@ pub(super) fn check_publishing(lint: &mut Lint<'_>, workflow: &Hash) {
     }
     if let Some(Yaml::Hash(plan)) = get(jobs, PLAN_JOB) {
         require_needs(lint, PLAN_JOB, plan, &["npm-qualify"]);
+        check_plan_job(lint, plan);
     }
     if let Some(Yaml::Hash(attest)) = get(jobs, ATTEST_JOB) {
         check_privileged_job(
@@ -160,6 +257,7 @@ pub(super) fn check_publishing(lint: &mut Lint<'_>, workflow: &Hash) {
             &[PLAN_JOB, ATTEST_JOB, "npm-qualify"],
             &["actions/download-artifact", "actions/setup-node"],
         );
+        check_channel_steps(lint, publish);
         let never_cancelled = matches!(
             get(publish, "concurrency"),
             Some(Yaml::Hash(concurrency))
@@ -310,57 +408,492 @@ fn check_commands(lint: &mut Lint<'_>, id: &str, job: &Hash) {
         let Some(Yaml::String(script)) = get(step, "run") else {
             continue;
         };
+        let mut implied: Vec<Channel> = Vec::new();
         for command in logical_lines(script) {
-            check_command(lint, id, &command);
+            if let Some(channel) = check_command(lint, id, &command)
+                && !implied.contains(&channel)
+            {
+                implied.push(channel);
+            }
         }
+        check_step_channel(lint, id, step, script, &implied);
     }
 }
 
-fn check_command(lint: &mut Lint<'_>, id: &str, command: &str) {
+/// Checks one command of a `run` script and returns the channel it serves,
+/// if it publishes or releases.
+fn check_command(lint: &mut Lint<'_>, id: &str, command: &str) -> Option<Channel> {
+    let words: Vec<&str> = command.split_whitespace().collect();
+    // Single spaces, so `npm  dist-tag` or a tab cannot slip past a match.
+    let normalised = words.join(" ");
     for maintainer_only in MAINTAINER_COMMANDS {
-        if command.contains(maintainer_only) {
+        if normalised.contains(maintainer_only) {
             lint.report(&format!(
                 "job `{id}` runs `{maintainer_only}`, which only the maintainer does by hand \
                  (release.md section 6)"
             ));
         }
     }
-    if command.contains("npm publish") {
-        if id != PUBLISH_JOB {
+    let mut channel = None;
+    if normalised.contains("npm publish") {
+        channel = check_npm_publish(lint, id, &words);
+    }
+    if normalised.contains("gh release") {
+        channel = check_gh_release(lint, id, &normalised, &words).or(channel);
+    }
+    if normalised.contains("gh api") {
+        check_gh_api(lint, id, &words);
+    }
+    if words
+        .iter()
+        .any(|word| *word == "curl" || word.ends_with("(curl"))
+    {
+        check_curl(lint, id, &words);
+    }
+    channel
+}
+
+fn check_npm_publish(lint: &mut Lint<'_>, id: &str, words: &[&str]) -> Option<Channel> {
+    if id != PUBLISH_JOB {
+        lint.report(&format!(
+            "job `{id}` runs `npm publish`; only the `publish` job publishes"
+        ));
+    }
+    if !words.contains(&"--provenance") {
+        lint.report(&format!(
+            "job `{id}` runs `npm publish` without `--provenance` (ADR 0023 decision C)"
+        ));
+    }
+    if words.iter().any(|word| word.starts_with("--tag=")) {
+        lint.report(&format!(
+            "job `{id}` runs `npm publish` with `--tag=...`; write the dist-tag as `--tag next` \
+             or `--tag latest` so the lint can read it"
+        ));
+    }
+    let tag = words
+        .iter()
+        .position(|word| *word == "--tag")
+        .and_then(|index| words.get(index + 1))
+        .copied();
+    match tag {
+        Some("next") => Some(Channel::PreRelease),
+        Some("latest") => Some(Channel::Stable),
+        _ => {
             lint.report(&format!(
-                "job `{id}` runs `npm publish`; only the `publish` job publishes"
+                "job `{id}` runs `npm publish` without an explicit `--tag next` or `--tag \
+                 latest`: the dist-tag is never npm's default and never a variable (ADR 0024 \
+                 decision A)"
+            ));
+            None
+        }
+    }
+}
+
+fn check_gh_release(
+    lint: &mut Lint<'_>,
+    id: &str,
+    normalised: &str,
+    words: &[&str],
+) -> Option<Channel> {
+    if id != PUBLISH_JOB {
+        lint.report(&format!(
+            "job `{id}` runs `gh release`; only the `publish` job creates the release"
+        ));
+    }
+    let subcommand = words
+        .iter()
+        .position(|word| *word == "release")
+        .and_then(|index| words.get(index + 1))
+        .copied()
+        .unwrap_or_default();
+    if !RELEASE_SUBCOMMANDS.contains(&subcommand) {
+        lint.report(&format!(
+            "job `{id}` runs `gh release {subcommand}`; the workflow only creates, publishes and \
+             views its own release ({RELEASE_SUBCOMMANDS:?})"
+        ));
+    }
+    if normalised.contains("gh release create") {
+        if !["--verify-tag", "--draft"]
+            .iter()
+            .all(|flag| words.contains(flag))
+        {
+            lint.report(&format!(
+                "job `{id}` creates a release without `--verify-tag` and `--draft`: the tag must \
+                 exist, and a release is a draft until it is published"
             ));
         }
-        if !command.contains("--provenance") || !command.contains("--tag next") {
+        if words.contains(&"--prerelease") {
+            if !words.contains(&"--latest=false") {
+                lint.report(&format!(
+                    "job `{id}` creates a pre-release without `--latest=false`: a pre-release is \
+                     never marked latest"
+                ));
+            }
+            return Some(Channel::PreRelease);
+        }
+        if words.iter().any(|word| word.starts_with("--latest")) {
             lint.report(&format!(
-                "job `{id}` runs `npm publish` without `--provenance` and `--tag next` \
-                 (ADR 0023 decisions B and C)"
+                "job `{id}` marks a release latest when it creates the draft; a stable release \
+                 is marked latest once, by the edit that publishes it"
             ));
         }
-        if command.contains("latest") {
+        return Some(Channel::Stable);
+    }
+    if normalised.contains("gh release edit") {
+        let start = words
+            .iter()
+            .position(|word| *word == "edit")
+            .map_or(0, |index| index + 2);
+        let mut flags_ok = true;
+        let mut skip_value = false;
+        for word in words.iter().skip(start) {
+            if skip_value {
+                skip_value = false;
+            } else if *word == "--repo" {
+                skip_value = true;
+            } else if word.starts_with('-') && !RELEASE_EDIT_FLAGS.contains(word) {
+                flags_ok = false;
+            }
+        }
+        if !flags_ok || !words.contains(&"--draft=false") {
             lint.report(&format!(
-                "job `{id}` names `latest` in `npm publish`; a 0.x pre-release never moves \
-                 `latest` (ADR 0023 decision B)"
+                "job `{id}` edits a release with flags other than `--repo`, `--draft=false` and \
+                 `--latest`, or without `--draft=false`: it only publishes its own draft"
+            ));
+        }
+        return Some(if words.contains(&"--latest") {
+            Channel::Stable
+        } else {
+            Channel::PreRelease
+        });
+    }
+    None
+}
+
+/// `gh api` only reads GitHub's latest release, to confirm a stable release
+/// was marked latest: no method, field or input, no other path.
+fn check_gh_api(lint: &mut Lint<'_>, id: &str, words: &[&str]) {
+    if id != PUBLISH_JOB {
+        lint.report(&format!(
+            "job `{id}` runs `gh api`; only the `publish` job reads the latest release"
+        ));
+    }
+    let Some(start) = words.iter().position(|word| *word == "api") else {
+        return;
+    };
+    let mut paths = 0_usize;
+    let mut skip_value = false;
+    let mut flags_ok = true;
+    for word in words.iter().skip(start + 1) {
+        if matches!(*word, "||" | "&&" | ";" | "|") {
+            break;
+        }
+        if skip_value {
+            skip_value = false;
+        } else if *word == "--jq" {
+            skip_value = true;
+        } else if word.starts_with('-') {
+            flags_ok = false;
+        } else if *word == LATEST_RELEASE_PATH {
+            paths += 1;
+        } else {
+            flags_ok = false;
+        }
+    }
+    if !flags_ok || paths != 1 {
+        lint.report(&format!(
+            "job `{id}` runs `gh api` other than `gh api {LATEST_RELEASE_PATH} --jq <filter>`: \
+             the workflow only reads the latest release, never writes through the API"
+        ));
+    }
+}
+
+/// A `curl` in the release workflow is a read-only GET of npm's public
+/// registry: only the reviewed flags, and no URL but the registry's.
+fn check_curl(lint: &mut Lint<'_>, id: &str, words: &[&str]) {
+    let Some(start) = words
+        .iter()
+        .position(|word| *word == "curl" || word.ends_with("(curl"))
+    else {
+        return;
+    };
+    let mut registry_urls = 0_usize;
+    let mut other = Vec::new();
+    for word in words.iter().skip(start + 1) {
+        if matches!(*word, "||" | "&&" | ";" | "|") {
+            break;
+        }
+        let bare = word.trim_matches(|character| matches!(character, '"' | '\''));
+        if word.starts_with('-') {
+            if !CURL_FLAGS.contains(word) {
+                other.push((*word).to_owned());
+            }
+        } else if bare.contains("://") {
+            if bare.starts_with(REGISTRY_URL) {
+                registry_urls += 1;
+            } else {
+                other.push((*word).to_owned());
+            }
+        }
+    }
+    if !other.is_empty() || registry_urls != 1 {
+        lint.report(&format!(
+            "job `{id}` runs `curl` other than a plain GET of `{REGISTRY_URL}` with only \
+             {CURL_FLAGS:?}{}",
+            if other.is_empty() {
+                String::new()
+            } else {
+                format!(" (found {})", other.join(", "))
+            }
+        ));
+    }
+}
+
+/// A step that publishes or releases serves one channel, runs only when the
+/// plan says so, and (for `npm publish`) checks the version's shape itself.
+fn check_step_channel(
+    lint: &mut Lint<'_>,
+    id: &str,
+    step: &Hash,
+    script: &str,
+    implied: &[Channel],
+) {
+    let name = get(step, "name")
+        .and_then(Yaml::as_str)
+        .unwrap_or("an unnamed step");
+    let [channel] = implied else {
+        if implied.len() > 1 {
+            lint.report(&format!(
+                "step `{name}` of job `{id}` publishes or releases for both channels; each step \
+                 serves exactly one (ADR 0024 decision A)"
+            ));
+        }
+        return;
+    };
+    let condition = get(step, "if").and_then(Yaml::as_str).unwrap_or_default();
+    if !condition.contains(channel.condition()) || condition.contains(channel.other().condition()) {
+        lint.report(&format!(
+            "step `{name}` of job `{id}` serves the {} channel but does not run only under \
+             `{}`",
+            channel.name(),
+            channel.condition()
+        ));
+    }
+    for escape in CONDITION_ESCAPES {
+        if condition.contains(escape) {
+            lint.report(&format!(
+                "step `{name}` of job `{id}` has `{escape}` in its condition, which could run it \
+                 for the wrong channel"
             ));
         }
     }
-    if command.contains("gh release") {
-        if id != PUBLISH_JOB {
+    let publishes = logical_lines(script).iter().any(|line| {
+        line.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .contains("npm publish")
+    });
+    if publishes
+        && !script
+            .lines()
+            .any(|line| line.trim() == channel.shape_check())
+    {
+        lint.report(&format!(
+            "step `{name}` of job `{id}` publishes for the {} channel without checking the \
+             version's own shape with `{}`",
+            channel.name(),
+            channel.shape_check()
+        ));
+    }
+}
+
+/// The line of a stable `npm publish` step that requires every package's
+/// `latest` (read into `tags-before` just before) to be a version at or below
+/// the one being published, so `latest` can only move forward.
+const STABLE_FORWARD_CHECK: &str =
+    r#"test "$(printf '%s\n%s\n' "${latest}" "${VERSION}" | sort -V | tail -n 1)" = "${VERSION}""#;
+
+/// What a step that records the dist-tags before publishing writes.
+const TAGS_RECORD: &str = r#">> "${RUNNER_TEMP}/tags-before""#;
+
+/// What each channel's verification step after the publish contains: it reads
+/// both dist-tags back and waits until they settle.
+const VERIFICATION_MARKS: [&str; 3] = [
+    "dist-tags.latest",
+    "dist-tags.next",
+    r#"test "${settled}" = yes"#,
+];
+
+/// What a stable release step ends with: GitHub's own latest release must be
+/// this tag.
+const LATEST_RELEASE_CHECK: &str = r#"test "${latest_release}" = "${TAG}""#;
+
+/// The publish job's dist-tag bookkeeping (P14 PR 8): the tags are recorded
+/// before the first publish, a stable publish checks `latest` only moves
+/// forward, each channel's tags are verified after, and a stable release is
+/// confirmed to be GitHub's latest.
+fn check_channel_steps(lint: &mut Lint<'_>, job: &Hash) {
+    let mut recorded = false;
+    let mut published = false;
+    for step in steps(job) {
+        let Some(Yaml::String(script)) = get(step, "run") else {
+            continue;
+        };
+        let publish_at = script.lines().position(|line| {
+            line.split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .contains("npm publish")
+        });
+        let Some(publish_at) = publish_at else {
+            if !published && script.contains(TAGS_RECORD) && script.contains("dist-tags.latest") {
+                recorded = true;
+            }
+            continue;
+        };
+        published = true;
+        let condition = get(step, "if").and_then(Yaml::as_str).unwrap_or_default();
+        if condition.contains(Channel::Stable.condition()) {
+            let check_at = script
+                .lines()
+                .position(|line| line.trim() == STABLE_FORWARD_CHECK);
+            if check_at.is_none_or(|check_at| check_at >= publish_at) {
+                lint.report(&format!(
+                    "the stable `npm publish` step does not first require `latest` to be at or \
+                     below the version being published (`{STABLE_FORWARD_CHECK}`): `latest` \
+                     must only move forward"
+                ));
+            }
+        }
+    }
+    if !recorded {
+        lint.report(&format!(
+            "job `publish` does not record the dist-tags (`{TAGS_RECORD}`) in a step before it \
+             publishes, so it cannot check afterwards that only one tag moved"
+        ));
+    }
+    for channel in [Channel::PreRelease, Channel::Stable] {
+        let verified = steps(job).into_iter().any(|step| {
+            get(step, "if")
+                .and_then(Yaml::as_str)
+                .is_some_and(|condition| condition.contains(channel.condition()))
+                && matches!(
+                    get(step, "run"),
+                    Some(Yaml::String(script)) if VERIFICATION_MARKS.iter().all(|mark| script.contains(mark))
+                )
+        });
+        if !verified {
             lint.report(&format!(
-                "job `{id}` runs `gh release`; only the `publish` job creates the release"
+                "job `publish` has no step under `{}` that reads both dist-tags back after \
+                 publishing and waits for them to settle ({VERIFICATION_MARKS:?})",
+                channel.condition()
             ));
         }
-        if command.contains("gh release create")
-            && !["--verify-tag", "--prerelease", "--latest=false"]
-                .iter()
-                .all(|flag| command.contains(flag))
-        {
-            lint.report(&format!(
-                "job `{id}` creates a release without `--verify-tag`, `--prerelease` and \
-                 `--latest=false`: the tag must exist, and a 0.x release is a pre-release that \
-                 is not marked latest"
-            ));
+    }
+    let confirms_latest_release = steps(job).into_iter().any(|step| {
+        get(step, "if")
+            .and_then(Yaml::as_str)
+            .is_some_and(|condition| condition.contains(Channel::Stable.condition()))
+            && matches!(
+                get(step, "run"),
+                Some(Yaml::String(script)) if script.contains("gh release create")
+                    && script.lines().any(|line| line.trim() == LATEST_RELEASE_CHECK)
+            )
+    });
+    if !confirms_latest_release {
+        lint.report(&format!(
+            "the stable release step does not confirm that GitHub's latest release is the new \
+             tag (`{LATEST_RELEASE_CHECK}`)"
+        ));
+    }
+}
+
+/// The arguments every `vsift-release publish-plan` of the `plan` job carries (P14 PR 8):
+/// the saved registry metadata, the evidence check's answer, and the run and date a delta
+/// record names.
+const PUBLISH_PLAN_ARGUMENTS: [&str; 4] = ["--registry", "--evidence", "--run-id", "--date"];
+
+/// The `plan` job's inputs for the stable path (P14 PR 8): it exports the
+/// channel, fetches the full history so the candidate's tag is there, and
+/// hands `publish-plan` the registry files it saved.
+fn check_plan_job(lint: &mut Lint<'_>, plan: &Hash) {
+    let exports_channel = matches!(
+        get(plan, "outputs"),
+        Some(Yaml::Hash(outputs)) if get(outputs, "channel").is_some()
+    );
+    if !exports_channel {
+        lint.report(
+            "job `plan` must export `channel`, which the publish steps' conditions compare \
+             (ADR 0024 decision A)",
+        );
+    }
+    let full_history = steps(plan).into_iter().any(|step| {
+        get(step, "uses")
+            .and_then(Yaml::as_str)
+            .is_some_and(|uses| uses.starts_with("actions/checkout@"))
+            && matches!(
+                get(step, "with"),
+                Some(Yaml::Hash(with)) if get(with, "fetch-depth") == Some(&Yaml::Integer(0))
+            )
+    });
+    if !full_history {
+        lint.report(
+            "job `plan` must check out with `fetch-depth: 0`: a stable plan compares the commit \
+             with its accepted release candidate, whose tag a shallow clone does not have",
+        );
+    }
+    let mut plans = 0_usize;
+    let mut complete_plans = 0_usize;
+    let mut finds_candidate = false;
+    let mut checks_evidence = false;
+    for step in steps(plan) {
+        if let Some(Yaml::String(script)) = get(step, "run") {
+            for command in logical_lines(script) {
+                let words: Vec<&str> = command.split_whitespace().collect();
+                if words.contains(&"vsift-release") && words.contains(&"publish-plan") {
+                    plans += 1;
+                    if PUBLISH_PLAN_ARGUMENTS
+                        .iter()
+                        .all(|argument| words.contains(argument))
+                    {
+                        complete_plans += 1;
+                    }
+                }
+                if words.contains(&"vsift-release")
+                    && words.contains(&"candidate-delta")
+                    && words.contains(&"--github-output")
+                {
+                    finds_candidate = true;
+                }
+                if words.contains(&"vsift-governance")
+                    && words.contains(&"release-evidence")
+                    && words.contains(&"--complete-for")
+                    && words.contains(&"--commit")
+                {
+                    checks_evidence = true;
+                }
+            }
         }
+    }
+    if plans == 0 || complete_plans != plans {
+        lint.report(&format!(
+            "job `plan` must run `vsift-release publish-plan` with {PUBLISH_PLAN_ARGUMENTS:?}, so \
+             a stable plan states and checks the registry and the evidence ledger before `latest` \
+             may move, and names the run in the delta record"
+        ));
+    }
+    if !finds_candidate {
+        lint.report(
+            "job `plan` must run `vsift-release candidate-delta --github-output`, which names the \
+             accepted release candidate the evidence check is run for",
+        );
+    }
+    if !checks_evidence {
+        lint.report(
+            "job `plan` must run `vsift-governance release-evidence --complete-for <candidate> \
+             --commit <commit>`: a stable version is published only when the evidence ledger is \
+             complete for its accepted candidate (RQ-20)",
+        );
     }
 }
 
@@ -676,14 +1209,15 @@ mod tests {
                 "has `||` in its condition",
             ),
             (
-                "publish under latest",
+                "a pre-release publish under latest",
                 mutate(
                     &text,
                     "--tag next --access public",
                     "--tag latest --access public",
                     1,
                 )?,
-                "names `latest` in `npm publish`",
+                "serves the stable channel but does not run only under \
+                 `needs.plan.outputs.channel == 'stable'`",
             ),
             (
                 "publish without provenance",
@@ -693,7 +1227,7 @@ mod tests {
                     " --ignore-scripts",
                     1,
                 )?,
-                "without `--provenance` and `--tag next`",
+                "without `--provenance`",
             ),
             (
                 "npm publish outside the publish job",
@@ -713,12 +1247,12 @@ mod tests {
                     "          mkdir publish-plan\n          npm dist-tag add vsift-cli@0.1.0 latest\n",
                     1,
                 )?,
-                "runs `npm dist-tag`",
+                "moves a dist-tag",
             ),
             (
-                "a release marked latest",
+                "a pre-release marked latest",
                 mutate(&text, "--prerelease --latest=false", "--prerelease", 1)?,
-                "without `--verify-tag`, `--prerelease` and `--latest=false`",
+                "creates a pre-release without `--latest=false`",
             ),
             (
                 "a write scope in the plan",
@@ -848,6 +1382,359 @@ mod tests {
                 "{case}: expected a finding containing {expected:?}, got {messages:#?}"
             );
         }
+        Ok(())
+    }
+
+    /// The channel rules of P14 PR 8: each way a pre-release could reach
+    /// `latest`, a stable version `next`, `latest` move backwards or by
+    /// another path, or the stable path lose one of its inputs, is a
+    /// deliberately broken copy of the real workflow that the lint must name.
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one auditable list: each channel rule's violation of the real workflow and its finding"
+    )]
+    fn each_channel_rule_refuses_its_violation() -> Result<(), Box<dyn Error>> {
+        let text = release_text()?;
+        let stable_if = "        if: needs.plan.outputs.channel == 'stable'\n";
+        let prerelease_if = "        if: needs.plan.outputs.channel == 'prerelease'\n";
+        let after_mkdir = "          mkdir publish-plan\n";
+        let stable_shape = "          [[ \"${VERSION}\" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+$ ]]\n";
+        let forward_check = "            test \"$(printf '%s\\n%s\\n' \"${latest}\" \"${VERSION}\" | sort -V | tail -n 1)\" = \"${VERSION}\"\n";
+        let after_plan_step = |extra: &str| {
+            mutate(
+                &text,
+                after_mkdir,
+                &format!("{after_mkdir}          {extra}\n"),
+                1,
+            )
+        };
+        let cases: Vec<(&str, String, &str)> = vec![
+            (
+                "a stable publish under next",
+                mutate(
+                    &text,
+                    "--tag latest --access public",
+                    "--tag next --access public",
+                    1,
+                )?,
+                "serves the prerelease channel but does not run only under \
+                 `needs.plan.outputs.channel == 'prerelease'`",
+            ),
+            (
+                "a stable publish step without its channel condition",
+                mutate(&text, stable_if, "", 1)?,
+                "serves the stable channel but does not run only under",
+            ),
+            (
+                "a stable publish step gated on the pre-release channel",
+                mutate(&text, stable_if, prerelease_if, 1)?,
+                "serves the stable channel but does not run only under",
+            ),
+            (
+                "a pre-release publish step that also runs for stable",
+                mutate(
+                    &text,
+                    prerelease_if,
+                    "        if: needs.plan.outputs.channel == 'prerelease' || needs.plan.outputs.channel == 'stable'\n",
+                    1,
+                )?,
+                "has `||` in its condition",
+            ),
+            (
+                "a bypassable channel condition",
+                mutate(
+                    &text,
+                    stable_if,
+                    "        if: needs.plan.outputs.channel == 'stable' || always()\n",
+                    1,
+                )?,
+                "has `||` in its condition",
+            ),
+            (
+                "a stable publish without its shape check",
+                mutate(&text, stable_shape, "", 1)?,
+                "without checking the version's own shape",
+            ),
+            (
+                "a pre-release shape check that also accepts a stable version",
+                mutate(
+                    &text,
+                    "^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$ ]]",
+                    "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]",
+                    1,
+                )?,
+                "without checking the version's own shape",
+            ),
+            (
+                "a publish tag read from a variable",
+                mutate(
+                    &text,
+                    "--tag latest --access public",
+                    "--tag \"${DIST_TAG}\" --access public",
+                    1,
+                )?,
+                "without an explicit `--tag next` or `--tag latest`",
+            ),
+            (
+                "a publish tag in the --tag=latest form",
+                mutate(
+                    &text,
+                    "--tag latest --access public",
+                    "--tag=latest --access public",
+                    1,
+                )?,
+                "with `--tag=...`",
+            ),
+            (
+                "a stable publish that does not check that latest only moves forward",
+                mutate(&text, forward_check, "", 1)?,
+                "does not first require `latest` to be at or below",
+            ),
+            (
+                "no record of the dist-tags before publishing",
+                mutate(
+                    &text,
+                    " >> \"${RUNNER_TEMP}/tags-before\"",
+                    " > /dev/null",
+                    1,
+                )?,
+                "does not record the dist-tags",
+            ),
+            (
+                "no verification of a stable publish",
+                mutate(&text, "          test \"${settled}\" = yes\n", "", 2)?,
+                "has no step under `needs.plan.outputs.channel == 'stable'` that reads both \
+                 dist-tags back",
+            ),
+            (
+                "no verification of a pre-release publish",
+                mutate(&text, "          test \"${settled}\" = yes\n", "", 1)?,
+                "has no step under `needs.plan.outputs.channel == 'prerelease'` that reads both \
+                 dist-tags back",
+            ),
+            (
+                "a stable release that does not confirm it is GitHub's latest",
+                mutate(
+                    &text,
+                    "          test \"${latest_release}\" = \"${TAG}\"\n",
+                    "",
+                    1,
+                )?,
+                "does not confirm that GitHub's latest release",
+            ),
+            (
+                "a stable release marked latest when it is created",
+                mutate(
+                    &text,
+                    "--verify-tag --draft \\\n",
+                    "--verify-tag --draft --latest \\\n",
+                    1,
+                )?,
+                "marks a release latest when it creates the draft",
+            ),
+            (
+                "a stable release created as a pre-release",
+                mutate(
+                    &text,
+                    "--verify-tag --draft \\\n",
+                    "--verify-tag --draft --prerelease --latest=false \\\n",
+                    1,
+                )?,
+                "for both channels",
+            ),
+            (
+                "a release edited with other flags",
+                mutate(
+                    &text,
+                    "--draft=false --latest\n",
+                    "--draft=false --latest --notes changed\n",
+                    1,
+                )?,
+                "edits a release with flags other than",
+            ),
+            (
+                "an upload to the release",
+                mutate(
+                    &text,
+                    "          gh release view \"${TAG}\" --repo smormah/vsift\n",
+                    "          gh release view \"${TAG}\" --repo smormah/vsift\n          gh release upload \"${TAG}\" extra.txt\n",
+                    1,
+                )?,
+                "runs `gh release upload`",
+            ),
+            (
+                "a mutating API call",
+                mutate(
+                    &text,
+                    "gh api repos/smormah/vsift/releases/latest",
+                    "gh api -X DELETE repos/smormah/vsift/releases/latest",
+                    1,
+                )?,
+                "runs `gh api` other than",
+            ),
+            (
+                "an API read of something else",
+                mutate(
+                    &text,
+                    "gh api repos/smormah/vsift/releases/latest",
+                    "gh api repos/smormah/vsift/releases",
+                    1,
+                )?,
+                "runs `gh api` other than",
+            ),
+            (
+                "a curl with a header",
+                mutate(
+                    &text,
+                    "curl --silent --show-error",
+                    "curl -H 'Authorization: x' --silent --show-error",
+                    1,
+                )?,
+                "runs `curl` other than a plain GET",
+            ),
+            (
+                "a curl that follows redirects",
+                mutate(
+                    &text,
+                    "curl --silent --show-error",
+                    "curl --silent --location --show-error",
+                    1,
+                )?,
+                "runs `curl` other than a plain GET",
+            ),
+            (
+                "a curl to another host",
+                mutate(
+                    &text,
+                    "https://registry.npmjs.org/${package//",
+                    "https://example.com/${package//",
+                    1,
+                )?,
+                "runs `curl` other than a plain GET",
+            ),
+            (
+                "a download in a privileged job",
+                mutate(
+                    &text,
+                    "      - name: Fetch the plan\n",
+                    "      - name: Download\n        run: curl --silent https://registry.npmjs.org/x\n\n      - name: Fetch the plan\n",
+                    1,
+                )?,
+                "job `attest` runs `curl`",
+            ),
+            (
+                "a plan job with a shallow checkout",
+                mutate(&text, "          fetch-depth: 0\n", "", 1)?,
+                "must check out with `fetch-depth: 0`",
+            ),
+            (
+                "a plan job that does not export the channel",
+                mutate(
+                    &text,
+                    "      channel: ${{ steps.plan.outputs.channel }}\n",
+                    "",
+                    1,
+                )?,
+                "job `plan` must export `channel`",
+            ),
+            (
+                "a plan that is not given the registry",
+                mutate(
+                    &text,
+                    "--registry \"${RUNNER_TEMP}/registry\" --evidence",
+                    "--evidence",
+                    1,
+                )?,
+                "must run `vsift-release publish-plan` with",
+            ),
+            (
+                "a plan that ignores the evidence ledger's answer",
+                mutate(
+                    &text,
+                    " --evidence \"${RUNNER_TEMP}/evidence\" \\\n",
+                    " \\\n",
+                    1,
+                )?,
+                "must run `vsift-release publish-plan` with",
+            ),
+            (
+                "a plan that does not name the run in its delta record",
+                mutate(
+                    &text,
+                    "            --run-id \"${RUN_ID}\" --date \"$(date -u +%F)\" \\\n",
+                    "",
+                    1,
+                )?,
+                "must run `vsift-release publish-plan` with",
+            ),
+            (
+                "a plan job that does not find the accepted candidate",
+                mutate(
+                    &text,
+                    "candidate-delta --github-output --stable-commit",
+                    "candidate-delta --stable-commit",
+                    1,
+                )?,
+                "must run `vsift-release candidate-delta --github-output`",
+            ),
+            (
+                "a plan job that does not check the evidence ledger",
+                mutate(
+                    &text,
+                    "release-evidence --complete-for \"${CANDIDATE_VERSION}\" --commit \"${CANDIDATE_COMMIT}\"",
+                    "release-evidence",
+                    1,
+                )?,
+                "must run `vsift-governance release-evidence --complete-for",
+            ),
+            (
+                "a dist-tag move with extra spaces",
+                after_plan_step("npm   dist-tag  add vsift-cli@0.2.0 latest")?,
+                "moves a dist-tag",
+            ),
+            (
+                "a dist-tag move with a quoted subcommand",
+                after_plan_step("npm \"dist-tag\" add vsift-cli@0.2.0 latest")?,
+                "moves a dist-tag",
+            ),
+            (
+                "a dist-tag move with flags before the subcommand",
+                after_plan_step(
+                    "npm --registry https://registry.npmjs.org/ dist-tag add vsift-cli@0.2.0 latest",
+                )?,
+                "moves a dist-tag",
+            ),
+            (
+                "a dist-tag move through pnpm",
+                after_plan_step("pnpm dist-tag add vsift-cli@0.2.0 latest")?,
+                "moves a dist-tag",
+            ),
+            (
+                "a dist-tag move through Yarn",
+                after_plan_step("yarn npm tag add vsift-cli@0.2.0 latest")?,
+                "moves a dist-tag",
+            ),
+            (
+                "a dist-tag move through the registry API",
+                after_plan_step(
+                    "echo PUT https://registry.npmjs.org/-/package/vsift-cli/dist-tags/latest",
+                )?,
+                "moves a dist-tag",
+            ),
+        ];
+        for (case, mutated, expected) in cases {
+            let messages = findings(&mutated);
+            assert!(
+                messages.iter().any(|message| message.contains(expected)),
+                "{case}: expected a finding containing {expected:?}, got {messages:#?}"
+            );
+        }
+        // Reading the dist-tags is not moving them.
+        let read = after_plan_step("npm view vsift-cli dist-tags --json")?;
+        assert_eq!(findings(&read), Vec::<String>::new());
+        let read_one = after_plan_step("npm view \"@vsift/win32-x64\" dist-tags.latest")?;
+        assert_eq!(findings(&read_one), Vec::<String>::new());
         Ok(())
     }
 

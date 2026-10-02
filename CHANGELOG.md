@@ -8,6 +8,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **P14 PR 8: the release machinery for a release candidate and the stable release** (code,
+  the Release workflow, its lint, tests and documentation; **nothing is published**, no tag or
+  release was created and no setting changed). The version alone decides what a publication
+  does: a suffix (`0.2.0-rc.1`, any other) publishes under `next` as a GitHub pre-release and
+  never touches `latest`; no suffix (`0.2.0`, a 0.x version too) is a stable version, publishes
+  under `latest` and moves it on all four packages, as the release marked latest; `0.0.0` and
+  ambiguous versions are refused. `vsift-release publish-plan` states at the top whether
+  `latest` moves, tabulates each package's dist-tag from what to what, and for a stable
+  version guards it: the accepted release candidate (the highest `v<X.Y.Z>-rc.<N>` tag) is an
+  ancestor and differs from the commit only in version strings and the launcher's README,
+  the candidate is published on npm, `latest` is a stable version below this one, this
+  version is not on npm under another tag or with other bytes (the plan job reads the four
+  packages' public metadata with anonymous GETs; nothing of it but tags and integrities is
+  used) and the evidence ledger is complete for the candidate (the plan job runs P14 PR 1's
+  `release-evidence --complete-for` check and the plan reads its answer; a missing answer
+  fails). A failed guard refuses a publish and a dispatch on the tag even as a dry run; other
+  runs report it, and an enforced stable plan that passes writes `release-delta.json`, the
+  record for the ledger's `release_delta`. New `vsift-release candidate-delta` runs the
+  comparison by hand (and `--github-output` names the candidate for the workflow). The workflow
+  has one publishing step per channel with its own explicit `--tag`, each gated on the plan's
+  `channel` output and checking the version's shape in shell; the stable step requires `latest`
+  never to move backwards, the job records the dist-tags before and reads both back after,
+  and the stable GitHub release must be GitHub's latest. **The workflow still never runs
+  `npm dist-tag`**, and the lint now refuses it, and any publishing outside the `publish`
+  job, in every workflow. Release notes are now rendered from Markdown templates
+  (`tools/vsift-release/notes/`): "a release candidate", under qualification and not
+  announced, for a candidate, "a pre-release" for another, and what the stable release promises
+  for a stable one, with the three machines named as the R0 targets the executables are built
+  for (no longer "Supported machines", L-102); the templates and `release.md` are now
+  scanned by the public-claims check. 37 new lint mutations (65 in all) and tests of every
+  guard; `tools/vsift-release/tests/publish-steps.sh` executes the publishing shell against
+  stub commands (56 checks, run on Linux in CI). `cli_contract.rs` no longer hard-codes the
+  version. Runbook: `docs/operations/release.md` (sections 1, 3 and 6; 6.7 to 6.9 are new).
+  Known limits L-105 (the stable path never ran for real), L-107 and L-108; L-102 narrowed to
+  the published v0.1.0 page and L-103 updated for the delta record; L-097 updated. ADR 0024 has
+  the dated note; ADR 0023, the threat model (SEC-22) and verification point at it.
 - **The release evidence ledger and the public-claims registry, with their checks** (P14
   PR 1; the governance tool and documentation only: no product code, workflow, package or
   setting changed, nothing published, no new dependency). `docs/planning/p14-evidence-ledger.json`
@@ -25,7 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   [--commit <sha>]` is the completeness check, which fails unless everything the release needs is
   passed, carried forward because nothing in its scope changed (asked of Git), waived by a
   recorded maintainer decision or not applicable (a stable release also needs the delta record that
-  PR 8 will write). The checks prove that recorded evidence exists and banned words are absent,
+  PR 8's stable plan writes and the maintainer copies into the ledger). The checks prove that recorded evidence exists and banned words are absent,
   not that a run passed or a sentence is true (known limit L-101). Known limits: L-101, L-102
   (the generated release notes, and the published v0.1.0 page, say "Supported machines"; the
   template is not yet under the claims check) and L-103 (carried-forward evidence rests on

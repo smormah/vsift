@@ -398,10 +398,13 @@ and announcements.
 - The cold-agent scenarios' prompts, its grading (the skill's command classes still apply;
   the handoff schema does not) and the hold-out questions (PR 6).
 - Whether `next` moves to the stable version (a manual `npm dist-tag` by the maintainer, so
-  the lint's rule stands), and whether the Release workflow becomes a required check (PR 8).
+  the lint's rule stands), and whether the Release workflow becomes a required check (PR 8;
+  settled there: `next` does not follow, and the workflow stays an optional check).
 - Which docs flip after the publish (the repository-only pages: PR 13) and which ship
   inside the artifacts and are right at the publish (package READMEs, the skill, release
-  notes: PR 12), so `main` never claims a stable release before one exists.
+  notes: PR 12), so `main` never claims a stable release before one exists. (PR 8 narrowed
+  this: the skill and the release notes are frozen at the candidate, see its note below; only
+  the launcher's README may still change.)
 
 ## Implementation note, 2026-10-02 (P14 PR 1, the evidence ledger and the claims registry)
 
@@ -483,3 +486,136 @@ the decisions taken inside this ADR:
 - **For the maintainer's review:** the `now`-rung claims that keep "qualified" and "stable" in
   the existing pre-release wording (the P12 and P13 results, the v1 JSON contract) rather than
   rewording them; the choice of controlled words and banned phrases; the staleness scopes.
+
+## Implementation note, 2026-10-02 (P14 PR 8, release machinery for the candidate and the stable)
+
+Delivered from decisions A, B and C and the "Release tooling" row of the planned changes.
+**Nothing is published**, no tag or release was created, and no repository, environment,
+ruleset or npm setting changed. The runbook is
+[`release.md`](../operations/release.md) sections 1, 3 and 6 (6.7 to 6.9 are new). This is a
+high-risk seam: it is the first code that can move npm's `latest`, so every rule below has a
+lint rule or a test, and the shell that publishes is executed against stubs, not only read.
+
+- **Three kinds of version, decided by the suffix alone** (`tools/vsift-release/src/
+  publish.rs`). `X.Y.Z-rc.N` (positive `N`) is a *release candidate*, any other suffix a
+  *pre-release*; both are published under `next`, as a GitHub pre-release not marked latest,
+  and never touch `latest`. A version **without** a suffix is *stable*, a 0.x version
+  included (so `0.2.0` goes to `latest`, as decision A needs): `--tag latest`, the GitHub
+  release marked latest, `latest` moved on all four packages, `next` untouched. `0.0.0`
+  (the placeholder every package holds) and anything ambiguous (build metadata, a leading
+  `v`, leading zeros, an empty identifier) are refused in every mode. Consequence: `0.1.0`,
+  published as a pre-release before this rule, is stable by shape; a plan for it is refused
+  by the registry guards because npm holds it under another tag, and every pull request's
+  dry run says so while the workspace version is `0.1.0` (report-only, never a failure).
+- **The plan states what moves, and guards it.** `publish-plan` prints, at the top, whether
+  `latest` moves; a table of each package's dist-tag from what to what and what stays; the
+  guards; then the commands. A stable plan checks the accepted candidate (below), that the
+  candidate is published on all four packages, that `latest` on each is a stable version
+  below this one (or this version with the same bytes: a re-run completing a partial
+  publish), that this version is not on npm under another tag or with other bytes and that
+  the evidence ledger is complete for the candidate (RQ-20, below). The registry is read by the plan job with four anonymous GETs (`curl`, no credential, header or
+  body; a status and the metadata kept in the runner's temporary folder) and parsed by
+  `registry.rs`, which takes only the dist-tags and each version's integrity: the metadata
+  names the package's maintainers, so none of it is printed or uploaded. A guard fails a plan
+  only where it is *enforced*: a publish, or a dispatch on the version's own tag even with
+  `dry_run` set (the rehearsal), which therefore fails whenever the real run would. Other runs
+  report the same findings and carry on. A refused plan still writes its explanation to the
+  job summary.
+- **The evidence guard** (RQ-20; P14 PR 1's check, wired after it merged). The plan job
+  names the accepted candidate (`vsift-release candidate-delta --github-output`, which runs
+  the plan's own code) and, when there is one, runs `vsift-governance release-evidence
+  --complete-for <candidate> --commit <candidate commit>`, keeping its exit status and output
+  in the runner's temporary folder; `publish-plan --evidence` reads them (`evidence.rs`) and
+  the guard shows the check's first lines. A missing answer counts as a failure, so a stable
+  plan whose evidence step was removed is refused wherever the plan is enforced. The lint
+  holds the candidate step, the evidence step and the plan's `--evidence`, `--run-id` and
+  `--date` arguments; the shell harness runs both steps against stubs. The plan also writes
+  `release-delta.json`, the comparison in the shape of the ledger's `release_delta` record
+  (a test parses a shared example in both tools), for the maintainer to copy into the ledger
+  after the publish: the workflow never commits, so the copy is manual
+  ([L-103](../planning/known-limits.md#l-103)).
+- **The workflow** (`release.yml`). The plan job exports `channel` (`prerelease` or
+  `stable`), checks out the full history and passes `--registry`. The publish job has one
+  step per channel, each written out in full with its own `--tag`, each run only for its
+  channel and each checking the version's shape in shell first, so a pre-release can reach
+  `latest`, or a stable version `next`, only through two independent failures. It records the
+  four packages' dist-tags first; the stable step requires every `latest` to be a stable
+  version at or below the one published (`sort -V`; the plan checked the same at plan time,
+  and the approval can wait days); after publishing it reads both tags of every package back
+  (a pre-release moved `next` and not `latest`; a stable moved `latest` and not `next`);
+  the stable release is created as a draft, marked latest by the edit that publishes it, and
+  GitHub's own latest release must then be the tag. **The workflow still never runs `npm
+  dist-tag`**; `latest` moves only by a stable `npm publish --tag latest`.
+- **The lint** (`tools/vsift-governance/src/workflows/publish.rs` and `workflows.rs`). New:
+  rule 8 for **every** workflow (no `npm`/`pnpm dist-tag(s)`, `yarn npm tag` or call of the
+  registry's `dist-tags` endpoint, however spelled; no `npm`/`pnpm`/`yarn`/`bun`/`cargo
+  publish` outside the release workflow's `publish` job; reads such as `npm view ...
+  dist-tags` are allowed); in the release workflow an explicit `--tag next` or `--tag
+  latest` for every `npm publish`; each publishing or releasing step serving exactly one
+  channel and gated on `needs.plan.outputs.channel`, with no bypass in its condition and its
+  channel's shape check; `gh release` limited to `create`, `edit` and `view` with reviewed
+  flags and `gh api` to one read; the stable step's forward check, the dist-tag record and
+  read-back and the latest-release confirmation present; `curl` limited to read-only GETs of
+  `https://registry.npmjs.org/` (and not at all in `attest` and `publish`); the plan job's
+  full-history checkout, `channel` output and `--registry`, and the candidate and evidence
+  steps and the plan's `--evidence`, `--run-id` and `--date`. Each is held by a deliberately
+  broken copy of the real workflow that the lint must name: 65 in all (28 from P13, 37
+  new), plus the general rule's spellings, and each lint rule was also removed in turn to
+  confirm that a test then fails. `tools/vsift-release`'s tests hold the workflow's `npm
+  publish` and `gh release` lines to the plan's commands word for word for both channels and
+  hold the two publishing steps to be the same script but for their guards and `--tag`.
+- **The shell is executed** (`tools/vsift-release/tests/publish-steps.sh`, run on Linux by
+  the Rust test `publish_steps`): each publishing step and the registry step are extracted
+  from `release.yml` and run against stub `npm`, `gh`, `curl`, `sleep` and `cargo`: 56 checks of
+  the channels, the refusals before any publish, `latest` only moving forward (`0.9.0` is
+  below `0.10.0`), a re-run completing a partial stable publish, other bytes stopping the
+  publish and the read-back failing if the other tag moved. Removing the forward check from
+  a copy of the workflow makes three of them fail.
+- **The candidate-to-stable check** (`tools/vsift-release/src/candidate.rs`, `vsift-release
+  candidate-delta`, and inside every stable plan). The accepted candidate is the highest
+  `v<X.Y.Z>-rc.<N>` tag; it must be an ancestor of the stable commit, and every path that
+  differs must be an ordinary edit of one of two kinds: a **version-string file**
+  (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/
+  package.json`, `CHANGELOG.md`), whose stable content must equal the candidate's with the
+  candidate's version text replaced by the stable's, or a **shipped document**
+  (`npm/vsift-cli/README.md`). Everything else is refused. **The skill is deliberately not
+  a shipped document** here, narrower than "package READMEs, the skill, release notes" in
+  the details below: its bytes are what the named-client trials qualified (their digest is
+  frozen in every trial record), so changing it after the candidate would ship an unqualified
+  skill; the release notes and the platform packages' README are generated from code, which
+  is frozen at the cut too, so they must be right in the candidate (PR 9 at the latest). If
+  you want skill text to be allowed in the stable commit, add its paths to the constant in a
+  reviewed change before the candidate is cut. One supporting change: `cli_contract.rs`
+  asserted `vsift 0.1.0` literally; it now reads the workspace version, so a bump touches
+  only manifests.
+- **Release notes** (`tools/vsift-release/src/notes.rs`, rendered from the Markdown
+  templates in `tools/vsift-release/notes/`; L-102): a candidate says it is a *release
+  candidate*, under qualification, not announced and no statement of support or stability;
+  another pre-release says it is a pre-release; a stable release says what it promises (the
+  command-line grammar, the exit codes and the v1 JSON, additively) and nothing more, with
+  the measured-on-a-synthetic-corpus caveat and a link to the register. None says
+  "supported": the old "Supported machines" line is now "The executables are built for the
+  three R0 targets ...", decision G's wording until the matrix decides. The Smart App Control,
+  SmartScreen and Gatekeeper paragraph is the same in all three, word for word (a test holds
+  it). The four templates and `release.md` are scanned by the claims check
+  (`docs/planning/public-claims.json`), which fails on a controlled word in a template: the
+  release page of every later version is checked before it exists. The published v0.1.0 page
+  keeps its old line unless the maintainer edits it (L-102).
+- **Resolved from "Details left to their pull requests":** `next` does *not* follow the
+  stable: it keeps naming the candidate until the next pre-release moves it, and moving it
+  is a manual `npm dist-tag` by the maintainer (release.md 6.7), so the lint's rule stands
+  ([L-108](../planning/known-limits.md#l-108)). The Release workflow stays an optional
+  check (release.md 6.6).
+- **Not done, on purpose.** No signing was added (decision C). Nothing ran against the real
+  services ([L-105](../planning/known-limits.md#l-105)): the first real use of a stable
+  publish is the maintainer's. The guard for the evidence ledger was built after P14 PR 1
+  merged and is part of this change, so the workflow checks it before the candidate is cut
+  (the workflow is code, and code is frozen at the cut).
+- **For the maintainer's review (a high-risk seam; please read these first):** the
+  version-string and document lists above (the skill's exclusion especially); that `0.1.0` is
+  stable by shape; that `--tag latest` is covered by the trusted publisher's "npm publish"
+  permission (never exercised: [L-105](../planning/known-limits.md#l-105)); that `gh release
+  edit --latest` marks a draft latest (never exercised); that the registry guard refuses a
+  version npm already holds under another tag rather than adopting it; that a dispatch on the
+  tag is enforced even as a dry run; the stable release notes' wording, which is frozen at
+  the candidate.

@@ -308,9 +308,10 @@ on its limits) or a **non-claim** (a negation or a name: "not supported", "until
 release"). It fails on: a controlled word outside a statement, a banned phrase, a claim above
 the current rung, a claim whose evidence is not `passed`, a statement used in a document it is
 not registered for, and a stale entry. The later rungs' statements are listed already, unused.
-Not yet scanned, each with its owner pull request: the release-notes template (Rust source,
-PR 8; it says "Supported machines", L-102), the launcher's refusal messages (PR 9), the worker
-runbook and `release.md` (PR 9). It reads plain text: it cannot see meaning (L-101).
+Scanned since PR 8: `release.md` and the four release-notes templates
+(`tools/vsift-release/notes/`, which no longer say "Supported machines"; the published v0.1.0 page
+still does, L-102). Not yet scanned, each with its owner pull request: the launcher's refusal
+messages and the worker runbook (PR 9). It reads plain text: it cannot see meaning (L-101).
 
 ## 10. What the maintainer does, and the fallback
 
@@ -343,7 +344,8 @@ Read from `tools/vsift-governance/src/main.rs` on 2026-10-02:
   requirement, P14 threat, `R-SEC03` and P14-owned limit is supported by an item); and on demand
   by `cargo run --locked -p vsift-governance -- release-evidence --complete-for <version>`
   (completeness for a candidate or the stable, with the staleness rule and the extension point for
-  PR 8's delta check, ADR 0024's PR 1 note).
+  PR 8's delta check, ADR 0024's PR 1 note). The Release workflow runs it for the accepted
+  candidate and a stable plan is refused if it fails (PR 8, RQ-20).
 - The sets are fixed: packets P00-P14, requirements R-01..R-14, decisions DEC-01..DEC-13.
   P14 adds none; the cold-agent variant maps to R-13, which already lists P14; `RQ-nn` and
   `A-10` are P14's own IDs (verification's `Q-` IDs belong to R1). P14's `tests` stay
@@ -356,7 +358,10 @@ Read from `tools/vsift-governance/src/main.rs` on 2026-10-02:
 - Every workflow file is linted: pinned actions, no `pull_request_target`, minimal
   permissions, no untrusted expressions in `run`, `id-token` only for attest and publish.
   New workflows must pass; the changes to `release.yml` and the lint's rule 7 (always
-  `--tag next`, never `latest`) need new mutation tests for every rule they touch.
+  `--tag next`, never `latest`) need new mutation tests for every rule they touch. *Done in PR 8
+  (2026-10-02): rule 7 pairs `--tag next` and `--tag latest` with their channel, rule 8 refuses
+  `npm dist-tag` and publishing outside the `publish` job in every workflow, and every new rule has
+  a mutation test (65 in all, including the candidate and evidence steps); see ADR 0024's PR 8 note and `release.md` 6.7 to 6.9.*
 - At completion the ledger names the stable release commit, as P13's names the commit its
   pre-release was built from (the last implementation change), because a documentation,
   ledger and memory change cannot know its own merge commit.

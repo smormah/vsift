@@ -383,7 +383,7 @@ an agent trial.
   passes, and a mutation of it per rule (28) is refused. `tools/vsift-release/src/
   publish.rs` tests the mode decision for every event, ref, repository and input (a pull
   request, a push, a fork and a dispatch off the tag never publish), the dist-tag
-  (`next` only; a stable version is refused), the publication order and every argument,
+  (`next` only; a stable version is refused: *superseded in P14 PR 8, below*), the publication order and every argument,
   and holds the workflow's commands to them. The protected environment, tag ruleset and
   fork approval are maintainer settings not yet made, so their behaviour is unverified
   (L-096).*
@@ -403,6 +403,22 @@ an agent trial.
   tokens", which cannot be read from outside (the maintainer's report; the publish
   working is the proof for the first). L-096 is closed; the first attempt's `ENEEDAUTH` is
   L-100 ([P13 record](p13-distribution.md), "First publish").
+  *P14 PR 8 (2026-10-02, the stable path and `latest`):* the lint gains rule 8 (no workflow
+  moves a dist-tag or publishes outside the `publish` job) and the channel rules (explicit
+  `--tag next` or `--tag latest`; each publishing or releasing step serves one channel and
+  runs only under the plan's `channel` output, with its shape check; the stable step's
+  forward-only check, the dist-tag record and read-back and the latest-release confirmation;
+  `curl` read-only and only to npm's registry; the plan job's full-history checkout, `channel`,
+  `--registry`, and its candidate and evidence steps with `--evidence`, `--run-id` and `--date`):
+  65 deliberately broken copies of the real workflow are refused, 37 of them new,
+  and each rule was removed in turn to confirm a test then fails. `tools/vsift-release` tests
+  the version kinds (suffix decides: `0.2.0` is stable), the plan for each (the dist-tag moves,
+  the guards, the refusals), the registry reader (only tags and integrities are kept), the
+  candidate-to-stable check (allowed and refused deltas, on real throwaway repositories), the
+  evidence guard (a failed, a missing and a passing answer) and the release notes' wording per
+  kind (the Markdown templates are also scanned by the public-claims check); `tests/publish-steps.sh` (the Rust test `publish_steps`, on
+  Linux) executes the publishing shell against stub commands (56 checks). Not shown: any
+  real stable publish ([L-105](known-limits.md#l-105)).
 - R-SEC02: native/npm artifact matches protected commit; verify signatures/provenance,
   dependency/model inventory, malicious archive rejection and wrong-target behavior.
   *P13 PR 9 (2026-09-30): the npm packages are assembled only from canonical release

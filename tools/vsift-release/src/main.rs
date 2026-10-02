@@ -18,7 +18,8 @@
 //! vsift-release publish-plan --archive <file> (three times) --checksums <file> \
 //!     --tarball <file> (four times) --event <event> --ref <ref> \
 //!     --repository <owner/name> --dry-run-input <""|true|false> \
-//!     --commit <sha> --out-dir <dir>
+//!     --commit <sha> [--registry <dir>] --out-dir <dir>
+//! vsift-release candidate-delta [--stable-commit <sha>]
 //! ```
 //!
 //! `npm` assembles the four npm packages from the three archives (P13 PR 9,
@@ -27,17 +28,28 @@
 //! `publish-plan` (P13 PR 10, see the `publish` module) checks the archives,
 //! `SHA256SUMS` and tarballs again, decides whether the run may publish, and
 //! writes the plan the privileged `attest` and `publish` jobs carry out; it
-//! prints the plan job's outputs as `name=value` lines.
+//! prints the plan job's outputs as `name=value` lines. A version without a
+//! pre-release suffix is *stable* and moves npm's `latest` (P14 PR 8): its
+//! plan also reads the registry files the plan job saved (`--registry`) and
+//! compares the commit with the accepted release candidate, as the `guards`,
+//! `registry` and `candidate` modules describe. `candidate-delta` runs that
+//! comparison alone, for the maintainer's preflight.
 //!
 //! The tool writes only the files it is asked to create, never overwrites one,
-//! publishes nothing and contacts no network.
+//! publishes nothing and contacts no network. It runs `git` (explicit
+//! arguments, no shell, local objects only) for the candidate comparison.
 
 #![forbid(unsafe_code)]
 
 mod archive;
+mod candidate;
 mod checksums;
+mod evidence;
+mod guards;
+mod notes;
 mod npm;
 mod publish;
+mod registry;
 mod target;
 
 use std::{
@@ -56,14 +68,21 @@ use crate::{
         ArchiveContents, ArchiveError, LICENCE_FILES, SKILL_DIRECTORY, archive_file_name,
         is_plain_relative_path, read_archive, verify_archive, write_archive,
     },
+    candidate::{
+        CandidateObservation, CheckRecord, github_output as candidate_output, head_commit, observe,
+    },
     checksums::{ChecksumError, checksum_list},
+    evidence::{EvidenceObservation, read_directory as read_evidence},
+    guards::Observations,
     npm::{
         LAUNCHER_DIRECTORY, LAUNCHER_LIBRARY, LAUNCHER_MANIFEST, LAUNCHER_README, LAUNCHER_SCRIPT,
         LauncherSources, NpmError, NpmPackage, assemble, verify_tarball,
     },
     publish::{
-        DryRunInput, PackedPackage, PublishError, ReleaseArchive, RunContext, TriggerEvent, plan,
+        DryRunInput, PLAN_MARKDOWN, PackedPackage, PublishError, ReleaseArchive, ReleaseVersion,
+        RunContext, TriggerEvent, plan, publication_order,
     },
+    registry::{RegistryObservation, read_directory},
     target::ReleaseTarget,
 };
 
@@ -144,6 +163,19 @@ enum Command {
     /// whether this workflow run may publish, and write the publish plan into
     /// the output directory. Prints the plan job's outputs.
     PublishPlan(PlanArguments),
+    /// Compare the accepted release candidate of this version with a commit
+    /// (the stable commit): only version strings and the launcher's README
+    /// may differ. Prints the comparison and fails if anything else does.
+    CandidateDelta {
+        /// The stable commit, as a full lowercase SHA; defaults to `HEAD`.
+        #[arg(long)]
+        stable_commit: Option<String>,
+        /// Print only `candidate-version=` and `candidate-commit=` lines for
+        /// `$GITHUB_OUTPUT` (nothing when there is no accepted candidate), and
+        /// never fail: the plan job's evidence step runs when they are there.
+        #[arg(long)]
+        github_output: bool,
+    },
 }
 
 /// The inputs of `publish-plan`: the release's files and the workflow run.
@@ -174,6 +206,25 @@ struct PlanArguments {
     /// `github.sha`.
     #[arg(long)]
     commit: String,
+    /// The directory the plan job saved npm's public metadata of the four
+    /// packages in (`<name>.json` and `<name>.status` each). Without it the
+    /// plan says the registry was not read, and a stable plan is refused
+    /// wherever it is enforced.
+    #[arg(long)]
+    registry: Option<PathBuf>,
+    /// The directory the plan job saved the evidence ledger's answer for the
+    /// accepted candidate in (`status` and `result.txt`). Without it a stable
+    /// plan says the check did not run, and is refused wherever it is
+    /// enforced.
+    #[arg(long)]
+    evidence: Option<PathBuf>,
+    /// `github.run_id`, which the evidence ledger's `release_delta` record
+    /// names as the run that made the candidate comparison.
+    #[arg(long)]
+    run_id: Option<u64>,
+    /// The date of the run, `YYYY-MM-DD` in UTC, for the same record.
+    #[arg(long)]
+    date: Option<String>,
     /// An existing directory; the plan's files must not exist in it yet.
     #[arg(long)]
     out_dir: PathBuf,
@@ -186,6 +237,8 @@ enum Outcome {
     Path(PathBuf),
     /// The plan job's outputs, one `name=value` line each.
     Outputs(String),
+    /// A report, printed as it is.
+    Report(String),
 }
 
 impl Outcome {
@@ -194,7 +247,7 @@ impl Outcome {
     fn path(self) -> Option<PathBuf> {
         match self {
             Self::Path(path) => Some(path),
-            Self::Outputs(_) => None,
+            Self::Outputs(_) | Self::Report(_) => None,
         }
     }
 }
@@ -203,7 +256,7 @@ impl fmt::Display for Outcome {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Path(path) => write!(formatter, "{}", path.display()),
-            Self::Outputs(outputs) => formatter.write_str(outputs),
+            Self::Outputs(text) | Self::Report(text) => formatter.write_str(text),
         }
     }
 }
@@ -251,6 +304,9 @@ enum ReleaseError {
     Tarballs(String),
     /// The run may not publish, or its inputs are not the release.
     Publish(PublishError),
+    /// The comparison with the release candidate was refused or could not be
+    /// made; the text says why.
+    Candidate(String),
 }
 
 impl fmt::Display for ReleaseError {
@@ -281,6 +337,7 @@ impl fmt::Display for ReleaseError {
                 write!(formatter, "the tarballs are not one per package: {reason}")
             }
             Self::Publish(error) => error.fmt(formatter),
+            Self::Candidate(report) => formatter.write_str(report),
         }
     }
 }
@@ -315,7 +372,10 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli.command, Path::new(".")) {
         Ok(outcome) => {
-            println!("{outcome}");
+            let text = outcome.to_string();
+            if !text.is_empty() {
+                println!("{text}");
+            }
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -383,6 +443,10 @@ fn run(command: Command, repository_root: &Path) -> Result<Outcome, ReleaseError
             ))
         }
         Command::PublishPlan(arguments) => write_publish_plan(arguments, repository_root),
+        Command::CandidateDelta {
+            stable_commit,
+            github_output,
+        } => candidate_delta(stable_commit, github_output, repository_root),
     }
 }
 
@@ -414,17 +478,77 @@ fn write_publish_plan(
             notices: contents.notices,
         })
         .collect();
+    let version = ReleaseVersion::parse(VERSION)?;
+    let registry = match &arguments.registry {
+        Some(directory) => read_directory(directory, &publication_order()),
+        None => RegistryObservation::NotRead,
+    };
+    let evidence = match &arguments.evidence {
+        Some(directory) => read_evidence(directory),
+        None => EvidenceObservation::NotRun,
+    };
+    let check = match (arguments.run_id, arguments.date) {
+        (Some(run_id), Some(date)) if CheckRecord::is_date(&date) => {
+            Some(CheckRecord { run_id, date })
+        }
+        (Some(_), Some(date)) => return Err(ReleaseError::Publish(PublishError::Date(date))),
+        _ => None,
+    };
+    let observations = Observations {
+        registry,
+        candidate: observe(repository_root, &context.commit, &version),
+        evidence,
+        check,
+    };
     let plan = plan(
-        VERSION,
+        &version,
         context,
         &release_archives,
         &read(&arguments.checksums)?,
         &packed,
+        &observations,
     )?;
+    // A refused plan writes only its explanation: the job summary shows why,
+    // and no attestation list, release note or command exists to be used.
+    if let Some(reasons) = plan.refusal() {
+        write_new(
+            &arguments.out_dir.join(PLAN_MARKDOWN),
+            plan.markdown().as_bytes(),
+        )?;
+        return Err(ReleaseError::Publish(PublishError::Refused(reasons)));
+    }
     for (name, bytes) in plan.files()? {
         write_new(&arguments.out_dir.join(name), &bytes)?;
     }
     Ok(Outcome::Outputs(plan.outputs()))
+}
+
+/// Compares the accepted release candidate of this version with a commit and
+/// reports whether only version strings and the launcher's README differ.
+fn candidate_delta(
+    stable_commit: Option<String>,
+    github_output: bool,
+    repository_root: &Path,
+) -> Result<Outcome, ReleaseError> {
+    let version = ReleaseVersion::parse(VERSION)?;
+    let commit = match stable_commit {
+        Some(commit) => commit,
+        None => head_commit(repository_root).map_err(ReleaseError::Candidate)?,
+    };
+    let observation = observe(repository_root, &commit, &version);
+    if github_output {
+        return Ok(Outcome::Report(candidate_output(&observation)));
+    }
+    match observation {
+        CandidateObservation::NotApplicable => Err(ReleaseError::Candidate(format!(
+            "{VERSION} has a pre-release suffix, so it has no release candidate to compare with"
+        ))),
+        CandidateObservation::Failed(reason) => Err(ReleaseError::Candidate(reason)),
+        CandidateObservation::Checked(report) if report.violations().is_empty() => {
+            Ok(Outcome::Report(report.markdown()))
+        }
+        CandidateObservation::Checked(report) => Err(ReleaseError::Candidate(report.markdown())),
+    }
 }
 
 /// The release archives read back: each one's contents by target, and in the
@@ -650,13 +774,13 @@ mod tests {
     use clap::Parser;
 
     use super::{
-        Cli, Command, Inputs, PlanArguments, ReleaseError, VERSION, assemble_packages, load_skill,
-        read_release_archives, run,
+        Cli, Command, Inputs, PlanArguments, ReleaseError, VERSION, assemble_packages,
+        candidate_delta, load_skill, read_release_archives, run,
     };
     use crate::{
         archive::tests::contents,
         npm,
-        publish::{PublishError, TriggerEvent, npm_tarball_name},
+        publish::{Channel, PublishError, ReleaseVersion, TriggerEvent, npm_tarball_name},
         target::{ReleaseTarget, tests::minimal_executable},
     };
 
@@ -732,6 +856,47 @@ mod tests {
         // An event the Release workflow does not have is refused by the parser.
         assert!(parse("schedule", "").is_err());
         assert!(parse("pull_request_target", "").is_err());
+        // The registry directory is optional, and the candidate comparison
+        // takes only an optional commit.
+        let Command::PublishPlan(arguments) = parse("push", "")?.command else {
+            return Err("not publish-plan".into());
+        };
+        assert_eq!(arguments.registry, None);
+        let with_registry = Cli::try_parse_from([
+            "vsift-release",
+            "publish-plan",
+            "--archive",
+            "a.tar.gz",
+            "--checksums",
+            "SHA256SUMS",
+            "--tarball",
+            "t.tgz",
+            "--event",
+            "push",
+            "--ref",
+            "refs/heads/main",
+            "--repository",
+            "smormah/vsift",
+            "--commit",
+            "0123456789abcdef0123456789abcdef01234567",
+            "--registry",
+            "registry",
+            "--out-dir",
+            "publish-plan",
+        ])?;
+        let Command::PublishPlan(arguments) = with_registry.command else {
+            return Err("not publish-plan".into());
+        };
+        assert_eq!(arguments.registry, Some(PathBuf::from("registry")));
+        let Command::CandidateDelta {
+            stable_commit,
+            github_output,
+        } = Cli::try_parse_from(["vsift-release", "candidate-delta"])?.command
+        else {
+            return Err("not candidate-delta".into());
+        };
+        assert_eq!(stable_commit, None);
+        assert!(!github_output);
         Ok(())
     }
 
@@ -1019,6 +1184,10 @@ mod tests {
                 repository: String::from("smormah/vsift"),
                 dry_run_input: dry_run.to_owned(),
                 commit: String::from("0123456789abcdef0123456789abcdef01234567"),
+                registry: None,
+                evidence: None,
+                run_id: None,
+                date: None,
                 out_dir,
             })
         };
@@ -1035,9 +1204,11 @@ mod tests {
             ),
             &root,
         )?;
+        // The version decides the channel (a version without a suffix is stable).
+        let channel = ReleaseVersion::parse(VERSION)?.kind().channel().output();
         assert_eq!(
             outcome.to_string(),
-            format!("mode=dry-run\nversion={VERSION}\ntag=v{VERSION}")
+            format!("mode=dry-run\nversion={VERSION}\ntag=v{VERSION}\nchannel={channel}")
         );
         let mut written: Vec<String> = fs::read_dir(&out)?
             .filter_map(Result::ok)
@@ -1120,5 +1291,181 @@ mod tests {
             "{refused:?}"
         );
         Ok(())
+    }
+
+    /// The fixture release's archives, `SHA256SUMS` and packed tarballs.
+    struct FixtureRelease {
+        archives: Vec<PathBuf>,
+        sums: PathBuf,
+        tarballs: Vec<PathBuf>,
+    }
+
+    fn fixture_release(scratch: &Scratch) -> Result<FixtureRelease, Box<dyn Error>> {
+        let root = repository_root();
+        let archives = package_fixture_archives(scratch)?;
+        let sums = scratch.0.join("SHA256SUMS");
+        run(
+            Command::Checksums {
+                output: sums.clone(),
+                archives: archives.clone(),
+            },
+            &root,
+        )?;
+        let packages = assemble_packages(&read_release_archives(&archives)?, &root)?;
+        let tarball_dir = scratch.0.join("tarballs");
+        fs::create_dir(&tarball_dir)?;
+        let mut tarballs = Vec::new();
+        for package in &packages {
+            let path = tarball_dir.join(npm_tarball_name(package.name, VERSION));
+            fs::write(&path, npm::tests::pack(package)?)?;
+            tarballs.push(path);
+        }
+        Ok(FixtureRelease {
+            archives,
+            sums,
+            tarballs,
+        })
+    }
+
+    fn written_names(directory: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+        let mut names: Vec<String> = fs::read_dir(directory)?
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .collect();
+        names.sort();
+        Ok(names)
+    }
+
+    /// The rehearsal on the release tag: a dispatch on `v<version>` with
+    /// `dry_run` set is enforced, so a stable version without a registry read
+    /// and a candidate is refused, writes only its explanation and fails the
+    /// run; a pre-release plans as usual. (This workspace's own version decides
+    /// which; the unit tests of the `publish` module hold both.)
+    #[test]
+    fn an_enforced_plan_that_fails_a_guard_writes_only_its_explanation()
+    -> Result<(), Box<dyn Error>> {
+        let scratch = Scratch::new("refused-plan")?;
+        let root = repository_root();
+        let FixtureRelease {
+            archives,
+            sums,
+            tarballs,
+        } = fixture_release(&scratch)?;
+        let out = scratch.0.join("plan");
+        fs::create_dir(&out)?;
+        let outcome = run(
+            Command::PublishPlan(PlanArguments {
+                archives,
+                checksums: sums,
+                tarballs,
+                event: TriggerEvent::WorkflowDispatch,
+                git_ref: format!("refs/tags/v{VERSION}"),
+                repository: String::from("smormah/vsift"),
+                dry_run_input: String::from("true"),
+                commit: String::from("0123456789abcdef0123456789abcdef01234567"),
+                registry: None,
+                evidence: None,
+                run_id: None,
+                date: None,
+                out_dir: out.clone(),
+            }),
+            &root,
+        );
+        if ReleaseVersion::parse(VERSION)?.kind().channel() == Channel::Stable {
+            assert!(
+                matches!(
+                    outcome,
+                    Err(ReleaseError::Publish(PublishError::Refused(_)))
+                ),
+                "{outcome:?}"
+            );
+            assert_eq!(written_names(&out)?, ["publish-plan.md"]);
+            let markdown = fs::read_to_string(out.join("publish-plan.md"))?;
+            assert!(markdown.starts_with("## Publish plan: REFUSED, nothing is published"));
+            assert!(markdown.contains("Registry read"));
+        } else {
+            outcome?;
+            assert_eq!(written_names(&out)?.len(), 11);
+        }
+        Ok(())
+    }
+
+    /// The registry files the plan job saves are read by `--registry` and
+    /// shown in the plan; nothing of the metadata but the tags and versions
+    /// reaches it.
+    #[test]
+    fn the_registry_files_are_read_and_shown_in_the_plan() -> Result<(), Box<dyn Error>> {
+        let scratch = Scratch::new("registry-plan")?;
+        let root = repository_root();
+        let FixtureRelease {
+            archives,
+            sums,
+            tarballs,
+        } = fixture_release(&scratch)?;
+        let registry = scratch.0.join("registry");
+        fs::create_dir(&registry)?;
+        for stem in [
+            "vsift-cli",
+            "vsift-darwin-arm64",
+            "vsift-linux-x64",
+            "vsift-win32-x64",
+        ] {
+            fs::write(registry.join(format!("{stem}.status")), "200\n")?;
+            fs::write(
+                registry.join(format!("{stem}.json")),
+                r#"{"dist-tags": {"latest": "0.0.0", "next": "0.1.0"},
+                    "versions": {"0.0.0": {"maintainers": [{"name": "a-person", "email": "a-person@example.invalid"}]},
+                                 "0.1.0": {}}}"#,
+            )?;
+        }
+        let out = scratch.0.join("plan");
+        fs::create_dir(&out)?;
+        run(
+            Command::PublishPlan(PlanArguments {
+                archives,
+                checksums: sums,
+                tarballs,
+                event: TriggerEvent::PullRequest,
+                git_ref: String::from("refs/pull/1/merge"),
+                repository: String::from("smormah/vsift"),
+                dry_run_input: String::new(),
+                commit: String::from("0123456789abcdef0123456789abcdef01234567"),
+                registry: Some(registry),
+                evidence: None,
+                run_id: None,
+                date: None,
+                out_dir: out.clone(),
+            }),
+            &root,
+        )?;
+        let markdown = fs::read_to_string(out.join("publish-plan.md"))?;
+        let expected = match ReleaseVersion::parse(VERSION)?.kind().channel() {
+            Channel::Stable => "| `vsift-cli` | `0.0.0` | `",
+            Channel::PreRelease => "| `vsift-cli` | `0.1.0` | `",
+        };
+        assert!(markdown.contains(expected), "{markdown}");
+        for file in written_names(&out)? {
+            let text = fs::read_to_string(out.join(&file)).unwrap_or_default();
+            assert!(!text.contains("a-person"), "{file}");
+            assert!(!text.contains("example.invalid"), "{file}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn the_candidate_comparison_answers_in_a_typed_way_on_this_repository() {
+        // Whatever this checkout holds, the answer is a report or a typed
+        // refusal, never a crash: no candidate tag, a pre-release version, or
+        // (after the stable's own commit) the real comparison.
+        let result = candidate_delta(None, false, &repository_root());
+        assert!(
+            matches!(result, Ok(_) | Err(ReleaseError::Candidate(_))),
+            "{result:?}"
+        );
+        let absent = candidate_delta(Some(String::from("main")), false, &repository_root());
+        assert!(
+            matches!(absent, Err(ReleaseError::Candidate(_))),
+            "{absent:?}"
+        );
     }
 }

@@ -1,15 +1,31 @@
-//! The publish plan (P13 PR 10, ADR 0023 section 1 and decisions B and C).
+//! The publish plan (P13 PR 10, ADR 0023 section 1 and decisions B and C;
+//! P14 PR 8, ADR 0024 decisions A and B).
 //!
 //! The Release workflow's unprivileged `plan` job runs `vsift-release
 //! publish-plan` on every run. It checks the release archives, their
 //! `SHA256SUMS` and the npm tarballs the `npm-qualify` jobs installed, decides
 //! whether this run may publish at all, and writes down exactly what the
 //! privileged `attest` and `publish` jobs would do: the files to attest, the
-//! `npm publish` commands in order, and the GitHub pre-release with its
-//! assets. A dry run (every run that is not the maintainer's dispatch of the
-//! release tag with `dry_run` cleared) stops there, so the plan is what a dry
-//! run shows; the privileged jobs only execute it after the `release`
-//! environment's approval.
+//! `npm publish` commands in order, and the GitHub release with its assets. A
+//! dry run (every run that is not the maintainer's dispatch of the release tag
+//! with `dry_run` cleared) stops there, so the plan is what a dry run shows;
+//! the privileged jobs only execute it after the `release` environment's
+//! approval.
+//!
+//! There are two channels, and the version alone decides which:
+//!
+//! - a version **with a pre-release suffix** (`0.2.0-rc.1`, `0.3.0-beta.2`) is
+//!   published under the dist-tag `next`, as a GitHub pre-release that is not
+//!   marked latest, and never touches `latest`;
+//! - a version **without one** (`0.2.0`, and by the same rule `1.0.0`) is
+//!   *stable*: it is published under `latest`, moving it on all four
+//!   packages, as the GitHub release marked latest. Every stable plan carries
+//!   the [guards](crate::guards) that stand between a bad run and `latest`.
+//!
+//! The version `0.0.0` is the placeholder every package already holds and is
+//! refused in every mode. The workflow still never runs `npm dist-tag`: a
+//! stable version reaches `latest` only by being published with `--tag
+//! latest`.
 //!
 //! Only this module decides the mode, the dist-tag and the arguments. The
 //! workflow's two privileged jobs repeat the same commands in a few lines of
@@ -22,7 +38,13 @@ use clap::ValueEnum;
 use serde_json::{Value, json};
 
 use crate::{
-    archive::archive_file_name, checksums::checksum_list, npm::LAUNCHER_PACKAGE, npm::sha256_hex,
+    archive::archive_file_name,
+    candidate::{CandidateObservation, CandidateReport, release_delta},
+    checksums::checksum_list,
+    guards::{DistTagMove, Evaluation, Guard, GuardOutcome, Observations, evaluate},
+    notes::release_notes,
+    npm::{LAUNCHER_PACKAGE, sha256_hex},
+    registry::npm_integrity,
     target::ReleaseTarget,
 };
 
@@ -32,13 +54,16 @@ pub(crate) const REPOSITORY: &str = "smormah/vsift";
 /// The workflow npm's trusted publishers and the attestations name.
 pub(crate) const WORKFLOW_PATH: &str = ".github/workflows/release.yml";
 
-/// The dist-tag every R0 publication uses (ADR 0023 decision B): a 0.x
-/// pre-release goes under `next`, and `latest` stays the `vsift-cli@0.0.0`
-/// placeholder until a stable release, which is P14's to plan.
-pub(crate) const DIST_TAG: &str = "next";
+/// The dist-tag of a pre-release (ADR 0023 decision B).
+pub(crate) const PRERELEASE_DIST_TAG: &str = "next";
 
-/// The plan's format identifier.
-const PLAN_FORMAT: &str = "vsift-publish-plan/1";
+/// The dist-tag of a stable version (ADR 0024 decision A): the only tag whose
+/// move the workflow cannot take back, so only a stable version reaches it.
+pub(crate) const STABLE_DIST_TAG: &str = "latest";
+
+/// The plan's format identifier. Version 2 (P14 PR 8) adds the channel, the
+/// dist-tag moves, the guards and the candidate.
+const PLAN_FORMAT: &str = "vsift-publish-plan/2";
 
 /// Where the privileged jobs download the tarballs, the plan and the release
 /// assets (the artifact download paths in `release.yml`).
@@ -47,26 +72,6 @@ pub(crate) const TARBALL_DIRECTORY: &str = "npm-packages";
 pub(crate) const PLAN_DIRECTORY: &str = "publish-plan";
 /// The directory the GitHub release's assets are gathered in.
 pub(crate) const ASSET_DIRECTORY: &str = "release-assets";
-
-/// The flags of every `npm publish`: the `next` dist-tag, public access (a
-/// scope's first publish is otherwise restricted), npm provenance (automatic
-/// with trusted publishing, and required with the bootstrap token), and no
-/// lifecycle scripts (a tarball has none; this makes sure none runs).
-pub(crate) const NPM_PUBLISH_FLAGS: [&str; 6] = [
-    "--tag",
-    DIST_TAG,
-    "--access",
-    "public",
-    "--provenance",
-    "--ignore-scripts",
-];
-
-/// The flags of `gh release create`: the tag must already exist (the
-/// maintainer creates it under the tag ruleset; the workflow never creates a
-/// tag), the release starts as a draft so a half-uploaded release is never
-/// public, and it is a pre-release that GitHub does not mark as latest.
-pub(crate) const GITHUB_RELEASE_FLAGS: [&str; 4] =
-    ["--verify-tag", "--draft", "--prerelease", "--latest=false"];
 
 /// The plan's file names inside [`PLAN_DIRECTORY`].
 pub(crate) const PLAN_JSON: &str = "publish-plan.json";
@@ -78,6 +83,86 @@ pub(crate) const RELEASE_NOTES: &str = "release-notes.md";
 pub(crate) const SUBJECTS_LIST: &str = "attestation-subjects.sha256";
 /// Every asset of the GitHub release, in `sha256sum` format.
 pub(crate) const ASSETS_LIST: &str = "release-assets.sha256";
+/// The record of the candidate comparison in the evidence ledger's `release_delta`
+/// shape, written for an enforced stable plan that passed every guard.
+pub(crate) const RELEASE_DELTA: &str = "release-delta.json";
+
+/// Which of the two publications a version gets. The pairing of a channel
+/// with its dist-tag and its GitHub flags is made here and nowhere else; the
+/// workflow's two publishing paths are each held to one channel's commands.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Channel {
+    /// A version with a pre-release suffix: `next`, a GitHub pre-release.
+    PreRelease,
+    /// A version without one: `latest`, the GitHub release marked latest.
+    Stable,
+}
+
+impl Channel {
+    /// The value of the plan job's `channel` output, which the privileged
+    /// jobs' steps compare.
+    pub(crate) const fn output(self) -> &'static str {
+        match self {
+            Self::PreRelease => "prerelease",
+            Self::Stable => "stable",
+        }
+    }
+
+    /// The dist-tag every `npm publish` of this channel sets.
+    pub(crate) const fn dist_tag(self) -> &'static str {
+        match self {
+            Self::PreRelease => PRERELEASE_DIST_TAG,
+            Self::Stable => STABLE_DIST_TAG,
+        }
+    }
+
+    /// The dist-tag this channel leaves alone.
+    pub(crate) const fn untouched_dist_tag(self) -> &'static str {
+        match self {
+            Self::PreRelease => STABLE_DIST_TAG,
+            Self::Stable => PRERELEASE_DIST_TAG,
+        }
+    }
+
+    /// The flags of every `npm publish`: the channel's dist-tag, public
+    /// access (a scope's first publish is otherwise restricted), npm
+    /// provenance (automatic with trusted publishing, and required with the
+    /// bootstrap token), and no lifecycle scripts (a tarball has none; this
+    /// makes sure none runs). The dist-tag is always explicit, never npm's
+    /// default.
+    pub(crate) const fn npm_publish_flags(self) -> [&'static str; 6] {
+        [
+            "--tag",
+            self.dist_tag(),
+            "--access",
+            "public",
+            "--provenance",
+            "--ignore-scripts",
+        ]
+    }
+
+    /// The flags of `gh release create`: the tag must already exist (the
+    /// maintainer creates it under the tag ruleset; the workflow never
+    /// creates a tag), and the release starts as a draft so a half-uploaded
+    /// release is never public. A pre-release is marked as one and is never
+    /// latest; a stable release is not marked latest until it is published
+    /// (see [`Self::github_publish_flags`]).
+    pub(crate) const fn github_create_flags(self) -> &'static [&'static str] {
+        match self {
+            Self::PreRelease => &["--verify-tag", "--draft", "--prerelease", "--latest=false"],
+            Self::Stable => &["--verify-tag", "--draft"],
+        }
+    }
+
+    /// The flags of the `gh release edit` that publishes the draft: a stable
+    /// release is marked latest by this edit, once, explicitly.
+    pub(crate) const fn github_publish_flags(self) -> &'static [&'static str] {
+        match self {
+            Self::PreRelease => &["--draft=false"],
+            Self::Stable => &["--draft=false", "--latest"],
+        }
+    }
+}
 
 /// The event that started the workflow run, as `github.event_name` names it.
 /// The Release workflow has exactly these three triggers.
@@ -174,15 +259,71 @@ impl PublishMode {
     }
 }
 
+/// Whether a failed guard stops the run.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Enforcement {
+    /// A publish, or a dispatch on the version's own tag (the rehearsal of
+    /// one, even with `dry_run` set): a failed guard refuses the plan, so the
+    /// dry run on the tag fails whenever the real run would.
+    Enforced,
+    /// Any other run (a pull request, a push, a dispatch elsewhere): the
+    /// findings are shown and the run carries on, so a working tree whose
+    /// version has no candidate yet does not fail every pull request.
+    ReportOnly,
+}
+
+/// The kinds of version, which differ in their channel and in the wording of
+/// their release notes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ReleaseKind {
+    /// `X.Y.Z-rc.N` with a positive `N`: a release candidate, under `next`.
+    ReleaseCandidate,
+    /// Any other pre-release suffix: under `next`.
+    PreRelease,
+    /// No pre-release suffix, a 0.x version included: under `latest`.
+    Stable,
+}
+
+impl ReleaseKind {
+    /// The channel this kind is published in.
+    pub(crate) const fn channel(self) -> Channel {
+        match self {
+            Self::ReleaseCandidate | Self::PreRelease => Channel::PreRelease,
+            Self::Stable => Channel::Stable,
+        }
+    }
+
+    const fn key(self) -> &'static str {
+        match self {
+            Self::ReleaseCandidate => "release_candidate",
+            Self::PreRelease => "pre_release",
+            Self::Stable => "stable",
+        }
+    }
+
+    const fn words(self) -> &'static str {
+        match self {
+            Self::ReleaseCandidate => "release candidate",
+            Self::PreRelease => "pre-release",
+            Self::Stable => "stable",
+        }
+    }
+}
+
 /// A release version: `MAJOR.MINOR.PATCH` with an optional pre-release,
 /// numbers without leading zeros, as semantic versioning and npm read it.
 /// Build metadata (`+...`) is refused: npm drops it, so two versions that
 /// differ only there would publish as one.
+///
+/// Whether a version is stable depends on its suffix alone: `0.2.0` is
+/// stable exactly as `1.0.0` is. (`0.1.0` is stable by this rule and was
+/// published before it existed, as a pre-release under `next`; a plan for it
+/// is refused by the registry guards, since npm holds it under another tag.)
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ReleaseVersion {
     text: String,
-    major: u64,
-    prerelease: bool,
+    core: (u64, u64, u64),
+    prerelease: Option<String>,
 }
 
 impl ReleaseVersion {
@@ -218,24 +359,34 @@ impl ReleaseVersion {
                 return Err(refuse());
             }
         }
-        let major = major.parse::<u64>().map_err(|_| refuse())?;
+        let number = |text: &str| text.parse::<u64>().map_err(|_| refuse());
         Ok(Self {
             text: text.to_owned(),
-            major,
-            prerelease: prerelease.is_some(),
+            core: (number(major)?, number(minor)?, number(patch)?),
+            prerelease: prerelease.map(str::to_owned),
         })
     }
 
-    /// The dist-tag this version is published under: `next` for a 0.x
-    /// version or a pre-release. A stable version is refused: its dist-tag
-    /// (`latest`) and its release are P14's decision, and this workflow never
-    /// moves `latest`.
-    pub(crate) fn dist_tag(&self) -> Result<&'static str, PublishError> {
-        if self.major == 0 || self.prerelease {
-            Ok(DIST_TAG)
-        } else {
-            Err(PublishError::StableVersion(self.text.clone()))
+    /// The kind of version: a release candidate, another pre-release, or
+    /// stable.
+    pub(crate) fn kind(&self) -> ReleaseKind {
+        match self.prerelease.as_deref() {
+            None => ReleaseKind::Stable,
+            Some(suffix) if is_candidate_suffix(suffix) => ReleaseKind::ReleaseCandidate,
+            Some(_) => ReleaseKind::PreRelease,
         }
+    }
+
+    /// Whether this is the `0.0.0` that every package already holds as its
+    /// placeholder: never a release.
+    pub(crate) fn is_placeholder(&self) -> bool {
+        self.core == (0, 0, 0) && self.prerelease.is_none()
+    }
+
+    /// Whether this version's `MAJOR.MINOR.PATCH` is below `other`'s. Only
+    /// the numbers are compared, which is exact for stable versions.
+    pub(crate) fn precedes(&self, other: &Self) -> bool {
+        self.core < other.core
     }
 
     /// The Git tag a publication of this version must be dispatched on.
@@ -247,6 +398,13 @@ impl ReleaseVersion {
     pub(crate) fn as_str(&self) -> &str {
         &self.text
     }
+}
+
+/// `rc.N` with a positive `N`: the suffix of a release candidate.
+fn is_candidate_suffix(suffix: &str) -> bool {
+    suffix
+        .strip_prefix("rc.")
+        .is_some_and(|number| is_numeric_identifier(number) && number != "0")
 }
 
 /// A semantic-versioning numeric identifier: digits, and no leading zero
@@ -263,8 +421,8 @@ fn is_numeric_identifier(text: &str) -> bool {
 pub(crate) enum PublishError {
     /// The workspace version is not a version npm would publish unchanged.
     Version(String),
-    /// A stable version: P14 decides its dist-tag and release.
-    StableVersion(String),
+    /// The version is `0.0.0`, the placeholder every package already holds.
+    PlaceholderVersion,
     /// The `dry_run` input is neither empty, `true` nor `false`.
     DryRunInput(String),
     /// A publish was asked for on a ref that is not this version's tag.
@@ -285,6 +443,10 @@ pub(crate) enum PublishError {
     /// The tarballs are not exactly one per package, named as `npm pack`
     /// names them.
     Tarballs(String),
+    /// The date given for the delta record is not YYYY-MM-DD.
+    Date(String),
+    /// An enforced plan failed at least one guard.
+    Refused(Vec<String>),
     /// The plan could not be written as JSON.
     Json(String),
 }
@@ -296,10 +458,9 @@ impl fmt::Display for PublishError {
                 formatter,
                 "{version:?} is not a MAJOR.MINOR.PATCH[-PRERELEASE] version npm publishes as it is"
             ),
-            Self::StableVersion(version) => write!(
+            Self::PlaceholderVersion => write!(
                 formatter,
-                "{version} is a stable version; this workflow publishes only 0.x versions and \
-                 pre-releases under `{DIST_TAG}`, and a stable release is P14's to plan"
+                "0.0.0 is the placeholder every package already holds; it is never a release"
             ),
             Self::DryRunInput(text) => write!(
                 formatter,
@@ -323,6 +484,12 @@ impl fmt::Display for PublishError {
                 "SHA256SUMS does not list exactly the release archives with their digests"
             ),
             Self::Tarballs(reason) => write!(formatter, "the npm tarballs are wrong: {reason}"),
+            Self::Date(date) => write!(formatter, "{date:?} is not a date written YYYY-MM-DD"),
+            Self::Refused(reasons) => write!(
+                formatter,
+                "the plan is refused, nothing may be published: {}",
+                reasons.join("; ")
+            ),
             Self::Json(reason) => write!(formatter, "the plan cannot be written: {reason}"),
         }
     }
@@ -367,6 +534,22 @@ pub(crate) fn decide_mode(
     }
 }
 
+/// Whether a failed guard stops this run: always when it publishes, and for
+/// a dispatch on the version's own tag even with `dry_run` set.
+pub(crate) fn enforcement(
+    context: &RunContext,
+    version: &ReleaseVersion,
+    mode: PublishMode,
+) -> Enforcement {
+    let on_release_tag = context.event == TriggerEvent::WorkflowDispatch
+        && context.git_ref == format!("refs/tags/{}", version.git_tag());
+    if mode == PublishMode::Publish || on_release_tag {
+        Enforcement::Enforced
+    } else {
+        Enforcement::ReportOnly
+    }
+}
+
 /// One checked release archive and the files the GitHub release also
 /// carries separately.
 pub(crate) struct ReleaseArchive {
@@ -408,24 +591,34 @@ pub(crate) struct NpmPublication {
     pub package: &'static str,
     /// The tarball, by name and digest.
     pub tarball: Digested,
+    /// The `dist.integrity` npm will record for the tarball, which the
+    /// registry guards compare with what npm already holds.
+    pub integrity: String,
 }
 
 impl NpmPublication {
-    /// The arguments of `npm` for this publication, run from the job's
-    /// working directory.
-    pub(crate) fn arguments(&self) -> Vec<String> {
+    /// The arguments of `npm` for this publication in `channel`, run from
+    /// the job's working directory.
+    pub(crate) fn arguments(&self, channel: Channel) -> Vec<String> {
         let mut arguments = vec![
             String::from("publish"),
             format!("./{TARBALL_DIRECTORY}/{}", self.tarball.name),
         ];
-        arguments.extend(NPM_PUBLISH_FLAGS.iter().map(|flag| (*flag).to_owned()));
+        arguments.extend(
+            channel
+                .npm_publish_flags()
+                .iter()
+                .map(|flag| (*flag).to_owned()),
+        );
         arguments
     }
 }
 
-/// The GitHub pre-release.
+/// The GitHub release.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct GithubRelease {
+    /// The channel, which decides its flags.
+    pub channel: Channel,
     /// The existing tag it is created on.
     pub tag: String,
     /// Its title.
@@ -445,7 +638,12 @@ impl GithubRelease {
             String::from("--repo"),
             String::from(REPOSITORY),
         ];
-        arguments.extend(GITHUB_RELEASE_FLAGS.iter().map(|flag| (*flag).to_owned()));
+        arguments.extend(
+            self.channel
+                .github_create_flags()
+                .iter()
+                .map(|flag| (*flag).to_owned()),
+        );
         arguments.extend([
             String::from("--title"),
             self.title.clone(),
@@ -459,6 +657,24 @@ impl GithubRelease {
         );
         arguments
     }
+
+    /// The arguments of `gh` that publish the draft.
+    pub(crate) fn publish_arguments(&self) -> Vec<String> {
+        let mut arguments = vec![
+            String::from("release"),
+            String::from("edit"),
+            self.tag.clone(),
+            String::from("--repo"),
+            String::from(REPOSITORY),
+        ];
+        arguments.extend(
+            self.channel
+                .github_publish_flags()
+                .iter()
+                .map(|flag| (*flag).to_owned()),
+        );
+        arguments
+    }
 }
 
 /// Everything a run would publish, and whether it may.
@@ -466,20 +682,29 @@ impl GithubRelease {
 pub(crate) struct PublishPlan {
     /// The version.
     pub version: ReleaseVersion,
-    /// The dist-tag, always [`DIST_TAG`].
-    pub dist_tag: &'static str,
     /// Whether this run publishes.
     pub mode: PublishMode,
+    /// Whether a failed guard stops it.
+    pub enforcement: Enforcement,
     /// The run it was made in.
     pub context: RunContext,
     /// The `npm publish` commands, platform packages first.
     pub npm: Vec<NpmPublication>,
-    /// The GitHub pre-release.
+    /// The GitHub release.
     pub release: GithubRelease,
     /// Every file the `attest` job attests.
     pub subjects: Vec<Digested>,
     /// The SBOM and notices files the release carries beside the archives.
     pub extracted: Vec<(String, Vec<u8>)>,
+    /// What each guard found.
+    pub guards: Vec<Guard>,
+    /// What the publication does to each package's dist-tags.
+    pub moves: Vec<DistTagMove>,
+    /// The comparison with the accepted candidate, for a stable version.
+    pub candidate: Option<Box<CandidateReport>>,
+    /// The evidence ledger's `release_delta` record, for an enforced stable plan
+    /// whose guards all passed and that was given the run and date to name.
+    pub release_delta: Option<serde_json::Value>,
 }
 
 /// The file `npm pack` writes for `package` at `version`: the name without
@@ -512,23 +737,13 @@ pub(crate) fn publication_order() -> Vec<&'static str> {
         .collect()
 }
 
-/// Makes the plan from checked inputs: the workspace version, the run, one
-/// canonical archive per target, the `SHA256SUMS` file as the `package` job
-/// wrote it, and one verified tarball per package.
-pub(crate) fn plan(
-    version: &str,
-    context: RunContext,
+/// Requires exactly one archive per target, named for the version, and the
+/// `SHA256SUMS` file to be the one those archives produce.
+fn check_archives(
+    version: &ReleaseVersion,
     archives: &[ReleaseArchive],
     checksums: &[u8],
-    tarballs: &[PackedPackage],
-) -> Result<PublishPlan, PublishError> {
-    let version = ReleaseVersion::parse(version)?;
-    let dist_tag = version.dist_tag()?;
-    if !is_full_commit(&context.commit) {
-        return Err(PublishError::Commit(context.commit.clone()));
-    }
-    let mode = decide_mode(&context, &version)?;
-
+) -> Result<(), PublishError> {
     for target in ReleaseTarget::ALL {
         let expected = archive_file_name(version.as_str(), target);
         let count = archives
@@ -555,7 +770,15 @@ pub(crate) fn plan(
     if listed.as_bytes() != checksums {
         return Err(PublishError::Checksums);
     }
+    Ok(())
+}
 
+/// One publication per package, in publication order, from exactly one
+/// correctly named tarball each.
+fn npm_publications(
+    version: &ReleaseVersion,
+    tarballs: &[PackedPackage],
+) -> Result<Vec<NpmPublication>, PublishError> {
     let mut npm = Vec::new();
     for package in publication_order() {
         let expected = npm_tarball_name(package, version.as_str());
@@ -574,6 +797,7 @@ pub(crate) fn plan(
         npm.push(NpmPublication {
             package,
             tarball: digested(&tarball.file_name, &tarball.bytes),
+            integrity: npm_integrity(&tarball.bytes),
         });
     }
     if tarballs.len() != npm.len() {
@@ -581,6 +805,33 @@ pub(crate) fn plan(
             "a tarball is not one of the packages",
         )));
     }
+    Ok(npm)
+}
+
+/// Makes the plan from checked inputs: the version, the run, one canonical
+/// archive per target, the `SHA256SUMS` file as the `package` job wrote it,
+/// one verified tarball per package, and what the plan job observed outside
+/// them (the registry and the accepted candidate).
+pub(crate) fn plan(
+    version: &ReleaseVersion,
+    context: RunContext,
+    archives: &[ReleaseArchive],
+    checksums: &[u8],
+    tarballs: &[PackedPackage],
+    observations: &Observations,
+) -> Result<PublishPlan, PublishError> {
+    if version.is_placeholder() {
+        return Err(PublishError::PlaceholderVersion);
+    }
+    if !is_full_commit(&context.commit) {
+        return Err(PublishError::Commit(context.commit.clone()));
+    }
+    let mode = decide_mode(&context, version)?;
+    let enforcement = enforcement(&context, version, mode);
+    let channel = version.kind().channel();
+
+    check_archives(version, archives, checksums)?;
+    let npm = npm_publications(version, tarballs)?;
 
     let mut extracted = Vec::new();
     let mut assets = vec![digested("SHA256SUMS", checksums)];
@@ -598,20 +849,41 @@ pub(crate) fn plan(
     subjects.extend(npm.iter().map(|publication| publication.tarball.clone()));
     subjects.sort_by(|left, right| left.name.cmp(&right.name));
 
+    let Evaluation { guards, moves } = evaluate(version, &npm, observations);
+    let candidate = match &observations.candidate {
+        CandidateObservation::Checked(report) if channel == Channel::Stable => Some(report.clone()),
+        _ => None,
+    };
+    let release_delta = match (&candidate, &observations.check) {
+        (Some(report), Some(check))
+            if enforcement == Enforcement::Enforced
+                && guards
+                    .iter()
+                    .all(|guard| guard.outcome != GuardOutcome::Failed) =>
+        {
+            Some(release_delta(report, version.as_str(), check))
+        }
+        _ => None,
+    };
     let release = GithubRelease {
+        channel,
         tag: version.git_tag(),
         title: format!("VSift {}", version.as_str()),
         assets,
     };
     Ok(PublishPlan {
-        version,
-        dist_tag,
+        version: version.clone(),
         mode,
+        enforcement,
         context,
         npm,
         release,
         subjects,
         extracted,
+        guards,
+        moves,
+        candidate,
+        release_delta,
     })
 }
 
@@ -622,14 +894,47 @@ fn digested(name: &str, bytes: &[u8]) -> Digested {
     }
 }
 
-fn is_full_commit(commit: &str) -> bool {
+/// Whether `commit` is a full lowercase SHA-1.
+pub(crate) fn is_full_commit(commit: &str) -> bool {
     commit.len() == 40
         && commit
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
+/// A table cell: no pipe and no line break, which would end it.
+fn cell(text: &str) -> String {
+    text.replace('|', "\\|").replace(['\n', '\r'], " ")
+}
+
 impl PublishPlan {
+    /// The channel of this plan's version.
+    pub(crate) fn channel(&self) -> Channel {
+        self.version.kind().channel()
+    }
+
+    /// The failed guards of an enforced plan, as the reasons it is refused;
+    /// `None` when the plan stands. A report-only plan is never refused.
+    pub(crate) fn refusal(&self) -> Option<Vec<String>> {
+        if self.enforcement != Enforcement::Enforced {
+            return None;
+        }
+        let reasons = self.failed_guards();
+        if reasons.is_empty() {
+            None
+        } else {
+            Some(reasons)
+        }
+    }
+
+    fn failed_guards(&self) -> Vec<String> {
+        self.guards
+            .iter()
+            .filter(|guard| guard.outcome == GuardOutcome::Failed)
+            .map(|guard| format!("{}: {}", guard.name, guard.detail))
+            .collect()
+    }
+
     /// Every file of the plan by name: the JSON plan, the plan in words, the
     /// release notes, the two digest lists and the extracted SBOMs and
     /// notices. The workflow uploads them as the `publish-plan` artifact.
@@ -652,6 +957,14 @@ impl PublishPlan {
                 sha256sum_lines(&self.release.assets).into_bytes(),
             ),
         ];
+        if let Some(delta) = &self.release_delta {
+            let text = serde_json::to_string_pretty(delta)
+                .map_err(|error| PublishError::Json(error.to_string()))?;
+            files.push((
+                String::from(RELEASE_DELTA),
+                format!("{text}\n").into_bytes(),
+            ));
+        }
         files.extend(self.extracted.iter().cloned());
         Ok(files)
     }
@@ -660,10 +973,11 @@ impl PublishPlan {
     /// `$GITHUB_OUTPUT`.
     pub(crate) fn outputs(&self) -> String {
         format!(
-            "mode={}\nversion={}\ntag={}",
+            "mode={}\nversion={}\ntag={}\nchannel={}",
             self.mode.output(),
             self.version.as_str(),
-            self.version.git_tag()
+            self.version.git_tag(),
+            self.channel().output()
         )
     }
 
@@ -674,6 +988,7 @@ impl PublishPlan {
                 .map(|file| json!({"name": file.name, "sha256": file.sha256}))
                 .collect()
         };
+        let channel = self.channel();
         let npm: Vec<Value> = self
             .npm
             .iter()
@@ -682,15 +997,53 @@ impl PublishPlan {
                     "package": publication.package,
                     "tarball": publication.tarball.name,
                     "sha256": publication.tarball.sha256,
-                    "arguments": publication.arguments(),
+                    "integrity": publication.integrity,
+                    "arguments": publication.arguments(channel),
                 })
             })
             .collect();
+        let dist_tags: Vec<Value> = self
+            .moves
+            .iter()
+            .map(|moved| {
+                json!({
+                    "package": moved.package,
+                    "tag": moved.tag,
+                    "from": moved.from,
+                    "to": moved.to,
+                    "untouched_tag": moved.untouched_tag,
+                    "untouched": moved.untouched,
+                })
+            })
+            .collect();
+        let guards: Vec<Value> = self
+            .guards
+            .iter()
+            .map(|guard| {
+                json!({
+                    "name": guard.name,
+                    "outcome": guard.outcome.key(),
+                    "detail": guard.detail,
+                })
+            })
+            .collect();
+        let candidate = self.candidate.as_ref().map(|report| {
+            json!({
+                "tag": report.candidate_tag,
+                "version": report.candidate_version,
+                "commit": report.candidate_commit,
+                "changed_paths": report.changes.iter().map(|change| change.path.as_str()).collect::<Vec<_>>(),
+            })
+        });
         json!({
             "format": PLAN_FORMAT,
             "mode": self.mode.output(),
+            "enforced": self.enforcement == Enforcement::Enforced,
             "version": self.version.as_str(),
-            "dist_tag": self.dist_tag,
+            "kind": self.version.kind().key(),
+            "channel": channel.output(),
+            "dist_tag": channel.dist_tag(),
+            "moves_latest": channel == Channel::Stable,
             "git_tag": self.version.git_tag(),
             "commit": self.context.commit,
             "run": {
@@ -698,26 +1051,39 @@ impl PublishPlan {
                 "ref": self.context.git_ref,
                 "repository": self.context.repository,
             },
+            "dist_tags": dist_tags,
+            "guards": guards,
+            "candidate": candidate,
+            "release_delta": self.release_delta,
             "attestation_subjects": digests(&self.subjects),
             "npm": npm,
             "github_release": {
                 "tag": self.release.tag,
                 "title": self.release.title,
-                "prerelease": true,
-                "latest": false,
+                "prerelease": channel == Channel::PreRelease,
+                "latest": channel == Channel::Stable,
                 "arguments": self.release.create_arguments(),
+                "publish_arguments": self.release.publish_arguments(),
                 "assets": digests(&self.release.assets),
             },
         })
     }
 
-    /// The plan in words, for the job summary: what would be attested,
-    /// published and released, and whether this run does it.
-    pub(crate) fn markdown(&self) -> String {
+    /// The first lines of the plan: what it is, and above all whether it
+    /// moves `latest`.
+    fn banner(&self) -> String {
         let version = self.version.as_str();
+        let kind = self.version.kind();
+        let stable = kind == ReleaseKind::Stable;
+        let refused = self.refusal().is_some();
         let mut text = String::new();
-        let _ = match self.mode {
-            PublishMode::DryRun(reason) => writeln!(
+        let _ = match (self.mode, refused) {
+            (_, true) => writeln!(
+                text,
+                "## Publish plan: REFUSED, nothing is published\n\n\
+                 This run asked to publish or rehearse `{version}` on its tag, and a guard failed."
+            ),
+            (PublishMode::DryRun(reason), false) => writeln!(
                 text,
                 "## Publish plan: dry run, nothing is published\n\n{}",
                 match reason {
@@ -729,24 +1095,145 @@ impl PublishPlan {
                         String::from("This run was dispatched with `dry_run` set."),
                 }
             ),
-            PublishMode::Publish => writeln!(
+            (PublishMode::Publish, false) if stable => writeln!(
                 text,
-                "## Publish plan: PUBLISH after the `release` environment's approval\n\n\
+                "## Publish plan: PUBLISH a STABLE release after the `release` environment's \
+                 approval\n\n\
                  The `attest` job attests the files below, then the `publish` job waits for the \
                  maintainer's approval of the `release` environment before it publishes anything."
             ),
+            (PublishMode::Publish, false) => writeln!(
+                text,
+                "## Publish plan: PUBLISH a {} after the `release` environment's approval\n\n\
+                 The `attest` job attests the files below, then the `publish` job waits for the \
+                 maintainer's approval of the `release` environment before it publishes anything.",
+                kind.words()
+            ),
         };
+        if stable {
+            let _ = match self.mode {
+                PublishMode::Publish => writeln!(
+                    text,
+                    "\n> **This publication moves npm's `latest` dist-tag on all four packages.** \
+                     Afterwards `npm install vsift-cli` installs `{version}`. A published version \
+                     cannot be unpublished: a bad one is deprecated and replaced by a new version \
+                     (release.md section 6.5)."
+                ),
+                PublishMode::DryRun(_) => writeln!(
+                    text,
+                    "\n> **This version is stable: a real publication of this plan would move \
+                     npm's `latest` dist-tag on all four packages.**"
+                ),
+            };
+        } else {
+            let _ = writeln!(
+                text,
+                "\n> **`latest` is not touched.** This {} is published under `{}` only.",
+                kind.words(),
+                self.channel().dist_tag()
+            );
+        }
+        let failed = self.failed_guards();
+        if !failed.is_empty() {
+            let _ = writeln!(
+                text,
+                "\n**{}**\n",
+                if refused {
+                    "Refused because:"
+                } else {
+                    "A real publication of this plan would be refused, because:"
+                }
+            );
+            for reason in failed {
+                let _ = writeln!(text, "- {reason}");
+            }
+        }
+        text
+    }
+
+    /// The plan in words, for the job summary: what would be attested,
+    /// published and released, what moves which dist-tag, which guards held,
+    /// and whether this run does it.
+    pub(crate) fn markdown(&self) -> String {
+        let mut text = self.banner();
+        self.write_summary(&mut text);
+        if self.refusal().is_some() {
+            return text;
+        }
+        self.write_commands(&mut text);
+        text
+    }
+
+    /// The run, what happens to each dist-tag, the guards and, when the plan
+    /// passed an enforced run, the record for the evidence ledger.
+    fn write_summary(&self, text: &mut String) {
+        let version = self.version.as_str();
+        let channel = self.channel();
         let _ = writeln!(
             text,
-            "\n- Version `{version}`, npm dist-tag `{}` (`latest` is not touched), Git tag `{}`\n\
-             - Commit `{}`, event `{}` on `{}` in `{}`",
-            self.dist_tag,
+            "\n### This run\n\n- Version `{version}` ({}), npm dist-tag `{}`, Git tag `{}`\n\
+             - Commit `{}`, event `{}` on `{}` in `{}`\n\
+             - The plan is {}",
+            self.version.kind().words(),
+            channel.dist_tag(),
             self.version.git_tag(),
             self.context.commit,
             self.context.event.name(),
             self.context.git_ref,
             self.context.repository,
+            if self.enforcement == Enforcement::Enforced {
+                "enforced: a failed guard refuses it"
+            } else {
+                "report-only: a failed guard is shown and the run carries on"
+            },
         );
+        let _ = writeln!(
+            text,
+            "\n### What this publication does to the dist-tags\n\n\
+             | Package | Moves `{tag}` from | to | `{other}` stays |\n| --- | --- | --- | --- |",
+            tag = channel.dist_tag(),
+            other = channel.untouched_dist_tag()
+        );
+        for moved in &self.moves {
+            let _ = writeln!(
+                text,
+                "| `{}` | `{}` | `{}` | `{}` |",
+                moved.package,
+                cell(&moved.from),
+                cell(&moved.to),
+                cell(&moved.untouched)
+            );
+        }
+        let _ = writeln!(
+            text,
+            "\n### Guards\n\n| Guard | Result | What was seen |\n| --- | --- | --- |"
+        );
+        for guard in &self.guards {
+            let _ = writeln!(
+                text,
+                "| {} | {} | {} |",
+                cell(guard.name),
+                guard.outcome.label(),
+                cell(&guard.detail)
+            );
+        }
+        if let Some(delta) = &self.release_delta {
+            let rendered = serde_json::to_string_pretty(delta).unwrap_or_default();
+            let _ = writeln!(
+                text,
+                "\n### The evidence ledger's `release_delta` record\n\n\
+                 Copy this into `docs/planning/p14-evidence-ledger.json` after the publish \
+                 (release.md section 6.7); the plan's artifact `{RELEASE_DELTA}` holds it for 7 \
+                 days.\n\n```json\n{rendered}\n```"
+            );
+        }
+    }
+
+    /// What `attest` and `publish` would do: the files to attest, the four
+    /// `npm publish` commands and the GitHub release commands.
+    fn write_commands(&self, text: &mut String) {
+        let version = self.version.as_str();
+        let channel = self.channel();
         let _ = writeln!(
             text,
             "\n### 1. Sigstore build provenance (job `attest`)\n\n| File | SHA-256 |\n| --- | --- |"
@@ -767,79 +1254,32 @@ impl PublishPlan {
                 publication.package,
                 publication.tarball.name,
                 publication.tarball.sha256,
-                shell_words(&publication.arguments()),
+                shell_words(&publication.arguments(channel)),
             );
         }
         let _ = writeln!(
             text,
-            "\n### 3. GitHub pre-release (job `publish`)\n\n`gh {}`, then the draft is published \
-             as a pre-release that is not marked latest.\n\n| Asset | SHA-256 |\n| --- | --- |",
+            "\n### 3. GitHub release (job `publish`)\n\n`gh {}`, then `gh {}` publishes the draft \
+             {}.\n\n| Asset | SHA-256 |\n| --- | --- |",
             shell_words(&self.release.create_arguments()),
+            shell_words(&self.release.publish_arguments()),
+            match channel {
+                Channel::PreRelease => "as a pre-release that is not marked latest",
+                Channel::Stable => "as the release marked latest",
+            },
         );
         for asset in &self.release.assets {
             let _ = writeln!(text, "| `{}` | `{}` |", asset.name, asset.sha256);
         }
-        text
     }
 
     /// The GitHub release's notes. They name no person.
     pub(crate) fn release_notes(&self) -> String {
-        let version = self.version.as_str();
-        let tag = self.version.git_tag();
-        format!(
-            "VSift {version} is a pre-release. It is published to npm under the dist-tag \
-             `{dist_tag}`; `latest` stays the `vsift-cli@0.0.0` placeholder until a stable \
-             release. Built by the Release workflow from commit {commit} (tag `{tag}`).\n\
-             \n\
-             ## Install\n\
-             \n\
-             The npm package is `vsift-cli`; the command it installs is `vsift`. It needs \
-             Node.js 22 or later, or Bun 1.2 or later.\n\
-             \n\
-             ```console\n\
-             npm install --global vsift-cli@{dist_tag}\n\
-             pnpm add --global vsift-cli@{dist_tag}\n\
-             bun add --global vsift-cli@{dist_tag}\n\
-             ```\n\
-             \n\
-             Yarn 4 holds back a version for a day after it is published \
-             (`npmMinimalAgeGate`). Wait a day, or list `vsift-cli` and `@vsift/*` under \
-             `npmPreapprovedPackages` in the project's `.yarnrc.yml`.\n\
-             \n\
-             Supported machines: Windows 11 x64, macOS 15 on Apple silicon, and Linux x64 with \
-             glibc 2.35 or later and OpenSSL 3.\n\
-             \n\
-             ## Native archives\n\
-             \n\
-             Each `vsift-{version}-<target>.tar.gz` holds the `vsift` executable, the licences, \
-             `THIRD-PARTY-NOTICES`, a CycloneDX SBOM and the agent skill; each target's SBOM and \
-             notices are also attached on their own. Check a download against `SHA256SUMS` \
-             (`sha256sum --check --ignore-missing SHA256SUMS`, or `shasum -a 256 --check \
-             --ignore-missing SHA256SUMS` on macOS). The executables are not code-signed or \
-             notarized, so Windows SmartScreen and macOS Gatekeeper may warn about one \
-             downloaded directly. Files installed through npm do not carry the download mark \
-             that triggers those two warnings, but Windows Smart App Control, where it is \
-             turned on, can block an unsigned program however it was installed; see the \
-             installation guide.\n\
-             \n\
-             ## Verify the provenance\n\
-             \n\
-             Every archive, `SHA256SUMS`, SBOM, notices file and npm tarball has a Sigstore \
-             build-provenance attestation from the Release workflow:\n\
-             \n\
-             ```console\n\
-             gh attestation verify <file> --repo {REPOSITORY} \\\n  \
-             --signer-workflow {REPOSITORY}/{WORKFLOW_PATH} \\\n  \
-             --source-ref refs/tags/{tag} --deny-self-hosted-runners\n\
-             ```\n\
-             \n\
-             The npm packages also carry npm provenance: `npm audit signatures` in a project \
-             that installed `vsift-cli@{dist_tag}` checks their registry signatures and \
-             provenance attestations.\n\
-             \n\
-             Installation guide: https://github.com/{REPOSITORY}/blob/{tag}/docs/operations/install.md\n",
-            dist_tag = self.dist_tag,
-            commit = self.context.commit,
+        release_notes(
+            self.version.kind(),
+            self.version.as_str(),
+            &self.version.git_tag(),
+            &self.context.commit,
         )
     }
 }
@@ -874,474 +1314,4 @@ fn shell_words(arguments: &[String]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{error::Error, fs, path::Path};
-
-    use serde_json::Value;
-
-    use super::{
-        DIST_TAG, DryRunInput, DryRunReason, GITHUB_RELEASE_FLAGS, NPM_PUBLISH_FLAGS,
-        PackedPackage, PublishError, PublishMode, ReleaseArchive, ReleaseVersion, RunContext,
-        TriggerEvent, decide_mode, npm_tarball_name, plan, publication_order,
-    };
-    use crate::{
-        archive::archive_file_name, checksums::checksum_list, npm::LAUNCHER_PACKAGE,
-        target::ReleaseTarget,
-    };
-
-    const VERSION: &str = "0.1.0";
-    const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
-
-    fn context(event: TriggerEvent, git_ref: &str, dry_run: DryRunInput) -> RunContext {
-        RunContext {
-            event,
-            git_ref: git_ref.to_owned(),
-            repository: String::from("smormah/vsift"),
-            dry_run,
-            commit: String::from(COMMIT),
-        }
-    }
-
-    fn release_dispatch(dry_run: DryRunInput) -> RunContext {
-        context(TriggerEvent::WorkflowDispatch, "refs/tags/v0.1.0", dry_run)
-    }
-
-    fn archives() -> Vec<ReleaseArchive> {
-        ReleaseTarget::ALL
-            .into_iter()
-            .map(|target| ReleaseArchive {
-                target,
-                file_name: archive_file_name(VERSION, target),
-                bytes: format!("archive {target}").into_bytes(),
-                sbom: format!("sbom {target}").into_bytes(),
-                notices: format!("notices {target}").into_bytes(),
-            })
-            .collect()
-    }
-
-    fn checksums(archives: &[ReleaseArchive]) -> Result<Vec<u8>, Box<dyn Error>> {
-        Ok(checksum_list(
-            archives
-                .iter()
-                .map(|archive| (archive.file_name.as_str(), archive.bytes.as_slice())),
-        )?
-        .into_bytes())
-    }
-
-    fn tarballs() -> Vec<PackedPackage> {
-        publication_order()
-            .into_iter()
-            .rev()
-            .map(|package| PackedPackage {
-                package,
-                file_name: npm_tarball_name(package, VERSION),
-                bytes: format!("tarball {package}").into_bytes(),
-            })
-            .collect()
-    }
-
-    #[test]
-    fn versions_parse_as_semantic_versioning_without_build_metadata() {
-        for good in [
-            "0.1.0",
-            "0.0.1",
-            "1.2.3",
-            "0.1.0-rc.1",
-            "0.1.0-next.0",
-            "10.20.30-x-y",
-        ] {
-            assert!(ReleaseVersion::parse(good).is_ok(), "{good}");
-        }
-        for bad in [
-            "",
-            "0.1",
-            "0.1.0.0",
-            "01.1.0",
-            "0.01.0",
-            "0.1.0-",
-            "0.1.0-rc..1",
-            "0.1.0-01",
-            "0.1.0+build",
-            "v0.1.0",
-            "0.1.0-rc_1",
-            "0.1.0 ",
-            "a.b.c",
-        ] {
-            assert_eq!(
-                ReleaseVersion::parse(bad),
-                Err(PublishError::Version(bad.to_owned())),
-                "{bad}"
-            );
-        }
-    }
-
-    #[test]
-    fn only_zero_x_versions_and_pre_releases_are_published_and_always_under_next()
-    -> Result<(), Box<dyn Error>> {
-        for version in ["0.1.0", "0.9.9", "1.0.0-rc.1", "2.0.0-beta"] {
-            assert_eq!(ReleaseVersion::parse(version)?.dist_tag()?, DIST_TAG);
-        }
-        assert_eq!(DIST_TAG, "next");
-        for stable in ["1.0.0", "2.3.4"] {
-            assert_eq!(
-                ReleaseVersion::parse(stable)?.dist_tag(),
-                Err(PublishError::StableVersion(stable.to_owned()))
-            );
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn only_a_dispatch_on_the_release_tag_with_dry_run_cleared_publishes()
-    -> Result<(), Box<dyn Error>> {
-        let version = ReleaseVersion::parse(VERSION)?;
-        assert_eq!(
-            decide_mode(&release_dispatch(DryRunInput::Cleared), &version),
-            Ok(PublishMode::Publish)
-        );
-        assert_eq!(
-            decide_mode(&release_dispatch(DryRunInput::Set), &version),
-            Ok(PublishMode::DryRun(DryRunReason::Requested))
-        );
-        for event in [TriggerEvent::PullRequest, TriggerEvent::Push] {
-            for git_ref in ["refs/pull/7/merge", "refs/heads/main", "refs/tags/v0.1.0"] {
-                assert_eq!(
-                    decide_mode(&context(event, git_ref, DryRunInput::Absent), &version),
-                    Ok(PublishMode::DryRun(DryRunReason::NotDispatched(event)))
-                );
-            }
-            // A pull request or push never carries the input; one that
-            // claims to is refused rather than read.
-            assert!(matches!(
-                decide_mode(
-                    &context(event, "refs/tags/v0.1.0", DryRunInput::Cleared),
-                    &version
-                ),
-                Err(PublishError::DryRunInput(_))
-            ));
-        }
-        // Asking to publish anywhere but the tag of this version fails loudly.
-        for git_ref in [
-            "refs/heads/main",
-            "refs/tags/v0.1.1",
-            "refs/tags/0.1.0",
-            "refs/tags/v0.1.0-rc.1",
-            "refs/heads/v0.1.0",
-        ] {
-            let result = decide_mode(
-                &context(
-                    TriggerEvent::WorkflowDispatch,
-                    git_ref,
-                    DryRunInput::Cleared,
-                ),
-                &version,
-            );
-            assert_eq!(
-                result,
-                Err(PublishError::NotOnReleaseTag {
-                    expected: String::from("refs/tags/v0.1.0"),
-                    actual: git_ref.to_owned()
-                }),
-                "{git_ref}"
-            );
-        }
-        let mut fork = release_dispatch(DryRunInput::Cleared);
-        fork.repository = String::from("someone/vsift");
-        assert_eq!(
-            decide_mode(&fork, &version),
-            Err(PublishError::ForeignRepository(String::from(
-                "someone/vsift"
-            )))
-        );
-        // A fork's dry run is still planned, so its pull requests are checked.
-        fork.dry_run = DryRunInput::Set;
-        assert_eq!(
-            decide_mode(&fork, &version),
-            Ok(PublishMode::DryRun(DryRunReason::Requested))
-        );
-        assert!(matches!(
-            decide_mode(&release_dispatch(DryRunInput::Absent), &version),
-            Err(PublishError::DryRunInput(_))
-        ));
-        Ok(())
-    }
-
-    #[test]
-    fn the_dry_run_input_is_read_exactly() {
-        assert_eq!(DryRunInput::parse(""), Ok(DryRunInput::Absent));
-        assert_eq!(DryRunInput::parse("true"), Ok(DryRunInput::Set));
-        assert_eq!(DryRunInput::parse("false"), Ok(DryRunInput::Cleared));
-        for other in ["False", "0", "no", " false", "false\n"] {
-            assert_eq!(
-                DryRunInput::parse(other),
-                Err(PublishError::DryRunInput(other.to_owned()))
-            );
-        }
-    }
-
-    #[test]
-    fn tarball_names_are_the_ones_npm_pack_writes() {
-        assert_eq!(
-            npm_tarball_name("vsift-cli", "0.1.0"),
-            "vsift-cli-0.1.0.tgz"
-        );
-        assert_eq!(
-            npm_tarball_name("@vsift/win32-x64", "0.1.0-rc.1"),
-            "vsift-win32-x64-0.1.0-rc.1.tgz"
-        );
-    }
-
-    #[test]
-    fn platform_packages_are_published_before_the_launcher() {
-        assert_eq!(
-            publication_order(),
-            [
-                "@vsift/darwin-arm64",
-                "@vsift/win32-x64",
-                "@vsift/linux-x64",
-                LAUNCHER_PACKAGE
-            ]
-        );
-    }
-
-    #[test]
-    fn the_plan_lists_every_command_and_file_exactly() -> Result<(), Box<dyn Error>> {
-        let archives = archives();
-        let plan = plan(
-            VERSION,
-            release_dispatch(DryRunInput::Cleared),
-            &archives,
-            &checksums(&archives)?,
-            &tarballs(),
-        )?;
-        assert_eq!(plan.mode, PublishMode::Publish);
-        assert_eq!(plan.outputs(), "mode=publish\nversion=0.1.0\ntag=v0.1.0");
-        let commands: Vec<Vec<String>> = plan
-            .npm
-            .iter()
-            .map(super::NpmPublication::arguments)
-            .collect();
-        assert_eq!(
-            commands.first().map(|arguments| arguments.join(" ")),
-            Some(String::from(
-                "publish ./npm-packages/vsift-darwin-arm64-0.1.0.tgz --tag next --access public \
-                 --provenance --ignore-scripts"
-            ))
-        );
-        assert_eq!(
-            commands.last().map(|arguments| arguments.join(" ")),
-            Some(String::from(
-                "publish ./npm-packages/vsift-cli-0.1.0.tgz --tag next --access public \
-                 --provenance --ignore-scripts"
-            ))
-        );
-        for arguments in &commands {
-            assert!(!arguments.iter().any(|argument| argument.contains("latest")));
-        }
-        let release = plan.release.create_arguments();
-        assert_eq!(
-            release.get(..13).map(|words| words.join(" ")),
-            Some(String::from(
-                "release create v0.1.0 --repo smormah/vsift --verify-tag --draft --prerelease \
-                 --latest=false --title VSift 0.1.0 --notes-file publish-plan/release-notes.md"
-            ))
-        );
-        let assets: Vec<&str> = release
-            .get(13..)
-            .unwrap_or_default()
-            .iter()
-            .map(String::as_str)
-            .collect();
-        assert_eq!(
-            assets,
-            [
-                "release-assets/SHA256SUMS",
-                "release-assets/vsift-0.1.0-aarch64-apple-darwin.THIRD-PARTY-NOTICES.txt",
-                "release-assets/vsift-0.1.0-aarch64-apple-darwin.cdx.json",
-                "release-assets/vsift-0.1.0-aarch64-apple-darwin.tar.gz",
-                "release-assets/vsift-0.1.0-x86_64-pc-windows-msvc.THIRD-PARTY-NOTICES.txt",
-                "release-assets/vsift-0.1.0-x86_64-pc-windows-msvc.cdx.json",
-                "release-assets/vsift-0.1.0-x86_64-pc-windows-msvc.tar.gz",
-                "release-assets/vsift-0.1.0-x86_64-unknown-linux-gnu.THIRD-PARTY-NOTICES.txt",
-                "release-assets/vsift-0.1.0-x86_64-unknown-linux-gnu.cdx.json",
-                "release-assets/vsift-0.1.0-x86_64-unknown-linux-gnu.tar.gz",
-            ]
-        );
-        // Every release asset and every tarball is attested.
-        assert_eq!(plan.subjects.len(), 10 + 4);
-
-        let files = plan.files()?;
-        let file = |name: &str| {
-            files
-                .iter()
-                .find(|(candidate, _)| candidate == name)
-                .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
-                .unwrap_or_default()
-        };
-        let json: Value = serde_json::from_str(&file("publish-plan.json"))?;
-        assert_eq!(json["format"], "vsift-publish-plan/1");
-        assert_eq!(json["mode"], "publish");
-        assert_eq!(json["dist_tag"], "next");
-        assert_eq!(json["github_release"]["latest"], false);
-        assert_eq!(json["npm"].as_array().map(Vec::len), Some(4));
-        let subjects = file("attestation-subjects.sha256");
-        assert_eq!(subjects.lines().count(), 14);
-        assert!(subjects.contains("  vsift-cli-0.1.0.tgz\n"));
-        let assets_list = file("release-assets.sha256");
-        assert_eq!(assets_list.lines().count(), 10);
-        assert!(!assets_list.contains(".tgz"));
-        assert_eq!(
-            file("vsift-0.1.0-x86_64-unknown-linux-gnu.cdx.json"),
-            "sbom x86_64-unknown-linux-gnu"
-        );
-        let summary = file("publish-plan.md");
-        assert!(summary.contains("PUBLISH after the `release` environment's approval"));
-        assert!(summary.contains("`latest` is not touched"));
-        let notes = file("release-notes.md");
-        assert!(notes.contains("npm install --global vsift-cli@next"));
-        assert!(notes.contains("--source-ref refs/tags/v0.1.0"));
-        assert!(notes.contains(COMMIT));
-        Ok(())
-    }
-
-    #[test]
-    fn a_dry_run_plans_the_same_commands_and_says_it_publishes_nothing()
-    -> Result<(), Box<dyn Error>> {
-        let archives = archives();
-        let sums = checksums(&archives)?;
-        let publish = plan(
-            VERSION,
-            release_dispatch(DryRunInput::Cleared),
-            &archives,
-            &sums,
-            &tarballs(),
-        )?;
-        let pull_request = plan(
-            VERSION,
-            context(
-                TriggerEvent::PullRequest,
-                "refs/pull/9/merge",
-                DryRunInput::Absent,
-            ),
-            &archives,
-            &sums,
-            &tarballs(),
-        )?;
-        assert_eq!(
-            pull_request.mode,
-            PublishMode::DryRun(DryRunReason::NotDispatched(TriggerEvent::PullRequest))
-        );
-        assert_eq!(pull_request.npm, publish.npm);
-        assert_eq!(pull_request.release, publish.release);
-        assert_eq!(pull_request.subjects, publish.subjects);
-        assert!(pull_request.outputs().starts_with("mode=dry-run\n"));
-        assert!(
-            pull_request
-                .markdown()
-                .starts_with("## Publish plan: dry run, nothing is published")
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn inputs_that_are_not_exactly_the_release_are_refused() -> Result<(), Box<dyn Error>> {
-        let good = archives();
-        let sums = checksums(&good)?;
-        let run = || release_dispatch(DryRunInput::Set);
-
-        let mut missing = archives();
-        missing.pop();
-        assert!(matches!(
-            plan(VERSION, run(), &missing, &sums, &tarballs()),
-            Err(PublishError::Archives(_))
-        ));
-        let mut renamed = archives();
-        if let Some(archive) = renamed.first_mut() {
-            archive.file_name = String::from("vsift.tar.gz");
-        }
-        assert!(matches!(
-            plan(VERSION, run(), &renamed, &sums, &tarballs()),
-            Err(PublishError::Archives(_))
-        ));
-        let mut changed = archives();
-        if let Some(archive) = changed.first_mut() {
-            archive.bytes.push(0);
-        }
-        assert_eq!(
-            plan(VERSION, run(), &changed, &sums, &tarballs()).err(),
-            Some(PublishError::Checksums)
-        );
-
-        let mut short = tarballs();
-        short.pop();
-        assert!(matches!(
-            plan(VERSION, run(), &good, &sums, &short),
-            Err(PublishError::Tarballs(_))
-        ));
-        let mut misnamed = tarballs();
-        if let Some(tarball) = misnamed.first_mut() {
-            tarball.file_name = String::from("vsift-cli-0.2.0.tgz");
-        }
-        assert!(matches!(
-            plan(VERSION, run(), &good, &sums, &misnamed),
-            Err(PublishError::Tarballs(_))
-        ));
-        let mut doubled = tarballs();
-        doubled.push(PackedPackage {
-            package: LAUNCHER_PACKAGE,
-            file_name: npm_tarball_name(LAUNCHER_PACKAGE, VERSION),
-            bytes: Vec::new(),
-        });
-        assert!(matches!(
-            plan(VERSION, run(), &good, &sums, &doubled),
-            Err(PublishError::Tarballs(_))
-        ));
-
-        let mut short_commit = run();
-        short_commit.commit = String::from("0123456");
-        assert!(matches!(
-            plan(VERSION, short_commit, &good, &sums, &tarballs()),
-            Err(PublishError::Commit(_))
-        ));
-        assert!(matches!(
-            plan("1.0.0", run(), &good, &sums, &tarballs()),
-            Err(PublishError::StableVersion(_))
-        ));
-        Ok(())
-    }
-
-    /// The privileged jobs run the plan's commands in shell, so that no Rust
-    /// is compiled where an OIDC token is available. This holds the workflow's
-    /// commands to the ones this module builds, word for word.
-    #[test]
-    fn the_release_workflow_runs_the_planned_commands() -> Result<(), Box<dyn Error>> {
-        let workflow = fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/release.yml"),
-        )?;
-        let lines: Vec<&str> = workflow.lines().map(str::trim).collect();
-        let order = format!("for package in {}; do", publication_order().join(" "));
-        assert!(lines.contains(&order.as_str()), "missing: {order}");
-        let publish = format!(
-            "npm publish \"./npm-packages/${{file}}\" {}",
-            NPM_PUBLISH_FLAGS.join(" ")
-        );
-        assert_eq!(
-            lines
-                .iter()
-                .filter(|line| line.contains("npm publish"))
-                .count(),
-            1,
-            "exactly one npm publish command"
-        );
-        assert!(lines.contains(&publish.as_str()), "missing: {publish}");
-        let release = format!(
-            "gh release create \"${{TAG}}\" --repo smormah/vsift {} \\",
-            GITHUB_RELEASE_FLAGS.join(" ")
-        );
-        assert!(lines.contains(&release.as_str()), "missing: {release}");
-        assert!(lines.contains(
-            &"--title \"VSift ${VERSION}\" --notes-file publish-plan/release-notes.md release-assets/*"
-        ));
-        Ok(())
-    }
-}
+mod tests;

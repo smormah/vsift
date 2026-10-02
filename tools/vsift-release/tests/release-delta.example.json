@@ -1,0 +1,9 @@
+{
+  "candidate_version": "0.2.0-rc.1",
+  "candidate_commit": "1111111111111111111111111111111111111111",
+  "stable_version": "0.2.0",
+  "stable_commit": "2222222222222222222222222222222222222222",
+  "verdict": "allowed",
+  "check": { "type": "workflow_run", "workflow": "Release", "run_id": 36959682491 },
+  "date": "2026-11-01"
+}

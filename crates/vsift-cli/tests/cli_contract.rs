@@ -72,7 +72,12 @@ fn help_and_version_publish_the_r0_namespace() -> Result<(), Box<dyn std::error:
 
     let version = run(&["--version"])?;
     assert!(version.status.success());
-    assert_eq!(String::from_utf8(version.stdout)?.trim(), "vsift 0.1.0");
+    // The workspace version, not a copy of it: a release bump touches only the
+    // manifests, which the candidate-to-stable check (P14 PR 8) relies on.
+    assert_eq!(
+        String::from_utf8(version.stdout)?.trim(),
+        format!("vsift {}", env!("CARGO_PKG_VERSION"))
+    );
     Ok(())
 }
 

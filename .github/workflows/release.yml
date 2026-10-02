@@ -20,15 +20,25 @@ name: Release
 #              no uplink, installed and run (npm/qualification/qualify.cjs).
 #              Nothing is published to any public registry.
 #   plan       on every run: checks the archives, SHA256SUMS and the
-#              qualified tarballs again, decides whether this run may publish
-#              and writes the plan, which the job summary shows (P13 PR 10).
+#              qualified tarballs again, reads npm's public metadata of the
+#              four packages (anonymous GETs), decides whether this run may
+#              publish and writes the plan, which the job summary shows (P13
+#              PR 10). The version decides the channel (P14 PR 8): with a
+#              pre-release suffix it is `prerelease` (dist-tag `next`);
+#              without one it is `stable` (dist-tag `latest`), and the plan
+#              then also compares this commit with the accepted release
+#              candidate and checks the registry before `latest` may move.
 #   attest     only when publishing: Sigstore build provenance for every
 #              release asset and npm tarball.
 #   publish    only when publishing, in the protected `release` environment
 #              after the maintainer's approval: the tarballs the npm-qualify
-#              jobs installed, by digest, to npm under `next` with npm
-#              provenance (trusted publishing), platform packages first, then
-#              the GitHub pre-release with its assets.
+#              jobs installed, by digest, to npm with npm provenance (trusted
+#              publishing), platform packages first, then the GitHub release
+#              with its assets. Each channel has its own steps with its own
+#              dist-tag, written out in full and gated on the plan's `channel`
+#              output: `--tag next` and a GitHub pre-release for a
+#              pre-release, `--tag latest` and the release marked latest for a
+#              stable version.
 #
 # Every run is a dry run (ADR 0023 section 1: it builds, checks and plans
 # everything, and writes nothing outside the run: no attestation, release or
@@ -36,7 +46,9 @@ name: Release
 # `dry_run` cleared. Pull requests, pushes and forks never publish: the
 # privileged jobs' conditions and the plan both refuse them, and the lint in
 # tools/vsift-governance (workflows/publish.rs) holds this file to those rules.
-# The runbook is docs/operations/release.md section 6.
+# The workflow never runs `npm dist-tag`: `latest` moves only by publishing a
+# stable version with `--tag latest`. The runbook is docs/operations/release.md
+# section 6.
 #
 # Release builds take no features, so no development-only feature, test
 # binary or profile override can reach an archive; the governance workflow
@@ -545,12 +557,18 @@ jobs:
       mode: ${{ steps.plan.outputs.mode }}
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
+      channel: ${{ steps.plan.outputs.channel }}
       plan-sums: ${{ steps.plan-sums.outputs.sums }}
     steps:
-      - name: Check out repository
+      # The full history and every tag: a stable version's plan compares this
+      # commit with its accepted release candidate (`vsift-release
+      # publish-plan`, candidate.rs), which needs the candidate's tag and
+      # commit in the clone.
+      - name: Check out repository (full history and tags)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Fetch the archives
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -577,6 +595,56 @@ jobs:
           (cd npm-packages && sha256sum --check --strict "${RUNNER_TEMP}/tarball-sums")
           test "$(ls -A npm-packages | wc -l)" -eq "$(wc -l < "${RUNNER_TEMP}/tarball-sums")"
 
+      # Anonymous, read-only GETs of the four packages' public metadata, kept
+      # in the runner's temporary folder with each answer's HTTP status (a 404
+      # is "no such package", anything else that is not 200 is "unreadable").
+      # `publish-plan` takes from them only the dist-tags and each version's
+      # integrity: the metadata names the package's maintainers, so it is
+      # never printed or uploaded. A pre-release plan shows what it finds; a
+      # stable plan refuses to go on without it.
+      - name: Read npm's public metadata of the four packages
+        run: |
+          set -euo pipefail
+          mkdir "${RUNNER_TEMP}/registry"
+          for package in @vsift/darwin-arm64 @vsift/win32-x64 @vsift/linux-x64 vsift-cli; do
+            stem="${package#@}"
+            stem="${stem//\//-}"
+            status="$(curl --silent --show-error --proto '=https' --max-time 60 --retry 3 --output "${RUNNER_TEMP}/registry/${stem}.json" --write-out '%{http_code}' "https://registry.npmjs.org/${package//\//%2F}" || true)"
+            printf '%s\n' "${status:-000}" > "${RUNNER_TEMP}/registry/${stem}.status"
+            echo "${package}: HTTP ${status:-000}"
+          done
+
+      # The accepted release candidate of a stable version (the highest
+      # v<X.Y.Z>-rc.<N> tag, found by the code the plan itself uses): its
+      # version and commit, or nothing for any other version or when there is
+      # no candidate. The evidence step below runs only when they are there.
+      - name: Find the accepted release candidate
+        id: candidate
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cargo run --quiet --locked -p vsift-release -- candidate-delta --github-output --stable-commit "${SOURCE_COMMIT}" >> "$GITHUB_OUTPUT"
+
+      # RQ-20: the evidence ledger must be complete for that candidate. The
+      # governance tool's exit status and output are kept, not acted on here:
+      # `publish-plan` reads them and refuses a stable plan wherever it is
+      # enforced, and shows the findings wherever it only reports.
+      - name: Check the evidence ledger for the accepted candidate
+        if: steps.candidate.outputs.candidate-version != ''
+        env:
+          CANDIDATE_VERSION: ${{ steps.candidate.outputs.candidate-version }}
+          CANDIDATE_COMMIT: ${{ steps.candidate.outputs.candidate-commit }}
+        run: |
+          set -euo pipefail
+          mkdir "${RUNNER_TEMP}/evidence"
+          status=0
+          cargo run --quiet --locked -p vsift-governance -- release-evidence --complete-for "${CANDIDATE_VERSION}" --commit "${CANDIDATE_COMMIT}" > "${RUNNER_TEMP}/evidence/result.txt" 2>&1 || status=$?
+          echo "${status}" > "${RUNNER_TEMP}/evidence/status"
+          cat "${RUNNER_TEMP}/evidence/result.txt"
+
+      # A refused plan still writes its explanation, so the summary shows why
+      # the run stops; the step then fails.
       - name: Plan the release
         id: plan
         env:
@@ -585,6 +653,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
           SOURCE_COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           archives=()
@@ -596,13 +665,19 @@ jobs:
             tarballs+=(--tarball "${tarball}")
           done
           mkdir publish-plan
+          status=0
           cargo run --quiet --locked -p vsift-release -- publish-plan "${archives[@]}" \
             --checksums dist/SHA256SUMS "${tarballs[@]}" --event "${EVENT_NAME}" --ref "${GIT_REF}" \
             --repository "${REPOSITORY}" --dry-run-input "${DRY_RUN_INPUT}" --commit "${SOURCE_COMMIT}" \
-            --out-dir publish-plan > "${RUNNER_TEMP}/plan-outputs"
+            --registry "${RUNNER_TEMP}/registry" --evidence "${RUNNER_TEMP}/evidence" \
+            --run-id "${RUN_ID}" --date "$(date -u +%F)" \
+            --out-dir publish-plan > "${RUNNER_TEMP}/plan-outputs" || status=$?
+          if [ -f publish-plan/publish-plan.md ]; then
+            cat publish-plan/publish-plan.md >> "$GITHUB_STEP_SUMMARY"
+            cat publish-plan/publish-plan.md
+          fi
+          test "${status}" -eq 0
           cat "${RUNNER_TEMP}/plan-outputs" >> "$GITHUB_OUTPUT"
-          cat publish-plan/publish-plan.md >> "$GITHUB_STEP_SUMMARY"
-          cat publish-plan/publish-plan.md
 
       - name: Record the plan's digests
         id: plan-sums
@@ -696,7 +771,7 @@ jobs:
   # v* tags). It runs no repository code and publishes exactly the tarballs
   # the npm-qualify jobs installed, by digest; nothing is rebuilt or repacked.
   publish:
-    name: Publish to npm (next) and GitHub Releases
+    name: Publish to npm (next or latest) and GitHub Releases
     needs:
       - package
       - npm-package
@@ -769,6 +844,21 @@ jobs:
           cp publish-plan/*.cdx.json publish-plan/*.THIRD-PARTY-NOTICES.txt release-assets/
           require_exactly release-assets "${GITHUB_WORKSPACE}/publish-plan/release-assets.sha256"
 
+      # The four packages' dist-tags before anything is published. A
+      # publication moves exactly one tag of each package (`next` for a
+      # pre-release, `latest` for a stable version) and leaves the other where
+      # it was; the steps after the publish check both. `none` stands for a tag
+      # that is not set.
+      - name: Record the dist-tags before publishing
+        run: |
+          set -euo pipefail
+          for package in @vsift/darwin-arm64 @vsift/win32-x64 @vsift/linux-x64 vsift-cli; do
+            latest="$(npm view "${package}" dist-tags.latest)"
+            next="$(npm view "${package}" dist-tags.next)"
+            printf '%s %s %s\n' "${package}" "${latest:-none}" "${next:-none}" >> "${RUNNER_TEMP}/tags-before"
+            echo "${package}: latest ${latest:-none}, next ${next:-none}"
+          done
+
       # With trusted publishing npm exchanges the job's OIDC token for a
       # one-publish token and adds npm provenance. NPM_BOOTSTRAP_TOKEN exists
       # only for the first publish of a package that has no trusted publisher
@@ -776,13 +866,21 @@ jobs:
       # expands it from the environment, so it is never written to disk.
       # A version already published with the same bytes is skipped, so a
       # re-run after a partial failure completes the release.
-      - name: Publish the platform packages, then vsift-cli, under next
+      #
+      # The two publishing steps below are the two channels, each written out
+      # in full with its own dist-tag, so no variable ever chooses between
+      # `next` and `latest`. Each runs only for its channel and checks the
+      # version's shape itself. They are identical from `npm_version=` on,
+      # except for `--tag` (a vsift-release test holds that and the commands to
+      # the plan's), and the lint (workflows/publish.rs) holds the pairing.
+      - name: Publish the platform packages, then vsift-cli, under next (pre-release)
+        if: needs.plan.outputs.channel == 'prerelease'
         env:
           VERSION: ${{ needs.plan.outputs.version }}
           NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: |
           set -euo pipefail
-          [[ "${VERSION}" =~ ^0\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$|^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]
+          [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]
           npm_version="$(npm --version)"
           echo "npm ${npm_version}"
           case "${npm_version}" in
@@ -810,32 +908,112 @@ jobs:
             npm publish "./npm-packages/${file}" --tag next --access public --provenance --ignore-scripts
           done
 
+      # The stable channel moves `latest`, which this workflow can never take
+      # back. Before anything is published, every package's `latest` must be a
+      # stable version at or below this one (equal means a re-run completing a
+      # partial publish): the plan checked the same at plan time, and this is
+      # the check at publish time, after the approval's wait.
+      - name: Publish the platform packages, then vsift-cli, under latest (stable)
+        if: needs.plan.outputs.channel == 'stable'
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "${VERSION}" != "0.0.0"
+          while read -r package latest next; do
+            [[ "${latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            test "$(printf '%s\n%s\n' "${latest}" "${VERSION}" | sort -V | tail -n 1)" = "${VERSION}"
+          done < "${RUNNER_TEMP}/tags-before"
+          npm_version="$(npm --version)"
+          echo "npm ${npm_version}"
+          case "${npm_version}" in
+            11.5.[1-9]*|11.[6-9].*|11.[1-9][0-9].*|1[2-9].*) ;;
+            *) echo "npm ${npm_version} cannot publish with trusted publishing (11.5.1 or later)" >&2; exit 1 ;;
+          esac
+          : > "${RUNNER_TEMP}/publish.npmrc"
+          if [ -n "${NPM_BOOTSTRAP_TOKEN}" ]; then
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NPM_BOOTSTRAP_TOKEN}' > "${RUNNER_TEMP}/publish.npmrc"
+          fi
+          export npm_config_userconfig="${RUNNER_TEMP}/publish.npmrc"
+          for package in @vsift/darwin-arm64 @vsift/win32-x64 @vsift/linux-x64 vsift-cli; do
+            file="${package#@}"
+            file="${file//\//-}-${VERSION}.tgz"
+            integrity="sha512-$(openssl dgst -sha512 -binary "npm-packages/${file}" | base64 -w 0)"
+            published="$(npm view "${package}@${VERSION}" dist.integrity 2>/dev/null || true)"
+            if [ "${published}" = "${integrity}" ]; then
+              echo "${package}@${VERSION} is already published with these bytes"
+              continue
+            fi
+            if [ -n "${published}" ]; then
+              echo "${package}@${VERSION} is already published with other bytes" >&2
+              exit 1
+            fi
+            npm publish "./npm-packages/${file}" --tag latest --access public --provenance --ignore-scripts
+          done
+
       - name: Require next to be this version and latest to be untouched
+        if: needs.plan.outputs.channel == 'prerelease'
         env:
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
           set -euo pipefail
-          next=""
+          settled=no
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            next="$(npm view vsift-cli dist-tags.next 2>/dev/null || true)"
-            if [ "${next}" = "${VERSION}" ]; then
+            settled=yes
+            while read -r package latest next; do
+              next_now="$(npm view "${package}" dist-tags.next 2>/dev/null || true)"
+              if [ "${next_now}" != "${VERSION}" ]; then
+                settled=no
+                echo "attempt ${attempt}: ${package} next is '${next_now}', waiting for ${VERSION}"
+              fi
+            done < "${RUNNER_TEMP}/tags-before"
+            if [ "${settled}" = yes ]; then
               break
             fi
-            echo "attempt ${attempt}: vsift-cli next is '${next}', waiting for ${VERSION}"
             sleep 30
           done
-          latest="$(npm view vsift-cli dist-tags.latest)"
-          echo "vsift-cli: next ${next}, latest ${latest}"
-          test "${next}" = "${VERSION}"
-          if [ "${latest}" = "${VERSION}" ]; then
-            echo "latest moved to ${VERSION}; point it back at the placeholder (release.md section 6)" >&2
-            exit 1
-          fi
+          test "${settled}" = yes
+          while read -r package latest next; do
+            latest_now="$(npm view "${package}" dist-tags.latest)"
+            echo "${package}: next ${VERSION}, latest ${latest_now:-none} (before: ${latest})"
+            test "${latest_now:-none}" = "${latest}"
+          done < "${RUNNER_TEMP}/tags-before"
+
+      - name: Require latest to be this version and next to be untouched
+        if: needs.plan.outputs.channel == 'stable'
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          settled=no
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            settled=yes
+            while read -r package latest next; do
+              latest_now="$(npm view "${package}" dist-tags.latest 2>/dev/null || true)"
+              if [ "${latest_now}" != "${VERSION}" ]; then
+                settled=no
+                echo "attempt ${attempt}: ${package} latest is '${latest_now}', waiting for ${VERSION}"
+              fi
+            done < "${RUNNER_TEMP}/tags-before"
+            if [ "${settled}" = yes ]; then
+              break
+            fi
+            sleep 30
+          done
+          test "${settled}" = yes
+          while read -r package latest next; do
+            next_now="$(npm view "${package}" dist-tags.next)"
+            echo "${package}: latest ${VERSION} (before: ${latest}), next ${next_now:-none} (before: ${next})"
+            test "${next_now:-none}" = "${next}"
+          done < "${RUNNER_TEMP}/tags-before"
 
       # A draft first, so a release whose upload fails is never public; then
       # the draft is published as a pre-release that GitHub does not mark as
       # latest. The tag must exist already: the workflow never creates one.
       - name: Create the GitHub pre-release
+        if: needs.plan.outputs.channel == 'prerelease'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.plan.outputs.version }}
@@ -847,3 +1025,30 @@ jobs:
             --title "VSift ${VERSION}" --notes-file publish-plan/release-notes.md release-assets/*
           gh release edit "${TAG}" --repo smormah/vsift --draft=false
           gh release view "${TAG}" --repo smormah/vsift
+
+      # A stable release is created as a draft too, and marked latest once,
+      # explicitly, when the draft is published. GitHub's own "latest release"
+      # must then be this tag.
+      - name: Create the GitHub release (stable) and mark it latest
+        if: needs.plan.outputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test "${TAG}" = "v${VERSION}"
+          gh release create "${TAG}" --repo smormah/vsift --verify-tag --draft \
+            --title "VSift ${VERSION}" --notes-file publish-plan/release-notes.md release-assets/*
+          gh release edit "${TAG}" --repo smormah/vsift --draft=false --latest
+          gh release view "${TAG}" --repo smormah/vsift
+          latest_release=""
+          for attempt in 1 2 3 4 5; do
+            latest_release="$(gh api repos/smormah/vsift/releases/latest --jq .tag_name || true)"
+            if [ "${latest_release}" = "${TAG}" ]; then
+              break
+            fi
+            echo "attempt ${attempt}: GitHub's latest release is '${latest_release}', waiting for ${TAG}"
+            sleep 10
+          done
+          test "${latest_release}" = "${TAG}"

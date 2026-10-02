@@ -6,14 +6,14 @@
     "docs/operations/install.md",
     "SECURITY.md",
     "docs/agents/skill.md",
-    "npm/vsift-cli/README.md"
+    "npm/vsift-cli/README.md",
+    "docs/operations/release.md",
+    "tools/vsift-release/notes/candidate.md",
+    "tools/vsift-release/notes/pre-release.md",
+    "tools/vsift-release/notes/stable.md",
+    "tools/vsift-release/notes/body.md"
   ],
   "unscanned_documents": [
-    {
-      "path": "tools/vsift-release/src/publish.rs",
-      "owner": "P14 PR 8",
-      "reason": "Holds the generated release notes as a Rust format string, which says 'Supported machines' (L-102). PR 8 rewords the notes and brings the template under the check."
-    },
     {
       "path": "npm/vsift-cli/lib/launcher.cjs",
       "owner": "P14 PR 9",
@@ -23,11 +23,6 @@
       "path": "docs/operations/worker-host.md",
       "owner": "P14 PR 9",
       "reason": "The worker runbook describes the strict profile and its attestation; it is worded against decision E and the matrix in PR 9, which adds it."
-    },
-    {
-      "path": "docs/operations/release.md",
-      "owner": "P14 PR 9",
-      "reason": "The maintainer's runbook; brought to the matrix and the stable procedure by PR 9 (and PR 8 for the stable path)."
     }
   ],
   "controlled_words": ["supported", "stable", "qualified", "qualify", "qualifies", "certified", "guaranteed"],
@@ -213,6 +208,69 @@
       "documents": ["docs/operations/install.md"],
       "text": "makes no claim of publisher trust",
       "note": "A negation: the executables are unsigned, so no publisher-trust claim is made."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-801",
+      "documents": ["docs/operations/release.md"],
+      "text": "stable version",
+      "note": "A technical term of the maintainer's runbook: the release kind that has no pre-release suffix and is published under the `latest` dist-tag. It says nothing about how well any version works."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-802",
+      "documents": ["docs/operations/release.md"],
+      "text": "the stable release",
+      "note": "A technical term of the maintainer's runbook: the release kind that has no pre-release suffix and is published under the `latest` dist-tag. It says nothing about how well any version works."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-803",
+      "documents": ["docs/operations/release.md"],
+      "text": "stable commit",
+      "note": "A technical term of the maintainer's runbook: the release kind that has no pre-release suffix and is published under the `latest` dist-tag. It says nothing about how well any version works."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-804",
+      "documents": ["docs/operations/release.md"],
+      "text": "stable path",
+      "note": "A technical term of the maintainer's runbook: the release kind that has no pre-release suffix and is published under the `latest` dist-tag. It says nothing about how well any version works."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-805",
+      "documents": ["docs/operations/release.md"],
+      "text": "stable plan",
+      "note": "A technical term of the maintainer's runbook: the release kind that has no pre-release suffix and is published under the `latest` dist-tag. It says nothing about how well any version works."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-806",
+      "documents": ["docs/operations/release.md"],
+      "text": "stable publish",
+      "note": "A technical term of the maintainer's runbook: the release kind that has no pre-release suffix and is published under the `latest` dist-tag. It says nothing about how well any version works."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-807",
+      "documents": ["docs/operations/release.md"],
+      "text": "stable tag",
+      "note": "A technical term of the maintainer's runbook: the release kind that has no pre-release suffix and is published under the `latest` dist-tag. It says nothing about how well any version works."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-808",
+      "documents": ["docs/operations/release.md"],
+      "text": "channel stable",
+      "note": "The name of the Release workflow's `channel` output for a version without a pre-release suffix; a value, not a quality."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-809",
+      "documents": ["docs/operations/release.md"],
+      "text": "npm qualify",
+      "note": "The name of the Release workflow's twelve npm install-and-check jobs (`npm-qualify`); naming the job claims no platform or package manager is qualified."
     },
     {
       "kind": "claim",

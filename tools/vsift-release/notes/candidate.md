@@ -1,0 +1,1 @@
+VSift {version} is a release candidate. It is under qualification, it is not announced, and it is no statement of support or stability: a later candidate, or the release that follows it, may replace it. It is published to npm under the dist-tag `{dist_tag}`; `latest` is not touched. Built by the Release workflow from commit {commit} (tag `{tag}`).

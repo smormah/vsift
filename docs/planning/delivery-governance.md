@@ -15,7 +15,9 @@ least-privilege `permissions`, `id-token` only for release attestation and publi
 no untrusted expressions in `run` scripts, and no feature selection in release builds;
 since P13 PR 10 also the release workflow's publishing rules: publishing only from a
 dispatch of the release tag with `dry_run` cleared, in the protected `release`
-environment, with npm provenance under `next`, and only the qualified tarballs by
+environment, with npm provenance under `next` (or, since P14 PR 8, `latest` for a stable
+version, held by channel rules, a stable plan's guards and a ban on moving a dist-tag in any
+workflow), and only the qualified tarballs by
 digest; see [`../operations/release.md`](../operations/release.md)). A packet marked complete requires a full merge
 commit and nonempty verification record. The checker deliberately fixes the R0
 objective; changing it requires an explicit reviewed code, ledger and ADR change.
@@ -41,7 +43,9 @@ The second form is the completeness check (evidence item RQ-20): it fails unless
 the release needs is passed for that version and commit, carried forward because nothing in its
 scope changed (it asks Git, so it needs history), waived by a recorded maintainer decision or
 not applicable; for the stable version it also needs a recorded candidate-to-stable delta, which
-P14 PR 8 builds. These checks prove that recorded evidence exists and that banned words are
+P14 PR 8's `vsift-release candidate-delta` computes and the stable plan writes as `release-delta.json`
+(the maintainer copies it into the ledger after the publish, L-103); the Release workflow runs this
+check for the accepted candidate and refuses a stable plan when it fails (RQ-20). These checks prove that recorded evidence exists and that banned words are
 absent; they do not fetch a run or judge a sentence (known limits L-101 and L-103). A pull
 request that changes a quoted public sentence updates the registry with it; one that changes an
 item's status updates the ledger.
