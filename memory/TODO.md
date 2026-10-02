@@ -56,10 +56,10 @@ the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
   -Version 0.1.0 -MaxRuns 4` (the pilots), read them, then the rest; needs Claude Code 2.1.284
   and Docker; cost unknown until the pilots record tokens.
 - **PR 5:** the SEC-T01 fixture, or the fallback. **PR 9:** one pass over the thirty register
-  entries the claims lean on. **PRs 10 and 12:** each publish (`release.md` 6.3 and 6.7); the
+  entries the claims lean on; it also builds the R0 user guide (`user-guide-spec.md`). **PRs 10 and 12:** each publish (`release.md` 6.3 and 6.7); the
   first stable publish is the first real `--tag latest`.
 - **PR 11:** the go for batches 2 and 3 (they include the blurred-banner re-run, L-095); a Smart
-  App Control try-out (fresh Windows 11 VM); a macOS 15 browser-download try-out.
+  App Control try-out on the second, clean Windows 11 machine; no macOS try-out (no Mac).
 
 ## Open decisions and readings (maintainer)
 

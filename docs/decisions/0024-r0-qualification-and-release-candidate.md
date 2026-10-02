@@ -788,3 +788,16 @@ mode", "Cold-agent mode", "The P14 batches"); the plan facts are in
 - **Not done, on purpose.** No batch (each waits for the maintainer's go); no help-text change (PR 7,
   only if the baseline shows gaps); no `commands.md`, skill or contract change (the skill is frozen at
   the candidate); no workflow other than the existing container workflow changed.
+
+## Note, 2026-10-02: the R0 user guide, and the machines for the try-outs
+
+The maintainer decided that P14 includes an R0 **user guide**, specified in
+[`user-guide-spec.md`](../planning/user-guide-spec.md) and built in PR 9: tutorials, how-to
+recipes, concepts, a reference generated from the CLI's help and the v1 schemas, and help pages,
+organised by task and not by release, written only for features that exist, with its commands
+checked against real runs in CI. Later packets ship their own pages. A documentation site, its tool
+and any R1 page are not in P14. The same day the maintainer confirmed that they own **no Mac** and
+do have a **second, clean Windows 11 test machine**: the macOS Gatekeeper try-out will therefore
+ship as untried (decision H's fallback, with the hosted check as partial support), and the Smart
+App Control try-out and a true clean-machine install run on the second Windows machine. No
+decision A to H changed.

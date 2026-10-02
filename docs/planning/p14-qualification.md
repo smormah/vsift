@@ -421,7 +421,8 @@ counts as qualification evidence.
 | Smart App Control on the maintainer's machine | **Known: Off** (registry value `VerifiedAndReputablePolicyState` is 0, read 2026-10-02) | The 0.1.0 install-and-run observation of 2026-10-01 says nothing about Smart App Control. The try-out (RQ-17) needs a fresh Windows 11 virtual machine or another PC |
 | What Smart App Control state a fresh Windows 11 install shows | Unknown (a fresh install starts in evaluation mode) | The try-out records the state it finds; decision C's trigger applies to what it shows |
 | Whether Windows Sandbox is available on the maintainer's machine | Unknown: it could not be read without elevation | Not needed if a virtual machine or another PC is used; the maintainer may check |
-| Whether the maintainer owns a Mac (macOS 15) | Unknown; the supervisor has asked | If not: the macOS Gatekeeper try-out ships "untried", with a hosted `spctl` check as partial support (decision H) |
+| Whether the maintainer owns a Mac (macOS 15) | **Known: no** (2026-10-02) | The macOS Gatekeeper try-out ships "untried" and says so, with a hosted `spctl` check as partial support (decision H); macOS stays a target unless the hosted evidence earns more (decision F) |
+| A second Windows machine for the Smart App Control try-out | **Known: yes** (2026-10-02): the maintainer has a clean, wipeable Windows 11 test machine | The try-out and a true clean-machine install run there (the installer step needs the maintainer at its console); what a fresh install shows for Smart App Control is recorded when it runs |
 | Whether hosted-runner minutes are free for the account | Unknown; the supervisor has asked. The repository is public and GitHub documents standard runners as free for public repositories (not re-checked for this account) | Section 5 lists runner-hours either way; a cost would change the soak and fuzz budgets, not the gates |
 | Whether any test compares a build with the published 0.1.0 schemas | **Settled in PR 2 (2026-10-02): none did.** `published_compatibility` and `published_v0_1_0_records` do now (section 15.3) | Done |
 | Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | Not checked | PR 3 |
@@ -528,3 +529,16 @@ answered hostile names and arguments as vsift itself does.
   version and commit; the items are `passed` for 0.1.0 only, and the staleness rule (the version
   bump changes `Cargo.toml` and `npm/`, which are in every scope) means none of them counts for
   `0.2.0-rc.1`.
+
+## 16. The user guide (maintainer decision, 2026-10-02)
+
+The maintainer asked whether VSift needs a user guide and decided it does, in R0, with room for
+R1 and later. The specification is [user-guide-spec.md](user-guide-spec.md): a guide organised by
+what the reader wants to do (tutorials, how-to recipes, concepts, a generated reference, help
+pages), written only for features that exist, held to the claims ladder, with real and checked
+examples and a reference generated from `vsift --help` and the v1 schemas. P14 PR 9 builds the
+R0 guide (the tutorial, concepts, troubleshooting and the generated reference first) and its two
+CI checks; the guide's pages join the public-claims registry's scanned documents. It adds no
+evidence item and no requirement: its evidence is RQ-18 and the walked guides of RQ-01 to RQ-04.
+Every later packet ships its own pages (the definition of done in the work packets says so). A
+documentation site and its tool wait for the website.

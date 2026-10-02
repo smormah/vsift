@@ -347,7 +347,10 @@ checker knows.
 6. **The named-agent rounds from a clean install**, with the skill (both clients, both
    transcript paths, hold-out scenarios, the blurred-banner re-run) and the cold-agent
    variant (no skill, no docs; 84 runs planned, see the plan's section 7).
-7. **The supported-profile matrix, operator and user documents, and the claims check.**
+7. **The supported-profile matrix, operator and user documents, and the claims check.** The user
+   documents include the R0 user guide (a structure by task, a first-investigation tutorial,
+   concepts, troubleshooting and a generated reference; see
+   [user-guide-spec.md](user-guide-spec.md), maintainer decision 2026-10-02).
 8. **The release candidate and the stable release:** release tooling for stable versions,
    `0.2.0-rc.N` qualified in full, the stable `0.2.0` published by the maintainer, and the
    completion record with the handoff for using the published CLI ourselves.
@@ -370,7 +373,7 @@ maintainer and usage limits. Both are rough (plus or minus half) and not measure
 | 6 | The trial harness: clean-install mode, cold-agent mode and scenarios, hold-out scenarios, usage capture, the Codex clean-install image, #205; pilots (8 runs) and the cold baseline against 0.1.0 (12 runs) | 1; the maintainer's go (batch 1) | 4-5 d / 8 d; the harness, the scenario sets, the campaign script and the runbook are built (#262, nothing run, no model called); batch 1 (the pilots and the baseline) waits for the maintainer's go ([`trials.md`](../agents/trials.md), "The P14 batches") |
 | 7 | Fixes for what PRs 2-6 find, one finding per pull request with a regression test: the `vsift --help` "typical investigation" section if the baseline shows gaps, #232, #206 or #128 if reproduced, platform defects | findings | 3-8 d / 10 d (number of pull requests not known) |
 | 8 | Release machinery: stable versions and `latest` in `vsift-release`, the Release workflow and the lint, the candidate rule, the candidate-to-stable delta check, release-notes wording, `release.md`; reviewed as a high-risk seam | 0 (decisions A-C) | 3-4 d / 7 d; built in [#252](https://github.com/smormah/vsift/pull/252), awaiting review (includes the evidence-ledger guard and the notes templates and `release.md` under the claims check) |
-| 9 | The matrix, the documents and the claims: `support-and-resource-profiles.md`, the README for newcomers, `install.md`, `SECURITY.md`'s supported-versions table, the worker runbook, the skill guide, the register review sheet and the readings, the registry filled and enforced | 1, 2-5, 8 | 4-5 d / 7 d |
+| 9 | The matrix, the documents and the claims: `support-and-resource-profiles.md`, the README for newcomers, `install.md`, `SECURITY.md`'s supported-versions table, the worker runbook, the skill guide, the register review sheet and the readings, the registry filled and enforced; the R0 user guide in `docs/guide/` ([spec](user-guide-spec.md)) with its two CI checks (the guide's examples against real runs, the generated reference up to date) | 1, 2-5, 8 | 5-7 d / 8 d |
 | 10 | The release candidate `0.2.0-rc.1`: the version bump, `CHANGELOG.md`; the maintainer tags, runs the dry run, publishes and verifies (RQ-19) | 7, 8, 9 merged | 1 d / 2 d (the maintainer about an hour) |
 | 11 | The candidate's qualification: every hosted workflow on rc.1, the counted agent rounds (batches 2 and 3), the maintainer's try-outs (RQ-17), the scan reading again, the ledger entries; findings fixed and a second candidate if needed | 10 | 5-7 d / 12-15 d |
 | 12 | The stable `0.2.0`: the version bump, the documents that ship inside the artifacts, the completeness check green on the candidate with the delta check; the maintainer publishes and verifies; the hosted qualification re-run on the stable bytes | 11 | 1-2 d / 3 d (the maintainer about two hours) |
@@ -400,7 +403,8 @@ workflow, header or record carries a personal detail.
 on 2026-10-02 to after R1 or the announcements), crates.io, the MCP adapter, native
 installers, managed installation on Windows or macOS, a product fix for Codex on Windows
 (#204), signing (unless decision C's trigger fires), real-recording accuracy work
-(#150, #159, #173-#175), a multi-tenant host, any announcement, and using the published CLI
+(#150, #159, #173-#175), a multi-tenant host, any announcement, a documentation site and its tool, user-guide pages
+for R1 and later (they ship with their own packets), and using the published CLI
 ourselves (after P14; only its neutral handoff is P14's).
 
 ## R1 industrial capability expansion
@@ -431,7 +435,9 @@ failure cases and matching docs; lists measured verification and remaining limit
 includes no unrelated cleanup or silent privilege/persistence change. New dependencies
 have reviewed maintenance/licence/target/security impact. Cross-platform behavior is
 tested on affected targets. API/schema changes include compatibility fixtures. Security
-fixes add regression tests that fail on the previous behavior.
+fixes add regression tests that fail on the previous behavior. A change that alters what a
+user sees or does updates the matching page of the user guide in the same pull request
+(`docs/guide/`, once P14 PR 9 creates it; see [user-guide-spec.md](user-guide-spec.md)).
 
 Rewrite `memory/TODO.md` and `memory/project_current_status.md` in the same PR so
 they describe the current state in plain English and stay within the size limits

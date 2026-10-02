@@ -48,6 +48,8 @@ Read these documents together:
     its decisions were confirmed by the maintainer, who started P14), with its machine-checked
     [evidence ledger](p14-evidence-ledger.json) and
     [public-claims registry](public-claims.json) (P14 PR 1).
+13. [User guide specification](user-guide-spec.md): the structure, rules and delivery of the
+    guide for people using VSift (2026-10-02; the R0 part is built in P14 PR 9).
 
 The source code describes what exists. Accepted ADRs and the machine-checked delivery
 ledger describe approved direction. Existing ADRs remain intact. A reviewed design
