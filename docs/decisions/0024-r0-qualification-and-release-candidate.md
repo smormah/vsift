@@ -405,7 +405,7 @@ and announcements.
 
 ## Implementation note, 2026-10-02 (P14 PR 1, the evidence ledger and the claims registry)
 
-Delivered from "What P14 delivers" item 1, and the `verification.md` rows. No product
+Pull request #251. Delivered from "What P14 delivers" item 1, and the `verification.md` rows. No product
 code, workflow, package or setting changed, and nothing was published. What exists now, and
 the decisions taken inside this ADR:
 
