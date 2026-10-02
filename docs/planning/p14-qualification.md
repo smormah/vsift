@@ -458,11 +458,14 @@ frozen the same way, in a folder of its own.
 
 ### 15.4 Results on 0.1.0 (2026-10-02)
 
-Runs on commit `c83daf3` of the pull request (the tools differ from its last commit only in one
-reporting string); the final round used about 35 runner-minutes (the longest job 4.4 minutes), and
-the two rounds before it, which found the problems below, about 70 more. All jobs green: `P14 published artifacts` run 36966243825 (12 clean-install jobs, 3
-archive jobs, the offline install, 3 upgrade jobs), `P14 local upgrade` run 36966243840 (3 builds, the
-packing, 3 upgrade jobs), `P14 verify release` run 36966243886`, `P14 compatibility` run 36966243883.
+Runs on commit `6aa5403` of the pull request, rebased onto PR 8's merge (#252); the tools differ
+from the all-green round before the rebase only in PR 8's channel rule and the message of the
+unregistered stable checks (unit-tested). This round used about 50 runner-minutes, rounded up per
+job (the longest job 3.8 minutes); the three rounds before the rebase, which found the problems
+below, about 105 in all. All jobs green: `P14 published artifacts` run 36969577337 (12 clean-install
+jobs, 3 archive jobs, the offline install, 3 upgrade jobs, and the tests and version jobs), `P14 local
+upgrade` run 36969577251 (3 builds, the packing, 3 upgrade jobs), `P14 verify release` run
+36969577300, `P14 compatibility` run 36969577282.
 Each of the first jobs failed at its first run for a reason in the checks, not in VSift (an
 `--file` that must be absolute, Git's GNU `tar` on a Windows runner, `session list`'s paging, the
 configuration folder's media-tool record, PowerShell splitting `--option=C:\...` on its own command

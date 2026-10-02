@@ -26,9 +26,9 @@
       "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
       "evidence": [
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
-          "note": "The twelve clean-install jobs (npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu) of this run at c83daf3: vsift-cli 0.1.0 installed from the real registry with cargo, rustc, rustup, git and python not resolving (asserted first); global (Yarn: project) and one-shot installs with scripts disabled; --version names 0.1.0 and the tag commit; hostile file names and arguments through the PowerShell, shell and Bun shims; a fake ffmpeg planted in the working directory and on PATH (SEC-02); optional dependencies omitted fail with exit 127; npm audit signatures and gh attestation verify. For 0.1.0 only. Yarn held 0.1.0 back for its first day and the documented exemption passed; the Windows vsift.cmd shim is an observation, not a pass (L-109, #257)."
+          "note": "The twelve clean-install jobs (npm, pnpm, Yarn and Bun on Windows, macOS and Ubuntu) of this run at 6aa5403: vsift-cli 0.1.0 installed from the real registry with cargo, rustc, rustup, git and python not resolving (asserted first); global (Yarn: project) and one-shot installs with scripts disabled; --version names 0.1.0 and the tag commit; hostile file names and arguments through the PowerShell, shell and Bun shims; a fake ffmpeg planted in the working directory and on PATH (SEC-02); optional dependencies omitted fail with exit 127; npm audit signatures and gh attestation verify. For 0.1.0 only. Yarn held 0.1.0 back for its first day and the documented exemption passed; the Windows vsift.cmd shim is an observation, not a pass (L-109, #257)."
         }
       ],
       "prior": [
@@ -72,9 +72,9 @@
       "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
       "evidence": [
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
-          "note": "The three archive jobs of this run at c83daf3: the three archives and SHA256SUMS downloaded from the v0.1.0 release, checksums and attestations verified, extracted, each executable in the right format, the system's own run with --version (0.1.0 and the tag commit) and setup check --json with no Node.js, Rust, Git or Python on PATH, and the shipped skill byte-identical to the tag's. For 0.1.0 only; no browser download (RQ-17)."
+          "note": "The three archive jobs of this run at 6aa5403: the three archives and SHA256SUMS downloaded from the v0.1.0 release, checksums and attestations verified, extracted, each executable in the right format, the system's own run with --version (0.1.0 and the tag commit) and setup check --json with no Node.js, Rust, Git or Python on PATH, and the shipped skill byte-identical to the tag's. For 0.1.0 only; no browser download (RQ-17)."
         }
       ],
       "date": "2026-10-02"
@@ -100,9 +100,9 @@
       "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
       "evidence": [
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
-          "note": "The offline-install job of this run at c83daf3: the three real reviewed artifacts downloaded by the published binary's own plan (size and SHA-256 checked) and installed with --artifact-dir in a container with --network none: all three components activated, setup check ready, a rerun already_current; the same install without the folder failed as offline; a changed byte was INTEGRITY_FAILURE (digest_mismatch), a missing file INVALID_ARGUMENT (artifact_missing), a relative folder INVALID_ARGUMENT. The minimal Ubuntu image was given libgomp1, which the whisper.cpp build needs (L-110, #256). For 0.1.0 only."
+          "note": "The offline-install job of this run at 6aa5403: the three real reviewed artifacts downloaded by the published binary's own plan (size and SHA-256 checked) and installed with --artifact-dir in a container with --network none: all three components activated, setup check ready, a rerun already_current; the same install without the folder failed as offline; a changed byte was INTEGRITY_FAILURE (digest_mismatch), a missing file INVALID_ARGUMENT (artifact_missing), a relative folder INVALID_ARGUMENT. The minimal Ubuntu image was given libgomp1, which the whisper.cpp build needs (L-110, #256). For 0.1.0 only."
         }
       ],
       "prior": [
@@ -135,17 +135,17 @@
       "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
       "evidence": [
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36966243825 },
+          "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
-          "note": "The three upgrade jobs (real-registry mode, 0.1.0 over 0.1.0) of this run at c83daf3: sessions, a retained bundle and a configuration kept (configuration byte-identical, session reads as before, a new session works), then install.md section 8 walked: nothing left but the folders the guide names. The procedure and persistence only (L-111)."
+          "note": "The three upgrade jobs (real-registry mode, 0.1.0 over 0.1.0) of this run at 6aa5403: sessions, a retained bundle and a configuration kept (configuration byte-identical, session reads as before, a new session works), then install.md section 8 walked: nothing left but the folders the guide names. The procedure and persistence only (L-111)."
         },
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 local upgrade", "run_id": 36966243840 },
+          "reference": { "type": "workflow_run", "workflow": "P14 local upgrade", "run_id": 36969577251 },
           "date": "2026-10-02",
-          "note": "The three local-mode jobs of this run at c83daf3: the published 0.1.0 installed from the real registry and upgraded to the pull request's own build served by a loopback-only registry as 99.0.0-p14local.1: sessions, bundle and configuration read by the newer build, then the uninstall walk. Not the release packaging (L-111)."
+          "note": "The three local-mode jobs of this run at 6aa5403: the published 0.1.0 installed from the real registry and upgraded to the pull request's own build served by a loopback-only registry as 99.0.0-p14local.1: sessions, bundle and configuration read by the newer build, then the uninstall walk. Not the release packaging (L-111)."
         },
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 compatibility", "run_id": 36966243883 },
+          "reference": { "type": "workflow_run", "workflow": "P14 compatibility", "run_id": 36969577282 },
           "date": "2026-10-02",
           "note": "With the full history and VSIFT_REQUIRE_RELEASE_TAG=v0.1.0: the frozen copy of 0.1.0's 52 JSON examples is the tag's bytes, every one validates against the current v1 schemas, and the current readers decode the four stored session records (the same tests run in every Quality job)."
         }
@@ -554,7 +554,7 @@
       "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
       "evidence": [
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 verify release", "run_id": 36966243886 },
+          "reference": { "type": "workflow_run", "workflow": "P14 verify release", "run_id": 36969577300 },
           "date": "2026-10-02",
           "note": "From a hosted runner holding no publishing credential: the dist-tags and npm provenance of all four packages (the attestation names release.yml, the tag, the tag's commit and a GitHub-hosted builder), npm audit signatures, gh attestation verify for ten of ten release files and four of four tarballs, the checksums against GitHub's digests, the release flags (a pre-release, not a draft, not the latest release) and its ten files. For 0.1.0 only; the two checks a stable version adds (the candidate-to-stable delta and latest on all four packages) are registered before the stable publish."
         }

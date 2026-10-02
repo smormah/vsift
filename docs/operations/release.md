@@ -549,7 +549,7 @@ stable version fails it by name for now: the two checks it adds (the delta betwe
 candidate and the stable release, which reads the `release-delta.json` of 6.7 from the Release
 run's `publish-plan` artifact, and `latest` on all four packages) are registered in
 `tools/p14-published/lib/verify.cjs` before the stable publish, and a verification that skipped
-them would be green about the wrong thing. Run 36965744249 verified 0.1.0: ten of ten files and four of four tarballs
+them would be green about the wrong thing. Run 36969577300 verified 0.1.0: ten of ten files and four of four tarballs
 attested, the provenance of all four packages read, and `npm audit signatures` verified the two
 packages a Linux runner installs (the launcher and `@vsift/linux-x64`, npm 10.9.9; the count
 npm reports depends on its version, which is why the provenance check reads all four packages
