@@ -46,7 +46,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed as recommended). Its plan is 14 pull requests (0-13); **PR 0
-(#250) is merged; PR 8, the release machinery for a candidate and the stable (#NNN), is done in
+(#250) is merged; PR 8, the release machinery for a candidate and the stable (#252), is done in
 this change, awaiting review; PR 1 is being built in parallel; the whole packet is not complete.**
 What it must show, and what is weaker than it sounds today:
 - **No checkpoint has run the published artifact on a video:** every real-tool test runs a
@@ -125,7 +125,7 @@ shape, so every pull request's plan says it would be refused.
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PR 0 merged (#250); PR 8 done in this change (#NNN); PR 1 in parallel; the rest follow |
+| P14 | **In progress** (started 2026-10-02): PR 0 merged (#250); PR 8 done in this change (#252); PR 1 in parallel; the rest follow |
 
 ## Architecture snapshot
 

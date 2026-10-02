@@ -6,7 +6,7 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress: the maintainer started it
 and confirmed decisions A-H on 2026-10-02.** The plan is 14 pull requests (0-13). **PR 0 (#250)
-is merged. PR 8, the release machinery for a release candidate and the stable release (#NNN),
+is merged. PR 8, the release machinery for a release candidate and the stable release (#252),
 is done in this change, awaiting the maintainer's review; PR 1 (evidence ledger and claims
 registry) is being built in parallel; the rest wait.** The whole packet is not complete. The
 plan is `docs/planning/p14-qualification.md` (evidence RQ-01..RQ-20, traceability, budgets, the
