@@ -26,7 +26,12 @@
 //! 7. the release workflow publishes only as the `publish` module describes
 //!    (P13 PR 10): from a dispatch of the release tag with `dry_run` cleared,
 //!    in the protected `release` environment, with npm provenance under
-//!    `next`, and exactly the tarballs the qualification installed.
+//!    `next` or (for a stable version) `latest`, and exactly the tarballs the
+//!    qualification installed;
+//! 8. no workflow moves a dist-tag (`npm dist-tag`, `pnpm dist-tag`, `yarn npm tag` or
+//!    a call of the registry's `dist-tags` endpoint): `latest` moves only by publishing a
+//!    stable version from the release workflow's `publish` job, and no workflow but that
+//!    job publishes a package (npm, pnpm, Yarn, Bun or cargo).
 
 mod publish;
 
@@ -301,6 +306,7 @@ impl Lint<'_> {
                             None => {}
                             Some(Yaml::String(script)) => {
                                 self.check_interpolation(&step_owner, script);
+                                self.check_registry_commands(id, script);
                                 if self.release {
                                     cargo_builds += self.check_release_cargo(&step_owner, script);
                                 }
@@ -339,6 +345,36 @@ impl Lint<'_> {
                          `env` and quote the variable instead"
                     ));
                 }
+            }
+        }
+    }
+
+    /// Rule 8: no command of any workflow moves a dist-tag, and none but the
+    /// release workflow's `publish` job publishes a package. A match is made on
+    /// the words of the command with their quotes stripped, so extra
+    /// whitespace, quoting or flags between the tool and its subcommand do not
+    /// hide it; reads such as `npm view <package> dist-tags` are not refused.
+    fn check_registry_commands(&mut self, job: &str, script: &str) {
+        let may_publish = self.release && job == "publish";
+        for command in logical_lines(script) {
+            let words: Vec<&str> = command
+                .split_whitespace()
+                .map(|word| word.trim_matches(|character| matches!(character, '"' | '\'')))
+                .collect();
+            if moves_dist_tag(&words) {
+                self.report(&format!(
+                    "job `{job}` moves a dist-tag (`{}`); no workflow does: `latest` moves only by \
+                     publishing a stable version from the release workflow's `publish` job \
+                     (ADR 0024 decision A, release.md section 6)",
+                    words.join(" ")
+                ));
+            }
+            if publishes_package(&words) && !may_publish {
+                self.report(&format!(
+                    "job `{job}` publishes a package (`{}`); only the release workflow's \
+                     `publish` job does",
+                    words.join(" ")
+                ));
             }
         }
     }
@@ -408,6 +444,48 @@ impl Lint<'_> {
             ));
         }
     }
+}
+
+/// Whether the words of one command move a dist-tag: `npm` or `pnpm` followed
+/// (not necessarily directly) by `dist-tag` or `dist-tags` without a read
+/// subcommand (`view`, `info`, `show`, `v`) in between, `yarn ... npm tag`, or a
+/// word naming the registry's `dist-tags` endpoint.
+fn moves_dist_tag(words: &[&str]) -> bool {
+    const TOOLS: [&str; 2] = ["npm", "pnpm"];
+    const READS: [&str; 4] = ["view", "info", "show", "v"];
+    let after = |tool: &str, wanted: &[&str]| {
+        words.iter().enumerate().any(|(index, word)| {
+            *word == tool
+                && words
+                    .iter()
+                    .skip(index + 1)
+                    .take_while(|next| !READS.contains(next))
+                    .any(|next| wanted.contains(next))
+        })
+    };
+    let package_manager = TOOLS
+        .iter()
+        .any(|tool| after(tool, &["dist-tag", "dist-tags"]));
+    let yarn = words.contains(&"yarn")
+        && words
+            .windows(2)
+            .any(|pair| pair == ["npm", "tag"] || pair == ["npm", "tags"]);
+    let endpoint = words.iter().any(|word| word.contains("/dist-tags/"));
+    package_manager || yarn || endpoint
+}
+
+/// Whether the words of one command publish a package: `npm`, `pnpm`, `yarn` or
+/// `bun` followed (not necessarily directly) by `publish`, or `cargo publish`.
+fn publishes_package(words: &[&str]) -> bool {
+    const TOOLS: [&str; 5] = ["npm", "pnpm", "yarn", "bun", "cargo"];
+    words.iter().enumerate().any(|(index, word)| {
+        TOOLS.contains(word)
+            && words
+                .iter()
+                .skip(index + 1)
+                .take_while(|next| !matches!(**next, "view" | "info" | "show" | "v"))
+                .any(|next| *next == "publish")
+    })
 }
 
 fn get<'a>(map: &'a Hash, key: &str) -> Option<&'a Yaml> {
@@ -909,6 +987,74 @@ mod tests {
             findings(".github/workflows/ci.yml", &ci),
             Vec::<String>::new()
         );
+    }
+
+    /// Rule 8: no workflow moves a dist-tag, however the command is spelled,
+    /// and none but the release workflow's `publish` job publishes a package.
+    #[test]
+    fn no_workflow_moves_a_dist_tag_or_publishes_outside_the_publish_job() {
+        let step = |run: &str| {
+            workflow(
+                "permissions: {}\n",
+                &format!(
+                    "  tag:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          {run}\n"
+                ),
+            )
+        };
+        for moving in [
+            "npm dist-tag add vsift-cli@1.0.0 latest",
+            "npm  dist-tag   rm vsift-cli next",
+            "npm \"dist-tag\" add vsift-cli@1.0.0 latest",
+            "npm 'dist-tags' ls vsift-cli",
+            "npm --registry https://registry.npmjs.org/ dist-tag add vsift-cli@1.0.0 latest",
+            "npm \\\n          dist-tag add vsift-cli@1.0.0 latest",
+            "pnpm dist-tag add vsift-cli@1.0.0 latest",
+            "yarn npm tag add vsift-cli@1.0.0 latest",
+            "echo PUT https://registry.npmjs.org/-/package/vsift-cli/dist-tags/latest",
+            "x=1 npm dist-tag add vsift-cli@1.0.0 latest && echo done",
+        ] {
+            for path in [".github/workflows/ci.yml", RELEASE_WORKFLOW] {
+                let messages = findings(path, &step(moving));
+                assert!(
+                    messages
+                        .iter()
+                        .any(|message| message.contains("moves a dist-tag")),
+                    "{path}: {moving}: {messages:#?}"
+                );
+            }
+        }
+        for publishing in [
+            "npm publish ./x.tgz --tag latest",
+            "npm  publish",
+            "pnpm publish",
+            "yarn npm publish",
+            "yarn publish",
+            "bun publish",
+            "cargo publish -p vsift-cli",
+            "npm --userconfig x publish ./x.tgz",
+        ] {
+            let messages = findings(".github/workflows/ci.yml", &step(publishing));
+            assert!(
+                messages
+                    .iter()
+                    .any(|message| message.contains("publishes a package")),
+                "{publishing}: {messages:#?}"
+            );
+        }
+        // Reading the registry, packing and a plan-named tool are not publishing.
+        for harmless in [
+            "npm view vsift-cli dist-tags --json",
+            "npm view vsift-cli dist-tags.latest",
+            "npm info vsift-cli dist-tags",
+            "npm pack --ignore-scripts",
+            "cargo run -p vsift-release -- publish-plan --out-dir plan",
+            "echo publishing is done by the release workflow",
+            "npm run build-publish-notes",
+            "yarn add vsift-cli@next",
+        ] {
+            let messages = findings(".github/workflows/ci.yml", &step(harmless));
+            assert_eq!(messages, Vec::<String>::new(), "{harmless}");
+        }
     }
 
     #[test]
