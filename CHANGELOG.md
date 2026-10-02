@@ -153,7 +153,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   "on your machine" boundary, a before-and-after panel, the architecture, the roadmap and the
   logo. The full-size frames move into a collapsible section; a "Built in the open" section
   links the decision records, qualification records, known limits, ledger, build provenance and
-  threat model; release and last-commit badges are added. No wording on the claims ladder
+  threat model; release and last-commit badges are added. The copy now speaks to anyone with a
+  video on their machine, with or without an AI assistant, rather than to coding agents only, and
+  a "Just want a transcript?" section shows the transcript commands. No claims-ladder wording
   changed. Text inside the SVGs is not read by the claims check, so it was checked by hand
   (known limit L-121; the asset notes in `docs/assets/readme/README.md` give the check and when
   to redraw the roadmap).

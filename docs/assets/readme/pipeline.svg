@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc" xml:space="preserve">
 <title id="title">How VSift works</title>
-<desc id="desc">Inside a dashed boundary labelled on your machine, VSift uploads nothing: a local video and an optional transcript go into vsift ingest, which opens a disposable session. The session yields speech (transcript and search) and screen changes (visual candidates), which lead to frames, crops and audio with hashes. Outside the boundary, your coding agent reads that cited evidence; what it does next is up to the agent. Its draft report goes back through vsift handoff check and comes out as a cited handoff.</desc>
+<desc id="desc">Inside a dashed boundary labelled on your machine, VSift uploads nothing: a local video and an optional transcript go into vsift ingest, which opens a disposable session. The session yields speech (transcript and search) and screen changes (visual candidates), which lead to frames, crops and audio with hashes. Outside the boundary, you or your AI assistant read that cited evidence; what an assistant does next is up to it. A draft report goes back through vsift handoff check and comes out as a cited handoff.</desc>
 <style>
 .s{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif} .m{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
 .t{fill:#e8eef6} .mu{fill:#9fb2c8} .di{fill:#62799a}
@@ -46,10 +46,10 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <text x="466" y="481" font-size="12.5" class="s mu" text-anchor="start" >closed, links handled safely</text>
 <rect x="900" y="150" width="270" height="110" rx="14" fill="#172a44" stroke="#a78bfa" stroke-opacity="0.8" stroke-width="1.5"/>
 <circle cx="922" cy="176" r="4.5" fill="#a78bfa"/>
-<text x="934" y="181" font-size="15" class="s t b" text-anchor="start" >Your coding agent</text>
-<text x="918" y="206" font-size="12.5" class="s mu" text-anchor="start" >reads cited evidence through the CLI;</text>
-<text x="918" y="224" font-size="12.5" class="s mu" text-anchor="start" >what it does with it next is up to</text>
-<text x="918" y="242" font-size="12.5" class="s mu" text-anchor="start" >the agent and its settings</text>
+<text x="934" y="181" font-size="15" class="s t b" text-anchor="start" >You, or your AI assistant</text>
+<text x="918" y="206" font-size="12.5" class="s mu" text-anchor="start" >read the cited evidence through the CLI;</text>
+<text x="918" y="224" font-size="12.5" class="s mu" text-anchor="start" >what an assistant does with it next is</text>
+<text x="918" y="242" font-size="12.5" class="s mu" text-anchor="start" >up to it and how you set it up</text>
 <rect x="900" y="412" width="270" height="74" rx="12" fill="#13233a" stroke="#2dd4bf" stroke-opacity="0.8" stroke-width="1.5"/>
 <circle cx="920" cy="436" r="4.5" fill="#2dd4bf"/>
 <text x="932" y="441" font-size="15" class="s t b" text-anchor="start" >Cited handoff</text>
