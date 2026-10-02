@@ -1,9 +1,10 @@
 # vsift-cli
 
-`vsift` gives AI coding agents local, source-grounded access to the evidence in a
-video: timestamped transcripts, search, the moments the screen changed, and exact
-frames, crops and audio clips, all processed on your machine. This package (`vsift-cli`) installs
-the `vsift` command and the agent skill that teaches Claude Code or Codex to use it.
+`vsift` turns a video on your machine into evidence you can search and cite: timestamped
+transcripts, the moments the screen changed, and exact frames, crops and audio clips, all
+processed locally. Use it on its own, for example to transcribe and search a recorded meeting,
+or let your AI assistant use it. This package (`vsift-cli`) installs the `vsift` command and the
+agent skill that teaches Claude Code or Codex to use it.
 
 ```console
 npm install --global vsift-cli@next
