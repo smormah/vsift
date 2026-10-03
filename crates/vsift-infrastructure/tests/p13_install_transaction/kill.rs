@@ -493,6 +493,7 @@ fn assert_findings_match(plan: &RepairPlan, facts: &Facts, context: &str) -> Tes
 fn apply_repair(root: &TestRoot, plan: &RepairPlan) -> TestResult {
     let store = root.store()?;
     let Some(guard) = store.try_existing_install_guard()? else {
+        eprintln!("EVIDENCE253 the install guard was busy: repair did nothing");
         return Ok(());
     };
     let maintainer = GuardedManagedStore::new(&store, &guard);
@@ -505,7 +506,38 @@ fn apply_repair(root: &TestRoot, plan: &RepairPlan) -> TestResult {
             },
             other => return Err(format!("unexpected fix {other:?}").into()),
         };
-        remove_managed(&maintainer, &target).map_err(|refusal| format!("{refusal:?}"))?;
+        let started = Instant::now();
+        let report =
+            remove_managed(&maintainer, &target).map_err(|refusal| format!("{refusal:?}"))?;
+        if let Some(sweep) = &report.stages
+            && (sweep.removed == 0 || !sweep.retained.is_empty())
+        {
+            eprintln!(
+                "EVIDENCE253 the first repair sweep did not remove the stage: {sweep:?}; stages: {}; processes:\n{}",
+                describe_stages(root),
+                processes_under(root)
+            );
+            loop {
+                std::thread::sleep(Duration::from_millis(200));
+                let again = remove_managed(&maintainer, &target)
+                    .map_err(|refusal| format!("{refusal:?}"))?;
+                if Facts::observe(root)?.stages == 0 {
+                    eprintln!(
+                        "EVIDENCE253 the stage went after {:?}: {again:?}",
+                        started.elapsed()
+                    );
+                    break;
+                }
+                if started.elapsed() > Duration::from_secs(20) {
+                    eprintln!(
+                        "EVIDENCE253 the stage was still there after {:?}: {again:?}; processes:\n{}",
+                        started.elapsed(),
+                        processes_under(root)
+                    );
+                    break;
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -1086,6 +1118,13 @@ async fn installs_killed_by_the_operating_system_at_spread_moments_are_consisten
         child.kill()?;
         child.wait()?;
         let context = format!("kill {kill} of {KILLS}");
+        let strays = processes_under(&root);
+        if !strays.is_empty() {
+            eprintln!(
+                "EVIDENCE253 {context} (after {:?} of a whole run of {whole:?}): processes under the root after the kill:\n{strays}",
+                whole * kill / (KILLS + 1)
+            );
+        }
         assert_consistent(&root, &allowed, &context)?;
         run_command(&root.store()?, &server.base(), ManagedCommand::Install(1)).await?;
         // A kill during a smoke can leave its provider finishing for a moment
@@ -1094,7 +1133,7 @@ async fn installs_killed_by_the_operating_system_at_spread_moments_are_consisten
         // stage once; repair then names it and its command removes it.
         let after = assert_consistent(&root, &allowed, &context)?;
         apply_repair(&root, &after)?;
-        assert_healthy(
+        let healthy = assert_healthy(
             &root,
             &[
                 (MEDIA, Some(MEDIA_1)),
@@ -1102,7 +1141,72 @@ async fn installs_killed_by_the_operating_system_at_spread_moments_are_consisten
                 (MODEL, Some(MODEL_1)),
             ],
             &context,
-        )?;
+        );
+        if healthy.is_err() {
+            eprintln!(
+                "EVIDENCE253 {context} FAILED: stages: {}; processes:\n{}",
+                describe_stages(&root),
+                processes_under(&root)
+            );
+        }
+        healthy?;
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// EVIDENCE for #253 (temporary, evidence branch only): what is left after a kill.
+
+/// Lists the processes whose command line holds this root, each with the state
+/// of its threads, by asking PowerShell (Windows only).
+fn processes_under(root: &TestRoot) -> String {
+    #[cfg(windows)]
+    {
+        const SCRIPT: &str = "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:VSIFT_EVIDENCE_ROOT) } | ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; $s = if ($p) { ($p.Threads | ForEach-Object { '{0}/{1}' -f $_.ThreadState, $_.WaitReason }) -join ',' } else { 'gone' }; '{0} ppid={1} threads={2} cmd={3}' -f $_.ProcessId, $_.ParentProcessId, $s, $_.CommandLine }";
+        match Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+            .env("VSIFT_EVIDENCE_ROOT", root.root())
+            .output()
+        {
+            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            Err(error) => format!("(cannot list processes: {error})"),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = root;
+        String::new()
+    }
+}
+
+/// The names and sizes of the files of every stage folder.
+fn describe_stages(root: &TestRoot) -> String {
+    fn tree(path: &Path, out: &mut String) {
+        let Ok(entries) = fs::read_dir(path) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                out.push_str(&format!("{}/ ", entry.file_name().to_string_lossy()));
+                tree(&path, out);
+            } else {
+                let size = fs::metadata(&path).map_or(0, |metadata| metadata.len());
+                out.push_str(&format!("{}({size}) ", entry.file_name().to_string_lossy()));
+            }
+        }
+    }
+    let mut out = String::new();
+    let Ok(entries) = fs::read_dir(root.root()) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("stage-") {
+            out.push_str(&format!("[{name}: "));
+            tree(&entry.path(), &mut out);
+            out.push_str("] ");
+        }
+    }
+    out
 }

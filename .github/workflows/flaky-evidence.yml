@@ -1,0 +1,113 @@
+name: Flaky evidence (temporary, this branch only)
+
+# Reproduces the flaky tests #253 (a managed-store kill test, Windows) and #268
+# (a worker SIGTERM test, macOS) by running each many times at once on a hosted
+# runner, and prints what the failing runs saw. Temporary: it triggers only on a
+# push to the branch below, reads the repository, publishes nothing, uses no
+# secret, and is deleted with the branch. Never run on the maintainer's machine.
+
+on:
+  push:
+    branches:
+      - p14-pr7-flaky-evidence
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flaky-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  kill-windows:
+    name: "#253 kill test, windows-latest"
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the test binary
+        shell: pwsh
+        run: |
+          cargo test -p vsift-infrastructure --features "install-test-hooks fault-injection" --test p13_install_transaction --no-run --locked --message-format=json > build.json
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+      - name: Run the kill test many times at once
+        shell: pwsh
+        env:
+          RUNS: "200"
+          PARALLEL: "6"
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $exe = Get-Content build.json | ForEach-Object { if ($_.StartsWith('{')) { $_ | ConvertFrom-Json } } |
+            Where-Object { $_.executable -and $_.target.name -eq 'p13_install_transaction' } |
+            Select-Object -Last 1 -ExpandProperty executable
+          Write-Host "test binary: $exe"
+          $name = 'kill::installs_killed_by_the_operating_system_at_spread_moments_are_consistent'
+          $results = 1..([int]$env:RUNS) | ForEach-Object -Parallel {
+            $text = & $using:exe --exact $using:name --nocapture 2>&1 | Out-String
+            [pscustomobject]@{ Run = $_; Code = $LASTEXITCODE; Text = $text }
+          } -ThrottleLimit ([int]$env:PARALLEL)
+          $failed = @($results | Where-Object { $_.Code -ne 0 })
+          $noted = @($results | Where-Object { $_.Text -match 'EVIDENCE253' })
+          Write-Host "runs: $($results.Count); failed: $($failed.Count); with evidence lines: $($noted.Count)"
+          foreach ($result in $failed) {
+            Write-Host "::group::FAILED run $($result.Run) (exit $($result.Code))"
+            Write-Host $result.Text
+            Write-Host "::endgroup::"
+          }
+          foreach ($result in ($noted | Where-Object { $_.Code -eq 0 } | Select-Object -First 10)) {
+            Write-Host "::group::PASSED WITH EVIDENCE run $($result.Run)"
+            Write-Host $result.Text
+            Write-Host "::endgroup::"
+          }
+          Write-Host "RESULT failed=$($failed.Count) noted=$($noted.Count) runs=$($results.Count)"
+
+  sigterm-macos:
+    name: "#268 sigterm test, macos-latest"
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the test binary
+        run: |
+          cargo test -p vsift-cli --test job_run_cli_contract --no-run --locked --message-format=json > build.json
+          sysctl -n hw.ncpu
+
+      - name: Run the SIGTERM test many times at once
+        env:
+          RUNS: "200"
+          PARALLEL: "6"
+        run: |
+          exe="$(grep '"executable"' build.json | grep '"name":"job_run_cli_contract"' | tail -n 1 | sed -E 's/.*"executable":"([^"]+)".*/\1/')"
+          echo "test binary: $exe"
+          mkdir -p runs
+          export exe
+          run_once() {
+            n="$1"
+            if "$exe" --exact sigterm_stops_a_request_resumably --nocapture > "runs/$n.log" 2>&1; then
+              echo "$n pass"
+            else
+              echo "$n FAIL"
+            fi
+          }
+          export -f run_once
+          seq 1 "$RUNS" | xargs -P "$PARALLEL" -I{} bash -c 'run_once {}' > results.txt
+          failed="$(grep -c FAIL results.txt || true)"
+          echo "runs: $RUNS; failed: $failed"
+          for n in $(grep FAIL results.txt | cut -d' ' -f1 | head -n 10); do
+            echo "::group::FAILED run $n"
+            cat "runs/$n.log"
+            echo "::endgroup::"
+          done
+          echo "RESULT failed=$failed runs=$RUNS"

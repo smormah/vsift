@@ -691,7 +691,8 @@ fn shutdown_stops_a_request(signal: Signal, windows_console: bool) -> TestResult
         assert_eq!(terminal["result"]["error"]["code"], "CANCELLED");
         assert_eq!(
             terminal["result"]["error"]["remediation"][0]["summary"],
-            REQUEST_STOPPED_REMEDIATION
+            REQUEST_STOPPED_REMEDIATION,
+            "EVIDENCE268 drain={drain}; terminal={terminal}; kinds={kinds:?}; seen={seen:?}"
         );
         let steps = &terminal["result"]["data"]["steps"];
         if drain {
