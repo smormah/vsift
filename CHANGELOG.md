@@ -286,18 +286,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **A shutdown that cancels a running step of a `job run` request now ends it with the same
-  remediation as one that stops it between steps** (P14 PR 7, #268, the flaky macOS test
-  `sigterm_stops_a_request_resumably`). The hosted-runner reproduction (2 of 200 runs on
-  `macos-latest`, six at a time) showed the test freeing the admission unit at the same moment it
-  sent `SIGTERM`: the waiting ingest was admitted, started, and was cancelled 125 ms in, and the
-  terminal record said `CANCELLED` with an **empty** remediation, where a shutdown that arrives
-  between steps says "A shutdown stopped the request before it finished ... Deliver the same
-  request again". Both are the same event for a supervisor, so the CLI now adds that remediation to
-  any `CANCELLED` result a shutdown ended when its cause has none of its own (no code, status, exit
-  status or schema change; four unit tests). The test now frees the unit only after the stream says
-  `draining`, so the waiting step can only be cancelled and the test no longer races its own
-  signal. `docs/operations/worker-host.md` says so.
 - **Three small tool fixes found by P14's batch 1** (P14 PR 7; tooling and tests only, no product
   code). **#282:** `run-campaign.ps1` regenerated the batch summary from the running client's plan
   alone, so the second client replaced the first client's summary with one holding none of its runs;
@@ -366,6 +354,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and refuses a `-BatchDirectory` that is inside the checkout but outside that tree. New
   `campaign_script` tests (Windows) run the real script against a throwaway repository and fail
   on the old script, including the exact first-run refusal.
+- **A shutdown that cancels a running step of a `job run` request now ends it with the same
+  remediation as one that stops it between steps** (P14 PR 7, #268, the flaky macOS test
+  `sigterm_stops_a_request_resumably`). The hosted-runner reproduction (2 of 200 runs on
+  `macos-latest`, six at a time) showed the test freeing the admission unit at the same moment it
+  sent `SIGTERM`: the waiting ingest was admitted, started, and was cancelled 125 ms in, and the
+  terminal record said `CANCELLED` with an **empty** remediation, where a shutdown that arrives
+  between steps says "A shutdown stopped the request before it finished ... Deliver the same
+  request again". Both are the same event for a supervisor, so the CLI now adds that remediation to
+  any `CANCELLED` result a shutdown ended when its cause has none of its own (no code, status, exit
+  status or schema change; four unit tests). The test now frees the unit only after the stream says
+  `draining`, so the waiting step can only be cancelled and the test no longer races its own
+  signal. `docs/operations/worker-host.md` says so.
 
 ## [0.1.0] - 2026-10-01
 
