@@ -26,6 +26,9 @@ libfuzzer = ["dep:libfuzzer-sys"]
 libfuzzer-sys = { version = "0.4.13", optional = true }
 # The `handoff_check` target reads the published form of a check (P13 PR 5).
 serde_json = "1.0.151"
+# The `bundle_manifest` target (P14 PR 4) names each artifact it invents by its
+# SHA-256, as the store does. The workspace's version and settings.
+sha2 = { version = "0.11", default-features = false }
 vsift-contract = { version = "0.1.0", path = "../crates/vsift-contract" }
 vsift-domain = { version = "0.1.0", path = "../crates/vsift-domain" }
 vsift-infrastructure = { version = "0.1.0", path = "../crates/vsift-infrastructure" }
@@ -34,6 +37,12 @@ vsift-infrastructure = { version = "0.1.0", path = "../crates/vsift-infrastructu
 # Re-derive the local-ASR and visual-index record seeds in the replay tests;
 # serde_json (a dependency above) reads the recorded visual samples too.
 vsift-application = { version = "0.1.0", path = "../crates/vsift-application" }
+# P14 PR 4: the archive seeds are built the way the infrastructure crate's own
+# archive tests build theirs (a tar, then gzip or xz around it), with the
+# workspace's pinned versions and settings; all three are already in the graph.
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
+lzma-rust2 = { version = "=0.20.1", default-features = false, features = ["std", "xz", "encoder"] }
+tar = { version = "=0.4.46", default-features = false }
 
 [[bin]]
 name = "request_record"
@@ -222,6 +231,62 @@ required-features = ["libfuzzer"]
 [[bin]]
 name = "handoff_check"
 path = "fuzz_targets/handoff_check.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "setup_plan"
+path = "fuzz_targets/setup_plan.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "bundle_manifest"
+path = "fuzz_targets/bundle_manifest.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "tar_inventory"
+path = "fuzz_targets/tar_inventory.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "gzip_tar_inventory"
+path = "fuzz_targets/gzip_tar_inventory.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "xz_tar_inventory"
+path = "fuzz_targets/xz_tar_inventory.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "identifiers"
+path = "fuzz_targets/identifiers.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "input_path"
+path = "fuzz_targets/input_path.rs"
 test = false
 doc = false
 bench = false

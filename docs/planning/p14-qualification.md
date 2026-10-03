@@ -103,10 +103,10 @@ the code where noted (checked 2026-10-02).
 | SEC-16, SEC-17, SEC-18 instructions in evidence, false facts, retained sensitive data | A-04, SEC-T02; 0 of 84 counted phases leaked or acted; O-01, O-02 | Source builds; trials tuned on their scenarios | RQ-15 (hold-out; safety gate), RQ-16 (no skill) |
 | SEC-19 tenant isolation | Deferred (SEC-T03); no multi-tenant host | Not applicable to R0 | The claims check forbids any multi-tenant claim |
 | SEC-20 unbounded queue or retry | X-07..X-09; weighted admission 100 of 100; bounded batch reader | Ladder to 4, one machine | RQ-09 |
-| SEC-21 hostile bundle or record parsing | C-06, S-09; 24 fuzz targets | ADR 0016 (2026-09-24) lists the bundle manifest and metadata, the ownership marker, the verification record, the user configuration and the managed-archive inventories (digest-checked first) as not fuzzed; some were taken up since, and the saved setup plan that `setup install` reads is not among the 24 targets either (counted from the list); the gap review re-checks each | RQ-07's gap review and new targets |
+| SEC-21 hostile bundle or record parsing | C-06, S-09; 24 fuzz targets (31 since PR 4, section 18.1) | ADR 0016 (2026-09-24) lists the bundle manifest and metadata, the ownership marker, the verification record, the user configuration and the managed-archive inventories (digest-checked first) as not fuzzed; some were taken up since, and the saved setup plan that `setup install` reads is not among the 24 targets either (counted from the list); the gap review re-checks each | RQ-07's gap review and new targets |
 | SEC-24 crash durability | P10 and P13 campaigns (weekly for P10) | Ext4 only; stand-in versions for the managed store | RQ-11 |
 | SEC-25 secrets inherited by children | P-02; environment allowlist tests | SEC-T01 half done | A sentinel environment variable through the installed binary in RQ-05; RQ-14 |
-| R-SEC03 scan results | CodeQL, `cargo deny` and dependency review on every pull request; on 2026-10-02 the repository showed 0 open code-scanning, Dependabot and secret-scanning alerts (read-only `gh api`) | Job success is not a finding review; native tools and runtime artifacts are outside Cargo's lockfile; the SBOM lists only the Rust dependency graph | RQ-13 |
+| R-SEC03 scan results | CodeQL, `cargo deny` and dependency review on every pull request; on 2026-10-02 the repository showed 0 open code-scanning, Dependabot and secret-scanning alerts (read-only `gh api`) | Job success is not a finding review; native tools and runtime artifacts are outside Cargo's lockfile; the SBOM lists only the Rust dependency graph | RQ-13 (first read 2026-10-02, section 18.6) |
 
 ## 5. Campaign budgets
 
@@ -644,3 +644,319 @@ Ubuntu 24.04 with managed tools, Windows with pinned tools, macOS 15 with Homebr
 and 4 (clean installs from the registry, the extracted archive, the guide's walks) are PR 2's
 runs, and macOS's "supported for what the hosted run proves" wording is PR 9's to choose with
 L-114 in view.
+
+## 18. PR 4: the robustness campaigns (RQ-07 to RQ-10, RQ-12 and RQ-13), run on 0.1.0
+
+Pull request #259. The campaigns that stretch the code past its tests: long fuzzing with a gap
+review of the parsers, race and stress repetitions on three systems, a load ladder and soak in the
+strict-worker container, malicious media in a disposable container, the worker runbook walked
+step by step, and the first scan reading. **Everything ran on hosted runners; nothing ran on the
+maintainer's machine.** The published 0.1.0 is the subject of the load, media and walk
+campaigns (installed from the real registry, never built from source); the fuzz and stress
+campaigns run the repository's source at the pull request's head, whose crates, lockfile and
+`fuzz/` folder were not changed after the long runs. No product code changed; nothing was
+published or tagged; no repository, environment, ruleset or npm setting changed; no secret was
+used; no dependency was added to the workspace.
+
+| Item | Result | Findings |
+| --- | --- | --- |
+| RQ-07 fuzzing | **passed**: 31 targets, 3,601 s each, 3.68 billion runs, no crash, timeout or out-of-memory | none; 19 targets were still finding coverage at the end ([L-128](known-limits.md#l-128)) |
+| RQ-08 stress | **failed**: 21 of 24 jobs clean; Windows failed root creation (7 of 1,500, #206 reproduced), loaded root creation (2 of 1,500) and weighted admission (2 of 200) | [#206](https://github.com/smormah/vsift/issues/206), [#271](https://github.com/smormah/vsift/issues/271); #128 not reproduced ([L-123](known-limits.md#l-123)) |
+| RQ-09 load and soak | **passed**: every gate held for the ladder, the 100-request batch, the cancel, the warm page and the 1,000-request soak with kills; two longer soaks of 12,000 requests are recorded in 18.3 | [#274](https://github.com/smormah/vsift/issues/274) and [#277](https://github.com/smormah/vsift/issues/277) ([L-124](known-limits.md#l-124)); [#286](https://github.com/smormah/vsift/issues/286), the runbook's dedupe window |
+| RQ-10 malicious media | **failed**: 93 of 96 generated inputs ended inside their bounds with a typed answer; three CLI cases did not | [#264](https://github.com/smormah/vsift/issues/264), [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) ([L-127](known-limits.md#l-127)) |
+| RQ-12 runbook walk | **passed**: 18 steps, all matched, after ten divergences were fixed in the runbook and the walk's own script | none in the product; the runbook's errors are fixed |
+| RQ-13 scan reading | **failed**: one finding stands, the reviewed FFmpeg snapshot ([p14-scan-reading-2026-10-02.md](p14-scan-reading-2026-10-02.md)) | [#272](https://github.com/smormah/vsift/issues/272) ([L-122](known-limits.md#l-122)) |
+
+The findings in code (#206, #264 to #266, #274, #277 and, if its cause is the product's, #271) and in the
+runbook (#286) were not fixed in this pull request: a campaign pull request records what it finds, and the fix pull requests that
+follow carry their own regression tests. A finding closes only with implementation and
+regression-test evidence (`AGENTS.md`).
+
+### 18.1 RQ-07: fuzzing, and the gap review of the parsers
+
+**The gap review.** The plan listed the parsers of untrusted input that had no target (ADR 0016's
+2026-09-24 note, and the saved setup plan, which `setup install` reads). Each was checked against the
+published API the harness may use. Seven got a target; each target body is a plain function over bytes,
+so the libFuzzer entry point and the stable replay test run the same code, and a broken invariant is a
+typed `Violation`, never a panic of the harness.
+
+| Parser | Target | What the target checks beyond "does not panic" |
+| --- | --- | --- |
+| The saved setup plan `setup install` reads | `setup_plan` | strict JSON decoding, the envelope's schema version, and that an accepted plan encodes and decodes to itself |
+| The bundle manifest and the artifacts it names (Unix only) | `bundle_manifest` | `validate_bundle` over a manifest in a private folder with the payloads the fuzzer supplies: an accepted bundle names only its own files |
+| Tar, gzip-over-tar and xz-over-tar inventories of the managed archives | `tar_inventory`, `gzip_tar_inventory`, `xz_tar_inventory` | an independent statement of the archive rules, at a small and a production bound: bounded entries and bytes, printable-ASCII paths of at most 240 bytes with no backslash, colon, empty, `.` or `..` part and no two equal ignoring case, content only on regular files, no link or special entry |
+| The identifiers: session, source, operation, job, speaker, visual hash, managed version key, language tag, SHA-256 | `identifiers` | each constructor against a grammar model: accepted exactly when the model accepts; accepted text survives a round trip |
+| The input-path and bundle-name grammar of a worker request | `input_path` | a model of the relative-path rules: nothing absolute or empty, no `..` part, no Windows device name (superscript forms included), bounded components and bytes |
+
+Not taken up: the session root's ownership marker, the media-tool verification record and the user
+dependency configuration (read from owner-private folders VSift creates, with no published parse
+function the harness may call); the managed store's ownership marker is compared with fixed bytes and
+needs no parser. That is [L-128](known-limits.md#l-128). The 24 earlier targets are unchanged.
+
+**Seeds and their provenance.** Every target has committed seeds, each with a stated origin: a copy of
+an existing fixture, an inline example from an existing test, or a seed derived from code and
+regenerable with `VSIFT_REGENERATE_FUZZ_SEEDS=1` (the replay test fails if a seed drifts from its
+origin, and a second test rebuilds the derived seeds). The replay tests run on stable in every pull
+request, on Ubuntu and Windows (the bundle target on Unix only).
+
+**The workflow.** `Fuzz` keeps its weekly five-minute pass. Its duration cap is now 14,400 s a target (it
+was 1,200), every target job keeps its log, corpus and a coverage-plateau line, a crash is kept with a
+reproduction and a minimised copy, and a pull request that changes `fuzz/` or the workflow runs a
+15-second smoke of every target so a broken harness fails before it merges.
+
+**Result** (run [36978914176](https://github.com/smormah/vsift/actions/runs/36978914176), dispatched from
+the branch with 3,600 s a target on `ubuntu-24.04`): all 31 jobs succeeded, 3,678,778,321 runs in 111,631 s
+(31 hours of fuzzing, 1,939 job-minutes), no crash, timeout or out-of-memory, peak resident memory
+362 to 954 MB. The last column is where in the run the final new coverage appeared; a high figure means
+the target had not stopped finding paths, so the hour is a floor.
+
+| Target | Runs | Runs per second | Peak memory (MB) | Coverage | Corpus | Last new coverage found at |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `bundle_manifest` (new) | 13,452,337 | 3,735 | 444 | 5893 | 3258 | 99.7 % of the runs |
+| `chunk_checkpoint` | 274,857,270 | 76,328 | 678 | 2417 | 2312 | 89.3 % of the runs |
+| `crop_rect` | 268,730,389 | 74,626 | 533 | 154 | 95 | 0.2 % of the runs |
+| `evidence_record` | 138,038,473 | 38,333 | 688 | 3654 | 4078 | 97.2 % of the runs |
+| `ffprobe_metadata` | 157,991,546 | 43,874 | 710 | 2732 | 2642 | 93.3 % of the runs |
+| `frame_listing` | 90,485,755 | 25,127 | 506 | 562 | 659 | 50.9 % of the runs |
+| `frame_showinfo` | 115,124,053 | 31,970 | 549 | 594 | 813 | 50.3 % of the runs |
+| `gzip_tar_inventory` (new) | 6,937,626 | 1,926 | 423 | 1460 | 553 | 99.5 % of the runs |
+| `handoff_check` | 424,538 | 117 | 461 | 6107 | 1191 | 99.8 % of the runs |
+| `host_attestation` | 202,681,069 | 56,284 | 571 | 471 | 542 | 49.3 % of the runs |
+| `identifiers` (new) | 171,108,891 | 47,517 | 599 | 973 | 425 | 30.6 % of the runs |
+| `input_path` (new) | 204,218,750 | 56,711 | 611 | 518 | 626 | 84.9 % of the runs |
+| `job_batch_file` | 19,624,222 | 5,449 | 576 | 2839 | 5072 | 99.9 % of the runs |
+| `job_batch_line` | 141,547,646 | 39,307 | 742 | 2981 | 3510 | 98.5 % of the runs |
+| `job_record` | 154,822,923 | 42,994 | 665 | 2825 | 3137 | 98.5 % of the runs |
+| `job_request` | 159,251,882 | 44,224 | 954 | 3245 | 4055 | 92.8 % of the runs |
+| `mountinfo` | 47,911,160 | 13,304 | 562 | 397 | 530 | 35.4 % of the runs |
+| `os_release` | 186,300,047 | 51,735 | 682 | 353 | 626 | 14.9 % of the runs |
+| `png_sequence` | 211,379,430 | 58,700 | 530 | 397 | 123 | 5.7 % of the runs |
+| `request_record` | 107,327,828 | 29,805 | 745 | 4546 | 4268 | 99.6 % of the runs |
+| `search_query` | 9,345,863 | 2,595 | 601 | 652 | 999 | 90.9 % of the runs |
+| `setup_plan` (new) | 145,868,863 | 40,507 | 900 | 4268 | 5376 | 99.1 % of the runs |
+| `tar_inventory` (new) | 52,878,524 | 14,684 | 576 | 840 | 270 | 60 % of the runs |
+| `transcript_cursor` | 252,893,560 | 70,228 | 532 | 239 | 164 | 4.2 % of the runs |
+| `transcript_record` | 134,586,288 | 37,374 | 683 | 5928 | 5871 | 99.7 % of the runs |
+| `transcript_srt` | 39,161,880 | 10,875 | 693 | 1041 | 1311 | 96.4 % of the runs |
+| `transcript_webvtt` | 60,459,549 | 16,789 | 705 | 1383 | 2492 | 91.8 % of the runs |
+| `visual_index_record` | 149,538,733 | 41,527 | 717 | 3374 | 3787 | 98.3 % of the runs |
+| `visual_samples` | 29,162,744 | 8,098 | 477 | 867 | 755 | 99.4 % of the runs |
+| `whisper_full_json` | 130,546,710 | 36,252 | 707 | 2336 | 2670 | 99.2 % of the runs |
+| `xz_tar_inventory` (new) | 2,119,772 | 588 | 362 | 3167 | 278 | 98.2 % of the runs |
+
+Not shown: absence of bugs; inputs the corpus never reached in an hour; a longer run's result;
+the macOS and Windows builds of the same parsers (the replay runs there; the fuzzing does not).
+
+### 18.2 RQ-08: race and stress repetitions on three systems
+
+`P14 stress` (workflow, `tools/p14-campaigns/stress.cjs`) repeats cargo tests of the locking, admission,
+supervisor, root-creation, engine and delivery code on Windows Server 2025, Ubuntu 24.04 and macOS 15.
+A repetition fails if a test fails, and **hangs** if it does not finish in its time limit (the process
+tree is then killed and the repetition counts as hung: a deadlock candidate); each failing repetition's
+whole output is kept for 90 days. The "loaded" variants keep every CPU busy with two burner processes per
+CPU beside the tests, because #128 was seen only in a full workspace run with other work competing.
+
+| Suite | Repetitions per system | Windows | Ubuntu | macOS |
+| --- | ---: | --- | --- | --- |
+| locks (`--lib`, `p05_lifecycle`; issue #66) | 200 | 0 failed | 0 failed | 0 failed |
+| admission (`weighted_admission`, `storage_coordination`) | 200 | **2 failed** | 0 | 0 |
+| engine (`engine_worker`, `engine_batch`, `engine_jobs`, `engine_lifecycle`) | 200 | 0 | 0 | 0 |
+| delivery (`external_delivery_stress`, ignored test; each repetition is itself a randomised run with workers killed and requests redelivered) | 100 | 0 | 0 | 0 |
+| supervisor (#128) | 1,500 | 0 | 0 | 0 |
+| supervisor, CPUs busy (#128) | 1,500 | 0 | 0 | 0 |
+| roots (`session_root_provisioning`; #206) | 1,500 | **7 failed** | 0 | 0 |
+| roots, CPUs busy (#206) | 1,500 | **2 failed** | 0 | 0 |
+
+6,700 repetitions per system, 20,100 in all, 1,144 job-minutes (Windows 623, macOS 266). Run
+[36978939586](https://github.com/smormah/vsift/actions/runs/36978939586) at the pull request's head
+before its rebase; no hung repetition anywhere.
+
+**What failed.** #206 reproduced exactly as reported ("session storage root permissions are not
+private"), at about one repetition in 200 on Windows, in the threads test as well as the processes test,
+and in 2 of 1,500 under load; Ubuntu and macOS had none in 3,000 each. The weighted-admission failure is a
+child process that was never granted a reservation ("no reservation was ever granted"), twice in a row;
+whether the product or the test's wait is at fault is not known (#271). **#128 did not reproduce**: 3,000
+repetitions per system (plain and loaded) with no failure, so the issue stays a watch item. The rule
+(zero failures in at least 200 repetitions per system) is therefore not met, and RQ-08 is recorded as
+failed with both issues. The delivery suite ran 100 repetitions, below the rule's 200, because each
+one starts hundreds of processes; the rule is met for the other suites.
+
+**Not shown:** every interleaving; a quiet machine (hosted runners are shared and loaded); any other
+filesystem; the failure rates as a measure of a user's chance (a hosted Windows runner is not a desktop).
+
+
+### 18.3 RQ-09: load ladder, batch, cancel, warm page and soak
+
+`P14 load` installs the published 0.1.0 from the real registry, builds the worker image around the executable
+(Ubuntu 24.04 image pinned by digest, a `vsift` account with uid 10001), makes the state folder and the
+bundle root ext4 volumes with write barriers (so `durable` workspaces work), lets the published binary
+install the three reviewed tools itself (`setup plan`, `setup install`, `setup check`), stages the corpus as
+the input root, and runs every phase in the hardened container of the runbook (`--network none`, read-only
+root, `--cap-drop ALL`, `no-new-privileges`, 4 CPUs, 12 GiB, 256 processes, strict isolation attested). A
+sampler reads the container's cgroup (memory, processes, descriptors, descendants) every half second.
+The gates are the plan's: coordinator memory at most 256 MiB, no monotonic growth after warm-up, no
+descendant ten seconds after a cancel, every committed session and bundle validates, no sentinel or path in
+any output, a warm candidate page at p95 of at most 250 ms on a prepared 30-minute session.
+
+**Result: every gate held** (run [37137094810](https://github.com/smormah/vsift/actions/runs/37137094810),
+21 job-minutes, `ubuntu-24.04`, 4 CPUs, 16 GB):
+
+| Phase | What ran | Result |
+| --- | --- | --- |
+| Ladder | the same 24 requests (candidates, with one in six also a recognition) at 1, 2, 4 and 8 admitted jobs | 24 of 24 recorded at every rung; peak running equal to the concurrency; coordinator peak 12.8 to 14.5 MiB (container with its providers 296 to 581 MiB, 28 to 69 processes); throughput 36 to 58 requests a minute, a measurement of this runner |
+| Batch | 100 requests at concurrency 4 (ingest and candidates, retained bundles, supplied transcripts, recognitions) | 100 of 100 recorded; 21 bundles and 100 sessions validate; coordinator peak 14.4 MiB over 76 s; no growth in memory or descriptors |
+| Cancel | a whole-video recognition of a 30-minute source (two speech clips alternated by FFmpeg's concat demuxer), `job cancel` 3 s after its first progress event | the request ended `CANCELLED`; no descendant of the coordinator 10 s later |
+| Warm page | 200 calls of `candidates` on a prepared 30-minute session (prepared in 21 s) | every call returned a page; p50 5 ms, p95 5 ms, max 6 ms (each call starts the process) |
+| Soak | 1,000 mixed requests in 24 rounds at concurrency 4: imports, candidates, retained bundles, supplied transcripts, recognitions, malformed lines, duplicates, conflicts, a missing source, evidence calls on open sessions, 5 SIGTERM drains, 5 SIGKILLs of the whole container with redelivery, 6 cleaner passes | 1,000 of 1,000 came to what they were asked to (168 redeliveries replayed or continued); every drain ended with its terminal event; 158 bundles and 734 sessions validated or read back; the cleaner removed all 734 sessions and left none; the largest coordinator peak of 24 runs was 14.6 MiB; no growth; no path or sentinel in any output |
+
+The soak was 632 s of work (not hours): the plan's "in at most 5 hours" is an upper bound, and 1,000
+requests of this mix take about 11 minutes on this runner.
+
+**Two longer soaks (not the plan's bar).** Because 1,000 requests took only 11 minutes, a soak of 12,000
+requests was run twice (`phases=soak`, `soak_requests=12000`). Neither is a pass, and each taught something:
+
+- **Run [37138531445](https://github.com/smormah/vsift/actions/runs/37138531445)** (105 job-minutes). The
+  harness cleaned one bucket every four rounds, so the workspace's sessions piled up; at line 5,881 its 4,096
+  request records all belonged to live sessions and 4,440 of the lines after it (nearly all) were refused whole with
+  `RESOURCE_LIMIT` and no step started, which is what the runbook says a full workspace does (L-063). Nothing
+  else broke: 250 rounds, 47 SIGKILLs, 45 SIGTERM drains, 667 redeliveries; coordinator memory at most 15 MiB
+  with no growth; 942 bundles validated and 4,096 sessions read back; 12 sessions were left `initializing` by the
+  kills and `session status` of one answered `STORAGE_IO` ([#277](https://github.com/smormah/vsift/issues/277)).
+  The harness was wrong, not VSift: an operator's periodic job cleans everything, so the soak now runs the
+  cleaner over every bucket every 30 rounds.
+- **Run [37145175956](https://github.com/smormah/vsift/actions/runs/37145175956)** (153 job-minutes), with that
+  cleaner: 273 rounds, 67 SIGKILLs, 55 SIGTERM drains, 949 redeliveries, 2,199 evidence calls, 77 cleaner passes;
+  coordinator memory at most 14.9 MiB with no growth; 1,745 bundles validated and 168 sessions read back; 19
+  sessions left `initializing` by the kills. **11,811 of 12,000 lines came to what they were asked to.** The 189
+  that did not are all duplicates (122 of 910) and conflicts (67 of 505) that named a request older than the last
+  clean: its session was gone and its record pruned (the table was full), so the duplicate ran again and the
+  conflicting request was accepted, where the runbook says "the dedupe window is at least the retention"
+  ([#286](https://github.com/smormah/vsift/issues/286)). Every other kind (5,107 ingest-and-candidates requests, 1,745 retained
+  bundles, 755 recognitions, 724 supplied transcripts, 733 open sessions with evidence calls, 1,153 malformed
+  lines, 368 missing sources) settled in full. The campaign now counts a duplicate or conflict whose original
+  session was removed as outside the window and reports how many; that change was not re-run (a third
+  three-hour run was not spent on it), so this run's verdict stays "did not hold".
+
+**Diagnosis phase (not a gate).** Every speech clip's first five seconds were recognised in the worker
+container: seven of ten recognise; **F02, F04 and F05 fail as `MISSING_CAPABILITY` (`malformed_output`)
+although the whole clips recognise** ([#274](https://github.com/smormah/vsift/issues/274),
+[L-124](known-limits.md#l-124)). The campaign's request mix avoids those three clips so the load measures
+resource behaviour, not that finding. Two early smoke runs also left one or two sessions listed as
+`initializing` **without any kill**, with `session status` answering `STORAGE_IO`
+([#277](https://github.com/smormah/vsift/issues/277)); it did not recur in the 1,100 requests without kills
+since. The kills of the longer soaks leave initializing sessions as designed (12 and 19), and `session status`
+answers `STORAGE_IO` for them too.
+
+**Not shown:** the 8-hour length the verification section names; a reference machine or GPUs; another
+host or distribution; load from several machines; real storage under the state folder (an ext4 volume in
+a file); throughput as a promise. The 4 CPUs and 16 GB are a shared runner's.
+
+
+### 18.4 RQ-10: malicious media in a disposable container
+
+`P14 malicious media` installs the published 0.1.0 and runs every operation in its own container
+(`--network none`, read-only root, 1 GiB, 128 processes, 2 CPUs) on a hosted
+Ubuntu 24.04 runner, with a canary file outside the input root and a marker file name to catch an
+injected command. **Every hostile input is generated by code at run time** from the corpus's own fixtures (an MP4 box
+tree that is edited and rewritten with every size recomputed, hand-written Matroska elements, a
+zero-pixel-cost PNG made by streaming deflate, seeded bit flips and truncations, sparse files, a pipe, a
+link): nothing is downloaded, no real exploit or malware is used, and nothing hostile is committed.
+
+An operation is judged by its **typed answer** (`INVALID_SOURCE`, `RESOURCE_LIMIT` or
+`DEADLINE_EXCEEDED`; `INVALID_ARGUMENT` for a follow-up call on an accepted source) or a clean result,
+**inside its bounds** (120 s, 1 GiB, 128 processes), with **no network** and **no file created or changed
+outside** the root, the home and the queue, the canary unchanged and in no stored file, and no injected
+command run. Ingest of a file only copies and sniffs it, so for a damaged container the refusal is
+expected from a later call (candidates, a frame, the audio, a recognition): a case marked "refused" passes
+when some operation fails typed and none succeeds after it.
+
+| Group | Inputs | What they are | Outcome |
+| --- | ---: | --- | --- |
+| damaged | 12 | empty, `ftyp` only, truncated at 5, 50, 90 and 99.9 percent, three seeded bit-flip sets, a zeroed `moov`, boxes that claim 4 GiB and 2^63 bytes, a Matroska void element that claims 2^50 bytes | typed refusals or in-bound processing |
+| declared | 10 | movie-header lies, every track declaring 136 years, 4 hours, 4 hours and a second, zero; declared dimensions of 65535 and 4001 square; an EBML duration of 1e18 ms and NaN; an audio track of 255 channels at 3.4e38 Hz | typed refusals (136 years: `INVALID_SOURCE`); a header value alone does not change what the product measures |
+| nesting | 3 | an unknown box 5,000 deep, 300 nested tracks, 100 open-ended clusters | in bound |
+| metadata | 3 | 32 MiB and 64 MiB tags, a 512 MiB free-space box | in bound |
+| external | 11 | data references to a local file, an `http` address and an absolute path; an HLS playlist, a concat script and an SDP file named as media; 64 MiB of one letter; random bytes; a folder; **a link**; **a pipe** | refused as `INVALID_SOURCE`; the link and the pipe are findings |
+| streams | 3 | 32, 33 and 2,000 video tracks | 33 refused as `INVALID_SOURCE`, 2,000 as `RESOURCE_LIMIT` |
+| bomb | 3 | a 16384-square PNG frame (268 megapixels) in a quarter of a megabyte, a 3999-square one inside the limit, a track that says 64 square around an image that says 30000 | `INVALID_SOURCE` |
+| size | 2 | a sparse 30 GiB file (over the 20 GiB limit); **a sparse 600 MiB file into a 256 MiB root** | the first `INVALID_SOURCE`; the second is a finding |
+| sidecar | 11 | subtitle files of 9 MiB, 50,000 cues, a 6 MiB cue, a 7.9 MiB line, 400,000 nested tags, a million notes, control characters, invalid UTF-8, timestamps of 99999999 hours, a bare carriage return, a lone byte order mark | `RESOURCE_LIMIT` or `INVALID_SOURCE`; the two valid ones completed |
+| names | 38 | file names that look like shell syntax (`$(...)`, backticks, `;`, `|`, `&&`), line breaks, escape and C1 controls, OSC 8 links, leading dashes, trailing spaces, a bidirectional override, zero-width characters, 255 bytes, emoji | ingested or refused by name, never executed; no file named `pwned` anywhere |
+
+96 inputs, 251 operations (run [37136669473](https://github.com/smormah/vsift/actions/runs/37136669473)): 93
+inputs ended as above, three did not.
+
+- **A named pipe with no writer** made `vsift ingest` block until the harness killed it at 150 s
+  ([#264](https://github.com/smormah/vsift/issues/264)); the worker request naming the same pipe was
+  refused at once.
+- **A symbolic link** was refused as `STORAGE_IO`, not `INVALID_SOURCE`
+  ([#265](https://github.com/smormah/vsift/issues/265)); the canary was not read.
+- **A 600 MiB file into a 256 MiB root** failed after 5 s as `INTEGRITY_FAILURE`
+  ([#266](https://github.com/smormah/vsift/issues/266)); the job path gave `RESOURCE_LIMIT` early.
+
+The first runs of the campaign were wrong in the judge, not in VSift (the harness expected the copy step to
+refuse a damaged file; a declared header value is not what FFprobe reports, so a header-only "4 hours and a
+second" is processed); each was fixed in the tool and none by relaxing a bound. **Not shown:** that a decoder
+bug cannot be exploited (the variants are crafted to hit bounds, not memory-safety bugs; see
+[#272](https://github.com/smormah/vsift/issues/272) for the reviewed FFmpeg), other media types, and any
+platform but Linux.
+
+### 18.5 RQ-12: the worker runbook, walked
+
+`P14 runbook walk` follows [`docs/operations/worker-host.md`](../operations/worker-host.md) as an operator
+would, with the published 0.1.0 on hosted Ubuntu 24.04, copying its commands, its example request and its
+unit file as printed. The first walks **diverged at ten steps** (every later step depended on the first
+mistake): the runbook gave owners but no command that creates the `vsift` account (it must have uid 10001
+for the container's volumes), assumed the reviewed tools were already installed, printed the supervisor
+invocation without saying that it only attests isolation in the hardened unit or container (a plain shell
+gets `ISOLATION_UNAVAILABLE`), named an image it did not say how to build and asked for 8 CPUs, did not
+say that `systemctl stop` ends in exit 6, and described the cleaner's cursor as opaque when it is a bucket
+number from 0 to 255 (a full pass is up to 256 calls). All are fixed in the runbook. The walk's own script
+had three faults (a promise awaited after it had resolved, a durable workspace expected on a disk mounted
+without write barriers, and an image build context uploaded as an artifact).
+
+The corrected walk matched **all 18 steps** (run
+[37136669570](https://github.com/smormah/vsift/actions/runs/37136669570)): the account and folders; the
+tools installed by the binary itself; `setup configure` and `setup check`; a **durable** workspace (on an
+ext4 volume in a file, because a hosted runner's disk is mounted `nobarrier` and refuses `durable` as the
+runbook says; the runbook now shows how to make such a volume for a test host); the supervisor refused outside
+a unit or container; the hardened container example with strict isolation attested and `os_crash_durable`
+publication; replay, `IDEMPOTENCY_CONFLICT` and `BUSY` with `retry_after_ms` 2000; the 1,001-line batch
+refused whole; the example systemd unit started, stopped under `systemctl stop` with a drain (26 s, exit 6,
+the events ending with `stopped` and the terminal event) and started again (16 of 16 lines recorded); a
+SIGKILL of the whole unit and redelivery (8 of 8); `session clean` over 25 bucket pages.
+
+**Not shown:** a real disk with its own write barriers (the volume is a file on the runner's disk), other
+distributions, a cgroup hierarchy other than systemd's on the runner, and a worker host that is not a
+disposable machine. The hosted runner is `ubuntu-24.04` with 4 CPUs.
+
+### 18.6 RQ-13: the scan reading
+
+[`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md) holds the reading in full: Cargo,
+GitHub alerts, the pinned actions, whisper.cpp, FFmpeg, the runtime and the SBOM. One finding stands
+([#272](https://github.com/smormah/vsift/issues/272), [L-122](known-limits.md#l-122)). It is a dated
+reading of 0.1.0; the candidate and the stable each need their own within seven days.
+
+
+### 18.7 Hosted minutes, and what is weaker than it sounds
+
+Everything in this section used **5,082 hosted job-minutes (about 85 runner-hours) in 129 runs** of this pull
+request's branch, including runs cancelled by a newer push and the reruns after each rebase. **The three long
+dispatches took 3,363:** the long fuzz run 1,939 (31 jobs of an hour each and their set-up), the stress run 1,144
+(24 jobs: Windows 623, macOS 266, Ubuntu 255) and the load runs 280 (the plan's run 21 minutes, the two longer soaks
+105 and 153). **The pull requests' own runs took 1,719:** the smoke of every workflow on each push, and the
+repository's CI (650). Against section 5's budget: RQ-07 planned about 26 h, used about 32 h for 31 targets;
+RQ-08 planned 12 h, used 19 h; RQ-09 planned 7 h, used 4.7 h; RQ-10 and RQ-12 together planned 3 h, used well
+under one. GitHub documents hosted runners as free for public repositories (not re-checked here).
+
+- **Weaker than it sounds.** The fuzz hour is a floor (19 of 31 targets still growing). The stress
+  numbers come from shared Windows, Ubuntu and macOS runners that are noisier and slower than a developer's
+  machine, so a failure rate is not a user's chance of failure. The load, media and walk campaigns ran
+  one published version on one distribution with a durable volume that is a file. The hostile media are
+  crafted to hit bounds, not memory-safety bugs. The scan reading keys on public records that are neither
+  complete nor timely, and its FFmpeg status is an ancestry test.
+- **What remains.** Fix pull requests for #206, #271 (explain or fix), #264, #265, #266, #274, #277 and
+  #286 (PR 7's fixes list), and the maintainer's decision on #272. Then RQ-07 to RQ-10 need a re-run on
+  the candidate after the fixes (the staleness rule makes the ledger say so), RQ-13 needs a fresh reading
+  within seven days of the candidate and again before the stable, and the ledger's commits for RQ-07,
+  RQ-08, RQ-09 and RQ-12 are re-pointed to this pull request's merge commit.

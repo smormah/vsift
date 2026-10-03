@@ -1,0 +1,121 @@
+name: P14 runbook walk
+
+# P14 PR 4, evidence item RQ-12 (docs/planning/p14-qualification.md section 2):
+# the worker runbook (docs/operations/worker-host.md) walked step by step with
+# the PUBLISHED vsift on a hosted Ubuntu 24.04 runner: the layout of section 1,
+# the one-time setup of section 2, the example request and the supervisor
+# invocation of section 3, the systemd unit of section 3 (read from the
+# runbook, not retyped: installed, started, stopped with a drain and started
+# again), the acknowledgement table of section 4 (replay, conflict, BUSY), a
+# SIGKILL and redelivery of section 6, the cleaner of section 7 and the container
+# of section 10. Each step states what the runbook promises and what happened;
+# a step that does not match is a finding (a documentation error or a product
+# defect), never an edit of the expectation.
+#
+# NEVER on a developer's machine: it creates an account, folders under /var/lib
+# and /srv, a systemd unit, and starts and stops services. It cannot publish
+# anything: it has `contents: read` only and uses no secret; it installs only the
+# published package, the Ubuntu packages of its image and the three reviewed
+# tools from their publishers, as P13 managed smoke does.
+#
+# Triggers: a pull request that changes this workflow, its tool or the runbook,
+# and a manual dispatch.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-runbook-walk.yml
+      - tools/p14-campaigns/runbook-walk.cjs
+      - tools/p14-campaigns/install-published.cjs
+      - docs/operations/worker-host.md
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The published version of vsift-cli to run. Empty means the version on the next tag.
+        type: string
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: p14-runbook-walk-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.3"
+
+jobs:
+  walk:
+    name: Walk the worker runbook (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Record the host
+        run: |
+          uname -a
+          nproc
+          free -m
+          systemctl --version | head -1
+          docker --version
+          stat -fc 'cgroup filesystem: %T' /sys/fs/cgroup
+          findmnt --target /var/lib --noheadings --output FSTYPE,OPTIONS
+
+      - name: Install the published package from the real registry
+        id: published
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node tools/p14-campaigns/install-published.cjs \
+            --prefix "${RUNNER_TEMP}/published" \
+            --version "${VERSION}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Walk the runbook
+        env:
+          BINARY: ${{ steps.published.outputs.binary }}
+        run: |
+          set -euo pipefail
+          node tools/p14-campaigns/runbook-walk.cjs \
+            --out "${RUNNER_TEMP}/walk-out" \
+            --repo "${GITHUB_WORKSPACE}" \
+            --binary "${BINARY}"
+
+      - name: Put the result in the job summary
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/walk-out/runbook-summary.md" ]; then
+            cat "${RUNNER_TEMP}/walk-out/runbook-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Say what the units logged
+        if: always()
+        run: |
+          sudo journalctl -u 'vsift-batch@*' --no-pager -n 120 || true
+
+      - name: Keep the result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p14-runbook-walk
+          path: ${{ runner.temp }}/walk-out
+          if-no-files-found: warn
+          retention-days: 90

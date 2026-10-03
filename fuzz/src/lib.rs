@@ -14,34 +14,50 @@
 
 use std::{collections::BTreeSet, error::Error, fmt, io::Cursor};
 
+// The bundle target runs only where a private folder can be made without a
+// platform call (Unix), so what only it uses is imported there only.
+#[cfg(unix)]
+use std::cell::RefCell;
+
+#[cfg(unix)]
+use sha2::{Digest, Sha256};
 use vsift_contract::{
-    BatchLine, HandoffCheckData, HandoffChecker, MAX_BATCH_LINES, MAX_HANDOFF_FINDINGS,
-    MAX_HANDOFF_REPORT_BYTES, MAX_REQUEST_STEPS, RelativeInputPath, StepResult,
-    WORK_REQUEST_LIMITS, WorkResult, WorkTarget, decode_batch_line, decode_work_request,
-    validate_steps,
+    BatchLine, BundleName, HandoffCheckData, HandoffChecker, JsonLimits, MAX_BATCH_LINES,
+    MAX_BUNDLE_NAME_BYTES, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES, MAX_INPUT_PATH_BYTES,
+    MAX_INPUT_PATH_COMPONENTS, MAX_REQUEST_STEPS, RelativeInputPath, SavedSetupPlan, StepResult,
+    StrictJsonError, WORK_REQUEST_LIMITS, WorkResult, WorkTarget, decode_batch_line,
+    decode_strict_json, decode_work_request, validate_steps,
 };
 use vsift_domain::{
-    CropRect, CursorToken, FrameDimensions, JobId, ListingTail, MAX_CUE_TEXT_BYTES,
-    MAX_LISTED_FRAMES, MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SEARCH_QUERY_BYTES,
-    MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, MediaStreamKind, MediaTime,
-    OperationId, PlannedChunk, SearchMatch, SearchQuery, SessionId, SourceSegmentId, TimeRange,
-    TranscriptFormat, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId, VisualChangePolicy,
-    VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome, analyse_window,
-    normalise_search_text, validate_chunk_output,
+    ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId, LanguageTag,
+    ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES, MAX_RECORD_ITEMS,
+    MAX_RECORD_SELECTIONS, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
+    MAX_WINDOW_CANDIDATES, ManagedVersionKey, MediaStreamKind, MediaTime, OperationId,
+    OperationKey, PlannedChunk, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId,
+    SourceSegmentId, SpeakerLabel, TimeRange, TranscriptFormat, TranscriptRevisionId,
+    TranscriptSegmentId, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId,
+    VisualChangePolicy, VisualHash, VisualIndexId, VisualIndexWindow, VisualSample, VisualWindow,
+    VisualWindowOutcome, analyse_window, is_canonical_managed_key, normalise_search_text,
+    validate_chunk_output,
 };
 use vsift_infrastructure::{
-    BatchFileError, BatchLine as FileLine, BatchLines, CgroupLimit, CgroupMembership,
-    FrameListingWindow, MAX_CGROUP_DEPTH, MAX_DIAGNOSTIC_BYTES, MAX_LISTING_DIAGNOSTIC_BYTES,
-    MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES, MountDevice, NetworkInterfaces, SourceContainer,
-    VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo, classify_os_release,
-    classify_root_mount, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
-    decode_request_record, decode_transcript_record, decode_visual_index_record,
-    encode_chunk_checkpoint, encode_evidence_record, encode_job_record, encode_request_record,
-    encode_transcript_record, encode_visual_index_record, parse_ashowinfo_start,
-    parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing,
-    parse_frame_showinfo, parse_net_dev, parse_png_sequence, parse_proc_cgroup,
-    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, BatchFileError, BatchLine as FileLine,
+    BatchLines, CgroupLimit, CgroupMembership, FrameListingWindow, MAX_ARCHIVE_ENTRIES,
+    MAX_ARCHIVE_EXPANDED_BYTES, MAX_CGROUP_DEPTH, MAX_DIAGNOSTIC_BYTES, MAX_GZIP_ARCHIVE_BYTES,
+    MAX_LISTING_DIAGNOSTIC_BYTES, MAX_NET_DEV_BYTES, MAX_OS_RELEASE_BYTES, MAX_TAR_STREAM_BYTES,
+    MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer, VisualSamplingWindow,
+    WhisperOutputLimits, classify_mountinfo, classify_os_release, classify_root_mount,
+    decode_chunk_checkpoint, decode_evidence_record, decode_job_record, decode_request_record,
+    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
+    encode_evidence_record, encode_job_record, encode_request_record, encode_transcript_record,
+    encode_visual_index_record, inspect_gzip_tar_inventory, inspect_tar_inventory,
+    inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
+    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
+    parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript, parse_visual_samples,
+    parse_whisper_full_json,
 };
+#[cfg(unix)]
+use vsift_infrastructure::{BundleSourcePolicy, FilesystemSessionStore};
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 const WEBVTT_SIGNATURE: &[u8] = b"WEBVTT";
@@ -163,11 +179,37 @@ pub enum Target {
     /// the subset schema validator, the handoff rules and the report-text
     /// rules. The input is the draft, as the command reads it.
     HandoffCheck,
+    /// A saved `setup plan --json` result handed back to `setup install`
+    /// (P14 PR 4): the bounded strict decode of `vsift_contract`, then
+    /// `SavedSetupPlan::validate_envelope`. The input is the file.
+    SetupPlan,
+    /// A retained bundle's `bundle.json` and artifacts through
+    /// `FilesystemSessionStore::validate_bundle`, the check of `vsift bundle
+    /// validate` (P14 PR 4). See [`bundle_manifest_input`] for the input layout.
+    BundleManifest,
+    /// A raw tar stream through `inspect_tar_inventory`, the bounded header
+    /// review a managed archive passes before anything is extracted (P14
+    /// PR 4). The input is the stream.
+    TarInventory,
+    /// A gzip stream through `inspect_gzip_tar_inventory` (P14 PR 4). The
+    /// input is the compressed file.
+    GzipTarInventory,
+    /// An xz stream through `inspect_xz_tar_inventory` (P14 PR 4). The input
+    /// is the compressed file.
+    XzTarInventory,
+    /// The public identifier types and keys that command-line values and
+    /// stored records are parsed into, held to an independent statement of
+    /// each grammar (P14 PR 4). The input is the text.
+    Identifiers,
+    /// The relative input path of a worker request and a retained bundle's
+    /// name, held to an independent statement of their grammars (P14 PR 4,
+    /// SEC-07). The input is the text.
+    InputPath,
 }
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 31] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -192,6 +234,13 @@ impl Target {
         Self::RequestRecord,
         Self::JobBatchFile,
         Self::HandoffCheck,
+        Self::SetupPlan,
+        Self::BundleManifest,
+        Self::TarInventory,
+        Self::GzipTarInventory,
+        Self::XzTarInventory,
+        Self::Identifiers,
+        Self::InputPath,
     ];
 
     /// The target's `cargo fuzz` name, which is also its seed directory name.
@@ -222,6 +271,13 @@ impl Target {
             Self::RequestRecord => "request_record",
             Self::JobBatchFile => "job_batch_file",
             Self::HandoffCheck => "handoff_check",
+            Self::SetupPlan => "setup_plan",
+            Self::BundleManifest => "bundle_manifest",
+            Self::TarInventory => "tar_inventory",
+            Self::GzipTarInventory => "gzip_tar_inventory",
+            Self::XzTarInventory => "xz_tar_inventory",
+            Self::Identifiers => "identifiers",
+            Self::InputPath => "input_path",
         }
     }
 
@@ -256,6 +312,13 @@ impl Target {
             Self::RequestRecord => check_request_record(data),
             Self::JobBatchFile => check_job_batch_file(data),
             Self::HandoffCheck => check_handoff_check(data),
+            Self::SetupPlan => check_setup_plan(data),
+            Self::BundleManifest => check_bundle_manifest(data),
+            Self::TarInventory => check_tar_inventory(data),
+            Self::GzipTarInventory => check_gzip_tar_inventory(data),
+            Self::XzTarInventory => check_xz_tar_inventory(data),
+            Self::Identifiers => check_identifiers(data),
+            Self::InputPath => check_input_path(data),
         }
     }
 }
@@ -369,6 +432,23 @@ pub enum Violation {
     /// its grammar (a pointer or allowed value the draft could choose), or
     /// a verdict that disagrees with its errors or bounds.
     HandoffCheckInconsistent,
+    /// An accepted saved setup plan exceeded the document budget, did not
+    /// read back from its serialised form, or changed with whitespace added;
+    /// or a size or nesting refusal was wrong about the bytes.
+    SetupPlanInconsistent,
+    /// A bundle check disagreed with itself, wrote to the bundle, or accepted
+    /// a manifest whose facts are not the ones its bytes state.
+    BundleInconsistent,
+    /// An accepted archive inventory broke the stated archive rules: a path
+    /// that is not portable, a duplicate, a link or special entry nothing
+    /// reviewed, content on a directory, or more than the budget.
+    ArchiveInventoryInconsistent,
+    /// An identifier or key parser disagreed with the independent statement
+    /// of its grammar, or did not read back its own canonical form.
+    IdentifierInconsistent,
+    /// The relative input path or bundle name parser disagreed with the
+    /// independent statement of its grammar.
+    InputPathInconsistent,
 }
 
 impl fmt::Display for Violation {
@@ -427,6 +507,21 @@ impl fmt::Display for Violation {
             Self::BatchFileInconsistent => "the batch reader disagrees with the file's lines",
             Self::HandoffCheckInconsistent => {
                 "a handoff check repeated differently or published a finding outside its grammar"
+            }
+            Self::SetupPlanInconsistent => {
+                "a saved setup plan broke its budget or did not read back from its own form"
+            }
+            Self::BundleInconsistent => {
+                "a bundle check was inconsistent, wrote to the bundle or accepted other facts than its bytes state"
+            }
+            Self::ArchiveInventoryInconsistent => {
+                "an accepted archive inventory broke the archive rules"
+            }
+            Self::IdentifierInconsistent => {
+                "an identifier parser disagrees with the statement of its grammar"
+            }
+            Self::InputPathInconsistent => {
+                "an input path or bundle name parser disagrees with the statement of its grammar"
             }
         })
     }
@@ -1343,5 +1438,716 @@ fn check_handoff_check(data: &[u8]) -> Result<(), Violation> {
         Ok(())
     } else {
         Err(Violation::HandoffCheckInconsistent)
+    }
+}
+
+/// The most levels of objects and arrays outside strings, counted the way a
+/// plain reader would: an opening bracket adds one, a closing one removes
+/// one, and nothing inside a string counts.
+fn json_depth(data: &[u8]) -> usize {
+    let (mut depth, mut deepest) = (0_usize, 0_usize);
+    let (mut in_string, mut escaped) = (false, false);
+    for byte in data {
+        if in_string {
+            match (escaped, *byte) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_string = false,
+                (false, _) => {}
+            }
+            continue;
+        }
+        match *byte {
+            b'"' => in_string = true,
+            b'{' | b'[' => {
+                depth = depth.saturating_add(1);
+                deepest = deepest.max(depth);
+            }
+            b'}' | b']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    deepest
+}
+
+/// The depth of a parsed document, which an accepted plan must keep within
+/// the budget however its bytes were spelled.
+fn value_depth(value: &serde_json::Value) -> usize {
+    match value {
+        serde_json::Value::Array(items) => 1 + items.iter().map(value_depth).max().unwrap_or(0),
+        serde_json::Value::Object(members) => {
+            1 + members.values().map(value_depth).max().unwrap_or(0)
+        }
+        _ => 0,
+    }
+}
+
+/// The saved plan `setup install --plan` reads: refused before parsing when
+/// it is too large or too deep, otherwise decoded strictly. A refusal must
+/// be right about the bytes; an accepted plan stays inside the budget, reads
+/// back from its serialised form and does not change when whitespace is added.
+fn check_setup_plan(data: &[u8]) -> Result<(), Violation> {
+    let limits = JsonLimits::DOCUMENT;
+    let within_size = data.len() <= limits.max_bytes;
+    let within_depth = json_depth(data) <= limits.max_nesting;
+    let plan = match decode_strict_json::<SavedSetupPlan>(data, limits) {
+        Ok(plan) => plan,
+        Err(refusal) => {
+            let right = match refusal {
+                StrictJsonError::TooLarge => !within_size,
+                StrictJsonError::TooDeep => within_size && !within_depth,
+                StrictJsonError::Malformed(_) => within_size && within_depth,
+            };
+            return if right {
+                Ok(())
+            } else {
+                Err(Violation::SetupPlanInconsistent)
+            };
+        }
+    };
+    let parsed_depth = serde_json::from_slice::<serde_json::Value>(data)
+        .map(|value| value_depth(&value))
+        .map_err(|_| Violation::SetupPlanInconsistent)?;
+    if !within_size || !within_depth || parsed_depth > limits.max_nesting {
+        return Err(Violation::SetupPlanInconsistent);
+    }
+    let envelope = plan.validate_envelope();
+    if plan.validate_envelope() != envelope {
+        return Err(Violation::SetupPlanInconsistent);
+    }
+    // Only a plan the command would accept is read further.
+    if envelope.is_ok() {
+        let _ = plan.profile();
+    }
+    let encoded = serde_json::to_vec(&plan).map_err(|_| Violation::SetupPlanInconsistent)?;
+    if encoded.len() <= limits.max_bytes
+        && decode_strict_json::<SavedSetupPlan>(&encoded, limits)
+            .ok()
+            .as_ref()
+            != Some(&plan)
+    {
+        return Err(Violation::SetupPlanInconsistent);
+    }
+    let mut padded = data.to_vec();
+    padded.extend_from_slice(b" \n\t");
+    if padded.len() <= limits.max_bytes
+        && decode_strict_json::<SavedSetupPlan>(&padded, limits)
+            .ok()
+            .as_ref()
+            != Some(&plan)
+    {
+        return Err(Violation::SetupPlanInconsistent);
+    }
+    Ok(())
+}
+
+/// Builds a [`Target::BundleManifest`] input: the manifest (`bundle.json`),
+/// then, each after a NUL byte, the payload of artifact 0, artifact 1 and so
+/// on. A JSON document holds no raw NUL, so the first one ends the manifest.
+///
+/// The target names each artifact it has a payload for by the payload's own
+/// SHA-256 and rewrites that artifact's `name`, `sha256` and `bytes` in the
+/// manifest, as the store would have written them, so the fuzzer mutates the
+/// records without having to forge a digest.
+#[must_use]
+pub fn bundle_manifest_input(manifest: &[u8], payloads: &[&[u8]]) -> Vec<u8> {
+    let mut data = manifest.to_vec();
+    for payload in payloads {
+        data.push(0);
+        data.extend_from_slice(payload);
+    }
+    data
+}
+
+/// Lower-case hexadecimal digits of `bytes`.
+#[cfg(unix)]
+fn lower_hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut text = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
+        text.push(char::from(DIGITS[usize::from(byte >> 4)]));
+        text.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
+    }
+    text
+}
+
+/// The file extension a stored artifact kind is committed under, as the
+/// store names its files.
+#[cfg(unix)]
+fn artifact_extension(kind: &str) -> Option<&'static str> {
+    match kind {
+        "frame_png" => Some("png"),
+        "audio_pcm" => Some("pcm"),
+        "audio_wav" => Some("wav"),
+        "transcript_record" | "visual_index_record" | "evidence_record" => Some("json"),
+        _ => None,
+    }
+}
+
+/// Writes the payloads the manifest names under their digest names and
+/// returns the manifest to write: the one given, or, when it is a JSON
+/// object with an `artifacts` array, that with each artifact that has a
+/// payload renamed and re-measured.
+#[cfg(unix)]
+fn materialise_artifacts<Write>(
+    manifest: &[u8],
+    payloads: &[&[u8]],
+    mut write: Write,
+) -> Result<Vec<u8>, Violation>
+where
+    Write: FnMut(&str, &[u8]) -> Result<(), Violation>,
+{
+    let Ok(mut document) = serde_json::from_slice::<serde_json::Value>(manifest) else {
+        return Ok(manifest.to_vec());
+    };
+    let Some(artifacts) = document
+        .get_mut("artifacts")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return Ok(manifest.to_vec());
+    };
+    for (artifact, payload) in artifacts.iter_mut().zip(payloads) {
+        let Some(extension) = artifact
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .and_then(artifact_extension)
+        else {
+            continue;
+        };
+        let digest = lower_hex(&Sha256::digest(payload));
+        let name = format!("artifact-{digest}.{extension}");
+        write(&name, payload)?;
+        if let Some(record) = artifact.as_object_mut() {
+            record.insert("name".to_owned(), serde_json::Value::from(name));
+            record.insert("sha256".to_owned(), serde_json::Value::from(digest));
+            record.insert("bytes".to_owned(), serde_json::Value::from(payload.len()));
+        }
+    }
+    serde_json::to_vec(&document).map_err(|_| Violation::HarnessSetup)
+}
+
+/// What a passing bundle validation must report, read from the manifest it
+/// was given: the facts an independent reader of the bytes finds.
+#[cfg(unix)]
+fn bundle_facts_hold(manifest: &[u8], status: &vsift_infrastructure::BundleStatus) -> bool {
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(manifest) else {
+        return false;
+    };
+    let artifacts = document
+        .get("artifacts")
+        .and_then(serde_json::Value::as_array);
+    let listed_bytes: Option<u64> = artifacts.and_then(|items| {
+        items.iter().try_fold(0_u64, |total, item| {
+            total.checked_add(item.get("bytes")?.as_u64()?)
+        })
+    });
+    document
+        .get("session_id")
+        .and_then(serde_json::Value::as_str)
+        == Some(status.session_id().as_str())
+        && document
+            .get("source_id")
+            .and_then(serde_json::Value::as_str)
+            == Some(status.source_id().as_str())
+        && document
+            .get("source_bytes")
+            .and_then(serde_json::Value::as_u64)
+            == Some(status.source_bytes())
+        && status.source_policy() == BundleSourcePolicy::EvidenceOnly
+        && artifacts.map(Vec::len) == Some(status.artifact_count())
+        && listed_bytes == Some(status.artifact_bytes())
+        && status.manifest_sha256() == lower_hex(&Sha256::digest(manifest))
+}
+
+#[cfg(unix)]
+mod bundle_directory {
+    //! The private directory a bundle is written to for each run.
+
+    use std::{
+        collections::BTreeSet,
+        fs,
+        io::{self, Write},
+        os::unix::fs::{DirBuilderExt, OpenOptionsExt},
+        path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    /// A private folder holding one private `bundle` folder, which is removed
+    /// when the value is dropped (a libFuzzer process that is killed leaves
+    /// one behind, on a disposable runner).
+    pub(super) struct Workspace {
+        parent: PathBuf,
+        bundle: PathBuf,
+    }
+
+    impl Workspace {
+        pub(super) fn create() -> io::Result<Self> {
+            let parent = std::env::temp_dir().join(format!(
+                "vsift-fuzz-bundle-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let mut builder = fs::DirBuilder::new();
+            builder.mode(0o700);
+            builder.create(&parent)?;
+            let bundle = parent.join("bundle");
+            builder.create(&bundle)?;
+            Ok(Self { parent, bundle })
+        }
+
+        pub(super) fn bundle(&self) -> &Path {
+            &self.bundle
+        }
+
+        /// Empties the bundle folder.
+        pub(super) fn clear(&self) -> io::Result<()> {
+            for entry in fs::read_dir(&self.bundle)? {
+                fs::remove_file(entry?.path())?;
+            }
+            Ok(())
+        }
+
+        /// Writes one private file of the bundle, replacing what was there.
+        pub(super) fn write(&self, name: &str, bytes: &[u8]) -> io::Result<()> {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(self.bundle.join(name))?;
+            file.write_all(bytes)
+        }
+
+        /// The names in the bundle folder.
+        pub(super) fn names(&self) -> io::Result<BTreeSet<String>> {
+            let mut names = BTreeSet::new();
+            for entry in fs::read_dir(&self.bundle)? {
+                names.insert(entry?.file_name().to_string_lossy().into_owned());
+            }
+            Ok(names)
+        }
+    }
+
+    impl Drop for Workspace {
+        fn drop(&mut self) {
+            // Best effort: the folder is a scratch folder of this process.
+            let _ = fs::remove_dir_all(&self.parent);
+        }
+    }
+}
+
+#[cfg(unix)]
+thread_local! {
+    static BUNDLE_WORKSPACE: RefCell<Option<bundle_directory::Workspace>> =
+        const { RefCell::new(None) };
+}
+
+/// A retained bundle that someone else may have written: its manifest and
+/// artifacts through the check `vsift bundle validate` runs. The check must
+/// answer the same twice, must not write to the bundle, and a passing
+/// answer must state the facts the manifest's bytes state.
+///
+/// Only Unix can make the private folder the check requires without
+/// platform calls this crate does not make, so elsewhere the target accepts
+/// everything and runs nothing.
+fn check_bundle_manifest(data: &[u8]) -> Result<(), Violation> {
+    bundle_outcome(data).map(|_| ())
+}
+
+/// Why the bundle check refuses `data`, when it does: the typed refusal, for
+/// a test that expected an acceptance. `None` when it accepts or cannot run.
+#[must_use]
+pub fn bundle_manifest_refusal(data: &[u8]) -> Option<String> {
+    bundle_outcome(data).ok().flatten()
+}
+
+/// Whether the bundle check accepts `data` as the layout of
+/// [`bundle_manifest_input`] describes it. Always false where the check
+/// cannot run (not Unix), and when it fails for a reason of its own.
+#[must_use]
+pub fn bundle_manifest_is_accepted(data: &[u8]) -> bool {
+    cfg!(unix) && bundle_outcome(data) == Ok(None)
+}
+
+/// Runs the bundle check: `Ok(None)` when it accepted the bundle, `Ok(Some)`
+/// with the refusal when it did not.
+#[cfg(unix)]
+fn bundle_outcome(data: &[u8]) -> Result<Option<String>, Violation> {
+    let mut sections = data.split(|byte| *byte == 0);
+    let manifest = sections.next().unwrap_or_default();
+    let payloads: Vec<&[u8]> = sections.collect();
+    BUNDLE_WORKSPACE.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if slot.is_none() {
+            *slot =
+                Some(bundle_directory::Workspace::create().map_err(|_| Violation::HarnessSetup)?);
+        }
+        let workspace = slot.as_ref().ok_or(Violation::HarnessSetup)?;
+        workspace.clear().map_err(|_| Violation::HarnessSetup)?;
+        let written = materialise_artifacts(manifest, &payloads, |name, bytes| {
+            workspace
+                .write(name, bytes)
+                .map_err(|_| Violation::HarnessSetup)
+        })?;
+        workspace
+            .write("bundle.json", &written)
+            .map_err(|_| Violation::HarnessSetup)?;
+        let before = workspace.names().map_err(|_| Violation::HarnessSetup)?;
+        let first = FilesystemSessionStore::validate_bundle(workspace.bundle());
+        let second = FilesystemSessionStore::validate_bundle(workspace.bundle());
+        let after = workspace.names().map_err(|_| Violation::HarnessSetup)?;
+        if first != second || before != after {
+            return Err(Violation::BundleInconsistent);
+        }
+        match first {
+            Ok(status) if !bundle_facts_hold(&written, &status) => {
+                Err(Violation::BundleInconsistent)
+            }
+            Ok(_) => Ok(None),
+            Err(refusal) => Ok(Some(format!("{refusal:?}"))),
+        }
+    })
+}
+
+#[cfg(not(unix))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "Same signature as the Unix check, which can fail"
+)]
+fn bundle_outcome(_data: &[u8]) -> Result<Option<String>, Violation> {
+    Ok(Some(String::from("the check runs only on Unix")))
+}
+
+/// A small budget the fuzzer reaches with short inputs, beside the
+/// production one: entries, declared expanded bytes and tar stream bytes.
+const SMALL_ARCHIVE_BUDGET: (usize, u64, u64) = (8, 4_096, 8_192);
+/// The budget of the largest reviewed archive.
+const PRODUCTION_ARCHIVE_BUDGET: (usize, u64, u64) = (
+    MAX_ARCHIVE_ENTRIES,
+    MAX_ARCHIVE_EXPANDED_BYTES,
+    MAX_TAR_STREAM_BYTES,
+);
+
+/// What an accepted inventory must keep, stated without the checker's code:
+/// at most the entries and bytes of its budget; every path printable ASCII
+/// of at most 240 bytes with no backslash or colon, no empty, `.` or `..`
+/// part, and no two paths equal when case is ignored; content only on
+/// regular files; and, since no link was reviewed, no link and no special
+/// entry.
+fn check_inventory(
+    entries: &[ArchiveEntry],
+    max_entries: usize,
+    max_bytes: u64,
+) -> Result<(), Violation> {
+    let broken = Err(Violation::ArchiveInventoryInconsistent);
+    if entries.is_empty() || entries.len() > max_entries {
+        return broken;
+    }
+    let mut names = BTreeSet::new();
+    let mut total = 0_u64;
+    for entry in entries {
+        let directory = match &entry.kind {
+            ArchiveEntryKind::Regular => false,
+            ArchiveEntryKind::Directory => true,
+            ArchiveEntryKind::SymbolicLink { .. } | ArchiveEntryKind::Other => return broken,
+        };
+        if directory && entry.bytes != 0 {
+            return broken;
+        }
+        let name = if directory {
+            entry.path.strip_suffix('/').unwrap_or(&entry.path)
+        } else {
+            entry.path.as_str()
+        };
+        let portable = !name.is_empty()
+            && name.len() <= 240
+            && name
+                .bytes()
+                .all(|byte| (0x20..=0x7e).contains(&byte) && byte != b'\\' && byte != b':')
+            && name
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != "..");
+        if !portable || !names.insert(name.to_ascii_lowercase()) {
+            return broken;
+        }
+        total = match total.checked_add(entry.bytes) {
+            Some(sum) => sum,
+            None => return broken,
+        };
+    }
+    if total > max_bytes {
+        return broken;
+    }
+    Ok(())
+}
+
+/// A raw tar under both budgets: an accepted inventory keeps the archive
+/// rules and fits its stream limit, and the answer is the same twice.
+fn check_tar_inventory(data: &[u8]) -> Result<(), Violation> {
+    // A plain tar's input is the stream, so the stream limit bounds it.
+    for (entries, bytes, stream) in [SMALL_ARCHIVE_BUDGET, PRODUCTION_ARCHIVE_BUDGET] {
+        let bounds =
+            ArchiveInventoryBounds::new(entries, bytes).map_err(|_| Violation::HarnessSetup)?;
+        let first = inspect_tar_inventory(Cursor::new(data), stream, bounds, &[]);
+        if let Ok(found) = &first {
+            check_inventory(found, entries, bytes)?;
+            if u64::try_from(data.len()).is_ok_and(|length| length > stream) {
+                return Err(Violation::ArchiveInventoryInconsistent);
+            }
+        }
+        if inspect_tar_inventory(Cursor::new(data), stream, bounds, &[]) != first {
+            return Err(Violation::ArchiveInventoryInconsistent);
+        }
+    }
+    Ok(())
+}
+
+/// The compressed-input limit of the small budget: far above any seed.
+const SMALL_COMPRESSED_BYTES: u64 = 65_536;
+
+fn check_gzip_tar_inventory(data: &[u8]) -> Result<(), Violation> {
+    let ceiling = |stream: u64| {
+        if stream == SMALL_ARCHIVE_BUDGET.2 {
+            SMALL_COMPRESSED_BYTES
+        } else {
+            MAX_GZIP_ARCHIVE_BYTES
+        }
+    };
+    let input_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
+    for (entries, bytes, stream) in [SMALL_ARCHIVE_BUDGET, PRODUCTION_ARCHIVE_BUDGET] {
+        let bounds =
+            ArchiveInventoryBounds::new(entries, bytes).map_err(|_| Violation::HarnessSetup)?;
+        let inspect =
+            || inspect_gzip_tar_inventory(Cursor::new(data), ceiling(stream), stream, bounds, &[]);
+        let first = inspect();
+        if let Ok(found) = &first {
+            check_inventory(found, entries, bytes)?;
+            if input_bytes > ceiling(stream) {
+                return Err(Violation::ArchiveInventoryInconsistent);
+            }
+        }
+        if inspect() != first {
+            return Err(Violation::ArchiveInventoryInconsistent);
+        }
+    }
+    Ok(())
+}
+
+fn check_xz_tar_inventory(data: &[u8]) -> Result<(), Violation> {
+    let ceiling = |stream: u64| {
+        if stream == SMALL_ARCHIVE_BUDGET.2 {
+            SMALL_COMPRESSED_BYTES
+        } else {
+            MAX_XZ_ARCHIVE_BYTES
+        }
+    };
+    let input_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
+    for (entries, bytes, stream) in [SMALL_ARCHIVE_BUDGET, PRODUCTION_ARCHIVE_BUDGET] {
+        let bounds =
+            ArchiveInventoryBounds::new(entries, bytes).map_err(|_| Violation::HarnessSetup)?;
+        let inspect =
+            || inspect_xz_tar_inventory(Cursor::new(data), ceiling(stream), stream, bounds, &[]);
+        let first = inspect();
+        if let Ok(found) = &first {
+            check_inventory(found, entries, bytes)?;
+            if input_bytes > ceiling(stream) {
+                return Err(Violation::ArchiveInventoryInconsistent);
+            }
+        }
+        if inspect() != first {
+            return Err(Violation::ArchiveInventoryInconsistent);
+        }
+    }
+    Ok(())
+}
+
+/// Lower-case ASCII letters and digits, the alphabet of an opaque suffix.
+fn is_lower_alphanumeric(byte: u8) -> bool {
+    byte.is_ascii_lowercase() || byte.is_ascii_digit()
+}
+
+/// The grammar of an opaque identifier: its prefix, then 16 to 64 lower-case
+/// letters or digits.
+fn opaque_grammar(text: &str, prefix: &str) -> bool {
+    text.strip_prefix(prefix).is_some_and(|suffix| {
+        (16..=64).contains(&suffix.len()) && suffix.bytes().all(is_lower_alphanumeric)
+    })
+}
+
+/// The grammar of a digest: exactly `length` lower-case hexadecimal digits.
+fn hex_grammar(text: &str, length: usize) -> bool {
+    text.len() == length
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// Parses `$text` as `$type`, requiring it to be accepted exactly when the
+/// grammar says and, if accepted, to read back as the same text.
+macro_rules! agrees_with_grammar {
+    ($text:expr, $type:ty, $grammar:expr) => {
+        match <$type>::parse($text) {
+            Ok(identifier) if $grammar && identifier.as_str() == $text => {}
+            Err(_) if !$grammar => {}
+            _ => return Err(Violation::IdentifierInconsistent),
+        }
+    };
+}
+
+fn check_identifiers(data: &[u8]) -> Result<(), Violation> {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return Ok(());
+    };
+    agrees_with_grammar!(text, SessionId, opaque_grammar(text, "ses_"));
+    agrees_with_grammar!(text, JobId, opaque_grammar(text, "job_"));
+    agrees_with_grammar!(text, OperationId, opaque_grammar(text, "op_"));
+    agrees_with_grammar!(text, ArtifactId, opaque_grammar(text, "art_"));
+    agrees_with_grammar!(text, EvidenceId, opaque_grammar(text, "evd_"));
+    agrees_with_grammar!(text, SourceSegmentId, opaque_grammar(text, "sgm_"));
+    agrees_with_grammar!(text, TranscriptRevisionId, opaque_grammar(text, "trv_"));
+    agrees_with_grammar!(text, TranscriptSegmentId, opaque_grammar(text, "tsg_"));
+    agrees_with_grammar!(text, VisualIndexId, opaque_grammar(text, "vix_"));
+    agrees_with_grammar!(text, VisualCandidateId, opaque_grammar(text, "vcd_"));
+    let digest_after = |prefix: &str| {
+        text.strip_prefix(prefix)
+            .is_some_and(|digest| hex_grammar(digest, 64))
+    };
+    agrees_with_grammar!(text, SourceId, digest_after("src_sha256_"));
+    agrees_with_grammar!(text, OperationKey, digest_after("opk_sha256_"));
+    agrees_with_grammar!(text, Sha256Hex, hex_grammar(text, 64));
+    match VisualHash::parse_hex(text) {
+        Ok(hash) if hex_grammar(text, 16) && hash.to_hex() == text => {}
+        Err(_) if !hex_grammar(text, 16) => {}
+        _ => return Err(Violation::IdentifierInconsistent),
+    }
+    // A managed version key is one safe path segment: 1 to 64 lower-case
+    // letters, digits, '.', '_' or '-', first and last a letter or digit.
+    let alphanumeric_ends = text.bytes().next().is_some_and(is_lower_alphanumeric)
+        && text.bytes().last().is_some_and(is_lower_alphanumeric);
+    let managed_key = !text.is_empty()
+        && text.len() <= MAX_MANAGED_KEY_BYTES
+        && alphanumeric_ends
+        && text
+            .bytes()
+            .all(|byte| is_lower_alphanumeric(byte) || matches!(byte, b'.' | b'_' | b'-'));
+    agrees_with_grammar!(text, ManagedVersionKey, managed_key);
+    if is_canonical_managed_key(text) != managed_key {
+        return Err(Violation::IdentifierInconsistent);
+    }
+    // A language tag: letters, digits and single inner hyphens, a letter
+    // first, at most 35 bytes.
+    let language_tag = !text.is_empty()
+        && text.len() <= 35
+        && text
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphabetic())
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        && !text.ends_with('-')
+        && !text.contains("--");
+    agrees_with_grammar!(text, LanguageTag, language_tag);
+    // A speaker label: not blank, at most 128 bytes, no control character.
+    let speaker_label =
+        !text.trim().is_empty() && text.len() <= 128 && !text.chars().any(char::is_control);
+    agrees_with_grammar!(text, SpeakerLabel, speaker_label);
+    // Identifiers of different kinds never parse from one text.
+    let kinds = [
+        SessionId::parse(text).is_ok(),
+        JobId::parse(text).is_ok(),
+        OperationId::parse(text).is_ok(),
+        ArtifactId::parse(text).is_ok(),
+        EvidenceId::parse(text).is_ok(),
+        SourceSegmentId::parse(text).is_ok(),
+        TranscriptRevisionId::parse(text).is_ok(),
+        TranscriptSegmentId::parse(text).is_ok(),
+        VisualIndexId::parse(text).is_ok(),
+        VisualCandidateId::parse(text).is_ok(),
+        SourceId::parse(text).is_ok(),
+        OperationKey::parse(text).is_ok(),
+    ];
+    if kinds.iter().filter(|accepted| **accepted).count() > 1 {
+        return Err(Violation::IdentifierInconsistent);
+    }
+    Ok(())
+}
+
+/// Device names Windows resolves in every directory.
+const WINDOWS_DEVICE_NAMES: [&str; 22] = [
+    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
+    "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+];
+
+/// Whether one path component is safe on every platform, stated from the
+/// grammar's documentation: not empty, `.` or `..`; no control character and
+/// none of `\ : < > " | ? *`; no trailing dot or space (Windows drops them);
+/// and not a device name, with or without an extension, in any case, nor
+/// `COM` or `LPT` with a superscript 1, 2 or 3.
+fn safe_component(component: &str) -> bool {
+    if component.is_empty() || component == "." || component == ".." {
+        return false;
+    }
+    if component
+        .chars()
+        .any(|character| character.is_control() || "\\:<>\"|?*".contains(character))
+    {
+        return false;
+    }
+    if component.ends_with('.') || component.ends_with(' ') {
+        return false;
+    }
+    let stem = component
+        .split('.')
+        .next()
+        .unwrap_or(component)
+        .trim_end_matches(' ')
+        .to_ascii_lowercase();
+    if WINDOWS_DEVICE_NAMES.contains(&stem.as_str()) {
+        return false;
+    }
+    let characters: Vec<char> = stem.chars().collect();
+    let superscript_device = |prefix: [char; 3]| {
+        characters.len() == 4
+            && characters.iter().take(3).eq(prefix.iter())
+            && matches!(characters.get(3), Some('\u{b9}' | '\u{b2}' | '\u{b3}'))
+    };
+    !(superscript_device(['c', 'o', 'm']) || superscript_device(['l', 'p', 't']))
+}
+
+fn check_input_path(data: &[u8]) -> Result<(), Violation> {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return Ok(());
+    };
+    let components: Vec<&str> = text.split('/').collect();
+    let safe_path = !text.is_empty()
+        && text.len() <= MAX_INPUT_PATH_BYTES
+        && components.len() <= MAX_INPUT_PATH_COMPONENTS
+        && components.iter().all(|component| safe_component(component));
+    match RelativeInputPath::parse(text) {
+        Ok(path)
+            if safe_path
+                && path.as_str() == text
+                && path.components().eq(components.iter().copied()) => {}
+        Err(_) if !safe_path => {}
+        _ => return Err(Violation::InputPathInconsistent),
+    }
+    // A bundle name: one lower-case letter or digit, then up to 63 of
+    // lower-case letters, digits, '_' and '-'.
+    let bytes = text.as_bytes();
+    let bundle_name = !bytes.is_empty()
+        && bytes.len() <= MAX_BUNDLE_NAME_BYTES
+        && bytes
+            .first()
+            .is_some_and(|byte| is_lower_alphanumeric(*byte))
+        && bytes
+            .iter()
+            .all(|byte| is_lower_alphanumeric(*byte) || matches!(byte, b'_' | b'-'));
+    match BundleName::parse(text) {
+        Ok(name) if bundle_name && name.as_str() == text => Ok(()),
+        Err(_) if !bundle_name => Ok(()),
+        _ => Err(Violation::InputPathInconsistent),
     }
 }

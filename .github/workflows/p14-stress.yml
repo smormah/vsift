@@ -1,0 +1,169 @@
+name: P14 stress
+
+# P14 PR 4, evidence item RQ-08 (docs/planning/p14-qualification.md section 2):
+# race and stress repetitions of the locking, admission, worker and batch tests
+# on Windows, macOS and Ubuntu, with the output of every failed or hung
+# repetition kept. The rule: zero failed repetitions and zero that did not
+# finish (a hung run is a deadlock candidate) in at least 200 repetitions of
+# each suite on each system; the suites that watch issues #128 and #206 run at
+# least 300. A failure is a finding (governance rule 14): it becomes an issue
+# with the kept output before anything is repeated.
+#
+#   locks       the lock and lifecycle tests beside process-spawning tests (#66)
+#   admission   weighted admission and the cross-process coordination locks
+#   supervisor  the process supervisor (#128)
+#   roots       concurrent creation of one session root (#206)
+#   supervisor-loaded, roots-loaded
+#               the same two with every CPU kept busy: both failures were seen in a
+#               full workspace run, with other tests competing for the machine
+#   engine      the engine worker, batch, jobs and lifecycle
+#   delivery    the external-delivery simulation: workers killed at random,
+#               requests redelivered and duplicated (hundreds of processes)
+#
+# The tests run from Cargo-built binaries of the checked-out source: this is
+# race evidence for the code, not for the published binary. Everything runs on
+# hosted runners, never on a developer's machine: the suites kill processes
+# and create and delete folders in the temporary directory.
+#
+# It cannot publish anything: it has `contents: read` only and uses no secret.
+#
+# Triggers: a pull request that changes this workflow or its runner runs each
+# suite once (the smoke; PR_RUNS below), and a manual dispatch runs the full
+# repetition counts (`gh workflow run p14-stress.yml --ref <branch>` works
+# before the workflow is on the default branch).
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-stress.yml
+      - tools/p14-campaigns/stress.cjs
+      - tools/p14-campaigns/lib/repeat.cjs
+      - tools/p14-campaigns/test/repeat.test.cjs
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Repetitions of the locks, admission and engine suites per operating system (the plan asks for at least 200)
+        type: string
+        default: "200"
+      long_runs:
+        description: Repetitions of the supervisor and roots suites, plain and under CPU load, which watch #128 and #206 (the plan asks for at least 300)
+        type: string
+        default: "1500"
+      delivery_runs:
+        description: Repetitions of the external-delivery simulation (each starts hundreds of processes)
+        type: string
+        default: "100"
+
+permissions: {}
+
+concurrency:
+  group: p14-stress-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.3"
+  # The repetitions of a pull request's run. One is a smoke of the workflow;
+  # raise them only to run the campaign from a branch that cannot dispatch it.
+  PR_RUNS: "1"
+  PR_LONG_RUNS: "1"
+  PR_DELIVERY_RUNS: "1"
+
+jobs:
+  tooling-tests:
+    name: Tooling tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Test the campaign tools
+        run: node --test "tools/p14-campaigns/test/*.test.cjs"
+
+  stress:
+    name: ${{ matrix.suite }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 350
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+        suite:
+          - locks
+          - admission
+          - supervisor
+          - supervisor-loaded
+          - roots
+          - roots-loaded
+          - engine
+          - delivery
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          node --version
+
+      - name: Repeat the suite
+        env:
+          SUITE: ${{ matrix.suite }}
+          RUNS: ${{ github.event_name == 'pull_request' && (startsWith(matrix.suite, 'supervisor') || startsWith(matrix.suite, 'roots')) && env.PR_LONG_RUNS || github.event_name == 'pull_request' && (matrix.suite == 'delivery' && env.PR_DELIVERY_RUNS || env.PR_RUNS) || (startsWith(matrix.suite, 'supervisor') || startsWith(matrix.suite, 'roots')) && inputs.long_runs || (matrix.suite == 'delivery' && inputs.delivery_runs || inputs.runs) }}
+        run: |
+          set -euo pipefail
+          case "$RUNS" in ''|*[!0-9]*) echo "the repetition count must be a positive integer"; exit 1;; esac
+          node tools/p14-campaigns/stress.cjs \
+            --suite "$SUITE" \
+            --runs "$RUNS" \
+            --out "${RUNNER_TEMP}/stress-${SUITE}" \
+            --minutes 300 \
+            --timeout-minutes 25 \
+            --max-failures 10 \
+            --commit "${GITHUB_SHA}"
+
+      - name: Put the result in the job summary
+        if: always()
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          if [ -f "${RUNNER_TEMP}/stress-${SUITE}/summary.md" ]; then
+            cat "${RUNNER_TEMP}/stress-${SUITE}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the result and the output of every failed repetition
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p14-stress-${{ matrix.suite }}-${{ matrix.os }}
+          path: ${{ runner.temp }}/stress-${{ matrix.suite }}
+          if-no-files-found: warn
+          retention-days: 90

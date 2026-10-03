@@ -12,42 +12,49 @@ use std::{
     fmt::Write as _,
     fs,
     future::Future,
-    io::Cursor,
+    io::{Cursor, Write as _},
     num::{NonZeroU16, NonZeroU32},
     path::{Path, PathBuf},
     pin::pin,
     task::{Context, Poll, Waker},
 };
 
+use flate2::{Compression, write::GzEncoder};
+use lzma_rust2::{XzOptions, XzWriter};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use vsift_application::{
     AsrRevisionRequest, AsrTranscription, ExtendVisualIndexRequest, VisualIndexScope,
     VisualSampler, VisualSamplingError, build_asr_revision, extend_visual_index,
     whole_file_source_segment,
 };
 use vsift_contract::{
-    BatchLine, MAX_BATCH_LINES, WORK_REQUEST_LIMITS, decode_batch_line, decode_work_request,
+    BatchLine, BundleName, JsonLimits, MAX_BATCH_LINES, RelativeInputPath, SavedSetupPlan,
+    WORK_REQUEST_LIMITS, decode_batch_line, decode_strict_json, decode_work_request,
 };
 use vsift_domain::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
     AsrProviderBuild, AsrRun, AsrRunParts, ChunkPlan, CropRect, CursorToken, FrameDimensions,
-    JobId, ListingTail, MediaTime, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId,
-    TimeRange, VISUAL_BLOCKS, VISUAL_FRAME_BYTES, VisualHash, VisualIndexProfile, VisualSample,
-    VisualWindow, merge_chunks, plan_chunks, validate_chunk_output,
+    JobId, LanguageTag, ListingTail, ManagedVersionKey, MediaTime, OperationId, SearchMatch,
+    SearchQuery, SessionId, Sha256Hex, SourceId, TimeRange, VISUAL_BLOCKS, VISUAL_FRAME_BYTES,
+    VisualHash, VisualIndexProfile, VisualSample, VisualWindow, merge_chunks, plan_chunks,
+    validate_chunk_output,
 };
 use vsift_fuzz::{
     CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, JOB_FUZZ_JOB, JOB_FUZZ_SESSION,
-    REQUEST_FUZZ_OPERATION, Target, VISUAL_FUZZ_SESSION, png_sequence_input, visual_samples_input,
+    REQUEST_FUZZ_OPERATION, Target, VISUAL_FUZZ_SESSION, bundle_manifest_input,
+    bundle_manifest_is_accepted, bundle_manifest_refusal, png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
-    BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice, OsReleaseProfile,
-    SourceContainer, VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo,
-    classify_os_release, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
-    decode_request_record, decode_transcript_record, decode_visual_index_record,
-    encode_transcript_record, encode_visual_index_record, parse_ashowinfo_start,
-    parse_cgroup_limit, parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing,
-    parse_frame_showinfo, parse_net_dev, parse_png_sequence, parse_proc_cgroup,
-    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    ArchiveInventoryBounds, BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice,
+    OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
+    classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
+    decode_job_record, decode_request_record, decode_transcript_record, decode_visual_index_record,
+    encode_transcript_record, encode_visual_index_record, inspect_gzip_tar_inventory,
+    inspect_tar_inventory, inspect_xz_tar_inventory, parse_ashowinfo_start, parse_cgroup_limit,
+    parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
+    parse_net_dev, parse_png_sequence, parse_proc_cgroup, parse_supplied_transcript,
+    parse_visual_samples, parse_whisper_full_json,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -86,6 +93,41 @@ enum Origin {
         text: &'static str,
         text_in: &'static str,
     },
+    /// A `bundle_manifest` input built here: the manifest `vsift session
+    /// retain` writes for an evidence-only bundle (the shape of
+    /// `p05_lifecycle.rs`'s own manifests), listing these artifacts as
+    /// (kind, example file in `schemas/v1/examples/`), each followed by that
+    /// example's bytes as its payload. See [`bundle_image`].
+    BundleImage(&'static [(&'static str, &'static str)]),
+    /// An archive built here the way the infrastructure crate's own archive
+    /// tests build theirs (a `tar::Builder`, then gzip or xz with the
+    /// workspace's pinned crates); the named source file holds that test's
+    /// archive path. See [`archive_seed`].
+    Archive {
+        tree: ArchiveTree,
+        format: ArchiveFormat,
+        mirrors: &'static str,
+    },
+}
+
+/// What an archive seed holds.
+#[derive(Clone, Copy, Debug)]
+enum ArchiveTree {
+    /// `root/tool`, three bytes: the infrastructure tests' own archive.
+    OneFile,
+    /// A directory, a nested file and a licence file.
+    Tree,
+    /// A regular file and a symbolic link to it, which no reviewed alias
+    /// allows.
+    Link,
+}
+
+/// How an archive seed is wrapped.
+#[derive(Clone, Copy, Debug)]
+enum ArchiveFormat {
+    Tar,
+    Gzip,
+    Xz,
 }
 
 struct Seed {
@@ -484,7 +526,189 @@ const SEEDS: &[Seed] = &[
             text_in: "crates/vsift-infrastructure/tests/fixtures/whisper-1.9.2/F01.base.json",
         },
     ),
+    // P14 PR 4. The saved plans of the frozen examples (`setup install --plan`).
+    seed(
+        Target::SetupPlan,
+        "setup-plan.unavailable.json",
+        Origin::Copy("schemas/v1/examples"),
+    ),
+    seed(
+        Target::SetupPlan,
+        "setup-plan.unqualified.json",
+        Origin::Copy("schemas/v1/examples"),
+    ),
+    // Bundles: no artifact, each record the validation decodes, and both.
+    seed(
+        Target::BundleManifest,
+        "evidence-only.bin",
+        Origin::BundleImage(&[]),
+    ),
+    seed(
+        Target::BundleManifest,
+        "transcript-record.bin",
+        Origin::BundleImage(&[("transcript_record", "bundle-transcript-record.json")]),
+    ),
+    seed(
+        Target::BundleManifest,
+        "visual-index-record.bin",
+        Origin::BundleImage(&[("visual_index_record", "bundle-visual-index-record.json")]),
+    ),
+    seed(
+        Target::BundleManifest,
+        "transcript-and-visual-index.bin",
+        Origin::BundleImage(&[
+            ("transcript_record", "bundle-transcript-record.json"),
+            ("visual_index_record", "bundle-visual-index-record.json"),
+        ]),
+    ),
+    // Archives, in the three wrappers a reviewed artifact comes in.
+    seed(
+        Target::TarInventory,
+        "one-file.tar",
+        Origin::Archive {
+            tree: ArchiveTree::OneFile,
+            format: ArchiveFormat::Tar,
+            mirrors: XZ_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::TarInventory,
+        "tree.tar",
+        Origin::Archive {
+            tree: ArchiveTree::Tree,
+            format: ArchiveFormat::Tar,
+            mirrors: XZ_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::TarInventory,
+        "link.tar",
+        Origin::Archive {
+            tree: ArchiveTree::Link,
+            format: ArchiveFormat::Tar,
+            mirrors: XZ_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::GzipTarInventory,
+        "one-file.tar.gz",
+        Origin::Archive {
+            tree: ArchiveTree::OneFile,
+            format: ArchiveFormat::Gzip,
+            mirrors: GZIP_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::GzipTarInventory,
+        "tree.tar.gz",
+        Origin::Archive {
+            tree: ArchiveTree::Tree,
+            format: ArchiveFormat::Gzip,
+            mirrors: GZIP_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::XzTarInventory,
+        "one-file.tar.xz",
+        Origin::Archive {
+            tree: ArchiveTree::OneFile,
+            format: ArchiveFormat::Xz,
+            mirrors: XZ_INVENTORY_TESTS,
+        },
+    ),
+    seed(
+        Target::XzTarInventory,
+        "tree.tar.xz",
+        Origin::Archive {
+            tree: ArchiveTree::Tree,
+            format: ArchiveFormat::Xz,
+            mirrors: XZ_INVENTORY_TESTS,
+        },
+    ),
+    // Identifiers that appear in the frozen examples and the catalogue.
+    seed(
+        Target::Identifiers,
+        "session-id.txt",
+        Origin::InlineIn("schemas/v1/examples/job-batch.requests.jsonl"),
+    ),
+    seed(
+        Target::Identifiers,
+        "operation-id.txt",
+        Origin::InlineIn("schemas/v1/examples/job-batch.requests.jsonl"),
+    ),
+    seed(
+        Target::Identifiers,
+        "job-id.txt",
+        Origin::InlineIn("schemas/v1/examples/job-batch.events.jsonl"),
+    ),
+    seed(
+        Target::Identifiers,
+        "source-id.txt",
+        Origin::InlineIn("schemas/v1/examples/job-batch.events.jsonl"),
+    ),
+    seed(
+        Target::Identifiers,
+        "sha256.txt",
+        Origin::InlineIn("schemas/v1/examples/job-batch.events.jsonl"),
+    ),
+    seed(
+        Target::Identifiers,
+        "visual-hash.txt",
+        Origin::InlineIn("crates/vsift-infrastructure/tests/data/visual_samples/F01.json"),
+    ),
+    seed(
+        Target::Identifiers,
+        "managed-version-key.txt",
+        Origin::InlineIn("crates/vsift-infrastructure/src/managed_catalogue.rs"),
+    ),
+    seed(
+        Target::Identifiers,
+        "language-tag.txt",
+        Origin::InlineIn("schemas/v1/examples/transcript-get.asr.json"),
+    ),
+    seed(
+        Target::Identifiers,
+        "speaker-label.txt",
+        Origin::InlineIn("crates/vsift-infrastructure/tests/data/transcripts/markup.vtt"),
+    ),
+    // Paths and bundle names: the runbook's own, and the spellings the
+    // contained-input tests refuse.
+    seed(
+        Target::InputPath,
+        "walkthrough.txt",
+        Origin::InlineIn("docs/operations/worker-host.md"),
+    ),
+    seed(
+        Target::InputPath,
+        "bundle-name.txt",
+        Origin::InlineIn("docs/operations/worker-host.md"),
+    ),
+    seed(
+        Target::InputPath,
+        "outside-secret.txt",
+        Origin::InlineIn("crates/vsift-infrastructure/tests/contained_inputs.rs"),
+    ),
+    seed(
+        Target::InputPath,
+        "climb-then-leave.txt",
+        Origin::InlineIn("crates/vsift-infrastructure/tests/contained_inputs.rs"),
+    ),
+    seed(
+        Target::InputPath,
+        "drive.txt",
+        Origin::InlineIn("crates/vsift-infrastructure/tests/contained_inputs.rs"),
+    ),
+    seed(
+        Target::InputPath,
+        "device-in-directory.txt",
+        Origin::InlineIn("crates/vsift-infrastructure/tests/contained_inputs.rs"),
+    ),
 ];
+
+/// The tests of the two compressed-archive readers, whose archives the
+/// archive seeds mirror (`root/tool`, three bytes).
+const XZ_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/xz_tar_inventory.rs";
+const GZIP_INVENTORY_TESTS: &str = "crates/vsift-infrastructure/src/gzip_tar_inventory.rs";
 
 const fn seed(target: Target, file: &'static str, origin: Origin) -> Seed {
     Seed {
@@ -598,11 +822,37 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::ChunkCheckpoint, "checkpoint.silent.json"),
         (Target::HandoffCheck, "SKILL.md"),
         (Target::HandoffCheck, "draft-with-findings.md"),
+        (Target::SetupPlan, "setup-plan.unavailable.json"),
+        (Target::BundleManifest, "evidence-only.bin"),
+        (Target::BundleManifest, "transcript-record.bin"),
+        (Target::BundleManifest, "visual-index-record.bin"),
+        (Target::TarInventory, "one-file.tar"),
+        (Target::TarInventory, "tree.tar"),
+        (Target::GzipTarInventory, "one-file.tar.gz"),
+        (Target::GzipTarInventory, "tree.tar.gz"),
+        (Target::XzTarInventory, "one-file.tar.xz"),
+        (Target::XzTarInventory, "tree.tar.xz"),
+        (Target::Identifiers, "session-id.txt"),
+        (Target::Identifiers, "operation-id.txt"),
+        (Target::Identifiers, "job-id.txt"),
+        (Target::Identifiers, "source-id.txt"),
+        (Target::Identifiers, "sha256.txt"),
+        (Target::Identifiers, "visual-hash.txt"),
+        (Target::Identifiers, "managed-version-key.txt"),
+        (Target::Identifiers, "language-tag.txt"),
+        (Target::Identifiers, "speaker-label.txt"),
+        (Target::InputPath, "walkthrough.txt"),
+        (Target::InputPath, "bundle-name.txt"),
     ];
     for (target, file) in accepted {
         let data = fs::read(seed_directory(target).join(file))?;
         let is_accepted = is_accepted(target, &data)?;
-        assert!(is_accepted, "{}/{file} is rejected", target.name());
+        assert!(
+            is_accepted,
+            "{}/{file} is rejected ({})",
+            target.name(),
+            bundle_manifest_refusal(&data).unwrap_or_default()
+        );
     }
     Ok(())
 }
@@ -648,6 +898,10 @@ fn batch_file_is_read_whole(data: &[u8]) -> Result<bool, Box<dyn Error>> {
 }
 
 /// Whether `target`'s parser accepts a well-formed seed.
+#[allow(
+    clippy::too_many_lines,
+    reason = "One arm for each fuzz target keeps every parser's acceptance test in one place"
+)]
 fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
     Ok(match target {
         Target::TranscriptSrt | Target::TranscriptWebVtt => parse_supplied_transcript(data).is_ok(),
@@ -741,6 +995,14 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
                 || parse_cgroup_limit(data).is_ok()
                 || parse_net_dev(data).is_ok()
         }
+        // The P14 PR 4 targets are read by their own function.
+        Target::SetupPlan
+        | Target::BundleManifest
+        | Target::TarInventory
+        | Target::GzipTarInventory
+        | Target::XzTarInventory
+        | Target::Identifiers
+        | Target::InputPath => is_accepted_in_p14(target, data)?,
         // The outer and the inner rectangle are both accepted.
         Target::CropRect => {
             let (outer, inner) = std::str::from_utf8(data)?
@@ -752,6 +1014,59 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
                     .is_ok_and(|inner| outer.compose(inner).is_ok())
             })
         }
+    })
+}
+
+/// Whether a P14 PR 4 target's parser accepts a well-formed seed.
+fn is_accepted_in_p14(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
+    Ok(match target {
+        // The saved plan is one `setup install` would accept.
+        Target::SetupPlan => decode_strict_json::<SavedSetupPlan>(data, JsonLimits::DOCUMENT)
+            .is_ok_and(|plan| plan.validate_envelope().is_ok()),
+        // Where the check cannot run (not Unix) it accepts nothing, so only
+        // Unix holds the seeds to it.
+        Target::BundleManifest => !cfg!(unix) || bundle_manifest_is_accepted(data),
+        Target::TarInventory => inspect_tar_inventory(
+            Cursor::new(data),
+            SEED_STREAM_BYTES,
+            seed_archive_bounds()?,
+            &[],
+        )
+        .is_ok(),
+        Target::GzipTarInventory => inspect_gzip_tar_inventory(
+            Cursor::new(data),
+            SEED_COMPRESSED_BYTES,
+            SEED_STREAM_BYTES,
+            seed_archive_bounds()?,
+            &[],
+        )
+        .is_ok(),
+        Target::XzTarInventory => inspect_xz_tar_inventory(
+            Cursor::new(data),
+            SEED_COMPRESSED_BYTES,
+            SEED_STREAM_BYTES,
+            seed_archive_bounds()?,
+            &[],
+        )
+        .is_ok(),
+        // Each seed is the text of one identifier or key.
+        Target::Identifiers => {
+            let text = std::str::from_utf8(data)?;
+            SessionId::parse(text).is_ok()
+                || JobId::parse(text).is_ok()
+                || OperationId::parse(text).is_ok()
+                || SourceId::parse(text).is_ok()
+                || Sha256Hex::parse(text).is_ok()
+                || VisualHash::parse_hex(text).is_ok()
+                || ManagedVersionKey::parse(text).is_ok()
+                || LanguageTag::parse(text).is_ok()
+                || vsift_domain::SpeakerLabel::parse(text).is_ok()
+        }
+        Target::InputPath => {
+            let text = std::str::from_utf8(data)?;
+            RelativeInputPath::parse(text).is_ok() || BundleName::parse(text).is_ok()
+        }
+        _ => false,
     })
 }
 
@@ -809,6 +1124,15 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
                 data == format!("{query}\n{text}").as_bytes()
                     && fs::read_to_string(repository(query_in))?.contains(query)
                     && fs::read_to_string(repository(text_in))?.contains(text)
+            }
+            Origin::BundleImage(artifacts) => data == bundle_image(artifacts)?,
+            Origin::Archive {
+                tree,
+                format,
+                mirrors,
+            } => {
+                data == archive_seed(tree, format)?
+                    && fs::read_to_string(repository(mirrors))?.contains("root/tool")
             }
         };
         assert!(matches, "{} no longer matches its origin", seed.file);
@@ -1026,7 +1350,9 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
             | Origin::EncodedF01LocalAsr
             | Origin::RecordedCrops(_)
             | Origin::CropPair { .. }
-            | Origin::SearchPair { .. } => continue,
+            | Origin::SearchPair { .. }
+            | Origin::BundleImage(_)
+            | Origin::Archive { .. } => continue,
         };
         let path = seed_directory(seed.target).join(seed.file);
         if regenerate {
@@ -1037,6 +1363,185 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
             fs::read(&path)? == derived,
             "{} no longer derives from the recorded samples",
             seed.file
+        );
+    }
+    Ok(())
+}
+
+/// The session every bundle seed names: that of the visual-index example,
+/// whose record is decoded for it.
+const BUNDLE_SESSION: &str = "ses_0000000000000000visual";
+/// The source a bundle seed with no artifact names: that of the visual-index
+/// example. A bundle with artifacts names the source of its first one, since a
+/// record must describe the bundle's source.
+const BUNDLE_SOURCE: &str =
+    "src_sha256_aec1a03817bbe77366bd29ca7b8254537de50b6f941b0b262fadd82cb652ea60";
+
+/// Lower-case hexadecimal digits.
+fn hex_digits(bytes: &[u8]) -> Result<String, Box<dyn Error>> {
+    let mut text = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(text, "{byte:02x}")?;
+    }
+    Ok(text)
+}
+
+/// A `bundle_manifest` seed: the evidence-only manifest listing `artifacts`
+/// as (kind, example file), each artifact named by the digest of the
+/// example's bytes as the store names its files, then those bytes.
+fn bundle_image(artifacts: &[(&str, &str)]) -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut listed = Vec::new();
+    let mut payloads = Vec::new();
+    let mut source = BUNDLE_SOURCE.to_owned();
+    for (kind, example) in artifacts {
+        let payload = fs::read(repository("schemas/v1/examples").join(example))?;
+        if payloads.is_empty() {
+            let record: Value = serde_json::from_slice(&payload)?;
+            let named = record["source_id"]
+                .as_str()
+                .ok_or("the first example names no source")?;
+            named.clone_into(&mut source);
+        }
+        let digest = hex_digits(&Sha256::digest(&payload))?;
+        listed.push(serde_json::json!({
+            "kind": kind,
+            "name": format!("artifact-{digest}.json"),
+            "sha256": digest,
+            "bytes": payload.len(),
+        }));
+        payloads.push(payload);
+    }
+    let manifest = serde_json::to_vec(&serde_json::json!({
+        "schema_version": 1,
+        "format": "vsift.bundle",
+        "session_id": BUNDLE_SESSION,
+        "source_id": source,
+        "source_bytes": 1_234_567,
+        "source_included": false,
+        "publication": "process_crash_consistent",
+        "artifacts": listed,
+    }))?;
+    let borrowed: Vec<&[u8]> = payloads.iter().map(Vec::as_slice).collect();
+    Ok(bundle_manifest_input(&manifest, &borrowed))
+}
+
+/// Adds one regular file of `content` named `path`.
+fn append_file(
+    builder: &mut tar::Builder<Vec<u8>>,
+    path: &str,
+    content: &[u8],
+) -> Result<(), Box<dyn Error>> {
+    let mut header = tar::Header::new_gnu();
+    header.set_path(path)?;
+    header.set_size(u64::try_from(content.len())?);
+    header.set_mode(0o600);
+    header.set_cksum();
+    builder.append(&header, content)?;
+    Ok(())
+}
+
+/// A tar of one of the shapes the archive seeds hold.
+fn tar_seed(tree: ArchiveTree) -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut builder = tar::Builder::new(Vec::new());
+    match tree {
+        ArchiveTree::OneFile => append_file(&mut builder, "root/tool", b"abc")?,
+        ArchiveTree::Tree => {
+            let mut directory = tar::Header::new_gnu();
+            directory.set_path("root/")?;
+            directory.set_entry_type(tar::EntryType::Directory);
+            directory.set_size(0);
+            directory.set_mode(0o700);
+            directory.set_cksum();
+            builder.append(&directory, std::io::empty())?;
+            append_file(&mut builder, "root/bin/tool", b"abc")?;
+            append_file(&mut builder, "root/LICENSE.txt", b"A synthetic licence.\n")?;
+        }
+        ArchiveTree::Link => {
+            append_file(&mut builder, "root/lib.so.1", b"abc")?;
+            let mut link = tar::Header::new_gnu();
+            link.set_path("root/lib.so")?;
+            link.set_entry_type(tar::EntryType::Symlink);
+            link.set_link_name("lib.so.1")?;
+            link.set_size(0);
+            link.set_mode(0o777);
+            link.set_cksum();
+            builder.append(&link, std::io::empty())?;
+        }
+    }
+    Ok(builder.into_inner()?)
+}
+
+/// An archive seed: the tar, wrapped as the format says.
+fn archive_seed(tree: ArchiveTree, format: ArchiveFormat) -> Result<Vec<u8>, Box<dyn Error>> {
+    let tar = tar_seed(tree)?;
+    match format {
+        ArchiveFormat::Tar => Ok(tar),
+        ArchiveFormat::Gzip => {
+            let mut gzip = GzEncoder::new(Vec::new(), Compression::default());
+            gzip.write_all(&tar)?;
+            Ok(gzip.finish()?)
+        }
+        ArchiveFormat::Xz => {
+            let mut xz = XzWriter::new(Vec::new(), XzOptions::with_preset(1))?;
+            xz.write_all(&tar)?;
+            Ok(xz.finish()?)
+        }
+    }
+}
+
+/// The budget the well-formed archive seeds are accepted under: the
+/// fuzzer's own small one.
+const SEED_STREAM_BYTES: u64 = 8_192;
+const SEED_COMPRESSED_BYTES: u64 = 65_536;
+
+fn seed_archive_bounds() -> Result<ArchiveInventoryBounds, Box<dyn Error>> {
+    Ok(ArchiveInventoryBounds::new(8, 4_096)?)
+}
+
+/// The bundle and archive seeds are rebuilt by this test from the examples
+/// and the archive crates. After an encoder or example change, run it with
+/// `VSIFT_REGENERATE_FUZZ_SEEDS=1` to rewrite them, and review the diff.
+#[test]
+fn the_derived_seeds_are_rebuilt_by_the_harness() -> TestResult {
+    let regenerate = env::var("VSIFT_REGENERATE_FUZZ_SEEDS").is_ok_and(|value| value == "1");
+    for seed in SEEDS {
+        let derived = match seed.origin {
+            Origin::BundleImage(artifacts) => bundle_image(artifacts)?,
+            Origin::Archive { tree, format, .. } => archive_seed(tree, format)?,
+            Origin::Copy(_)
+            | Origin::InlineIn(_)
+            | Origin::EncodedF01LocalAsr
+            | Origin::RecordedShowinfo(_)
+            | Origin::RecordedVisualIndex(_)
+            | Origin::RecordedCrops(_)
+            | Origin::CropPair { .. }
+            | Origin::SearchPair { .. } => continue,
+        };
+        let path = seed_directory(seed.target).join(seed.file);
+        if regenerate {
+            fs::create_dir_all(seed_directory(seed.target))?;
+            fs::write(&path, &derived)?;
+        }
+        assert!(
+            fs::read(&path)? == derived,
+            "{} no longer derives from the examples and archive crates",
+            seed.file
+        );
+    }
+    Ok(())
+}
+
+/// The `Fuzz` workflow's matrix names every target, so a new target cannot
+/// be left out of the weekly and the long campaigns.
+#[test]
+fn the_fuzz_workflow_runs_every_target() -> TestResult {
+    let workflow = fs::read_to_string(repository(".github/workflows/fuzz.yml"))?;
+    for target in Target::ALL {
+        let entry = format!("          - {}\n", target.name());
+        assert!(
+            workflow.contains(&entry),
+            "{} is not in the Fuzz workflow's matrix",
+            target.name()
         );
     }
     Ok(())

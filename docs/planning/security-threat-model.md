@@ -500,6 +500,24 @@ P11/P14 retain strict decoder isolation and malicious-media release qualificatio
 See [ADR 0012](../decisions/0012-p04-source-media-profile.md) and the
 [P04 qualification record](p04-media-qualification.md).
 
+*Evidence 2026-10-03 (P14 PR 4, hosted runners; results in
+[`p14-qualification.md`](p14-qualification.md) section 18).* **SEC-05, SEC-06 and SEC-01:** 96 generated
+hostile inputs (decompression bombs, absurd dimensions, durations and track counts, damaged and truncated
+containers, nesting, external references, subtitle floods and 38 file names that look like shell syntax)
+went through 251 operations of the published 0.1.0 in a no-network, read-only-root container bounded to
+1 GiB, 128 processes and 120 s. Every playlist, concat script, SDP file and data reference to a local file,
+an absolute path or `http` was refused or not followed; the canary outside the root was unchanged and in no
+stored file; no injected command ran; the largest memory peak was 809 MiB. Three CLI cases fell outside the
+plan's rule (a named pipe hangs `ingest`, a link is refused as `STORAGE_IO`, a full disk is reported as
+`INTEGRITY_FAILURE`; #264 to #266, L-127). **SEC-04, SEC-07, SEC-08, SEC-09 and SEC-20:** a cancel of a 30-minute recognition left no descendant ten seconds later; a soak of 1,000 mixed requests with 5 SIGKILLs of the worker container and 168 redeliveries left every committed session readable, every bundle valid and the workspace cleanable, with coordinator memory at most 14.6 MiB and no growth; 6,700 stress
+repetitions per system found a Windows race in session-root creation (#206 reproduced, 7 of 1,500) and a
+weighted-admission child that was never granted a reservation (#271, 2 of 200), both L-123; the process
+supervisor (#128) did not fail in 3,000 repetitions per system. **SEC-21:** 31 fuzz targets ran an hour each
+(3.68 billion runs) with no crash; three stored-record kinds still have no target (L-128). **R-SEC03:** the
+first scan reading found the reviewed FFmpeg snapshot lacking 17 upstream fixes (#272, L-122); the Cargo,
+alert, action and whisper.cpp readings were clean. The residuals above are unchanged by these results; the
+three media cases and the FFmpeg snapshot are open findings.
+
 Since 2026-09-26 (issue #148, SEC-08) an operation that calls a provider many times
 over one session's source copy (local speech recognition and, since P08 PR 4, visual
 sampling) binds the copy for the whole operation instead of rehashing it before every

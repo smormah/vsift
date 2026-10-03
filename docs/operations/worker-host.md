@@ -30,6 +30,18 @@ routing, retries across hosts, scheduling across workspaces and replication.
 | `/srv/vsift/bundles` | `vsift`, writable | the bundle root; `retain` steps write `<bundle_name>/` here |
 | `/var/lib/vsift/queue`, `/var/lib/vsift/results` | `vsift` | request files written by the supervisor and the event streams it reads back |
 
+Create the account and the folders before anything else (the P14 walk of 2026-10-02 made
+them this way; the account's uid is the one section 10's `--user` names, so the volumes
+are writable from the container too):
+
+```console
+sudo useradd --system --uid 10001 --user-group --home-dir /var/lib/vsift/home \
+  --no-create-home --shell /usr/sbin/nologin vsift
+sudo install -d -o vsift -g vsift -m 0700 /var/lib/vsift /var/lib/vsift/home /srv/vsift/bundles
+sudo install -d -o vsift -g vsift /var/lib/vsift/queue /var/lib/vsift/results
+sudo install -d -m 0755 /srv/vsift/inputs
+```
+
 Rules VSift enforces: the workspace and the per-user folder must be private to the
 worker account (else `STORAGE_IO` before use); every request path is opened inside the
 input root one name at a time following no link, so inputs must be plain files with
@@ -45,6 +57,15 @@ multi-tenant host (SEC-19, SEC-T03).
 
 ## 2. One-time setup
 
+The tools come first. On Ubuntu 24.04 x64 the published `vsift` installs the reviewed
+FFmpeg, FFprobe, whisper.cpp and model for the worker account itself
+([`install.md`](install.md) section 5.1: `setup plan`, then `setup install --plan ...
+--accept-plan <digest>`, run with the worker's `HOME`; a minimal image also needs
+`libgomp1`); then the lines below register them by path. The paths in the example
+(`/usr/bin/ffmpeg`, `/opt/whisper.cpp/...`) are an operator's own tools: use the
+reviewed files' real paths if you registered the managed ones. The P14 walk did exactly
+that.
+
 ```console
 # As the worker account, with its own per-user base.
 export HOME=/var/lib/vsift/home XDG_CONFIG_HOME=/var/lib/vsift/home/.config
@@ -58,9 +79,15 @@ vsift --session-root /var/lib/vsift/workspace session init-workspace \
 ```
 
 - **Durability.** `durable` is accepted only on Ubuntu 24.04 with the workspace on
-  local ext4; anywhere else it fails with `MISSING_CAPABILITY` and creates nothing. Use
-  `ephemeral` elsewhere: sessions then survive a crash or kill of VSift, not an OS crash
-  or power loss.
+  local ext4 **mounted with write barriers**; anywhere else it fails with
+  `MISSING_CAPABILITY` and creates nothing. A hosted CI runner's disk is ext4 mounted
+  `nobarrier`, so `durable` is refused there (the P14 walk met this on 2026-10-02): look
+  at the mount options (`findmnt --target /var/lib/vsift`) before relying on it. On a
+  test host without such a disk, an ext4 file system in a file has barriers: `truncate
+  --size 24G <image>`, `mkfs.ext4 -F <image>`, `mount -o loop,rw,relatime <image>
+  /var/lib/vsift` (the P14 campaigns do this; it is a test aid, not a production
+  layout). Use `ephemeral` elsewhere: sessions then survive a crash or kill of VSift, not
+  an OS crash or power loss.
 - **Admission slots.** The workspace's capacity in weight units, fixed at creation: a
   visual window's FFmpeg pass weighs 2, a copy, probe or evidence extraction 1, a
   speech recognition its recognizer threads (the machine's parallelism, capped at 8 and
@@ -84,7 +111,10 @@ environment, absolute path or policy. Example `request.json`:
 ```
 
 One request per message, noninteractive, with the explicit workspace, roots, isolation,
-admission wait and drain time:
+admission wait and drain time. `--host-isolation strict-linux` is accepted only where
+the kernel attests the limits (the unit or the container below): in a plain shell the
+same command is refused before any work with `ISOLATION_UNAVAILABLE` (exit 2), and that
+refusal is the only event it writes:
 
 ```console
 vsift --host-isolation strict-linux --session-root /var/lib/vsift/workspace \
@@ -190,6 +220,11 @@ its current unit (L-055), which the cgroup kill removes.
 forced budgets); a commit in progress always completes first. Do not set `Restart=`:
 the supervisor redelivers instead (section 6). The unit exits non-zero for any batch
 that is not wholly complete or partial; read the events file for per-request results.
+A `systemctl stop` while requests run ends with exit status 6 (systemd labels it
+`NOTCONFIGURED`; it is VSift's shutdown code), the unit `failed`, and an events file that
+ends with `lifecycle` `stopped` and the terminal event; `systemctl start` of the same
+unit redelivers the file. Walked on a hosted runner (P14, RQ-12): the stop took the full
+30 s drain because a recognition was running, inside `TimeoutStopSec`.
 
 ## 4. Queue acknowledgement
 
@@ -231,8 +266,13 @@ SHA-256 of it), never from the delivery, so every redelivery carries the same id
   another workspace runs again there.
 - A workspace keeps at most 4,096 request records; when it is full, records of sessions
   that no longer exist are pruned first, else a new request is `RESOURCE_LIMIT`
-  (L-063). A record outlives its session until it is pruned, so the dedupe window is at
-  least the retention.
+  (L-063). A record outlives its session until it is pruned, and **it is pruned as soon as
+  the table is full and its session is gone**: a session that was closed and then removed by
+  `session clean` takes its record with it, however short its life. So the dedupe window
+  lasts while the session exists, or while the table is not full, and not for the retention:
+  a duplicate delivered later runs again, and the same id with another request is accepted
+  (the P14 soak met both, #286). **Acknowledge a message before the session can be
+  cleaned**, and do not rely on a replay or an `IDEMPOTENCY_CONFLICT` for an old id.
 
 ## 6. Restart and recovery
 
@@ -254,7 +294,9 @@ request replays that job's commit.
 ## 7. Cleanup
 
 - Run `vsift --session-root /var/lib/vsift/workspace session clean --expired --json`
-  periodically (a systemd timer), paging with `--cursor` until `next_cursor` is null. It
+  periodically (a systemd timer), paging with `--cursor` until `next_cursor` is null (a
+  cursor is a hash-bucket number, 0 to 255, so a whole pass is up to 256 calls: P14 walked
+  24 pages on a small workspace). It
   removes closed, expired and abandoned sessions of the workspace; it never touches the
   input root or the bundle root. `session clean` of a session with active work answers
   `BUSY`.
@@ -323,7 +365,14 @@ docker run --rm --init \
 
 - The image holds VSift, the pinned FFmpeg, FFprobe and whisper.cpp builds and the
   model on its read-only root; the per-user registration under `/var/lib/vsift/home`
-  names those paths. Pin the image by digest.
+  names those paths. Pin the image by digest. The runbook does not ship an image;
+  [`tools/p14-campaigns/worker.Dockerfile`](../../tools/p14-campaigns/worker.Dockerfile)
+  is the one the P14 campaigns built and ran (the pinned Ubuntu 24.04 base, `libgomp1`,
+  the CA bundle, an account of uid 10001, the published executable; the tools came from
+  `setup install` into the mounted `/var/lib/vsift/home`, so they are in a volume rather
+  than on the root). `--cpus` cannot exceed the host's CPUs (the example's 8 needs an
+  8-CPU host; the walk used 4 on a 4-CPU runner), and the volumes' owner must be uid
+  10001 (section 1).
 - `docker stop` sends `SIGTERM` to the container's first process and `SIGKILL` after
   `--stop-timeout`; with `--init` the signal reaches VSift, so the same drain rule
   applies (at least drain + 10 s).

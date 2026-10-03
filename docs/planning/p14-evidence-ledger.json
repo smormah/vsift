@@ -262,18 +262,32 @@
       "supports": {
         "requirements": ["R-04"],
         "threats": ["SEC-01", "SEC-21"],
-        "verification": ["C-06", "S-08"]
+        "verification": ["C-06", "S-08"],
+        "limits": ["L-128"]
       },
       "proves": "No crash, timeout or out-of-memory in at least 60 minutes per target on those inputs, with a coverage-plateau line per target; every untrusted-input parser has a target, and every finding is minimised into a seed and a regression test.",
-      "does_not_prove": "Absence of bugs.",
+      "does_not_prove": "Absence of bugs. Nineteen of the 31 targets were still finding new coverage in the last tenth of their hour, so the hour is a floor, not a plateau.",
       "producer": {
         "kind": "workflow",
         "p14_pr": 4,
         "description": "The Fuzz workflow with a raised duration cap, plus a gap review of untrusted-input parsers and new targets where one is missing."
       },
-      "scope": ["fuzz", "crates", "Cargo.lock"],
+      "scope": ["fuzz", "crates", "Cargo.lock", ".github/workflows/fuzz.yml"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "f6754460249eb2c8b6bf5b9e636cc4f534723e53" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 36978914176 },
+          "date": "2026-10-02",
+          "note": "All 31 targets (the 24 before this pull request and seven added by its gap review: setup_plan, bundle_manifest, tar_inventory, gzip_tar_inventory, xz_tar_inventory, identifiers, input_path) ran 3,601 s each on hosted Ubuntu 24.04 at the pull request's head before its rebase (crates, Cargo.lock and the fuzz folder are identical in the rebased branch): 3,678,778,321 runs in 31 hours of fuzzing (1,939 job-minutes), no crash, timeout or out-of-memory, peak resident memory 362 to 954 MB. One plateau line per target is in each job log: 19 targets found their last new coverage in the final tenth of their runs, three (transcript_cursor, crop_rect, png_sequence) none after their first 6 percent. Dispatched from the branch; the commit is the pre-rebase head and has to be re-pointed to the merge commit."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-02",
+          "note": "Section 18.1: the gap review table (which parsers had no target, the seven added, the seeds' provenance rule) and the per-target figures."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 36080106838 },
@@ -289,7 +303,8 @@
       "supports": {
         "requirements": ["R-07", "R-09"],
         "threats": ["SEC-04", "SEC-07", "SEC-08", "SEC-09"],
-        "verification": ["S-04", "S-05", "S-12", "X-04", "X-05"]
+        "verification": ["S-04", "S-05", "S-12", "X-04", "X-05"],
+        "limits": ["L-123"]
       },
       "proves": "The locking and admission claims hold on three kernels: zero failures in at least 200 repetitions per system of lock stress (Windows added), weighted admission, engine worker and batch; any failure is captured and filed first (governance rule 14).",
       "does_not_prove": "Every interleaving. Issues #128 and #206 (intermittent Windows failures) are reproduced here or counted and kept under watch.",
@@ -298,9 +313,23 @@
         "p14_pr": 4,
         "description": "Hosted repetitions on Windows, macOS and Ubuntu, with output captured."
       },
-      "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml"],
+      "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml", ".github/workflows/p14-stress.yml", "tools/p14-campaigns/stress.cjs", "tools/p14-campaigns/lib/repeat.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "failed",
+      "applies_to": { "version": "0.1.0", "commit": "f6754460249eb2c8b6bf5b9e636cc4f534723e53" },
+      "issues": [206, 271],
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 36978939586 },
+          "date": "2026-10-02",
+          "note": "Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs, 1,144 job-minutes) at the pull request's head before its rebase: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100, each a randomised run), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 21 jobs passed with zero failed or hung repetitions. Windows failed three: root creation 7 of 1,500 plain and 2 of 1,500 loaded (#206 reproduced, message 'session storage root permissions are not private', in the threads test as well as the processes test) and weighted admission 2 of 200 ('no reservation was ever granted', #271). #128 (process supervisor) did not reproduce: 0 in 3,000 on each system. Each failing repetition's output is a 90-day artifact. The pre-rebase commit has to be re-pointed to the merge commit."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-02",
+          "note": "Section 18.2: the per-suite results, how a repetition is judged, and what the numbers do not show."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/delivery-ledger.json" },
@@ -317,7 +346,7 @@
         "requirements": ["R-08", "R-09", "R-11", "R-12"],
         "threats": ["SEC-03", "SEC-04", "SEC-10", "SEC-11", "SEC-20"],
         "verification": ["X-07", "X-08", "X-09", "O-01", "O-02", "P-06"],
-        "limits": ["L-038"]
+        "limits": ["L-038", "L-124"]
       },
       "proves": "The verification section 5 gates on this hardware: coordinator memory at most 256 MiB, no monotonic growth after warm-up, no descendant ten seconds after a cancel, every committed session validates, no sentinel in any output, warm p95 candidate page at most 250 ms on a prepared 30-minute session; across the ladder 1, 2, 4 and 8 jobs, a 100-request batch and 1,000 mixed requests in at most 5 hours.",
       "does_not_prove": "The 8-hour length, the reference machine, GPUs, other hosts. Throughput is reported as a measurement, never a promise.",
@@ -326,9 +355,27 @@
         "p14_pr": 4,
         "description": "Hosted Ubuntu 24.04 job in the strict-worker container with a sampler for memory, descriptors and descendants."
       },
-      "scope": ["crates", "Cargo.lock"],
+      "scope": ["crates", "Cargo.lock", ".github/workflows/p14-load.yml", "tools/p14-campaigns/load.cjs", "tools/p14-campaigns/prepare-host.cjs", "tools/p14-campaigns/worker.Dockerfile", "tools/p14-campaigns/lib/requests.cjs", "tools/p14-campaigns/lib/events.cjs", "tools/p14-campaigns/lib/cgroup-sampler.cjs", "tools/p14-campaigns/lib/load-verdict.cjs", "tools/p14-campaigns/lib/host.cjs", "tools/p14-campaigns/lib/container.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "d3dfc55bfcc30f4becb73c5bed1b0ecc0c681002" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 37137094810 },
+          "date": "2026-10-03",
+          "note": "The published 0.1.0 in the hardened worker container (strict isolation attested, durable workspaces on an ext4 volume with write barriers, the reviewed tools installed by the binary) on a hosted 4-CPU Ubuntu 24.04 runner, 21 job-minutes: the ladder at 1, 2, 4 and 8 jobs (24 of 24 each), a 100-request batch (100 of 100; 21 bundles and 100 sessions validate), a cancel of a 30-minute recognition (CANCELLED, no descendant 10 s later), 200 warm candidate pages at p95 5 ms, and 1,000 mixed requests in 24 rounds (632 s) with 5 SIGTERM drains, 5 SIGKILLs, 168 redeliveries and 6 cleaner passes: 1,000 of 1,000 came to what they were asked, 158 bundles and 734 sessions validated, coordinator memory at most 14.6 MiB, no growth in memory or descriptors, no path or sentinel in any output. Every gate held. The request mix avoids the three clips of #274; the commit is the pull request's head at the run and has to be re-pointed to the merge commit."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-03",
+          "note": "Section 18.3: what each phase ran, the figures, the diagnosis phase (not a gate) and what the numbers do not show."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 37145175956 },
+          "date": "2026-10-03",
+          "note": "A longer soak beyond the plan's bar, 12,000 mixed requests in 273 rounds (153 job-minutes, 67 SIGKILLs, 55 SIGTERM drains, 949 redeliveries, 77 cleaner passes): coordinator memory at most 14.9 MiB with no growth, 1,745 bundles and 168 sessions validated, and every kind of request settled in full except 189 duplicates and conflicts of requests older than the last clean, whose records had been pruned (#286, the runbook's dedupe window, now corrected). The run's own verdict is that it did not hold; the harness now judges that case as outside the window and was not re-run."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p11-worker-host.md" },
@@ -336,7 +383,7 @@
           "note": "The admission ladder ran at 1, 2 and 4 jobs once, on one Windows machine; the 8-job rung, the 100-request batch and the soak never ran."
         }
       ],
-      "date": "2026-10-02"
+      "date": "2026-10-03"
     },
     {
       "id": "RQ-10",
@@ -345,7 +392,7 @@
         "requirements": ["R-11"],
         "threats": ["SEC-05", "SEC-06"],
         "verification": ["M-02", "M-03", "M-04"],
-        "limits": ["L-004"]
+        "limits": ["L-004", "L-127"]
       },
       "proves": "The bounds hold under abuse: each decompression-bomb and resource-abuse variant (huge dimensions, many streams, declared long duration, damaged and truncated files, container nesting, external references) ends in a typed failure inside its bound, with no hang, no network and no file outside the root.",
       "does_not_prove": "That a decoder bug cannot be exploited. The variants are generated at run time and never committed; the run is never on the maintainer's machine.",
@@ -354,9 +401,23 @@
         "p14_pr": 4,
         "description": "Disposable hosted container with --network none and memory and process limits."
       },
-      "scope": ["crates", "Cargo.lock"],
+      "scope": ["crates", "Cargo.lock", ".github/workflows/p14-malicious-media.yml", "tools/p14-campaigns/hostile-media.cjs", "tools/p14-campaigns/lib/hostile-cases.cjs", "tools/p14-campaigns/lib/hostile-judge.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "failed",
+      "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
+      "issues": [264, 265, 266],
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 malicious media", "run_id": 37136669473 },
+          "date": "2026-10-02",
+          "note": "96 generated inputs (damaged and truncated MP4, absurd declared durations and sizes, nesting, external references, 33 and 2,000 tracks, three decompression bombs, sparse files, 38 hostile file names, 11 subtitle floods and malformed subtitle files) through 251 operations of the published 0.1.0 in a no-network, read-only-root, 1 GiB, 128-process container on hosted Ubuntu 24.04: 93 inputs ended as a typed failure or an in-bound completion, with no network use, no canary or marker leaked and the largest memory peak 809 MiB. Three did not: a named pipe made 'vsift ingest' hang until the harness killed it at 150 s (#264), a symbolic link was refused as STORAGE_IO (#265), and a file larger than the root was reported INTEGRITY_FAILURE after 5 s (#266). The job path refused all three at once. The pull request's smoke is the full set."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-02",
+          "note": "Section 18.4: the cases, how each is judged, what 'refused' means for a file that is only copied, and the limits of the generated variants."
+        }
+      ],
       "date": "2026-10-02"
     },
     {
@@ -412,9 +473,22 @@
         "p14_pr": 4,
         "description": "Hosted Ubuntu 24.04 job that follows docs/operations/worker-host.md step by step."
       },
-      "scope": ["crates", "Cargo.lock", "docs/operations/worker-host.md"],
+      "scope": ["crates", "Cargo.lock", "docs/operations/worker-host.md", ".github/workflows/p14-runbook-walk.yml", "tools/p14-campaigns/runbook-walk.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": { "version": "0.1.0", "commit": "d3dfc55bfcc30f4becb73c5bed1b0ecc0c681002" },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 runbook walk", "run_id": 37136669570 },
+          "date": "2026-10-02",
+          "note": "The corrected runbook walked step by step with the published 0.1.0 on hosted Ubuntu 24.04 (kernel 6.17): the worker account and folders, the reviewed tools installed by the binary itself, 'setup configure' and 'setup check', a durable workspace on an ext4 volume with write barriers (the runner's own disk is mounted nobarrier and refuses 'durable'), the supervisor refused outside a unit or container (ISOLATION_UNAVAILABLE), the hardened container example (strict isolation attested), replay, IDEMPOTENCY_CONFLICT and BUSY, the 1,001-line batch refused whole, the systemd unit started, stopped with a drain (exit 6) and restarted, a SIGKILL of the whole unit then redelivery (every line recorded), and 'session clean' over the buckets: 18 steps, all matched. The first walks diverged at ten steps; the causes were errors in the runbook (fixed in this pull request: how to make the account and folders, the tools prerequisite, which invocation attests isolation, the image and CPU count, exit 6 on a stop, what the cleaner's cursor is) and in the walk's own script, not in VSift. The commit is the pull request's head at the run and has to be re-pointed to the merge commit."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
+          "date": "2026-10-02",
+          "note": "Section 18.5: the walk, the runbook corrections and what the hosted runner cannot show (a real disk, other distributions)."
+        }
+      ],
       "date": "2026-10-02"
     },
     {
@@ -422,7 +496,8 @@
       "title": "R-SEC03: the scan reading",
       "supports": {
         "requirements": ["R-14"],
-        "verification": ["R-SEC03"]
+        "verification": ["R-SEC03"],
+        "limits": ["L-122"]
       },
       "proves": "The state of what was read on the day: no unresolved high or critical finding in a supported path across Cargo, GitHub alerts, the native tools, the runtime and build, and the SBOM inventory.",
       "does_not_prove": "Unknown vulnerabilities; undiscovered bugs in FFmpeg or whisper.cpp.",
@@ -433,7 +508,21 @@
       },
       "scope": ["."],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "failed",
+      "applies_to": { "version": "0.1.0", "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa" },
+      "issues": [272],
+      "evidence": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-02.md" },
+          "date": "2026-10-02",
+          "note": "The reading of the published 0.1.0 (published executable, workspace lockfile at the tag): cargo deny 0.20.2 ok for the workspace and the fuzz crate; 0 open code-scanning, Dependabot and secret-scanning alerts; no advisory against a pinned action's version; whisper.cpp v1.9.2 named by no record; Node.js 24.21.0 and npm 11.19.0 current; the SBOM matches the resolved crates. One finding stands: the reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities (1 critical, 13 high, 3 medium) and 18 more records give no fix reference, 18 of the 35 being high-severity records that name code VSift uses or name none (#272). Dispositions are proposed, not decided. Not scanned: the worker image's packages."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 scan reading", "run_id": 37136669647 },
+          "date": "2026-10-02",
+          "note": "The hosted part: cargo deny, the published executable's glibc and OpenSSL requirements, and the SBOM against cargo metadata."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },

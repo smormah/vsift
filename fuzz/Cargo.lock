@@ -1415,8 +1415,12 @@ version = "0.1.0"
 name = "vsift-fuzz"
 version = "0.0.0"
 dependencies = [
+ "flate2",
  "libfuzzer-sys",
+ "lzma-rust2",
  "serde_json",
+ "sha2",
+ "tar",
  "vsift-application",
  "vsift-contract",
  "vsift-domain",
