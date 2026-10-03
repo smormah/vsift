@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-03 (P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -157,13 +157,13 @@ Each entry has these fields:
 | [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
 | [L-122](#l-122) | The reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities, and 18 more records give no fix reference | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
 | [L-123](#l-123) | Two Windows concurrency failures reproduce on a hosted runner at about one repetition in 200: session-root creation and the weighted-admission grant | integrity/durability | medium | P14 | [#206](https://github.com/smormah/vsift/issues/206), [#271](https://github.com/smormah/vsift/issues/271) | open |
-| [L-124](#l-124) | Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips | accuracy/ASR | medium | P14 | [#274](https://github.com/smormah/vsift/issues/274), [#277](https://github.com/smormah/vsift/issues/277) | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
 | [L-127](#l-127) | The CLI's ingest treats three kinds of hostile source worse than the worker path does: a named pipe hangs it, a link is refused as a storage failure and a full disk is reported as corruption | security | low | P14 | [#264](https://github.com/smormah/vsift/issues/264), [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) | open |
 | [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, nineteen of 31 targets were still finding coverage at the end, and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-130](#l-130) | whisper.cpp ends the last segment of a range cut mid-speech past the audio, by an unbounded amount; VSift cuts it at the audio's end, so that end says nothing about where speech stopped | accuracy/ASR | low | unscheduled | [#274](https://github.com/smormah/vsift/issues/274) | accepted residual |
 
-Counts: 1 high, 35 medium, 79 low (115 entries).
+Counts: 1 high, 34 medium, 80 low (115 entries).
 
 ## Security
 
@@ -1382,6 +1382,38 @@ Counts: 1 high, 35 medium, 79 low (115 entries).
 - **Next step:** schedule #147 after R0.
 - **Owner:** unscheduled. **Issue:** [#147](https://github.com/smormah/vsift/issues/147).
   **Status:** deferred. **Review:** pending.
+
+### L-130
+
+**whisper.cpp ends the last segment of a range cut mid-speech past the audio, by an unbounded amount; VSift cuts it at the audio's end, so that end says nothing about where speech stopped.**
+
+- **What:** a recogniser's segment ends are predicted timestamp tokens, quantised coarsely on a
+  small model and not limited by the audio's length (they may fall anywhere in the padded 30 s window).
+  On a 5.001 s chunk the reviewed whisper.cpp v1.9.2 with the `base_q5_1` model ended the last
+  segment at 7.000 s (F02 and F04), 6.100 s (F03) and 6.000 s (F05); the whole clips end inside their
+  audio. Until P14 PR 7 VSift trimmed an end up to one second past the audio and rejected a longer
+  one, and a chunk with too many rejected segments failed: a short range has one segment, so three
+  of the ten synthetic speech clips failed `transcript retranscribe --from 0 --to 5000000` as
+  `MISSING_CAPABILITY` (found by the P14 load campaign, #274). A segment that starts inside the audio
+  is now cut at the audio's end whatever the overrun, counted as `provider_end_trimmed`, with the raw end
+  kept ([ADR 0017](../decisions/0017-local-asr-through-whisper-cpp.md), dated note).
+- **Evidence:** #274; the local reproduction with the reviewed tools on 2026-10-03; domain tests
+  `a_range_cut_mid_speech_keeps_its_last_segment_however_far_the_provider_ran_on` and
+  `an_overrunning_final_segment_of_a_chunk_stitches_without_a_gap_or_a_repeat`.
+- **Impact:** the end of a cut segment is the end of the range, not a measurement: a citation to a
+  trimmed segment's end can claim a moment where nothing was said. The text is the recogniser's: on a
+  cut it can complete a word or a sentence the audio did not contain. Neither is visible except by the
+  warning.
+- **Why:** the recogniser gives no confidence for a timestamp, and the audio's end is the only
+  bound VSift can state; refusing the segment loses real speech (this limit's cause) and a fixed
+  tolerance was a guess.
+- **Mitigation:** each cut segment is counted (`provider_end_trimmed`, with the chunk) and keeps its raw
+  `provider_end_us`; the contract says a cut end is the audio's end, not evidence that speech continued
+  there; recognising a larger range (or the whole video) puts the cut at a point with silence or
+  a seam, where the stitching rules prefer the neighbour that heard the sentence whole.
+- **Next step:** none planned; a recogniser that reports measured ends is the real fix.
+- **Owner:** unscheduled. **Issue:** [#274](https://github.com/smormah/vsift/issues/274).
+  **Status:** accepted residual. **Review:** pending.
 
 ## Visual candidates
 
@@ -3107,32 +3139,6 @@ that week.**
   #271; re-run `P14 stress` on the candidate (RQ-08).
 - **Owner:** P14. **Issue:** [#206](https://github.com/smormah/vsift/issues/206),
   [#271](https://github.com/smormah/vsift/issues/271). **Status:** open. **Review:** pending.
-
-### L-124
-
-**Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips.**
-
-- **What:** with the published 0.1.0 and the managed tools, `transcript retranscribe --from 0 --to
-  5000000` of the synthetic clips F02, F04 and F05 ends `MISSING_CAPABILITY` ("output_validation
-  (malformed_output)") while the same range of F01, F03, F06, F07, F08, F09 and F12 recognises, and
-  the whole of F02, F04 and F05 recognises. The same request as a worker `retranscribe` step fails
-  the same way. The cause is not known. In two early smoke runs of the load campaign a session or two
-  was left listed as `initializing`, and `session status` of such a
-  session answers `STORAGE_IO` ([#277](https://github.com/smormah/vsift/issues/277)); it did not return in
-  the later runs, so the connection is not established.
-- **Evidence:** `P14 load` run 37136669579 (`load-summary.md`, `diagnose-recognition.json`);
-  [#274](https://github.com/smormah/vsift/issues/274).
-- **Impact:** an agent asking for a range of speech can be told that a tool is missing, with a
-  remediation (reinstall whisper.cpp) that cannot help, and the code is not retryable. The
-  whole-clip request works for these clips.
-- **Why:** not traced; the recogniser's raw output for the failing chunk was not kept.
-- **Mitigation:** ask for the whole clip, or a wider range.
-- **Next step:** reproduce with the raw output, decide whether a segment beyond the chunk is
-  clamped or dropped with a coverage note, and stop reporting a malformed output as a missing
-  capability; add the three clips to the local-ASR checks. The load campaign's request mix avoids
-  these clips until then.
-- **Owner:** P14. **Issue:** [#274](https://github.com/smormah/vsift/issues/274),
-  [#277](https://github.com/smormah/vsift/issues/277). **Status:** open. **Review:** pending.
 
 ### L-125
 

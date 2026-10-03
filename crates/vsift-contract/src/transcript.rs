@@ -572,7 +572,7 @@ pub fn transcript_warning_messages(revision: &TranscriptRevision) -> Vec<&'stati
                 "Some recognised segments had times outside their audio and were not used."
             }
             TranscriptWarningKind::ProviderEndTrimmed => {
-                "Some recognised segments ended just after their audio and were cut at its end."
+                "Some recognised segments ended after their audio and were cut at its end; a cut end is the audio's end, not evidence that speech continued there."
             }
             TranscriptWarningKind::NonSpeechMarkersRemoved => {
                 "Non-speech markers such as [BLANK_AUDIO] were removed from the transcript."

@@ -354,6 +354,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and refuses a `-BatchDirectory` that is inside the checkout but outside that tree. New
   `campaign_script` tests (Windows) run the real script against a throwaway repository and fail
   on the old script, including the exact first-run refusal.
+- **A short range cut mid-speech no longer fails as `MISSING_CAPABILITY`** (P14 PR 7, #274; found by
+  the P14 load campaign: `transcript retranscribe --from 0 --to 5000000` failed on three of the ten
+  synthetic speech clips while the whole clips recognised, with a remediation to reinstall whisper.cpp).
+  **Cause, reproduced with the reviewed whisper.cpp v1.9.2 and the `base_q5_1` model:** for a range cut
+  mid-speech the recogniser ended the last segment well past the audio (7.0 s, 7.0 s, 6.1 s and 6.0 s on a
+  5.001 s chunk); VSift trimmed an end up to one second past the audio and rejected a longer one, and a
+  chunk whose segments were mostly rejected failed. A long run hid it (one rejected segment among many is
+  only counted); a short range has one segment. **Fix (decided by the maintainer, ADR 0017 has a dated
+  note that supersedes the one-second tolerance):** a segment that starts inside the chunk's audio and
+  ends past it is cut at the audio's end **by any distance**, counted as `provider_end_trimmed` with the
+  raw end kept; a segment that starts at or after the audio's end, runs backwards or is empty is still
+  rejected, and the quarter rule is unchanged for those. A chunk whose segments mostly do not fit their
+  audio keeps the code `MISSING_CAPABILITY` (changing it is not additive in v1) but its remediation now
+  says that nothing needs reinstalling and to retry with a larger range or the whole video; the
+  `provider_end_trimmed` warning says a cut end is the audio's end, not evidence that speech continued.
+  No field, shape or code changes (the schema description and `cli-v1.md` do), and the frozen 0.1.0
+  examples still validate. Tests: the domain's validation (the old tolerance test now asserts the new
+  rule, plus the #274 case at 5.5 s to 29 s overruns, what is still rejected, and the stored-record check),
+  a three-chunk merge with overrunning final segments (no repeat, no gap, no step backwards), the
+  remediation text, and a new opt-in real-tool stage, `p07_local_asr_cut_range`, over F02 to F05 at 0 to 5 s.
+  Known limit L-124 (the failure) is closed and deleted; L-130 records the recogniser behaviour that
+  remains.
 
 ## [0.1.0] - 2026-10-01
 

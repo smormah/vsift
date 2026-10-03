@@ -839,8 +839,8 @@ requests was run twice (`phases=soak`, `soak_requests=12000`). Neither is a pass
 
 **Diagnosis phase (not a gate).** Every speech clip's first five seconds were recognised in the worker
 container: seven of ten recognise; **F02, F04 and F05 fail as `MISSING_CAPABILITY` (`malformed_output`)
-although the whole clips recognise** ([#274](https://github.com/smormah/vsift/issues/274),
-[L-124](known-limits.md#l-124)). The campaign's request mix avoids those three clips so the load measures
+although the whole clips recognise** ([#274](https://github.com/smormah/vsift/issues/274), fixed in P14 PR 7;
+[L-130](known-limits.md#l-130) is what remains). The campaign's request mix avoids those three clips so the load measures
 resource behaviour, not that finding. Two early smoke runs also left one or two sessions listed as
 `initializing` **without any kill**, with `session status` answering `STORAGE_IO`
 ([#277](https://github.com/smormah/vsift/issues/277)); it did not recur in the 1,100 requests without kills

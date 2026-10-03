@@ -473,6 +473,18 @@ segment has `alignment` with its chunk, the chunk's decoded audio range, the pro
 chunk-relative times, whether the end was trimmed, and the recognizer; `cue` is `null`
 and confidence is the mean token probability, `provider_uncalibrated` (example
 [`transcript-get.asr.json`](../../schemas/v1/examples/transcript-get.asr.json)).
+**A trimmed end** (`end_trimmed` true, counted as the warning `provider_end_trimmed`) means
+the recogniser ended a segment that starts inside the chunk's audio **past that audio, by
+any distance**, and the segment's `end_us` is the audio's end; `provider_end_us` keeps the
+raw end. The cut end is the audio's end, not evidence that speech continued there: a
+recogniser's end timestamps are predicted, not measured, and a range cut mid-speech makes it
+run on (whisper.cpp ended a 5 s cut's last segment at 7 s, #274). Before P14 PR 7 only an
+end up to one second past was trimmed and a longer one rejected the segment, which failed a
+short range as `MISSING_CAPABILITY`; a segment that starts at or after the audio's end, or
+runs backwards, is still rejected and counted (`provider_segments_rejected`). A range whose
+recognised segments mostly do not fit their audio still fails as `MISSING_CAPABILITY`
+(stage `output_validation`, reason `malformed_output`), and since PR 7 its remediation says
+that nothing needs reinstalling and to retry with a larger range or the whole video.
 Warnings use the envelope's fixed prose and the revision's typed codes; for local-ASR
 codes `first_cue` is the first affected chunk. Segments are read with `transcript get`
 (the new revision is the default). With `--events jsonl`, `transcript retranscribe`
