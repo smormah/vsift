@@ -1,0 +1,89 @@
+name: Evidence 277 (temporary, this branch only)
+
+# Looks for sessions left initializing after a worker batch (#277): fresh
+# workspaces, 20 requests at concurrency 4, many rounds, on a hosted Ubuntu
+# runner with the Cargo-built binary. Temporary: it triggers only on a push to
+# the branch below, reads the repository, publishes nothing, uses no secret.
+
+on:
+  push:
+    branches:
+      - p14-pr7-evidence-277
+
+permissions:
+  contents: read
+
+jobs:
+  batches:
+    name: "#277 batches at concurrency 4, ubuntu-latest"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build vsift
+        run: cargo build -p vsift-cli --locked
+
+      - name: Run the batches
+        env:
+          ROUNDS: "40"
+        run: |
+          set -u
+          work="$RUNNER_TEMP/w"; mkdir -p "$work/inputs" "$work/user"
+          for f in F01 F02 F03 F04 F05 F06 F07 F08; do cp "fixtures/corpus/generated/$f.mp4" "$work/inputs/"; done
+          cat > "$work/run.js" <<'JS'
+          const { spawnSync } = require('node:child_process');
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const [bin, work] = process.argv.slice(2);
+          const env = { ...process.env, HOME: path.join(work, 'user'), XDG_CONFIG_HOME: path.join(work, 'user'), XDG_CACHE_HOME: path.join(work, 'user') };
+          const run = (args) => spawnSync(bin, args, { env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+          let anomalies = 0;
+          for (let round = 1; round <= Number(process.env.ROUNDS); round += 1) {
+            const workspace = path.join(work, `ws-${round}`);
+            const init = run(['--session-root', workspace, 'session', 'init-workspace', '--durability', 'ephemeral', '--admission-slots', '4', '--json']);
+            if (init.status !== 0) { console.log(`round ${round}: init failed ${init.stdout} ${init.stderr}`); anomalies += 1; continue; }
+            const lines = [];
+            for (let i = 0; i < 20; i += 1) {
+              const id = `op_${crypto.createHash('sha256').update(`${round}:${i}`).digest('hex').slice(0, 32)}`;
+              lines.push(JSON.stringify({ schema_version: '1', operation_id: id, durability: 'ephemeral', target: { ingest: { source: `F0${1 + (i % 8)}.mp4`, transcript: null } }, steps: [{ close: {} }] }));
+            }
+            const requests = path.join(work, `requests-${round}.jsonl`);
+            fs.writeFileSync(requests, `${lines.join('\n')}\n`);
+            const batch = run(['--session-root', workspace, 'job', 'batch', '--requests', requests, '--input-root', path.join(work, 'inputs'), '--concurrency', '4', '--events', 'jsonl']);
+            const events = batch.stdout.split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+            const results = events.filter((event) => event.event === 'result');
+            const byStatus = {};
+            for (const event of results) { const status = event.result && event.result.status; byStatus[status] = (byStatus[status] || 0) + 1; }
+            let cursor = null; let total = 0; const initializing = [];
+            for (let page = 0; page < 300; page += 1) {
+              const args = ['--session-root', workspace, 'session', 'list', '--json'];
+              if (cursor !== null) args.push('--cursor', String(cursor));
+              const listed = run(args);
+              let data;
+              try { data = JSON.parse(listed.stdout).data; } catch { console.log(`round ${round}: session list unreadable ${listed.stdout.slice(0, 200)}`); anomalies += 1; break; }
+              for (const entry of data.sessions || data.entries || []) { total += 1; if (entry.state === 'initializing') initializing.push(entry.session_id); }
+              if (data.next_cursor === null || data.next_cursor === undefined) break;
+              cursor = data.next_cursor;
+            }
+            const note = initializing.length > 0 || total !== 20 ? 'ANOMALY' : 'ok';
+            if (note === 'ANOMALY') anomalies += 1;
+            console.log(`round ${round}: exit=${batch.status} results=${JSON.stringify(byStatus)} sessions=${total} initializing=${initializing.length} ${note}`);
+            if (note === 'ANOMALY') {
+              for (const id of initializing) {
+                const status = run(['--session-root', workspace, 'session', 'status', id, '--json']);
+                console.log(`  ${id}: status exit=${status.status} ${status.stdout.slice(0, 400)}`);
+                const files = spawnSync('find', [path.join(workspace, 'session-index'), path.join(workspace, 'sessions'), '-name', `*${id}*`], { encoding: 'utf8' });
+                console.log(`  files: ${files.stdout.trim()}`);
+              }
+              const failed = results.filter((event) => event.result && event.result.status !== 'complete').slice(0, 3);
+              for (const event of failed) console.log(`  non-complete result: ${JSON.stringify(event.result).slice(0, 600)}`);
+            }
+          }
+          console.log(`ANOMALIES=${anomalies}`);
+          JS
+          node "$work/run.js" "$PWD/target/debug/vsift" "$work"
