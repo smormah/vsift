@@ -55,9 +55,36 @@ pub fn non_private_folder_summary(folder: PrivateFolder) -> String {
     )
 }
 
+/// Remediation for an existing session root that holds no `VSift` ownership
+/// marker (#261).
+///
+/// `VSift` writes the marker last when it creates a root, so a folder without
+/// one was made by someone else and is never adopted: it is left exactly as it
+/// was. The failure code stays `INTEGRITY_FAILURE` (the v1 answer since 0.1.0,
+/// and v1 is additive only); this text is what tells the person the folder is
+/// theirs, not damaged `VSift` data. The first sentence is stable so an agent
+/// can act on it without parsing free text. It never contains a path.
+pub const UNOWNED_SESSION_ROOT_REMEDIATION: &str = "The VSift session_root folder holds no VSift ownership marker, so VSift did not create it and did not use it. Nothing was changed: VSift never adopts a folder it did not create. It is the disposable-session folder: the directory given with --session-root, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux. Name a --session-root path that does not exist yet and VSift creates it, private to you; or, if that folder holds nothing you need, delete it yourself and retry.";
+
 #[cfg(test)]
 mod tests {
-    use super::{PrivateFolder, non_private_folder_summary};
+    use super::{PrivateFolder, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary};
+
+    #[test]
+    fn the_unowned_root_remediation_is_stable_bounded_and_pathless() {
+        let text = UNOWNED_SESSION_ROOT_REMEDIATION;
+        assert!(
+            text.starts_with(
+                "The VSift session_root folder holds no VSift ownership marker, so VSift did not create it"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("never adopts a folder it did not create"));
+        assert!(text.contains("does not exist yet"));
+        assert!(text.contains("--session-root"));
+        assert!(text.len() <= 1024, "{} bytes", text.len());
+        assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+    }
 
     #[test]
     fn every_folder_is_named_by_kind_within_the_schema_bound() {

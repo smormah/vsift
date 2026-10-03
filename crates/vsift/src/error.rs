@@ -1123,7 +1123,13 @@ pub enum SessionRootError {
     AlreadyExists,
     /// The root's recorded admission capacity is outside the supported bound.
     InvalidAdmissionCapacity,
-    /// The root's ownership marker is absent or not a `VSift` marker.
+    /// The directory exists but holds no ownership marker: `VSift` did not
+    /// create it, and never adopts a directory it did not create. A person
+    /// who named a folder of their own with `--session-root` lands here; the
+    /// failure code stays `INTEGRITY_FAILURE` (the v1 answer since 0.1.0) and
+    /// the host explains the refusal.
+    OwnershipMarkerMissing,
+    /// The root's ownership marker is present but not a valid `VSift` marker.
     InvalidOwnership,
     /// A required contained directory or lock anchor is invalid.
     InvalidLayout,
@@ -1170,7 +1176,13 @@ impl SessionRootError {
             Self::ParentUnavailable | Self::Missing | Self::Unavailable | Self::NotPrivate => {
                 FailureCode::StorageIo
             }
-            Self::InvalidOwnership | Self::InvalidLayout => FailureCode::IntegrityFailure,
+            // `INVALID_ARGUMENT` would say what happened to a person who named
+            // their own folder, but 0.1.0 answered `INTEGRITY_FAILURE` (exit 7)
+            // and v1 is additive only, so the code is kept and the remediation
+            // carries the explanation (known limit L-126).
+            Self::OwnershipMarkerMissing | Self::InvalidOwnership | Self::InvalidLayout => {
+                FailureCode::IntegrityFailure
+            }
             Self::ProvisioningInProgress => FailureCode::Busy,
         }
     }
@@ -1188,6 +1200,7 @@ impl fmt::Display for SessionRootError {
             Self::NotPrivate => "session root permissions are not private",
             Self::AlreadyExists => "session root already exists",
             Self::InvalidAdmissionCapacity => "session root admission capacity is invalid",
+            Self::OwnershipMarkerMissing => "session root has no VSift ownership marker",
             Self::InvalidOwnership => "session root ownership marker is invalid",
             Self::InvalidLayout => "session root layout is invalid",
             Self::Unavailable => "session root is unavailable",
@@ -1214,6 +1227,7 @@ impl From<SessionStoreOpenError> for SessionRootError {
             SessionStoreOpenError::RootUnavailable => Self::Unavailable,
             SessionStoreOpenError::RootNotDirectory => Self::NotDirectory,
             SessionStoreOpenError::RootNotPrivate => Self::NotPrivate,
+            SessionStoreOpenError::OwnershipMarkerMissing => Self::OwnershipMarkerMissing,
             SessionStoreOpenError::InvalidOwnership => Self::InvalidOwnership,
             SessionStoreOpenError::InvalidLayout => Self::InvalidLayout,
             SessionStoreOpenError::RootAlreadyExists => Self::AlreadyExists,
@@ -1528,6 +1542,16 @@ mod tests {
                 SessionStoreOpenError::InvalidLayout,
                 FailureCode::IntegrityFailure,
             ),
+            // Kept apart from a wrong marker so the host can explain it, and
+            // kept on the 0.1.0 code (#261, L-126).
+            (
+                SessionStoreOpenError::OwnershipMarkerMissing,
+                FailureCode::IntegrityFailure,
+            ),
+            (
+                SessionStoreOpenError::InvalidOwnership,
+                FailureCode::IntegrityFailure,
+            ),
             (
                 SessionStoreOpenError::RootUnavailable,
                 FailureCode::StorageIo,
@@ -1538,6 +1562,14 @@ mod tests {
                 code
             );
         }
+        assert_eq!(
+            SessionRootError::from(SessionStoreOpenError::OwnershipMarkerMissing),
+            SessionRootError::OwnershipMarkerMissing
+        );
+        assert_eq!(
+            SessionRootError::from(SessionStoreOpenError::InvalidOwnership),
+            SessionRootError::InvalidOwnership
+        );
     }
 
     #[test]

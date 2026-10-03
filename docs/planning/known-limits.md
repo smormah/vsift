@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-03 (P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-03 (P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -157,8 +157,9 @@ Each entry has these fields:
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
 
-Counts: 1 high, 32 medium, 77 low (110 entries).
+Counts: 1 high, 32 medium, 78 low (111 entries).
 
 ## Security
 
@@ -3092,6 +3093,37 @@ that week.**
   maintainer decides then (the setting stays strict until then).
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
   accepted residual. **Review:** pending.
+
+### L-126
+
+**A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened.**
+
+- **What:** `--session-root` (or the per-user default) naming an existing folder that holds no
+  VSift ownership marker, such as an empty folder made with `mkdir`, is never adopted and is left
+  untouched. Since P14 PR 7 (issue #261) the answer carries a fixed-prose remediation that says the
+  folder holds no VSift marker, was not created by VSift and was not used, and names the fix (a
+  path that does not exist yet, or delete the folder). The failure code is still the 0.1.0 one,
+  `INTEGRITY_FAILURE` (exit 7). `INVALID_ARGUMENT` (exit 2) would describe a person's mistake
+  better, like `NotDirectory` and `AlreadyExists` already do, but changing the code of a published
+  answer is not additive within v1, and the agent skill (frozen for the trials) tells an agent to
+  stop and report on `INTEGRITY_FAILURE` and to correct the request once on `INVALID_ARGUMENT`.
+  A just-made empty folder is also refused only after the five seconds the documented concurrent-creator
+  wait takes. A marker that is present but wrong is not described this way, nor is one that vanishes
+  while a command is using the root (both stay a bare `INTEGRITY_FAILURE`); a later command that finds
+  a VSift root whose marker was deleted cannot tell it from a folder VSift never made and describes it so.
+- **Evidence:** [`cli-v1.md`](../contracts/cli-v1.md) ("Private per-user folders"),
+  `schemas/v1/examples/session-root-unowned.json`, the CLI test
+  `foreign_session_root_cli_contract` and issue #261.
+- **Impact:** a script or an agent that keys on the code sees an integrity failure and exit 7 for a
+  user mistake; one that reads the remediation sees what to do. Agents do not pass `--session-root`
+  (an operator option the cold grader fails), so the skill's table is not exercised by it.
+- **Why:** v1 is additive only since 0.1.0, and the skill is frozen until the trials finish.
+- **Mitigation:** the remediation text; the contract, the schema example and the install guide say
+  so.
+- **Next step:** at the next major contract version, or the next skill freeze if a consumer is found
+  to branch on this case, answer `INVALID_ARGUMENT` for a folder with no marker.
+- **Owner:** unscheduled. **Issue:** none (#261 is closed by the remediation). **Status:** accepted
+  residual. **Review:** pending.
 
 ## Review workflow
 

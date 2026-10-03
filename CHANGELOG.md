@@ -249,6 +249,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **A `--session-root` that names a folder VSift did not create now says so** (P14 PR 7, #261;
+  found by the README's worked example with the published 0.1.0). The command already refused such
+  a folder (VSift never adopts one it did not create) with a bare `INTEGRITY_FAILURE`, which reads
+  as damaged stored data. A folder with no ownership marker is now told apart from a marker that
+  is present but wrong (new typed store reason `OwnershipMarkerMissing`) and answers the same code
+  and exit status (7) plus a fixed-prose remediation: the folder holds no VSift marker, VSift did
+  not create or use it and changed nothing, and the fix is a `--session-root` path that does not
+  exist yet (or deleting the folder). No path is echoed. The failure code is kept because changing
+  a published answer is not additive within v1 (known limit L-126); a wrong marker, or one that
+  vanishes while a command runs, stays a bare `INTEGRITY_FAILURE`. New v1 example
+  `schemas/v1/examples/session-root-unowned.json` and human snapshot; documented in
+  `docs/contracts/cli-v1.md` and the install guide; new CLI tests drive the binary against a
+  folder made by hand (empty and with content), a wrong marker and a deleted one.
 - **The campaign script no longer mistakes its own output for a dirty checkout** (P14 PR 7,
   #273; tooling only: `tools/vsift-agent-trials/campaigns/run-campaign.ps1`; the skill, grader,
   scenarios and settings are untouched, so no freeze is voided). `run-campaign.ps1` wrote its

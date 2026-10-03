@@ -497,6 +497,13 @@ process group, which would deliver the signal twice ([L-091](../planning/known-l
 
 ## 12. Problems
 
+**`INTEGRITY_FAILURE` right after `--session-root <folder>`.** If the folder already exists and
+VSift did not create it (an empty folder you made with `mkdir`, say), VSift never adopts it and
+leaves it untouched. The error's remediation says so: name a `--session-root` path that does not
+exist yet (VSift creates it, private to you), or delete the folder yourself if it holds nothing
+you need. An empty folder made a moment ago is refused after a wait of up to five seconds,
+because it could be another VSift process still creating it.
+
 Run `vsift setup check --json` and read [`SUPPORT.md`](../../SUPPORT.md) before opening an
 issue; remove secrets, personal information and sensitive paths first. Security
 concerns follow [`SECURITY.md`](../../SECURITY.md). Maintainers publishing a release use

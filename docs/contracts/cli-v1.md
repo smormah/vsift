@@ -25,7 +25,9 @@ workspace; otherwise P05 uses the per-user application cache. The first command
 that needs the root creates it. Commands that race to create it converge on one
 root: the others wait at most five seconds for the creator and use the root only
 after the full ownership and privacy checks, failing with `BUSY` if it is still
-being created. An existing directory that VSift did not create is never adopted.
+being created. An existing directory that VSift did not create is never adopted: the command
+fails with `INTEGRITY_FAILURE` and a remediation that says so and names the fix (see "Private
+per-user folders").
 `--host-isolation process-only|strict-linux` (P11 PR 2; default `process-only`)
 selects the isolation a command runs under: `strict-linux` is accepted only when the
 kernel attests the strict worker controls, and otherwise the command answers
@@ -1871,7 +1873,32 @@ configure-model`) or opens the session root (`ingest`, `session ...`,
 `STORAGE_IO` without remediation and the session-root case was `INVALID_ARGUMENT`.
 See [`storage-not-private.json`](../../schemas/v1/examples/storage-not-private.json).
 Storage that is a link, unreadable or not writable remains `STORAGE_IO` without this
-remediation. A folder another VSift process created a moment ago can briefly look
+remediation.
+
+**A session root VSift did not create** (`--session-root` naming an existing folder, or
+the per-user default, that holds no VSift ownership marker, for example an empty folder
+made with `mkdir`) is never adopted and is left exactly as it was. The command fails with
+`INTEGRITY_FAILURE` (exit 7, not retryable), the code 0.1.0 already answered, and since
+P14 PR 7 (issue #261) one `remediation` item (`required_authority: "none"`, `command:
+null`) whose summary begins with the fixed sentence `The VSift session_root folder holds
+no VSift ownership marker, so VSift did not create it and did not use it.` It says that
+nothing was changed, where the session root is by default, and the fix: name a
+`--session-root` path that does not exist yet (VSift creates it, private to you), or
+delete that folder yourself if it holds nothing you need. The path is never included.
+Every command that opens the session root reports it this way (`ingest`, `session ...`,
+`transcript get`, `session init-workspace`, ...). Only a folder with **no** marker is
+described so: a marker that is present but wrong (malformed, a foreign application, an
+unsupported version, a link) is damage and remains a bare `INTEGRITY_FAILURE`, and so does
+a marker that vanishes while a command is using the root; a later command that finds a VSift
+root whose marker was deleted cannot tell it from a folder VSift never made and describes it
+so. `INVALID_ARGUMENT` would describe
+the case better, but changing a published failure code is not additive within v1, so the
+code stays and the remediation carries the explanation (known limit L-126). A just-made
+empty folder could be a concurrent creator's first step, so its refusal waits out the
+5 seconds above first. See
+[`session-root-unowned.json`](../../schemas/v1/examples/session-root-unowned.json).
+
+A folder another VSift process created a moment ago can briefly look
 non-private while that process restricts it, so a folder that is still empty and was
 created within the last 10 seconds is checked again for up to 2 seconds (the session
 root keeps its existing 5-second wait for a creator) before it is refused.
