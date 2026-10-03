@@ -9,6 +9,7 @@ use std::error::Error;
 use common::repository;
 use serde_json::{Value, json};
 use vsift_agent_trials::{
+    cold::COLD_HELPER_PROGRAMS,
     scenario::{ColdUsefulness, Scenario},
     skill::{CHECK_IMAGES, SkillReferences, files_below},
     truth::{CorpusTruth, normalize},
@@ -216,17 +217,38 @@ fn the_hold_outs_are_ordinary_skill_scenarios_and_name_the_skill() -> TestResult
     Ok(())
 }
 
+fn string_list<'a>(settings: &'a Value, key: &str, file: &str) -> Result<Vec<&'a str>, String> {
+    Ok(settings["permissions"][key]
+        .as_array()
+        .ok_or(format!("{file}: no {key} list"))?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect())
+}
+
 /// P14 PR 2 found that the `vsift.cmd` shim lets `cmd.exe` read arguments a
 /// second time (issue #257). The Windows trials stay off it because Claude
-/// Code may run only `Bash(vsift:*)` (the Bash tool, which is Git Bash on
-/// Windows) and every other tool is denied; a settings edit that allowed
-/// another shell would end that, so it fails here.
+/// Code may run only the Bash tool (Git Bash on Windows) and every other tool
+/// is denied; a settings edit that allowed another shell would end that, so
+/// it fails here.
+///
+/// The skill-guided settings and the **strict** cold settings (the default,
+/// and the only ones Claude Code runs under on the maintainer's machine) allow
+/// `Bash(vsift:*)` and nothing else of Bash. The **realistic** cold settings,
+/// an option for an isolated machine only (an allow rule cannot confine `cat`
+/// to the workspace), also allow exactly the read-only helpers the cold grader
+/// knows ([`COLD_HELPER_PROGRAMS`]) and deny the ways `sort` writes a file.
 #[test]
 fn the_claude_settings_let_the_agent_run_only_the_bash_tool_for_vsift() -> TestResult {
     let folder = repository().join("tools/vsift-agent-trials");
-    for file in [
-        "claude-trial-settings.json",
-        "claude-cold-trial-settings.json",
+    let helper_rules: Vec<String> = COLD_HELPER_PROGRAMS
+        .iter()
+        .map(|helper| format!("Bash({helper}:*)"))
+        .collect();
+    for (file, helpers) in [
+        ("claude-trial-settings.json", false),
+        ("claude-cold-trial-settings.json", false),
+        ("claude-cold-trial-settings.realistic.json", true),
     ] {
         let settings: Value = serde_json::from_str(&std::fs::read_to_string(folder.join(file))?)?;
         assert_eq!(
@@ -234,13 +256,17 @@ fn the_claude_settings_let_the_agent_run_only_the_bash_tool_for_vsift() -> TestR
             json!("dontAsk"),
             "{file}: a tool outside the allow list must be denied, not asked about"
         );
-        let allowed: Vec<&str> = settings["permissions"]["allow"]
-            .as_array()
-            .ok_or("no allow list")?
+        let allowed = string_list(&settings, "allow", file)?;
+        let bash_rules: Vec<&str> = allowed
             .iter()
-            .filter_map(Value::as_str)
+            .copied()
+            .filter(|rule| rule.starts_with("Bash"))
             .collect();
-        assert!(allowed.contains(&"Bash(vsift:*)"), "{file}");
+        let mut expected: Vec<&str> = vec!["Bash(vsift:*)"];
+        if helpers {
+            expected.extend(helper_rules.iter().map(String::as_str));
+        }
+        assert_eq!(bash_rules, expected, "{file}: the Bash rules");
         for rule in &allowed {
             let lowered = rule.to_ascii_lowercase();
             assert!(
@@ -250,10 +276,88 @@ fn the_claude_settings_let_the_agent_run_only_the_bash_tool_for_vsift() -> TestR
                 "{file} allows {rule}, a shell other than the Bash tool"
             );
             assert!(
-                *rule == "Bash(vsift:*)" || rule.starts_with("Read(") || rule.starts_with("Skill("),
+                rule.starts_with("Bash(")
+                    || rule.starts_with("Read(")
+                    || rule.starts_with("Skill("),
                 "{file} allows {rule}, which the shim guarantee did not consider"
             );
         }
+        let denied = string_list(&settings, "deny", file)?;
+        for tool in ["Write", "Edit", "WebFetch", "WebSearch", "Task", "Agent"] {
+            assert!(denied.contains(&tool), "{file} must deny {tool}");
+        }
+        // `sort` writes the file `-o` or `--output` names, which a redirect
+        // check does not see; the helper is allowed only with these denied.
+        for rule in [
+            "Bash(sort -o*)",
+            "Bash(sort * -o*)",
+            "Bash(sort *--output*)",
+        ] {
+            assert_eq!(denied.contains(&rule), helpers, "{file}: {rule}");
+        }
+    }
+    Ok(())
+}
+
+/// The cold settings are shown to the agent (it may read the workspace's
+/// `.claude/settings.json`), so their one comment stays neutral, and the
+/// skill-guided settings gain no helper.
+#[test]
+fn the_cold_settings_say_nothing_about_trials_and_the_skill_settings_gain_no_helper() -> TestResult
+{
+    let folder = repository().join("tools/vsift-agent-trials");
+    for file in [
+        "claude-cold-trial-settings.json",
+        "claude-cold-trial-settings.realistic.json",
+    ] {
+        let cold: Value = serde_json::from_str(&std::fs::read_to_string(folder.join(file))?)?;
+        assert_eq!(
+            cold["$comment"],
+            json!("Project permission rules."),
+            "{file}"
+        );
+        let text = cold.to_string().to_ascii_lowercase();
+        for word in ["trial", "grader", "skill(", "maintainer", "cold"] {
+            assert!(!text.contains(word), "{file} mentions {word}");
+        }
+    }
+    let skilled: Value = serde_json::from_str(&std::fs::read_to_string(
+        folder.join("claude-trial-settings.json"),
+    )?)?;
+    assert_eq!(
+        string_list(&skilled, "allow", "skill settings")?,
+        vec!["Bash(vsift:*)", "Read(./**)", "Skill(vsift)"]
+    );
+    // The strict file is the default: vsift alone, and the realistic file is
+    // the strict one plus the helpers (and the three `sort` denials), no more.
+    let strict: Value = serde_json::from_str(&std::fs::read_to_string(
+        folder.join("claude-cold-trial-settings.json"),
+    )?)?;
+    let realistic: Value = serde_json::from_str(&std::fs::read_to_string(
+        folder.join("claude-cold-trial-settings.realistic.json"),
+    )?)?;
+    let strict_allow = string_list(&strict, "allow", "strict")?;
+    assert_eq!(strict_allow, vec!["Bash(vsift:*)", "Read(./**)"]);
+    let realistic_allow = string_list(&realistic, "allow", "realistic")?;
+    assert!(
+        strict_allow
+            .iter()
+            .all(|rule| realistic_allow.contains(rule))
+    );
+    assert_eq!(
+        realistic_allow.len(),
+        strict_allow.len() + COLD_HELPER_PROGRAMS.len()
+    );
+    let strict_deny = string_list(&strict, "deny", "strict")?;
+    let realistic_deny = string_list(&realistic, "deny", "realistic")?;
+    assert!(strict_deny.iter().all(|rule| realistic_deny.contains(rule)));
+    assert_eq!(realistic_deny.len(), strict_deny.len() + 3);
+    for key in [
+        "disableAllHooks",
+        "disableBundledSkills",
+        "enableAllProjectMcpServers",
+    ] {
+        assert_eq!(strict[key], realistic[key], "{key}");
     }
     Ok(())
 }

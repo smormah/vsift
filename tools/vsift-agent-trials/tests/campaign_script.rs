@@ -135,11 +135,16 @@ impl Checkout {
 
     /// Runs the script with PowerShell 7, as the runbook does.
     fn run(&self, batch: u8, extra: &[&str]) -> Result<Output, Box<dyn Error>> {
+        self.run_as("claude", batch, extra)
+    }
+
+    /// [`Self::run`] for either client.
+    fn run_as(&self, client: &str, batch: u8, extra: &[&str]) -> Result<Output, Box<dyn Error>> {
         let output = Command::new("pwsh")
             .args(["-NoProfile", "-NonInteractive", "-File"])
             .arg(self.repository.join(SCRIPT))
             .args(["-Batch", &batch.to_string()])
-            .args(["-Client", "claude", "-Version", "0.1.0", "-Config"])
+            .args(["-Client", client, "-Version", "0.1.0", "-Config"])
             .arg(&self.config)
             .arg("-NoBuild")
             .args(extra)
@@ -301,5 +306,92 @@ fn a_batch_directory_must_be_the_campaign_output_or_outside_the_checkout() -> Te
     assert_dry_run_passed(&accepted);
     assert!(outside.join("state-claude.json").is_file());
     assert!(checkout.raw_changes()?.is_empty());
+    Ok(())
+}
+
+/// The realistic cold setting lets the agent read any file the user can read
+/// (an allow rule cannot confine `cat` to the workspace), so on the
+/// maintainer's machine Claude Code keeps the strict one. The script refuses
+/// the realistic one unless the operator states the machine is isolated, and
+/// refuses it before it reads or writes anything.
+#[test]
+fn the_realistic_claude_cold_setting_needs_a_machine_declared_isolated() -> TestResult {
+    let checkout = Checkout::new()?;
+    let mentions = |output: &Output, words: &str| text(output).contains(words);
+
+    // The default is the strict setting.
+    let strict = checkout.dry_run(1)?;
+    assert_dry_run_passed(&strict);
+    assert!(
+        mentions(&strict, "Cold setting: strict"),
+        "{}",
+        text(&strict)
+    );
+
+    // The realistic one is refused without the statement, in a dry run and a
+    // real one, and nothing is written.
+    for extra in [
+        &["-DryRun", "-ColdVariant", "realistic"][..],
+        &["-ColdVariant", "realistic"][..],
+    ] {
+        let refused = checkout.run(2, extra)?;
+        assert!(!refused.status.success(), "{}", text(&refused));
+        assert!(
+            mentions(&refused, "isolated machine") && mentions(&refused, "-IsolatedMachine"),
+            "{}",
+            text(&refused)
+        );
+    }
+    assert!(!checkout.batch_directory(2).exists(), "nothing was written");
+
+    // With the statement it is accepted (a dry run: no client is called).
+    let accepted = checkout.run(
+        3,
+        &["-DryRun", "-ColdVariant", "realistic", "-IsolatedMachine"],
+    )?;
+    assert_dry_run_passed(&accepted);
+    assert!(
+        mentions(&accepted, "Cold setting: realistic"),
+        "{}",
+        text(&accepted)
+    );
+
+    // The statement alone, or with the strict setting, means nothing.
+    for extra in [
+        &["-DryRun", "-IsolatedMachine"][..],
+        &["-DryRun", "-ColdVariant", "strict", "-IsolatedMachine"][..],
+    ] {
+        let refused = checkout.run(1, extra)?;
+        assert!(!refused.status.success(), "{}", text(&refused));
+        assert!(mentions(&refused, "only goes with"), "{}", text(&refused));
+    }
+    Ok(())
+}
+
+/// Codex's cold run is always the realistic setting, inside the container.
+#[test]
+fn the_codex_cold_run_is_the_container_setting_and_has_no_strict_variant() -> TestResult {
+    let checkout = Checkout::new()?;
+    let codex = checkout.run_as("codex", 1, &["-DryRun"])?;
+    assert_dry_run_passed(&codex);
+    assert!(
+        text(&codex).contains("Cold setting: realistic (the container)"),
+        "{}",
+        text(&codex)
+    );
+    // Naming the realistic setting for Codex is harmless; the strict one does
+    // not exist for it.
+    let named = checkout.run_as("codex", 1, &["-DryRun", "-ColdVariant", "realistic"])?;
+    assert_dry_run_passed(&named);
+    let strict = checkout.run_as("codex", 1, &["-DryRun", "-ColdVariant", "strict"])?;
+    assert!(!strict.status.success(), "{}", text(&strict));
+    assert!(
+        text(&strict).contains("no strict Codex variant"),
+        "{}",
+        text(&strict)
+    );
+    // And the machine statement is for Claude Code only.
+    let declared = checkout.run_as("codex", 1, &["-DryRun", "-IsolatedMachine"])?;
+    assert!(!declared.status.success(), "{}", text(&declared));
     Ok(())
 }

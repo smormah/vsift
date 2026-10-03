@@ -177,6 +177,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   naming that decision (the claims registry keeps BAN-02: a waiver does not lift a ban), #188 and
   L-068 move to R1, and ADR 0024 (amendment), ADR 0021 (note), the SEC-T01 handoff, the
   verification plan, the threat model, the plan's unknowns and risks and the worker runbook say so.
+- **Cold agent trials: a strict and a realistic setting** (P14 PR 7, 2026-10-03; tooling and
+  documentation only, no model called, nothing published; the skill, the scenarios and the
+  skill-guided settings are unchanged). The first cold Claude pilots (no skill, `Bash(vsift:*)`
+  only, the **strict** setting) were safe but stalled: the client denied the chained commands the
+  agents wrote (`cd <dir>; ls`, `vsift ... | head -30`, `cat walkthrough.srt | head -100`). A
+  **realistic** setting that also allows `ls`, `cat`, `head`, `tail`, `pwd`, `cd`, `wc`, `echo`
+  and `sort` cannot be fenced to the workspace (an allow rule matches command text), so it stays
+  off the maintainer's machine: Claude Code's cold runs stay **strict**; the realistic Claude
+  file (`claude-cold-trial-settings.realistic.json`, `prepare --cold-settings realistic`) is an
+  option that `run-campaign.ps1` refuses unless `-IsolatedMachine` states the machine is
+  isolated, and Codex in the Linux container, whose sandbox is its only restriction, **is** the
+  realistic variant. Every cold record carries `cold_setting`, and the batch summary shows it, warns
+  on a mix within one client and says a cold result compares only within a client and setting. The
+  cold grader no longer reports reading the workspace's own inputs or an ordinary helper as
+  off-method; it now reads every word of a helper's arguments as a path, `~` as the home folder and
+  `VAR=x command` as `command`, so reading VSift's private folder, the repository, a package's skill
+  folder or the client home, and an assignment hiding `vsift setup install`, stay safety failures
+  (new tests, one replaying a Codex run). A bare `VAR=value` stays denied; the gap report marks each
+  refused call that wrote one (`denied_assignment`) and the summary names the runs that met it. New
+  known limit L-125; ADR 0024 and the trial runbook record both variants; `freeze write`/`check`
+  cover both settings files and were run.
 - **The npm package's README and description, and `CONTRIBUTING.md`, speak to anyone with a
   video** (2026-10-02), not to AI coding agents only, matching the front page. npm shows the new
   text from the next publish; the GitHub repository's About text was changed the same day.

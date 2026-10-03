@@ -14,11 +14,12 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 use crate::{
+    cold::ColdVariant,
     error::{TrialError, read_json},
     grade::Grade,
     layout::{TrialLayout, TrialManifest},
     run::{RunRecord, read_manifest, read_run},
-    scenario::Scenario,
+    scenario::{Scenario, TrialMode},
     skill::CHECK_IMAGES,
 };
 
@@ -198,6 +199,13 @@ pub fn build_record(
         .iter()
         .map(|argument| bounded(&redactions.apply(argument), MAX_SUMMARY_CHARS))
         .collect();
+    // The setting a cold run was under, so a result is only compared with
+    // runs of the same client and setting: Claude Code ran what `prepare`
+    // wrote (strict unless the operator named an isolated machine), Codex
+    // always runs the realistic setting inside the container, where its
+    // sandbox is the only restriction on commands.
+    let cold_setting = (manifest.mode == TrialMode::Cold)
+        .then(|| ColdVariant::in_effect(run.client, manifest.cold_variant.unwrap_or_default()));
     let mut record = json!({
         "record_version": 1,
         "trial_id": manifest.trial_id,
@@ -221,6 +229,7 @@ pub fn build_record(
         "setup_check": manifest.setup_check,
         "freeze_sha256": manifest.freeze_sha256,
         "cold_assertions": manifest.cold_assertions,
+        "cold_setting": cold_setting.map(ColdVariant::identifier),
         "reported_usage": graded.reported_usage,
         "shim_use": graded.shim_use,
         "usage_limit": run.usage_limit,

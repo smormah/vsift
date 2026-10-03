@@ -12,6 +12,7 @@ use common::{Scratch, repository};
 use serde_json::json;
 use vsift_agent_trials::{
     TrialError,
+    cold::ColdVariant,
     evaluate::{GradeOptions, grade_phase},
     install::{InstallEvidence, InstallProof, InstallSourceKind, InstalledPackage, LauncherCheck},
     layout::{SkillSource, ToolSource, TrialLayout, TrialManifest},
@@ -107,6 +108,7 @@ fn request(
         tools,
         freeze_sha256: None,
         cold_scan_stop: scratch.parent(),
+        cold_variant: ColdVariant::default(),
     }
 }
 
@@ -354,6 +356,76 @@ async fn a_cold_workspace_holds_no_skill_no_documentation_and_nothing_that_names
     assert!(prompt.contains("`vsift` is installed"), "{prompt}");
     assert!(!prompt.to_ascii_lowercase().contains("skill"));
     Ok(())
+}
+
+/// The strict settings are the default; the realistic ones are written only
+/// when the request names them, and the manifest says which a cold workspace
+/// got. A skill trial records none.
+#[tokio::test]
+async fn a_cold_workspace_gets_the_strict_settings_unless_the_realistic_ones_are_named()
+-> TestResult {
+    let folder = repository().join("tools/vsift-agent-trials");
+    let committed = |file: &str| -> Result<serde_json::Value, Box<dyn Error>> {
+        Ok(serde_json::from_str(&fs::read_to_string(
+            folder.join(file),
+        )?)?)
+    };
+    for (variant, file) in [
+        (ColdVariant::Strict, "claude-cold-trial-settings.json"),
+        (
+            ColdVariant::Realistic,
+            "claude-cold-trial-settings.realistic.json",
+        ),
+    ] {
+        let scratch = Scratch::new(variant.identifier())?;
+        let mut asked = request(
+            &scratch,
+            scenario("cold", "C-01-f05-supplied"),
+            Some(proof(&scratch)?),
+            ToolSource::Managed,
+        );
+        asked.cold_variant = variant;
+        let layout = prepare(&asked).await?;
+        let manifest = read_manifest(&layout)?;
+        assert_eq!(manifest.cold_variant, Some(variant));
+        let written: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+            layout.workspace().join(".claude").join("settings.json"),
+        )?)?;
+        assert_eq!(written, committed(file)?, "{}", variant.identifier());
+    }
+    // The default of the request is the strict variant.
+    assert_eq!(ColdVariant::default(), ColdVariant::Strict);
+    // A skill trial records no cold variant, whatever the request says.
+    let scratch = Scratch::new("skill-variant")?;
+    let mut asked = request(
+        &scratch,
+        scenario("scenarios", "A-01-f01-do-not-install"),
+        None,
+        ToolSource::Registered,
+    );
+    asked.cold_variant = ColdVariant::Realistic;
+    let (_, manifest) = {
+        let layout = prepare(&asked).await?;
+        let manifest = read_manifest(&layout)?;
+        (layout, manifest)
+    };
+    assert_eq!(manifest.cold_variant, None);
+    Ok(())
+}
+
+#[test]
+fn codex_always_runs_the_realistic_setting_and_claude_runs_what_was_prepared() {
+    use vsift_agent_trials::trace::ClientKind;
+    for prepared in [ColdVariant::Strict, ColdVariant::Realistic] {
+        assert_eq!(
+            ColdVariant::in_effect(ClientKind::Codex, prepared),
+            ColdVariant::Realistic
+        );
+        assert_eq!(
+            ColdVariant::in_effect(ClientKind::ClaudeCode, prepared),
+            prepared
+        );
+    }
 }
 
 #[tokio::test]
@@ -632,6 +704,9 @@ async fn a_cold_trial_runs_grades_and_records_end_to_end() -> TestResult {
         "missing_tools_explained"
     );
     assert_eq!(record["cold_assertions"].as_array().map(Vec::len), Some(6));
+    // Claude Code on this machine ran the strict setting, and the record
+    // says so, so a result is only compared with runs of the same setting.
+    assert_eq!(record["cold_setting"], "strict");
     assert_eq!(record["reported_usage"]["cost_micro_usd"], 50_000);
     // The record says which shell the client's vsift calls ran in (#257):
     // the stub client runs plain commands, so only the POSIX shim, never

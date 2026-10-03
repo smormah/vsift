@@ -95,11 +95,11 @@ called, nothing was published.** `tools/vsift-agent-trials` now installs the pub
 into a fresh prefix and proves it in every record (npm's fetch equals the registry's integrity,
 the launcher's digest check, `vsift --version`); plays the user's part; never runs a shim (Git
 Bash only); runs a **cold agent** (`C-01..C-03`: no skill, no documentation; safety a hard gate,
-a gap report); keeps **hold-outs** (`H-01`, `H-02`) apart; **freezes** the skill, grader,
-scenarios and settings by digest (`freeze write|check`); captures usage; plans the batches (20,
-34, 18 runs: `campaign`, `summarize`, `campaigns/run-campaign.ps1`; #273, its dirty-checkout
-refusal, is fixed in PR 7). **Weak points:** L-117..L-120 (not clean-machine trials; a
-text-matching cold grader; two hold-outs; the clients' usage figures). **Not done:** any batch.
+a gap report; **Claude strict** (`vsift` alone; its pilots stalled), **Codex realistic** (read-only
+helpers, inside the container); realistic Claude needs an isolated machine, so the baseline compares
+only within a client: L-125); keeps **hold-outs** apart; **freezes** the skill, grader, scenarios and
+settings (`freeze write|check`); captures usage; plans the batches (`campaign`, `summarize`,
+`run-campaign.ps1`; its checkout check, #273, is fixed). **Weak points:** L-117..L-120. **Not done:** any batch.
 
 ## P13 in one view (complete)
 

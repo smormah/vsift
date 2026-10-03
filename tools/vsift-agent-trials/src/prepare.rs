@@ -27,7 +27,7 @@ use vsift::{
 };
 
 use crate::{
-    cold::{CLAUDE_COLD_SETTINGS, assert_cold_workspace},
+    cold::{ColdVariant, assert_cold_workspace},
     error::{TrialError, write_json},
     holdout::HoldoutIndex,
     install::InstallProof,
@@ -99,6 +99,10 @@ pub struct PrepareRequest {
     /// checked; the harness's own tests, whose scratch folders lie below a
     /// user profile that may hold skills, name a folder to stop before.
     pub cold_scan_stop: Option<PathBuf>,
+    /// Which Claude Code settings a cold trial gets: the strict ones by
+    /// default, the realistic ones only where the machine is isolated (the
+    /// campaign script asks). Ignored for a skill trial.
+    pub cold_variant: ColdVariant,
 }
 
 fn required<'a>(value: Option<&'a PathBuf>, what: &str) -> Result<&'a PathBuf, TrialError> {
@@ -267,6 +271,7 @@ pub async fn prepare(request: &PrepareRequest) -> Result<TrialLayout, TrialError
         setup_check,
         freeze_sha256: request.freeze_sha256.clone(),
         cold_assertions,
+        cold_variant: (mode == TrialMode::Cold).then_some(request.cold_variant),
     };
     write_json(&layout.manifest(), &manifest)?;
     Ok(layout)
@@ -474,7 +479,7 @@ fn write_settings(
 ) -> Result<String, TrialError> {
     let file = match mode {
         TrialMode::Skill => CLAUDE_SETTINGS,
-        TrialMode::Cold => CLAUDE_COLD_SETTINGS,
+        TrialMode::Cold => request.cold_variant.claude_settings(),
     };
     let mut settings = crate::error::read_json(&request.repository.join(file))?;
     if scenario.image_policy == crate::scenario::ImagePolicy::Disabled {

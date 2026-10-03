@@ -105,6 +105,21 @@ param(
     # not comparable, and the summary must say so).
     [switch] $AllowGraderChange,
 
+    # The Claude Code settings of the cold runs: 'strict' (vsift alone, the
+    # default and the only one for Claude Code on the maintainer's machine) or
+    # 'realistic' (also ls, cat, head, tail, pwd, cd, wc, echo, sort). A rule
+    # cannot confine those helpers to the workspace, so the realistic setting
+    # lets the agent read any file the user can read: it is refused unless
+    # -IsolatedMachine says this machine holds none of the user's own files.
+    # Codex always runs the realistic setting, inside the Linux container.
+    [ValidateSet('strict', 'realistic')]
+    [string] $ColdVariant = 'strict',
+
+    # States that this machine is isolated (a clean test machine, nothing of
+    # the user's on it). The only thing that allows -ColdVariant realistic
+    # for Claude Code.
+    [switch] $IsolatedMachine,
+
     [switch] $NoBuild,
 
     # Print the plan and what would run; call no client, no npm and no docker.
@@ -116,6 +131,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandArgumentPassing = 'Standard'
+
+# --- the cold setting --------------------------------------------------------
+# Refused before anything is read or written. The strict Claude setting keeps
+# the agent to vsift on the maintainer's machine; the realistic one is for an
+# isolated machine only, and Codex has no strict variant to ask for.
+if ($Client -eq 'claude' -and $ColdVariant -eq 'realistic' -and -not $IsolatedMachine) {
+    throw 'The realistic cold setting for Claude Code lets the agent read any file the user can read (ls, cat and head cannot be confined to the workspace), so it runs only on an isolated machine. Say so with -IsolatedMachine, or keep the default -ColdVariant strict.'
+}
+if ($Client -eq 'codex' -and $PSBoundParameters.ContainsKey('ColdVariant') -and $ColdVariant -ne 'realistic') {
+    throw 'The Codex cold run is always the realistic setting, inside the Linux container whose sandbox is its only restriction; there is no strict Codex variant. Leave -ColdVariant out.'
+}
+if ($IsolatedMachine -and -not ($Client -eq 'claude' -and $ColdVariant -eq 'realistic')) {
+    throw '-IsolatedMachine only goes with -Client claude -ColdVariant realistic: it is the statement that allows the realistic Claude setting.'
+}
 
 $here = $PSScriptRoot
 $repository = (Resolve-Path (Join-Path $here '..\..\..')).Path
@@ -220,6 +249,7 @@ else {
 
 if ($DryRun) {
     Write-Step 'Dry run: the plan below is what would run, in order. No client, npm or docker is called.'
+    Write-Step ('Cold setting: ' + $(if ($Client -eq 'codex') { 'realistic (the container)' } else { $ColdVariant }))
     $plan = Get-Content -LiteralPath $state -Raw | ConvertFrom-Json
     $plan.runs | ForEach-Object {
         '{0,-8} {1,-52} {2,-18} {3}' -f $_.status, $_.run.run_id, $_.run.model, $_.run.scenario
@@ -301,6 +331,7 @@ function Invoke-ClaudeRun([object] $Run) {
     $prepared = Invoke-Harness @(
         'prepare', '--root', $root, '--scenario', $scenario,
         '--install-proof', $proof, '--tools', 'registered', '--freeze', $freezeFile,
+        '--cold-settings', $ColdVariant,
         '--vsift-commit', $commit,
         '--ffmpeg', $configuration.ffmpeg, '--ffprobe', $configuration.ffprobe,
         '--whisper', $configuration.whisper, '--model', $configuration.model,

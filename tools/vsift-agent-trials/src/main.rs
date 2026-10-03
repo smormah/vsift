@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use vsift_agent_trials::{
     TrialError,
     campaign::{CampaignState, ClientName, Outcome, Tier},
-    cold::CLAUDE_COLD_SETTINGS,
+    cold::{CLAUDE_COLD_SETTINGS, ColdVariant},
     evaluate::{GradeOptions, environment_user_names, grade_phase},
     freeze, holdout,
     install::{DEFAULT_REGISTRY, InstallProof, InstallRequest, install},
@@ -70,6 +70,15 @@ enum Tools {
     Registered,
     /// `setup plan` and `setup install` by the harness (Ubuntu 24.04 x64).
     Managed,
+}
+
+/// Which Claude Code cold settings `prepare` writes (a cold scenario only).
+#[derive(Clone, Copy, ValueEnum)]
+enum ColdSettings {
+    /// `Bash(vsift:*)` only: Claude Code on the maintainer's machine.
+    Strict,
+    /// Also the read-only helpers: only where the machine is isolated.
+    Realistic,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -234,6 +243,12 @@ enum Step {
         /// How the tools are provided.
         #[arg(long, value_enum, default_value = "registered")]
         tools: Tools,
+        /// The Claude Code settings of a cold trial: `strict` (vsift only,
+        /// the default) or `realistic` (also read-only helpers), which gives
+        /// a cold agent the run of the user's files and so belongs only on
+        /// an isolated machine. Ignored for a skill trial.
+        #[arg(long, value_enum, default_value = "strict")]
+        cold_settings: ColdSettings,
         /// The freeze file the trial runs under.
         #[arg(long)]
         freeze: Option<PathBuf>,
@@ -472,6 +487,7 @@ async fn execute(step: Step) -> Result<Done, TrialError> {
             vsift,
             install_proof,
             tools,
+            cold_settings,
             freeze,
             vsift_commit,
             ffmpeg,
@@ -532,6 +548,10 @@ async fn execute(step: Step) -> Result<Done, TrialError> {
                 },
                 freeze_sha256,
                 cold_scan_stop: None,
+                cold_variant: match cold_settings {
+                    ColdSettings::Strict => ColdVariant::Strict,
+                    ColdSettings::Realistic => ColdVariant::Realistic,
+                },
             })
             .await?;
             Ok(Done::ok(format!("prepared {}", layout.trial().display())))
