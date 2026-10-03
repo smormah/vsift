@@ -34,13 +34,25 @@ function sha256(bytes) {
 }
 
 /**
+ * Removes a folder tree, retrying when Windows still holds a file in it. An
+ * executable that just ran or was just copied can stay locked for a moment (the
+ * exited process, or the scanner of a hosted image), and `unlink` then fails
+ * with EBUSY (#285). `rmSync` retries only when told to, with a linear back-off
+ * of `retryDelay` per attempt (about five seconds in all here); a file that is
+ * still held after that still fails the test.
+ */
+function removeTree(target, options = {}) {
+  fs.rmSync(target, { recursive: true, maxRetries: 10, retryDelay: 100, ...options });
+}
+
+/**
  * Lays out node_modules the way a package manager does, under a directory
  * whose name has spaces and non-ASCII letters: the launcher from source and
  * `target`'s platform package holding `executable` (bytes, or a file to copy).
  */
 function makeLayout(t, { target, executable, platformVersion = VERSION, editDigests = (digests) => digests }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vsift launcher ü 日本 '));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => removeTree(root, { force: true }));
   const launcherRoot = path.join(root, 'node_modules', 'vsift-cli');
   fs.mkdirSync(path.join(launcherRoot, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(launcherRoot, 'lib'), { recursive: true });
@@ -126,7 +138,7 @@ for (const target of Object.values(launcher.TARGETS)) {
 
   test(`${target.packageName}: a missing package names it and how to reinstall`, (t) => {
     const layout = makeLayout(t, { target, executable: Buffer.from('native executable') });
-    fs.rmSync(layout.packageRoot, { recursive: true });
+    removeTree(layout.packageRoot);
     assertFailure(
       () => prepareFor(layout, target),
       launcher.EXIT_NOT_INSTALLED,
@@ -238,7 +250,7 @@ test('standard input, output and error are the executable’s', endToEnd, (t) =>
 
 test('a launcher failure is a readable message without a stack trace', endToEnd, (t) => {
   const missing = makeLayout(t, { target: hostTarget, executable: process.execPath });
-  fs.rmSync(missing.packageRoot, { recursive: true });
+  removeTree(missing.packageRoot);
   const notInstalled = runLauncher(missing, ['args']);
   assert.equal(notInstalled.status, launcher.EXIT_NOT_INSTALLED);
   assert.equal(notInstalled.stdout, '');
