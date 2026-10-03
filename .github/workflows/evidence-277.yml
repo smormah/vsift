@@ -66,7 +66,7 @@ jobs:
               const listed = run(args);
               let data;
               try { data = JSON.parse(listed.stdout).data; } catch { console.log(`round ${round}: session list unreadable ${listed.stdout.slice(0, 200)}`); anomalies += 1; break; }
-              for (const entry of data.sessions || data.entries || []) { total += 1; if (entry.state === 'initializing') initializing.push(entry.session_id); }
+              for (const entry of data.items || []) { total += 1; if (entry.state === 'initializing') initializing.push(entry.session_id); }
               if (data.next_cursor === null || data.next_cursor === undefined) break;
               cursor = data.next_cursor;
             }
