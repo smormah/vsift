@@ -801,3 +801,88 @@ do have a **second, clean Windows 11 test machine**: the macOS Gatekeeper try-ou
 ship as untried (decision H's fallback, with the hosted check as partial support), and the Smart
 App Control try-out and a true clean-machine install run on the second Windows machine. No
 decision A to H changed.
+
+## Implementation note, 2026-10-02 (P14 PR 3, the journeys on the published binary)
+
+Pull request #254. Delivered from "What P14 delivers" item 3 (RQ-05 and RQ-06) and the "Tests"
+and "Workflows" rows of the planned changes. **No product code, no release workflow and no
+setting changed, and nothing was published or tagged;** the only production-adjacent change
+is a `[[test]]` entry in `crates/vsift-cli/Cargo.toml`. The record, with the results, is
+[`p14-qualification.md`](../planning/p14-qualification.md) section 17.
+
+- **The central finding is closed for 0.1.0.** Every real-tool checkpoint ran a Cargo-built
+  binary; the published one has now completed the supplied-transcript and local-ASR journeys and
+  the P06 to P11 checkpoints on Ubuntu 24.04, Windows and macOS 15 (53 stages passed on each, one
+  blocked by design or by the host, below).
+- **The override.** `assert_cmd` 2.2.2 does read `CARGO_BIN_EXE_vsift` when a test runs, but
+  `cargo test` sets it for every test process and replaces any value given from outside (a
+  nonexistent path changed nothing), so it cannot select another binary. The override is
+  therefore a repository variable, `VSIFT_E2E_BINARY`, read by one module
+  (`crates/vsift-cli/tests/published_binary/mod.rs`) that every checkpoint includes; the
+  unset case runs the Cargo-built binary exactly as before. The override is **refused, never
+  ignored**, unless the path is absolute and names a file, `VSIFT_E2E_EXPECTED_VERSION` and
+  `VSIFT_E2E_EXPECTED_COMMIT` are both set and well formed, and `<path> --version` prints
+  exactly `vsift <version> (<commit>)` for them (a build without a commit is refused). The
+  expectations are explicit rather than read from the test crate because the tests and the
+  binary may come from different commits: **a tag that predates the override (0.1.0) cannot run
+  an installed binary with its own tests**, so for it the workflow compiles the tests from its
+  own ref and runs the binary published as 0.1.0 ([L-115](../planning/known-limits.md#l-115));
+  from the first tag that contains the module, `auto` takes the tag's own tests. Each checkpoint
+  report gains `binary_under_test` (source, `--version` line, SHA-256, never a path). 17 tests
+  cover the rules (`e2e_binary_override`).
+- **`p14_installed_binary_e2e`** adds the two cases no checkpoint had: hostile file names
+  through the real tools (SEC-01; C-04, P-01) and a sentinel environment (SEC-25; P-02). It has
+  no libtest harness (`harness = false`, the one manifest change): the recorder that stands in
+  for each tool is a copy of the test executable, started by `vsift` with `vsift`'s own argument
+  list, which libtest would reject, and it prints `skipped` unless `VSIFT_P14_INSTALLED_E2E=1`.
+  The recorder writes down every argument and variable it is started with; a control recorder
+  started directly with a sentinel proves it can see a leak. The child of every probe saw no
+  variable at all on all three systems.
+- **The workflow `P14 journeys` and its driver.** Every step is one subcommand of
+  `tools/p14_journeys.py` (standard library only, no shell, an explicit argument list per
+  command, 26 tests; versions are validated before they reach a command line). A job installs
+  `vsift-cli@<version>` with npm from the real registry with scripts disabled, requires the
+  lockfile to name `registry.npmjs.org` and every package an integrity, compares the native
+  executable with `platform-digests.json`, and checks its `--version` against the tag's commit.
+  **Why npm and not the archive:** the bytes are the same ones (the archives are RQ-02's),
+  npm is how users get them, and it gives the registry's integrity as extra evidence. It runs
+  the **native executable directly** (the shim needs Node.js on a `PATH` the checkpoints empty,
+  and the checkpoints signal the process), so the launcher is RQ-01's. Tools: **Ubuntu** installs
+  them with the published binary's own `setup plan` and `setup install --accept-plan` (the
+  catalogue's BtbN FFmpeg, whisper.cpp v1.9.2 and the `base` model) and registers the
+  resulting executables as the checkpoints do; **Windows** uses the repository's pinned builds
+  as its other Windows jobs obtain them (`tools/p07_local_asr_tools.py`: the BtbN win64 LGPL
+  build, not the gyan.dev build of the maintainer's machine, which no hosted job downloads);
+  **macOS** installs Homebrew's `ffmpeg` and `whisper-cpp` (the formula name on the image's
+  tap; not reviewed artifacts: recorded, not endorsed, [L-114](../planning/known-limits.md#l-114))
+  with the pinned, hash-checked model. On macOS the T-04 recognizer gates also run, in
+  process, on a dispatch (about an hour). A stage that cannot run is reported (`blocked`, or
+  under "Not run here, and why"), never skipped. The workflow is read-only
+  (`permissions: contents: read`, no secrets, no publish step) and passes the lint.
+- **RQ-06.** `P13 managed smoke` gained `published_version` (a version or `highest`): its
+  `managed-install` and `install-e2e` jobs then install the published binary and export the
+  override, and run the same tests unchanged; with the input empty, the jobs are as before.
+- **Schedule and cost.** Both workflows run weekly (Wednesday 04:37 and 04:53 UTC) against the
+  highest published version, from the default branch once this merges. One `P14 journeys` run
+  is about 53 runner-minutes, the managed smoke about 8; the maintainer can disable either
+  schedule. A failed run is the signal; no workflow opens an issue ([L-116](../planning/known-limits.md#l-116)).
+- **Results and findings** (run 36965956708; `P13 managed smoke` run 36965088525): all three
+  systems passed; the managed smoke passed. Three defects of this change's own workflow and
+  driver were found and fixed (the Homebrew formula name; the 65-minute gate on every run; a
+  silent stall: a later run's Windows job printed nothing after `p10` and was cancelled at its
+  limit, [#263](https://github.com/smormah/vsift/issues/263), most likely the driver closing a
+  pipe under its reader, now bounded, flushed and partial-result-safe). **One finding
+  about what was proved:** P11's durable stage cannot run on a hosted runner, whose root is
+  mounted `nobarrier`, so the published binary's durable worker request has not run on the
+  qualified profile ([#258](https://github.com/smormah/vsift/issues/258),
+  [L-113](../planning/known-limits.md#l-113)); the ledger therefore marks RQ-05 `running` for
+  0.1.0 (RQ-06 `passed` for 0.1.0), and the stage's disposition is the maintainer's. No product
+  defect was found.
+- **Resolved from "Details left to their pull requests":** how the journeys scrub the
+  environment (every `vsift` runs with an empty `PATH` and a per-test base; the recorder shows an
+  empty environment reaches a tool child) and Homebrew's versions on macOS (recorded per run).
+- **For the maintainer's review:** the weekly schedules and the hosted minutes they use; that
+  macOS is judged with Homebrew's tools; running the T-04 gates only on a dispatch; RQ-05 left
+  `running` because of the durable stage; the `harness = false` manifest entry; the variable
+  names (`VSIFT_E2E_BINARY`, `VSIFT_E2E_EXPECTED_VERSION`, `VSIFT_E2E_EXPECTED_COMMIT`,
+  `VSIFT_P14_INSTALLED_E2E`).

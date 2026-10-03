@@ -569,6 +569,35 @@ named in an item's `supports.verification` where the plan names it (`A-08`, `A-0
 and consistent; they do not fetch a run or judge a result (known limit
 [L-101](known-limits.md#l-101)).
 
+## 2026-10-02 P14 PR 3 evidence (the journeys on the published binary, branch `p14-pr3-journeys`)
+
+Evidence items RQ-05 and RQ-06 against the **published** `vsift-cli` 0.1.0 (`vsift 0.1.0
+(011bc4da1af6)`), on hosted runners; the record, with the per-system tools, timings and caveats,
+is [`p14-qualification.md`](p14-qualification.md) section 17, and the ledger holds the links
+(RQ-05 `running` for 0.1.0, RQ-06 `passed` for 0.1.0, both for 0.1.0 only).
+
+- **Override and helper.** `VSIFT_E2E_BINARY` (with `VSIFT_E2E_EXPECTED_VERSION` and
+  `VSIFT_E2E_EXPECTED_COMMIT`) selects the executable every real-tool checkpoint drives, through
+  one module (`crates/vsift-cli/tests/published_binary/mod.rs`); refused, never ignored, when the
+  path is relative or missing, an expectation is missing or malformed, or `--version` is another
+  version or commit. 17 tests (`e2e_binary_override`, every build, no tools). `CARGO_BIN_EXE_vsift`
+  cannot do this job: `cargo test` overwrites it.
+- **`P14 journeys`** (run 36965956708): Ubuntu 24.04 (managed tools installed by the binary's own
+  `setup install`), Windows (pinned) and macOS 15 arm64 (Homebrew): 9 checkpoints each, 53 stages
+  passed, 1 blocked (P11's durable stage: by design off Ubuntu; refused on the hosted Ubuntu root,
+  mounted `nobarrier`, [L-113](known-limits.md#l-113), issue #258). The rows each checkpoint
+  carries (the [spine](e2e-test-spine.md) lists them: P07's A-08 and A-09 stages, P08's V-02 to
+  V-05 and S-11, P09's V-01, V-06 to V-08 and both mechanical journeys, P10's X-01 to X-03, X-06
+  and X-09, P11's X-07, X-08, X-11, O-01, O-03 and O-04) now ran through the installed binary,
+  and, new, C-04 and P-01 (hostile names) and P-02 with SEC-25 (a sentinel environment) in
+  `p14_installed_binary_e2e`. T-04's gates ran in process on macOS (clean WER 4.06% for `base`,
+  4.87% for `base_q5_1`; F08 61.53% and 46.15%; only the reviewed misses).
+- **`P13 managed smoke`** with `published_version` 0.1.0 (run 36965088525): green, the published
+  Linux executable as the binary under test, D-02 and D-07's real downloads from the publishers.
+- **Not shown:** the launcher and the archives (RQ-01, RQ-02), a clean machine, the durable
+  worker stage on the qualified profile, real recordings, the candidate or the stable
+  ([L-113](known-limits.md#l-113), [L-114](known-limits.md#l-114), [L-115](known-limits.md#l-115)).
+
 ## 2026-09-30 P13 PR 7 evidence (kill and power-loss tests of the managed store, branch `p13-pr7-crash`)
 
 - **Kill matrix, every CI OS:** `cargo test -p vsift-infrastructure --features

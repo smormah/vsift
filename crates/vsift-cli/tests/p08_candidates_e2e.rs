@@ -45,6 +45,8 @@
 //! run here is `blocked`, never `passed`, and the test fails unless every
 //! stage passed.
 
+mod published_binary;
+
 use std::{
     collections::BTreeMap,
     env,
@@ -234,7 +236,7 @@ impl Whisper {
 
 /// A bounded `vsift` invocation with isolated per-user state and no ambient `PATH`.
 fn vsift(base: &Path) -> Result<Command, StageStop> {
-    let mut command = Command::cargo_bin("vsift")?;
+    let mut command = published_binary::command()?;
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
@@ -1384,6 +1386,7 @@ async fn candidates_checkpoint() -> TestResult {
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "resource_profile": "each CLI call killed after 900 s; empty PATH; each window decode under its 120 s deadline",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "local_asr_variant": whisper.is_some(),
         "authorization": "opt-in cargo test invocation; setup configure writes only to isolated temporary per-user bases; clips are built in a temporary directory; no install, download or network access",
         "prior_checkpoints": ["P07: p07_transcript_e2e", "P07: p07_local_asr_e2e", "P08: p08_search_e2e"],

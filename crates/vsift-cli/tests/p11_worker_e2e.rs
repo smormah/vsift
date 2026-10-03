@@ -57,6 +57,8 @@
 //! `p11_worker: passed` when every required stage passed. A stage that
 //! cannot run here is `blocked`, never `passed`.
 
+mod published_binary;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     env,
@@ -344,7 +346,7 @@ impl Host {
     /// A bounded `vsift` invocation in the isolated environment.
     fn command(&self) -> Result<Command, StageStop> {
         let user = self.base.join("user");
-        let mut command = Command::cargo_bin("vsift")?;
+        let mut command = published_binary::command()?;
         command
             .env("LOCALAPPDATA", &user)
             .env("XDG_CONFIG_HOME", &user)
@@ -422,8 +424,8 @@ impl Workspace {
     }
 
     /// `job batch` of `requests` with the host's roots, ready to spawn.
-    fn batch(&self, host: &Host, requests: &Path, concurrency: u16) -> Process {
-        let mut command = Process::new(assert_cmd::cargo::cargo_bin("vsift"));
+    fn batch(&self, host: &Host, requests: &Path, concurrency: u16) -> Result<Process, StageStop> {
+        let mut command = published_binary::process()?;
         host.isolate(&mut command)
             .arg("--session-root")
             .arg(&self.root)
@@ -439,7 +441,7 @@ impl Workspace {
                 "--events",
                 "jsonl",
             ]);
-        command
+        Ok(command)
     }
 
     /// Runs a batch to its end.
@@ -451,7 +453,7 @@ impl Workspace {
     ) -> Result<BatchRun, StageStop> {
         let started = Instant::now();
         let output = self
-            .batch(host, requests, concurrency)
+            .batch(host, requests, concurrency)?
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()?;
@@ -1237,7 +1239,7 @@ fn ladder_stage(root: &OwnedRoot, tools: &Tools) -> StageResult {
         write_requests(&requests, &lines)?;
         let started = Instant::now();
         let mut child = workspace
-            .batch(&host, &requests, concurrency)
+            .batch(&host, &requests, concurrency)?
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()?;
@@ -1530,7 +1532,7 @@ fn shutdown_stage(root: &OwnedRoot, tools: &Tools) -> StageResult {
     // The interrupted batch, stopped once the first recognition has a
     // checkpoint and the second (line 4) has been admitted.
     let (workspace, _) = Workspace::create(&host, "interrupted", "ephemeral", WIDE_CAPACITY)?;
-    let mut command = workspace.batch(&host, &requests, 2);
+    let mut command = workspace.batch(&host, &requests, 2)?;
     command.stdout(Stdio::piped()).stderr(Stdio::null());
     #[cfg(windows)]
     {
@@ -1891,6 +1893,7 @@ fn single_host_worker_run() -> TestResult {
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "resource_profile": "ephemeral worker workspaces of 16 admission units (4 for the ladder); each CLI call killed after 600 s; empty PATH; a stopped batch must end within 15 s and leave no provider running 10 s later",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "authorization": "opt-in cargo test invocation; setup configure writes only to isolated temporary per-user bases; no install, download or network access",
         "prior_checkpoints": ["P09: p09_evidence_e2e", "P10: p10_recovery_e2e"],
         "stages": stages,

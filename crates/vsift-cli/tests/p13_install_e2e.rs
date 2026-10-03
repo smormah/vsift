@@ -45,13 +45,15 @@
 //! `.vsift/e2e-runs/p13-<run-id>/report.json`, and fails unless every stage
 //! passed.
 
+mod published_binary;
+
 use std::{
     env,
     error::Error,
     ffi::OsStr,
     fs,
     path::{Path, PathBuf},
-    process::{Child, Command as Process, Stdio},
+    process::{Child, Stdio},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -103,7 +105,7 @@ impl Base {
 
     /// The binary with this base, an empty `PATH`, no stdin and a deadline.
     fn vsift(&self) -> Result<Command, StageStop> {
-        let mut command = Command::cargo_bin("vsift")?;
+        let mut command = published_binary::command()?;
         for (name, value) in self.environment() {
             command.env(name, value);
         }
@@ -117,8 +119,7 @@ impl Base {
 
     /// The same, as a child the stage can kill.
     fn spawn(&self, arguments: &[&OsStr]) -> Result<Child, StageStop> {
-        let binary = assert_cmd::cargo::cargo_bin("vsift");
-        let mut command = Process::new(binary);
+        let mut command = published_binary::process()?;
         for (name, value) in self.environment() {
             command.env(name, value);
         }
@@ -875,6 +876,7 @@ fn p13_install_checkpoint() -> TestResult {
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "resource_profile": "each CLI call killed after 30 min; empty PATH; nothing configured; no Rust toolchain reachable from the binary",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "authorization": "opt-in cargo test invocation (VSIFT_P13_INSTALL_E2E=1) accepting the reviewed plan's digest; downloads only the pinned catalogue artifacts into isolated temporary per-user bases",
         "prior_checkpoints": ["P06: p06_setup_e2e", "P07: p07_local_asr_e2e", "P08-P11 checkpoints", "P12: p12_skill_procedure_e2e"],
         "stages": stages,

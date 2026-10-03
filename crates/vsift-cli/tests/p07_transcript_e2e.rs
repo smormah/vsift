@@ -18,6 +18,8 @@
 //! A journey that cannot run here is `blocked`, never `passed`, and the test
 //! fails unless every P07 journey passed.
 
+mod published_binary;
+
 use std::{
     env,
     error::Error,
@@ -155,7 +157,7 @@ fn f10_truth() -> Result<Truth, Box<dyn Error>> {
 
 /// A bounded `vsift` invocation with isolated per-user state and no ambient `PATH`.
 fn vsift(base: &Path) -> Result<Command, StageStop> {
-    let mut command = Command::cargo_bin("vsift")?;
+    let mut command = published_binary::command()?;
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
@@ -652,6 +654,7 @@ async fn supplied_transcript_checkpoint() -> TestResult {
         ),
         "resource_profile": "each CLI call killed after 60 s; empty PATH; FFprobe under the P04 probe bounds",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "ffmpeg_version": versions["ffmpeg_version"],
         "ffprobe_version": versions["ffprobe_version"],
         "whisper_version": null,

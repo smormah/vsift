@@ -13,6 +13,8 @@
 //! A journey that cannot run here is `blocked`, never `passed`, and the test
 //! fails unless every P06 journey passed.
 
+mod published_binary;
+
 use std::{
     env,
     error::Error,
@@ -164,7 +166,7 @@ fn config_root(base: &Path) -> PathBuf {
 
 /// A bounded `vsift` invocation whose per-user state lives beneath `base`.
 fn vsift(base: &Path) -> Result<Command, StageStop> {
-    let mut command = Command::cargo_bin("vsift")?;
+    let mut command = published_binary::command()?;
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
@@ -551,7 +553,7 @@ fn allow_record_replacement(config: &Path) -> std::io::Result<()> {
 /// A denied configuration write fails typed, once, and changes nothing.
 fn denied_configuration_storage(root: &OwnedRoot) -> StageResult {
     let base = root.base("denied");
-    let stand_in = Command::cargo_bin("vsift")?.get_program().to_os_string();
+    let stand_in = published_binary::path()?.into_os_string();
     let configured = vsift(&base)?
         .args(["setup", "configure", "ffmpeg", "--executable"])
         .arg(&stand_in)
@@ -811,6 +813,7 @@ async fn dependency_setup_checkpoint() -> TestResult {
         ),
         "resource_profile": "setup probes bounded by --timeout-seconds; each CLI call killed after 60 s; verification under the reviewed compatibility policy limits",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "ffmpeg_version": versions["ffmpeg_version"],
         "ffprobe_version": versions["ffprobe_version"],
         "whisper_version": null,

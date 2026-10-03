@@ -8,7 +8,7 @@ pull requests" in
 [implementation-work-packets](implementation-work-packets.md). This file becomes the P14
 qualification record when the packet completes: until then every "Evidence that exists"
 cell is what the earlier records show, every "P14 adds" cell is a plan, and the only results are
-those of section 15 (PR 2, on the published 0.1.0). Test IDs are [verification](verification.md)'s; the `RQ-nn` IDs below are local to
+those of sections 15 (PR 2) and 17 (PR 3), on the published 0.1.0. Test IDs are [verification](verification.md)'s; the `RQ-nn` IDs below are local to
 P14's [evidence ledger](p14-evidence-ledger.json) and have their rows in verification
 section 8 (added by PR 1, 2026-10-02, which also built the ledger's checks and the
 [claims registry](public-claims.json)). Dates are UTC.
@@ -425,8 +425,8 @@ counts as qualification evidence.
 | A second Windows machine for the Smart App Control try-out | **Known: yes** (2026-10-02): the maintainer has a clean, wipeable Windows 11 test machine | The try-out and a true clean-machine install run there (the installer step needs the maintainer at its console); what a fresh install shows for Smart App Control is recorded when it runs |
 | Whether hosted-runner minutes are free for the account | Unknown; the supervisor has asked. The repository is public and GitHub documents standard runners as free for public repositories (not re-checked for this account) | Section 5 lists runner-hours either way; a cost would change the soak and fuzz budgets, not the gates |
 | Whether any test compares a build with the published 0.1.0 schemas | **Settled in PR 2 (2026-10-02): none did.** `published_compatibility` and `published_v0_1_0_records` do now (section 15.3) | Done |
-| Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | Not checked | PR 3 |
-| Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | Not checked | PR 3 records the versions |
+| Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | **Settled by PR 3 (2026-10-02): no.** `assert_cmd` 2.2.2 reads `CARGO_BIN_EXE_vsift` when a test runs, but `cargo test` sets that variable itself and replaces any value from outside (a nonexistent path changed nothing) | A repository-owned variable, `VSIFT_E2E_BINARY`, read by one test module (section 17) |
+| Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | **Settled by PR 3 (2026-10-02): they suit them.** On the image `macos15` 20260907.0337.1: `ffmpeg 9.0.1_1` and `whisper-cpp 1.9.2` (the formula name on that image's tap; a newer tap names it `whisper.cpp`, version 1.9.4 on the public API); every checkpoint passed and the T-04 gates held | Versions are recorded in every run; L-114 holds the limit; PR 9 words the macOS cell |
 | Whether the automated safety stop on authoring a hostile provider fixture recurs | Unknown | PR 5; the fallback is decision E's option 4 |
 | Tokens spent per agent run | Not recorded in P12; **recorded by the harness since PR 6** (`reported_usage`, where the client reports it) but never yet measured | The budget in section 7 is an estimate; batch 1's pilots are the first measurement, and the maintainer can read them before saying go for batches 2 and 3 |
 | Whether the clients' real streams carry what the parsers read (Claude Code's `result` event with `usage` and `total_cost_usd`, Codex's `turn.completed` usage) and say "usage limit" in the words the detector expects | Unknown: the parsers and their tests were written from the event shapes the earlier parsers already read, not from recorded streams (no raw log of P12 is in the repository) | The pilots; a client that exits non-zero without one tool call is graded invalid whatever it said (an allowance stop and an outage look alike), and an unrecognised figure leaves `reported_usage` absent, never a wrong number (L-120) |
@@ -542,3 +542,105 @@ CI checks; the guide's pages join the public-claims registry's scanned documents
 evidence item and no requirement: its evidence is RQ-18 and the walked guides of RQ-01 to RQ-04.
 Every later packet ships its own pages (the definition of done in the work packets says so). A
 documentation site and its tool wait for the website.
+
+## 17. RQ-05 and RQ-06 against the published 0.1.0 (P14 PR 3, 2026-10-02)
+
+What ran, on hosted runners, and what it does and does not show. **Evidence for 0.1.0 only:**
+the candidate and the stable repeat it on their own bytes (the ledger's gates), and a green
+run on 0.1.0 counts for neither. Nothing was published or changed.
+
+**How.** `.github/workflows/p14-journeys.yml` (workflow `P14 journeys`; read-only, no secrets)
+resolves the version (the one dispatched, else the highest published, never the `0.0.0`
+placeholder), then on each of Ubuntu 24.04, Windows and macOS 15: installs `vsift-cli@<version>`
+from the **real npm registry** into a fresh folder with scripts disabled (npm only delivers it;
+the journeys run the platform package's native executable directly, with an empty `PATH`, so the
+launcher is RQ-01's); checks the executable against `platform-digests.json` and its `--version`
+against the tag's commit; stages the system's tools; and runs the real-tool checkpoints from the
+tests of the tag's source, or, for a tag that predates the override (0.1.0), from the workflow's
+ref ([L-115](known-limits.md#l-115)), with `VSIFT_E2E_BINARY` naming the installed executable
+([`development.md`](../development.md)). Every step is `tools/p14_journeys.py`
+(`tools/test_p14_journeys.py` guards it). Each job writes a summary, uploads `results.json`,
+the checkpoints' reports and logs, and a final job lists the three systems (a system without
+results is a failure). It runs on dispatch, on a pull request that touches the workflow or its
+tooling, and weekly (Wednesday 04:37 UTC). `P13 managed smoke` takes `published_version` (or
+`highest`, and runs weekly at 04:53 UTC) and runs `managed-install` and `install-e2e` with the
+installed binary.
+
+| System | Tools | Result for 0.1.0 (run 36965956708) |
+| --- | --- | --- |
+| Ubuntu 24.04 x64 (image `ubuntu24` 20260927.320.1, 4 CPUs) | Managed: installed by the published binary's own `setup plan`, `setup install --accept-plan` and checked by `setup check` (21 s): BtbN FFmpeg n9.0.1-11-ge47273f4d9-20260831, whisper.cpp v1.9.2 `whisper-cli`, the `base` model, catalogue `ubuntu-24.04-x86_64-2026-09-22-r2` | 9 checkpoints, 53 stages passed, 1 blocked (P11's durable stage, [L-113](known-limits.md#l-113)); 14 minutes |
+| Windows x64 (image `win25-vs2026` 20260925.250.1, 4 CPUs) | Pinned: the repository's reviewed builds, hash-checked by `tools/p07_local_asr_tools.py`: BtbN win64 LGPL FFmpeg n9.0.1-11-ge47273f4d9-20260831 (not the gyan.dev build of the maintainer's machine), whisper.cpp v1.9.2, the `base` model | 9 checkpoints, 53 stages passed, 1 blocked (the same stage, by design off Ubuntu); 20 minutes |
+| macOS 15 arm64 (image `macos15` 20260907.0337.1, 3 CPUs) | Homebrew, not reviewed ([L-114](known-limits.md#l-114)): `ffmpeg 9.0.1_1`, `whisper-cpp 1.9.2`; the repository's pinned `base` and `base_q5_1` models | 9 checkpoints, 53 stages passed, 1 blocked (the same); the T-04 gates passed in process (clean word error rate `base` 4.06%, `base_q5_1` 4.87%, F08 61.53% and 46.15%, only the reviewed misses, 3.03 times slower than real time); 87 minutes, of which 65 for the gates |
+
+The nine checkpoints are `p06_setup_e2e`, `p07_transcript_e2e` (A-09), `p07_local_asr_e2e` (A-08),
+`p08_search_e2e`, `p08_candidates_e2e`, `p09_evidence_e2e` (both mechanical journeys),
+`p10_recovery_e2e`, `p11_worker_e2e` and the new `p14_installed_binary_e2e`. The published
+native executables were `@vsift/linux-x64` (8,202,200 bytes, SHA-256 `b16580c0...`),
+`@vsift/win32-x64` (9,833,984 bytes, `98a6cc21...`) and `@vsift/darwin-arm64` (7,080,944 bytes,
+`67d0a140...`), each `vsift 0.1.0 (011bc4da1af6)`, each equal to the digest the launcher package
+records. `P13 managed smoke` with `published_version` 0.1.0 (run 36965088525): all three jobs
+green with the published Linux executable as the binary under test, downloading the three reviewed
+artifacts from their publishers.
+
+**The two checks no earlier checkpoint had** (`p14_installed_binary_e2e`; all three systems
+passed): *hostile names* (SEC-01): copies of F01 named with quotes, spaces, shell and glob
+characters, a leading dash, Unicode and (on Unix) a newline, a tab and a backslash opened a
+session and delivered a frame through the real tools (6 names on Windows, 14 elsewhere), left the
+original unchanged and created nothing beside it; a bare leading dash is the parser's typed
+`INVALID_ARGUMENT` (exit 2) and works behind `--` or as `./-name`; names that are not files
+(`; touch pwned;`, `$(touch pwned)`, a backtick command, `-i`) are typed failures that ran
+nothing. *Sentinel environment* (SEC-25): four secret-looking variables set in `vsift`'s
+environment reached none of the recorders that stood in for FFmpeg, FFprobe and whisper.cpp (each
+was started at least once by `setup check` or `frame get`, and saw no variable at all; a control
+recorder started directly did write the variable down), and none appeared in `vsift`'s output.
+
+**What did not run, and why** (each job lists it under "Not run here, and why"): P11's
+`p11_durable_workspace` is `blocked` everywhere: off Ubuntu by design, and on the hosted Ubuntu
+runner because its root is mounted `nobarrier` (the durable profile refuses; issue
+[#258](https://github.com/smormah/vsift/issues/258), L-113), so **RQ-05's pass rule "every stage
+passed" is not met and its ledger status is `running`**. The managed-install checkpoints are
+Ubuntu-only (ADR 0023 decision E) and run in `P13 managed smoke`. The T-04 gates run in process
+on macOS only; the weekly `P07 local ASR` workflow runs them on Ubuntu and Windows.
+
+**Findings.** Three defects of the new workflow and tooling, fixed in this change: Homebrew's
+formula name for whisper.cpp differs between taps (the first macOS run failed before any
+checkpoint; run 36964094127); the first design ran the 65-minute macOS gate on every run (now
+a dispatch input, left out of weekly and pull-request runs and listed as not run); and the
+driver could stall without a word: in run 36976284379 the Windows job printed nothing after
+`p10_recovery_e2e` ended and was cancelled at its 150-minute limit (issue
+[#263](https://github.com/smormah/vsift/issues/263)). The likeliest cause is the driver's, not
+a product's: after a checkpoint it closed the child's output pipe from the main thread while
+the reader thread, waiting for a descendant that still held the pipe, owned its lock. The
+driver now waits for the end of the output for a bounded time and never closes a pipe under its
+reader, kills a stuck command with bounded waits, flushes its progress lines, prints a heartbeat
+every five minutes, writes `results.json` after every checkpoint, gives a checkpoint 45 minutes
+(100 for the macOS gate) and its step 130; the summary names the checkpoint after which an
+unfinished run stopped. Whether a descendant really outlived `p10` on Windows is not known;
+the run after this change shows it if it recurs (`lingering_output` in `results.json`). One
+finding about what was proved, issue #258. **Two findings of PR 2 apply here:** #257 (the
+Windows `vsift.cmd` shim re-parses arguments): every step runs in Git Bash and every checkpoint
+starts the platform package's native `vsift.exe` directly, never the shim or `cmd.exe`; and #256
+(`libgomp.so.1`): the hosted `ubuntu-24.04` image already has it (the reviewed whisper.cpp ran
+on it without installing `libgomp1`, and the job now prints `ldconfig -p` for it), so no
+install step was needed. No product defect was found: every stage of the published binary
+passed. That is weaker than it sounds: see L-115 (tests from a later commit, the launcher and
+archives not reached, some stages in process, a recorder instead of real children).
+
+**Cost.** One `P14 journeys` run is about 53 runner-minutes (12, 20 and 21 minutes on Ubuntu,
+Windows and macOS in the run of 2026-10-02 after the rebase, run 36973367081, with the 65-minute
+macOS gate left out; the first full run took 14, 20 and 87) and `P13 managed smoke` about 8
+more, so the weekly drift is about 61 runner-minutes, well inside the 6 hours the plan allowed
+for a full RQ-05 pass; the gate adds 65 minutes to a dispatch. This pull request's own
+workflows used about 460 runner-minutes in six runs (five journeys runs and one managed
+smoke; 150 of them are the Windows job that stalled to its limit, #263), not counting the
+repository's ordinary checks. The first stall-free run after the fix took 14, 21 and 21
+minutes on Ubuntu, Windows and macOS. The repository is public, so GitHub
+documents the runners as free (not re-checked for this account); if minutes are ever charged,
+the macOS minutes cost most.
+
+**Matrix inputs** (section 8): for the published bytes, the supplied-transcript and local-ASR
+journeys passed on all three systems with that system's tools (rule 3 of decision F for
+Ubuntu 24.04 with managed tools, Windows with pinned tools, macOS 15 with Homebrew's); rules 1, 2
+and 4 (clean installs from the registry, the extracted archive, the guide's walks) are PR 2's
+runs, and macOS's "supported for what the hosted run proves" wording is PR 9's to choose with
+L-114 in view.
