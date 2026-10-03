@@ -66,9 +66,41 @@ pub fn non_private_folder_summary(folder: PrivateFolder) -> String {
 /// can act on it without parsing free text. It never contains a path.
 pub const UNOWNED_SESSION_ROOT_REMEDIATION: &str = "The VSift session_root folder holds no VSift ownership marker, so VSift did not create it and did not use it. Nothing was changed: VSift never adopts a folder it did not create. It is the disposable-session folder: the directory given with --session-root, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux. Name a --session-root path that does not exist yet and VSift creates it, private to you; or, if that folder holds nothing you need, delete it yourself and retry.";
 
+/// Remediation when the session root's filesystem has no room for a copy of
+/// the source (#266), found before the copy from the source's size and the
+/// free space, or when a write ran out of space.
+///
+/// The code is `RESOURCE_LIMIT`, the answer a worker request already gets, and
+/// not `STORAGE_IO` or `INTEGRITY_FAILURE`: the disk is not damaged and the
+/// video is not corrupt. The first sentence is stable. It never contains a
+/// path or a size.
+pub const SOURCE_NO_ROOM_REMEDIATION: &str = "The folder that holds VSift's sessions does not have room for a copy of this video. Nothing was committed. Free space on that drive, or use --session-root to name a folder on a drive with more room (VSift keeps one private copy of the video per session), then retry. The folder is the --session-root directory, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux.";
+
 #[cfg(test)]
 mod tests {
-    use super::{PrivateFolder, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary};
+    use super::{
+        PrivateFolder, SOURCE_NO_ROOM_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+        non_private_folder_summary,
+    };
+
+    #[test]
+    fn the_no_room_remediation_is_stable_bounded_and_pathless() {
+        let text = SOURCE_NO_ROOM_REMEDIATION;
+        assert!(
+            text.starts_with(
+                "The folder that holds VSift's sessions does not have room for a copy"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("--session-root"));
+        assert!(text.contains("Free space"));
+        assert!(
+            !text.contains("corrupt") && !text.contains("integrity"),
+            "{text}"
+        );
+        assert!(text.len() <= 1024, "{} bytes", text.len());
+        assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+    }
 
     #[test]
     fn the_unowned_root_remediation_is_stable_bounded_and_pathless() {

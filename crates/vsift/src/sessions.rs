@@ -4,8 +4,8 @@
 use std::path::{Path, PathBuf};
 
 use vsift_application::{
-    ForegroundSessionPort, OpenSession, OpenSessionOutcome, OpenSessionRequest,
-    TranscriptImportRequest,
+    ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
+    SessionStorageError, TranscriptImportRequest,
 };
 use vsift_domain::{
     DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
@@ -789,18 +789,29 @@ where
     }
 }
 
-/// Checks a worker workspace's free-space reserve before the source is
-/// copied into it: the source's size (`incoming`, read from its metadata;
-/// the copy itself still refuses a file that grows) and the 1 GiB reserve
-/// must be available. A desktop root is not checked, as before P11.
+/// Checks the room for the source's copy before it starts, so a source that
+/// cannot fit is refused at once and not after it has filled the disk
+/// (#266): the source's size (`incoming`, read from its metadata; the copy
+/// itself still refuses a file that grows) and, in a worker workspace, the
+/// 1 GiB reserve must be available. A desktop root keeps only a small margin
+/// for the session's own records and reports the reserve as not enforced, as
+/// before P11. Both refuse with [`OpenSessionError::SourceNoRoom`]
+/// (`RESOURCE_LIMIT`), the same answer a write that ran out of room gives.
 fn free_space_reserve(
     store: &FilesystemSessionStore,
     incoming: u64,
 ) -> Result<FreeSpaceReserveCheck, EngineError> {
+    let no_room = |error: SessionStorageError| match error {
+        SessionStorageError::CapacityExhausted => {
+            EngineError::OpenSession(OpenSessionError::SourceNoRoom)
+        }
+        other => EngineError::Storage(other),
+    };
     if store.workspace_policy().is_none() {
+        store.ensure_room_for_copy(incoming).map_err(no_room)?;
         return Ok(FreeSpaceReserveCheck::NotEnforced);
     }
-    Ok(match store.ensure_free_space(incoming)? {
+    Ok(match store.ensure_free_space(incoming).map_err(no_room)? {
         FreeSpaceCheck::Enforced => FreeSpaceReserveCheck::Enforced,
         FreeSpaceCheck::NotEnforced => FreeSpaceReserveCheck::NotEnforced,
     })

@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-03 (P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 7, a source that does not fit the root is refused at once: L-127 narrowed; P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -160,7 +160,7 @@ Each entry has these fields:
 | [L-124](#l-124) | Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips | accuracy/ASR | medium | P14 | [#274](https://github.com/smormah/vsift/issues/274), [#277](https://github.com/smormah/vsift/issues/277) | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
-| [L-127](#l-127) | The CLI's ingest treats three kinds of hostile source worse than the worker path does: a named pipe hangs it, a link is refused as a storage failure and a full disk is reported as corruption | security | low | P14 | [#264](https://github.com/smormah/vsift/issues/264), [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) | open |
+| [L-127](#l-127) | The CLI's ingest treats two kinds of hostile source worse than the worker path does: a named pipe hangs it and a link is refused as a storage failure | security | low | P14 | [#264](https://github.com/smormah/vsift/issues/264), [#265](https://github.com/smormah/vsift/issues/265) | open |
 | [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, nineteen of 31 targets were still finding coverage at the end, and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 
 Counts: 1 high, 35 medium, 79 low (115 entries).
@@ -3212,33 +3212,32 @@ that week.**
 
 ### L-127
 
-**The CLI's ingest treats three kinds of hostile source worse than the worker path does: a named pipe hangs it, a link is refused as a storage failure and a full disk is reported as corruption.**
+**The CLI's ingest treats two kinds of hostile source worse than the worker path does: a named pipe hangs it and a link is refused as a storage failure.**
 
 - **What:** the P14 malicious-media campaign ran 96 generated inputs through 251 operations of
   the published 0.1.0 in a no-network, read-only-root, memory- and process-bounded container.
-  Every other input was refused or processed inside its bound with a typed code. Three were not:
+  Every other input was refused or processed inside its bound with a typed code. Two are not:
   `vsift ingest` of a **named pipe with no writer never returns** (killed at 150 s;
   [#264](https://github.com/smormah/vsift/issues/264)); `ingest` of a **symbolic link** answers
   `STORAGE_IO` instead of `INVALID_SOURCE`, and no document says how links are treated
-  ([#265](https://github.com/smormah/vsift/issues/265)); `ingest` of a **600 MiB file into a root of
-  256 MiB** fails after 5 s as `INTEGRITY_FAILURE` where the job path refuses early as
-  `RESOURCE_LIMIT` ([#266](https://github.com/smormah/vsift/issues/266)). A worker job request
-  refuses all three at once with a typed code.
+  ([#265](https://github.com/smormah/vsift/issues/265)). A worker job request refuses both at once
+  with a typed code. (A third, a **600 MiB file into a root of 256 MiB** that failed after 5 s as
+  `INTEGRITY_FAILURE`, is fixed: [#266](https://github.com/smormah/vsift/issues/266),
+  `CHANGELOG.md`; Windows still copies until the disk is full before it fails, now typed,
+  [L-061](#l-061).)
 - **Evidence:** `P14 malicious media` run 37136669473 (`hostile-summary.md`);
   [`p14-qualification.md`](p14-qualification.md) section 18.
-- **Impact:** a script or agent handed a path it did not create can wait for ever on a pipe; the
-  two misclassifications send an agent to investigate storage or the source when the cause is the
-  path or the disk's size. Nothing wrong is stored or shown as evidence, and the link's target was
-  never read.
-- **Why:** the CLI path opens the source before it checks the file type, and does not apply the
-  free-space check the job path applies (not traced).
+- **Impact:** a script or agent handed a path it did not create can wait for ever on a pipe; a
+  refused link sends an agent to investigate storage when the cause is the path. Nothing wrong is
+  stored or shown as evidence, and the link's target was never read.
+- **Why:** the CLI path opens the source before it checks the file type (not traced for the link's
+  storage code).
 - **Mitigation:** use the worker path for paths you do not control; keep untrusted sources off
   pipes and links.
-- **Next step:** check the file type first on the CLI path, give links one documented answer and
-  share the free-space check; a regression test per case.
+- **Next step:** check the file type first on the CLI path and give links one documented answer;
+  a regression test per case.
 - **Owner:** P14. **Issue:** [#264](https://github.com/smormah/vsift/issues/264),
-  [#265](https://github.com/smormah/vsift/issues/265),
-  [#266](https://github.com/smormah/vsift/issues/266). **Status:** open. **Review:** pending.
+  [#265](https://github.com/smormah/vsift/issues/265). **Status:** open. **Review:** pending.
 
 ### L-128
 

@@ -157,6 +157,10 @@ pub enum OpenSessionError {
     InvalidSource,
     /// Source input could not be read.
     SourceIo,
+    /// The session root's filesystem has no room for the copy of the source:
+    /// found before the copy from the source's size and the free space, or
+    /// when a write ran out of space (#266). Nothing was activated.
+    SourceNoRoom,
     /// The clock could not represent the bounded lifetime.
     InvalidClock,
     /// Storage or coordination rejected the operation.
@@ -178,6 +182,9 @@ impl fmt::Display for OpenSessionError {
         match self {
             Self::InvalidSource => formatter.write_str("selected source is invalid"),
             Self::SourceIo => formatter.write_str("selected source could not be read"),
+            Self::SourceNoRoom => {
+                formatter.write_str("the session root has no room for a copy of the source")
+            }
             Self::InvalidClock => {
                 formatter.write_str("session clock is outside the supported range")
             }
