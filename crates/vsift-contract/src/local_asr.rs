@@ -6,6 +6,7 @@
 //! text. None contains a path, provider output or transcript text.
 
 use vsift_application::{AsrFailure, AsrFailureReason, LocalAsrVerificationFailure};
+use vsift_domain::ProviderOutputError;
 
 /// Remediation when `FFmpeg`, `FFprobe` or whisper.cpp is missing.
 pub const LOCAL_ASR_TOOLS_REMEDIATION: &str = "Local speech recognition needs FFmpeg, FFprobe and the whisper.cpp CLI (whisper-cli). Nothing was changed. Install or locate trusted builds, register them with setup configure ffmpeg|ffprobe|whisper --executable <path>, then run setup check. A supplied SubRip or WebVTT transcript (ingest --transcript) needs no speech recognition.";
@@ -81,7 +82,7 @@ pub fn local_asr_verification_summary(failure: LocalAsrVerificationFailure) -> S
     let lead = "VSift's local speech-recognition check, which transcribes a short reviewed speech clip built into VSift before touching your video, failed";
     match failure {
         LocalAsrVerificationFailure::Transcription(asr) => {
-            let (explanation, next_step) = failure_prose(asr.reason);
+            let (explanation, next_step) = verification_prose(asr.reason);
             format!(
                 "{lead} (transcription) at the {} step ({}). {explanation} {next_step}",
                 asr.stage.identifier(),
@@ -115,6 +116,20 @@ pub fn local_asr_verification_summary(failure: LocalAsrVerificationFailure) -> S
 
 const WHISPER_REMEDY: &str = "Nothing was committed. Reinstall the reviewed whisper.cpp v1.9.2 CLI or register a working build with setup configure whisper --executable <path>, then retry.";
 const MEDIA_TOOL_REMEDY: &str = "Nothing was changed. Reinstall FFmpeg and FFprobe from a trusted build or register a working pair with setup configure, then retry.";
+
+/// The prose for a recognition that failed during `setup check`. It is the
+/// request's, except for segments that mostly did not fit their audio: the clip
+/// is a whole, reviewed one with no range to widen, so a tool that cannot
+/// transcribe it is the problem and reinstalling it is the answer.
+const fn verification_prose(reason: AsrFailureReason) -> (&'static str, &'static str) {
+    match reason {
+        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments) => (
+            "whisper.cpp ran on the clip, but most of the segments it returned did not fit the clip's audio.",
+            WHISPER_REMEDY,
+        ),
+        other => failure_prose(other),
+    }
+}
 
 const fn failure_prose(reason: AsrFailureReason) -> (&'static str, &'static str) {
     match reason {
@@ -167,8 +182,18 @@ const fn failure_prose(reason: AsrFailureReason) -> (&'static str, &'static str)
             "whisper.cpp's output was not the documented JSON.",
             WHISPER_REMEDY,
         ),
+        // A range whose recognised segments mostly did not fit the audio it was
+        // given (#274): the tool ran and answered, and a short range cut
+        // mid-speech is the usual cause, so the first step is a larger range.
+        // It is also the only signal of a recogniser answering with garbage for
+        // a whole run, so the reinstall hint stays, behind the whole-video
+        // retry.
+        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments) => (
+            "whisper.cpp ran, but most of the segments it returned did not fit the audio it was given (they were empty, ran backwards, started at or after the audio's end, or lay outside the video).",
+            "Nothing was committed. A range that ends mid-speech can cause this, so retry with a larger range, or without --from and --to to recognise the whole video. Reinstall the reviewed whisper.cpp v1.9.2 CLI or register a working build with setup configure whisper --executable <path> only if the whole video fails the same way.",
+        ),
         AsrFailureReason::MalformedOutput(_) => (
-            "whisper.cpp's output broke VSift's rules for recognised text, such as segment times outside their audio or invalid scores.",
+            "whisper.cpp's output broke VSift's rules for recognised text, such as out-of-order segments or invalid scores.",
             WHISPER_REMEDY,
         ),
         AsrFailureReason::Workspace => (
@@ -197,7 +222,7 @@ mod tests {
         local_asr_verification_summary,
     };
 
-    const REASONS: [AsrFailureReason; 17] = [
+    const REASONS: [AsrFailureReason; 18] = [
         AsrFailureReason::InvalidRange,
         AsrFailureReason::TooManyChunks,
         AsrFailureReason::ModelChanged,
@@ -212,10 +237,82 @@ mod tests {
         AsrFailureReason::ProviderFailed,
         AsrFailureReason::UnparseableOutput,
         AsrFailureReason::MalformedOutput(ProviderOutputError::TooManySegments),
+        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments),
         AsrFailureReason::Workspace,
         AsrFailureReason::Io,
         AsrFailureReason::InvalidRun(TranscriptRevisionError::InvalidAsrRun),
     ];
+
+    /// #274: recognised segments that mostly did not fit their audio are, for a
+    /// request, most likely a range cut mid-speech, so the answer says to widen
+    /// the range first; it is also the only signal of a recogniser answering with
+    /// garbage for a whole run, so the reinstall step stays, behind the
+    /// whole-video retry. Any other malformed output still says to reinstall.
+    #[test]
+    fn segments_that_did_not_fit_their_audio_say_to_widen_the_range_before_reinstalling() {
+        let stage = AsrStage::OutputValidation;
+        let fit = local_asr_failure_summary(AsrFailure {
+            stage,
+            reason: AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments),
+        });
+        assert!(fit.contains("(malformed_output)"), "{fit}");
+        assert!(fit.contains("did not fit the audio"), "{fit}");
+        // Every way a segment is rejected is named.
+        for kind in [
+            "empty",
+            "ran backwards",
+            "started at or after the audio's end",
+            "outside the video",
+        ] {
+            assert!(fit.contains(kind), "{kind}: {fit}");
+        }
+        // The first step is a larger range or the whole video, and the
+        // reinstall step comes after it and only on a whole-video failure.
+        assert!(
+            matches!(
+                (
+                    fit.find("without --from and --to"),
+                    fit.find("Reinstall the reviewed whisper.cpp")
+                ),
+                (Some(retry), Some(reinstall)) if retry < reinstall
+            ),
+            "{fit}"
+        );
+        assert!(
+            fit.contains("only if the whole video fails the same way"),
+            "{fit}"
+        );
+        assert!(!fit.contains("nothing needs reinstalling"), "{fit}");
+        let broken = local_asr_failure_summary(AsrFailure {
+            stage,
+            reason: AsrFailureReason::MalformedOutput(ProviderOutputError::OutOfOrderSegments),
+        });
+        assert!(
+            broken.contains("Reinstall the reviewed whisper.cpp"),
+            "{broken}"
+        );
+        assert!(!broken.contains("only if"), "{broken}");
+    }
+
+    /// The setup check transcribes a whole, built-in clip: there is no range to
+    /// widen, so the same reason says to reinstall the tool.
+    #[test]
+    fn the_setup_check_never_tells_to_widen_a_range() {
+        let summary = local_asr_verification_summary(LocalAsrVerificationFailure::Transcription(
+            AsrFailure {
+                stage: AsrStage::OutputValidation,
+                reason: AsrFailureReason::MalformedOutput(
+                    ProviderOutputError::TooManyRejectedSegments,
+                ),
+            },
+        ));
+        assert!(
+            summary.contains("Reinstall the reviewed whisper.cpp"),
+            "{summary}"
+        );
+        assert!(!summary.contains("--from"), "{summary}");
+        assert!(!summary.contains("larger range"), "{summary}");
+    }
 
     #[test]
     fn every_failure_names_its_stage_and_reason_within_the_schema_bound() {

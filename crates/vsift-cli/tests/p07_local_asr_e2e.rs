@@ -889,6 +889,51 @@ fn missing_model(root: &OwnedRoot, tools: &Tools) -> StageResult {
     Ok(json!({"code": result["error"]["code"], "artifact_count": 0}))
 }
 
+/// #274: the first five seconds of a speech clip, a range cut mid-speech. The
+/// recogniser ends the last segment of such a cut well past the audio (the
+/// reviewed build: 7.0 s, 6.1 s and 6.0 s on a 5.001 s chunk), which `VSift`
+/// once refused, so a range of three of the ten clips failed as
+/// `MISSING_CAPABILITY` while the whole clips recognised. Every clip's cut
+/// must recognise, and every segment must lie inside the cut.
+fn cut_ranges(base: &Path) -> StageResult {
+    const CUT_US: u64 = 5_000_000;
+    // The decoded audio of a 5 s range runs a frame or two past it.
+    const DECODED_SLACK_US: u64 = 50_000;
+    let mut clips = Vec::new();
+    for fixture_name in [
+        "F02-speech.mp4",
+        "F03-speech.mp4",
+        "F04-speech.mp4",
+        "F05-speech.mp4",
+    ] {
+        let session = ingest(base, &fixture(fixture_name))?;
+        let (data, elapsed) = retranscribe(base, &session, Some((0, CUT_US)))?;
+        let page = read_all(base, &session, CUT_US, None)?;
+        let id = fixture_name.trim_end_matches("-speech.mp4");
+        within_span(&page, speech_span(id)?)?;
+        for item in page["items"].as_array().into_iter().flatten() {
+            let (from, to) = (
+                item["start_us"].as_u64().unwrap_or(u64::MAX),
+                item["end_us"].as_u64().unwrap_or(u64::MAX),
+            );
+            ensure(
+                from < CUT_US && to <= CUT_US + DECODED_SLACK_US,
+                &format!("{fixture_name}: a segment [{from}, {to}) is not inside the cut"),
+            )?;
+        }
+        clips.push(json!({
+            "fixture": fixture_name,
+            "recognised_segments": data["recognised_segment_count"],
+            "last_end_us": page["items"]
+                .as_array()
+                .and_then(|items| items.last())
+                .map_or(Value::Null, |item| item["end_us"].clone()),
+            "retranscribe_ms": elapsed,
+        }));
+    }
+    Ok(json!({"range_us": [0, CUT_US], "clips": clips}))
+}
+
 fn stage(name: &str, started: Instant, result: StageResult) -> Value {
     let elapsed_ms = started.elapsed().as_millis();
     match result {
@@ -996,6 +1041,13 @@ async fn local_asr_checkpoint() -> TestResult {
         _ => blocked(),
     };
     stages.push(stage("p07_local_asr_multi_chunk_seam", clock, result));
+
+    let clock = Instant::now();
+    let result = match &setup {
+        Some(_) => cut_ranges(&base),
+        None => blocked(),
+    };
+    stages.push(stage("p07_local_asr_cut_range", clock, result));
 
     let clock = Instant::now();
     let result = tools.as_ref().map_or_else(blocked, |tools| {

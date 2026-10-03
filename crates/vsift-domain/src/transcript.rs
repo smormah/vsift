@@ -358,8 +358,10 @@ pub enum TranscriptWarningKind {
     /// Local ASR: provider segments with an empty or reversed range, or a range
     /// outside their chunk's decoded audio or the source, were not used.
     ProviderSegmentsRejected,
-    /// Local ASR: provider segments ending less than one second past their
-    /// chunk's decoded audio were cut at the audio end; raw times are kept.
+    /// Local ASR: provider segments ending past their chunk's decoded audio
+    /// (as far as the recogniser's padded 30 s window: its end timestamps are
+    /// not bounded by the audio) were cut at the audio end; raw times are kept.
+    /// The cut end is the audio's end, not evidence that speech continued there.
     ProviderEndTrimmed,
     /// Local ASR: whole-segment non-speech markers such as `[BLANK_AUDIO]`, or
     /// segments with no text, were removed.
@@ -810,9 +812,10 @@ impl SidecarIdentity {
 pub enum ProviderEndTrim {
     /// The source range ends exactly at the provider's reported end.
     Unchanged,
-    /// The provider reported an end less than one second past the decoded
-    /// audio; the source range ends at the audio end and the raw provider end
-    /// is kept beside it.
+    /// The provider reported an end past the decoded audio, within the padded
+    /// 30 s window it works in (before P14 PR 7 only up to one second past the
+    /// audio, and a longer overrun rejected the segment); the source range ends
+    /// at the audio end and the raw provider end is kept beside it.
     TrimmedToAudioEnd,
 }
 
