@@ -42,35 +42,47 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PR 0 (#250), PR 1
 (#251), PR 2 (#255, the published-artifact qualification), PR 6 (#262, the agent-trial harness)
-and PR 8 (#252) are merged; PR 3 (#254) is open and needs a rebase, PR 4 (#259) is a draft; the
-whole packet is not complete.** What it must show, and what is weaker than it sounds today:
-- **No published artifact has run on a video:** every real-tool test runs a Cargo-built `vsift`.
-  PR 2 installed 0.1.0 from the real registry on clean hosted runners, but ran no media
-  (journeys: PR 3). Smart App Control and the macOS prompts are unseen on a real machine (L-098).
-- **One real platform:** the P08/P09/P11 numbers and the Claude Code trials are Windows 11;
-  Ubuntu 24.04 has local ASR and the managed install; macOS has no media run (L-035).
+and PR 8 (#252) are merged; PR 3 (#254, the journeys on the published binary) is done in this
+change, awaiting review; PR 4 (#259) is a draft; the whole packet is not complete.** What it must
+show, and what is weaker than it sounds today:
+- **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints
+  against it on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit; no launcher
+  or archives in those runs, L-115); PR 2 installed it on hosted runners that are not clean
+  machines. Smart App Control and the macOS prompts are unseen on a real machine (L-098).
+- **Platforms:** the P08/P09/P11 numbers and the Claude Code trials are Windows 11; hosted
+  Ubuntu, Windows and macOS passed on 0.1.0 (macOS with Homebrew's tools, L-114); P11's durable
+  stage cannot run on a hosted runner (#258, L-113); the matrix rules are not met yet (L-035).
 - **A synthetic corpus and synthetic voice only** (L-020, L-022, L-028, L-030). **Trials tuned on
   their own scenarios;** the hold-outs and the skill-less run are built (PR 6) but unrun; the
   review tier's blurred-banner re-run is missing (L-095).
 - **SEC-T01 is half done** (L-068, #188); dangerous media has never been run; the load ladder
   stopped at 4 jobs; fuzzing is weekly at five minutes per target.
-- **`latest` has never moved;** the path that moves it has never run for real (L-105).
-  Decisions A-H of ADR 0024 are listed in `memory/TODO.md`.
+- **`latest` has never moved;** that path never ran for real (L-105). Decisions A-H: `TODO.md`.
 
-## P14 PR 1, PR 2, PR 8 and PR 6 in one view
+## P14 PR 1, 2, 3, 6 and 8 in one view
 
 **PR 1 (merged, #251):** the evidence ledger (`p14-evidence-ledger.json`, RQ-01..RQ-20) and the
 claims registry (`public-claims.json`, rung `now`), checked on every pull request (L-101).
 
-**PR 2 (merged, #255; nothing published).** Real artifacts on hosted runners, for **0.1.0
-only** (stale for `0.2.0-rc.1`; plan section 15): **RQ-01** clean install from the real registry
-(npm, pnpm, Yarn, Bun; Windows, macOS 15, Ubuntu 24.04; scrubbed `PATH`); **RQ-02** the extracted
-archives; **RQ-03** `--artifact-dir` with no network; **RQ-04** upgrade, the uninstall walk, a
-frozen v0.1.0 compatibility test; **RQ-19** a credential-free second verifier. Read-only
-workflows `p14-*.yml`, tools `tools/p14-published/`; the five items are `passed` in the ledger.
-**Findings:** #256 (minimal Ubuntu lacks `libgomp1`; PR 6's Codex image installs it), #257
-(Windows `.cmd` shims re-parse hostile arguments; PR 6's trials reach `vsift` through Git Bash
-only); L-109 to L-112. **Not covered:** a video (PR 3), Smart App Control, macOS prompts.
+**PR 2 (merged, #255; nothing published).** Real artifacts on hosted runners, for **0.1.0 only**
+(plan section 15): **RQ-01** clean install from the real registry (npm, pnpm, Yarn, Bun; Windows,
+macOS 15, Ubuntu 24.04; scrubbed `PATH`); **RQ-02** the extracted archives; **RQ-03**
+`--artifact-dir` with no network; **RQ-04** upgrade, the uninstall walk and a frozen v0.1.0
+compatibility test; **RQ-19** a credential-free second verifier; all `passed` in the ledger.
+**Findings:** #256 (minimal Ubuntu lacks `libgomp1`; the hosted image has it), #257 (Windows `.cmd`
+shims re-parse hostile arguments; trials and journeys use Git Bash and the native executable);
+L-109 to L-112.
+
+**PR 3 (this change; awaiting review; nothing published).** ADR 0024's note; results in plan
+section 17. `VSIFT_E2E_BINARY` (with the expected version and commit; refused, never ignored, when
+wrong) makes the real-tool checkpoints drive an installed `vsift`; `p14_installed_binary_e2e` adds
+hostile file names and a sentinel environment. The workflow `P14 journeys` (driver
+`tools/p14_journeys.py`) installs `vsift-cli@<version>` from the real npm registry on Ubuntu 24.04
+(tools installed by the binary's own `setup install`), Windows (pinned) and macOS 15 (Homebrew)
+and runs P06-P11 against its native executable; `P13 managed smoke` takes `published_version`;
+both run weekly (about an hour of runner time). **On 0.1.0:** 53 stages passed on each system;
+the managed smoke passed (RQ-06 `passed`, RQ-05 `running`: P11's durable stage is blocked, #258);
+the T-04 gates held on macOS. No product defect; one Windows stall: #263.
 
 **PR 8 (merged, #252; nothing published).** Runbook `release.md` 6.7-6.9. The version alone
 decides the channel: a suffix means `next` (a candidate is `-rc.N`), none is stable and moves
@@ -78,28 +90,16 @@ decides the channel: a suffix means `next` (a candidate is `-rc.N`), none is sta
 complete ledger (L-103). **Not done:** a real stable publish (L-105). **Frozen at the candidate
 cut:** the allowed lists, the notes, the workflow, the skill.
 
-**PR 6 (#262, merged; runbook `docs/agents/trials.md`).** **No trial was run, no
-model was called, nothing was published.** `tools/vsift-agent-trials` now:
-- **installs the published package** (`install`: `npm install --global vsift-cli@<exact>` into a
-  fresh prefix, scripts off, cleared environment) and **proves it** in every record: what npm
-  fetched equals the registry's integrity, the launcher's digest check is redone, `vsift
-  --version` runs through the launcher. The skill copy comes from the package; the harness plays
-  the user's part (`setup configure`; on Ubuntu `setup plan` and `setup install`). It never runs
-  a shim; the Claude settings allow only `Bash(vsift:*)` (Git Bash), and each grade counts the
-  shell used;
-- **runs a cold agent** (`C-01..C-03`: no skill, no documentation, a neutral prompt, a workspace
-  proved cold in every folder above it); safety is a hard gate, usefulness is graded apart, a gap
-  report lists every failed or retried call;
-- **keeps hold-outs apart** (`H-01`, `H-02`, frozen `INDEX.json`) and **freezes** the skill,
-  grader, scenarios, settings and truth by digest (`freeze write|check`);
-- **captures usage**, **plans the batches** (20, 34 and 18 runs; `campaign`, `summarize`,
-  `campaigns/run-campaign.ps1`, resumable with a stop file) and builds the Codex image from the
-  registry (`*-published` targets, with `libgomp1`, checked in the container workflow).
-- **Weak points:** L-117 (not clean-machine trials), L-118 (the cold grader matches text
-  mechanically; a command it cannot read fails safety), L-119 (two hold-outs, one run per client
-  each), L-120 (usage figures are the clients'; cost unknown until the pilots). **Not done:** any
-  batch (each waits for the maintainer's go); the `--help` changes (PR 7, if the baseline shows
-  gaps). #205 was already fixed by #203 and is closed.
+**PR 6 (#262, merged; runbook `docs/agents/trials.md`).** **No trial was run, no model was
+called, nothing was published.** `tools/vsift-agent-trials` now installs the published package
+into a fresh prefix and proves it in every record (npm's fetch equals the registry's integrity,
+the launcher's digest check, `vsift --version`); plays the user's part; never runs a shim (Git
+Bash only); runs a **cold agent** (`C-01..C-03`: no skill, no documentation; safety a hard gate,
+a gap report); keeps **hold-outs** (`H-01`, `H-02`) apart; **freezes** the skill, grader,
+scenarios and settings by digest (`freeze write|check`); captures usage; plans the batches (20,
+34, 18 runs: `campaign`, `summarize`, `campaigns/run-campaign.ps1`). **Weak points:** L-117..L-120
+(not clean-machine trials; a text-matching cold grader; two hold-outs; usage figures are the
+clients'). **Not done:** any batch (each waits for the go).
 
 ## P13 in one view (complete)
 
@@ -130,7 +130,7 @@ macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PR 0 (#250), PR 1 (#251), PR 2 (#255), PR 6 (#262) and PR 8 (#252) merged; PR 3 (#254) open, PR 4 (#259) draft |
+| P14 | **In progress** (started 2026-10-02): PR 0 (#250), PR 1 (#251), PR 2 (#255), PR 6 (#262) and PR 8 (#252) merged; PR 3 (#254) done in this change, PR 4 (#259) draft |
 
 ## Architecture snapshot
 
@@ -138,8 +138,8 @@ macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 `vsift-infrastructure` (OS, processes, storage, providers, parsers) <- `vsift` (engine) <-
 `vsift-cli` (parse, present, signals). `vsift-contract` sits beside the engine and owns the wire
 types. The skill only calls the `vsift` binary. The trial harness depends only on `vsift` and
-`vsift-contract`; `tools/vsift-release` and `tools/p14-published` (never shipped) package and
-qualify the artifacts; `npm/` holds the launcher.
+`vsift-contract`; `tools/vsift-release`, `tools/p14-published` and `tools/p14_journeys.py` (never shipped) package
+and qualify the artifacts; `npm/` holds the launcher.
 
 ## Quality evidence
 

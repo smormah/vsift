@@ -2,12 +2,26 @@ name: P13 managed smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      published_version:
+        description: "Run the two managed-install jobs against the PUBLISHED vsift-cli of this version, such as 0.1.0 (or `highest`), instead of a binary built from this ref; empty keeps the source build (P14 PR 3, RQ-06)"
+        required: false
+        default: ""
+        type: string
+  schedule:
+    # Weekly, Wednesday 04:53 UTC (P14 PR 3, RQ-06, L-099): nothing else watches the
+    # publishers' files between releases. A scheduled run always tests the highest
+    # published version, so it shows whether the real routes and the published
+    # bytes still work together.
+    - cron: "53 4 * * 3"
 
 # The reviewed third-party tools run on a disposable runner. The jobs receive
 # no repository token and no secrets; checkout keeps no credentials. They
 # download only the pinned artifacts of the accepted catalogue, each verified
 # by size and SHA-256, and send no credentials or personal details: publisher
-# requests carry only VSift's neutral user agent.
+# requests carry only VSift's neutral user agent. In published mode the binary
+# is installed from the public npm registry with scripts disabled (npm's own
+# client identifiers only); nothing is published, tagged or changed.
 permissions: {}
 
 concurrency:
@@ -44,6 +58,8 @@ jobs:
   # empty PATH, then a rerun that must find every component already current
   # and a plan with nothing to install. Its "L-087" lines time a warm setup
   # check and frame get against the managed tools (the rehash-per-use cost).
+  # With `published_version` (or on the weekly schedule) the binary is the
+  # published one: the same checkpoint, a different executable.
   managed-install:
     name: Managed install through the CLI (Ubuntu 24.04)
     runs-on: ubuntu-24.04
@@ -53,6 +69,51 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Choose the binary under test
+        id: mode
+        env:
+          REQUESTED: ${{ inputs.published_version }}
+        run: |
+          if [ -n "$REQUESTED" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.mode.outputs.published == 'true'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        if: steps.mode.outputs.published == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+
+      - name: Resolve the published version
+        if: steps.mode.outputs.published == 'true'
+        id: published
+        env:
+          REQUESTED: ${{ inputs.published_version }}
+        run: python tools/p14_journeys.py resolve-version --requested "$REQUESTED"
+
+      - name: Check out the source of the published tag
+        if: steps.mode.outputs.published == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.published.outputs.tag }}
+          path: tag-source
+          persist-credentials: false
+
+      - name: Install the published binary and make it the one under test
+        if: steps.mode.outputs.published == 'true'
+        env:
+          VERSION: ${{ steps.published.outputs.version }}
+        run: |
+          python tools/p14_journeys.py select-source --version "$VERSION" --tag-source "$GITHUB_WORKSPACE/tag-source" --workflow-source "$GITHUB_WORKSPACE" --tests-from workflow-ref
+          python tools/p14_journeys.py install --export-environment
 
       - name: Show toolchain and host
         run: |
@@ -68,12 +129,24 @@ jobs:
           cargo test --release --locked -p vsift-cli
           --test p13_managed_install_real -- --ignored --exact --nocapture
 
+      - name: Say what ran
+        if: always() && steps.mode.outputs.published == 'true'
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "### Managed install, published binary: ${RESULT}"
+            echo
+            echo "A failure here with an unchanged binary means a publisher's file or route moved (L-099): open an issue before rerunning."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # P13 PR 7: the P13 stage of the end-to-end spine. From a fresh per-user
   # base with an empty PATH it kills the accepted install (SIGKILL) during a
   # download and during a smoke, checks setup repair and setup list after
   # each kill, reruns it to completion, runs the A-08 local-ASR journey on
   # the managed tools alone, then removes and reinstalls the model. Its
-  # report is uploaded; it holds no personal detail.
+  # report is uploaded; it holds no personal detail. With `published_version`
+  # (or on the weekly schedule) the binary is the published one.
   install-e2e:
     name: Install E2E stage (Ubuntu 24.04)
     runs-on: ubuntu-24.04
@@ -83,6 +156,51 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Choose the binary under test
+        id: mode
+        env:
+          REQUESTED: ${{ inputs.published_version }}
+        run: |
+          if [ -n "$REQUESTED" ] || [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.mode.outputs.published == 'true'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        if: steps.mode.outputs.published == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+
+      - name: Resolve the published version
+        if: steps.mode.outputs.published == 'true'
+        id: published
+        env:
+          REQUESTED: ${{ inputs.published_version }}
+        run: python tools/p14_journeys.py resolve-version --requested "$REQUESTED"
+
+      - name: Check out the source of the published tag
+        if: steps.mode.outputs.published == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.published.outputs.tag }}
+          path: tag-source
+          persist-credentials: false
+
+      - name: Install the published binary and make it the one under test
+        if: steps.mode.outputs.published == 'true'
+        env:
+          VERSION: ${{ steps.published.outputs.version }}
+        run: |
+          python tools/p14_journeys.py select-source --version "$VERSION" --tag-source "$GITHUB_WORKSPACE/tag-source" --workflow-source "$GITHUB_WORKSPACE" --tests-from workflow-ref
+          python tools/p14_journeys.py install --export-environment
 
       - name: Show toolchain and host
         run: |
@@ -97,6 +215,17 @@ jobs:
         run: >-
           cargo test --release --locked -p vsift-cli
           --test p13_install_e2e -- --ignored --exact --nocapture
+
+      - name: Say what ran
+        if: always() && steps.mode.outputs.published == 'true'
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "### Install E2E stage, published binary: ${RESULT}"
+            echo
+            echo "A failure here with an unchanged binary means a publisher's file or route moved (L-099): open an issue before rerunning."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the checkpoint report
         if: always()

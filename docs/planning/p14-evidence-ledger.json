@@ -159,18 +159,40 @@
         "requirements": ["R-01", "R-04", "R-05", "R-06", "R-08"],
         "threats": ["SEC-07", "SEC-08", "SEC-25"],
         "verification": ["T-04", "V-02", "V-06", "M-05"],
-        "limits": ["L-035", "L-042"]
+        "limits": ["L-035", "L-042", "L-113", "L-114", "L-115"]
       },
       "proves": "The shipped bytes complete the supplied-transcript and local-ASR journeys and the checkpoints on three systems with each system's documented tools, and the P07 ASR gates hold on each; hostile paths and a sentinel environment variable go through the installed binary.",
       "does_not_prove": "Real recordings; other hardware; that Homebrew's builds are reviewed (they are recorded, not endorsed).",
       "producer": {
         "kind": "workflow",
         "p14_pr": 3,
-        "description": "Hosted workflow on Ubuntu 24.04 (managed tools), Windows (pinned tools) and macOS 15 (Homebrew tools); the tests are compiled from the tag's source and run the installed vsift through a binary override; tool versions recorded; a weekly drift run once stable."
+        "description": "Hosted workflow on Ubuntu 24.04 (managed tools), Windows (pinned tools) and macOS 15 (Homebrew tools); the tests are compiled from the tag's source (from the workflow's ref for a tag that predates the override) and run the installed vsift through a binary override; tool versions recorded; a weekly drift run."
       },
-      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", "fixtures"],
+      "scope": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "npm", "skills/vsift", "tools/vsift-release", ".github/workflows/release.yml", ".github/workflows/p14-journeys.yml", "tools/p14_journeys.py", "tools/p07_local_asr_tools.py", "fixtures"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "running",
+      "applies_to": {
+        "version": "0.1.0",
+        "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa"
+      },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 36965956708 },
+          "date": "2026-10-02",
+          "note": "The published vsift 0.1.0 (011bc4da1af6), installed from the real npm registry, passed on all three systems: P06, P07 (supplied transcript and local ASR), P08, P09, P10, P11 and the hostile-path and sentinel checks on Ubuntu 24.04 (managed tools installed by the binary's own setup install), Windows (the repository's pinned builds) and macOS 15 arm64 (Homebrew's ffmpeg 9.0.1_1 and whisper-cpp 1.9.2, with the T-04 gates in process: clean WER 4.06%). The tests were compiled from the workflow's ref, not the tag (it predates the override). P11's durable stage was blocked on every system, on Ubuntu because the hosted root is mounted nobarrier (issue 258), so the pass rule 'every stage passed' is not met: this item stays running, for 0.1.0 only, until that stage runs or the maintainer records what covers it."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 36973367081 },
+          "date": "2026-10-02",
+          "note": "The same run on a later revision (rebased onto the merged release machinery): the same result on all three systems, 53 stages passed and 1 blocked each; the macOS T-04 gate was left out by design and is listed as not run."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 36998030090 },
+          "date": "2026-10-02",
+          "note": "The same run on the pull request's final code (rebased onto the merged published-artifact qualification and the README), with the hardened driver: the same result on all three systems, 53 stages passed and 1 blocked each, every result file complete, no output left open by a descendant. The run before it (36976284379) stalled on Windows after p10 and was cancelled at its limit (issue 263)."
+        }
+      ],
+      "issues": [258, 263],
       "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P07 local ASR", "run_id": 36175016465 },
@@ -204,11 +226,22 @@
       "producer": {
         "kind": "workflow",
         "p14_pr": 3,
-        "description": "The existing P13 managed smoke workflow on hosted Ubuntu 24.04, run against the installed binary, on the candidate and then weekly."
+        "description": "The existing P13 managed smoke workflow on hosted Ubuntu 24.04, run against the installed binary (its published_version input), on the candidate and then weekly."
       },
-      "scope": ["Cargo.toml", "Cargo.lock", "crates", ".github/workflows/p13-managed-smoke.yml"],
+      "scope": ["Cargo.toml", "Cargo.lock", "crates", ".github/workflows/p13-managed-smoke.yml", "tools/p14_journeys.py"],
       "gate": { "candidate": "required", "stable": "repeat" },
-      "status": "planned",
+      "status": "passed",
+      "applies_to": {
+        "version": "0.1.0",
+        "commit": "011bc4da1af62a837d7ac5f319fc0ee55c9cb2aa"
+      },
+      "evidence": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 36965088525 },
+          "date": "2026-10-02",
+          "note": "Dispatched with published_version 0.1.0: all three jobs green on Ubuntu 24.04 with the published vsift 0.1.0 (011bc4da1af6) from the real npm registry as the binary under test (managed-install and install-e2e ran it, the report shows source override), downloading the three reviewed artifacts from their publishers. Evidence for 0.1.0 only; the weekly schedule runs the highest published version."
+        }
+      ],
       "prior": [
         {
           "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 36734316384 },

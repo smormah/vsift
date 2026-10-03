@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **P14 PR 3: the journeys on the published binary** (test support, a driver script and two
+  workflows; no product code, release workflow or setting changed, **nothing published**).
+  The real-tool checkpoints (`p06` to `p11`, `p13`) can now drive an installed `vsift` instead of
+  the one Cargo builds: `VSIFT_E2E_BINARY`, with `VSIFT_E2E_EXPECTED_VERSION` and
+  `VSIFT_E2E_EXPECTED_COMMIT`, read by one test module and refused, never ignored, when the path
+  is relative or missing, an expectation is missing or `--version` names another version or
+  commit (`cargo test` overwrites `CARGO_BIN_EXE_vsift`, so that variable cannot do it); the
+  checkpoint reports name the binary under test. A new opt-in checkpoint,
+  `p14_installed_binary_e2e`, sends hostile file names through the real tools (SEC-01) and
+  proves that secret-looking environment variables reach no tool child (SEC-25). The workflow
+  `P14 journeys` (`tools/p14_journeys.py`) installs `vsift-cli@<version>` from the real npm
+  registry on Ubuntu 24.04 (tools installed by the published binary's own `setup install`),
+  Windows (the repository's pinned builds) and macOS 15 (Homebrew's tools, not reviewed) and runs
+  the checkpoints against it, on dispatch, on a pull request that touches it, and weekly;
+  `P13 managed smoke` takes the same override through `published_version` and runs weekly too.
+  **First results on 0.1.0:** all three systems passed (53 stages each; P11's durable stage was
+  blocked everywhere, and on the hosted Ubuntu runner because its root is mounted `nobarrier`,
+  issue #258; one later Windows run stalled silently and was cancelled at its limit, #263, most
+  likely the driver, which is hardened) and the managed smoke passed. Evidence items RQ-05 (`running`, for 0.1.0 only) and
+  RQ-06 (`passed`, for 0.1.0 only) are updated; the T-04 recognizer gates also ran on macOS (clean
+  word error rate 4.06%). Known limits L-113 to L-116 added, L-035, L-042 and L-099 updated;
+  ADR 0024 has a note for this change.
 - **Published-artifact qualification on hosted runners** (P14 PR 2; evidence items RQ-01 to
   RQ-04 and RQ-19; no product code changed, nothing published, tagged or configured, no secret,
   no new dependency). Four workflows, each read-only (`contents: read`, and `attestations: read`

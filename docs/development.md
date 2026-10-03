@@ -199,8 +199,10 @@ Do not create a general-purpose `utils` or `helpers` module. Name modules after 
   untrusted TLS identity is a
   throwaway self-signed key in `tests/fixtures/tls/` (README there). The real install
   (`VSIFT_P13_REAL_INSTALL=1`, `p13_managed_install_real` in `vsift-cli`) runs only on
-  Ubuntu 24.04 x86-64, through the manual workflow `P13 managed smoke` (job
-  `managed-install`), in a fresh per-user base; it downloads the three pinned artifacts.
+  Ubuntu 24.04 x86-64, through the workflow `P13 managed smoke` (job `managed-install`;
+  manual, and weekly against the published binary since P14 PR 3, see "Running a checkpoint
+  against an installed binary" below), in a fresh per-user base; it downloads the three
+  pinned artifacts.
   The P13 stage of the end-to-end spine (`VSIFT_P13_INSTALL_E2E=1`, `p13_install_e2e`
   in `vsift-cli`, P13 PR 7) runs the same way (job `install-e2e`): it kills the real
   install with `SIGKILL` twice, reruns it, runs the local-ASR journey on the managed
@@ -280,6 +282,65 @@ frozen `candidates*.json(l)` examples (`vsift-contract`'s `candidates_contract`)
 `bundle-visual-index-record.json` (`vsift-infrastructure`'s `visual_index_store`) and
 `bundle-evidence-record.json` (`vsift-infrastructure`'s `evidence_store`); review the
 diff before committing.
+
+### Running a checkpoint against an installed binary (P14 PR 3)
+
+By default every real-tool checkpoint (`p06_setup_e2e`, `p07_transcript_e2e`,
+`p07_local_asr_e2e`, `p08_search_e2e`, `p08_candidates_e2e`, `p09_evidence_e2e`,
+`p10_recovery_e2e`, `p11_worker_e2e`, `p13_install_e2e`, `p13_managed_install_real`) drives the
+`vsift` that Cargo builds inside the test run. To drive the **published** binary instead, three
+environment variables select and identify it; the one module that reads them is
+`crates/vsift-cli/tests/published_binary/mod.rs`, and nothing sets them by default:
+
+| Variable | Meaning |
+| --- | --- |
+| `VSIFT_E2E_BINARY` | Absolute path of the native `vsift` executable to run |
+| `VSIFT_E2E_EXPECTED_VERSION` | The version it must print, for example `0.1.0` or `0.2.0-rc.1` |
+| `VSIFT_E2E_EXPECTED_COMMIT` | The commit its tag points at (at least twelve lowercase hex digits; the binary prints twelve) |
+
+The override is **refused, never ignored**, when the path is relative, names no file, or the
+other two variables are missing or malformed, or when `<path> --version` does not print exactly
+`vsift <version> (<commit>)` for that version and a commit the expected one starts with (a build
+without `VSIFT_SOURCE_COMMIT` prints no commit and is refused). Without `VSIFT_E2E_BINARY`
+nothing changes. Each checkpoint's `report.json` gains `binary_under_test` (`source`, the
+`--version` line and the executable's SHA-256, never its path). `CARGO_BIN_EXE_vsift` cannot be
+used for this: `assert_cmd` 2.2.2 reads it when a test runs, but `cargo test` sets it itself and
+overwrites any value from outside.
+
+Point it at the **native executable** the platform package ships, not at the `vsift` shim that
+npm puts on `PATH`: the checkpoints run `vsift` with an empty `PATH` (no Node.js) and signal it
+directly. For an npm install into a scratch folder on Windows, from a checkout of the release
+tag (the tag `v0.1.0` predates the override, so use the current checkout's tests and the tag's
+commit):
+
+```powershell
+npm install --prefix $env:TEMP\vsift-published vsift-cli@0.1.0 --ignore-scripts
+$env:VSIFT_E2E_BINARY = "$env:TEMP\vsift-published\node_modules\@vsift\win32-x64\vsift.exe"
+$env:VSIFT_E2E_EXPECTED_VERSION = "0.1.0"
+$env:VSIFT_E2E_EXPECTED_COMMIT = (git rev-parse "v0.1.0^{commit}")   # after: git fetch --tags
+cargo test --release -p vsift-cli --locked --test p07_transcript_e2e -- --ignored --nocapture
+```
+
+(`@vsift/darwin-arm64/vsift` and `@vsift/linux-x64/vsift` elsewhere.) Unset the three variables
+afterwards. The helper's own tests (`e2e_binary_override`, no tools needed) run in every build.
+A run on the maintainer's machine was made with a release build copied out of the tree and
+named by the same variables (the mechanism is the same); the npm path itself runs on the hosted
+runners, because nothing is installed on a development machine without its owner's word.
+
+`p14_installed_binary_e2e` is the checkpoint written for an installed binary: hostile file
+names (quotes, spaces, shell and glob characters, a leading dash, Unicode, and on Unix a newline,
+a tab and a backslash) through the real tools, and a sentinel environment (variables that look
+like secrets must not reach a tool child, which a recorder started by `vsift` proves). It has no
+libtest harness and prints `skipped` unless `VSIFT_P14_INSTALLED_E2E=1`.
+
+The hosted run is the workflow **P14 journeys** (`.github/workflows/p14-journeys.yml`, driven by
+`tools/p14_journeys.py`, whose guardrails are `tools/test_p14_journeys.py`): on Ubuntu 24.04,
+Windows and macOS 15 it installs `vsift-cli@<version>` from the real npm registry into a fresh
+folder, stages the system's tools, and runs the checkpoints above with the override. It runs on
+dispatch (`version` empty means the highest published), on a pull request that touches the
+workflow or its tooling, and weekly. `P13 managed smoke` takes the same override through its
+`published_version` input (or `highest`) and runs weekly too. Each run's job summary says which
+tests ran, which did not and why; a failure is a finding to file before any rerun.
 
 ## Dependencies
 

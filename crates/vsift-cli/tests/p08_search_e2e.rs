@@ -19,6 +19,8 @@
 //! A stage that cannot run here is `blocked`, never `passed`, and the test
 //! fails unless it passed.
 
+mod published_binary;
+
 use std::{
     env,
     error::Error,
@@ -136,7 +138,7 @@ fn f10_truth() -> Result<(u64, u64), Box<dyn Error>> {
 
 /// A bounded `vsift` invocation with isolated per-user state and no ambient `PATH`.
 fn vsift(base: &Path) -> Result<Command, StageStop> {
-    let mut command = Command::cargo_bin("vsift")?;
+    let mut command = published_binary::command()?;
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
@@ -400,6 +402,7 @@ fn search_checkpoint() -> TestResult {
         "architecture": env::consts::ARCH,
         "resource_profile": "each CLI call killed after 60 s; empty PATH",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "authorization": "opt-in cargo test invocation; setup configure writes only to an isolated temporary per-user base; no install, download or network access",
         "prior_checkpoints": ["P07: p07_transcript_e2e", "P07: p07_local_asr_e2e"],
         "stages": [stage],

@@ -429,6 +429,24 @@ passed on the tag `v0.1.0` in the dry run and the published run (runs 3691961238
 36931487439). How a user checks an install is
 [`install.md`](../operations/install.md) section 6.
 
+P14 PR 3 adds the **published-binary run** of the same checkpoints (RQ-05, RQ-06), because every
+stage above ran a Cargo-built `vsift` (L-042). A binary override selects the executable under
+test for all of them from one module, `crates/vsift-cli/tests/published_binary/mod.rs`
+(`VSIFT_E2E_BINARY`, with the version and tag commit it must print; refused, never ignored,
+otherwise; [`development.md`](../development.md) "Running a checkpoint against an installed
+binary"), and the workflow `P14 journeys` runs `p06_setup_e2e`, `p07_transcript_e2e`,
+`p07_local_asr_e2e`, `p08_search_e2e`, `p08_candidates_e2e`, `p09_evidence_e2e`,
+`p10_recovery_e2e`, `p11_worker_e2e` and the new `p14_installed_binary_e2e` against
+`vsift-cli@<version>` installed from the real npm registry, on Ubuntu 24.04 (tools installed by
+the published binary's own `setup install`), Windows (the repository's pinned builds) and macOS
+15 (Homebrew's tools, which are not reviewed artifacts). `p14_installed_binary_e2e` carries the
+two cases no earlier checkpoint had: hostile file names through the real tools (SEC-01) and a
+sentinel environment that must not reach a tool child (SEC-25). `P13 managed smoke` takes the
+same override (`published_version`) so `p13_managed_install_real` and `p13_install_e2e` run the
+published binary on Ubuntu 24.04, and both workflows run weekly. A stage that cannot run on a
+system is reported (`blocked`, or listed under "Not run here, and why" in the job summary), never
+skipped silently. Results and caveats: the [P14 plan](p14-qualification.md) section 17.
+
 An opt-in Windows [candidate-only compatibility smoke](p06-windows-artifact-candidate.md)
 has separately verified pinned third-party bytes and model-backed inference on
 F01 tone audio. It is **not** the P06 stage, a P13 managed-install stage, a real-speech

@@ -23,6 +23,8 @@
 //!
 //! The manual workflow `P13 managed smoke` runs it on a hosted runner.
 
+mod published_binary;
+
 use std::{
     env,
     error::Error,
@@ -46,7 +48,7 @@ struct Base(PathBuf);
 
 impl Base {
     fn vsift(&self) -> Result<Command, Box<dyn Error>> {
-        let mut command = Command::cargo_bin("vsift")?;
+        let mut command = published_binary::command()?;
         command
             .env("PATH", "")
             .env("HOME", &self.0)
@@ -90,6 +92,7 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
     if detect_managed_target() != ManagedTarget::Ubuntu2404X86_64 {
         return Err("the real managed installation runs only on Ubuntu 24.04 x86-64".into());
     }
+    println!("binary under test: {}", published_binary::report()?);
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let base = Base(env::temp_dir().join(format!("vsift-p13-real-install-{stamp}")));
     fs::create_dir(&base.0)?;

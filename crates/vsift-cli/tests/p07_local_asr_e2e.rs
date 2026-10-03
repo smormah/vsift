@@ -25,6 +25,8 @@
 //! cannot run here is `blocked`, never `passed`, and the test fails unless
 //! every journey passed.
 
+mod published_binary;
+
 use std::{
     env,
     error::Error,
@@ -165,7 +167,7 @@ impl Tools {
 
 /// A bounded `vsift` invocation with isolated per-user state and no ambient `PATH`.
 fn vsift(base: &Path) -> Result<Command, StageStop> {
-    let mut command = Command::cargo_bin("vsift")?;
+    let mut command = published_binary::command()?;
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
@@ -1042,6 +1044,7 @@ async fn local_asr_checkpoint() -> TestResult {
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "resource_profile": "each CLI call killed after 900 s; empty PATH; whisper.cpp under the 120 s per-chunk deadline",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "ffmpeg_version": checks["dependencies"][0]["detail"],
         "ffprobe_version": checks["dependencies"][1]["detail"],
         "whisper_version": checks["dependencies"][2]["detail"],

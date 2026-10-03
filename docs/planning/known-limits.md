@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-02 (the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-02 (P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -80,12 +80,12 @@ Each entry has these fields:
 | [L-032](#l-032) | Search: no Unicode folding, no cross-segment phrases, no compound number words | contract/UX | medium | unscheduled | none | accepted residual |
 | [L-033](#l-033) | A supplied transcript is assumed to cover the whole video | contract/UX | low | unscheduled | none | accepted residual |
 | [L-034](#l-034) | Speech fixtures are synthetic and partly unaligned | corpus/fixtures | low | unscheduled | none | accepted residual |
-| [L-035](#l-035) | Evidence exists for Windows 11 only; macOS and Linux are unproven | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-035](#l-035) | Evidence on three systems exists only for the published 0.1.0 and a synthetic corpus; no platform has the release matrix's rules met yet | platform/distribution | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-037](#l-037) | Managed installation is qualified on Ubuntu 24.04 x64 only, and its power-loss claim is for ext4 only | platform/distribution | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-038](#l-038) | The worker host is a qualification target, not a supported platform | platform/distribution | medium | P11, P14 | [#14](https://github.com/smormah/vsift/issues/14), [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-040](#l-040) | Process-supervisor tests fail intermittently on Windows under load | process/CI | low | unscheduled | [#128](https://github.com/smormah/vsift/issues/128) | monitoring |
 | [L-041](#l-041) | A creator slower than 5 s makes a racing command `BUSY` | process/CI | low | unscheduled | [#144](https://github.com/smormah/vsift/issues/144) | accepted residual |
-| [L-042](#l-042) | Real-tool success paths run only on demand, not in hosted CI | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
+| [L-042](#l-042) | Real-tool success paths run only on demand in pull-request CI; the published binary's run is weekly | process/CI | medium | P14 | [#178](https://github.com/smormah/vsift/issues/178) | open |
 | [L-043](#l-043) | Library API unstable; MSRV and MCP decisions open | contract/UX | low | unscheduled | [#176](https://github.com/smormah/vsift/issues/176) | open |
 | [L-044](#l-044) | Accepted engineering trade-offs (CLI test dependencies, session compatibility) | contract/UX | low | unscheduled | none | accepted residual |
 | [L-045](#l-045) | Several documents and trackers state an outdated position | process/CI | low | unscheduled | [#177](https://github.com/smormah/vsift/issues/177) | open |
@@ -147,13 +147,17 @@ Each entry has these fields:
 | [L-110](#l-110) | The reviewed whisper.cpp build needs `libgomp.so.1`, which a minimal Ubuntu 24.04 image lacks; the managed install then fails without saying so | platform/distribution | low | P14 (PR 7) | [#256](https://github.com/smormah/vsift/issues/256) | deferred |
 | [L-111](#l-111) | The upgrade evidence has one published baseline, and its two modes prove different things | process/CI | low | P14 (PRs 10, 12) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
 | [L-112](#l-112) | The clean-install jobs hide named programs from `PATH` on a hosted image; that is not a clean machine, and one tool set stands in for each system's users | process/CI | low | unscheduled | none | accepted residual |
+| [L-113](#l-113) | The P11 durable stage cannot run on a hosted runner, so the published binary's durable worker request has never run on the qualified profile | integrity/durability | medium | P14 | [#258](https://github.com/smormah/vsift/issues/258) | open |
+| [L-114](#l-114) | macOS is tried with Homebrew's FFmpeg and whisper.cpp, which are not reviewed artifacts | platform/distribution | medium | P14 (PR 9) | [#17](https://github.com/smormah/vsift/issues/17) | deferred |
+| [L-115](#l-115) | The published-binary journeys run later tests against 0.1.0 and do not reach the launcher, the archives or the engine-library stages | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-116](#l-116) | A weekly drift run shows only that one hosted run of the highest published version passed that week | process/CI | low | unscheduled | none | accepted residual |
 | [L-117](#l-117) | The clean-install and cold-agent trials are not clean-machine trials, and a cold agent on Windows can still find the package's README and skill | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-118](#l-118) | The cold grader reads command text and matches free text mechanically | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-119](#l-119) | There are two hold-out scenarios, one run per client each, written by the same authors | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
 
-Counts: 1 high, 29 medium, 74 low (104 entries).
+Counts: 1 high, 31 medium, 77 low (109 entries).
 
 ## Security
 
@@ -1504,25 +1508,27 @@ Counts: 1 high, 29 medium, 74 low (104 entries).
 
 ### L-035
 
-**Evidence exists for Windows 11 only; macOS and Linux are unproven.**
+**Evidence on three systems exists only for the published 0.1.0 and a synthetic corpus; no
+platform has the release matrix's rules met yet.**
 
-- **What:** the P08 and P09 real-tool checkpoints and all performance numbers were
-  recorded on one Windows 11 machine. Local ASR was also measured on hosted Ubuntu 24.04
-  and Windows Server 2025 runners, and since P13 the hosted Ubuntu 24.04 runner also runs
-  the managed install and the A-08 local-ASR journey on the managed tools. macOS runs
-  the ordinary Quality CI and, since P13 PR 9, the release-package qualification (the
-  installed launcher running `--version`, `setup check` and `handoff check`): still no
-  media, ASR or evidence checkpoint, and whisper.cpp v1.9.2 publishes no macOS CLI
-  archive, so there is no reviewed macOS build. Linux desktop and other distributions, network
-  filesystems, and Windows/macOS worker use are unqualified.
+- **What:** the P08 and P09 numbers and the performance figures were recorded on one
+  Windows 11 machine. Since P14 PR 3 the published 0.1.0 has also run the P06 to P11
+  real-tool checkpoints and the hostile-path and sentinel checks on hosted Ubuntu 24.04
+  (tools installed by its own `setup install`), Windows (the repository's pinned builds) and
+  macOS 15 arm64 (Homebrew's tools, [L-114](#l-114)): all passed, with P11's durable stage
+  blocked ([L-113](#l-113)). That is evidence for 0.1.0 only (the candidate and the stable
+  repeat it), on hosted virtual machines, with a synthetic corpus. The matrix rules (ADR 0024
+  decision F) also need the clean installs, the extracted archives and the guide's walks
+  (RQ-01, RQ-02, RQ-04). Linux desktop and other distributions, network filesystems and
+  Windows or macOS worker use are unqualified.
 - **Evidence:** [resource profiles](support-and-resource-profiles.md);
   [P09 record](p09-evidence-navigation.md) residuals;
-  [P07 ASR record](p07-asr-qualification.md); [P06 source review](p06-provisioning-source-review.md).
+  [P07 ASR record](p07-asr-qualification.md); [P06 source review](p06-provisioning-source-review.md);
+  `P14 journeys` run 36965956708; [P14 plan](p14-qualification.md) section 17.
 - **Impact:** no platform may be called "supported" yet; only "qualification target".
 - **Why:** P14 owns the release matrix.
-- **Mitigation:** cross-platform Quality CI on every PR.
-- **Next step:** run the opt-in checkpoints on Ubuntu and macOS before P14; decide the
-  macOS whisper.cpp route.
+- **Mitigation:** cross-platform Quality CI on every PR; the weekly `P14 journeys` run.
+- **Next step:** the candidate's own runs (P14 PR 11) and the matrix decision (PR 9).
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
   **Status:** deferred. **Review:** pending.
 
@@ -1913,8 +1919,9 @@ about a direct download, and Windows Smart App Control may block `vsift.exe` out
 - **Mitigation:** the typed reason and the manual path (`install.md` sections 5.2 and 9);
   `--artifact-dir` imports files obtained another way and verifies them identically; the
   hosted `P13 managed smoke` run shows whether the real routes still work.
-- **Next step:** dispatch `P13 managed smoke` before each release (it runs only on demand,
-  [L-042](#l-042)); revalidate or replace the catalogue before its stop date.
+- **Next step:** `P13 managed smoke` now runs weekly against the highest published binary
+  (P14 PR 3; [L-116](#l-116)) and shows the drift; dispatch it before each release too;
+  revalidate or replace the catalogue before its stop date.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
 
@@ -2320,34 +2327,36 @@ raw.**
 
 ### L-042
 
-**Real-tool success paths run only on demand, not in hosted CI.**
+**Real-tool success paths run only on demand in pull-request CI; the published binary's run
+is weekly.**
 
 - **What:** the success paths that use real FFmpeg, whisper.cpp or large media are
-  opt-in (`--ignored`): `p07_transcript_e2e`, `p07_local_asr_e2e`,
-  `p07_asr_qualification`, `p08_search_e2e`, `p08_candidates_e2e`, `p09_evidence_e2e`
-  and the listed engine tests. Only the P07 local ASR workflow runs some of them on
-  hosted runners, on demand. P13's real-download workflows (`P13 managed smoke` with its
-  `install-e2e` stage, and `P13 managed power loss`) are manual dispatches too, so a later
-  change can break managed installation without CI noticing until someone dispatches them.
-  Long fuzz campaigns (weekly short runs today), soak and the load ladder are P14 gates.
-  *Found while planning P14 (2026-10-02, read from the code):* every real-tool checkpoint of
-  the `vsift-cli` crate runs the binary Cargo builds inside the test run
-  (`Command::cargo_bin("vsift")`), not an installed or published one, so no checkpoint has
-  exercised the shipped artifact on a video; the P14 plan's RQ-05 closes that.
-- **Evidence:** [work record](../../memory/TODO.md) "Known issues and gates";
-  [verification](verification.md) section 7 CI tiers.
-- **Impact:** a regression in a real-tool path is found only when someone runs the
-  checkpoint.
+  opt-in (`--ignored`) and no ordinary pull-request job runs them: `p06_setup_e2e`,
+  `p07_transcript_e2e`, `p07_local_asr_e2e`, `p07_asr_qualification`, `p08_search_e2e`,
+  `p08_candidates_e2e`, `p09_evidence_e2e`, `p10_recovery_e2e`, `p11_worker_e2e` and the
+  listed engine tests. Run by hand they drive the binary Cargo builds inside the test run.
+  Since P14 PR 3 a binary override (`VSIFT_E2E_BINARY`) lets the same checkpoints drive an
+  installed binary, and the hosted workflow `P14 journeys` runs them on Ubuntu 24.04,
+  Windows and macOS 15 against the highest published `vsift-cli`, on dispatch and weekly (the
+  weekly `P07 local ASR` workflow and `P13 managed smoke`, now weekly too, remain). A change
+  to the engine is therefore met by a hosted run of the published bytes only on the next
+  weekly or dispatched run, not on the pull request; the Cargo-built binary is checked by a
+  hosted run only through those workflows and by hand. Long fuzz campaigns (weekly short
+  runs today), soak and the load ladder are P14 gates.
+- **Evidence:** [work record](../../memory/TODO.md) "Tracked issues and gates";
+  [verification](verification.md) section 7 CI tiers; `P14 journeys` run 36965956708;
+  [P14 plan](p14-qualification.md) section 17.
+- **Impact:** a regression in a real-tool path is found when the weekly run or someone's
+  dispatch reaches it, and then only for the published version, not for the commit that
+  caused it.
 - **Why:** local models and sizeable media; runner cost (decided in the test spine's
-  execution policy).
+  execution policy). A pull-request run of all three systems takes about an hour.
 - **Mitigation:** recorded samples keep the P08 recall gate in every CI run; stand-in
-  tools cover contracts.
-- **Next step:** consider a scheduled hosted run of the P08/P09 checkpoints. The proposed
-  P14 plan (RQ-05, RQ-06 in [p14-qualification.md](p14-qualification.md)) runs the
-  checkpoints against the published binary on Ubuntu, Windows and macOS and schedules a
-  weekly drift run once the release is stable.
-- **Owner:** P14 (release runs); scheduled runs unscheduled. **Issue:** [#178](https://github.com/smormah/vsift/issues/178).
-  **Status:** open. **Review:** pending.
+  tools cover contracts; the candidate's own runs are P14 gates (RQ-05, RQ-06).
+- **Next step:** the candidate (P14 PR 11) and each stable repeat the runs on their own
+  bytes; whether a cheaper subset belongs in every pull request is #178's question.
+- **Owner:** P14 (release runs); per-pull-request runs unscheduled. **Issue:**
+  [#178](https://github.com/smormah/vsift/issues/178). **Status:** open. **Review:** pending.
 
 ### L-043
 
@@ -2665,7 +2674,7 @@ candidate to be the accepted one.**
 - **Next step:** decide at the stable whether to move `next`.
 - **Owner:** P14 (PR 12, the maintainer's choice). **Issue:**
   [#17](https://github.com/smormah/vsift/issues/17). **Status:** accepted residual.
-  **Review:** pending.
+
 ### L-109
 
 **On Windows, the `vsift.cmd` shim that npm and pnpm create lets cmd.exe re-read arguments: percent expansion, dropped quotes and a redirection without whitespace that runs.**
@@ -2769,6 +2778,126 @@ candidate to be the accepted one.**
 - **Why:** hosted runners are what a repository can run on every change; real machines are the
   maintainer's try-outs.
 - **Mitigation:** the plan says so wherever it claims more; the try-outs are RQ-17.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
+  pending.
+
+### L-113
+
+**The P11 durable stage cannot run on a hosted runner, so the published binary's durable
+worker request has never run on the qualified profile.**
+
+- **What:** in the `P14 journeys` run of the published 0.1.0 (run 36965956708), the P11
+  worker checkpoint passed every stage but `p11_durable_workspace`, which is `blocked` on all
+  three systems: `session init-workspace --durability durable` was refused with
+  `MISSING_CAPABILITY` and created nothing. On the hosted `ubuntu-24.04` runner the cause is
+  the storage: `/etc/os-release` says Ubuntu 24.04, but the root is `/dev/sda1` ext4 mounted
+  `rw,relatime,discard,journal_async_commit,nobarrier,errors=remount-ro,commit=30,
+  data=writeback`, and the durable profile requires ext4 with write barriers left on.
+- **Evidence:** the run above (job `Journeys (ubuntu)`, step "Record the storage the
+  durable profile reads (Linux)"); `crates/vsift-infrastructure/src/durable_profile.rs`;
+  [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md);
+  issue [#258](https://github.com/smormah/vsift/issues/258).
+- **Impact:** RQ-05 cannot show that the shipped bytes publish a durable worker request
+  (`os_crash_durable`) and replay it on the profile where it is claimed. The product behaved
+  as designed (it refuses a host that disables barriers); the gap is in what was proved. The
+  P10 and P13 campaigns exercise the durable paths in virtual machines with a real ext4 root,
+  with campaign builds (a release cannot carry the fault-injection features), not the
+  published binary.
+- **Why:** a hosted runner's virtual machine disables barriers, and no hosted job can
+  change a mount of its own root.
+- **Mitigation:** the stage reports `blocked` with the reason, never `passed`; RQ-05 stays
+  `running` until it runs or the maintainer records what covers it; durable-worker claims
+  lean on RQ-11 and are limited to the profile (L-008).
+- **Next step:** run the stage inside the virtual machine the `P10 durability campaign`
+  boots, with the installed executable, or record that RQ-05 does not cover it (#258).
+- **Owner:** P14. **Issue:** [#258](https://github.com/smormah/vsift/issues/258).
+  **Status:** open. **Review:** pending.
+
+### L-114
+
+**macOS is tried with Homebrew's FFmpeg and whisper.cpp, which are not reviewed artifacts.**
+
+- **What:** no reviewed FFmpeg or whisper.cpp build exists for macOS (whisper.cpp v1.9.2
+  publishes no macOS CLI archive, [L-035](#l-035)), and managed installation is Ubuntu-only.
+  The macOS journeys therefore install Homebrew's bottles on the runner and record what they
+  got: on the image `macos15` 20260907.0337.1, `ffmpeg 9.0.1_1` and `whisper-cpp 1.9.2` (the
+  formula is named `whisper-cpp` on that image's tap and `whisper.cpp` on newer ones; the
+  tap is the image's snapshot, not updated), with the repository's pinned, hash-checked
+  `base` model. With them every checkpoint passed on the published 0.1.0 and the T-04 gates
+  held (in process: clean word error rate 4.06% for `base` and 4.87% for `base_q5_1`, F08
+  61.53% and 46.15%, the same reviewed misses, 3.03 times slower than real time on three CPUs).
+- **Evidence:** `P14 journeys` run 36965956708 (`tools.json`, `results.json` and the
+  `p07_asr_gates` log in its macOS artifact); [P14 plan](p14-qualification.md) section 17.
+- **Impact:** a macOS "supported" cell (ADR 0024 decision F) would rest on the user's own
+  tools; what Homebrew installs changes with its tap and is not pinned, so a later run may
+  meet other versions.
+- **Why:** reviewing and pinning a macOS toolchain is its own work (ADR 0007), outside R0.
+- **Mitigation:** the versions are recorded in every run; the claim is worded as what the
+  hosted run proves with the user's tools; no managed install is offered there.
+- **Next step:** P14 PR 9 decides the matrix wording; a reviewed macOS build would need its
+  own review and catalogue entry.
+- **Owner:** P14 (PR 9). **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
+  **Status:** deferred. **Review:** pending.
+
+### L-115
+
+**The published-binary journeys run later tests against 0.1.0 and do not reach the
+launcher, the archives or the engine-library stages.**
+
+- **What:** (1) 0.1.0's source predates the binary override, so for 0.1.0 the checkpoint
+  tests are compiled from the workflow's ref (a later commit), not the tag: fixtures,
+  schemas and the in-process engine parts are the later commit's, while the binary is the
+  one published as 0.1.0 (tag commit `011bc4d`, checked by `--version` and by
+  `platform-digests.json`). From the first tag that contains the override, `auto` uses the
+  tag's own tests. (2) The checkpoints run the native executable of the platform package
+  directly, with an empty `PATH`: the npm launcher and the extracted archives are RQ-01 and
+  RQ-02's. (3) Some stages use the engine library compiled in the test, not the binary:
+  P06's tool verification, P08's `p08_candidates_budget`, P11's session inspection and the
+  macOS-only T-04 gates. (4) The sentinel check sees what the probes of `setup check` and of
+  `frame get` pass to a recorder standing in for each tool (no variable at all on any
+  system), not the environment of real FFmpeg or whisper.cpp, which cannot be asked; the
+  hostile names go through `ingest` and `frame get`, not every command. (5) The Windows tools
+  are the repository's pinned BtbN LGPL 9.0.1 build, not the gyan.dev build the maintainer's
+  machine uses.
+- **Evidence:** `tools/p14_journeys.py`, `crates/vsift-cli/tests/published_binary/mod.rs`,
+  `p14_installed_binary_e2e.rs`; the job summaries of the run above ("Test source", "Not run
+  here, and why"); [P14 plan](p14-qualification.md) section 17.
+- **Impact:** low. A test expectation that depends on behaviour newer than 0.1.0 would fail
+  (a finding), not pass falsely; what a pass does not show is listed per run.
+- **Why:** the override is new, and the stable procedure compares artifacts, not tests.
+- **Mitigation:** every run names its test source, the binary's `--version` line and SHA-256;
+  RQ-01 and RQ-02 cover the launcher and the archives.
+- **Next step:** none planned; the candidate's tag carries the override.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
+  accepted residual. **Review:** pending.
+
+### L-116
+
+**A weekly drift run shows only that one hosted run of the highest published version passed
+that week.**
+
+- **What:** `P14 journeys` (Wednesday 04:37 UTC) and `P13 managed smoke` (04:53) run weekly
+  against the highest published version of `vsift-cli`. A green run says one hosted run
+  passed on that day's runner image (`ImageVersion` is recorded in `results.json`); a red run
+  may be a changed runner image, Homebrew snapshot or publisher host (L-099) rather than
+  VSift (or, once, the driver: a hosted Windows run stalled after `p10` and was cancelled at
+  its limit, [#263](https://github.com/smormah/vsift/issues/263)). No issue is opened
+  automatically (no workflow holds a write permission): the signal
+  is the failed run, its job summary and GitHub's own notification of it. Schedules run only
+  from the default branch, GitHub documents that it disables a scheduled workflow of a public
+  repository after 60 days without repository activity, and once a stable exists the weekly
+  run no longer tests an older candidate. About one runner hour a week for the journeys
+  (about 12, 20 and 21 minutes on Ubuntu, Windows and macOS) and eight minutes for the managed
+  smoke; the macOS T-04 gate (about an hour) runs only on a dispatch.
+- **Evidence:** `.github/workflows/p14-journeys.yml`, `.github/workflows/p13-managed-smoke.yml`;
+  [P14 plan](p14-qualification.md) section 17.
+- **Impact:** low: a drift can go unnoticed until someone looks at the Actions page, and a
+  red run needs reading before it is called a VSift defect.
+- **Why:** automation that opens issues or changes settings needs permissions these
+  read-only workflows deliberately lack.
+- **Mitigation:** the job summary says "a finding: open an issue before rerunning"; the
+  maintainer's release procedure dispatches both before each release.
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.

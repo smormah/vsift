@@ -58,6 +58,8 @@
 //! here is `blocked`, never `passed`, and the test fails unless every stage
 //! passed.
 
+mod published_binary;
+
 use std::{
     collections::BTreeSet,
     env,
@@ -251,7 +253,7 @@ impl Tools {
 /// A bounded `vsift` invocation with isolated per-user state and no
 /// ambient `PATH`.
 fn vsift(base: &Path) -> Result<Command, StageStop> {
-    let mut command = Command::cargo_bin("vsift")?;
+    let mut command = published_binary::command()?;
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
@@ -459,7 +461,7 @@ fn checkpoints(base: &Path, session: &str) -> Vec<PathBuf> {
 /// A `vsift` run in the background, in a console of its own on Windows so
 /// a console event reaches only it and its providers.
 fn spawn(base: &Path, arguments: &[&str]) -> Result<Child, StageStop> {
-    let mut command = Process::new(assert_cmd::cargo::cargo_bin("vsift"));
+    let mut command = published_binary::process()?;
     command
         .env("LOCALAPPDATA", base)
         .env("XDG_CONFIG_HOME", base)
@@ -1438,6 +1440,7 @@ fn recoverable_mechanical_run() -> TestResult {
         "build_profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "resource_profile": "each CLI call killed after 600 s; empty PATH; interrupted commands must end within 10 s and leave no provider running 10 s later",
         "vsift_version": env!("CARGO_PKG_VERSION"),
+        "binary_under_test": published_binary::report()?,
         "authorization": "opt-in cargo test invocation; setup configure writes only to isolated temporary per-user bases; no install, download or network access",
         "prior_checkpoints": ["P09: p09_evidence_e2e"],
         "stages": stages,

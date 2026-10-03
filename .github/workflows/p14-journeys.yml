@@ -1,0 +1,228 @@
+name: P14 journeys
+
+# P14 PR 3, evidence item RQ-05 (docs/planning/p14-qualification.md): the
+# PUBLISHED vsift binary, installed from the real npm registry, through the
+# supplied-transcript and local-ASR journeys and the P08-P11 real-tool
+# checkpoints on Ubuntu 24.04, Windows and macOS 15. The checkpoint tests are
+# compiled from the source of the tag (or, for a tag that predates the binary
+# override, from this workflow's ref) and run the installed executable through
+# `VSIFT_E2E_BINARY` (crates/vsift-cli/tests/published_binary). Every step is
+# tools/p14_journeys.py.
+#
+# Read-only and non-publishing: no secrets, no credentials of any kind, a
+# read-only repository token, nothing is published, tagged or changed. The only
+# network use is npm's client reading the public registry, the publishers' pinned
+# files (hash-checked, as the repository's other staging does) and Homebrew on
+# macOS. Requests carry only those tools' own identifiers.
+#
+# A failed run is a finding: open an issue (governance rule 14) before rerunning.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "vsift-cli version to qualify, such as 0.1.0 (empty: the highest published)"
+        required: false
+        default: ""
+        type: string
+      tests_from:
+        description: "Where the checkpoint tests are compiled from (auto: the tag when it has the binary override, else this workflow's ref)"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - tag
+          - workflow-ref
+      asr_gates:
+        description: "Also run the recognizer's T-04 gates on macOS (about an hour; in process, not the installed binary)"
+        required: false
+        default: true
+        type: boolean
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/p14-journeys.yml"
+      - "tools/p14_journeys.py"
+      - "tools/test_p14_journeys.py"
+      - "crates/vsift-cli/tests/published_binary/**"
+      - "crates/vsift-cli/tests/p14_installed_binary_e2e.rs"
+  schedule:
+    # Weekly, Wednesday 04:37 UTC: the drift run. The version is the highest
+    # published (a stable once one exists, else the newest pre-release), so a
+    # change here means a runner image, a publisher or the published bytes moved.
+    - cron: "37 4 * * 3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p14-journeys-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  resolve:
+    name: Resolve the version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Check out the workflow's own source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Test the driver
+        run: python -m unittest discover -s tools -p test_p14_journeys.py
+
+      - name: Resolve the version to qualify
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: python tools/p14_journeys.py resolve-version --requested "$REQUESTED"
+
+  journeys:
+    name: Journeys (${{ matrix.system }})
+    needs: resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: ubuntu
+            os: ubuntu-24.04
+          - system: windows
+            os: windows-2025
+          - system: macos
+            os: macos-15
+    steps:
+      - name: Check out the workflow's own source (the driver and the fallback tests)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workflow-source
+          persist-credentials: false
+
+      - name: Check out the source of the published tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          path: tag-source
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      # The minimum Node.js the npm launcher supports; npm only delivers the
+      # package here, the journeys run the native executable directly.
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          python -c "import platform, os; print(platform.platform(), platform.machine(), os.cpu_count())"
+
+      # What the durable-publication profile reads (ADR 0020, L-008): the P11
+      # checkpoint's durable stage runs only where it accepts the host, and the job
+      # summary should say why it did or did not.
+      - name: Record the storage the durable profile reads (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          grep -E '^(ID|VERSION_ID)=' /etc/os-release
+          uname -r
+          findmnt --target "${TMPDIR:-/tmp}" --output SOURCE,FSTYPE,OPTIONS
+          cat /proc/self/mountinfo
+          # The reviewed whisper.cpp needs libgomp.so.1 (issue 256): does this image have it?
+          ldconfig -p | grep libgomp || echo "libgomp is not in the loader cache"
+
+      - name: Select the test source
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          TESTS_FROM: ${{ inputs.tests_from }}
+        run: python workflow-source/tools/p14_journeys.py select-source --version "$VERSION" --tests-from "${TESTS_FROM:-auto}"
+
+      - name: Install the published package from the real npm registry
+        run: python workflow-source/tools/p14_journeys.py install
+
+      - name: Stage the tools
+        run: python workflow-source/tools/p14_journeys.py stage-tools
+
+      # The macOS-only T-04 gate (the recognizer's accuracy and timing, in process) takes
+      # about an hour on the hosted runner, so it runs on a dispatch (unless the
+      # `asr_gates` input is cleared) and not on the weekly or pull-request runs; the
+      # job summary lists it under "Not run here" when it is left out.
+      # Under the job's own 150-minute limit, so a stall ends this step (and the summary
+      # still runs, from the partial results written after every checkpoint) instead of
+      # cancelling the whole job with nothing said.
+      - name: Run the checkpoints against the installed binary
+        timeout-minutes: 130
+        env:
+          EVENT: ${{ github.event_name }}
+          ASR_GATES: ${{ inputs.asr_gates }}
+        run: |
+          skip=()
+          if [ "$EVENT" != "workflow_dispatch" ] || [ "$ASR_GATES" = "false" ]; then
+            skip=(--skip p07_asr_gates)
+          fi
+          python workflow-source/tools/p14_journeys.py run "${skip[@]}"
+
+      - name: Summarize
+        if: always()
+        run: python workflow-source/tools/p14_journeys.py summarize
+
+      - name: Upload the results, reports and logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p14-journeys-${{ matrix.system }}
+          path: p14-work/out
+          retention-days: 90
+          if-no-files-found: warn
+
+  report:
+    name: Report
+    needs:
+      - resolve
+      - journeys
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the workflow's own source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Fetch the three systems' results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: p14-journeys-*
+          path: results
+
+      - name: Report
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: python tools/p14_journeys.py report --results results --version "$VERSION"
