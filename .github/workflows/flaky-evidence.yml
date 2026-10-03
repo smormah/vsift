@@ -1,0 +1,79 @@
+name: Flaky evidence 271 (temporary, this branch only)
+
+# Reproduces #271 (weighted admission, Windows) by running the test many times
+# at once on a hosted runner and prints how long each child waited for its first
+# grant. Temporary: it triggers only on a push to the branch below, reads the
+# repository, publishes nothing, uses no secret, and is deleted with the
+# branch. Never run on the maintainer's machine.
+
+on:
+  push:
+    branches:
+      - p14-pr7-flaky-evidence-271
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flaky-evidence-271-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  admission-windows:
+    name: "#271 admission test, windows-2025"
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the test binary
+        shell: pwsh
+        run: |
+          cargo test -p vsift-infrastructure --test weighted_admission --no-run --locked --message-format=json > build.json
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+      - name: Run the admission test many times at once
+        shell: pwsh
+        env:
+          RUNS: "400"
+          PARALLEL: "8"
+          BUDGET_MINUTES: "45"
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $exe = Get-Content build.json | ForEach-Object { if ($_.StartsWith('{')) { $_ | ConvertFrom-Json } } |
+            Where-Object { $_.executable -and $_.target.name -eq 'weighted_admission' } |
+            Select-Object -Last 1 -ExpandProperty executable
+          Write-Host "test binary: $exe"
+          $name = 'weighted_admission_never_exceeds_root_capacity'
+          $stopAt = (Get-Date).AddMinutes([int]$env:BUDGET_MINUTES)
+          $ran = 0; $failed = 0; $skipped = 0
+          $firstGrants = New-Object System.Collections.Generic.List[int]
+          1..([int]$env:RUNS) | ForEach-Object -Parallel {
+            if ((Get-Date) -gt $using:stopAt) { return [pscustomobject]@{ Run = $_; Code = -1; Text = ''; Skipped = $true } }
+            $text = & $using:exe --exact $using:name --nocapture 2>&1 | Out-String
+            [pscustomobject]@{ Run = $_; Code = $LASTEXITCODE; Text = $text; Skipped = $false }
+          } -ThrottleLimit ([int]$env:PARALLEL) | ForEach-Object {
+            if ($_.Skipped) { $skipped++; return }
+            $ran++
+            foreach ($m in [regex]::Matches($_.Text, 'first_grant_ms=Some\((\d+)\)')) { $firstGrants.Add([int]$m.Groups[1].Value) }
+            if ($_.Code -ne 0) {
+              $failed++
+              Write-Host "::group::run $($_.Run) FAILED (exit $($_.Code))"
+              Write-Host $_.Text
+              Write-Host "::endgroup::"
+            } elseif ($_.Text -match 'first_grant_ms=None') {
+              Write-Host "run $($_.Run): a child was never granted but the test passed?"
+            }
+          }
+          $sorted = $firstGrants | Sort-Object
+          if ($sorted.Count -gt 0) {
+            $p50 = $sorted[[int]($sorted.Count * 0.5)]; $p99 = $sorted[[int]($sorted.Count * 0.99)]; $max = $sorted[-1]
+            Write-Host "first grant (ms) over $($sorted.Count) children: p50=$p50 p99=$p99 max=$max"
+          }
+          Write-Host "RESULT ran=$ran failed=$failed skipped=$skipped"

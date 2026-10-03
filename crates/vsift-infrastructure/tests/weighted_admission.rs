@@ -136,12 +136,15 @@ fn weighted_admission_child() -> TestResult {
     let mut ledger = Ledger::open(&ledger_path)?;
     let started = Instant::now();
     let mut granted = 0_u32;
+    let mut busy = 0_u32;
+    let mut first_grant = None;
     while started.elapsed() < CHILD_RUN {
         let index = usize::try_from(schedule.next())? % weights.len();
         let weight = weights[index];
         match store.try_admit(weight) {
             Ok(permit) => {
                 granted += 1;
+                first_grant.get_or_insert(started.elapsed());
                 let total = ledger.change(i64::from(weight))?;
                 if total > i64::from(capacity) {
                     return Err(format!("{total} units held on a root of {capacity}").into());
@@ -151,11 +154,16 @@ fn weighted_admission_child() -> TestResult {
                 drop(permit);
             }
             Err(SessionStorageError::Busy) => {
+                busy += 1;
                 thread::sleep(Duration::from_micros(schedule.next() % 500));
             }
             Err(other) => return Err(format!("weight {weight}: unexpected {other:?}").into()),
         }
     }
+    println!(
+        "EVIDENCE271 capacity={capacity} first_grant_ms={:?} granted={granted} busy={busy}",
+        first_grant.map(|elapsed| elapsed.as_millis())
+    );
     if granted == 0 {
         return Err("no reservation was ever granted".into());
     }
@@ -196,6 +204,11 @@ fn weighted_admission_never_exceeds_root_capacity() -> TestResult {
         let mut failures = Vec::new();
         for child in children {
             let output = child.wait_with_output()?;
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                if line.starts_with("EVIDENCE271") {
+                    eprintln!("{line} status={}", output.status);
+                }
+            }
             if !output.status.success() {
                 failures.push(String::from_utf8_lossy(&output.stdout).into_owned());
             }
