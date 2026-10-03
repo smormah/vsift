@@ -85,7 +85,7 @@
       "supports": {
         "requirements": ["R-03"],
         "verification": ["D-02", "D-07"],
-        "limits": ["L-037", "L-110"]
+        "limits": ["L-037"]
       },
       "proves": "D-07's offline path with real bytes: components activated, setup check ready, a tampered file refused.",
       "does_not_prove": "A publisher's future file retention (L-099).",
@@ -102,7 +102,7 @@
         {
           "reference": { "type": "workflow_run", "workflow": "P14 published artifacts", "run_id": 36969577337 },
           "date": "2026-10-02",
-          "note": "The offline-install job of this run at 6aa5403: the three real reviewed artifacts downloaded by the published binary's own plan (size and SHA-256 checked) and installed with --artifact-dir in a container with --network none: all three components activated, setup check ready, a rerun already_current; the same install without the folder failed as offline; a changed byte was INTEGRITY_FAILURE (digest_mismatch), a missing file INVALID_ARGUMENT (artifact_missing), a relative folder INVALID_ARGUMENT. The minimal Ubuntu image was given libgomp1, which the whisper.cpp build needs (L-110, #256). For 0.1.0 only."
+          "note": "The offline-install job of this run at 6aa5403: the three real reviewed artifacts downloaded by the published binary's own plan (size and SHA-256 checked) and installed with --artifact-dir in a container with --network none: all three components activated, setup check ready, a rerun already_current; the same install without the folder failed as offline; a changed byte was INTEGRITY_FAILURE (digest_mismatch), a missing file INVALID_ARGUMENT (artifact_missing), a relative folder INVALID_ARGUMENT. The minimal Ubuntu image was given libgomp1, which the whisper.cpp build needs (#256, fixed in P14 PR 7). For 0.1.0 only."
         }
       ],
       "prior": [

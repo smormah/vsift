@@ -22,6 +22,10 @@ These files are the machine-readable public v1 boundary:
   `failed`), a failure's `step`, typed `reason`, `failure_code` and `smoke_check`, and
   what cleanup did with its stage. A failed install carries the same object as data
   beside its error (examples `setup-install.json` and `setup-install.failed.json`).
+  A component whose reviewed tool the loader could not start has the optional
+  `missing_shared_library` (a validated file name such as `libgomp.so.1`; absent otherwise and
+  in every earlier release), with the reason still `provider_failed` (example
+  `setup-install.missing-library.json`, issue #256).
   The setup-check `lookup` gains `managed_version` and its remediation's
   `managed_install` takes the plan's availability values in the same change;
   since P13 PR 6 it also has `cleanup`: the stale stages swept before the transaction and

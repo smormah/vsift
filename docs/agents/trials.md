@@ -668,8 +668,8 @@ unreadable to everyone but root (the bytes are unchanged), so a cold Codex agent
 the harness image has the repository, FFmpeg for the clips and the readable package, and never runs a
 client. Both published images install `libgomp1` from Ubuntu's archive: the reviewed whisper.cpp build that
 `setup install` downloads needs `libgomp.so.1`, a minimal Ubuntu 24.04 image lacks it, and the install then fails
-with `MISSING_CAPABILITY` without naming the library (P14 PR 2's finding, #256,
-[L-110](../planning/known-limits.md#l-110)). It belongs to the system image, as on a user's Ubuntu; the harness
+with `MISSING_CAPABILITY` without naming the library (P14 PR 2's finding, #256; since P14 PR 7
+the error names it). It belongs to the system image, as on a user's Ubuntu; the harness
 installs no distribution package into a trial. `.github/workflows/p12-codex-container.yml` builds both from the
 published 0.1.0 on every change to the harness and checks what each holds and hides, and that the library is
 there.

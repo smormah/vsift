@@ -16,7 +16,7 @@ use vsift_contract::{
     CommandName, InstallSource, OperationResponse, SetupInstallResponse, TerminalEventResponse,
     setup_install_failure_summary,
 };
-use vsift_domain::{FailureCode, ManagedComponent};
+use vsift_domain::{FailureCode, ManagedComponent, SharedLibraryName};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -186,6 +186,156 @@ fn a_failed_install_keeps_its_components_beside_the_error() -> TestResult {
         .with_failure_value(response["data"].clone()),
     ))?;
     validate("terminal-event.schema.json", &event)?;
+    Ok(())
+}
+
+/// A rerun after the media tools were current, whose recognizer then failed
+/// its banner check because the loader could not find `library`: the case of
+/// a minimal Ubuntu image without the OpenMP runtime (#256).
+fn missing_library_report(
+    library: &str,
+) -> Result<ManagedInstallReport, Box<dyn std::error::Error>> {
+    let name = SharedLibraryName::parse(library).ok_or("not a library name")?;
+    Ok(ManagedInstallReport {
+        components: vec![
+            component(
+                ManagedComponent::MediaTools,
+                ComponentInstallOutcome::AlreadyCurrent,
+                None,
+            ),
+            component(
+                ManagedComponent::WhisperCli,
+                ComponentInstallOutcome::Failed(ComponentInstallFailure::at(
+                    InstallStep::Smoke,
+                    InstallFailureReason::Smoke(CompatibilitySmokeFailure {
+                        check: CompatibilitySmokeCheck::Banner,
+                        reason: CompatibilitySmokeFailureReason::MissingSharedLibrary(name),
+                    }),
+                )),
+                Some(StageDisposal::Discarded),
+            ),
+            component(
+                ManagedComponent::WhisperModel,
+                ComponentInstallOutcome::Failed(ComponentInstallFailure {
+                    step: None,
+                    reason: InstallFailureReason::Blocked,
+                }),
+                None,
+            ),
+        ],
+    })
+}
+
+/// #256: a reviewed tool the loader could not start names the missing library
+/// in the data (an additive field) and in a fixed-prose remediation that says
+/// what to install; the public reason stays `provider_failed`, so a reader of
+/// the earlier shape sees the same failure.
+#[test]
+fn a_missing_shared_library_is_named_in_the_data_and_the_remediation() -> TestResult {
+    let response = failure_envelope(&missing_library_report("libgomp.so.1")?)?;
+    validate("operation-response.schema.json", &response)?;
+    validate("setup-install.schema.json", &response["data"])?;
+    assert_eq!(response["error"]["code"], "MISSING_CAPABILITY");
+    let whisper = &response["data"]["components"][1];
+    assert_eq!(whisper["reason"], "provider_failed");
+    assert_eq!(whisper["smoke_check"], "banner");
+    assert_eq!(whisper["failure_code"], "MISSING_CAPABILITY");
+    assert_eq!(whisper["missing_shared_library"], "libgomp.so.1");
+    // The other components do not carry the field at all.
+    assert!(
+        response["data"]["components"][0]
+            .get("missing_shared_library")
+            .is_none()
+    );
+    assert!(
+        response["data"]["components"][2]
+            .get("missing_shared_library")
+            .is_none()
+    );
+    let summary = response["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("no remediation")?;
+    assert!(summary.len() <= 1024, "{summary}");
+    for expected in [
+        "whisper_cli could not start on this machine",
+        "shared library libgomp.so.1",
+        "sudo apt-get install libgomp1",
+        "run the same setup install again",
+    ] {
+        assert!(summary.contains(expected), "{expected}: {summary}");
+    }
+    assert_eq!(
+        response,
+        load("examples/setup-install.missing-library.json")?
+    );
+    let event = serde_json::to_value(TerminalEventResponse::new(
+        OperationResponse::failure_with_remediation(
+            CommandName::SetupInstall.identifier(),
+            FailureCode::MissingCapability,
+            String::from("fixture"),
+        )
+        .with_failure_value(response["data"].clone()),
+    ))?;
+    validate("terminal-event.schema.json", &event)?;
+    Ok(())
+}
+
+/// The package is named only where it is known; for any other library the
+/// text says what can be relied on and no more.
+#[test]
+fn another_missing_library_gets_no_guessed_package() -> TestResult {
+    let response = failure_envelope(&missing_library_report("libstdc++.so.6")?)?;
+    validate("setup-install.schema.json", &response["data"])?;
+    let summary = response["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("no remediation")?;
+    assert!(
+        summary.contains("shared library libstdc++.so.6"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("Install the package that provides libstdc++.so.6"),
+        "{summary}"
+    );
+    assert!(summary.contains("Ubuntu 24.04 only"), "{summary}");
+    assert!(!summary.contains("apt-get"), "{summary}");
+    assert!(!summary.contains("libgomp"), "{summary}");
+    Ok(())
+}
+
+/// A provider failure that named no library is what it always was: no new
+/// field, and the earlier remediation.
+#[test]
+fn a_provider_failure_without_a_library_is_unchanged() -> TestResult {
+    let report = ManagedInstallReport {
+        components: vec![component(
+            ManagedComponent::WhisperCli,
+            ComponentInstallOutcome::Failed(ComponentInstallFailure::at(
+                InstallStep::Smoke,
+                InstallFailureReason::Smoke(CompatibilitySmokeFailure {
+                    check: CompatibilitySmokeCheck::Banner,
+                    reason: CompatibilitySmokeFailureReason::ProviderFailed,
+                }),
+            )),
+            Some(StageDisposal::Discarded),
+        )],
+    };
+    let response = failure_envelope(&report)?;
+    validate("setup-install.schema.json", &response["data"])?;
+    assert!(
+        response["data"]["components"][0]
+            .get("missing_shared_library")
+            .is_none()
+    );
+    let summary = response["error"]["remediation"][0]["summary"]
+        .as_str()
+        .ok_or("no remediation")?;
+    assert!(
+        summary.starts_with(
+            "The reviewed whisper_cli did not pass its compatibility check on this machine (the banner check, provider_failed)"
+        ),
+        "{summary}"
+    );
     Ok(())
 }
 

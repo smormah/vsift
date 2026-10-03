@@ -485,6 +485,10 @@ pub(crate) struct InstallComponent {
     pub(crate) reason: Option<String>,
     pub(crate) failure_code: Option<String>,
     pub(crate) smoke_check: Option<String>,
+    /// The shared library the loader could not find (#256); absent unless a
+    /// failure named one.
+    #[serde(default)]
+    pub(crate) missing_shared_library: Option<String>,
     pub(crate) stage: Option<String>,
     pub(crate) retention_reason: Option<String>,
 }

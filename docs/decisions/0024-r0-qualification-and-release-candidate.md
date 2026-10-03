@@ -665,7 +665,7 @@ this ADR:
   gate.
 - **RQ-03 uses the pinned Ubuntu image of `ci.yml`.** The minimal image lacks `libgomp.so.1`, which
   the reviewed whisper.cpp build needs; the tool reads it from `ldd`, gives the image exactly that
-  package and records the finding (#256, L-110) instead of hiding it.
+  package and records the finding (#256, fixed in PR 7) instead of hiding it.
 - **RQ-04 has two modes, and the docs say what each proves** (L-111). While only 0.1.0 is
   published, the real-registry mode upgrades 0.1.0 to 0.1.0; the local mode serves the pull
   request's own build, packed by `assemble-local-packages.cjs` (the checkout's launcher over the
