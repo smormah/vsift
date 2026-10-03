@@ -249,6 +249,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **`vsift ingest` into a root with too little room fails at once as `RESOURCE_LIMIT`, with a remediation**
+  (P14 PR 7, #266; found by the P14 malicious-media campaign: a sparse 600 MiB video into a 256 MiB root
+  failed after five seconds with `INTEGRITY_FAILURE`, where `job run` refused at once). The free-space check
+  was made only for a worker workspace, so a desktop root copied until the disk was full; reproduced on a hosted
+  runner (a 256 MiB tmpfs): 7.5 s, then `STORAGE_IO` with **no remediation** and a registered, never-activated
+  session left behind (the campaign's `INTEGRITY_FAILURE` came from its container's storage, which I could not
+  reproduce; both were wrong). Now, on Unix, `ingest` checks the source's size plus a 16 MiB margin against the
+  root's free space before it copies anything (a worker workspace still adds its 1 GiB reserve), and a write
+  that runs out of room during the copy (the only check on Windows, which reads no free space, L-061) gives
+  the same typed answer, `RESOURCE_LIMIT` (exit 5), whose remediation names `--session-root` and freeing space.
+  New typed error `OpenSessionError::SourceNoRoom`; new `SOURCE_NO_ROOM_REMEDIATION`; no field or schema
+  change. Tests: the room check (`a_copy_that_cannot_fit_is_refused_before_it_starts_on_unix_only`), the
+  mapping of a write that ran out of room, the code table and the remediation text, and the binary's JSON
+  failure (code, exit status, remediation). A hosted-runner re-run of the 256 MiB scenario is in the PR.
 - **`setup install` names a missing shared library** (P14 PR 7, #256; found by P14 PR 2 in the
   pinned minimal `ubuntu:24.04` image). The reviewed whisper.cpp build needs the OpenMP runtime
   `libgomp.so.1`; without it `setup install` stopped at that component with `MISSING_CAPABILITY`

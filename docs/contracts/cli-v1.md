@@ -93,7 +93,14 @@ vsift session clean --expired --json
 source bytes, committed generation, `process_crash_consistent` publication (or
 `os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
 Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
-supplied-transcript import is described in the next section.
+supplied-transcript import is described in the next section. **A source that does not fit
+the session root's filesystem** is `RESOURCE_LIMIT` (exit 5) with a remediation that names
+`--session-root` and freeing space, whichever path it comes by (since P14 PR 7, #266): on
+Unix `ingest` checks the source's size (plus a 16 MiB margin for the session's records)
+against the free space before it copies anything, a worker workspace keeps its 1 GiB reserve
+on top of that, and a write that runs out of room during the copy (the only check on
+Windows, which reads no free space, L-061) gives the same answer. It was `STORAGE_IO` with no
+remediation after the copy had filled the disk.
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
 days from open. A worker workspace sets its own retention (P11, below). Close and
 cleanup return busy while active work holds the session. Expiry becomes visible at
@@ -947,7 +954,9 @@ expiry, since the mode names whose rules bound its life; `session renew` extends
 by the retention, and `session clean --expired` removes it once expired, as for any
 session. Before a source is copied into a workspace on Unix, the filesystem must have
 the source's size and a 1 GiB reserve free, else `RESOURCE_LIMIT`; Windows does not
-check (L-061).
+check (L-061). A desktop root keeps a 16 MiB margin instead of the reserve, and a write
+that runs out of room gives the same `RESOURCE_LIMIT` (#266, the third paragraph of the
+`ingest` section above).
 
 **Weighted admission (X-07, ADR 0021 section 5a).** Every root (4 units for a desktop
 root) limits the work it runs at once by weight: a visual-candidate window's `FFmpeg`
