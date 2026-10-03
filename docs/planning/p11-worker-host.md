@@ -19,7 +19,9 @@ requirement has mechanical evidence below, and the `p11_*` checkpoint passed wit
 tools. **SEC-T01 is met for P11 by non-adversarial evidence, which the maintainer
 accepted on 2026-09-28; the adversarial containment evidence is technical debt,
 required before the R0 release (known limit [L-068](known-limits.md#l-068)).** The
-strict Linux profile stays a qualification target until P14.
+strict Linux profile stays a qualification target until P14. *(2026-10-03: by the maintainer's
+decision the adversarial evidence moves to R1, and R0 makes no claim that the strict profile
+contains a hostile provider; ADR 0024's amendment.)*
 
 ## Method
 

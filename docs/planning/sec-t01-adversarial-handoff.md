@@ -1,9 +1,10 @@
 # SEC-T01 adversarial containment evidence: handoff (technical debt)
 
-Status: **technical debt, open for maintainer discussion**. Recorded 2026-09-28.
+Status: **technical debt, moved to R1 by the maintainer's decision of 2026-10-03** (see the
+status section below). Recorded 2026-09-28.
 Tracking: [issue #188](https://github.com/smormah/vsift/issues/188), known-limits register entry
-"SEC-T01 adversarial containment evidence deferred". Must be resolved before the R0 release
-qualification (P14).
+"SEC-T01 adversarial containment evidence deferred". It was to be resolved before the R0 release
+qualification (P14); R0 instead ships with no claim that depends on it.
 
 ## In plain English
 
@@ -12,6 +13,32 @@ VSift as a worker, those tools run inside a locked-down Linux sandbox. P11 prove
 **present and correctly configured**. It did not prove that the sandbox **holds when a tool behaves
 maliciously**. That second proof, the adversarial one, is deferred. It is recorded here so it is
 decided deliberately and not forgotten.
+
+## Status, 2026-10-03 (P14 PR 5)
+
+On 2026-10-02 the maintainer chose option A for R0 (decision E of
+[ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md): a hostile stand-in
+provider run in the hardened CI container), with narrowing the claim as the fallback if the
+automated safety check recurred. **It recurred.** The session implementing PR 5 wrote the
+fixture's vocabulary and an output scan, was stopped when it reached the stand-in's own attempt
+code, and, as this document asks, neither worked around the stop nor rephrased the text. The
+partial crate was removed before any commit, so **no adversarial fixture exists in the
+repository**.
+
+**Decided by the maintainer on 2026-10-03: option 4, narrow the claim.** R0 ships with no claim
+that the strict profile contains a hostile decoder or provider; the worker host stays a
+qualification target; **#188 and L-068 move to R1**; the claims registry keeps its ban (BAN-02);
+and RQ-14 is recorded `waived` in the evidence ledger, naming this decision. The decision is in
+the amendment at the end of ADR 0024 and the note in ADR 0021. **Do not attempt to author the
+stand-in again as part of R0.**
+
+For R1 the choice in the table below is open again, and option A now means the maintainer (or a
+trusted engineer) writes or reviews the stand-in by hand. The design a future author can start
+from is the one this document's engineering notes and the verification plan already give: one
+behaviour per mode, run as the provider of a strict worker host with the media-tool verifier
+replaced, each attempt checked for containment, a typed failure in bounded time, no leak of
+planted canaries, and a host that still works afterwards, with a negative control outside the
+container.
 
 ## What P11 delivered (accepted by the maintainer for P11)
 

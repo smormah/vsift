@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-02 (P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-03 (P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -110,7 +110,7 @@ Each entry has these fields:
 | [L-065](#l-065) | A request's deadline, admission wait and attempt count per delivery | contract/UX | low | unscheduled | none | accepted residual |
 | [L-066](#l-066) | A batch file holds at most 1,000 lines; a longer file runs nothing | contract/UX | low | unscheduled | none | accepted residual |
 | [L-067](#l-067) | Requests of one batch contend with each other; a job-cancelled line exits 6 | contract/UX | low | P11 | [#14](https://github.com/smormah/vsift/issues/14) | open |
-| [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | maintainer discussion, before P14 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
+| [L-068](#l-068) | SEC-T01 adversarial containment evidence deferred (technical debt) | security | high | R1 | [#188](https://github.com/smormah/vsift/issues/188) | deferred (technical debt) |
 | [L-069](#l-069) | A request that failed for good because of the host replays that failure | contract/UX | low | unscheduled | none | accepted residual |
 | [L-072](#l-072) | Codex's permissions are graded from its event stream, not configured to match Claude Code's | security | medium | unscheduled | [#15](https://github.com/smormah/vsift/issues/15) | accepted residual |
 | [L-074](#l-074) | SubRip markup removal is broader than the contract lists | contract/UX | low | unscheduled | none | open |
@@ -265,7 +265,7 @@ Counts: 1 high, 31 medium, 77 low (109 entries).
   contains a hostile decoder is unproven and deferred as technical debt
   ([L-068](#l-068)). The [worker-host runbook](../operations/worker-host.md) gives an
   isolated deployment example with the same controls.
-- **Next step:** resolve [L-068](#l-068) before release; P14 malicious-decoder and
+- **Next step:** [L-068](#l-068) moved to R1 (maintainer decision, 2026-10-03); P14 malicious-decoder and
   decompression-bomb qualification in a disposable environment.
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
   **Status:** deferred. **Review:** pending.
@@ -966,22 +966,30 @@ Counts: 1 high, 31 medium, 77 low (109 entries).
   attested host) and the hardened `strict-worker-boundary` CI container job, which
   verifies the inherited container and cgroup controls (read-only root, no network,
   CPU, memory, swap and PID limits, no capabilities, no new privileges, an unprivileged
-  user) around the process supervisor. The adversarial evidence is technical debt and
-  must be resolved before the R0 release.
+  user) around the process supervisor. **By the maintainer's decision of 2026-10-03
+  the adversarial evidence is not produced in R0: it moves to R1** (ADR 0024, decision
+  E, option 4).
 - **Evidence:** [P11 qualification record](p11-worker-host.md) (SEC-T01);
   [verification](verification.md) "P11 PR 4 evidence"; the handoff document
-  [sec-t01-adversarial-handoff.md](sec-t01-adversarial-handoff.md).
+  [sec-t01-adversarial-handoff.md](sec-t01-adversarial-handoff.md); ADR 0024's amendment
+  of 2026-10-03; evidence item RQ-14, recorded `waived` by that decision.
 - **Impact:** strict isolation is attested and its controls are shown present, but
-  that they contain a hostile decoder is not demonstrated; the strict worker profile
-  cannot be released on this evidence.
-- **Why:** maintainer decision (2026-09-28, option 2): the adversarial work is
-  deferred for maintainer discussion.
+  that they contain a hostile decoder is not demonstrated. R0 therefore makes no claim
+  that the strict worker profile contains a hostile decoder or provider, and the worker
+  host stays a qualification target; the claims registry's ban BAN-02 stays in force.
+- **Why:** maintainer decision (2026-09-28, option 2): the adversarial work was
+  deferred; on 2026-10-03, after the automated safety check stopped the authoring of the
+  hostile stand-in provider a second time, the maintainer chose to narrow the claim
+  rather than have it authored again.
 - **Mitigation:** strict mode fails closed; the runbook's deployments apply the same
   controls as the CI container job; desktop profiles claim no isolation
   ([L-004](#l-004)).
-- **Next step:** maintainer discussion (see the handoff document); resolved before P14.
-- **Owner:** maintainer discussion, before P14. **Issue:** [#188](https://github.com/smormah/vsift/issues/188).
-  **Status:** deferred (technical debt). **Review:** pending.
+- **Next step:** in R1, the maintainer writes or reviews a hostile stand-in provider run in
+  the hardened CI container (option A of the handoff), or chooses a recognised third-party
+  containment suite or an external review (B, C). Do not author the stand-in automatically
+  for R0. When the evidence passes, lift BAN-02 in the claims registry and delete this entry.
+- **Owner:** R1. **Issue:** [#188](https://github.com/smormah/vsift/issues/188).
+  **Status:** deferred (technical debt). **Review:** rescheduled to R1 (2026-10-03).
 
 ### L-069
 

@@ -829,6 +829,11 @@ a new process group kept inside the worker cgroup). Adversarial evidence is tech
 debt, deferred for maintainer discussion and required before the R0 release (known
 limit L-068). SEC-06 and SEC-25 therefore rest, for P11, on controls shown present and
 attested, not on a demonstrated containment of a hostile provider.
+*P14 PR 5 (2026-10-03, maintainer decision, ADR 0024 decision E option 4):* the adversarial
+fixture was not written, because the automated safety check stopped its authoring. R0 ships
+with no claim that the strict profile contains a hostile decoder or provider; SEC-06 and
+SEC-25 stay on controls shown present and attested; the adversarial evidence (#188, L-068)
+moves to R1; evidence item RQ-14 is recorded `waived`.
 **SEC-19 status (tenants).** P11 ships no multi-tenant host, and a workspace is one
 trust domain: a request delivered to it may target any of its sessions by id and
 writes into its one bundle root (an existing bundle of another session is refused,
