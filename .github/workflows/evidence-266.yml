@@ -1,0 +1,56 @@
+name: Evidence 266 (temporary, this branch only)
+
+# Reproduces #266 on a hosted Ubuntu runner: ingest of a sparse 600 MiB video
+# into a session root on a 256 MiB tmpfs. Temporary: it triggers only on a push
+# to the branch below, reads the repository, publishes nothing, uses no secret.
+
+on:
+  push:
+    branches:
+      - p14-pr7-evidence-266
+
+permissions:
+  contents: read
+
+jobs:
+  small-root:
+    name: "#266 ingest into a small root, ubuntu-latest"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build vsift
+        run: cargo build -p vsift-cli --locked
+
+      - name: Ingest a file larger than the root
+        run: |
+          set -u
+          small=/mnt/small
+          sudo mkdir -p "$small"
+          sudo mount -t tmpfs -o size=256m,mode=0777 tmpfs "$small"
+          df -h "$small"
+          mkdir -p "$RUNNER_TEMP/user"
+          export HOME="$RUNNER_TEMP/user" XDG_CONFIG_HOME="$RUNNER_TEMP/user" XDG_CACHE_HOME="$RUNNER_TEMP/user"
+          video="$RUNNER_TEMP/big.mp4"
+          # An MP4 file type box, then a sparse 600 MiB body.
+          printf '\000\000\000\030ftypisom\000\000\002\000isomiso2' > "$video"
+          truncate -s 600M "$video"
+          ls -ls "$video"
+          bin=target/debug/vsift
+          echo "== plain ingest into the 256 MiB tmpfs"
+          start=$(date +%s.%N)
+          set +e
+          "$bin" --session-root "$small/root" ingest "$video" --json > "$RUNNER_TEMP/out.json" 2> "$RUNNER_TEMP/err.txt"
+          code=$?
+          set -e
+          end=$(date +%s.%N)
+          echo "exit=$code seconds=$(echo "$end - $start" | bc)"
+          head -c 1500 "$RUNNER_TEMP/out.json"; echo
+          echo "stderr:"; head -c 500 "$RUNNER_TEMP/err.txt"; echo
+          df -h "$small"
+          echo "== session list afterwards"
+          "$bin" --session-root "$small/root" session list --json | head -c 1500; echo
