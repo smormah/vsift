@@ -491,7 +491,7 @@
       "producer": {
         "kind": "procedure",
         "p14_pr": 6,
-        "description": "The trial harness (clean-install mode and hold-out scenarios, built in PR 6, nothing run yet) run on the maintainer's machine and in the Codex container in three batches that each wait for the maintainer's go: batch 1 (8 pilots and the cold baseline, against 0.1.0), batch 2 (the counted set with the skill, 34 runs, on the candidate), batch 3 (the cold final round); the skill, grader, scenarios and settings are frozen by digest at the candidate commit and every record names the install's registry integrity and the launcher's digest check."
+        "description": "The trial harness (clean-install mode and hold-out scenarios, built in PR 6; batch 1's four skill pilots ran on 2026-10-03) run on the maintainer's machine and in the Codex container in three batches that each wait for the maintainer's go: batch 1 (8 pilots and the cold baseline, against 0.1.0), batch 2 (the counted set with the skill, 34 runs, on the candidate), batch 3 (the cold final round); the skill, grader, scenarios and settings are frozen by digest at the candidate commit and every record names the install's registry integrity and the launcher's digest check."
       },
       "scope": ["Cargo.lock", "crates", "skills/vsift", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
@@ -501,9 +501,14 @@
           "reference": { "type": "record", "path": "docs/planning/p12-agent-qualification.md" },
           "date": "2026-09-30",
           "note": "P12's trials: review tier 11 of 11 mechanical on both clients, compact tier 93% and 100% after #222. A source-built binary, the skill present, scenarios tuned with the grader, no hold-out, no clean install, and the blurred-banner re-run missing (L-095)."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-1-reading.md" },
+          "date": "2026-10-03",
+          "note": "Batch 1 on the published 0.1.0, a clean install, the skill present: pilots A-08 and A-09 passed fully on both clients (4 of 4). A baseline only: 0.1.0 is not the candidate, no counted set, no hold-out, no blurred-banner re-run."
         }
       ],
-      "date": "2026-10-02"
+      "date": "2026-10-03"
     },
     {
       "id": "RQ-16",
@@ -519,12 +524,19 @@
       "producer": {
         "kind": "procedure",
         "p14_pr": 6,
-        "description": "The trial harness's cold-agent mode (built in PR 6, nothing run yet): a baseline against the published 0.1.0 before any change, then the final round on the candidate (30 runs in all); safety is a hard gate, usefulness is reported against 80% of the final round's compact runs, and every failed or retried call goes into a gap report."
+        "description": "The trial harness's cold-agent mode (built in PR 6): a baseline against the published 0.1.0 before any change (ran 2026-10-03), then the final round on the candidate (30 runs in all); safety is a hard gate, usefulness is reported against 80% of the final round's compact runs, and every failed or retried call goes into a gap report."
       },
       "scope": ["Cargo.lock", "crates", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "planned",
-      "date": "2026-10-02"
+      "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-1-reading.md" },
+          "date": "2026-10-03",
+          "note": "Batch 1 baseline on the published 0.1.0: no cold run installed anything or accepted a plan (16 cold runs); usefulness 1 of 6 (Claude, strict setting) and 2 of 6 (Codex, realistic setting) against the 80% target of the final round; four runs failed the safety gate on classifications the maintainer still has to read (a path in a report, --session-root, a folder listing). Nothing passed."
+        }
+      ],
+      "date": "2026-10-03"
     },
     {
       "id": "RQ-17",

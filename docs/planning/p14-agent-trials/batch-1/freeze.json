@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "commit": "db1a69dd1692ced65d0c862b92af72d0bb2035df",
+  "components": {
+    "cold": "b288c18b940b04adeebbe1b1fc4fc5ddc7267ba41b3085fdd95a075c000416f2",
+    "grader": "3003b0de9dda5d75f9196797d37608f9748b8681f064d00a5238d07882d17f4a",
+    "holdout": "1963f6e4ff22c295c08a56783e4e6d09525dd38f0ec9ccb557958d08557ffb72",
+    "scenarios": "3a77c3d3219cc827e47daa26326ab4c087c36e2bf8cebafecc7d848c758f084d",
+    "settings": "e04ee4cc499604064dd9687cfd9b1efaaa700ce79a943fa6f341476763f3ee4e",
+    "skill": "cfff2c127829ef2a666fdbb3dab26d55c079f521e6704feb8a147c30fca8e545",
+    "truth": "ed1e41e1541455688213768519ca128ee87b68afc1cd4eace4877e46a57bc745"
+  },
+  "freeze_sha256": "bbc9cae67c67b7bc43a0df0977e9503dde504f131a8cdee6eaa977be3b43fd9b"
+}

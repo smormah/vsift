@@ -1,9 +1,11 @@
 # P14 agent trial records
 
-**Status: no trial has run.** P14 PR 6 built the harness, the cold-agent mode, the hold-out
-scenarios and the campaign scripts, and ran nothing: every batch spends the maintainer's Claude
-and Codex allowances and starts on the maintainer's explicit go. This folder is where the
-batches' bounded records land. Until a batch runs it holds only this page.
+**Status: batch 1 (the baseline on the published 0.1.0) ran on 2026-10-03; batches 2 and 3 have
+not.** P14 PR 6 built the harness, the cold-agent mode, the hold-out scenarios and the campaign
+scripts; every batch spends the maintainer's Claude and Codex allowances and starts on the
+maintainer's explicit go. This folder is where the batches' bounded records land. The reading of
+batch 1 is [batch-1-reading.md](batch-1-reading.md); it qualifies nothing, it is the "before"
+picture for the final round.
 
 The plan is [p14-qualification.md](../p14-qualification.md) section 7; the runbook, with what the
 maintainer does for each batch and what it costs, is
@@ -15,7 +17,9 @@ note.
 
 ```text
 p14-agent-trials/
-  batch-1/    pilots and the cold baseline, against the published 0.1.0
+  batch-1/    pilots and the cold baseline, against the published 0.1.0 (ran 2026-10-03)
+  batch-1-strict-first-attempt/   the first four Claude runs (same strict settings; kept, not counted twice)
+  batch-1-reading.md              the maintainer-side reading of batch 1
   batch-2/    the counted set with the skill, on the candidate
   batch-3/    the cold final round, on the candidate
     records/<trial>-<client>-p1.json   one bounded record (at most 64 KiB) per counted or invalid trial
