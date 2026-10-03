@@ -71,6 +71,11 @@ fn component(repository: &Path, name: &str) -> Result<String, TrialError> {
             text.push_str(&file_digest(
                 &harness.join("claude-cold-trial-settings.json"),
             )?);
+            // The realistic variant is an option, but a change to it voids a
+            // batch that could have used it.
+            text.push_str(&file_digest(
+                &harness.join("claude-cold-trial-settings.realistic.json"),
+            )?);
             Ok(sha256_hex(text.as_bytes()))
         }
         "truth" => {

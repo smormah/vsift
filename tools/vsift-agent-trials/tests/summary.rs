@@ -441,3 +441,116 @@ fn a_counted_run_whose_client_exited_in_error_is_listed_for_the_reader() -> Test
     );
     Ok(())
 }
+
+#[test]
+fn a_cold_run_that_met_a_refused_assignment_is_listed_for_the_reader() -> TestResult {
+    let (state, mut records) = batch(1, ClientName::Claude, |_| Verdict::pass())?;
+    let cold: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| !record["cold"].is_null())
+        .map(|(index, _)| index)
+        .collect();
+    assert!(cold.len() >= 3, "the baseline has cold runs");
+    records[cold[0]]["cold"]["gap_report"] =
+        json!([{"denied_assignment": true}, {"denied_assignment": true}, {}]);
+    records[cold[1]]["cold"]["gap_report"] = json!([{"denied_assignment": false}, {}]);
+    let summary = summarize(&[state], &records);
+    let note = summary
+        .warnings
+        .iter()
+        .find(|warning| warning.contains("bare NAME=value"))
+        .ok_or("no warning about the refused assignment")?;
+    assert!(note.starts_with("1 cold run(s)"), "{note}");
+    assert!(note.contains("(2)"), "{note}");
+    assert!(note.contains("L-125"), "{note}");
+    assert_eq!(
+        summary
+            .runs
+            .iter()
+            .map(|run| run.denied_assignments)
+            .sum::<usize>(),
+        2
+    );
+    // A batch without one has no such warning.
+    let (state, records) = batch(1, ClientName::Claude, |_| Verdict::pass())?;
+    let quiet = summarize(&[state], &records);
+    assert!(
+        quiet
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("bare NAME=value"))
+    );
+    Ok(())
+}
+
+/// Claude Code (strict, on the maintainer's machine) and Codex (realistic,
+/// in the container) do not take the same cold test, so the summary shows
+/// each run's setting, says results compare only within a client and setting,
+/// and warns when one client's runs ran under two settings.
+#[test]
+fn cold_runs_show_their_setting_and_never_pool_two_settings_of_one_client() -> TestResult {
+    let cold_indexes = |records: &[Value]| -> Vec<usize> {
+        records
+            .iter()
+            .enumerate()
+            .filter(|(_, record)| !record["cold"].is_null())
+            .map(|(index, _)| index)
+            .collect()
+    };
+    let (claude, mut claude_records) = batch(1, ClientName::Claude, |_| Verdict::pass())?;
+    let (codex, mut codex_records) = batch(1, ClientName::Codex, |_| Verdict::pass())?;
+    for index in cold_indexes(&claude_records) {
+        claude_records[index]["cold_setting"] = json!("strict");
+    }
+    for index in cold_indexes(&codex_records) {
+        codex_records[index]["cold_setting"] = json!("realistic");
+    }
+    let mut records = claude_records.clone();
+    records.extend(codex_records);
+    let summary = summarize(&[claude, codex], &records);
+    let markdown = summary.to_markdown();
+    assert!(markdown.contains("| Run | Setting |"), "{markdown}");
+    assert!(markdown.contains("| strict |") && markdown.contains("| realistic |"));
+    assert!(
+        markdown.contains("compares only with runs of the same client and setting"),
+        "{markdown}"
+    );
+    assert!(
+        markdown.contains("compares like with like only within each client"),
+        "{markdown}"
+    );
+    assert!(
+        summary
+            .gates
+            .iter()
+            .any(|gate| gate.detail.contains("setting strict"))
+            && summary
+                .gates
+                .iter()
+                .any(|gate| gate.detail.contains("setting realistic")),
+        "the usefulness gates name the setting"
+    );
+    assert!(
+        summary
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("more than one setting")),
+        "{:?}",
+        summary.warnings
+    );
+
+    // One client's runs under two settings are not pooled silently.
+    let (state, mut mixed) = batch(1, ClientName::Claude, |_| Verdict::pass())?;
+    let indexes = cold_indexes(&mixed);
+    mixed[indexes[0]]["cold_setting"] = json!("strict");
+    mixed[indexes[1]]["cold_setting"] = json!("realistic");
+    let summary = summarize(&[state], &mixed);
+    let warning = summary
+        .warnings
+        .iter()
+        .find(|warning| warning.contains("more than one setting"))
+        .ok_or("no warning about two settings")?;
+    assert!(warning.starts_with("claude cold runs"), "{warning}");
+    Ok(())
+}

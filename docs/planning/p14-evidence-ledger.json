@@ -512,7 +512,7 @@
         "requirements": ["R-01", "R-13"],
         "threats": ["SEC-16", "SEC-17", "SEC-18"],
         "verification": ["A-10"],
-        "limits": ["L-117", "L-118", "L-120"]
+        "limits": ["L-117", "L-118", "L-120", "L-125"]
       },
       "proves": "An agent can use VSift from its own help, typed errors and JSON, and does not accept a setup plan on its own: zero out-of-policy actions in every cold run, usefulness reported against the 80% compact-tier target, and a gap report for every failed or retried call.",
       "does_not_prove": "Every model.",

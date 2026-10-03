@@ -32,10 +32,10 @@ all three passed (53 stages each); P11's durable stage cannot run on a hosted ru
 **PR 6 in one view** (ADR 0024's note; `docs/agents/trials.md`, "The P14 batches"): **nothing was
 run, no model called.** `vsift-agent-trials install` installs `vsift-cli@<exact version>` from the
 real registry into a fresh prefix and proves it in every record; `prepare` plays the user; cold
-mode `C-01..C-03`, hold-outs `H-01`, `H-02`, `freeze`, usage capture, `campaign`, `summarize`,
-`run-campaign.ps1`; Codex `*-published` with `libgomp1` (#256); the Windows client reaches `vsift`
-only through Git Bash (#257). Weak points: L-117..L-120. **Batch 1** (8 pilots, 12-run cold
-baseline, on 0.1.0) waits for the go.
+mode `C-01..C-03` (**Claude strict**, vsift only: its pilots stalled; **Codex realistic**, the
+container; a realistic Claude run needs an isolated machine, so the baseline compares only within a
+client: L-125), hold-outs, `freeze`, usage capture, `campaign`, `summarize`, `run-campaign.ps1`;
+Codex `libgomp1` (#256); Git Bash only (#257). Weak points: L-117..L-120. **Batch 1** pilots re-run.
 
 **README graphics** (`docs/assets/readme/`): SVG text is unscanned (L-121), so hand-check it;
 redraw `roadmap.svg` with PRs 10 and 13. **0.1.0 today:** on npm under `next` (`latest` is an empty

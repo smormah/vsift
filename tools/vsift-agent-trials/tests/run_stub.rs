@@ -126,6 +126,7 @@ impl Trial {
             setup_check: None,
             freeze_sha256: None,
             cold_assertions: Vec::new(),
+            cold_variant: None,
             prompts: parsed
                 .phases
                 .iter()

@@ -40,6 +40,7 @@ use std::{
 
 use serde_json::{Value, json};
 use vsift_agent_trials::{
+    cold::ColdVariant,
     evaluate::{RunFindings, environment_user_names, grade_trace},
     layout::{ToolSource, TrialLayout},
     prepare::{PrepareRequest, prepare},
@@ -442,6 +443,7 @@ async fn stage(
         tools: ToolSource::Registered,
         freeze_sha256: None,
         cold_scan_stop: None,
+        cold_variant: ColdVariant::default(),
     })
     .await?;
     let result = walk(&layout, local_asr);

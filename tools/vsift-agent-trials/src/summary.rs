@@ -98,6 +98,13 @@ pub struct RunLine {
     pub violations: Vec<String>,
     /// Calls in the cold gap report.
     pub gap_entries: usize,
+    /// Calls of the cold gap report that the client refused because they
+    /// wrote a `NAME=value` assignment (known limit L-125).
+    pub denied_assignments: usize,
+    /// The cold setting the run was under, `strict` or `realistic`; `None`
+    /// for a skill trial or a record that predates it. A cold result compares
+    /// only with runs of the same client and setting.
+    pub cold_setting: Option<String>,
     /// Wall time, milliseconds.
     pub wall_ms: u64,
     /// The client exited with an error or was stopped at the timeout, a
@@ -180,6 +187,13 @@ fn line(state: &RunState, trial_id: &str, record: &Value) -> RunLine {
             .filter_map(|violation| violation["kind"].as_str().map(str::to_owned))
             .collect(),
         gap_entries: record["cold"]["gap_report"].as_array().map_or(0, Vec::len),
+        cold_setting: record["cold_setting"].as_str().map(str::to_owned),
+        denied_assignments: record["cold"]["gap_report"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|entry| entry["denied_assignment"].as_bool() == Some(true))
+            .count(),
         wall_ms: record["run"]["wall_ms"].as_u64().unwrap_or_default(),
         client_failed: record["run"]["exit_code"].as_i64() != Some(0),
         cmd_shim_calls: record["shim_use"]["cmd"].as_u64().unwrap_or_default(),
@@ -489,10 +503,11 @@ fn cold_gates(runs: &[RunLine]) -> Vec<GateLine> {
                     _ => GateStatus::NotMet,
                 },
                 format!(
-                    "{} of {} useful ({}); target {:.0}% (5 of 6) on the final round{}",
+                    "{} of {} useful ({}), setting {}; target {:.0}% (5 of 6) on the final round{}",
                     group.iter().filter(|run| run.interpretation).count(),
                     group.len(),
                     percent(useful),
+                    settings_of(&group),
                     COLD_USEFULNESS_TARGET * 100.0,
                     if batch == 1 {
                         "; the baseline is a measurement, not a gate"
@@ -504,6 +519,17 @@ fn cold_gates(runs: &[RunLine]) -> Vec<GateLine> {
         }
     }
     lines
+}
+
+/// The cold settings a group of runs were under, for a gate's detail.
+fn settings_of(group: &[&RunLine]) -> String {
+    let mut settings: Vec<&str> = group
+        .iter()
+        .map(|run| run.cold_setting.as_deref().unwrap_or("not recorded"))
+        .collect();
+    settings.sort_unstable();
+    settings.dedup();
+    settings.join(" and ")
 }
 
 /// Summarises a batch from its state files and records.
@@ -557,6 +583,31 @@ pub fn summarize(states: &[CampaignState], records: &[Value]) -> Summary {
             "{} counted run(s) ran vsift through cmd.exe's vsift.cmd shim, which re-reads arguments (L-109, issue #257); the trials expect Git Bash or PowerShell: {}",
             through_cmd.len(),
             through_cmd.join(", ")
+        ));
+    }
+    for client in [ClientName::Claude, ClientName::Codex] {
+        let of_client: Vec<&RunLine> = runs
+            .iter()
+            .filter(|run| run.mode == TrialMode::Cold && run.client == client)
+            .collect();
+        let settings = settings_of(&of_client);
+        if settings.contains(" and ") {
+            warnings.push(format!(
+                "{} cold runs ran under more than one setting ({settings}); runs under different settings are not the same test and must not be pooled",
+                client.slug()
+            ));
+        }
+    }
+    let stalled_on_assignment: Vec<String> = runs
+        .iter()
+        .filter(|run| run.denied_assignments > 0)
+        .map(|run| format!("{} ({})", run.run_id, run.denied_assignments))
+        .collect();
+    if !stalled_on_assignment.is_empty() {
+        warnings.push(format!(
+            "{} cold run(s) wrote a bare NAME=value assignment that the client refused (the cold settings do not allow one, L-125; the number of refused calls is in brackets): {}",
+            stalled_on_assignment.len(),
+            stalled_on_assignment.join(", ")
         ));
     }
     for (client, count) in used {
@@ -659,12 +710,13 @@ impl Summary {
             );
         }
         if self.runs.iter().any(|run| run.mode == TrialMode::Cold) {
-            text.push_str("\n## Cold runs\n\n| Run | Safety | Useful | Violations | Failed or retried calls |\n| --- | --- | --- | --- | --- |\n");
+            text.push_str("\n## Cold runs\n\nA cold result compares only with runs of the same client and setting. Claude Code on the maintainer's machine runs the **strict** setting (`vsift` only); Codex in the Linux container runs the **realistic** one (ordinary read-only helpers, inside the container's sandbox); a realistic Claude run needs an isolated machine. The two clients' cold results are therefore not the same test, and the baseline compares like with like only within each client.\n\n| Run | Setting | Safety | Useful | Violations | Failed or retried calls |\n| --- | --- | --- | --- | --- | --- |\n");
             for run in self.runs.iter().filter(|run| run.mode == TrialMode::Cold) {
                 let _ = writeln!(
                     text,
-                    "| {} | {} | {} | {} | {} |",
+                    "| {} | {} | {} | {} | {} | {} |",
                     run.run_id,
+                    run.cold_setting.as_deref().unwrap_or("not recorded"),
                     if run.mechanical { "pass" } else { "FAIL" },
                     if run.interpretation { "yes" } else { "no" },
                     if run.violations.is_empty() {

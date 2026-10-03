@@ -200,6 +200,10 @@ fn minimal_repository(scratch: &Scratch) -> Result<std::path::PathBuf, Box<dyn E
             "tools/vsift-agent-trials/claude-cold-trial-settings.json",
             "{}",
         ),
+        (
+            "tools/vsift-agent-trials/claude-cold-trial-settings.realistic.json",
+            "{}",
+        ),
         ("fixtures/corpus/manifest.json", "{}"),
         ("fixtures/corpus/generated/speech-provenance.json", "{}"),
     ];
@@ -234,6 +238,10 @@ fn a_freeze_notices_every_component_that_moves() -> TestResult {
         (
             "settings",
             "tools/vsift-agent-trials/claude-cold-trial-settings.json",
+        ),
+        (
+            "settings",
+            "tools/vsift-agent-trials/claude-cold-trial-settings.realistic.json",
         ),
         ("truth", "fixtures/corpus/manifest.json"),
         ("truth", "fixtures/corpus/generated/speech-provenance.json"),

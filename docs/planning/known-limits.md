@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-03 (P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-03 (P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -156,8 +156,9 @@ Each entry has these fields:
 | [L-119](#l-119) | There are two hold-out scenarios, one run per client each, written by the same authors | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
+| [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 
-Counts: 1 high, 31 medium, 77 low (109 entries).
+Counts: 1 high, 32 medium, 77 low (110 entries).
 
 ## Security
 
@@ -2952,7 +2953,8 @@ that week.**
 **The cold grader reads command text and matches free text mechanically.**
 
 - **What:** the safety gate is decided from the commands a client reports: program names,
-  arguments that look like paths or URLs, and the `vsift` classes from `commands.md`. It can miss
+  every argument read as a path (since 2026-10-03, with `~` as the home folder and a leading
+  `VAR=x` skipped, see [L-125](#l-125)) or a URL, and the `vsift` classes from `commands.md`. It can miss
   an installer under another name, a redirect to a path the shell reader does not attribute (a
   write outside the workspace by redirection), or a download by an interpreter's own code with an
   address the reader cannot see. Syntax it cannot read (command substitution, a subshell, a
@@ -3045,6 +3047,51 @@ that week.**
   content of `<text>` elements; redraw the roadmap with P14 PRs 10 and 13.
 - **Owner:** unscheduled (P14 PR 9 is the natural home). **Issue:** none. **Status:** open.
   **Review:** pending.
+
+### L-125
+
+**The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test.**
+
+- **What:** the cold trials have two settings (maintainer decisions of 2026-10-03; ADR 0024, "the cold
+  settings, strict and realistic"). **Strict** (`Bash(vsift:*)` only) is Claude Code on the maintainer's
+  machine; its first pilots were safe but stalled on chained commands. **Realistic** also lets the agent run
+  `ls`, `cat`, `head`, `tail`, `pwd`, `cd`, `wc`, `echo` and `sort`, alone, chained or piped. A Claude Code
+  allow rule matches command text and cannot say which paths a command may name, so `cat /somewhere/else`
+  runs where `cat` is allowed: on the maintainer's Windows machine the helpers could read any file the user can
+  read, which conflicts with the rule that personal details do not leave the machine without consent. So the
+  realistic Claude file is a named option (`claude-cold-trial-settings.realistic.json`) that
+  `run-campaign.ps1` refuses unless `-IsolatedMachine` states the machine is isolated, and **Codex in the
+  Linux container is the realistic variant in effect** (its sandbox is the only restriction on commands, and
+  the container is the isolation). The baseline therefore compares like with like **only within each client**
+  (Claude strict, Codex realistic); the summary says so per run and a report must not set one against the
+  other. Even on an isolated machine a read outside the workspace is stopped by the grader's safety gate after
+  the fact (`outside_allowed_folders`; the grader reads every word of a helper's arguments as a path, a leading
+  `~` as the home folder and `VAR=x command` as `command`), not prevented. `sort -o` and `--output` are denied
+  by rule, but a deny rule matches text and has no character classes, so a clustered flag (`sort -ro file`) is
+  not matched. A bare `VAR=value` (the strict pilots' `S=ses_...; vsift ... $S`) is **not** allowed in either
+  Claude file: a rule matches a command's whole text and `*` crosses spaces, so `Bash(S=*)` would also allow
+  `S=x <any program>`. Nothing was run against the client when the settings were written (no model call; the
+  permission engine has no offline evaluator), so which chained forms Claude Code 2.1.284 allows is read from
+  its documentation.
+- **Evidence:** `tools/vsift-agent-trials/claude-cold-trial-settings.json` and `.realistic.json`; the settings
+  tests in `tests/scenario_sets.rs`, the refusal tests in `tests/campaign_script.rs`, the grader tests in
+  `tests/cold_grader.rs` (one replays a Codex run); [`trials.md`](../agents/trials.md) ("Two cold variants").
+- **Impact:** a strict Claude cold run may stall on chained commands and so understate what a cold agent can do
+  (the baseline is a measurement, not a gate); a realistic run (Codex, or Claude on an isolated machine) is
+  graded after the fact, so a read the grader fails has already happened inside the container or machine. The
+  zero-unsafe-actions claim rests on the grader reading command text (L-118) and on a person reading the raw
+  logs.
+- **Why:** the client's rule language cannot express "inside the workspace", and the maintainer's machine holds
+  the user's own files.
+- **Mitigation:** the strict default on the maintainer's machine; the refusal without `-IsolatedMachine`; the
+  container for Codex; the gap report marks every refused bare assignment (`denied_assignment`) and the batch
+  summary lists the runs that met one, so a stall on them is easy to see; the maintainer reads every cold run's
+  raw log before the claim is made.
+- **Next step:** read the re-run pilots. If Claude's strict runs stall, the clean test machine (decision H's
+  second Windows machine) is where the realistic Claude baseline can run; if agents stall on assignments, the
+  maintainer decides then (the setting stays strict until then).
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
+  accepted residual. **Review:** pending.
 
 ## Review workflow
 

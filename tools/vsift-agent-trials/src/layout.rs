@@ -248,6 +248,11 @@ pub struct TrialManifest {
     /// documentation absent from every discovery location).
     #[serde(default)]
     pub cold_assertions: Vec<String>,
+    /// Which Claude Code cold settings the workspace got (`None` for a skill
+    /// trial). Codex ignores them: its cold run is always the realistic
+    /// setting, whose only restriction is the container's sandbox.
+    #[serde(default)]
+    pub cold_variant: Option<crate::cold::ColdVariant>,
 }
 
 /// Where a trial's skill copy came from.
