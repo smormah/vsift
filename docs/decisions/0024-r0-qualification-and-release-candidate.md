@@ -1030,7 +1030,7 @@ each shows and what it does not are in [`p14-qualification.md`](../planning/p14-
 the decisions taken inside this ADR:
 
 - **The campaigns are Node.js tools with no dependency, in `tools/p14-campaigns/`** (a sibling of
-  `tools/p14-published/`, so a change to them does not start the Release workflow), with 70 unit tests that
+  `tools/p14-published/`, so a change to them does not start the Release workflow), with 71 unit tests that
   need no network or container. Six workflows run them (`Fuzz` extended, `P14 stress`, `P14 load`, `P14
   malicious media`, `P14 runbook walk`, `P14 scan reading`), each `permissions: {}` at the top and
   `contents: read` per job, with no secret, no OIDC token and no write step. The governance workflow lint

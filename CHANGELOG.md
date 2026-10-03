@@ -33,7 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **The robustness campaigns, run on hosted runners** (P14 PR 4; evidence items RQ-07 to RQ-10,
   RQ-12 and RQ-13; no product code changed, nothing published, tagged or configured, no secret, no
   dependency added to the workspace). Six read-only workflows, tools in `tools/p14-campaigns/` (Node.js,
-  no dependency, 70 tests). **Fuzzing:** a gap review of the parsers added seven targets (the saved setup
+  no dependency, 71 tests). **Fuzzing:** a gap review of the parsers added seven targets (the saved setup
   plan, the bundle manifest, the tar, gzip and xz archive inventories, the identifiers, the input-path
   grammar), 31 in all; the `Fuzz` workflow takes up to 14,400 s a target, keeps each target's plateau
   line and a reproduction of any crash, and smoke-tests every target in a pull request that touches it;
