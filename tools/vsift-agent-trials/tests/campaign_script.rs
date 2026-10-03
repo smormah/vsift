@@ -17,6 +17,7 @@
 mod common;
 
 use std::{
+    collections::BTreeSet,
     error::Error,
     fs,
     path::{Path, PathBuf},
@@ -24,7 +25,7 @@ use std::{
 };
 
 use common::Scratch;
-use serde_json::json;
+use serde_json::{Value, json};
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -393,5 +394,119 @@ fn the_codex_cold_run_is_the_container_setting_and_has_no_strict_variant() -> Te
     // And the machine statement is for Claude Code only.
     let declared = checkout.run_as("codex", 1, &["-DryRun", "-IsolatedMachine"])?;
     assert!(!declared.status.success(), "{}", text(&declared));
+    Ok(())
+}
+
+impl Checkout {
+    /// The harness copy the script runs, as the script runs it.
+    fn harness(&self, arguments: &[&str]) -> Result<Output, Box<dyn Error>> {
+        Ok(Command::new(
+            self.repository
+                .join("target/release/vsift-agent-trials.exe"),
+        )
+        .args(arguments)
+        .output()?)
+    }
+
+    /// Counts the next run of `client`'s plan in `batch`, as a finished trial
+    /// would, and writes the record it names (just enough for a summary).
+    fn count_next_run(&self, client: &str, batch: u8) -> Result<(), Box<dyn Error>> {
+        let state = self
+            .batch_directory(batch)
+            .join(format!("state-{client}.json"));
+        let state_argument = state.to_string_lossy().into_owned();
+        let next = self.harness(&["campaign", "next", "--state", &state_argument])?;
+        assert!(next.status.success(), "{}", text(&next));
+        let run: Value = serde_json::from_slice(&next.stdout)?;
+        let run_id = run["run_id"].as_str().ok_or("no run id")?;
+        let trial = format!("trial-{client}-{batch}");
+        let marked = self.harness(&[
+            "campaign",
+            "mark",
+            "--state",
+            &state_argument,
+            "--run",
+            run_id,
+            "--outcome",
+            "counted",
+            "--trial",
+            &trial,
+        ])?;
+        assert!(marked.status.success(), "{}", text(&marked));
+        let records = self.batch_directory(batch).join("records");
+        fs::create_dir_all(&records)?;
+        fs::write(
+            records.join(format!("{trial}-p1.json")),
+            serde_json::to_vec(&json!({ "trial_id": trial, "valid": true }))?,
+        )?;
+        Ok(())
+    }
+}
+
+/// The clients of the runs a batch's summary lists.
+fn summary_clients(checkout: &Checkout, batch: u8) -> Result<BTreeSet<String>, Box<dyn Error>> {
+    let summary: Value = serde_json::from_slice(&fs::read(
+        checkout.batch_directory(batch).join("summary.json"),
+    )?)?;
+    Ok(summary["runs"]
+        .as_array()
+        .ok_or("the summary lists no runs")?
+        .iter()
+        .filter_map(|run| run["client"].as_str().map(str::to_owned))
+        .collect())
+}
+
+/// #282: the batch's summary is rewritten after every counted run, and used to
+/// be made from the running client's plan alone, so the second client's run
+/// replaced the first client's summary with one that had none of its runs.
+/// The summary now covers every plan the batch folder holds, whichever client
+/// writes it.
+#[test]
+fn the_summary_covers_every_client_of_the_batch_whichever_one_writes_it() -> TestResult {
+    let checkout = Checkout::new()?;
+    // Each client's plan: the real script writes one before it stops (Claude
+    // at the version pin) and so does a dry run (Codex).
+    assert_stopped_at_the_version_pin(&checkout.real_run(1)?);
+    assert_dry_run_passed(&checkout.run_as("codex", 1, &["-DryRun"])?);
+    checkout.count_next_run("claude", 1)?;
+    checkout.count_next_run("codex", 1)?;
+    let both: BTreeSet<String> = ["claude", "codex"].map(str::to_owned).into();
+
+    for writer in ["codex", "claude"] {
+        let summary = checkout.run_as(writer, 1, &["-SummaryOnly"])?;
+        assert!(summary.status.success(), "{}", text(&summary));
+        assert_eq!(
+            summary_clients(&checkout, 1)?,
+            both,
+            "the summary written by the {writer} client lost the other client's runs"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn a_summary_only_run_calls_no_client_and_plans_nothing() -> TestResult {
+    let checkout = Checkout::new()?;
+    // No batch folder: nothing to summarise, and nothing is made.
+    let refused = checkout.run(3, &["-SummaryOnly"])?;
+    assert!(!refused.status.success(), "{}", text(&refused));
+    assert!(
+        text(&refused).contains("nothing to summarise"),
+        "{}",
+        text(&refused)
+    );
+    assert!(!checkout.batch_directory(3).exists());
+
+    // A folder with one client's plan: the other client gets none.
+    assert_stopped_at_the_version_pin(&checkout.real_run(1)?);
+    let summary = checkout.run_as("codex", 1, &["-SummaryOnly"])?;
+    assert!(summary.status.success(), "{}", text(&summary));
+    assert!(
+        !checkout
+            .batch_directory(1)
+            .join("state-codex.json")
+            .exists()
+    );
+    assert!(checkout.batch_directory(1).join("summary.json").is_file());
     Ok(())
 }

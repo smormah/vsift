@@ -122,6 +122,10 @@ param(
 
     [switch] $NoBuild,
 
+    # Regenerate summary.json and SUMMARY.md from every plan and record the
+    # batch folder holds, call no client, and stop.
+    [switch] $SummaryOnly,
+
     # Print the plan and what would run; call no client, no npm and no docker.
     # The checkout is checked exactly as in a real run, so a dry run that
     # passes is not hiding a refusal.
@@ -234,6 +238,40 @@ if (-not $NoBuild) {
     if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
 }
 if (-not (Test-Path -LiteralPath $harnessExe)) { throw "No harness at $harnessExe (build it, or drop -NoBuild)" }
+
+# --- the summary -------------------------------------------------------------
+# The batch's summary covers every client that has a plan in the batch folder,
+# not only the one running now (#282): the second client's run used to replace
+# the first client's summary with one that had none of its runs.
+function Get-StateFiles {
+    $files = @()
+    if (Test-Path -LiteralPath $BatchDirectory) {
+        $files = @(Get-ChildItem -LiteralPath $BatchDirectory -Filter 'state-*.json' -File | Sort-Object Name | ForEach-Object { $_.FullName })
+    }
+    if ($files.Count -eq 0) { $files = @($state) }
+    return $files
+}
+
+function Update-Summary {
+    $arguments = @('summarize')
+    foreach ($file in (Get-StateFiles)) { $arguments += @('--state', $file) }
+    $arguments += @(
+        '--records', $records,
+        '--output-json', (Join-Path $BatchDirectory 'summary.json'),
+        '--output-markdown', (Join-Path $BatchDirectory 'SUMMARY.md'))
+    $summary = Invoke-Harness $arguments
+    if ($summary.Code -ne 0) { Write-Warning "summarize failed: $($summary.Output)" }
+}
+
+if ($SummaryOnly) {
+    # Regenerates the batch's summary from the plans and records the folder
+    # already holds, for a summary that went stale; no client is called and no
+    # plan is made.
+    if (-not (Test-Path -LiteralPath $BatchDirectory)) { throw "No batch folder at ${BatchDirectory}: there is nothing to summarise" }
+    Update-Summary
+    Write-Step "Summary: $(Join-Path $BatchDirectory 'SUMMARY.md')."
+    exit 0
+}
 
 # --- the plan ----------------------------------------------------------------
 New-Item -ItemType Directory -Force -Path $records | Out-Null
@@ -375,14 +413,6 @@ function Invoke-CodexRun([object] $Run) {
     Copy-Item -LiteralPath $source -Destination $record
     $valid = (Get-Content -LiteralPath $record -Raw | ConvertFrom-Json).valid
     return @{ Outcome = $(if ($valid) { 'counted' } else { 'invalid' }); Note = $null; Trial = $trialId }
-}
-
-function Update-Summary {
-    $summary = Invoke-Harness @(
-        'summarize', '--state', $state, '--records', $records,
-        '--output-json', (Join-Path $BatchDirectory 'summary.json'),
-        '--output-markdown', (Join-Path $BatchDirectory 'SUMMARY.md'))
-    if ($summary.Code -ne 0) { Write-Warning "summarize failed: $($summary.Output)" }
 }
 
 $ran = 0
