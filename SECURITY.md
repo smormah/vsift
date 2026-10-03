@@ -47,3 +47,7 @@ High-priority areas include:
 - malicious media exploiting VSift's own parsing or orchestration.
 
 Vulnerabilities in FFmpeg, Whisper, operating-system components, or other upstream software should also be reported to the relevant upstream project. Reports are still welcome when VSift can reduce exposure or improve isolation.
+
+## Known issue: the Windows command file of npm and pnpm
+
+On Windows, npm and pnpm write a `vsift.cmd` file for the `vsift` command, and `cmd.exe` reads the command line of a `.cmd` file a second time: it expands `%NAME%`, can drop a double quote and acts on an unquoted `>` or `|`. A program that builds a `cmd.exe` command line (Node's `exec`, Python's `subprocess` with `shell=True`, `cmd /c`) from text it did not write, and starts `vsift` through it, can have that text run. VSift cannot change a file that npm and pnpm generate. Start `vsift` from PowerShell or Git Bash, or run the native `vsift.exe` with an argument list and no shell; the PowerShell shim, Bun and the native archive are not affected. The details, and the same advice for programs and AI agents, are in the [install guide](docs/operations/install.md#2-install-with-a-package-manager) and [known limit L-109](docs/planning/known-limits.md#l-109).

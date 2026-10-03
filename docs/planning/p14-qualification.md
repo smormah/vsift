@@ -499,7 +499,7 @@ line); every one was fixed in the tool and none by relaxing a rule.
 
 | Finding | Issue | Limit |
 | --- | --- | --- |
-| On Windows the `vsift.cmd` shim of npm and pnpm lets cmd.exe re-read arguments: `%NAME%` expanded, quotes dropped, an unquoted redirection ran as a command (`.ps1`, Bun's `.exe` and the Linux and macOS shell shim passed every hostile case) | [#257](https://github.com/smormah/vsift/issues/257) | [L-109](known-limits.md#l-109) |
+| On Windows the `vsift.cmd` shim of npm and pnpm lets cmd.exe re-read arguments: `%NAME%` expanded, quotes dropped, an unquoted redirection ran as a command (`.ps1`, Bun's `.exe` and the Linux and macOS shell shim passed every hostile case). **PR 7: documented, not fixable by VSift** (the `.cmd` file is written by npm and pnpm): `install.md`, `SECURITY.md` and the launcher's README name who is affected and the routes that avoid `cmd.exe`, launcher tests pin both, and L-109 is an accepted residual | [#257](https://github.com/smormah/vsift/issues/257) | [L-109](known-limits.md#l-109) |
 | The reviewed whisper.cpp build needs `libgomp.so.1`, absent from the minimal Ubuntu 24.04 image; `setup install` then stops at that component with `MISSING_CAPABILITY` and says nothing of the library; `install.md` did not name it | [#256](https://github.com/smormah/vsift/issues/256) | [L-110](known-limits.md#l-110) |
 | Git for Windows' GNU `tar`, first on a runner's `PATH`, reads `D:\...` as a host and cannot extract an archive; `install.md` now says to use `System32\tar.exe` or `--force-local` | (documentation) | |
 | `install.md`'s configuration folder also holds the media-tool check record, and the Linux data folder `vsift` holds only `managed-v1`; the guide's section 8 table now says so | (documentation) | |

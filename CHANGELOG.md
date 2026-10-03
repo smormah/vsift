@@ -249,6 +249,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Windows: the `vsift.cmd` file of npm and pnpm is documented as the route that must not carry
+  text you did not write** (P14 PR 7, #257, known limit L-109 now an accepted residual; documents
+  and tests only, **no launcher or product code changed**). `cmd.exe` re-reads the command line of
+  that `.cmd` file (`%NAME%` expanded, a quote dropped, an unquoted `>` or `|` run), and VSift
+  cannot change a file npm and pnpm generate. `install.md` section 2 now says who is affected (a
+  program that passes untrusted text through `cmd.exe`: Node's `exec`, Python's `shell=True`,
+  `cmd /c`, a batch file, or a person at a `cmd.exe` prompt), who is not (PowerShell, Git Bash,
+  Bun, the native archive, any caller that starts an executable with an argument list and no
+  shell) and three routes that never touch `cmd.exe`, including Node on the launcher
+  (`vsift-cli\bin\vsift.cjs`); `SECURITY.md` has a "Known issue" section and the launcher's
+  README, which ships in the package, two sentences. New launcher tests (`node --test
+  npm/test/launcher.test.cjs`) send every hostile file name and argument of the published-artifact
+  job through the launcher route and require each to arrive unchanged with no command run (the
+  detector was shown to fire through a shell), and pin the three documents to the warning and the
+  routes, so they fail on the old text. The skill is frozen for the agent trials; one sentence for
+  it is recorded as a candidate for the next freeze.
 - **A `--session-root` that names a folder VSift did not create now says so** (P14 PR 7, #261;
   found by the README's worked example with the published 0.1.0). The command already refused such
   a folder (VSift never adopts one it did not create) with a bare `INTEGRITY_FAILURE`, which reads
