@@ -217,6 +217,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   spine, verification, the threat model and the work-packets table no longer say that
   nothing is published.
 
+### Fixed
+
+- **The campaign script no longer mistakes its own output for a dirty checkout** (P14 PR 7,
+  #273; tooling only: `tools/vsift-agent-trials/campaigns/run-campaign.ps1`; the skill, grader,
+  scenarios and settings are untouched, so no freeze is voided). `run-campaign.ps1` wrote its
+  state file into `docs/planning/p14-agent-trials/batch-<n>/` and then refused to run because
+  `git status` was not empty, so a real batch never started; the dry run exited before the check
+  and hid it, and a resumed campaign hit it after every run. The check now runs first, before
+  anything is written and in a dry run too, exempts only the campaign's own output tree, still
+  refuses any other uncommitted change (tracked, untracked or staged) and an unreadable checkout,
+  and refuses a `-BatchDirectory` that is inside the checkout but outside that tree. New
+  `campaign_script` tests (Windows) run the real script against a throwaway repository and fail
+  on the old script, including the exact first-run refusal.
+
 ## [0.1.0] - 2026-10-01
 
 The first pre-release, published on 2026-10-01: the npm packages `vsift-cli`,

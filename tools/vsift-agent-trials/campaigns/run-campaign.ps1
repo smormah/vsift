@@ -11,7 +11,12 @@
 
     What it does, in order:
       1. reads the campaign configuration (a JSON file of local paths kept
-         outside the repository: campaign.example.json is the template);
+         outside the repository: campaign.example.json is the template), and
+         refuses a checkout with uncommitted changes, before it writes
+         anything: the records name a committed state. The campaign's own
+         output (docs/planning/p14-agent-trials) is not a change, so a state
+         file written earlier, or by a run that was stopped, does not count.
+         A dry run does the same check;
       2. builds the harness (cargo build --release) and checks the pinned
          client version;
       3. provides the published install: for Claude Code, `vsift-agent-trials
@@ -103,6 +108,8 @@ param(
     [switch] $NoBuild,
 
     # Print the plan and what would run; call no client, no npm and no docker.
+    # The checkout is checked exactly as in a real run, so a dry run that
+    # passes is not hiding a refusal.
     [switch] $DryRun
 )
 
@@ -160,6 +167,37 @@ function Test-Stop {
     return $false
 }
 
+# --- the checkout ------------------------------------------------------------
+# The campaign's own output tree: the batch directories hold the state files,
+# the freeze, the records and the summaries this script writes (#273). They are
+# the result of the work, not the code under test, so they never count as an
+# uncommitted change; anything else does. The check runs before anything is
+# written and in a dry run too, so the dry run cannot hide a refusal.
+$campaignOutput = 'docs/planning/p14-agent-trials'
+
+function Test-PathUnder([string] $Path, [string] $Parent) {
+    $prefix = $Parent.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    return $Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-CleanCheckout {
+    # A batch directory inside the checkout but outside the campaign's output
+    # tree would be written by this script and then be read as a change, or
+    # would have to be exempted and hide a real change.
+    $batchFull = [IO.Path]::GetFullPath($BatchDirectory)
+    $outputFull = [IO.Path]::GetFullPath((Join-Path $repository $campaignOutput))
+    if ((Test-PathUnder $batchFull $repository) -and -not (Test-PathUnder $batchFull $outputFull)) {
+        throw "-BatchDirectory is inside the checkout but not under ${campaignOutput}: use the default, or a folder outside the checkout"
+    }
+    $changes = @(& git -C $repository status --porcelain -- . ":(exclude)$campaignOutput")
+    if ($LASTEXITCODE -ne 0) { throw 'git status failed: the checkout cannot be read, so it cannot be shown to be clean' }
+    if ($changes.Count -gt 0) {
+        $shown = ($changes | Select-Object -First 10) -join [Environment]::NewLine
+        throw ("The checkout has uncommitted changes outside $campaignOutput (the campaign's own output): a batch runs at a committed state, which the records name. Commit or stash them first:" + [Environment]::NewLine + $shown)
+    }
+}
+Assert-CleanCheckout
+
 # --- the harness -------------------------------------------------------------
 if (-not $NoBuild) {
     Write-Step 'Building the harness'
@@ -191,9 +229,6 @@ if ($DryRun) {
 
 # --- the client and its published install ----------------------------------
 $commit = Get-HeadCommit
-if ((& git -C $repository status --porcelain)) {
-    throw 'The checkout has uncommitted changes: a batch runs at a committed state, which the records name'
-}
 if ($Client -eq 'claude') {
     $claude = $configuration.claudeExecutable
     $versionLine = (& $claude --version) -join ' '

@@ -808,7 +808,10 @@ install prefix and the Docker images):
 4. Copy `tools/vsift-agent-trials/campaigns/campaign.example.json` to the neutral root (it is outside the
    repository on purpose: it holds local paths), edit every path, and keep it out of git.
 5. A committed, clean checkout at the commit under test (the records name it); for batches 2 and 3 the candidate
-   must already be published (the install is from the registry).
+   must already be published (the install is from the registry). The script checks this first, before it writes
+   anything and in a dry run too, and refuses any uncommitted change except under `docs/planning/p14-agent-trials/`,
+   the campaign's own output (state files, freeze, records, summaries), so a stopped or resumed campaign is not
+   mistaken for a dirty checkout (#273). No ignore rule in `.git/info/exclude` is needed.
 
 **For each batch**, from the repository root, one command per client (run Claude Code's on Windows and Codex's in a
 second terminal if you like: they write separate state files):
@@ -819,7 +822,7 @@ pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 1 -Client claude
 pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 1 -Client codex  -Version 0.1.0 -Config <your campaign.json> -MaxRuns 4
 ```
 
-`-DryRun` prints the plan and calls no client, npm or Docker (it builds the harness and writes the state file). The first real command runs the four pilots: read
+`-DryRun` prints the plan and calls no client, npm or Docker (it checks the checkout exactly as a real run does, builds the harness and writes the state file). The first real command runs the four pilots: read
 `docs/planning/p14-agent-trials/batch-1/SUMMARY.md` and the pilot records before the rest (below). Then run
 the same commands without `-MaxRuns`. The script builds the harness, checks the pinned version, installs
 `vsift-cli@<version>` (Claude Code) or builds the clean-install images (Codex), writes the freeze, and loops:

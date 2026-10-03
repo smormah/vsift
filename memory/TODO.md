@@ -73,10 +73,10 @@ write`). **Before PR 12:** register the two stable checks in `STABLE_CHECKS`
 
 ## Tracked issues and gates
 
-- **Open:** #17 (P14), #219, #224 (L-095), #188 (SEC-T01), #232, #246 (deferred), #256, #257
-  (PR 7), #258 (P11's durable stage on the published binary), #263 (a stalled Windows run);
-  #170-#178 (register); #159, #150, #147; flaky tests #128, #206, #253 (a managed-store kill
-  test on Windows), #268 (a macOS SIGTERM test); #204.
+- **Open:** #17 (P14), #219, #224 (L-095), #188 (SEC-T01), #232, #246 (deferred), #256, #257,
+  #261 (PR 7; #273 is fixed), #258 (P11's durable stage on the published binary), #263 (a
+  stalled Windows run); #170-#178 (register); #159, #150, #147; flaky tests #128, #206, #253 (a
+  managed-store kill test on Windows), #268 (a macOS SIGTERM test); #204.
 - **Opt-in real-tool paths** (`--ignored`) run a Cargo-built binary unless `VSIFT_E2E_BINARY`
   names an installed one; `P14 journeys` and `P13 managed smoke` run the published one weekly
   (L-042); a failed run is a finding: issue first, then rerun. **P14 tools:**

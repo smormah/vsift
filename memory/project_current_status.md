@@ -97,9 +97,9 @@ the launcher's digest check, `vsift --version`); plays the user's part; never ru
 Bash only); runs a **cold agent** (`C-01..C-03`: no skill, no documentation; safety a hard gate,
 a gap report); keeps **hold-outs** (`H-01`, `H-02`) apart; **freezes** the skill, grader,
 scenarios and settings by digest (`freeze write|check`); captures usage; plans the batches (20,
-34, 18 runs: `campaign`, `summarize`, `campaigns/run-campaign.ps1`). **Weak points:** L-117..L-120
-(not clean-machine trials; a text-matching cold grader; two hold-outs; usage figures are the
-clients'). **Not done:** any batch (each waits for the go).
+34, 18 runs: `campaign`, `summarize`, `campaigns/run-campaign.ps1`; #273, its dirty-checkout
+refusal, is fixed in PR 7). **Weak points:** L-117..L-120 (not clean-machine trials; a
+text-matching cold grader; two hold-outs; the clients' usage figures). **Not done:** any batch.
 
 ## P13 in one view (complete)
 
