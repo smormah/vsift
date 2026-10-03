@@ -142,9 +142,66 @@ fn opening_is_read_only_and_rejects_relative_or_unowned_roots() -> TestResult {
     fs::remove_file(fixture.path.join(OWNERSHIP_FILE))?;
     assert_eq!(
         FilesystemSessionStore::open_existing(&fixture.path).err(),
-        Some(SessionStoreOpenError::InvalidOwnership)
+        Some(SessionStoreOpenError::OwnershipMarkerMissing)
     );
     assert!(fixture.path.join(SESSIONS_DIRECTORY).is_dir());
+    Ok(())
+}
+
+/// A marker that is absent (a directory `VSift` did not create) and a marker
+/// that is present but wrong (damage) are different findings, so a person who
+/// named their own folder is not told that stored data is damaged (#261).
+#[test]
+fn an_absent_marker_is_told_apart_from_a_marker_that_is_wrong() -> TestResult {
+    let fixture = Fixture::new()?;
+    let marker = fixture.path.join(OWNERSHIP_FILE);
+    let original = fs::read(&marker)?;
+
+    for wrong in [
+        b"".as_slice(),
+        b"not json".as_slice(),
+        br#"{"schema_version":1,"application":"other","layout_version":1,"admission_capacity":4}"#
+            .as_slice(),
+    ] {
+        fs::remove_file(&marker)?;
+        fs::write(&marker, wrong)?;
+        assert_eq!(
+            FilesystemSessionStore::open_existing(&fixture.path).err(),
+            Some(SessionStoreOpenError::InvalidOwnership),
+            "{}",
+            String::from_utf8_lossy(wrong)
+        );
+    }
+
+    // A directory standing where the marker should be is not an absent marker.
+    fs::remove_file(&marker)?;
+    fs::create_dir(&marker)?;
+    assert_eq!(
+        FilesystemSessionStore::open_existing(&fixture.path).err(),
+        Some(SessionStoreOpenError::InvalidOwnership)
+    );
+    fs::remove_dir(&marker)?;
+
+    assert_eq!(
+        FilesystemSessionStore::open_existing(&fixture.path).err(),
+        Some(SessionStoreOpenError::OwnershipMarkerMissing)
+    );
+    fs::write(&marker, original)?;
+    assert!(FilesystemSessionStore::open_existing(&fixture.path).is_ok());
+    Ok(())
+}
+
+/// A root that was opened and then loses its marker underneath a running
+/// operation is damage, not a folder `VSift` did not create.
+#[test]
+fn a_marker_removed_from_an_opened_root_is_integrity_damage() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+    fs::remove_file(fixture.path.join(OWNERSHIP_FILE))?;
+    assert!(matches!(
+        store.try_admit(1),
+        Err(SessionStorageError::IntegrityFailure)
+    ));
     Ok(())
 }
 
@@ -460,7 +517,7 @@ fn an_opener_waits_for_an_active_creator_and_then_adopts_the_root() -> TestResul
     let creator = CreatorInProgress::new()?;
     assert_eq!(
         FilesystemSessionStore::open_existing(&creator.path).err(),
-        Some(SessionStoreOpenError::InvalidOwnership)
+        Some(SessionStoreOpenError::OwnershipMarkerMissing)
     );
     assert_eq!(
         root_provisioning_state(&creator.path, SystemTime::now(), Duration::from_secs(10)),
@@ -527,10 +584,10 @@ fn a_creator_that_stopped_leaves_a_root_that_is_rejected_at_once() -> TestResult
         matches!(
             result,
             Err(SessionRootError::Store(
-                SessionStoreOpenError::InvalidOwnership
+                SessionStoreOpenError::OwnershipMarkerMissing
             ))
         ),
-        "expected InvalidOwnership"
+        "expected OwnershipMarkerMissing"
     );
     assert!(started.elapsed() < Duration::from_secs(5));
     Ok(())
@@ -554,10 +611,10 @@ fn an_empty_unmarked_directory_is_never_adopted() -> TestResult {
         matches!(
             result,
             Err(SessionRootError::Store(
-                SessionStoreOpenError::InvalidOwnership
+                SessionStoreOpenError::OwnershipMarkerMissing
             ))
         ),
-        "expected InvalidOwnership"
+        "expected OwnershipMarkerMissing"
     );
     assert!(started.elapsed() >= Duration::from_millis(100));
     assert_eq!(fs::read_dir(&fresh.path)?.count(), 0, "nothing was written");

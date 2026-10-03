@@ -134,7 +134,15 @@ pub enum SessionStoreOpenError {
     RootNotDirectory,
     /// Unix permission bits allow access outside the owning user.
     RootNotPrivate,
-    /// The ownership marker is absent, malformed, or not a supported `VSift` marker.
+    /// The directory holds no ownership marker at all. `VSift` writes the marker
+    /// last when it creates a root, so a directory without one was made by
+    /// someone else (or is a creator's first step) and is never adopted. It is
+    /// kept apart from [`Self::InvalidOwnership`] so a person who pointed
+    /// `--session-root` at a folder of their own is told so, not that stored
+    /// data is damaged.
+    OwnershipMarkerMissing,
+    /// The ownership marker is present but malformed, linked, unreadable, or not a
+    /// supported `VSift` marker.
     InvalidOwnership,
     /// A required contained directory or stable lock anchor is invalid.
     InvalidLayout,
@@ -155,6 +163,7 @@ impl fmt::Display for SessionStoreOpenError {
             Self::RootUnavailable => "session storage root is unavailable",
             Self::RootNotDirectory => "session storage root is not a directory",
             Self::RootNotPrivate => "session storage root permissions are not private",
+            Self::OwnershipMarkerMissing => "session storage root has no ownership marker",
             Self::InvalidOwnership => "session storage ownership marker is invalid",
             Self::InvalidLayout => "session storage layout is invalid",
             Self::RootAlreadyExists => "session storage root already exists",
@@ -591,9 +600,11 @@ fn create_private_child_directory(parent: &Dir, name: &Path) -> io::Result<()> {
 fn map_open_error(error: SessionStoreOpenError) -> SessionStorageError {
     match error {
         SessionStoreOpenError::RootNotPrivate => SessionStorageError::AccessDenied,
-        SessionStoreOpenError::InvalidOwnership | SessionStoreOpenError::InvalidLayout => {
-            SessionStorageError::IntegrityFailure
-        }
+        // A root that opened and then lost its marker was damaged underneath
+        // a running operation, which is integrity damage like any other.
+        SessionStoreOpenError::OwnershipMarkerMissing
+        | SessionStoreOpenError::InvalidOwnership
+        | SessionStoreOpenError::InvalidLayout => SessionStorageError::IntegrityFailure,
         _ => SessionStorageError::Io,
     }
 }

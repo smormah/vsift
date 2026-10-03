@@ -157,7 +157,8 @@ others validated the still-unmarked root and failed with `InvalidOwnership`.
   written, synced and the root validated; the lock file is then removed, so the
   published layout is unchanged. Failure releases the lock and rolls back as before.
 - **Openers.** `open_session_root` (both `CreateIfMissing` and `ExistingOnly`) treats
-  `InvalidOwnership`/`InvalidLayout` as possibly unfinished only while the provisioning
+  `InvalidOwnership`/`InvalidLayout` (since P14 PR 7, #261, also `OwnershipMarkerMissing`,
+  the split-out case of a marker that is absent rather than wrong) as possibly unfinished only while the provisioning
   lock is held, or while the root changed within 10 s and holds nothing beyond the
   creator's first steps. It then retries the complete `open_existing` validation with
   a 2 ms doubling backoff (50 ms cap) for at most 5 s, then fails with the typed

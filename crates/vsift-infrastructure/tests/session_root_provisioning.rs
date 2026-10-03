@@ -297,7 +297,7 @@ fn an_unmarked_directory_with_content_is_rejected_and_left_untouched() -> TestRe
     create_private_directory(&root)?;
     fs::write(root.join("notes.txt"), b"not a vsift root")?;
 
-    assert_rejected_promptly(&root, SessionStoreOpenError::InvalidOwnership);
+    assert_rejected_promptly(&root, SessionStoreOpenError::OwnershipMarkerMissing);
 
     assert_eq!(sorted_names(&root)?, ["notes.txt"]);
     assert_eq!(fs::read(root.join("notes.txt"))?, b"not a vsift root");

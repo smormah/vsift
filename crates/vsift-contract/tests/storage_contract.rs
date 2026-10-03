@@ -1,15 +1,18 @@
-//! Conformance of the refusal of an existing folder other accounts can access
-//! against the published v1 envelope schema and its frozen example.
+//! Conformance of the refusal of an existing folder other accounts can access,
+//! and of the refusal of a session root `VSift` did not create, against the
+//! published v1 envelope schema and their frozen examples.
 //!
-//! The example is the result an agent receives when `setup configure` meets a
-//! per-user configuration folder that inherited access for other accounts.
+//! The first example is the result an agent receives when `setup configure`
+//! meets a per-user configuration folder that inherited access for other
+//! accounts; the second, when `session list` meets a `--session-root` folder
+//! that holds no `VSift` ownership marker.
 
 use std::{fs, io, path::PathBuf};
 
 use serde_json::Value;
 use vsift_contract::{
     CommandName, OperationResponse, PrivateFolder, TerminalEventResponse,
-    non_private_folder_summary,
+    UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
 };
 use vsift_domain::FailureCode;
 
@@ -48,6 +51,23 @@ fn a_refused_configuration_folder_matches_the_frozen_example() -> TestResult {
     ))?;
     validate("operation-response.schema.json", &response)?;
     assert_eq!(response, load("examples/storage-not-private.json")?);
+    Ok(())
+}
+
+/// The answer to a session root `VSift` did not create (#261): the failure code
+/// is the 0.1.0 one, `INTEGRITY_FAILURE`, and the remediation explains it.
+#[test]
+fn a_session_root_vsift_did_not_create_matches_the_frozen_example() -> TestResult {
+    let response = OperationResponse::<Value>::failure_with_remediation(
+        CommandName::SessionList.identifier(),
+        FailureCode::IntegrityFailure,
+        UNOWNED_SESSION_ROOT_REMEDIATION.to_owned(),
+    );
+    let value = serde_json::to_value(&response)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value, load("examples/session-root-unowned.json")?);
+    let event = serde_json::to_value(TerminalEventResponse::new(response))?;
+    validate("terminal-event.schema.json", &event)?;
     Ok(())
 }
 

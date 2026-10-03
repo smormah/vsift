@@ -283,7 +283,11 @@ user's folder; a real result names the absolute path on the machine that ran it.
 `storage-not-private.json` is the `setup configure` failure an agent receives when
 the per-user configuration folder already exists and other accounts can access it;
 it is checked by `vsift-contract`'s `storage_contract` and by the CLI's Windows
-`private_storage_cli_contract`.
+`private_storage_cli_contract`. `session-root-unowned.json` is the `session list`
+failure when `--session-root` names an existing folder VSift did not create (it holds no
+ownership marker): `INTEGRITY_FAILURE`, as in 0.1.0, with the remediation that says the
+folder is not VSift's and what to do; it is checked by `storage_contract` and by the CLI's
+`foreign_session_root_cli_contract`.
 
 The Rust types that produce these documents live in the `vsift-contract` crate
 (`crates/vsift-contract`), which every VSift host uses so they all emit identical JSON.

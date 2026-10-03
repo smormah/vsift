@@ -64,7 +64,9 @@
 //! - **Verification:** [`media_tool_verification_summary`], the fixed-prose
 //!   remediation for a failed automatic media-tool preflight.
 //! - **Storage:** [`non_private_folder_summary`], the fixed-prose remediation
-//!   for an existing [`PrivateFolder`] that other accounts can access.
+//!   for an existing [`PrivateFolder`] that other accounts can access, and
+//!   [`UNOWNED_SESSION_ROOT_REMEDIATION`] for a session root `VSift` did not
+//!   create.
 //! - **Text:** [`sanitize_untrusted_text`], the one rule for placing untrusted
 //!   provider text in public output; [`render_hidden_characters`], which
 //!   writes every [`is_hidden_character`] as `<U+XXXX>` for the `display_text`
@@ -221,7 +223,7 @@ pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, SavedSetupPlan,
     SetupCheckResponse, SetupPlanResponse, explicit_path_option,
 };
-pub use storage::{PrivateFolder, non_private_folder_summary};
+pub use storage::{PrivateFolder, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary};
 pub use stream::{
     EventKind, EvidenceEventResponse, EvidenceRecordType, EvidenceStream, TranscriptEvidenceStream,
     TranscriptStreamData,

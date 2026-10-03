@@ -840,8 +840,17 @@ fn layout_error(error: &io::Error, damage: SessionStoreOpenError) -> SessionStor
 }
 
 pub(super) fn validate_root_layout(root: &Dir) -> Result<OwnershipMarker, SessionStoreOpenError> {
-    let ownership = open_regular_file(root, OWNERSHIP_FILE, false)
-        .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidOwnership))?;
+    // A marker that is not there at all is a directory `VSift` did not create
+    // (the creator writes the marker last), which a person must be able to tell
+    // from a marker that is there and wrong: only the second is damage.
+    let ownership = open_regular_file(root, OWNERSHIP_FILE, false).map_err(|error| {
+        let damage = if error.kind() == io::ErrorKind::NotFound {
+            SessionStoreOpenError::OwnershipMarkerMissing
+        } else {
+            SessionStoreOpenError::InvalidOwnership
+        };
+        layout_error(&error, damage)
+    })?;
     let bytes = read_bounded(ownership)
         .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidOwnership))?;
     let marker: OwnershipMarker =

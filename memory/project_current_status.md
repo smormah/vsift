@@ -99,7 +99,7 @@ a gap report; **Claude strict** (`vsift` alone; its pilots stalled), **Codex rea
 helpers, inside the container); realistic Claude needs an isolated machine, so the baseline compares
 only within a client: L-125); keeps **hold-outs** apart; **freezes** the skill, grader, scenarios and
 settings (`freeze write|check`); captures usage; plans the batches (`campaign`, `summarize`,
-`run-campaign.ps1`; its checkout check, #273, is fixed). **Weak points:** L-117..L-120. **Not done:** any batch.
+`run-campaign.ps1`; PR 7 fixed its checkout check, #273, and #261). **Weak points:** L-117..L-120. **Not done:** any batch.
 
 ## P13 in one view (complete)
 

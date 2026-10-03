@@ -198,8 +198,11 @@ fn adopt_existing_root(
     loop {
         let rejection = match FilesystemSessionStore::open_existing(root) {
             Ok(store) => return Ok(store),
+            // A creator writes the marker last, so a root still being
+            // provisioned shows no marker yet: that is the common case here.
             Err(
-                rejection @ (SessionStoreOpenError::InvalidOwnership
+                rejection @ (SessionStoreOpenError::OwnershipMarkerMissing
+                | SessionStoreOpenError::InvalidOwnership
                 | SessionStoreOpenError::InvalidLayout
                 | SessionStoreOpenError::RootNotPrivate),
             ) => rejection,
