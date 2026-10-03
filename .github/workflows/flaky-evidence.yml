@@ -25,7 +25,7 @@ jobs:
   kill-windows:
     name: "#253 kill test, windows-latest"
     runs-on: windows-latest
-    timeout-minutes: 120
+    timeout-minutes: 110
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,8 +41,9 @@ jobs:
       - name: Run the kill test many times at once
         shell: pwsh
         env:
-          RUNS: "200"
+          RUNS: "120"
           PARALLEL: "6"
+          BUDGET_MINUTES: "70"
         run: |
           $ErrorActionPreference = 'Continue'
           $exe = Get-Content build.json | ForEach-Object { if ($_.StartsWith('{')) { $_ | ConvertFrom-Json } } |
@@ -50,24 +51,28 @@ jobs:
             Select-Object -Last 1 -ExpandProperty executable
           Write-Host "test binary: $exe"
           $name = 'kill::installs_killed_by_the_operating_system_at_spread_moments_are_consistent'
-          $results = 1..([int]$env:RUNS) | ForEach-Object -Parallel {
+          $stopAt = (Get-Date).AddMinutes([int]$env:BUDGET_MINUTES)
+          $ran = 0; $failed = 0; $noted = 0; $skipped = 0
+          1..([int]$env:RUNS) | ForEach-Object -Parallel {
+            if ((Get-Date) -gt $using:stopAt) { return [pscustomobject]@{ Run = $_; Code = -1; Text = ''; Skipped = $true; Seconds = 0 } }
+            $started = Get-Date
             $text = & $using:exe --exact $using:name --nocapture 2>&1 | Out-String
-            [pscustomobject]@{ Run = $_; Code = $LASTEXITCODE; Text = $text }
-          } -ThrottleLimit ([int]$env:PARALLEL)
-          $failed = @($results | Where-Object { $_.Code -ne 0 })
-          $noted = @($results | Where-Object { $_.Text -match 'EVIDENCE253' })
-          Write-Host "runs: $($results.Count); failed: $($failed.Count); with evidence lines: $($noted.Count)"
-          foreach ($result in $failed) {
-            Write-Host "::group::FAILED run $($result.Run) (exit $($result.Code))"
-            Write-Host $result.Text
-            Write-Host "::endgroup::"
+            [pscustomobject]@{ Run = $_; Code = $LASTEXITCODE; Text = $text; Skipped = $false; Seconds = [int]((Get-Date) - $started).TotalSeconds }
+          } -ThrottleLimit ([int]$env:PARALLEL) | ForEach-Object {
+            if ($_.Skipped) { $skipped++; return }
+            $ran++
+            $hasEvidence = $_.Text -match 'EVIDENCE253'
+            if ($hasEvidence) { $noted++ }
+            if ($_.Code -ne 0) { $failed++ }
+            if ($_.Code -ne 0 -or $hasEvidence) {
+              Write-Host "::group::run $($_.Run): exit $($_.Code) after $($_.Seconds) s$(if ($hasEvidence) { ' (evidence lines)' })"
+              Write-Host $_.Text
+              Write-Host "::endgroup::"
+            } else {
+              Write-Host "run $($_.Run): passed in $($_.Seconds) s"
+            }
           }
-          foreach ($result in ($noted | Where-Object { $_.Code -eq 0 } | Select-Object -First 10)) {
-            Write-Host "::group::PASSED WITH EVIDENCE run $($result.Run)"
-            Write-Host $result.Text
-            Write-Host "::endgroup::"
-          }
-          Write-Host "RESULT failed=$($failed.Count) noted=$($noted.Count) runs=$($results.Count)"
+          Write-Host "RESULT ran=$ran failed=$failed with_evidence=$noted skipped=$skipped"
 
   sigterm-macos:
     name: "#268 sigterm test, macos-latest"
