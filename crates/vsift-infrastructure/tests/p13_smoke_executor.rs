@@ -36,7 +36,7 @@ use vsift_application::{
     ReviewedCompatibilityPolicy, SmokeStageOutcome, StageDisposal, StageRetentionReason,
     smoke_before_activation,
 };
-use vsift_domain::{ArtifactIntegrity, ManagedComponent};
+use vsift_domain::{ArtifactIntegrity, ManagedComponent, SharedLibraryName};
 use vsift_infrastructure::{
     ArchiveInventoryBounds, HostIsolation, ManagedArtifactStore, ManagedCandidateFailure,
     ManagedRuntimeRole, MediaProviderConformance, MediaSmokeRequest, ProcessCancellation,
@@ -431,6 +431,11 @@ async fn passing_media_tools_run_from_the_stage_and_stay_unactivated() -> TestRe
     Ok(())
 }
 
+/// The library the loader-failure fixture names.
+fn libgomp() -> TestResult<SharedLibraryName> {
+    SharedLibraryName::parse("libgomp.so.1").ok_or_else(|| "libgomp.so.1 is a library name".into())
+}
+
 /// Each banner failure is typed; the stage is removed and nothing activated.
 #[tokio::test]
 async fn banner_failures_are_typed_and_the_stage_is_discarded() -> TestResult {
@@ -441,6 +446,10 @@ async fn banner_failures_are_typed_and_the_stage_is_discarded() -> TestResult {
         ("flood", 30, Reason::OutputOverBound),
         ("hang", 2, Reason::DeadlineExceeded),
         ("fail", 30, Reason::ProviderFailed),
+        // The loader's missing-library words name the library (#256); the
+        // same words around a hostile "name" name nothing.
+        ("missinglib", 30, Reason::MissingSharedLibrary(libgomp()?)),
+        ("hostilelib", 30, Reason::ProviderFailed),
     ] {
         let root = TestRoot::new()?;
         let store = root.store()?;
@@ -952,6 +961,18 @@ async fn a_staged_recognizer_and_model_fail_together() -> TestResult {
             CompatibilitySmokeFailure {
                 check: Check::Banner,
                 reason: Reason::DeadlineExceeded,
+            },
+        ),
+        // #256: the reviewed whisper.cpp build on a minimal Ubuntu image
+        // cannot start without the OpenMP runtime; the loader says which
+        // library, and the smoke carries that name.
+        (
+            "missinglib",
+            30,
+            FixedVerifiers::passing(),
+            CompatibilitySmokeFailure {
+                check: Check::Banner,
+                reason: Reason::MissingSharedLibrary(libgomp()?),
             },
         ),
     ] {

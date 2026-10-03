@@ -14,7 +14,7 @@ use vsift_application::{
     ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport, InstallFailureReason,
     InstallStep, ManagedInstallReport, StageDisposal, StageSweep, VersionRemovalReport,
 };
-use vsift_domain::ManagedComponent;
+use vsift_domain::{ManagedComponent, SharedLibraryName};
 
 use crate::lifecycle::InstallCleanupResponse;
 
@@ -57,6 +57,12 @@ struct InstallComponentResponse {
     reason: Option<&'static str>,
     failure_code: Option<&'static str>,
     smoke_check: Option<&'static str>,
+    /// The shared library a program could not start without, read from its
+    /// own error output and validated as a plain library file name (#256).
+    /// Absent unless a failure named one, so earlier readers of the object
+    /// see nothing new.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    missing_shared_library: Option<String>,
     stage: Option<&'static str>,
     retention_reason: Option<&'static str>,
 }
@@ -121,6 +127,13 @@ fn component_response(report: &ComponentInstallReport) -> InstallComponentRespon
             InstallFailureReason::Smoke(smoke) => Some(smoke.check.identifier()),
             _ => None,
         }),
+        missing_shared_library: failure.and_then(|failure| match failure.reason {
+            InstallFailureReason::Smoke(smoke) => smoke
+                .reason
+                .missing_shared_library()
+                .map(|name| name.as_str().to_owned()),
+            _ => None,
+        }),
         stage,
         retention_reason,
     }
@@ -170,10 +183,13 @@ pub fn setup_install_failure_summary(
         InstallFailureReason::Storage => format!(
             "VSift could not write its private managed folder while installing {component} ({reason}); the version selected before is unchanged. Free disk space or fix the folder's permissions, then run the same setup install again. {manual}"
         ),
-        InstallFailureReason::Smoke(smoke) => format!(
-            "The reviewed {component} did not pass its compatibility check on this machine (the {} check, {reason}), so it was not installed. {manual}",
-            smoke.check.identifier()
-        ),
+        InstallFailureReason::Smoke(smoke) => match smoke.reason.missing_shared_library() {
+            Some(library) => missing_library_summary(component, smoke.check.identifier(), library),
+            None => format!(
+                "The reviewed {component} did not pass its compatibility check on this machine (the {} check, {reason}), so it was not installed. {manual}",
+                smoke.check.identifier()
+            ),
+        },
         InstallFailureReason::Cancelled => format!(
             "The installation was cancelled at {component}; the components already installed stay installed and nothing partial was kept. Run the same setup install again to continue."
         ),
@@ -181,4 +197,27 @@ pub fn setup_install_failure_summary(
             format!("{component} was not installed because an earlier component failed. {manual}")
         }
     }
+}
+
+/// Fixed-prose remediation for a reviewed tool that could not start because
+/// a shared library is not installed (#256).
+///
+/// The library's file name is the only text taken from the program's own
+/// error output, and only after [`SharedLibraryName`] validated it as a plain
+/// file name. The package is named only where it is known: the OpenMP runtime
+/// `libgomp.so.1` is Ubuntu's and Debian's `libgomp1`, which a minimal
+/// container image lacks. For any other library the text says what a person
+/// can rely on and no more: install the package that provides it. The
+/// managed installation is qualified on Ubuntu 24.04 only.
+fn missing_library_summary(component: &str, check: &str, library: SharedLibraryName) -> String {
+    let fix = if library.as_str() == "libgomp.so.1" {
+        "On Ubuntu and Debian install it with `sudo apt-get install libgomp1` (a minimal container image does not include it)".to_owned()
+    } else {
+        format!(
+            "Install the package that provides {library} with your system's package manager (the managed installation is qualified on Ubuntu 24.04 only)"
+        )
+    };
+    format!(
+        "The reviewed {component} could not start on this machine: it needs the shared library {library}, which is not installed here (the {check} check; the program's own error output says so), so it was not installed. {fix}, then run the same setup install again: it continues from this component. Or install the tool yourself and register it with setup configure (the model with setup configure-model), then run setup check."
+    )
 }

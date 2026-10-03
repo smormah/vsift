@@ -29,7 +29,7 @@ use vsift_application::{
 use vsift_domain::{
     ArtifactIntegrity, DependencyState, DependencyStatus, FailureCode, ManagedArtifactFormat,
     ManagedComponent, ManagedTarget, ProgressStage, ProgressUpdate, RuntimeDependency,
-    RuntimeReadiness,
+    RuntimeReadiness, SharedLibraryName,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -497,7 +497,14 @@ async fn a_companion_that_cannot_be_fetched_discards_the_staged_recognizer() -> 
 #[tokio::test]
 async fn a_failed_smoke_reports_each_candidate_and_activates_none() -> TestResult {
     let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let libgomp = SharedLibraryName::parse("libgomp.so.1").ok_or("a library name")?;
     for (reason, code) in [
+        // #256: a tool the loader could not start is a missing capability like
+        // any other provider failure; the library name only travels with it.
+        (
+            CompatibilitySmokeFailureReason::MissingSharedLibrary(libgomp),
+            FailureCode::MissingCapability,
+        ),
         (
             CompatibilitySmokeFailureReason::FixtureMismatch,
             FailureCode::MissingCapability,

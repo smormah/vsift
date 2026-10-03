@@ -5,7 +5,7 @@ use std::{fmt::Write as _, future::Future};
 use sha2::{Digest, Sha256};
 use vsift_domain::{
     ArtifactIntegrity, DependencyStatus, ManagedArtifactFormat, ManagedComponent, ManagedTarget,
-    RuntimeDependency, RuntimeReadiness,
+    RuntimeDependency, RuntimeReadiness, SharedLibraryName,
 };
 
 use crate::RuntimeDiagnosis;
@@ -443,6 +443,13 @@ pub enum CompatibilitySmokeFailureReason {
     /// A provider could not start, crashed, exited unsuccessfully or rejected
     /// the fixture.
     ProviderFailed,
+    /// A provider could not start because a shared library it needs is not
+    /// installed on this machine, and its own error output named the library
+    /// in the operating system loader's fixed words (#256). It is
+    /// [`Self::ProviderFailed`] for every public purpose (the same
+    /// [`Self::identifier`], the same failure code); the name is carried only
+    /// so the remediation can say what to install.
+    MissingSharedLibrary(SharedLibraryName),
     /// A provider ran, but its results differ from the fixture's recorded
     /// truth.
     FixtureMismatch,
@@ -468,11 +475,21 @@ impl CompatibilitySmokeFailureReason {
             Self::DeadlineExceeded => "deadline_exceeded",
             Self::UnexpectedExtraFile => "unexpected_extra_file",
             Self::ChangedContent => "changed_content",
-            Self::ProviderFailed => "provider_failed",
+            Self::ProviderFailed | Self::MissingSharedLibrary(_) => "provider_failed",
             Self::FixtureMismatch => "fixture_mismatch",
             Self::Preparation => "preparation",
             Self::InvalidRequest => "invalid_request",
             Self::Cancelled => "cancelled",
+        }
+    }
+
+    /// The shared library a provider could not start without, when its own
+    /// error output named one.
+    #[must_use]
+    pub const fn missing_shared_library(self) -> Option<SharedLibraryName> {
+        match self {
+            Self::MissingSharedLibrary(name) => Some(name),
+            _ => None,
         }
     }
 }

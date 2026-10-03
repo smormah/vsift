@@ -68,7 +68,7 @@ claims registry (`public-claims.json`, rung `now`), checked on every pull reques
 macOS 15, Ubuntu 24.04; scrubbed `PATH`); **RQ-02** the extracted archives; **RQ-03**
 `--artifact-dir` with no network; **RQ-04** upgrade, the uninstall walk and a frozen v0.1.0
 compatibility test; **RQ-19** a credential-free second verifier; all `passed` in the ledger.
-**Findings:** #256 (minimal Ubuntu lacks `libgomp1`), #257 (Windows `.cmd` shims re-parse hostile
+**Findings:** #256 (minimal Ubuntu lacks `libgomp1`; the error now names it), #257 (Windows `.cmd` shims re-parse hostile
 arguments; documented in `install.md` and `SECURITY.md`, L-109 accepted); L-109 to L-112.
 
 **PR 3 (merged, #254; nothing published).** ADR 0024's note; results in plan section 17.

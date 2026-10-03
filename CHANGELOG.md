@@ -249,6 +249,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **`setup install` names a missing shared library** (P14 PR 7, #256; found by P14 PR 2 in the
+  pinned minimal `ubuntu:24.04` image). The reviewed whisper.cpp build needs the OpenMP runtime
+  `libgomp.so.1`; without it `setup install` stopped at that component with `MISSING_CAPABILITY`
+  and a remediation that only said the banner check failed. When a reviewed tool fails its banner
+  check and its own error output says, in the GNU loader's fixed words, which library it could not
+  find, the failure now names it: the component gains the optional `missing_shared_library` (a
+  validated plain file name, `setup-install.schema.json`; absent otherwise and in every earlier
+  release) and the remediation says what to install (`sudo apt-get install libgomp1` on Ubuntu and
+  Debian; for another library, to install the package that provides it, naming none), then to run
+  the same `setup install` again. The public `reason` stays `provider_failed` and the code
+  `MISSING_CAPABILITY`. The program's output is untrusted: only a name that passes a strict file-name
+  check is taken (a path, a command line or a terminal escape in its place leaves the field out),
+  and nothing else of the output is kept (new domain value `SharedLibraryName`). New v1 example
+  `setup-install.missing-library.json`, human output and snapshots, install guide prerequisites,
+  `cli-v1.md`. Known limit L-110 is closed and deleted. Tests drive the real smoke path with a
+  fixture tool that fails like the loader does (and one that fails with a hostile "name").
 - **Windows: the `vsift.cmd` file of npm and pnpm is documented as the route that must not carry
   text you did not write** (P14 PR 7, #257, known limit L-109 now an accepted residual; documents
   and tests only, **no launcher or product code changed**). `cmd.exe` re-reads the command line of

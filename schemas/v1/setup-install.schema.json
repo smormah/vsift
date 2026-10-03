@@ -131,6 +131,12 @@
             { "enum": ["layout", "banner", "media_fixture", "speech_fixture", "recheck"] }
           ]
         },
+        "missing_shared_library": {
+          "description": "Present only when a reviewed program could not start because the loader could not find a shared library: its plain file name (for example libgomp.so.1), read from the program's own error output and validated; the reason is still provider_failed. Absent otherwise, and in every earlier release.",
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^lib[A-Za-z0-9_+-]{1,58}\\.so(\\.[0-9]{1,6}){0,3}$"
+        },
         "stage": {
           "oneOf": [
             { "type": "null" },
@@ -165,6 +171,16 @@
           "if": { "properties": { "step": { "const": "smoke" } } },
           "then": { "properties": { "smoke_check": { "type": "string" } } },
           "else": { "properties": { "smoke_check": { "type": "null" } } }
+        },
+        {
+          "if": { "required": ["missing_shared_library"] },
+          "then": {
+            "properties": {
+              "step": { "const": "smoke" },
+              "reason": { "const": "provider_failed" },
+              "failure_code": { "const": "MISSING_CAPABILITY" }
+            }
+          }
         },
         {
           "if": { "properties": { "stage": { "const": "retained" } } },

@@ -225,6 +225,28 @@ fn setup_install_lists_each_component_and_its_outcome() -> TestResult {
     assert_terminal_safe(error.as_str());
     check_snapshot("failure-setup-install-download", error.as_str())?;
     assert!(error.as_str().contains("(DOWNLOAD_FAILED)"));
+
+    // #256: a tool the loader could not start names the missing library, in
+    // the component line and in the remediation, so a person sees what to install.
+    let missing_value = example("setup-install.missing-library.json")?;
+    let missing = render_value(CommandName::SetupInstall, &missing_value)?.ok_or("no renderer")?;
+    assert_terminal_safe(missing.as_str());
+    check_snapshot("setup-install-missing-library", missing.as_str())?;
+    assert!(missing.as_str().contains(
+        "[failed] whisper_cli whisper.cpp-v1.9.2-ubuntu-x64: smoke (banner check) provider_failed (missing shared library libgomp.so.1), MISSING_CAPABILITY; stage discarded"
+    ));
+    let missing_error = render_failure(&missing_value, None)?;
+    assert_terminal_safe(missing_error.as_str());
+    check_snapshot(
+        "failure-setup-install-missing-library",
+        missing_error.as_str(),
+    )?;
+    assert!(
+        missing_error
+            .as_str()
+            .contains("sudo apt-get install libgomp1")
+    );
+    assert!(missing_error.as_str().contains("(MISSING_CAPABILITY)"));
     Ok(())
 }
 

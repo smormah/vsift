@@ -329,6 +329,11 @@ fn push_component(text: &mut TerminalText, component: &InstallComponent) {
                 .push_fixed(" check) ");
         }
         text.push_value(reason);
+        if let Some(library) = &component.missing_shared_library {
+            text.push_fixed(" (missing shared library ")
+                .push_value(library)
+                .push_fixed(")");
+        }
         if let Some(code) = &component.failure_code {
             text.push_fixed(", ").push_value(code);
         }

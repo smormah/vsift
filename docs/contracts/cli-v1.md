@@ -1632,6 +1632,22 @@ code and a fixed-prose remediation, with the same `data` beside it, so a caller 
 sees what is installed. Human mode lists the components on stdout and the error on
 stderr.
 
+**A tool the loader could not start** (since P14 PR 7, issue #256; example
+[`setup-install.missing-library.json`](../../schemas/v1/examples/setup-install.missing-library.json)).
+When a reviewed program fails its `banner` check and its own error output says, in the GNU loader's
+fixed words, that a shared library is missing (as the reviewed whisper.cpp build does on a minimal
+Ubuntu 24.04 image without `libgomp1`), the component also has `missing_shared_library`: the
+library's plain file name (for example `libgomp.so.1`; at most 64 bytes, `lib`, a stem, `.so` and up
+to three numeric version parts, with no path, space or punctuation). The program's output is
+untrusted, so only a name that passes that check is taken, and nothing else of it is kept; any other
+output leaves the field out. The `reason` stays `provider_failed` and the code `MISSING_CAPABILITY`
+(2), so a reader of the earlier shape sees the same failure, and the field is absent otherwise,
+including in every earlier release. The remediation names the library and what to do: for
+`libgomp.so.1` the Ubuntu and Debian package `libgomp1` (`sudo apt-get install libgomp1`), then the
+same `setup install` again; for any other library it says to install the package that provides it
+and names no package, because none is known. Human mode adds `(missing shared library <name>)` to the
+component's line.
+
 Since P13 PR 6 the data also has `cleanup`: once the plan is accepted, under the install
 guard and before anything is staged, the stages earlier runs abandoned are swept
 (`stale_stages_removed`, `stale_stages_retained`: kept when nothing proves them VSift's
