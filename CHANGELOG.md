@@ -384,6 +384,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   status or schema change; four unit tests). The test now frees the unit only after the stream says
   `draining`, so the waiting step can only be cancelled and the test no longer races its own
   signal. `docs/operations/worker-host.md` says so.
+- **`vsift ingest` of a named pipe with no writer no longer blocks for ever** (P14 PR 7, #264; found by
+  the P14 malicious-media campaign on the published 0.1.0). The source was opened for reading before its
+  file type was checked, and opening a named pipe for reading waits until something writes to it, so
+  `mkfifo x.mp4; vsift ingest x.mp4` had to be killed (the worker path refused the same pipe at once).
+  The source is now opened without waiting on Unix (`O_NONBLOCK`; a regular file ignores it, so every read
+  of an accepted source is unchanged), its type is read from that handle (no window in which the file is
+  swapped for a pipe between a check and the open), and a pipe, a folder or another special file ends as
+  `INVALID_SOURCE`. The same open serves a supplied transcript (`--transcript <pipe>`). Tests: a staging
+  test with a 30 s deadline (`a_named_pipe_with_no_writer_is_refused_and_not_waited_for`) and a binary test
+  (`fifo_source_cli_contract`, a 30 s deadline on `vsift ingest <pipe>`), both Unix only; on the old code
+  both wait until their deadline. `docs/contracts/cli-v1.md` states the source rule.
 
 ## [0.1.0] - 2026-10-01
 

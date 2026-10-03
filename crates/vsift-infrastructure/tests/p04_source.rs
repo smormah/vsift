@@ -124,6 +124,36 @@ async fn playlist_and_external_reference_sources_fail_before_provider_execution(
     Ok(())
 }
 
+/// #264: a named pipe that nothing writes to is refused as not a regular
+/// file. Opening it for reading blocks until a writer appears, so the open
+/// used to wait for ever (`vsift ingest <pipe>` had to be killed); the file
+/// type is now found on a handle that was opened without waiting.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_named_pipe_with_no_writer_is_refused_and_not_waited_for() -> TestResult {
+    use std::{sync::mpsc, time::Duration};
+
+    let root = OwnedRoot::create()?;
+    let (store, session_id) = workspace(&root).await?;
+    let pipe = root.0.join("pipe.mp4");
+    // The system's own `mkfifo` (rustix has no `mknodat` on macOS).
+    let made = std::process::Command::new("mkfifo").arg(&pipe).status()?;
+    assert!(made.success(), "mkfifo failed: {made:?}");
+    let operation = OperationId::parse("op_abcdef0123456789")?;
+    // Staged on its own thread: a build that waits would otherwise hang the
+    // whole test run instead of failing this test.
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = SourceSnapshot::stage(&store, &session_id, &operation, &pipe);
+        let _ = sender.send(matches!(result, Err(SourceError::NotRegularFile)));
+    });
+    let refused = receiver
+        .recv_timeout(Duration::from_secs(30))
+        .map_err(|_| "staging a named pipe with no writer did not return within 30 s")?;
+    assert!(refused, "the pipe was not refused as not a regular file");
+    Ok(())
+}
+
 /// P10 PR 3: a cancelled copy stops between blocks, removes its partial
 /// private file and never touches the original; an uncancelled one of the
 /// same source still stages.
