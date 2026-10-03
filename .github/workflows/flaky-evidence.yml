@@ -1,83 +1,30 @@
-name: Flaky evidence (temporary, this branch only)
+name: Flaky evidence 268 (temporary, this branch only)
 
-# Reproduces the flaky tests #253 (a managed-store kill test, Windows) and #268
-# (a worker SIGTERM test, macOS) by running each many times at once on a hosted
-# runner, and prints what the failing runs saw. Temporary: it triggers only on a
-# push to the branch below, reads the repository, publishes nothing, uses no
+# Re-runs the #268 test (an old, racy ordering of it) many times at once on a
+# hosted macOS runner against the candidate fix. Temporary: it triggers only on
+# a push to the branch below, reads the repository, publishes nothing, uses no
 # secret, and is deleted with the branch. Never run on the maintainer's machine.
 
 on:
   push:
     branches:
-      - p14-pr7-flaky-evidence
+      - p14-pr7-flaky-evidence-268
 
 permissions:
   contents: read
 
 concurrency:
-  group: flaky-evidence-${{ github.ref }}
+  group: flaky-evidence-268-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: never
 
 jobs:
-  kill-windows:
-    name: "#253 kill test, windows-latest"
-    runs-on: windows-latest
-    timeout-minutes: 110
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build the test binary
-        shell: pwsh
-        run: |
-          cargo test -p vsift-infrastructure --features "install-test-hooks fault-injection" --test p13_install_transaction --no-run --locked --message-format=json > build.json
-          if ($LASTEXITCODE -ne 0) { throw "build failed" }
-
-      - name: Run the kill test many times at once
-        shell: pwsh
-        env:
-          RUNS: "120"
-          PARALLEL: "6"
-          BUDGET_MINUTES: "70"
-        run: |
-          $ErrorActionPreference = 'Continue'
-          $exe = Get-Content build.json | ForEach-Object { if ($_.StartsWith('{')) { $_ | ConvertFrom-Json } } |
-            Where-Object { $_.executable -and $_.target.name -eq 'p13_install_transaction' } |
-            Select-Object -Last 1 -ExpandProperty executable
-          Write-Host "test binary: $exe"
-          $name = 'kill::installs_killed_by_the_operating_system_at_spread_moments_are_consistent'
-          $stopAt = (Get-Date).AddMinutes([int]$env:BUDGET_MINUTES)
-          $ran = 0; $failed = 0; $noted = 0; $skipped = 0
-          1..([int]$env:RUNS) | ForEach-Object -Parallel {
-            if ((Get-Date) -gt $using:stopAt) { return [pscustomobject]@{ Run = $_; Code = -1; Text = ''; Skipped = $true; Seconds = 0 } }
-            $started = Get-Date
-            $text = & $using:exe --exact $using:name --nocapture 2>&1 | Out-String
-            [pscustomobject]@{ Run = $_; Code = $LASTEXITCODE; Text = $text; Skipped = $false; Seconds = [int]((Get-Date) - $started).TotalSeconds }
-          } -ThrottleLimit ([int]$env:PARALLEL) | ForEach-Object {
-            if ($_.Skipped) { $skipped++; return }
-            $ran++
-            $hasEvidence = $_.Text -match 'EVIDENCE253'
-            if ($hasEvidence) { $noted++ }
-            if ($_.Code -ne 0) { $failed++ }
-            if ($_.Code -ne 0 -or $hasEvidence) {
-              Write-Host "::group::run $($_.Run): exit $($_.Code) after $($_.Seconds) s$(if ($hasEvidence) { ' (evidence lines)' })"
-              Write-Host $_.Text
-              Write-Host "::endgroup::"
-            } else {
-              Write-Host "run $($_.Run): passed in $($_.Seconds) s"
-            }
-          }
-          Write-Host "RESULT ran=$ran failed=$failed with_evidence=$noted skipped=$skipped"
-
   sigterm-macos:
-    name: "#268 sigterm test, macos-latest"
+    name: "#268 sigterm test with the fix, macos-latest"
     runs-on: macos-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,7 +38,7 @@ jobs:
 
       - name: Run the SIGTERM test many times at once
         env:
-          RUNS: "200"
+          RUNS: "800"
           PARALLEL: "6"
         run: |
           exe="$(grep '"executable"' build.json | grep '"name":"job_run_cli_contract"' | tail -n 1 | sed -E 's/.*"executable":"([^"]+)".*/\1/')"
