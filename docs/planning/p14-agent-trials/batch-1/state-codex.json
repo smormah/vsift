@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "batch": 1,
+  "client": "codex",
+  "version": "0.1.0",
+  "runs": [
+    {
+      "run": {
+        "run_id": "b1-codex-compact-pilot-a-08-f05-local-asr-1",
+        "batch": 1,
+        "kind": "pilot",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "A-08-f05-local-asr",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-08-f05-local-asr-33e93268",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-pilot-a-09-f05-supplied-1",
+        "batch": 1,
+        "kind": "pilot",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "A-09-f05-supplied",
+        "mode": "skill"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "a-09-f05-supplied-9bba132e",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-pilot-c-01-f05-supplied-1",
+        "batch": 1,
+        "kind": "pilot",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-01-f05-supplied",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-c567401d",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-pilot-c-02-f05-local-asr-1",
+        "batch": 1,
+        "kind": "pilot",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-02-f05-local-asr",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-c30c05d9",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-counted-c-01-f05-supplied-1",
+        "batch": 1,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-01-f05-supplied",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-8b83ab70",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-counted-c-01-f05-supplied-2",
+        "batch": 1,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-01-f05-supplied",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-392b8d50",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-counted-c-02-f05-local-asr-1",
+        "batch": 1,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-02-f05-local-asr",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-c9ef59d1",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-counted-c-02-f05-local-asr-2",
+        "batch": 1,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-02-f05-local-asr",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-f5bd1c00",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-counted-c-03-f03-missing-tools-1",
+        "batch": 1,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-03-f03-missing-tools",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-63c37c6e",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    },
+    {
+      "run": {
+        "run_id": "b1-codex-compact-counted-c-03-f03-missing-tools-2",
+        "batch": 1,
+        "kind": "counted",
+        "client": "codex",
+        "model": "gpt-6-sol",
+        "tier": "compact",
+        "scenario": "C-03-f03-missing-tools",
+        "mode": "cold"
+      },
+      "status": "counted",
+      "attempts": [
+        {
+          "trial_id": "run-e1cfe98e",
+          "outcome": "counted",
+          "note": null
+        }
+      ]
+    }
+  ]
+}
