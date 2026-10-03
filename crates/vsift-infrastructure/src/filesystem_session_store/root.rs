@@ -283,7 +283,25 @@ impl FilesystemSessionStore {
         &self,
         incoming_bytes: u64,
     ) -> Result<FreeSpaceCheck, SessionStorageError> {
-        free_space_check(&self.root, incoming_bytes)
+        free_space_check(&self.root, incoming_bytes, FREE_SPACE_RESERVE_BYTES)
+    }
+
+    /// Requires the root's filesystem to have room for `incoming_bytes` and a
+    /// small margin for the session's own records, **without** the worker
+    /// workspace's reserve: the check of a desktop root, so a copy that cannot
+    /// fit is refused before it starts instead of failing after it has filled
+    /// the disk (#266). Same platform rules and caveats as
+    /// [`Self::ensure_free_space`] (Unix only; a reservation, not a quota).
+    ///
+    /// # Errors
+    ///
+    /// [`SessionStorageError::CapacityExhausted`] when the space is short,
+    /// and [`SessionStorageError::Io`] when it cannot be read.
+    pub fn ensure_room_for_copy(
+        &self,
+        incoming_bytes: u64,
+    ) -> Result<FreeSpaceCheck, SessionStorageError> {
+        free_space_check(&self.root, incoming_bytes, COPY_ROOM_MARGIN_BYTES)
     }
 
     /// The lifetime rules of sessions opened in this root.
@@ -657,14 +675,19 @@ pub enum FreeSpaceCheck {
     NotEnforced,
 }
 
+/// The margin a desktop root keeps beyond a source copy: 16 MiB, room for the
+/// session's index entry, manifests and records.
+pub const COPY_ROOM_MARGIN_BYTES: u64 = 16 * 1024 * 1024;
+
 #[cfg(unix)]
 fn free_space_check(
     root: &Dir,
     incoming_bytes: u64,
+    keep_free: u64,
 ) -> Result<FreeSpaceCheck, SessionStorageError> {
     let statistics = rustix::fs::fstatvfs(root).map_err(|_| SessionStorageError::Io)?;
     let available = statistics.f_bavail.saturating_mul(statistics.f_frsize);
-    let needed = incoming_bytes.saturating_add(FREE_SPACE_RESERVE_BYTES);
+    let needed = incoming_bytes.saturating_add(keep_free);
     if available < needed {
         return Err(SessionStorageError::CapacityExhausted);
     }
@@ -679,6 +702,7 @@ fn free_space_check(
 const fn free_space_check(
     _root: &Dir,
     _incoming_bytes: u64,
+    _keep_free: u64,
 ) -> Result<FreeSpaceCheck, SessionStorageError> {
     Ok(FreeSpaceCheck::NotEnforced)
 }

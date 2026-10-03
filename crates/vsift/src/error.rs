@@ -348,6 +348,7 @@ impl EngineError {
             Self::OpenSession(error) => match error {
                 OpenSessionError::InvalidSource => FailureCode::InvalidSource,
                 OpenSessionError::SourceIo => FailureCode::StorageIo,
+                OpenSessionError::SourceNoRoom => FailureCode::ResourceLimit,
                 OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
                 OpenSessionError::Storage(storage) => storage_failure_code(*storage),
                 OpenSessionError::SourceProbe(probe) => probe_failure_code(*probe),
@@ -1528,6 +1529,15 @@ mod tests {
         assert_eq!(
             EngineError::OpenSession(OpenSessionError::InvalidClock).failure_code(),
             FailureCode::InvalidArgument
+        );
+        // #266: a source that does not fit the root is a limit, not damage.
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceNoRoom).failure_code(),
+            FailureCode::ResourceLimit
+        );
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceIo).failure_code(),
+            FailureCode::StorageIo
         );
     }
 
