@@ -6,6 +6,7 @@
 //! text. None contains a path, provider output or transcript text.
 
 use vsift_application::{AsrFailure, AsrFailureReason, LocalAsrVerificationFailure};
+use vsift_domain::ProviderOutputError;
 
 /// Remediation when `FFmpeg`, `FFprobe` or whisper.cpp is missing.
 pub const LOCAL_ASR_TOOLS_REMEDIATION: &str = "Local speech recognition needs FFmpeg, FFprobe and the whisper.cpp CLI (whisper-cli). Nothing was changed. Install or locate trusted builds, register them with setup configure ffmpeg|ffprobe|whisper --executable <path>, then run setup check. A supplied SubRip or WebVTT transcript (ingest --transcript) needs no speech recognition.";
@@ -167,8 +168,15 @@ const fn failure_prose(reason: AsrFailureReason) -> (&'static str, &'static str)
             "whisper.cpp's output was not the documented JSON.",
             WHISPER_REMEDY,
         ),
+        // A range whose recognised segments mostly lay outside the audio it
+        // was given (#274): the tool ran and answered, nothing is missing and
+        // nothing is broken, so it is not a reason to reinstall anything.
+        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments) => (
+            "whisper.cpp ran, but most of the segments it returned did not fit the audio it was given (they started outside it, or ran backwards).",
+            "Nothing was committed and nothing needs reinstalling. Retry with a larger range, or without --from and --to to recognise the whole video.",
+        ),
         AsrFailureReason::MalformedOutput(_) => (
-            "whisper.cpp's output broke VSift's rules for recognised text, such as segment times outside their audio or invalid scores.",
+            "whisper.cpp's output broke VSift's rules for recognised text, such as out-of-order segments or invalid scores.",
             WHISPER_REMEDY,
         ),
         AsrFailureReason::Workspace => (
@@ -197,7 +205,7 @@ mod tests {
         local_asr_verification_summary,
     };
 
-    const REASONS: [AsrFailureReason; 17] = [
+    const REASONS: [AsrFailureReason; 18] = [
         AsrFailureReason::InvalidRange,
         AsrFailureReason::TooManyChunks,
         AsrFailureReason::ModelChanged,
@@ -212,10 +220,36 @@ mod tests {
         AsrFailureReason::ProviderFailed,
         AsrFailureReason::UnparseableOutput,
         AsrFailureReason::MalformedOutput(ProviderOutputError::TooManySegments),
+        AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments),
         AsrFailureReason::Workspace,
         AsrFailureReason::Io,
         AsrFailureReason::InvalidRun(TranscriptRevisionError::InvalidAsrRun),
     ];
+
+    /// #274: recognised segments that mostly did not fit their audio are not a
+    /// broken or missing tool, so the answer must not send the user to reinstall
+    /// one; any other malformed output still does.
+    #[test]
+    fn segments_that_did_not_fit_their_audio_do_not_say_to_reinstall() {
+        let stage = AsrStage::OutputValidation;
+        let fit = local_asr_failure_summary(AsrFailure {
+            stage,
+            reason: AsrFailureReason::MalformedOutput(ProviderOutputError::TooManyRejectedSegments),
+        });
+        assert!(fit.contains("did not fit the audio"), "{fit}");
+        assert!(fit.contains("nothing needs reinstalling"), "{fit}");
+        assert!(fit.contains("without --from and --to"), "{fit}");
+        assert!(!fit.contains("Reinstall"), "{fit}");
+        assert!(fit.contains("(malformed_output)"), "{fit}");
+        let broken = local_asr_failure_summary(AsrFailure {
+            stage,
+            reason: AsrFailureReason::MalformedOutput(ProviderOutputError::OutOfOrderSegments),
+        });
+        assert!(
+            broken.contains("Reinstall the reviewed whisper.cpp"),
+            "{broken}"
+        );
+    }
 
     #[test]
     fn every_failure_names_its_stage_and_reason_within_the_schema_bound() {

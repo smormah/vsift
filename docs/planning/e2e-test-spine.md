@@ -152,7 +152,9 @@ and `bundle validate` with both records conforming to the bundle schema);
 `p07_local_asr_f08_noise_spanish`; `p07_local_asr_f09_offset` (times anchored at the
 0.75 s audio start); `p07_local_asr_multi_chunk_seam` (a two-chunk clip built at run
 time from the speech utterances, every checked word heard exactly once);
-`p07_local_asr_whisper_tripwire` (an F10 SubRip import succeeds with whisper
+`p07_local_asr_cut_range` (P14 PR 7, #274: the first 5 s of F02 to F05, a range cut
+mid-speech, which the recogniser ends well past the audio; every one recognises with
+every segment inside the cut); `p07_local_asr_whisper_tripwire` (an F10 SubRip import succeeds with whisper
 registered as a program that is not whisper); and `p07_local_asr_missing_model`
 (typed `MISSING_CAPABILITY`, no revision). It prints `p07_local_asr: passed` when every
 stage passed and writes `.vsift/e2e-runs/p07-local-asr-<run-id>/report.json`. A release

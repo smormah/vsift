@@ -227,7 +227,7 @@ fn provider_segments_outside_their_audio_are_rejected_or_trimmed() -> TestResult
         provider_segment(2_500, 2_500, "empty range")?,
         provider_segment(3_000, 9_000, "also kept")?,
         provider_segment(9_000, 10_600, "ends just past the audio")?,
-        provider_segment(9_500, 11_200, "ends too far past the audio")?,
+        provider_segment(9_500, 11_200, "ends further past the audio")?,
         provider_segment(9_600, 10_000, "ends at the audio end")?,
         provider_segment(9_700, 10_000, "one more kept")?,
         provider_segment(9_800, 10_000, "and another")?,
@@ -246,18 +246,24 @@ fn provider_segments_outside_their_audio_are_rejected_or_trimmed() -> TestResult
         })
         .collect();
     assert_eq!(
-        ranges[..4],
+        ranges[..5],
         [
             (50_100_000, 52_100_000, ProviderEndTrim::Unchanged),
             (53_100_000, 59_100_000, ProviderEndTrim::Unchanged),
             (59_100_000, 60_100_000, ProviderEndTrim::TrimmedToAudioEnd),
+            (59_600_000, 60_100_000, ProviderEndTrim::TrimmedToAudioEnd),
             (59_700_000, 60_100_000, ProviderEndTrim::Unchanged),
         ]
     );
-    // The raw provider end is kept beside the trimmed range.
+    // The raw provider end is kept beside the trimmed range, however far past
+    // the audio it lay.
     assert_eq!(
         validated.segments()[2].provider_end().as_micros(),
         10_600_000
+    );
+    assert_eq!(
+        validated.segments()[3].provider_end().as_micros(),
+        11_200_000
     );
     let warnings: Vec<_> = validated
         .warnings()
@@ -268,10 +274,89 @@ fn provider_segments_outside_their_audio_are_rejected_or_trimmed() -> TestResult
     assert_eq!(
         warnings,
         [
-            (TranscriptWarningKind::ProviderSegmentsRejected, 2, 3),
-            (TranscriptWarningKind::ProviderEndTrimmed, 1, 3),
+            (TranscriptWarningKind::ProviderSegmentsRejected, 1, 3),
+            (TranscriptWarningKind::ProviderEndTrimmed, 2, 3),
         ]
     );
+    Ok(())
+}
+
+/// #274: whisper.cpp ends the last segment of a range cut mid-speech past the
+/// audio (a 5 s cut ended at 7 s). The segment starts inside the audio, so its
+/// end is cut at the audio end whatever the overrun, and the chunk is not
+/// failed for it.
+#[test]
+fn a_range_cut_mid_speech_keeps_its_last_segment_however_far_the_provider_ran_on() -> TestResult {
+    let planned = chunk(0, 0, 5 * SECOND)?;
+    // F02's first five seconds decode to 5.001 s.
+    let audio = range(0, 5_001_000)?;
+    let source = range(0, 12 * SECOND)?;
+    for end_ms in [5_500, 6_100, 7_000, 29_000] {
+        let segments = vec![provider_segment(
+            0,
+            end_ms,
+            "First the queue is empty. Here it rises to 12.",
+        )?];
+        let validated = validate_chunk_output(&planned, audio, source, output(segments))?;
+        let [only] = validated.segments() else {
+            return Err("the segment was not kept".into());
+        };
+        assert_eq!(only.range().start().as_micros(), 0, "{end_ms}");
+        assert_eq!(only.range().end().as_micros(), 5_001_000, "{end_ms}");
+        assert_eq!(only.trimmed(), ProviderEndTrim::TrimmedToAudioEnd);
+        assert_eq!(only.provider_end().as_micros(), end_ms * 1_000);
+        let warnings: Vec<_> = validated
+            .warnings()
+            .as_slice()
+            .iter()
+            .map(|warning| (warning.kind(), warning.count()))
+            .collect();
+        assert_eq!(
+            warnings,
+            [(TranscriptWarningKind::ProviderEndTrimmed, 1)],
+            "{end_ms}"
+        );
+    }
+    Ok(())
+}
+
+/// What is still rejected after #274: a segment that does not start inside the
+/// audio, a reversed one and an empty one, and the quarter rule still fails a
+/// chunk that has too many of them.
+#[test]
+fn segments_that_do_not_start_inside_the_audio_are_still_rejected() -> TestResult {
+    let planned = chunk(0, 0, 5 * SECOND)?;
+    let audio = range(0, 5_001_000)?;
+    let source = range(0, 12 * SECOND)?;
+    for (start_ms, end_ms) in [(5_001, 7_000), (5_500, 7_000), (30_000, 31_000)] {
+        let segments = vec![provider_segment(start_ms, end_ms, "after the audio")?];
+        assert_eq!(
+            validate_chunk_output(&planned, audio, source, output(segments)),
+            Err(ProviderOutputError::TooManyRejectedSegments),
+            "{start_ms}"
+        );
+    }
+    // Reversed and empty ranges, beside a kept segment: rejected, counted.
+    let segments = vec![
+        provider_segment(0, 1_000, "kept")?,
+        provider_segment(2_000, 2_000, "empty")?,
+        provider_segment(3_000, 2_500, "reversed")?,
+        provider_segment(3_100, 3_200, "kept too")?,
+        provider_segment(3_300, 3_400, "and this one")?,
+        provider_segment(3_500, 3_600, "and another")?,
+        provider_segment(3_700, 3_800, "and one more")?,
+        provider_segment(3_900, 4_000, "and the last")?,
+    ];
+    let validated = validate_chunk_output(&planned, audio, source, output(segments))?;
+    assert_eq!(validated.segments().len(), 6);
+    // A segment that starts just inside the audio is kept and cut, never empty.
+    let segments = vec![provider_segment(5_000, 7_000, "right at the end")?];
+    let validated = validate_chunk_output(&planned, audio, source, output(segments))?;
+    let [only] = validated.segments() else {
+        return Err("the segment was not kept".into());
+    };
+    assert_eq!(only.range().start().as_micros(), 5_000_000);
+    assert_eq!(only.range().end().as_micros(), 5_001_000);
     Ok(())
 }
 
@@ -457,6 +542,93 @@ fn a_sentence_across_a_seam_is_kept_once() -> TestResult {
         ["before the seam", "the sentence crosses the seam cleanly"]
     );
     assert_eq!(duplicates, 0);
+    Ok(())
+}
+
+/// #274: the last segment of a middle chunk, cut by the chunk's edge, may be
+/// ended by the recogniser well past the audio (seconds, not a second). It is
+/// kept and cut at the chunk end, then stitched like any cut segment: the
+/// neighbour that heard the sentence whole supplies it, and the transcript has
+/// no repeat, no gap and no step backwards.
+#[test]
+fn an_overrunning_final_segment_of_a_chunk_stitches_without_a_gap_or_a_repeat() -> TestResult {
+    let (window_0, window_1, window_2) = (
+        (0, 30 * SECOND),
+        (25 * SECOND, 55 * SECOND),
+        (50 * SECOND, 80 * SECOND),
+    );
+    // Chunks 0 and 1 end mid-sentence, and the recogniser runs those segments'
+    // ends 3 s and 2.5 s past their audio.
+    let first = with(
+        draft(
+            0,
+            window_0,
+            20 * SECOND,
+            24 * SECOND,
+            "before the first seam",
+        )?,
+        draft(
+            0,
+            window_0,
+            26 * SECOND,
+            33 * SECOND,
+            "the first sentence crosses",
+        )?,
+    );
+    let second = with(
+        draft(
+            1,
+            window_1,
+            26 * SECOND,
+            32 * SECOND,
+            "the first sentence crosses the seam cleanly",
+        )?,
+        draft(
+            1,
+            window_1,
+            51 * SECOND,
+            57_500_000,
+            "and the second sentence crosses",
+        )?,
+    );
+    let third = draft(
+        2,
+        window_2,
+        51 * SECOND,
+        58 * SECOND,
+        "and the second sentence crosses the seam too",
+    )?;
+    let merged = merge_chunks(&[first, second, third]);
+    let kept: Vec<&str> = merged
+        .segments
+        .iter()
+        .map(|merged| merged.segment.text().text())
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            "before the first seam",
+            "the first sentence crosses the seam cleanly",
+            "and the second sentence crosses the seam too",
+        ]
+    );
+    let starts: Vec<u64> = merged
+        .segments
+        .iter()
+        .map(|merged| merged.segment.range().start().as_micros())
+        .collect();
+    assert!(
+        starts.windows(2).all(|pair| pair[0] < pair[1]),
+        "the transcript steps backwards: {starts:?}"
+    );
+    assert!(
+        merged
+            .warnings
+            .as_slice()
+            .iter()
+            .all(|warning| warning.kind() != TranscriptWarningKind::SeamDuplicatesRemoved),
+        "a repeat was found where the neighbour supplied the sentence"
+    );
     Ok(())
 }
 
@@ -911,6 +1083,58 @@ fn spliced_revisions_check_carried_segments_against_their_origin() -> TestResult
     Ok(())
 }
 
+/// #274: a stored segment is checked with the same rule that made it. An end
+/// however far past the audio is valid when it is marked as cut at the audio's
+/// end (it was refused beyond one second, and a recogniser runs on by seconds);
+/// an unmarked overrun, a cut mark on an end inside the audio and a start at or
+/// after the audio's end stay refused.
+#[test]
+fn a_stored_segment_ending_past_its_audio_is_valid_only_when_marked_cut() -> TestResult {
+    // Chunk 1 decoded from 25.75 s to 55 s (29.25 s of audio).
+    for end in [30_300_000, 33 * SECOND, 59 * SECOND] {
+        let ran_on = asr_segment(
+            1,
+            range(54 * SECOND, 55 * SECOND)?,
+            1,
+            (28_250_000, end),
+            ProviderEndTrim::TrimmedToAudioEnd,
+            Confidence::unknown(),
+        )?;
+        TranscriptRevision::new(asr_revision(vec![ran_on])?)?;
+    }
+    let unmarked = asr_segment(
+        1,
+        range(54 * SECOND, 55 * SECOND)?,
+        1,
+        (28_250_000, 33 * SECOND),
+        ProviderEndTrim::Unchanged,
+        Confidence::unknown(),
+    )?;
+    let marked_inside = asr_segment(
+        1,
+        range(54 * SECOND, 55 * SECOND)?,
+        1,
+        (28_250_000, 29_000_000),
+        ProviderEndTrim::TrimmedToAudioEnd,
+        Confidence::unknown(),
+    )?;
+    let starts_after = asr_segment(
+        1,
+        range(54_500_000, 55 * SECOND)?,
+        1,
+        (29_250_000, 31 * SECOND),
+        ProviderEndTrim::TrimmedToAudioEnd,
+        Confidence::unknown(),
+    )?;
+    for refused in [unmarked, marked_inside, starts_after] {
+        assert_eq!(
+            TranscriptRevision::new(asr_revision(vec![refused])?),
+            Err(TranscriptRevisionError::AlignmentMismatch)
+        );
+    }
+    Ok(())
+}
+
 /// T-06: an ASR segment's range is re-derived from its chunk and provider times.
 #[test]
 fn asr_segments_are_validated_against_their_own_chunk() -> TestResult {
@@ -945,18 +1169,6 @@ fn asr_segments_are_validated_against_their_own_chunk() -> TestResult {
     )?;
     assert_eq!(
         TranscriptRevision::new(asr_revision(vec![shifted])?),
-        Err(TranscriptRevisionError::AlignmentMismatch)
-    );
-    let too_far = asr_segment(
-        1,
-        range(54 * SECOND, 55 * SECOND)?,
-        1,
-        (28_250_000, 30_300_000),
-        ProviderEndTrim::TrimmedToAudioEnd,
-        Confidence::unknown(),
-    )?;
-    assert_eq!(
-        TranscriptRevision::new(asr_revision(vec![too_far])?),
         Err(TranscriptRevisionError::AlignmentMismatch)
     );
     for silent_chunk in [0, 2, 3] {

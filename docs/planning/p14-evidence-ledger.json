@@ -346,7 +346,7 @@
         "requirements": ["R-08", "R-09", "R-11", "R-12"],
         "threats": ["SEC-03", "SEC-04", "SEC-10", "SEC-11", "SEC-20"],
         "verification": ["X-07", "X-08", "X-09", "O-01", "O-02", "P-06"],
-        "limits": ["L-038", "L-124"]
+        "limits": ["L-038"]
       },
       "proves": "The verification section 5 gates on this hardware: coordinator memory at most 256 MiB, no monotonic growth after warm-up, no descendant ten seconds after a cancel, every committed session validates, no sentinel in any output, warm p95 candidate page at most 250 ms on a prepared 30-minute session; across the ladder 1, 2, 4 and 8 jobs, a 100-request batch and 1,000 mixed requests in at most 5 hours.",
       "does_not_prove": "The 8-hour length, the reference machine, GPUs, other hosts. Throughput is reported as a measurement, never a promise.",
