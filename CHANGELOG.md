@@ -168,6 +168,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **SEC-T01 (P14 PR 5): the claim is narrowed, by the maintainer's decision of 2026-10-03; the
+  hostile stand-in provider was not written** (decision E, option 4; documents and the evidence
+  ledger only, no code, nothing published). The automated safety check stopped the session that
+  began the stand-in, as decision E feared; the session stopped and removed its partial work.
+  R0 now ships with **no claim that the strict worker profile contains a hostile decoder or
+  provider**, and the worker host stays a qualification target. Evidence item RQ-14 is `waived`
+  naming that decision (the claims registry keeps BAN-02: a waiver does not lift a ban), #188 and
+  L-068 move to R1, and ADR 0024 (amendment), ADR 0021 (note), the SEC-T01 handoff, the
+  verification plan, the threat model, the plan's unknowns and risks and the worker runbook say so.
 - **The npm package's README and description, and `CONTRIBUTING.md`, speak to anyone with a
   video** (2026-10-02), not to AI coding agents only, matching the front page. npm shows the new
   text from the next publish; the GitHub repository's About text was changed the same day.

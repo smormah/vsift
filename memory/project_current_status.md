@@ -55,8 +55,8 @@ show, and what is weaker than it sounds today:
 - **A synthetic corpus and synthetic voice only** (L-020, L-022, L-028, L-030). **Trials tuned on
   their own scenarios;** the hold-outs and the skill-less run are built (PR 6) but unrun; the
   review tier's blurred-banner re-run is missing (L-095).
-- **SEC-T01 is half done** (L-068, #188); dangerous media has never been run; the load ladder
-  stopped at 4 jobs; fuzzing is weekly at five minutes per target.
+- **SEC-T01 is half done and stays so in R0** (L-068, #188 in R1; claim narrowed 2026-10-03, RQ-14
+  waived); dangerous media never run; load ladder stopped at 4 jobs; fuzzing weekly, 5 min a target.
 - **`latest` has never moved;** that path never ran for real (L-105). Decisions A-H: `TODO.md`.
 
 ## P14 PR 1, 2, 3, 6 and 8 in one view
@@ -127,7 +127,7 @@ macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | --- | --- |
 | P00-P05 | Complete; merge commits and evidence are in the ledger |
 | P06-P10 | Complete: detect, select, verify, guide (`b73df52`); engine, transcripts, local ASR (`9ea3180`); search, candidates (`b830fc9`); frames, crops, audio (`e57c706`); jobs, resume, durable Ubuntu/ext4 (`3f27ce3`) |
-| P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt (#188, L-068) |
+| P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
 | P14 | **In progress** (started 2026-10-02): PR 0 (#250), PR 1 (#251), PR 2 (#255), PR 6 (#262) and PR 8 (#252) merged; PR 3 (#254) done in this change, PR 4 (#259) draft |

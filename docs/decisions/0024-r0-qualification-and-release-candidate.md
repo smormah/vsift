@@ -886,3 +886,48 @@ is a `[[test]]` entry in `crates/vsift-cli/Cargo.toml`. The record, with the res
   `running` because of the durable stage; the `harness = false` manifest entry; the variable
   names (`VSIFT_E2E_BINARY`, `VSIFT_E2E_EXPECTED_VERSION`, `VSIFT_E2E_EXPECTED_COMMIT`,
   `VSIFT_P14_INSTALLED_E2E`).
+
+## Amendment, 2026-10-03 (P14 PR 5): decision E is settled as option 4, by the maintainer
+
+**Decided by the maintainer on 2026-10-03.** Decision E chose option 1, a reviewed hostile
+stand-in provider in the hardened CI container, with option 4 as the fallback "if the automated
+safety check recurs". It recurred. The session implementing PR 5 wrote the fixture's vocabulary
+(the behaviour names, the plan format and the output scan) and was stopped by the automated safety
+check when it came to writing the stand-in's own attempt code, the functions that carry out each
+prohibited action. As decision E and the handoff require, the session did not rephrase or work
+around the stop. It removed the partial crate (`tools/vsift-hostile-provider` was never committed),
+and the maintainer then confirmed option 4 and told the project not to try authoring the stand-in
+again. **No fixture code exists in the repository.**
+
+**What is decided:**
+
+- R0 ships **with no claim that the strict worker profile contains a hostile decoder or provider**.
+  The strict profile stays what the P11 record says: attested (a kernel-reported cgroup v2
+  boundary, a read-only root, loopback only, `ISOLATION_UNAVAILABLE` before any work) and shown
+  present by the `strict-worker-boundary` container job, including its CPU, process-count and
+  memory pressure and a process-group escape that stays in the worker cgroup. The worker host
+  stays a "qualification target" in the support matrix (plan section 8).
+- **#188 and L-068 move to R1.** The adversarial evidence is produced there, by a fixture the
+  maintainer writes or reviews on their own terms (option A of the handoff), or by one of the other
+  options in the handoff (a recognised third-party containment suite, an external review). Until
+  then nothing may be authored automatically for it.
+- **The claims registry keeps BAN-02** (`strict worker`, `strict isolation`, `hostile media`,
+  `hostile decoder`, `hostile provider`) with `lifted_by: ["RQ-14"]` unchanged. The ban lifts only
+  when every listed item has `passed`, and a waived item does not lift it, so the check keeps
+  refusing those phrases. The statement that needs RQ-14, RQ-09 and RQ-12 stays unused. RQ-09 and
+  RQ-12 still run for the worker host's load and runbook; they support no containment claim.
+- **RQ-14 is recorded `waived` in the evidence ledger**, naming this decision (2026-10-03), so the
+  completeness check for a candidate or the stable accepts it. A waiver is not a pass and is shown
+  as one nowhere.
+
+**What the strict profile does and does not support in R0, in plain words.** A reader may rely on
+the P11 evidence: VSift refuses to run in strict mode unless the host shows the boundary, and the
+boundary's controls hold against the process-supervisor qualification's own pressure tests. A
+reader may **not** rely on it to contain a decoder that has been exploited: that has not been
+tried, and the worker runbook and the public text must say so (the runbook already says the limits
+are the host's and that VSift enforces none of them).
+
+This amendment is matched by a note in [ADR 0021](0021-worker-and-batch-host.md), which holds the
+strict profile's decision, and by the [SEC-T01 handoff](../planning/sec-t01-adversarial-handoff.md),
+[known limit L-068](../planning/known-limits.md#l-068), the verification plan's SEC-T01 row and the
+threat model's SEC-T01 status. The plan's unknowns list (section 14) records that the stop recurred.

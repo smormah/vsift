@@ -461,7 +461,13 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "waived",
+      "decision": {
+        "statement": "Option 4 of decision E: R0 ships with no claim that the strict worker profile contains a hostile decoder or provider; the worker host stays a qualification target; the adversarial evidence (#188, L-068) moves to R1. The hostile stand-in provider (option 1) was not written because the automated safety check stopped its authoring again.",
+        "reference": { "type": "record", "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md" },
+        "date": "2026-10-03"
+      },
+      "reason": "The adversarial half of SEC-T01 is not produced in R0. The strict profile is still attested and shown present (the non-adversarial evidence below); the claims registry keeps BAN-02, so no public text says the profile contains hostile media.",
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/sec-t01-adversarial-handoff.md" },
@@ -469,7 +475,7 @@
           "note": "Non-adversarial evidence accepted by the maintainer for P11: strict-Linux attestation passes inside the hardened strict-worker-boundary container. Adversarial containment is open (L-068, #188)."
         }
       ],
-      "date": "2026-10-02"
+      "date": "2026-10-03"
     },
     {
       "id": "RQ-15",

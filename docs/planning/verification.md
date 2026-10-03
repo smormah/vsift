@@ -334,6 +334,11 @@ an agent trial.
   access, fork pressure and output flooding; demonstrate actual host containment.
   *P11 (2026-09-28): non-adversarial evidence accepted for P11 by the maintainer;
   adversarial evidence is technical debt (known limit L-068), required before release.*
+  *P14 PR 5 (2026-10-03, maintainer decision, ADR 0024 decision E option 4): the adversarial
+  fixture was not written (the automated safety check stopped its authoring); R0 ships with
+  no claim that the strict profile contains a hostile provider, evidence item RQ-14 is
+  `waived`, and the adversarial evidence moves to R1 (#188, L-068). The non-adversarial
+  evidence stands.*
 - SEC-T02: adversarial evidence and output rendering tests, including hidden markup,
   terminal links and multimodal prompt injection.
   *P12 PR 2 (2026-09-28): the tool-level suite
@@ -726,7 +731,7 @@ this part.
 | O-03 | `lifecycle_events_distinguish_ready_busy_unhealthy_missing`; stage timings, admission waits and termination reasons in every result and summary |
 | O-04 | The `SIGTERM` (CI) and Ctrl-Break (opt-in, run here) tests for `job run` and `job batch`; `p11_shutdown_and_redelivery`: a console Ctrl-Break mid-batch, exit 6 in 2.0 s with both running recognitions `cancelled` and no provider left; `job resume` and redelivery complete every line, equal to an uninterrupted control; a third delivery replays unchanged |
 | Repeated external-delivery simulation | `repeated_external_delivery_commits_once` (PR 3): 24 seeded runs passed; every request committed once and replays its first result |
-| SEC-T01 | **Non-adversarial evidence accepted for P11 by the maintainer (2026-09-28):** the strict-Linux attestation checks (fixture-file and decision-table tests, fuzz targets `host_attestation` and `mountinfo`, `ISOLATION_UNAVAILABLE` before any work) and the hardened `strict-worker-boundary` container controls. Adversarial evidence is technical debt ([known limit L-068](known-limits.md#l-068)), required before the R0 release |
+| SEC-T01 | **Non-adversarial evidence accepted for P11 by the maintainer (2026-09-28):** the strict-Linux attestation checks (fixture-file and decision-table tests, fuzz targets `host_attestation` and `mountinfo`, `ISOLATION_UNAVAILABLE` before any work) and the hardened `strict-worker-boundary` container controls. Adversarial evidence is technical debt ([known limit L-068](known-limits.md#l-068)); **moved to R1 by the maintainer on 2026-10-03** (ADR 0024 decision E, option 4; RQ-14 `waived`; R0 makes no claim that the strict profile contains a hostile provider) |
 | E2E spine (P11 stage) | `p11_worker_e2e` passed on Windows 11 (FFmpeg 9.0, whisper.cpp v1.9.2, release build) in 209 s; `p11_durable_workspace` blocked by the platform as designed |
 
 ## 2026-09-28 P11 PR 4 evidence, first part (`job batch`, branch `p11/job-batch`)

@@ -6,9 +6,12 @@ worker profile is a **qualification target**, not a supported platform: public s
 begins after P14 ([support profiles](../planning/support-and-resource-profiles.md)).
 For P11 the strict profile's isolation (SEC-T01) rests on non-adversarial evidence the
 maintainer accepted: the kernel attestation and the hardened container controls of the
-CI job; adversarial containment evidence is technical debt, required before release
-([known limit L-068](../planning/known-limits.md#l-068)). What was tested, and how, is
-in the [P11 qualification record](../planning/p11-worker-host.md).
+CI job; adversarial containment evidence is technical debt
+([known limit L-068](../planning/known-limits.md#l-068)), moved to R1 by the maintainer's
+decision of 2026-10-03. **R0 makes no claim that the strict profile contains a hostile
+decoder or provider:** the worker host is a qualification target, and the limits are the
+host's. What was tested, and how, is in the
+[P11 qualification record](../planning/p11-worker-host.md).
 
 VSift has no daemon, no HTTP listener and no queue. A worker host is an external
 supervisor (your queue consumer, a systemd unit, a container orchestrator) that

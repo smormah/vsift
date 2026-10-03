@@ -132,7 +132,8 @@ durable request there fails with `MISSING_CAPABILITY` before anything changes.
 Storage that ignores flushes and the loss of the disk or host stay outside the
 guarantee (known limits L-056 and L-057). P11 delivered the worker host and its
 [qualification record](p11-worker-host.md); the strict worker profile still needs P14
-and the adversarial SEC-T01 evidence deferred as technical debt (L-068).
+and the adversarial SEC-T01 evidence deferred as technical debt (L-068, moved to R1 by the
+maintainer on 2026-10-03: R0 claims no containment of a hostile provider).
 
 - Fresh-machine installation without Rust, upgrade, rollback and uninstall.
 - All deterministic PR checks plus platform process/filesystem conformance tests.

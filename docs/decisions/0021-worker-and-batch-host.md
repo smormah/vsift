@@ -581,6 +581,20 @@ The second part of PR 4 completes section 10 and the packet's operator deliverab
   request like any permanent failure (PR 3 notes), so the same operation id replays it
   after the host is fixed; the runbook tells supervisors to resubmit under a new id.
 
+## Note, 2026-10-03 (P14 PR 5): the strict profile's claim is narrowed, by the maintainer
+
+*Decided by the maintainer on 2026-10-03; see the amendment in
+[ADR 0024](0024-r0-qualification-and-release-candidate.md).* Section 10's adversarial SEC-T01
+evidence was to be produced in P14 as a hostile stand-in provider in the hardened container
+(ADR 0024 decision E, option 1). The automated safety check stopped the session that began
+authoring it, so the maintainer chose the fallback (option 4): R0 ships with **no claim that the
+strict profile contains a hostile decoder or provider**. Nothing in this record's design changes:
+`--host-isolation strict-linux` is still accepted only on an attested host, the limits are still
+the host's, and the profile is still shown by the attestation and the `strict-worker-boundary`
+container job. The profile stays a qualification target, and the adversarial evidence (#188,
+[L-068](../planning/known-limits.md#l-068)) moves to R1. Section 10's SEC-T01 amendment of
+2026-09-28 stands for P11; this note adds that P14 does not close it.
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

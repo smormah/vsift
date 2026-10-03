@@ -291,7 +291,7 @@ client is **qualified** only on the system it was trialled on. Anything short of
 | Windows 11 25H2 x64 | npm, pnpm, Yarn, Bun; archive | Your own FFmpeg, FFprobe, whisper.cpp (pinned versions tested) | RQ-01, 02, 04, 05, 15 (Claude Code), 17 | Supported, with "Smart App Control untried" if RQ-17 is not done |
 | Ubuntu 24.04 x64 | the same | Managed (`setup install`, offline `--artifact-dir`) or your own | RQ-01..06, 11, 15 (Codex) | Supported; durable sessions on local ext4 with barriers |
 | macOS 15 arm64 | the same | Your own only; no managed install | RQ-01, 02, 04, 05 | Supported for what the hosted run proves (CLI, supplied transcript, local ASR with your whisper.cpp); agent skill untrialled; a "qualification target" if the run does not pass |
-| Strict worker (Ubuntu 24.04) | n/a | n/a | RQ-09, 12, 14 | Not claimed unless decision E is resolved; otherwise a "qualification target" |
+| Strict worker (Ubuntu 24.04) | n/a | n/a | RQ-09, 12, 14 | **Not claimed:** a "qualification target" (decision E option 4, 2026-10-03; RQ-14 `waived`) |
 | Another Linux, Linux on Arm, Intel Macs, Windows on Arm, Windows 10, musl | n/a | n/a | n/a | Unsupported; the launcher says so (exit 127) |
 
 Agent clients: Claude Code on Windows (Opus 5.5, Sonnet 5.5) and Codex on Linux in its
@@ -407,7 +407,7 @@ counts as qualification evidence.
 | Smart App Control may block unsigned executables | A default Windows 11 consumer machine may not run VSift at all | The try-out, the signing trigger of decision C |
 | Real recordings are untried | Every accuracy number is synthetic | Claims worded as measured on a synthetic corpus; the post-R0 trial |
 | The agent allowance | 84 runs is about one and a half rounds; usage limits stall batches | Three batches, usage capture, the lean option |
-| SEC-T01's authoring block may recur | Without it no strict-worker claim | Maintainer-authored fixture or the narrowed claim |
+| SEC-T01's authoring block recurred (2026-10-03) | Without the evidence no strict-worker claim | **Taken:** the maintainer chose the narrowed claim (decision E, option 4) on 2026-10-03; RQ-14 is `waived`; the fixture waits for R1 |
 | The stable publish path has never run | `latest` is irreversible | Dry run on the stable tag, the candidate exercising the same workflow, the stronger-model review, RQ-19 |
 | Tuning to the test | The skill, grader and scenarios co-evolved | The freeze, hold-out scenarios, the cold agent |
 | Hidden fixes found late | A candidate with findings costs a publish session and a re-run | At most two candidates planned; path-scoped re-runs |
@@ -427,7 +427,7 @@ counts as qualification evidence.
 | Whether any test compares a build with the published 0.1.0 schemas | **Settled in PR 2 (2026-10-02): none did.** `published_compatibility` and `published_v0_1_0_records` do now (section 15.3) | Done |
 | Whether the real-tool checkpoints can run an installed binary through `assert_cmd`'s environment override | **Settled by PR 3 (2026-10-02): no.** `assert_cmd` 2.2.2 reads `CARGO_BIN_EXE_vsift` when a test runs, but `cargo test` sets that variable itself and replaces any value from outside (a nonexistent path changed nothing) | A repository-owned variable, `VSIFT_E2E_BINARY`, read by one test module (section 17) |
 | Whether Homebrew's FFmpeg and whisper.cpp suit the macOS journeys, and which versions they install | **Settled by PR 3 (2026-10-02): they suit them.** On the image `macos15` 20260907.0337.1: `ffmpeg 9.0.1_1` and `whisper-cpp 1.9.2` (the formula name on that image's tap; a newer tap names it `whisper.cpp`, version 1.9.4 on the public API); every checkpoint passed and the T-04 gates held | Versions are recorded in every run; L-114 holds the limit; PR 9 words the macOS cell |
-| Whether the automated safety stop on authoring a hostile provider fixture recurs | Unknown | PR 5; the fallback is decision E's option 4 |
+| Whether the automated safety stop on authoring a hostile provider fixture recurs | **It recurred (2026-10-03, PR 5).** The session stopped at the stand-in's attempt code, and the maintainer chose the narrowing the same day | Decision E's option 4, in ADR 0024's amendment of 2026-10-03: no strict-worker claim in R0, RQ-14 `waived`, #188 and L-068 in R1, where the maintainer writes or reviews the fixture (option A) or chooses a third-party suite or review (B, C); nothing is authored automatically for R0 |
 | Tokens spent per agent run | Not recorded in P12; **recorded by the harness since PR 6** (`reported_usage`, where the client reports it) but never yet measured | The budget in section 7 is an estimate; batch 1's pilots are the first measurement, and the maintainer can read them before saying go for batches 2 and 3 |
 | Whether the clients' real streams carry what the parsers read (Claude Code's `result` event with `usage` and `total_cost_usd`, Codex's `turn.completed` usage) and say "usage limit" in the words the detector expects | Unknown: the parsers and their tests were written from the event shapes the earlier parsers already read, not from recorded streams (no raw log of P12 is in the repository) | The pilots; a client that exits non-zero without one tool call is graded invalid whatever it said (an allowance stop and an outage look alike), and an unrecognised figure leaves `reported_usage` absent, never a wrong number (L-120) |
 
