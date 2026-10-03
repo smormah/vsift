@@ -20,6 +20,8 @@ const launcherSource = path.join(__dirname, '..', 'vsift-cli');
 const launcher = require(path.join(launcherSource, 'lib', 'launcher.cjs'));
 const fakeScript = path.join(__dirname, 'fixtures', 'fake-vsift.cjs');
 const sendConsoleControl = path.join(__dirname, '..', '..', 'tools', 'send-console-ctrl.ps1');
+const repositoryRoot = path.join(__dirname, '..', '..');
+const { MARKER, hostileArguments, hostileFileNames } = require(path.join(repositoryRoot, 'tools', 'p14-published', 'lib', 'hostile.cjs'));
 const manifest = JSON.parse(fs.readFileSync(path.join(launcherSource, 'package.json'), 'utf8'));
 const VERSION = manifest.version;
 const hostTarget = launcher.TARGETS[`${process.platform} ${process.arch}`];
@@ -201,6 +203,23 @@ test('arguments reach the executable exactly, spaces and Unicode included', endT
   assert.deepEqual(JSON.parse(result.stdout), args);
 });
 
+// The route the Windows `vsift.cmd` warning recommends (L-109, #257): Node on
+// the launcher with an argument list and no shell. The `.cmd` file that npm
+// and pnpm write runs exactly this after cmd.exe has re-read the line, so
+// the hostile text of the published-artifact qualification must reach the
+// executable unchanged and no command it spells may run.
+test('hostile file names and arguments reach the executable unchanged and run nothing (the route install.md recommends)', endToEnd, (t) => {
+  const layout = makeLayout(t, { target: hostTarget, executable: process.execPath });
+  const cases = [...hostileFileNames(process.platform), ...hostileArguments(process.platform)];
+  assert.ok(cases.length >= 25, `only ${cases.length} hostile cases for ${process.platform}`);
+  for (const [label, value] of cases) {
+    const result = runLauncher(layout, ['args', '--', value], { cwd: layout.root });
+    assert.equal(result.status, 0, `${label}: ${result.stderr}`);
+    assert.deepEqual(JSON.parse(result.stdout), ['--', value], label);
+  }
+  assert.equal(fs.existsSync(path.join(layout.root, MARKER)), false, `${MARKER} was created: a command an argument spelled ran`);
+});
+
 test('the exit status is the executable’s', endToEnd, (t) => {
   const layout = makeLayout(t, { target: hostTarget, executable: process.execPath });
   for (const status of [0, 1, 2, 6, 7, 126, 255]) {
@@ -327,6 +346,47 @@ function sendConsoleEvent(pid, event) {
     { encoding: 'utf8', timeout: 60_000 },
   );
 }
+
+// The documents that tell a Windows user what the `vsift.cmd` file of npm and
+// pnpm does (L-109, #257). VSift cannot change that file, so the warning and
+// the routes around it are the mitigation and must not be dropped silently.
+const windowsShimDocuments = {
+  'docs/operations/install.md': [
+    'vsift.cmd',
+    'cmd.exe',
+    'PowerShell',
+    'Git Bash',
+    'vsift.exe',
+    'execFile',
+    'vsift.cjs',
+    'child_process.exec',
+    'shell=True',
+    'L-109',
+  ],
+  'SECURITY.md': ['vsift.cmd', 'cmd.exe', 'PowerShell', 'Git Bash', 'vsift.exe', 'known-limits.md#l-109'],
+  'npm/vsift-cli/README.md': ['vsift.cmd', 'cmd.exe', 'PowerShell', 'Git Bash', 'vsift.exe', 'bin/vsift.cjs'],
+};
+
+test('the install guide, the security policy and the package README warn about vsift.cmd and name the safe routes', () => {
+  for (const [relative, fragments] of Object.entries(windowsShimDocuments)) {
+    const text = fs.readFileSync(path.join(repositoryRoot, ...relative.split('/')), 'utf8');
+    for (const fragment of fragments) {
+      assert.ok(text.includes(fragment), `${relative} does not mention ${fragment}`);
+    }
+  }
+});
+
+test('the launcher path the install guide gives for Node is the file the package really has', () => {
+  const guide = fs.readFileSync(path.join(repositoryRoot, 'docs', 'operations', 'install.md'), 'utf8');
+  assert.ok(guide.includes('vsift-cli\\bin\\vsift.cjs'), 'install.md names no launcher path');
+  assert.ok(fs.existsSync(path.join(launcherSource, 'bin', 'vsift.cjs')));
+  for (const target of Object.values(launcher.TARGETS)) {
+    if (target.packageName === '@vsift/win32-x64') {
+      assert.ok(guide.includes(target.packageName.replace('/', '\\')), 'install.md does not name the Windows platform package');
+      assert.equal(target.executable, 'vsift.exe');
+    }
+  }
+});
 
 test('a console Ctrl-Break leaves the launcher waiting for the executable', windowsOnly, async (t) => {
   const layout = makeLayout(t, { target: hostTarget, executable: process.execPath });

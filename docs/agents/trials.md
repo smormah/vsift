@@ -655,7 +655,9 @@ they ran in (`posix`: the extensionless shim on Windows, the plain link on Linux
 `cmd`: `vsift.cmd`), read from the commands the client reported, and the install evidence lists the command
 files npm wrote (`command_shims`). A call through `cmd.exe` is a note in the grade's deviations and a warning in
 the batch summary, not a failure: it should be impossible, so seeing it means a rule or the harness changed.
-The `cmd.exe` shim is therefore **not exercised by any agent trial**; PR 7 decides what to do about it.
+The `cmd.exe` shim is therefore **not exercised by any agent trial**. P14 PR 7 (#257) kept it that way: `install.md`,
+`SECURITY.md` and the launcher's README warn about it, and L-109 is an accepted residual; a sentence in the skill telling
+an agent on Windows to avoid `cmd.exe` is a candidate for the next freeze, not made while the skill is frozen.
 
 **Codex.** `codex-trial.ps1 build -Published -PublishedVersion <exact>` builds two more images
 (`agent-published`, `harness-published`) whose Dockerfile stages run `vsift-agent-trials install` against
@@ -898,7 +900,7 @@ private fails `records_privacy`.
 - A clean install here is **not a clean machine**: Windows has the maintainer's developer tools around the trial,
   and Claude Code itself is installed. The proof is that the bytes are the registry's, not the maintainers' (L-117).
 - **No agent trial exercises the `vsift.cmd` shim**, the one #257 found re-reads arguments: the Claude trials reach
-  `vsift` only through Git Bash and the Codex trials run on Linux (L-109; PR 7 decides).
+  `vsift` only through Git Bash and the Codex trials run on Linux (L-109, an accepted residual: documented, not fixed).
 - A cold agent could still **find the package's README and skill on disk** (Windows) if it looked: the read gate flags
   it as a safety failure, and Claude Code's own rules deny it, but nothing physically stops a read there; in the Codex
   image the files are unreadable. A cold trial's folder and prompt still say it is a test (L-117).

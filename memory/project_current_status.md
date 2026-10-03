@@ -70,8 +70,8 @@ macOS 15, Ubuntu 24.04; scrubbed `PATH`); **RQ-02** the extracted archives; **RQ
 `--artifact-dir` with no network; **RQ-04** upgrade, the uninstall walk and a frozen v0.1.0
 compatibility test; **RQ-19** a credential-free second verifier; all `passed` in the ledger.
 **Findings:** #256 (minimal Ubuntu lacks `libgomp1`; the hosted image has it), #257 (Windows `.cmd`
-shims re-parse hostile arguments; trials and journeys use Git Bash and the native executable);
-L-109 to L-112.
+shims re-parse hostile arguments; trials use Git Bash; PR 7 documented it in `install.md`,
+`SECURITY.md` and the launcher README, L-109 accepted residual); L-109 to L-112.
 
 **PR 3 (this change; awaiting review; nothing published).** ADR 0024's note; results in plan
 section 17. `VSIFT_E2E_BINARY` (with the expected version and commit; refused, never ignored, when

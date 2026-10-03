@@ -41,6 +41,12 @@ omitted) or 126 (the platform package has another version, or the executable doe
 match its recorded digest or cannot be started). Reinstall `vsift-cli` with optional
 dependencies included; `vsift` itself never exits with either status.
 
+On Windows, npm and pnpm also write a `vsift.cmd` file, and `cmd.exe` re-reads the command
+line of a `.cmd` file (it expands `%NAME%` and acts on an unquoted `>` or `|`). Typing `vsift` in
+PowerShell or Git Bash is not affected. A program that passes `vsift` text it did not write should
+not go through `cmd.exe` (Node's `exec`, Python's `shell=True`, `cmd /c`): start the platform
+package's `vsift.exe`, or Node on `bin/vsift.cjs`, with an argument list and no shell.
+
 The install guide, including the native archives for machines without a JavaScript
 runtime and how to verify them, is
 [`docs/operations/install.md`](https://github.com/smormah/vsift/blob/main/docs/operations/install.md).
