@@ -1013,3 +1013,75 @@ route and require them to arrive unchanged with no command run, and pin the thre
 the routes. **Not done:** one sentence in the skill (run `vsift` from PowerShell or Git Bash on Windows, never
 through `cmd.exe`), because the skill is frozen for the agent-trial batches; it is a candidate for the next
 freeze and the maintainer decides. [L-109](../planning/known-limits.md#l-109) is an accepted residual.
+
+## Implementation note, 2026-10-03 (P14 PR 4, the robustness campaigns)
+
+Pull request #259. Delivered from "What P14 delivers" item 4: evidence items RQ-07 to RQ-10, RQ-12 and
+RQ-13, built and **run**: long fuzzing with a gap review, race and stress repetitions on three systems,
+the load ladder, batch and soak in the strict-worker container, malicious media in a disposable
+container, the worker runbook walked step by step, and the first scan reading. **Everything ran on hosted
+runners; nothing ran on the maintainer's machine.** No product code changed; nothing was published or
+tagged; no repository, environment, ruleset or npm setting changed; no alert was dismissed; no secret was
+used; no dependency was added to the workspace (the fuzz crate, which is outside it and has its own
+lockfile, gained four at the workspace's pinned versions to build its seeds and name its artifacts: `sha2`,
+`flate2`, `lzma-rust2` and `tar`, all already in the graph; `cargo deny` passes for it). The results, what
+each shows and what it does not are in [`p14-qualification.md`](../planning/p14-qualification.md) section
+18 and the scan reading in [`p14-scan-reading-2026-10-02.md`](../planning/p14-scan-reading-2026-10-02.md);
+the decisions taken inside this ADR:
+
+- **The campaigns are Node.js tools with no dependency, in `tools/p14-campaigns/`** (a sibling of
+  `tools/p14-published/`, so a change to them does not start the Release workflow), with 71 unit tests that
+  need no network or container. Six workflows run them (`Fuzz` extended, `P14 stress`, `P14 load`, `P14
+  malicious media`, `P14 runbook walk`, `P14 scan reading`), each `permissions: {}` at the top and
+  `contents: read` per job, with no secret, no OIDC token and no write step. The governance workflow lint
+  was **not changed** and accepts them; `tools/p14-published/test/pins.test.cjs` holds them to the Release
+  workflow's pins. A pull request that changes a workflow or its tools runs a small smoke of it, so a
+  change is exercised before it merges; a dispatch names the branch (`--ref`) and works before the
+  workflow is on the default branch.
+- **The subject is the published binary where the question is about the product as shipped** (load,
+  malicious media and the runbook walk install `vsift-cli` from the real registry into the worker image
+  and never build from source), **and the source where the question is about the code** (fuzzing and the
+  stress repetitions). The evidence ledger says which: RQ-09, RQ-10 and RQ-12 name the published 0.1.0 (RQ-09
+  and RQ-12 the pull request's head that ran them); RQ-07 and RQ-08 name the commit that ran, because the
+  fuzz folder and the stress runner changed after 0.1.0 (the crates did not). **The ledger's commits for
+  RQ-07, RQ-08, RQ-09 and RQ-12 are commits of this pull request and do not survive its squash; they have
+  to be re-pointed to the merge commit**, which no change inside the pull request can know.
+- **A finding is filed, not fixed, in a campaign pull request.** Every failure became an issue before it
+  was repeated (rule 14): #206 gained the reproduction; #271, #272, #274 and #277 are new; #264 to #266 are
+  the media findings. The ledger records RQ-08, RQ-10 and RQ-13 as **failed** with their issues; the fixes
+  are for the pull requests that follow, each with its regression test. The malicious-media runner knows
+  the three filed cases (`TRACKED`) so that a run which finds only those passes and says so, while a new
+  finding or a broken containment check fails it; a tracked case that now passes is reported so its entry
+  is removed.
+- **Judging a hostile input is by the typed answer and the bounds, not by a particular step.** `ingest`
+  only copies and sniffs a file, so a damaged container is refused by a later call; a case marked
+  "refused" passes when some operation fails typed and none succeeds after it. The bounds are the plan's
+  (120 s, 1 GiB, 128 processes, no network, nothing outside the root, canary unchanged, no injected
+  command). The first runs were wrong in the judge (a header-only declared duration is not what the
+  product measures); each was fixed in the tool, none by relaxing a bound.
+- **The worker host is exercised with `durable` workspaces.** A hosted runner's disk is mounted
+  `nobarrier` and the product refuses `durable` there, as the runbook says; the walk and the load make an
+  ext4 volume in a file for the state folder and the bundle root (`truncate`, `mkfs.ext4`, `mount -o loop`)
+  and the runbook now shows the recipe for a test host. This is a file on the runner's disk, so it proves the
+  product's behaviour with barriers on, not a disk's.
+- **The load's request mix avoids three clips.** F02, F04 and F05 fail a five-second range of local
+  recognition (#274, L-124) while the whole clips recognise; a load campaign needs requests that complete,
+  and the diagnosis phase still lists every clip, with a whole-clip trial for each that fails. The soak
+  runs the operator's cleaner over every bucket every 30 rounds: a workspace keeps at most 4,096 request
+  records and prunes only those of sessions that no longer exist (the runbook, section 5), so the first
+  12,000-request run, which cleaned one bucket at a time, met that documented `RESOURCE_LIMIT` at its line
+  5,881. The second run (cleaning every 30 rounds) settled every request except 189 duplicates and
+  conflicts whose records had been pruned with their sessions: the runbook's sentence that the dedupe
+  window is at least the retention was wrong and is corrected (#286), and the campaign now judges that case
+  as outside the window (not re-run).
+- **The scan reading keeps identifiers, not write-ups.** Cargo and the binary are read by a hosted job; the
+  alerts, the pinned actions' advisories and the public records for FFmpeg and whisper.cpp by read-only calls
+  to public interfaces. The reading records identifier, severity, named component, version range and a
+  disposition, and does not reproduce a record's description. FFmpeg's status was tested by commit
+  ancestry (an exact test in one direction only). Dispositions are proposed; the maintainer decides.
+- **The runbook was corrected where the walk found it wrong** (the account and folder commands, the tools
+  prerequisite, which invocation attests isolation, the image and CPU count, exit 6 on a stop, what the
+  cleaner's cursor is, the barrier-volume recipe). None of these was a product defect.
+- **Known limits.** L-122, L-123, L-124, L-127 and L-128 (L-121, L-125 and L-126 were taken by other pull requests while this was in progress):
+  the FFmpeg snapshot, the two Windows concurrency failures, the five-second recognition range, the
+  CLI's handling of a pipe, a link and a full disk, and the depth and gaps of the fuzzing.

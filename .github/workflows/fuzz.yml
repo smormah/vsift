@@ -1,19 +1,42 @@
 name: Fuzz
 
-# Short libFuzzer passes over the parsers of untrusted input (ADR 0016, decision
-# 6). cargo-fuzz needs a nightly toolchain, so by maintainer decision (2026-09-24)
-# it runs weekly and on demand rather than on every pull request; the stable
-# toolchain and MSRV are unchanged for everything else, and every pull request
-# still replays the same target bodies over the committed seeds on stable (CI,
-# "Fuzz harness replay"). Long campaigns remain P14 qualification gates.
+# libFuzzer passes over the parsers of untrusted input (ADR 0016, decision 6).
+# cargo-fuzz needs a nightly toolchain, so by maintainer decision (2026-09-24)
+# the long passes run weekly and on demand rather than on every pull request;
+# the stable toolchain and MSRV are unchanged for everything else, and every
+# pull request still replays the same target bodies over the committed seeds on
+# stable (CI, "Fuzz harness replay").
+#
+# P14 PR 4 (evidence item RQ-07, docs/planning/p14-qualification.md section 2):
+#   - 31 targets: seven were added by the gap review of the parsers of
+#     untrusted input (docs/planning/p14-qualification.md, "RQ-07 gap review");
+#   - the duration cap is 4 hours per target (it was 20 minutes), so the
+#     campaign can ask for the plan's 60 minutes or more of every target;
+#   - every target job keeps its log, its corpus and a coverage-plateau line;
+#     a crash is kept with a reproduction and a minimised copy, and is a
+#     finding: it becomes an issue and a regression seed, never a rerun;
+#   - a pull request that changes `fuzz/` or this file runs a smoke pass over
+#     every target for 15 seconds each, so a broken harness fails before it
+#     merges.
+#
+# The workflow cannot publish anything: it has `contents: read` only and uses
+# no secret. Retention is 90 days (the maximum for a public repository; the
+# plan names no figure).
 
 on:
   schedule:
     - cron: "17 3 * * 1"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/fuzz.yml
+      - fuzz/**
+      - tools/p14-campaigns/**
   workflow_dispatch:
     inputs:
       seconds:
-        description: Seconds of fuzzing per target (1-1200)
+        description: Seconds of fuzzing per target (1-14400; the P14 campaign asks for 3600)
         required: false
         default: "300"
 
@@ -22,7 +45,7 @@ permissions:
 
 concurrency:
   group: fuzz-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # A dated nightly, not the moving channel, so a scheduled run changes only
@@ -30,12 +53,77 @@ env:
   # MSRV in Cargo.toml) and record the date in the pull request.
   FUZZ_TOOLCHAIN: nightly-2026-09-01
   CARGO_FUZZ_VERSION: 0.13.2
+  NODE_VERSION: "22.23.3"
 
 jobs:
+  smoke:
+    name: Fuzz smoke (every target, 15 s each)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Test the campaign tools
+        run: node --test "tools/p14-campaigns/test/*.test.cjs"
+
+      - name: Install the pinned nightly toolchain
+        run: rustup toolchain install "$FUZZ_TOOLCHAIN" --profile minimal
+
+      - name: Install the pinned cargo-fuzz
+        run: cargo install cargo-fuzz --version "$CARGO_FUZZ_VERSION" --locked
+
+      - name: Require the committed fuzz lockfile
+        run: cargo "+$FUZZ_TOOLCHAIN" metadata --locked --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
+
+      - name: Build every target once
+        run: cargo "+$FUZZ_TOOLCHAIN" fuzz build --features libfuzzer
+
+      - name: Run every target for 15 seconds
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for source in fuzz/fuzz_targets/*.rs; do
+            target="$(basename "$source" .rs)"
+            mkdir -p "fuzz/corpus/$target" "fuzz/artifacts/$target"
+            binary="fuzz/target/x86_64-unknown-linux-gnu/release/$target"
+            if ! "$binary" "fuzz/corpus/$target" "fuzz/seeds/$target" \
+                 -max_total_time=15 -timeout=10 -rss_limit_mb=2048 \
+                 "-artifact_prefix=fuzz/artifacts/$target/" -print_final_stats=1 \
+                 > "fuzz-$target.log" 2>&1; then
+              echo "FAILED: $target"
+              tail -40 "fuzz-$target.log"
+              failed=1
+            fi
+            node tools/p14-campaigns/fuzz-summary.cjs --target "$target" --log "fuzz-$target.log" --seconds 15 \
+              | tee -a "$GITHUB_STEP_SUMMARY" || failed=1
+          done
+          exit "$failed"
+
+      - name: Upload the crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-smoke-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore
+          retention-days: 90
+
   fuzz:
     name: Fuzz (${{ matrix.target }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
@@ -64,11 +152,24 @@ jobs:
           - request_record
           - job_batch_file
           - handoff_check
+          - setup_plan
+          - bundle_manifest
+          - tar_inventory
+          - gzip_tar_inventory
+          - xz_tar_inventory
+          - identifiers
+          - input_path
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
 
       - name: Validate the requested duration
         id: duration
@@ -78,8 +179,8 @@ jobs:
         run: |
           set -euo pipefail
           case "$REQUESTED" in ''|*[!0-9]*) echo "seconds must be a positive integer"; exit 1;; esac
-          if [ "$REQUESTED" -lt 1 ] || [ "$REQUESTED" -gt 1200 ]; then
-            echo "seconds must be between 1 and 1200"
+          if [ "$REQUESTED" -lt 1 ] || [ "$REQUESTED" -gt 14400 ]; then
+            echo "seconds must be between 1 and 14400"
             exit 1
           fi
           echo "seconds=$REQUESTED" >> "$GITHUB_OUTPUT"
@@ -93,6 +194,12 @@ jobs:
       - name: Require the committed fuzz lockfile
         run: cargo "+$FUZZ_TOOLCHAIN" metadata --locked --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null
 
+      - name: Record the host
+        run: |
+          uname -a
+          nproc
+          free -m | head -2
+
       - name: Fuzz ${{ matrix.target }}
         shell: bash
         env:
@@ -103,7 +210,47 @@ jobs:
           mkdir -p "fuzz/corpus/$TARGET"
           cargo "+$FUZZ_TOOLCHAIN" fuzz run --features libfuzzer "$TARGET" \
             "fuzz/corpus/$TARGET" "fuzz/seeds/$TARGET" -- \
-            "-max_total_time=$SECONDS_PER_TARGET" -timeout=10 -rss_limit_mb=2048
+            "-max_total_time=$SECONDS_PER_TARGET" -timeout=10 -rss_limit_mb=2048 \
+            -print_final_stats=1 2>&1 | tee "fuzz-$TARGET.log"
+
+      - name: Say where coverage stopped growing
+        if: always()
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          SECONDS_PER_TARGET: ${{ steps.duration.outputs.seconds }}
+        run: |
+          set -uo pipefail
+          touch "fuzz-$TARGET.log"
+          node tools/p14-campaigns/fuzz-summary.cjs --target "$TARGET" --log "fuzz-$TARGET.log" --seconds "$SECONDS_PER_TARGET" \
+            | tee "fuzz-$TARGET.plateau.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Reproduce and minimise a crash
+        if: failure()
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -uo pipefail
+          for crash in "fuzz/artifacts/$TARGET"/*; do
+            [ -f "$crash" ] || continue
+            echo "== reproducing $crash ($(wc -c < "$crash") bytes)"
+            cargo "+$FUZZ_TOOLCHAIN" fuzz run --features libfuzzer "$TARGET" "$crash" 2>&1 | tail -40 || true
+            echo "== minimising"
+            cargo "+$FUZZ_TOOLCHAIN" fuzz tmin --features libfuzzer "$TARGET" "$crash" -- -runs=5000 -timeout=10 2>&1 | tail -8 || true
+          done
+
+      - name: Upload the corpus, the log and the plateau line
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-corpus-${{ matrix.target }}
+          path: |
+            fuzz/corpus/${{ matrix.target }}
+            fuzz-${{ matrix.target }}.log
+            fuzz-${{ matrix.target }}.plateau.txt
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Upload the crashing inputs
         if: failure()
@@ -112,4 +259,4 @@ jobs:
           name: fuzz-artifacts-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 90

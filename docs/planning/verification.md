@@ -541,7 +541,9 @@ is **not** recorded here: the machine-checked
 the earlier material that does not count, and `cargo run --locked -p vsift-governance --
 release-evidence --complete-for <version>` fails unless every item the release needs is
 answered (see [delivery governance](delivery-governance.md)). `A-10` (above) is the
-scenario row of RQ-16.
+scenario row of RQ-16. The first results of RQ-07 to RQ-10, RQ-12 and RQ-13 (what ran, on what, and what
+it does not show) are in [`p14-qualification.md`](p14-qualification.md) section 18; each campaign is
+dispatched as `docs/development.md` says, on hosted runners only.
 
 | ID | Evidence | Pass rule |
 | --- | --- | --- |

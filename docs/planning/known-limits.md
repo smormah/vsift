@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-03 (P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-03 (P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -105,7 +105,7 @@ Each entry has these fields:
 | [L-060](#l-060) | Admission is not fair between processes sharing a root | performance | low | unscheduled | none | accepted residual |
 | [L-061](#l-061) | The free-space reserve is a pre-copy check on Unix only, not a quota | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-062](#l-062) | A worker request's input path may not go through any link | security | low | unscheduled | none | accepted residual |
-| [L-063](#l-063) | A workspace keeps at most 4,096 request records, pruned only when their session is gone | contract/UX | low | unscheduled | none | accepted residual |
+| [L-063](#l-063) | A workspace keeps at most 4,096 request records, pruned only when their session is gone | contract/UX | low | unscheduled | [#286](https://github.com/smormah/vsift/issues/286) | accepted residual |
 | [L-064](#l-064) | A retain killed mid-copy leaves a staging directory in the bundle root | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-065](#l-065) | A request's deadline, admission wait and attempt count per delivery | contract/UX | low | unscheduled | none | accepted residual |
 | [L-066](#l-066) | A batch file holds at most 1,000 lines; a longer file runs nothing | contract/UX | low | unscheduled | none | accepted residual |
@@ -155,10 +155,15 @@ Each entry has these fields:
 | [L-119](#l-119) | There are two hold-out scenarios, one run per client each, written by the same authors | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
+| [L-122](#l-122) | The reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities, and 18 more records give no fix reference | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
+| [L-123](#l-123) | Two Windows concurrency failures reproduce on a hosted runner at about one repetition in 200: session-root creation and the weighted-admission grant | integrity/durability | medium | P14 | [#206](https://github.com/smormah/vsift/issues/206), [#271](https://github.com/smormah/vsift/issues/271) | open |
+| [L-124](#l-124) | Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips | accuracy/ASR | medium | P14 | [#274](https://github.com/smormah/vsift/issues/274), [#277](https://github.com/smormah/vsift/issues/277) | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
+| [L-127](#l-127) | The CLI's ingest treats three kinds of hostile source worse than the worker path does: a named pipe hangs it, a link is refused as a storage failure and a full disk is reported as corruption | security | low | P14 | [#264](https://github.com/smormah/vsift/issues/264), [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) | open |
+| [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, nineteen of 31 targets were still finding coverage at the end, and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 
-Counts: 1 high, 32 medium, 77 low (110 entries).
+Counts: 1 high, 35 medium, 79 low (115 entries).
 
 ## Security
 
@@ -881,13 +886,17 @@ Counts: 1 high, 32 medium, 77 low (110 entries).
   keeps exactly-once instead).
 - **Evidence:** ADR 0021 PR 3 notes; `a_full_workspace_prunes_only_records_whose_session_is_gone`.
 - **Impact:** a workspace that keeps more than 4,096 live sessions' requests must clean
-  sessions (`session clean --expired`, or their retention) before new requests run.
+  sessions (`session clean --expired`, or their retention) before new requests run. The other
+  side (P14 soak, 2026-10-03): a closed session that the cleaner removes takes its record with
+  it as soon as the table is full, so a duplicate delivered later runs again and the same id
+  with another request is accepted (189 of 12,000 lines; the runbook said the window was at
+  least the retention and now says otherwise); [#286](https://github.com/smormah/vsift/issues/286).
 - **Why:** a bounded store, and replay must stay exact while its session exists.
 - **Mitigation:** records expire with their sessions (at most 720 hours); `RESOURCE_LIMIT`
   is typed and names no path.
 - **Next step:** none planned.
-- **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual.
-  **Review:** pending.
+- **Owner:** unscheduled. **Issue:** [#286](https://github.com/smormah/vsift/issues/286) (the dedupe window).
+  **Status:** accepted residual. **Review:** pending.
 
 ### L-065
 
@@ -3039,6 +3048,92 @@ that week.**
 - **Owner:** unscheduled (P14 PR 9 is the natural home). **Issue:** none. **Status:** open.
   **Review:** pending.
 
+### L-122
+
+**The reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities, and 18 more records give no fix reference.**
+
+- **What:** the managed catalogue installs one reviewed FFmpeg, the BtbN snapshot
+  `n9.0.1-11-ge47273f4d9` of 2026-08-31. Of 47 public records naming FFmpeg (published June to
+  September 2026), 12 are fixed by an older release line and are in the snapshot; **17 have a fix on
+  FFmpeg's `master` that the snapshot does not contain** (1 critical, 13 high, 3 medium); **18 give
+  no fix commit** (14 high, 4 medium). Read against VSift's configuration (the `mov` and
+  `matroska` demuxers, the `file` protocol, decoding after a bounded probe), 12 of the 35 name code
+  VSift cannot start, including the one critical record (a network streaming protocol); 23 do not, and 18 of
+  those are high-severity (the scaler and filters, HEVC, PNG, the MP4 demuxer's IAMF parsing, two
+  decoders a probe may open, and nine records that name no component). Whisper.cpp v1.9.2, the
+  pinned actions and the Rust dependencies gave no finding.
+- **Evidence:** [`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md) (identifiers,
+  severities, components and the method); `P14 scan reading` run 37136669647;
+  [#272](https://github.com/smormah/vsift/issues/272).
+- **Impact:** untrusted media is decoded by an FFmpeg that may carry known bugs. The allow-lists, the
+  byte, time, pixel and stream bounds and, in a worker, the strict-isolation container limit what
+  such a bug could do; none of them removes it. The reading is an assumption about reachability, not
+  a proof, and an ancestry test cannot see a backport under another hash.
+- **Why:** the catalogue is a reviewed snapshot, not a rolling build; refreshing it is a new
+  catalogue revision with its own review.
+- **Mitigation:** keep untrusted media in the strict-isolation container
+  ([`worker-host.md`](../operations/worker-host.md)); the maintainer's choice among the proposed
+  dispositions in the reading (refresh the snapshot, read the 18 upstream, or accept the 12 as a
+  residual with a test that FFmpeg never gets another demuxer or protocol).
+- **Next step:** the maintainer decides; a refresh is a catalogue revision and a new RQ-13 reading.
+- **Owner:** P14. **Issue:** [#272](https://github.com/smormah/vsift/issues/272). **Status:**
+  open. **Review:** pending.
+
+### L-123
+
+**Two Windows concurrency failures reproduce on a hosted runner at about one repetition in 200: session-root creation and the weighted-admission grant.**
+
+- **What:** the P14 stress campaign repeated the tests on hosted Windows Server 2025, Ubuntu 24.04
+  and macOS 15. `session_root_provisioning` failed **7 times in 1,500** on Windows (and 2 in 1,500
+  with every CPU kept busy) with "session storage root permissions are not private", in the
+  threads test as well as the processes test; this is [#206](https://github.com/smormah/vsift/issues/206),
+  now reproduced. `weighted_admission_never_exceeds_root_capacity` failed **2 times in 200**
+  (consecutively) on Windows: a child never received a reservation within its wait
+  ([#271](https://github.com/smormah/vsift/issues/271)). None of the other tests failed on any
+  system, and neither failed on Ubuntu or macOS (0 in 3,000 and 0 in 400). Issue
+  [#128](https://github.com/smormah/vsift/issues/128) (process supervisor, Windows) did **not**
+  reproduce: 0 in 3,000 repetitions on each system.
+- **Evidence:** `P14 stress` run 36978939586 (`p14-stress-roots-windows-2025`,
+  `p14-stress-roots-loaded-windows-2025` and `p14-stress-admission-windows-2025` keep the failing
+  outputs); [`p14-qualification.md`](p14-qualification.md) section 18.
+- **Impact:** a Windows process that opens a session root while another creates it can be refused
+  with a typed error (fail closed: nothing wrong is accepted). Whether the refused call works when
+  repeated was not measured. For the admission failure it is not known whether the product or the
+  test's wait is at fault.
+- **Why:** not traced. The root's privacy is checked while another creator may still be setting
+  its access list, as [#206](https://github.com/smormah/vsift/issues/206) first suspected.
+- **Mitigation:** create the root with one process before starting others (likely, not measured).
+- **Next step:** fix #206 with a regression test that repeats creation on Windows; explain or fix
+  #271; re-run `P14 stress` on the candidate (RQ-08).
+- **Owner:** P14. **Issue:** [#206](https://github.com/smormah/vsift/issues/206),
+  [#271](https://github.com/smormah/vsift/issues/271). **Status:** open. **Review:** pending.
+
+### L-124
+
+**Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips.**
+
+- **What:** with the published 0.1.0 and the managed tools, `transcript retranscribe --from 0 --to
+  5000000` of the synthetic clips F02, F04 and F05 ends `MISSING_CAPABILITY` ("output_validation
+  (malformed_output)") while the same range of F01, F03, F06, F07, F08, F09 and F12 recognises, and
+  the whole of F02, F04 and F05 recognises. The same request as a worker `retranscribe` step fails
+  the same way. The cause is not known. In two early smoke runs of the load campaign a session or two
+  was left listed as `initializing`, and `session status` of such a
+  session answers `STORAGE_IO` ([#277](https://github.com/smormah/vsift/issues/277)); it did not return in
+  the later runs, so the connection is not established.
+- **Evidence:** `P14 load` run 37136669579 (`load-summary.md`, `diagnose-recognition.json`);
+  [#274](https://github.com/smormah/vsift/issues/274).
+- **Impact:** an agent asking for a range of speech can be told that a tool is missing, with a
+  remediation (reinstall whisper.cpp) that cannot help, and the code is not retryable. The
+  whole-clip request works for these clips.
+- **Why:** not traced; the recogniser's raw output for the failing chunk was not kept.
+- **Mitigation:** ask for the whole clip, or a wider range.
+- **Next step:** reproduce with the raw output, decide whether a segment beyond the chunk is
+  clamped or dropped with a coverage note, and stop reporting a malformed output as a missing
+  capability; add the three clips to the local-ASR checks. The load campaign's request mix avoids
+  these clips until then.
+- **Owner:** P14. **Issue:** [#274](https://github.com/smormah/vsift/issues/274),
+  [#277](https://github.com/smormah/vsift/issues/277). **Status:** open. **Review:** pending.
+
 ### L-125
 
 **The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test.**
@@ -3114,6 +3209,68 @@ that week.**
   to branch on this case, answer `INVALID_ARGUMENT` for a folder with no marker.
 - **Owner:** unscheduled. **Issue:** none (#261 is closed by the remediation). **Status:** accepted
   residual. **Review:** pending.
+
+### L-127
+
+**The CLI's ingest treats three kinds of hostile source worse than the worker path does: a named pipe hangs it, a link is refused as a storage failure and a full disk is reported as corruption.**
+
+- **What:** the P14 malicious-media campaign ran 96 generated inputs through 251 operations of
+  the published 0.1.0 in a no-network, read-only-root, memory- and process-bounded container.
+  Every other input was refused or processed inside its bound with a typed code. Three were not:
+  `vsift ingest` of a **named pipe with no writer never returns** (killed at 150 s;
+  [#264](https://github.com/smormah/vsift/issues/264)); `ingest` of a **symbolic link** answers
+  `STORAGE_IO` instead of `INVALID_SOURCE`, and no document says how links are treated
+  ([#265](https://github.com/smormah/vsift/issues/265)); `ingest` of a **600 MiB file into a root of
+  256 MiB** fails after 5 s as `INTEGRITY_FAILURE` where the job path refuses early as
+  `RESOURCE_LIMIT` ([#266](https://github.com/smormah/vsift/issues/266)). A worker job request
+  refuses all three at once with a typed code.
+- **Evidence:** `P14 malicious media` run 37136669473 (`hostile-summary.md`);
+  [`p14-qualification.md`](p14-qualification.md) section 18.
+- **Impact:** a script or agent handed a path it did not create can wait for ever on a pipe; the
+  two misclassifications send an agent to investigate storage or the source when the cause is the
+  path or the disk's size. Nothing wrong is stored or shown as evidence, and the link's target was
+  never read.
+- **Why:** the CLI path opens the source before it checks the file type, and does not apply the
+  free-space check the job path applies (not traced).
+- **Mitigation:** use the worker path for paths you do not control; keep untrusted sources off
+  pipes and links.
+- **Next step:** check the file type first on the CLI path, give links one documented answer and
+  share the free-space check; a regression test per case.
+- **Owner:** P14. **Issue:** [#264](https://github.com/smormah/vsift/issues/264),
+  [#265](https://github.com/smormah/vsift/issues/265),
+  [#266](https://github.com/smormah/vsift/issues/266). **Status:** open. **Review:** pending.
+
+### L-128
+
+**The fuzzing is one hour per target on shared hosted CPUs, nineteen of 31 targets were still finding coverage at the end, and three kinds of stored record have no target.**
+
+- **What:** the P14 campaign ran every one of the 31 targets for 3,601 s (3.68 billion runs in all)
+  with no crash, timeout or out-of-memory. For 19 targets the last new coverage came in the final
+  tenth of the run (for example `request_record`, `transcript_record`, `bundle_manifest`,
+  `handoff_check`, `job_batch_file` and `setup_plan`), so a longer run may still find new paths; three
+  (`transcript_cursor`, `crop_rect`, `png_sequence`) stopped finding any in their first 6 percent.
+  Seven targets were added by the gap review (the saved setup plan, the bundle manifest and its
+  artifacts, the tar, gzip and xz archive inventories, the identifier grammars, the input-path
+  grammar). Not fuzzed: the session root's ownership marker, the media-tool verification record and the
+  user dependency configuration, which are read from folders VSift
+  creates owner-private; the managed store's ownership marker is compared with
+  fixed bytes, not parsed. The bundle target runs on Unix only (the Windows replay skips it).
+- **Evidence:** `Fuzz` run 36978914176 (one plateau line per target in each job log);
+  [`p14-qualification.md`](p14-qualification.md) section 18.1.
+- **Impact:** "no finding" is a floor: it covers those inputs for that hour, not every input. A
+  malformed file in one of the three unfuzzed records is read by code no fuzzer has exercised;
+  the writer of such a file already has the user's rights.
+- **Why:** an hour per target was the plan's bar and the hosted budget; the three records are not
+  reachable through a published parse function, and the harness reaches parsers only through the
+  published surface.
+- **Mitigation:** the weekly five-minute runs and every pull request's replay of the committed seeds
+  continue; the candidate's qualification repeats the long run after the fixes (RQ-07 is `carry` to
+  the stable only when no file in its scope changed).
+- **Next step:** repeat the long run on the candidate with the two-hour budget for the 19 targets
+  still growing; expose and fuzz the three records if a published parser is added.
+- **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
+  accepted residual. **Review:** pending.
+
 
 ## Review workflow
 

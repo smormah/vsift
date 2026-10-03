@@ -1,6 +1,6 @@
 # VSift current status
 
-As of 2026-10-02. Current-state document: rewrite it, don't append to it. Next actions and
+As of 2026-10-03. Current-state document: rewrite it, don't append to it. Next actions and
 open decisions are in `memory/TODO.md`.
 
 ## In plain English
@@ -42,8 +42,9 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1
 (#251), 2 (#255, published artifacts), 3 (#254, journeys on the published binary), 5 (#276), 6
-(#262, the trial harness) and 8 (#252) are merged; PR 4 (#259) is a draft; PR 7 (fixes) is under
-way; the whole packet is not complete.** What it must show, and what is weaker than it sounds:
+(#262, the trial harness) and 8 (#252) are merged; PR 4 (#259, the robustness campaigns) is ready
+for review; PR 7 (fixes) is under way; the whole packet is not complete.** What it must show, and
+what is weaker than it sounds:
 - **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints
   against it on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit; no launcher
   or archives, L-115); PR 2 installed it on hosted runners, not clean machines. Smart App Control
@@ -54,52 +55,51 @@ way; the whole packet is not complete.** What it must show, and what is weaker t
 - **A synthetic corpus and synthetic voice only** (L-020, L-022, L-028, L-030). **Trials tuned on
   their own scenarios;** the hold-outs are unrun and the skill-less run ran only as batch 1's
   baseline; the review tier's blurred-banner re-run is missing (L-095).
-- **SEC-T01 is half done and stays so in R0** (L-068, #188 in R1; claim narrowed 2026-10-03, RQ-14
-  waived); dangerous media never run; load ladder stopped at 4 jobs; fuzzing weekly, 5 min a target.
+- **SEC-T01 is half done and stays so in R0** (L-068, #188 in R1; RQ-14 waived). **The campaigns
+  have now run once on 0.1.0 and found things:** Windows races (#206, #271), the FFmpeg snapshot
+  (#272), three hostile-source cases (#264-#266) and a recognition range failure (#274); none is
+  fixed (PR 7), so RQ-08, RQ-10 and RQ-13 are `failed`.
 - **`latest` has never moved;** that path never ran for real (L-105). Decisions A-H: `TODO.md`.
 
-## P14 PR 1, 2, 3, 6 and 8 in one view
+## P14 PRs 1, 2, 3, 4, 6 and 8 in one view
 
-**PR 1 (merged, #251):** the evidence ledger (`p14-evidence-ledger.json`, RQ-01..RQ-20) and the
-claims registry (`public-claims.json`, rung `now`), checked on every pull request (L-101).
+**PR 1 (merged, #251):** the evidence ledger (RQ-01..RQ-20) and the claims registry (rung `now`),
+checked on every pull request (L-101). **PR 2 (merged, #255):** RQ-01 clean install from the real
+registry (npm, pnpm, Yarn, Bun; three systems), RQ-02 the archives, RQ-03 the offline install, RQ-04
+upgrade and a frozen v0.1.0 compatibility test, RQ-19 a second verifier; all `passed` for 0.1.0 only
+(plan section 15; #256 fixed, #257 documented; L-109 to L-112). **PR 8 (merged, #252):** `release.md`
+6.7-6.9; the version alone decides the channel (a suffix means `next`, none moves `latest`), guarded
+by the candidate delta and the complete ledger (L-103); a real stable publish is not done (L-105).
 
-**PR 2 (merged, #255; nothing published).** Real artifacts on hosted runners, for **0.1.0 only**
-(plan section 15): **RQ-01** clean install from the real registry (npm, pnpm, Yarn, Bun; Windows,
-macOS 15, Ubuntu 24.04; scrubbed `PATH`); **RQ-02** the extracted archives; **RQ-03**
-`--artifact-dir` with no network; **RQ-04** upgrade, the uninstall walk and a frozen v0.1.0
-compatibility test; **RQ-19** a credential-free second verifier; all `passed` in the ledger.
-**Findings:** #256 (minimal Ubuntu lacks `libgomp1`; the error now names it), #257 (Windows `.cmd` shims re-parse hostile
-arguments; documented in `install.md` and `SECURITY.md`, L-109 accepted); L-109 to L-112.
+**PR 3 (merged, #254).** `VSIFT_E2E_BINARY` makes the real-tool checkpoints drive an installed `vsift`;
+`P14 journeys` installs `vsift-cli@<version>` from the real registry on Ubuntu 24.04 (managed tools),
+Windows (pinned) and macOS 15 (Homebrew) and runs P06-P11 against its native executable; both it and `P13
+managed smoke` run weekly. **On 0.1.0:** 53 stages passed on each system, RQ-06 `passed`, RQ-05 `running`
+(P11's durable stage is blocked, #258); one Windows stall (#263).
 
-**PR 3 (merged, #254; nothing published).** ADR 0024's note; results in plan section 17.
-`VSIFT_E2E_BINARY` (with the expected version and commit; refused, never ignored, when wrong) makes
-the real-tool checkpoints drive an installed `vsift`; `p14_installed_binary_e2e` adds hostile file
-names and a sentinel environment. The workflow `P14 journeys` (`tools/p14_journeys.py`) installs
-`vsift-cli@<version>` from the real npm registry on Ubuntu 24.04 (tools from the binary's own
-`setup install`), Windows (pinned) and macOS 15 (Homebrew) and runs P06-P11 against its native
-executable; `P13 managed smoke` takes `published_version`; both run weekly (about an hour of runner
-time). **On 0.1.0:** 53 stages passed on each system; the managed smoke passed (RQ-06 `passed`,
-RQ-05 `running`: P11's durable stage is blocked, #258); the T-04 gates held on macOS. No product
-defect; one Windows stall: #263.
+**PR 6 (merged, #262; `docs/agents/trials.md`) and batch 1.** `tools/vsift-agent-trials` installs the
+published package and proves it in every record, runs a cold agent (`C-01..C-03`: **Claude strict**,
+**Codex realistic**, L-125), keeps hold-outs, freezes inputs by digest, captures usage and plans three
+batches. Weak points: L-117 to L-120. **Batch 1** (2026-10-03, 0.1.0, 20 runs, a baseline;
+`p14-agent-trials/batch-1-reading.md`): skill pilots 4 of 4; cold useful 1 of 6 (Claude) and 2 of 6
+(Codex); none installed anything; safety "not met" on three grader classes for the maintainer (#282).
 
-**PR 8 (merged, #252; nothing published).** Runbook `release.md` 6.7-6.9. The version alone
-decides the channel: a suffix means `next` (a candidate is `-rc.N`), none is stable and moves
-`latest` on all four packages, guarded by the candidate delta, the candidate on npm and the
-complete ledger (L-103). **Not done:** a real stable publish (L-105). **Frozen at the cut:** the
-allowed lists, the notes, the workflow, the skill.
-
-**PR 6 (#262, merged; runbook `docs/agents/trials.md`; nothing published).**
-`tools/vsift-agent-trials` installs the published package into a fresh prefix and proves it in
-every record (npm's fetch equals the registry's integrity, the launcher's digest check, `vsift
---version`); plays the user's part; never runs a shim (Git Bash only); runs a **cold agent**
-(`C-01..C-03`: no skill, no documentation; safety a hard gate, a gap report; **Claude strict**
-(`vsift` alone), **Codex realistic** (read-only helpers, in the container); realistic Claude needs
-an isolated machine, so the baseline compares only within a client: L-125); keeps **hold-outs**
-apart; **freezes** the skill, grader, scenarios and settings (`freeze write|check`); captures usage;
-plans the batches (`campaign`, `summarize`, `run-campaign.ps1`). **Weak points:** L-117..L-120.
-**Batch 1** (2026-10-03, 0.1.0, 20 runs, a baseline; `p14-agent-trials/batch-1-reading.md`): skill
-pilots 4 of 4; cold useful 1 of 6 (Claude) and 2 of 6 (Codex); none installed anything; safety "not
-met" on three grader classes for the maintainer (#282). **Not done:** batches 2 and 3.
+**PR 4 (#259, ready for review; hosted runners only, nothing published, no product code changed;
+plan section 18).** The robustness campaigns on 0.1.0 (`tools/p14-campaigns/`, six read-only workflows):
+- **RQ-07 passed.** The gap review added seven fuzz targets (31 in all): 3,601 s each, 3.68 billion
+  runs, no crash; 19 were still finding coverage at the end; three record kinds have no target (L-128).
+- **RQ-08 failed.** 6,700 repetitions per system on Windows, Ubuntu and macOS: Windows failed root creation
+  7 of 1,500 (#206 reproduced) and 2 of 1,500 loaded, and weighted admission 2 of 200 (#271); #128 did not
+  reproduce (0 in 3,000); L-123.
+- **RQ-09 passed.** Ladder 1-8, a 100-request batch, a cancel, a warm page (p95 5 ms) and a 1,000-request
+  soak with kills: every gate held (two longer soaks: plan 18.3). Found on the way: #274 (a 5 s range of
+  three clips fails as `MISSING_CAPABILITY`, L-124), #277 (sessions left `initializing`), #286 (dedupe window).
+- **RQ-10 failed.** 96 hostile inputs, no network, bounded: 93 held; a pipe hangs `ingest` (#264), a link
+  is `STORAGE_IO` (#265), a full disk `INTEGRITY_FAILURE` (#266); L-127.
+- **RQ-12 passed.** The runbook walked in 18 steps (durable workspace on an ext4 volume in a file); ten
+  divergences fixed. The ledger commits of RQ-07, 08, 09 and 12 are PR heads: re-point them after the squash.
+- **RQ-13 failed.** The first scan reading (`p14-scan-reading-2026-10-02.md`): all clean but the FFmpeg
+  snapshot, which lacks 17 upstream fixes; 18 more records give no fix reference (#272, L-122).
 
 ## P13 in one view (complete)
 
@@ -130,7 +130,7 @@ macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-3, 5, 6 and 8 merged; PR 4 (#259) draft; PR 7 under way; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-3, 5, 6 and 8 merged; PR 4 (#259) ready for review; PR 7 under way; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 

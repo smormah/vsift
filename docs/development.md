@@ -102,6 +102,25 @@ own lockfile. Each target body is a plain function in `fuzz/src/lib.rs`; the sta
 tests above run it over every seed in `fuzz/seeds/<target>/`, and the libFuzzer entry
 points in `fuzz/fuzz_targets/` (feature `libfuzzer`) run it under libFuzzer.
 
+P14 PR 4's gap review added seven more targets, each through a published parser: `setup_plan`
+(the saved setup plan `setup install` reads), `bundle_manifest` (a bundle manifest and the artifacts it
+names, through `FilesystemSessionStore::validate_bundle` in a private folder; Unix only, the Windows replay
+skips it), `tar_inventory`, `gzip_tar_inventory` and `xz_tar_inventory` (the managed archives'
+inventories under a small and a production bound, checked against an independent statement of the archive
+rules), `identifiers` (the id, key and label constructors against a grammar model) and `input_path` (the
+relative-path and bundle-name grammar of a worker request against a model). A seed is a copy of a reviewed
+fixture, an inline example, or derived from code and rebuilt by `VSIFT_REGENERATE_FUZZ_SEEDS=1` (the
+replay tests refuse a seed whose origin is not listed in `fuzz/tests/replay.rs`).
+
+The `Fuzz` workflow takes at most 14,400 s a target (`seconds`, default 300; the P14 campaign asks for
+3,600) and keeps each target's log, corpus and a coverage-plateau line
+(`tools/p14-campaigns/fuzz-summary.cjs`); a pull request that changes `fuzz/` or the workflow runs a
+15-second smoke of every target. A long run is dispatched on a hosted runner, never locally:
+
+```console
+gh workflow run fuzz.yml --ref <branch> -f seconds=3600
+```
+
 libFuzzer needs a nightly toolchain, so the `Fuzz` workflow runs it weekly and on
 manual dispatch, never as a per-PR check. To fuzz locally on Linux (x86-64, with a C++
 compiler), use the workflow's pinned versions:
@@ -472,6 +491,41 @@ record readers starts `P14 compatibility`, which fetches the history and require
 copy of 0.1.0's JSON examples (`schemas/v1/frozen/v0.1.0/`) to be the tag's bytes. The tests behind
 that workflow, `published_compatibility` and `published_v0_1_0_records`, also run in every Quality
 job with the checked-in copy.
+
+## Robustness campaigns (P14)
+
+`tools/p14-campaigns/` holds Node.js tools (CommonJS, no dependency) for the campaigns that stress
+the product on hosted runners ([`planning/p14-qualification.md`](planning/p14-qualification.md)
+section 18 has the results and what each does and does not show). **They are for hosted runners and
+disposable machines only.** They kill processes, fill disks, mount file systems, build containers,
+create hostile files and install packages; never run one on a machine whose state you care about. What
+is safe locally is the tooling's own tests, which need no network, no container and no published
+package:
+
+```console
+node --test "tools/p14-campaigns/test/*.test.cjs"
+```
+
+| Campaign | Workflow (a pull request that changes it or its tools runs a small smoke) | Full run, from a hosted dispatch |
+| --- | --- | --- |
+| Fuzzing (RQ-07) | `Fuzz` | `gh workflow run fuzz.yml --ref <branch> -f seconds=3600` |
+| Race and stress repetitions (RQ-08) | `P14 stress` | `gh workflow run p14-stress.yml --ref <branch>`; inputs `runs` (200), `long_runs` (1500, the supervisor and root-creation suites, plain and with every CPU busy) and `delivery_runs` (100) |
+| Load ladder, 100-request batch, cancel, warm page and soak (RQ-09) | `P14 load` | `gh workflow run p14-load.yml --ref <branch>`; inputs `phases`, `ladder_requests` (24), `batch_requests` (100), `soak_requests` (1000) and `soak_minutes` (270) |
+| Malicious media (RQ-10) | `P14 malicious media` | `gh workflow run p14-malicious-media.yml --ref <branch>` (the pull request's run is already the full set) |
+| The worker runbook walk (RQ-12) | `P14 runbook walk` | `gh workflow run p14-runbook-walk.yml --ref <branch>` |
+| The hosted part of the scan reading (RQ-13) | `P14 scan reading` | `gh workflow run p14-scan-reading.yml --ref <branch>`, then the read-only `gh api` calls listed in the reading |
+
+Each workflow is read-only (`contents: read`), uses no secret, installs the **published** `vsift-cli`
+from the real registry (an empty `version` means the one on `next`) and keeps its record for 90 days as an
+artifact (`load-summary.md`, `hostile-summary.md`, `runbook-summary.md`, the per-job `summary.md` of the
+stress run, the fuzz logs). A hosted job is limited to six hours, so the soak stops starting rounds after
+`soak_minutes`. The load and walk jobs build the worker image from `tools/p14-campaigns/worker.Dockerfile`
+around the published executable, make an ext4 volume in a file for the state folder and the bundle root (a
+runner's own disk is mounted without write barriers and refuses `durable`), and install FFmpeg, whisper.cpp
+and the model with the published binary's own `setup install`. A finding is a result: it gets an issue
+before the run is repeated (governance rule 14), not a rerun. The governance workflow lint and
+`tools/p14-published/test/pins.test.cjs` hold the workflows to the same pins and read-only scopes as the
+others.
 
 ## Governance checks, release evidence and public claims
 

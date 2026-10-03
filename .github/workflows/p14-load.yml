@@ -1,0 +1,193 @@
+name: P14 load
+
+# P14 PR 4, evidence item RQ-09 (docs/planning/p14-qualification.md section 2):
+# the PUBLISHED vsift from the real registry, on a hosted Ubuntu 24.04 runner,
+# with the reviewed FFmpeg, whisper.cpp and model installed by the published
+# binary itself, run in the hardened worker container of docs/operations/
+# worker-host.md section 10 (read-only root, no network, CPU, memory, swap and
+# process limits, every capability dropped, an unprivileged user), with
+# strict isolation attested by the kernel:
+#
+#   ladder   the same requests at 1, 2, 4 and 8 admitted jobs
+#   batch    a 100-request batch at concurrency 4
+#   cancel   `job cancel` of a running recognition: nothing may outlive it by 10 s
+#   page     the warm candidate page of a prepared 30-minute session
+#   soak     1,000 mixed requests: imports, candidates, evidence calls on open
+#            sessions, small recognitions, malformed lines, duplicates, conflicts,
+#            SIGTERM drains and SIGKILLs with redelivery, cleaner passes
+#
+# The sampler (tools/p14-campaigns/sampler.cjs, run under sudo) records the
+# container's memory and process count and each process's resident memory,
+# descriptors and descendants every second; the curves go in the job summary
+# and in the artifact. The rule (plan section 2): coordinator memory at most
+# 256 MiB, no monotonic growth after warm-up, no descendant ten seconds after
+# a cancel, every committed session and bundle validates, no sentinel or path in
+# any output, warm p95 candidate page at most 250 ms. Throughput is a
+# measurement of the runner, never a promise. A failure is a finding.
+#
+# It cannot publish anything: it has `contents: read` only and uses no secret;
+# it installs only the published package, the Ubuntu packages of its own image
+# and the three reviewed tools from their publishers (as P13 managed smoke
+# does). Hosted runners only: the soak kills containers at random.
+#
+# Triggers: a pull request that changes this workflow or its tools runs a
+# small smoke of every phase (PR_* below), and a manual dispatch runs the full
+# campaign (`gh workflow run p14-load.yml --ref <branch>` works before the
+# workflow is on the default branch).
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p14-load.yml
+      - tools/p14-campaigns/load.cjs
+      - tools/p14-campaigns/prepare-host.cjs
+      - tools/p14-campaigns/sampler.cjs
+      - tools/p14-campaigns/worker.Dockerfile
+      - tools/p14-campaigns/case-wrapper.sh
+      - tools/p14-campaigns/lib/cgroup-sampler.cjs
+      - tools/p14-campaigns/lib/container.cjs
+      - tools/p14-campaigns/lib/events.cjs
+      - tools/p14-campaigns/lib/host.cjs
+      - tools/p14-campaigns/lib/load-verdict.cjs
+      - tools/p14-campaigns/lib/requests.cjs
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The published version of vsift-cli to run. Empty means the version on the next tag.
+        type: string
+        default: ""
+      phases:
+        description: Comma-separated phases (diagnose, ladder, batch, cancel, page, soak)
+        type: string
+        default: "diagnose,ladder,batch,cancel,page,soak"
+      ladder_requests:
+        description: Requests at each rung of the ladder
+        type: string
+        default: "24"
+      batch_requests:
+        description: Requests of the batch (the plan asks for 100)
+        type: string
+        default: "100"
+      soak_requests:
+        description: Lines of the mixed soak (the plan asks for 1,000)
+        type: string
+        default: "1000"
+      soak_minutes:
+        description: Minutes after which the soak stops starting rounds
+        type: string
+        default: "270"
+
+permissions: {}
+
+concurrency:
+  group: p14-load-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.3"
+  # The sizes of a pull request's smoke.
+  PR_PHASES: "diagnose,ladder,batch,cancel,page,soak"
+  PR_LADDER: "8"
+  PR_BATCH: "20"
+  PR_SOAK: "40"
+  PR_SOAK_MINUTES: "20"
+
+jobs:
+  tooling-tests:
+    name: Tooling tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Test the campaign tools
+        run: node --test "tools/p14-campaigns/test/*.test.cjs"
+
+  load:
+    name: Load and soak (Ubuntu 24.04, strict worker container)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Record the host
+        run: |
+          uname -a
+          cat /etc/os-release | head -3
+          nproc
+          free -m
+          df -h / /tmp
+          docker --version
+          stat -fc 'cgroup filesystem: %T' /sys/fs/cgroup
+          findmnt --target /var/lib --noheadings --output FSTYPE,OPTIONS
+
+      - name: Prepare the worker host with the published binary
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node tools/p14-campaigns/prepare-host.cjs \
+            --work "${RUNNER_TEMP}/p14" \
+            --out "${RUNNER_TEMP}/load-out" \
+            --repo "${GITHUB_WORKSPACE}" \
+            --version "${VERSION}"
+
+      - name: Run the load campaign
+        env:
+          PHASES: ${{ github.event_name == 'pull_request' && env.PR_PHASES || inputs.phases }}
+          LADDER: ${{ github.event_name == 'pull_request' && env.PR_LADDER || inputs.ladder_requests }}
+          BATCH: ${{ github.event_name == 'pull_request' && env.PR_BATCH || inputs.batch_requests }}
+          SOAK: ${{ github.event_name == 'pull_request' && env.PR_SOAK || inputs.soak_requests }}
+          SOAK_MINUTES: ${{ github.event_name == 'pull_request' && env.PR_SOAK_MINUTES || inputs.soak_minutes }}
+        run: |
+          set -euo pipefail
+          node tools/p14-campaigns/load.cjs \
+            --out "${RUNNER_TEMP}/load-out" \
+            --phases "$PHASES" \
+            --ladder-requests "$LADDER" \
+            --batch-requests "$BATCH" \
+            --soak-requests "$SOAK" \
+            --soak-minutes "$SOAK_MINUTES"
+
+      - name: Put the result in the job summary
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/load-out/load-summary.md" ]; then
+            cat "${RUNNER_TEMP}/load-out/load-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the result, the event streams and the resource curves
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: p14-load
+          path: ${{ runner.temp }}/load-out
+          if-no-files-found: warn
+          retention-days: 90

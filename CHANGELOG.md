@@ -30,6 +30,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   RQ-06 (`passed`, for 0.1.0 only) are updated; the T-04 recognizer gates also ran on macOS (clean
   word error rate 4.06%). Known limits L-113 to L-116 added, L-035, L-042 and L-099 updated;
   ADR 0024 has a note for this change.
+- **The robustness campaigns, run on hosted runners** (P14 PR 4; evidence items RQ-07 to RQ-10,
+  RQ-12 and RQ-13; no product code changed, nothing published, tagged or configured, no secret, no
+  dependency added to the workspace). Six read-only workflows, tools in `tools/p14-campaigns/` (Node.js,
+  no dependency, 71 tests). **Fuzzing:** a gap review of the parsers added seven targets (the saved setup
+  plan, the bundle manifest, the tar, gzip and xz archive inventories, the identifiers, the input-path
+  grammar), 31 in all; the `Fuzz` workflow takes up to 14,400 s a target, keeps each target's plateau
+  line and a reproduction of any crash, and smoke-tests every target in a pull request that touches it;
+  the long run (3,601 s each, 3.68 billion runs) found no crash. **`P14 stress`** repeats the locking,
+  admission, supervisor, root-creation, engine and delivery tests (6,700 repetitions per system) on
+  Windows, Ubuntu and macOS, plain and with every CPU busy; it reproduced #206 on Windows (7 of 1,500),
+  failed a weighted-admission child twice in 200 (#271) and did not reproduce #128. **`P14 load`** runs
+  the published binary in the hardened worker container: the ladder at 1, 2, 4 and 8 jobs, a 100-request
+  batch, a cancel with a descendant check, 200 warm candidate pages (p95 5 ms) and a soak of 1,000 mixed
+  requests with SIGTERM drains and SIGKILLs and a cgroup sampler; every gate held (two soaks of 12,000 requests also ran; the second settled every
+  request except 189 duplicates and conflicts outside the dedupe window, #286). **`P14 malicious
+  media`** generates 96 hostile inputs by code (bombs, absurd headers, damaged containers, external
+  references, subtitle floods, 38 hostile file names) and runs 251 operations of the published binary in
+  a no-network, read-only, bounded container: 93 held; three CLI cases did not (#264 a pipe hangs
+  `ingest`, #265 a link is `STORAGE_IO`, #266 a full disk is `INTEGRITY_FAILURE`). **`P14 runbook walk`**
+  follows `docs/operations/worker-host.md` step by step with the published binary (container example,
+  systemd unit, drain, SIGKILL and redelivery, the cleaner): 18 steps matched after ten divergences were
+  fixed in the runbook. **`P14 scan reading`** and [`p14-scan-reading-2026-10-02.md`](docs/planning/p14-scan-reading-2026-10-02.md)
+  record the first R-SEC03 reading: Cargo, alerts, actions, whisper.cpp, Node.js and the SBOM clean; the
+  reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities and 18 more give no
+  fix reference (#272). **Ledger:** RQ-07, RQ-09 and RQ-12 `passed`; RQ-08, RQ-10 and RQ-13 `failed`
+  with their issues. **Known limits:** L-122 (the FFmpeg snapshot), L-123 (the Windows races), L-124
+  (a five-second recognition range fails for three clips, #274, #277), L-127 (the CLI and hostile
+  sources), L-128 (the depth and gaps of the fuzzing). Results: `docs/planning/p14-qualification.md`
+  section 18; how to dispatch each campaign: `docs/development.md`.
 - **Published-artifact qualification on hosted runners** (P14 PR 2; evidence items RQ-01 to
   RQ-04 and RQ-19; no product code changed, nothing published, tagged or configured, no secret,
   no new dependency). Four workflows, each read-only (`contents: read`, and `attestations: read`
@@ -198,6 +227,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   refused call that wrote one (`denied_assignment`) and the summary names the runs that met it. New
   known limit L-125; ADR 0024 and the trial runbook record both variants; `freeze write`/`check`
   cover both settings files and were run.
+- **The worker runbook** (`docs/operations/worker-host.md`) was corrected where the P14 walk found it
+  wrong: the commands that create the `vsift` account (uid 10001) and the folders, the tools prerequisite,
+  which invocation attests strict isolation (a plain shell gets `ISOLATION_UNAVAILABLE`), the image the
+  container example needs and its CPU count, `systemctl stop` ending in exit 6, redelivery after a stop,
+  what the cleaner's cursor is (a bucket number from 0 to 255), that blank lines count towards the batch
+  limit, that the dedupe window ends when a session is removed and the record table is full (#286), and how
+  to make an ext4 volume with write barriers on a test host. The `Fuzz` workflow's
+  duration cap is 14,400 s a target (it was 1,200).
 - **The npm package's README and description, and `CONTRIBUTING.md`, speak to anyone with a
   video** (2026-10-02), not to AI coding agents only, matching the front page. npm shows the new
   text from the next publish; the GitHub repository's About text was changed the same day.

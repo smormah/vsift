@@ -1,0 +1,42 @@
+{
+  "schema_version": "1",
+  "command": "setup.plan",
+  "operation_id": null,
+  "status": "complete",
+  "data": {
+    "profile": "desktop",
+    "readiness": "blocked",
+    "verification_scope": "executable_probe_only",
+    "local_asr_model": "not_checked",
+    "managed_install": "unavailable_unqualified",
+    "plan_digest": null,
+    "actions": [],
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "status": "missing",
+        "disposition": "manual_selection_required",
+        "required_authority": "user",
+        "next_step": "Install or locate trusted FFmpeg, then run setup configure ffmpeg --executable <absolute-path> and setup check."
+      },
+      {
+        "dependency": "ffprobe",
+        "status": "missing",
+        "disposition": "manual_selection_required",
+        "required_authority": "user",
+        "next_step": "Install or locate trusted FFprobe, then run setup configure ffprobe --executable <absolute-path> and setup check."
+      },
+      {
+        "dependency": "whisper",
+        "status": "missing",
+        "disposition": "manual_selection_required",
+        "required_authority": "user",
+        "next_step": "For local ASR, install or locate a trusted whisper.cpp CLI, then run setup configure whisper --executable <absolute-path> and setup check. A supplied transcript can skip local ASR."
+      }
+    ]
+  },
+  "warnings": [],
+  "error": null,
+  "coverage": null,
+  "lifecycle": null
+}

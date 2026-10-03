@@ -364,3 +364,18 @@ as a GitHub pre-release (P13, [ADR 0023](0023-r0-distribution-managed-installati
 completion note). It is unstable by design, `latest` stays an empty placeholder, and R0
 remains the first release that claims full qualification (P14). No crate is published, and the
 optional MCP adapter remains an open decision for the maintainer.
+
+## 2026-10-02 note: seven more fuzz targets and the long campaign (P14 PR 4)
+
+Decision 6's gap list (the 2026-09-24 note above) was re-checked by P14's gap review
+([`p14-qualification.md`](../planning/p14-qualification.md) section 18.1). Seven targets were added,
+each through a published parser and with committed seeds of stated origin: `setup_plan` (the saved plan
+`setup install` reads), `bundle_manifest` (a bundle manifest and its artifacts, Unix only),
+`tar_inventory`, `gzip_tar_inventory` and `xz_tar_inventory` (the managed archives' inventories, against an
+independent statement of the archive rules), `identifiers` and `input_path` (the id grammars and the
+worker request's path grammar, against models). That makes 31. Still without a target, and recorded as
+[L-128](../planning/known-limits.md#l-128): the session root's ownership marker, the media-tool
+verification record and the user dependency configuration, which are read from owner-private folders
+VSift creates and have no published parse function. The `Fuzz` workflow's cap is now 14,400 s a target; the
+long run (3,601 s each, 3.68 billion runs) found no crash. The weekly five-minute runs and the per-pull-request
+replay on stable are unchanged.
