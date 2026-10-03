@@ -246,6 +246,12 @@ inputs are gone.
 | a batch line `request_finished` `rejected` (no result) | no | the line is not a valid request: dead letter |
 | no result at all (the process was killed, the host crashed, a failure before `started`, `ISOLATION_UNAVAILABLE`) | no | do not acknowledge; fix the host if it said why, then redeliver |
 
+A shutdown that stops a request ends it as `cancelled` with `CANCELLED` and, in `job run`'s
+terminal error, a remediation that says to deliver the same request again, whether the signal
+arrived between two steps or while one was running (until P14 PR 7 a step cancelled while it
+ran reported `CANCELLED` with an empty remediation, #268). A supervisor acts on the code and
+the status, never on that text.
+
 In a batch, act on each `result` event as it arrives; lines the batch never started
 (`not_started_from_line`) have no result and are simply redelivered. The events file of
 a stopped batch ends with `lifecycle` `stopped` and the terminal event; a file without

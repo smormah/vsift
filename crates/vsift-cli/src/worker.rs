@@ -170,6 +170,7 @@ pub(crate) fn work_run(
 /// supervisor delivers the request again and receives the recorded result.
 pub(crate) fn present(outcome: WorkOutcome) -> (Response, ProcessExit) {
     let unrecorded = outcome.unrecorded().is_some();
+    let stopped = outcome.stopped_by_shutdown();
     let (result, cause) = outcome.into_parts();
     let command = CommandName::JobRun.identifier();
     let operation = OperationId::parse(result.operation_id()).ok();
@@ -192,6 +193,7 @@ pub(crate) fn present(outcome: WorkOutcome) -> (Response, ProcessExit) {
             .map(|response| (response, ProcessExit::Success)),
         (OperationStatus::Failed | OperationStatus::Cancelled, Some(code)) => {
             let failure = failure_of(&result, cause, code);
+            let failure = stopped_request_failure(failure, code, stopped);
             failure_response(CommandName::JobRun, failure)
                 .with_failure_data(&result)
                 .map(|response| (response, ProcessExit::from(code.class())))
@@ -233,6 +235,28 @@ fn failure_of(
         && !failure.affected_ids.iter().any(|id| id == session)
     {
         failure.affected_ids.insert(0, session.to_owned());
+    }
+    failure
+}
+
+/// A request a shutdown ended as `CANCELLED` always says what to do next.
+///
+/// A shutdown that arrives between two steps ends the request with the
+/// engine's `Stopped` cause, whose remediation tells the host to deliver the
+/// same request again. One that arrives while a step runs cancels that step,
+/// which reports its own cancellation (`from_job_run`, an interrupted media
+/// read, a closed admission) and none of those carries a remediation: the
+/// host got `CANCELLED` and nothing to do, depending only on whether the
+/// signal landed before or after the step began (#268). For the host it is
+/// the same event, and it resumes the same way, so the remediation is added
+/// when the failure has none; a failure with its own is left as it is.
+fn stopped_request_failure(
+    mut failure: CommandFailure,
+    code: FailureCode,
+    stopped: bool,
+) -> CommandFailure {
+    if stopped && code == FailureCode::Cancelled && failure.remediation.is_none() {
+        failure.remediation = Some(REQUEST_STOPPED_REMEDIATION.to_owned());
     }
     failure
 }
@@ -507,5 +531,65 @@ fn observe<StandardOutput, StandardError>(
                 },
             ))
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vsift::FailureCode;
+    use vsift_contract::REQUEST_STOPPED_REMEDIATION;
+
+    use super::stopped_request_failure;
+    use crate::CommandFailure;
+
+    /// What a step cancelled while it ran reports: its own `CANCELLED`, with
+    /// no remediation (the shape the flaky `sigterm_stops_a_request_resumably`
+    /// met, #268).
+    fn cancelled_step() -> CommandFailure {
+        CommandFailure::from(FailureCode::Cancelled)
+    }
+
+    #[test]
+    fn a_step_a_shutdown_cancelled_while_it_ran_says_to_deliver_the_request_again() {
+        assert!(cancelled_step().remediation.is_none());
+        let failure = stopped_request_failure(cancelled_step(), FailureCode::Cancelled, true);
+        assert_eq!(
+            failure.remediation.as_deref(),
+            Some(REQUEST_STOPPED_REMEDIATION)
+        );
+        assert_eq!(failure.code, FailureCode::Cancelled);
+    }
+
+    #[test]
+    fn a_cancellation_that_was_not_a_shutdown_keeps_its_answer() {
+        let failure = stopped_request_failure(cancelled_step(), FailureCode::Cancelled, false);
+        assert!(failure.remediation.is_none());
+    }
+
+    #[test]
+    fn another_failure_during_a_shutdown_keeps_its_answer() {
+        let failure = stopped_request_failure(
+            CommandFailure::from(FailureCode::StorageIo),
+            FailureCode::StorageIo,
+            true,
+        );
+        assert_eq!(failure.code, FailureCode::StorageIo);
+        assert_ne!(
+            failure.remediation.as_deref(),
+            Some(REQUEST_STOPPED_REMEDIATION)
+        );
+    }
+
+    #[test]
+    fn a_remediation_the_cause_already_has_is_not_replaced() {
+        let own = CommandFailure::with_remediation(
+            FailureCode::Cancelled,
+            "Run `vsift job resume` for the job.".to_owned(),
+        );
+        let failure = stopped_request_failure(own, FailureCode::Cancelled, true);
+        assert_eq!(
+            failure.remediation.as_deref(),
+            Some("Run `vsift job resume` for the job.")
+        );
     }
 }
