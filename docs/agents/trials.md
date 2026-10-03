@@ -872,7 +872,10 @@ pwsh tools/vsift-agent-trials/campaigns/run-campaign.ps1 -Batch 1 -Client codex 
 `docs/planning/p14-agent-trials/batch-1/SUMMARY.md` and the pilot records before the rest (below). Then run
 the same commands without `-MaxRuns`. The script builds the harness, checks the pinned version, installs
 `vsift-cli@<version>` (Claude Code) or builds the clean-install images (Codex), writes the freeze, and loops:
-`campaign next`, prepare, run, grade, record, `campaign mark`, and a fresh `summarize` after each counted run. Every command is an
+`campaign next`, prepare, run, grade, record, `campaign mark`, and a fresh `summarize` after each counted run. The summary
+covers **every** `state-<client>.json` in the batch folder, whichever client writes it (until P14 PR 7, #282, a client's
+run replaced the other client's summary with one holding none of its runs); `-SummaryOnly` rebuilds `summary.json` and
+`SUMMARY.md` from the plans and records the folder holds, calling no client and making no plan. Every command is an
 executable and an argument array; no value from a file or a client's output is ever put in a command string.
 
 **Reading the pilots.** For a skill pilot check that the client's init event lists only `vsift` (Claude Code's
@@ -893,7 +896,9 @@ batch (the plan: a compact miss allows up to 6 more runs of that scenario, judge
 invalid trial), `state-<client>.json`, `freeze.json`, `summary.json` and `SUMMARY.md` (the gates, results by
 scenario, the usage the clients reported, the cold runs with their violations and gap entries, and notes). The
 raw logs stay local. The records are committed in the pull request that acts on them. A record that holds anything
-private fails `records_privacy`.
+private fails `records_privacy`; the record writer replaces each known local path in five spellings (backslashes,
+forward slashes, the `\\?\` form, doubled backslashes and, since P14 PR 7 (#283), Git Bash's `/c/...`, which is how
+Claude Code on Windows writes its commands).
 
 ## What is weaker than it sounds (P14 harness)
 

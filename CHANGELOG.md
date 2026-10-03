@@ -249,6 +249,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Three small tool fixes found by P14's batch 1** (P14 PR 7; tooling and tests only, no product
+  code). **#282:** `run-campaign.ps1` regenerated the batch summary from the running client's plan
+  alone, so the second client replaced the first client's summary with one holding none of its runs;
+  the summary now covers every `state-<client>.json` in the batch folder, and a new `-SummaryOnly`
+  switch rebuilds it without calling a client (two `campaign_script` tests; the first fails on the old
+  behaviour with the batch-1 symptom). **#283:** the record writer did not redact the Git Bash
+  spelling of a drive path (`/c/...`, how Claude Code on Windows writes its commands), so four
+  Claude records of batch 1 named the run's workspace until `records_privacy` caught them; it now
+  redacts it (two unit tests; the Codex container's POSIX paths are unchanged). `src/record.rs` is part of
+  the grader's source digest, so batch 2's freeze is written after this change. **#285:** the npm launcher
+  test's cleanup of a temporary install failed once with `EBUSY` on `windows-latest`; its recursive
+  removals now retry (`maxRetries`, `retryDelay`) and a file still held afterwards still fails.
 - **`setup install` names a missing shared library** (P14 PR 7, #256; found by P14 PR 2 in the
   pinned minimal `ubuntu:24.04` image). The reviewed whisper.cpp build needs the OpenMP runtime
   `libgomp.so.1`; without it `setup install` stopped at that component with `MISSING_CAPABILITY`

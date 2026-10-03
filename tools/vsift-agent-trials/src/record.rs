@@ -49,16 +49,8 @@ impl Redactions {
     ) -> Self {
         let mut pairs = Vec::new();
         let mut add_path = |path: &Path, token: &str| {
-            let text = path.to_string_lossy().into_owned();
-            for variant in [
-                text.clone(),
-                text.replace('\\', "/"),
-                format!("\\\\?\\{text}"),
-                text.replace('\\', "\\\\"),
-            ] {
-                if !variant.is_empty() {
-                    pairs.push((variant, token.to_owned()));
-                }
+            for variant in path_variants(&path.to_string_lossy()) {
+                pairs.push((variant, token.to_owned()));
             }
         };
         add_path(&layout.session_root(), "<session-root>");
@@ -116,6 +108,45 @@ impl Redactions {
             other => other.clone(),
         }
     }
+}
+
+/// Every spelling of one local path that a record could hold: as the harness
+/// knows it, with forward slashes, with the `\\?\` prefix, with doubled
+/// backslashes (a JSON string a client printed), and in the Git Bash (MSYS)
+/// form of a Windows drive path, which is how Claude Code on Windows runs its
+/// commands (#283).
+fn path_variants(text: &str) -> Vec<String> {
+    let mut variants = vec![
+        text.to_owned(),
+        text.replace('\\', "/"),
+        format!("\\\\?\\{text}"),
+        text.replace('\\', "\\\\"),
+    ];
+    variants.extend(git_bash_spelling(text));
+    variants.retain(|variant| !variant.is_empty());
+    variants
+}
+
+/// `C:\trials\run` as Git Bash writes it, `/c/trials/run` (the drive letter in
+/// lower case; the redaction ignores case, so `/C/` is covered too). A path
+/// that does not start with a drive letter and a separator has no such
+/// spelling: a POSIX path is already in this form.
+fn git_bash_spelling(path: &str) -> Option<String> {
+    let path = path.strip_prefix("\\\\?\\").unwrap_or(path);
+    let mut characters = path.chars();
+    let drive = characters.next().filter(char::is_ascii_alphabetic)?;
+    if characters.next() != Some(':') {
+        return None;
+    }
+    let rest = characters.as_str();
+    if !rest.starts_with(['\\', '/']) {
+        return None;
+    }
+    Some(format!(
+        "/{}{}",
+        drive.to_ascii_lowercase(),
+        rest.replace('\\', "/")
+    ))
 }
 
 /// Replacements that keep every check image's code out of a record.
@@ -335,6 +366,75 @@ mod tests {
         assert_eq!(
             redactions.apply("read c:\\TRIALS\\t1\\workspace\\a.png and C:\\trials\\t1\\x"),
             "read <workspace>\\a.png and <trial>\\x"
+        );
+    }
+
+    /// A redaction set holding every spelling of `path` under `token`.
+    fn redactions_for(path: &str, token: &str) -> Redactions {
+        let mut pairs: Vec<(String, String)> = path_variants(path)
+            .into_iter()
+            .map(|variant| (variant, token.to_owned()))
+            .collect();
+        // `for_trial` applies the longest spelling first.
+        pairs.sort_by_key(|pair| std::cmp::Reverse(pair.0.len()));
+        Redactions { pairs }
+    }
+
+    #[test]
+    fn the_git_bash_spelling_of_a_drive_path_is_redacted() {
+        // #283: Claude Code on Windows runs its commands in Git Bash, which
+        // writes a drive path as `/c/...`; four records of the first batch
+        // named the run's workspace that way.
+        let redactions = redactions_for(r"C:\vsift-trials\run-9\workspace", "<workspace>");
+        for command in [
+            "cd /c/vsift-trials/run-9/workspace; ls; vsift --help",
+            "cd /C/vsift-trials/run-9/workspace; ls; vsift --help",
+            "cd /c/VSIFT-trials/run-9/workspace; ls; vsift --help",
+        ] {
+            assert_eq!(
+                redactions.apply(command),
+                "cd <workspace>; ls; vsift --help",
+                "{command}"
+            );
+        }
+        // The other four spellings are still redacted.
+        for spelling in [
+            r"C:\vsift-trials\run-9\workspace",
+            "C:/vsift-trials/run-9/workspace",
+            r"\\?\C:\vsift-trials\run-9\workspace",
+            r"C:\\vsift-trials\\run-9\\workspace",
+        ] {
+            assert_eq!(
+                redactions.apply(&format!("read {spelling}\\a.png")),
+                "read <workspace>\\a.png",
+                "{spelling}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_a_drive_path_has_a_git_bash_spelling() {
+        assert_eq!(
+            git_bash_spelling(r"D:\a\b").as_deref(),
+            Some("/d/a/b"),
+            "any drive letter"
+        );
+        assert_eq!(
+            git_bash_spelling(r"\\?\C:\a").as_deref(),
+            Some("/c/a"),
+            "the verbatim prefix is not part of the spelling"
+        );
+        assert_eq!(git_bash_spelling("C:/a/b").as_deref(), Some("/c/a/b"));
+        assert_eq!(git_bash_spelling("C:").as_deref(), None, "no separator");
+        assert_eq!(git_bash_spelling("C:relative").as_deref(), None);
+        // The Codex container's paths are POSIX already: nothing is added, and
+        // nothing a POSIX path does not contain is redacted.
+        assert_eq!(git_bash_spelling("/vsift-trials/run-9"), None);
+        assert_eq!(git_bash_spelling("relative/path"), None);
+        let posix = redactions_for("/vsift-trials/run-9/workspace", "<workspace>");
+        assert_eq!(
+            posix.apply("cd /vsift-trials/run-9/workspace && ls /c/other"),
+            "cd <workspace> && ls /c/other"
         );
     }
 
