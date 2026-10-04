@@ -185,7 +185,8 @@ On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
 | `RESOURCE_LIMIT` | Use a smaller range or fewer frames; report the gap. |
 | `IDEMPOTENCY_CONFLICT` | You reused an operation id for another request; use a new id. |
 | `INVALID_SOURCE` | The video (or part of it) cannot be read; report it. |
-| `INTEGRITY_FAILURE`, `STORAGE_IO`, `INTERNAL`, `UNSUPPORTED_SCHEMA` | Go to REPORT with the code; do not work around it. |
+| `STORAGE_IO` | Go to REPORT with the code; do not work around it. Read `error.remediation` first: it often says what really happened (a link was given instead of the file, the drive has no room, the id names no published session), so do not call it damage unless it does. Put that in the gap's note in your own words and briefly: a note holds 600 characters, less than some remediations. |
+| `INTEGRITY_FAILURE`, `INTERNAL`, `UNSUPPORTED_SCHEMA` | Go to REPORT with the code; do not work around it. |
 
 A gap caused by a failure may carry its code in `gaps[].code`.
 
