@@ -95,8 +95,9 @@ vsift --session-root /var/lib/vsift/workspace session init-workspace \
   `CPUQuota=800%` use 8. A request whose work is heavier than the whole capacity fails
   `RESOURCE_LIMIT` before any tool runs. `--concurrency` of a batch may not exceed it.
 - **Retention.** Sessions live the retention after they open or are renewed, at most
-  720 hours in all. It is also the minimum window in which a redelivered request is
-  recognised as a duplicate (section 5).
+  720 hours in all. It is **not** the window in which a redelivered request is recognised
+  as a duplicate: that lasts while the session exists or while the workspace holds fewer
+  than 4,096 request records, whichever is longer (section 5).
 - The policy is immutable: running the same `init-workspace` again answers
   `already_initialized`; another policy is refused. To change it, drain the host and
   create a new workspace.
@@ -232,7 +233,7 @@ Acknowledge a message only after VSift has **recorded** its result: a result is
 recorded exactly when it is returned from `job run`'s `data`, or a `job batch`
 `result` event, **and** it has ended. Then every later delivery of the same request
 replays exactly that result (`replayed: true`) without running anything, even when the
-inputs are gone.
+inputs are gone, **for as long as its record is held** (section 5: not the session's retention).
 
 | What the supervisor sees for a request | Recorded? | Action |
 | --- | --- | --- |
@@ -265,7 +266,8 @@ SHA-256 of it), never from the delivery, so every redelivery carries the same id
 
 - The same id with the same request (spacing, member order and an omitted deadline do
   not matter): replayed when ended, `BUSY` while another process runs it, continued
-  when interrupted. One id opens at most one session.
+  when interrupted. **While its record is held**, one id opens at most one session; once the
+  record is pruned (below) the same id runs again and opens another.
 - The same id with another request: `IDEMPOTENCY_CONFLICT`, nothing changed.
 - Duplicates are recognised **within one workspace** only. Route every delivery of a
   message to the same host and workspace (sticky routing); a duplicate delivered to

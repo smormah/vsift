@@ -595,6 +595,10 @@ container job. The profile stays a qualification target, and the adversarial evi
 [L-068](../planning/known-limits.md#l-068)) moves to R1. Section 10's SEC-T01 amendment of
 2026-09-28 stands for P11; this note adds that P14 does not close it.
 
+## Note, 2026-10-04 (P14 PR 7, #286): a request record is held while its session exists or the table is not full, not for the retention
+
+Section 4 and the PR 3 notes say a known operation id is answered from its record, that "records expire with the session they name", that "the oldest ended ones are pruned first" and that a retry which records a new id leaves one key opening one session. The text above is kept as written; this note supersedes the unconditional reading of it. What the code does (`worker_requests.rs`, `make_room` and `prune_if_orphaned`): a record is removed only when the workspace already holds 4,096 records and a request with a **new** operation id arrives, and then **every** record whose session no longer exists and that no process holds is removed at once (a record that names no session counts as gone); "oldest ended first" was never implemented ([L-063](../planning/known-limits.md#l-063)). So the replay and the `IDEMPOTENCY_CONFLICT` of the table hold **while the record is held, which is while its session exists or while fewer than 4,096 records are held**, and not for the session's retention; after the record is pruned the same id and request runs again (a new session, `replayed: false`) and the same id with another request is accepted. The P14 soak met both (189 of 12,000 lines). `cli-v1.md` and the runbook now say so. A small ended-request stub kept beyond the session is the R1 option (L-063); it is a decision for the maintainer.
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,
