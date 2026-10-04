@@ -1225,6 +1225,8 @@ one read-only workflow; **nothing published**, no product code, release workflow
 recordings and a synthetic voice, not that the prose around them is true; only marked blocks run, and the prose is
 checked by reading and by the claims check. Speech output is compared by shape, not by words, because a recogniser may
 hear a clip a little differently on another processor. The local runs are on Windows 11 with the maintainer's FFmpeg
-and whisper.cpp; the CI run is on Ubuntu 24.04 with the managed tools, so the first runs of the `Guide` workflow are the
-evidence for that system, and a difference the masks do not cover is a finding to fix there. The generated pages are
+and whisper.cpp; the `Guide` workflow runs them on Ubuntu 24.04 with the managed tools, where all 40 matched on its
+first run that reached them (the run before it failed on a development build's refusal to download, now allowed for that
+step). Nothing has run them on macOS. A difference the masks do not cover is a finding to fix where it appears, by
+widening a mask or eliding a line, never by changing what a page claims. The generated pages are
 long (the JSON reference is about 150 KB) because they are complete, not because anyone should read them through.

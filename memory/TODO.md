@@ -7,8 +7,8 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress: decisions A-H confirmed
 2026-10-02.** The plan is 14 pull requests (0-13). **PRs 0 (#250), 1 (#251), 2 (#255), 3 (#254), 4 (#259),
 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; agent-trial batch 1 ran on 2026-10-03.**
-**PR 9 is two pull requests, both open: 9a (#302: support matrix, documents, claims, register review sheet)
-and 9b (#304: the user guide and its two checks); PR 9 is complete only when both merge.**
+**PR 9 was two pull requests: 9a (#302: support matrix, documents, claims, register review sheet) is merged;
+9b (#304: the user guide and its two checks) is open, and PR 9 is complete only when it merges.**
 The packet is not complete. Plan: `docs/planning/p14-qualification.md` (sections 15-21); ADR 0024 stays
 Proposed. **Evidence:** `p14-evidence-ledger.json`, all **for 0.1.0 only**: `passed` RQ-01 to RQ-04, RQ-06,
 RQ-07, RQ-09, RQ-12, RQ-19; **`failed`: RQ-08, RQ-10, RQ-13** (PR 7 fixes them; PR 11 re-runs them on the
@@ -51,7 +51,7 @@ grader questions are ruled (#298). **README graphics:** redraw `roadmap.svg` wit
 
 ## The remaining P14 pull requests (0-8 merged)
 
-**9** 9a and 9b (open); **10** candidate `0.2.0-rc.1`; **11** its qualification (batches 2 and 3; `P14
+**9** 9b (open; 9a merged); **10** candidate `0.2.0-rc.1`; **11** its qualification (batches 2 and 3; `P14
 journeys`; re-run RQ-07 to RQ-10); **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff.
 **Before PR 10:** settle the allowed-path lists in `candidate.rs`; freeze the skill (candidates: plan 20.2),
 grader (changed in #298), scenarios and settings (`freeze write`); the bump re-runs the guide (`release.md`

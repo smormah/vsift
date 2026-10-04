@@ -1099,14 +1099,17 @@ setting changed, and nothing was published. The decisions and what is weaker tha
 | The guide | [`docs/guide/`](../guide/index.md): twelve written pages (the first investigation, five recipes, concepts, evidence and citations, troubleshooting, FAQ, limits, the first page) and two generated reference pages; three small practice files in `files/`. |
 | The generated pages | `reference/commands.md` (every command's `--help`) and `reference/json.md` (every v1 schema); `generate-reference.cjs --check` fails when either is out of date. |
 | The promises it holds | The release the guide names is the binary's, one troubleshooting row per v1 failure code with the contract's exit status, every relative link and anchor, every page in the claims registry. |
-| The examples | 40 commands on six pages, run against the real binary on the synthetic recordings, each page in its own sandbox; Windows 11, FFmpeg 9.0 (gyan.dev full build), whisper.cpp 1.9.2 and the `base` model: all 40 match. The Ubuntu 24.04 run with managed tools is the `Guide` workflow's. |
+| The examples | 40 commands on six pages, run against the real binary on the synthetic recordings, each page in its own sandbox; Windows 11, FFmpeg 9.0 (gyan.dev full build), whisper.cpp 1.9.2 and the `base` model: all 40 match. On Ubuntu 24.04 with the managed tools (BtbN FFmpeg, whisper.cpp 1.9.2 and the `base` model, installed by the binary's own `setup install`) the `Guide` workflow's examples job matched all 40 as well, speech recognition ready, with no mask or page changed for the system (run 37229607086, 2026-10-04, the job took 7 minutes). |
 | Claims | The pages are scanned documents; CL-010 and CL-011 register two phrases of the schemas that the generated JSON reference repeats. |
 
-**Not done here, and why.** The guide's examples have not run on Ubuntu or macOS locally; the first `Guide` workflow runs
-are that evidence. The workflow is not a required check on `main`. A tutorial walk by a person who has never seen VSift
+**Not done here, and why.** The examples have not run on macOS or on a Mac-like tool set (the guide's commands are the
+same, the tools are Homebrew's, L-114). The first `Guide` run failed before any example, not on a difference: a
+development build refuses to resolve publisher hosts, so the managed install failed as `offline`; the examples job now
+sets the variable that allows it for that step. The workflow is not a required check on `main`. A tutorial walk by a person who has never seen VSift
 (RQ-04's "guide walked" is about the install guides) is not recorded; the cold-agent baseline is not about this guide.
 Wording changes the skill might take from what the guide taught are listed in section 20.2, not made.
 
 **Hosted minutes.** None for the work itself. Each `Guide` run builds the command-line tool twice (once per job) and, in
-the examples job, installs the three reviewed artifacts with the binary's own `setup install` (21 seconds in the
-journeys on Ubuntu) and runs the examples; the first runs will give the cost.
+the examples job, installs the three reviewed artifacts with the binary's own `setup install` (about three minutes with
+the plan, in run 37229607086) and runs the examples (about three more, most of it speech recognition); the reference job
+took one minute.
