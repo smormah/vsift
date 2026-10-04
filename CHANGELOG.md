@@ -433,6 +433,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   sequential, 0 in 3,000 parallel and 0 in 6,000 parallel repetitions (runs 37168127630 and 37168936692); these
   show no failure, not that the repair fired (the injection test shows that). No behaviour or contract change
   elsewhere. Known limit L-123 is closed and deleted (its admission half was #271); L-005 is updated.
+- **The flaky managed-store kill test (#253) is mitigated in the test, and the window behind it is a recorded
+  limit** (P14 PR 7; test and documents only, **no product code changed**). The test really kills a host at
+  eight moments of an install and then requires a consistent store, a repair that names the stale stage and a
+  rerun that completes. It failed with "one stage left after the rerun and the repair" in three of the last 100
+  runs of `ci.yml` (counted on 2026-10-04; 76 of the 100 had finished: runs 37139519121 on main, 37158810147
+  and 37169068798 on two pull-request branches) and repeatedly on the maintainer's machine. The cause is a
+  product window, found by inspecting the strays it left on that machine: on Windows the supervisor creates a
+  provider suspended and assigns it to its kill-on-close job a moment later, and a host killed between the two
+  leaves a provider that never ran, is in no job and stays suspended (five found, each one thread in
+  `Wait/Suspended`); its mapped image keeps the stage from being deleted, so no sweep or repair can remove it.
+  VSift cannot close the window without `unsafe` or a new dependency (the provider must be born inside the
+  job), so it is **known limit L-129**, accepted for R0, with the fix for the maintainer to decide for R1 (an
+  ADR). The test now ends a stray whose command line names its own private folder (read again immediately
+  before it is ended: same creation time, same folder, every thread suspended) and **prints what it ended**,
+  and fails when a provider that is not suspended outlives its host; two Windows unit tests make the reaper
+  itself deterministic (a created-suspended process is ended, a running one is not and is reported, a stale
+  listing ends nothing). `SECURITY.md`, the worker-host runbook's guarantee matrix and L-055 no longer say
+  Windows is unaffected by a hard kill. **What is not shown:** a hosted-runner reproduction (a temporary
+  workflow, six runs at a time) did not fail in 57 runs, counted from the partial log of run 37154374500
+  because both reproduction runs were cancelled by their time bound before a summary line; zero of 57 does not
+  exclude the CI rate (a 95% bound of about 1 in 19). The strays were seen on the maintainer's machine, not on
+  a runner. "Mitigated" and not "fixed": a `StaleStages` after the repair is also what any file held open
+  produces, so the test prints the stages and processes left when it fails, to tell that apart.
 
 ## [0.1.0] - 2026-10-01
 

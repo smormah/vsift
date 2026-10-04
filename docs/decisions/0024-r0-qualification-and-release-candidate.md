@@ -1107,3 +1107,19 @@ of [`p14-scan-reading-2026-10-02.md`](../planning/p14-scan-reading-2026-10-02.md
   again before the stable, by the method and tool of the addendum (`tools/p14-campaigns/ffmpeg-ancestry.cjs`,
   Node.js, no dependency, eight tests with offline fixtures). The hostile-media and load campaigns (PR 4) test **published** versions
   from the registry, so their re-run on a refreshed build happens on the release candidate (PR 11).
+
+## Note, 2026-10-04: the Windows kill window (#253, L-129)
+
+The flaky kill test of the managed store (#253) was a product window, not only a loaded-machine race. The
+supervisor creates a Windows provider suspended and assigns it to its kill-on-close job a moment later; a host
+killed between the two leaves a provider that never ran, is in no job and stays suspended until the user ends it
+or the machine restarts, and its mapped image keeps the stage it lives in from being deleted (five such strays were
+found on the maintainer's machine, each a single suspended thread, and every failure of the test left one stage
+after the repair). The statements that "the Job Object kills the tree when VSift dies" hold except in that window.
+The worker-host runbook's guarantee matrix, `SECURITY.md` and L-055 now say so; ADR 0003 and ADR 0023's PR 7 note
+are accepted records and are not edited: **this note supersedes them on this point**.
+**Decided by P14 PR 7, for the maintainer to confirm:** R0 accepts the window as a limitation
+([L-129](../planning/known-limits.md#l-129)); closing it needs the provider born inside the job
+(`PROC_THREAD_ATTRIBUTE_JOB_LIST`) or the host inside a kill-on-close job, which needs `unsafe` (forbidden) or a
+reviewed dependency and so an ADR, which the maintainer decides for R1. The kill test now ends a stray under its own
+private folder, prints what it ended and fails when a provider that is not suspended outlives its host.

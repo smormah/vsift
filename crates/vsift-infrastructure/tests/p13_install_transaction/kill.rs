@@ -962,6 +962,266 @@ fn the_scenarios_cover_every_managed_point() {
 // ---------------------------------------------------------------------------
 // Real kills by the operating system.
 
+/// A PowerShell function that tells whether every thread of a process waits
+/// suspended: the state a provider is in when its host was killed after creating
+/// it suspended and before it was resumed.
+#[cfg(windows)]
+const TEST_SUSPENDED: &str = "function Test-Suspended($id) { $threads = @((Get-Process -Id $id -ErrorAction SilentlyContinue).Threads); $threads.Count -gt 0 -and @($threads | Where-Object { $_.WaitReason -ne 'Suspended' }).Count -eq 0 }";
+
+/// What this script prints for each process whose command line names a test's
+/// private folder: its id, its creation time, `suspended` when every thread of
+/// it waits suspended and `running` otherwise, and its command line, tab
+/// separated. The folder arrives in the environment, never in the script text.
+#[cfg(windows)]
+const LIST_STRAYS: &str = "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:VSIFT_STRAY_FOLDER) } | ForEach-Object { $state = if (Test-Suspended $_.ProcessId) { 'suspended' } else { 'running' }; '{0}{1}{2}{1}{3}{1}{4}' -f $_.ProcessId, [char]9, $_.CreationDate.ToString('o'), $state, $_.CommandLine }";
+
+/// Ends one listed process, after reading it again: it must still have the
+/// listed creation time (a process id the system has reused is a different
+/// process), still name the test's private folder, and still have every
+/// thread suspended. The re-check and the end are one script, so no other
+/// process starts between them. The values arrive in the environment.
+#[cfg(windows)]
+const END_STRAY: &str = "$p = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + [int]$env:VSIFT_STRAY_PID); if ($p -and $p.CommandLine -and $p.CreationDate.ToString('o') -eq $env:VSIFT_STRAY_CREATED -and $p.CommandLine.Contains($env:VSIFT_STRAY_FOLDER) -and (Test-Suspended $p.ProcessId)) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }";
+
+/// A process the killed host left behind under the test's private folder.
+#[cfg(windows)]
+#[derive(Debug)]
+struct Stray {
+    pid: u32,
+    created: String,
+    suspended: bool,
+    command: String,
+}
+
+/// The test root's own folder name with a trailing separator, which is what a
+/// command line inside it contains. The name is unique (process id, time and
+/// a counter), and the separator keeps `...-6` from matching `...-60`.
+#[cfg(windows)]
+fn stray_folder(root: &TestRoot) -> TestResult<String> {
+    let name = root
+        .parent
+        .file_name()
+        .ok_or("the test root has no name")?
+        .to_string_lossy();
+    Ok(format!("{name}\\"))
+}
+
+/// Runs a script of this file in a fresh PowerShell with the given environment.
+#[cfg(windows)]
+fn powershell(body: &str, environment: &[(&str, &str)]) -> std::io::Result<std::process::Output> {
+    let mut command = Command::new("powershell");
+    command
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!("{TEST_SUSPENDED}; {body}"),
+        ])
+        .stdin(Stdio::null());
+    for (name, value) in environment {
+        command.env(name, value);
+    }
+    command.output()
+}
+
+/// The processes whose command line names this test's private folder.
+#[cfg(windows)]
+fn strays_under(root: &TestRoot) -> TestResult<Vec<Stray>> {
+    let output = powershell(LIST_STRAYS, &[("VSIFT_STRAY_FOLDER", &stray_folder(root)?)])?;
+    if !output.status.success() {
+        return Err(format!(
+            "listing the processes failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
+    let mut strays = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let mut fields = line.splitn(4, '\t');
+        let (Some(pid), Some(created), Some(state), Some(command)) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        strays.push(Stray {
+            pid: pid.trim().parse()?,
+            created: created.to_owned(),
+            suspended: state == "suspended",
+            command: command.to_owned(),
+        });
+    }
+    Ok(strays)
+}
+
+/// Ends `stray` if it is still the process that was listed (see
+/// [`END_STRAY`]); a refusal means it is already going, and the next listing
+/// shows whether it is.
+#[cfg(windows)]
+fn end_stray(root: &TestRoot, stray: &Stray) -> TestResult {
+    powershell(
+        END_STRAY,
+        &[
+            ("VSIFT_STRAY_FOLDER", &stray_folder(root)?),
+            ("VSIFT_STRAY_PID", &stray.pid.to_string()),
+            ("VSIFT_STRAY_CREATED", &stray.created),
+        ],
+    )?;
+    Ok(())
+}
+
+/// Ends the providers a killed host left suspended, and says so.
+///
+/// On Windows the supervisor creates a provider suspended and assigns it to
+/// its kill-on-close job a moment later (`process-wrap`'s `JobObject`). A host
+/// killed in that moment leaves the provider suspended for good: never
+/// started, in no job, nothing ends it, and its mapped image keeps its stage
+/// from being deleted, so no sweep or repair can remove that stage (known
+/// limit L-129). The kill test cannot prevent the window, only clean up after
+/// it, so it ends such a stray, **only a process whose command line names this
+/// test's own private folder**, and prints what it ended. Each process is read
+/// again immediately before it is ended (same creation time, same folder, every
+/// thread still suspended), so a process id the system reused is left alone. A
+/// provider that is *not* suspended and outlives its host by more than the wait
+/// fails the test: that would be a job that did not contain it.
+#[cfg_attr(
+    not(windows),
+    allow(
+        clippy::unnecessary_wraps,
+        reason = "only Windows can leave a suspended provider; the other systems have nothing to end"
+    )
+)]
+fn end_suspended_providers(root: &TestRoot, context: &str) -> TestResult {
+    end_suspended_providers_within(root, context, Duration::from_secs(10))
+}
+
+/// [`end_suspended_providers`] with the wait for a running provider to go.
+#[cfg_attr(
+    not(windows),
+    allow(
+        clippy::unnecessary_wraps,
+        reason = "only Windows can leave a suspended provider; the other systems have nothing to end"
+    )
+)]
+fn end_suspended_providers_within(root: &TestRoot, context: &str, wait: Duration) -> TestResult {
+    #[cfg(windows)]
+    {
+        let deadline = Instant::now() + wait;
+        let mut reported = BTreeSet::new();
+        loop {
+            let strays = strays_under(root)?;
+            if strays.is_empty() {
+                return Ok(());
+            }
+            for stray in strays.iter().filter(|stray| stray.suspended) {
+                if reported.insert(stray.pid) {
+                    eprintln!(
+                        "{context}: ending process {}, a provider the killed host left suspended (L-129): {}",
+                        stray.pid, stray.command
+                    );
+                }
+                end_stray(root, stray)?;
+            }
+            if Instant::now() > deadline {
+                return Err(format!(
+                    "{context}: processes of the killed host were still there after {wait:?}: {strays:?}"
+                )
+                .into());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (root, context, wait);
+        Ok(())
+    }
+}
+
+/// A stand-in provider that is ended when it goes out of scope, so a failed
+/// assertion cannot leave a suspended process of this test behind.
+#[cfg(windows)]
+struct StandIn(Child);
+
+#[cfg(windows)]
+impl Drop for StandIn {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Starts a stand-in provider whose command line names `root`'s private
+/// folder, as a provider in a stage does: `suspended` is how a killed host
+/// leaves one (created suspended, never resumed); otherwise it runs a minute.
+#[cfg(windows)]
+fn start_stand_in_provider(root: &TestRoot, suspended: bool) -> TestResult<StandIn> {
+    use std::os::windows::process::CommandExt as _;
+    const CREATE_SUSPENDED: u32 = 0x0000_0004;
+    let name = root
+        .parent
+        .file_name()
+        .ok_or("the test root has no name")?
+        .to_string_lossy();
+    let script = format!("Start-Sleep -Seconds 60 # {name}\\managed\\stage-0\\runtime.pending");
+    let mut command = Command::new("powershell");
+    command
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if suspended {
+        command.creation_flags(CREATE_SUSPENDED);
+    }
+    Ok(StandIn(command.spawn()?))
+}
+
+/// The reaper the kill test relies on really ends a provider created
+/// suspended and never resumed (the state a killed host leaves), a provider
+/// that is not suspended is not ended but fails it, and a listed process that
+/// is no longer the one that was listed (its id reused) is left alone.
+#[cfg(windows)]
+#[test]
+fn a_provider_left_suspended_by_a_killed_host_is_ended_and_a_running_one_fails() -> TestResult {
+    let root = TestRoot::new()?;
+
+    let mut suspended = start_stand_in_provider(&root, true)?;
+    let listed = strays_under(&root)?;
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert!(listed.iter().all(|stray| stray.suspended), "{listed:?}");
+
+    // A listing that no longer describes the process (as after an id was
+    // reused) ends nothing.
+    let stale = Stray {
+        pid: listed[0].pid,
+        created: "1999-01-01T00:00:00.0000000".to_owned(),
+        suspended: true,
+        command: listed[0].command.clone(),
+    };
+    end_stray(&root, &stale)?;
+    assert!(
+        suspended.0.try_wait()?.is_none(),
+        "a stale listing ended it"
+    );
+    assert_eq!(strays_under(&root)?.len(), 1);
+
+    end_suspended_providers(&root, "suspended stand-in")?;
+    let status = suspended.0.wait()?;
+    assert!(!status.success(), "the stray was not ended: {status:?}");
+    assert!(strays_under(&root)?.is_empty());
+
+    let mut running = start_stand_in_provider(&root, false)?;
+    let outcome =
+        end_suspended_providers_within(&root, "running stand-in", Duration::from_millis(1500));
+    let still_running = running.0.try_wait()?.is_none();
+    let message = outcome.err().ok_or("a running provider was not reported")?;
+    assert!(
+        message.to_string().contains("still there"),
+        "unexpected report: {message}"
+    );
+    assert!(still_running, "a running provider must not be ended");
+    Ok(())
+}
+
 /// Waits, with a deadline, until `ready` holds, while the child runs.
 fn wait_for(child: &mut Child, ready: impl Fn() -> bool, what: &str) -> TestResult {
     let deadline = Instant::now() + KILL_WAIT;
@@ -1086,14 +1346,30 @@ async fn installs_killed_by_the_operating_system_at_spread_moments_are_consisten
         child.kill()?;
         child.wait()?;
         let context = format!("kill {kill} of {KILLS}");
+        // On Windows a kill in the first moments of a provider's start leaves
+        // that provider suspended and its stage undeletable (L-129); end it
+        // and say so before anything tries to sweep the stage. A provider
+        // runs from a stage, so a kill that left none needs no search.
+        if !root.stages()?.is_empty() {
+            end_suspended_providers(&root, &context)?;
+        }
         assert_consistent(&root, &allowed, &context)?;
         run_command(&root.store()?, &server.base(), ManagedCommand::Install(1)).await?;
         // A kill during a smoke can leave its provider finishing for a moment
-        // (on Unix it runs on, L-055; on Windows the job object ends it, but
-        // its image may still be mapped), so the rerun's sweep may keep that
-        // stage once; repair then names it and its command removes it.
+        // (on Unix it runs on, L-055; on Windows the job object ends it, its
+        // image may still be mapped for a moment, and a provider caught before
+        // it joined the job is ended above), so the rerun's sweep may keep
+        // that stage once; repair then names it and its command removes it.
         let after = assert_consistent(&root, &allowed, &context)?;
         apply_repair(&root, &after)?;
+        // If the store is not healthy after the repair, say what is still
+        // there, so a failure that is not the leaked provider of L-129 can be
+        // told from it (the kill test's flake, #253, was undiagnosable from its
+        // repair plan alone). The assertion panics, so a guard reports it.
+        let report = ReportLeftoversOnPanic {
+            root: &root,
+            context: &context,
+        };
         assert_healthy(
             &root,
             &[
@@ -1103,6 +1379,45 @@ async fn installs_killed_by_the_operating_system_at_spread_moments_are_consisten
             ],
             &context,
         )?;
+        drop(report);
     }
     Ok(())
+}
+
+/// Prints what the store still holds when the test is unwinding from a failed
+/// assertion while this is alive.
+struct ReportLeftoversOnPanic<'a> {
+    root: &'a TestRoot,
+    context: &'a str,
+}
+
+impl Drop for ReportLeftoversOnPanic<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            eprintln!("{}: {}", self.context, describe_leftovers(self.root));
+        }
+    }
+}
+
+/// What a store that is not healthy after a kill still holds: its stage
+/// folders and, on Windows, the processes whose command line names its folder.
+fn describe_leftovers(root: &TestRoot) -> String {
+    let stages: Vec<String> = root
+        .stages()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|stage| {
+            stage
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
+        .collect();
+    #[cfg(windows)]
+    let processes = strays_under(root).map_or_else(
+        |error| format!("(cannot list processes: {error})"),
+        |strays| format!("{strays:?}"),
+    );
+    #[cfg(not(windows))]
+    let processes = String::from("(not listed on this platform)");
+    format!("stages left: {stages:?}; processes under the folder: {processes}")
 }

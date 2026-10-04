@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-04 (P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -161,9 +161,10 @@ Each entry has these fields:
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
 | [L-127](#l-127) | The CLI's ingest treats two kinds of hostile source worse than the worker path does: a link is refused as a storage failure and a full disk is reported as corruption | security | low | P14 | [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) | open |
 | [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, nineteen of 31 targets were still finding coverage at the end, and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-129](#l-129) | On Windows, a host killed outright in the first instants of a provider's start leaves that provider suspended for good, and its stage cannot be deleted | security | low | unscheduled | [#253](https://github.com/smormah/vsift/issues/253) | accepted residual |
 | [L-132](#l-132) | The reviewed FFmpeg can only follow a month-end build of its publisher, and a new pin does not move existing installs; the refresh candidate of 2026-10-03 is a daily build, needs two reviewed bounds raised and adds three libraries to the recipe | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
 
-Counts: 1 high, 35 medium, 79 low (115 entries).
+Counts: 1 high, 35 medium, 80 low (116 entries).
 
 ## Security
 
@@ -426,8 +427,10 @@ Counts: 1 high, 35 medium, 79 low (115 entries).
   Ctrl-C away from it and lets the supervisor stop the whole tree. If `vsift` itself is
   killed outright (`SIGKILL`), no destructor runs, so a whisper.cpp or `FFmpeg` process
   already running keeps going until its current chunk or window ends (its output then
-  goes nowhere). Windows is not affected: the Job Object kills the tree when `vsift`
-  dies. An interrupted (Ctrl-C, `SIGTERM`) command always reaps its providers first.
+  goes nowhere). Windows is affected only in the first instants of a provider's start
+  ([L-129](#l-129)): the Job Object kills the tree when `vsift` dies, unless it died
+  before the provider joined the job. An interrupted (Ctrl-C, `SIGTERM`) command always
+  reaps its providers first.
 - **Evidence:** `process_supervisor.rs` (process groups, kill-on-drop), the P10
   `p10_kill_and_resume` stage.
 - **Impact:** after a hard kill a provider can use CPU for up to one chunk (at most
@@ -492,6 +495,61 @@ Counts: 1 high, 35 medium, 79 low (115 entries).
 - **Next step:** none planned.
 - **Owner:** unscheduled. **Issue:** none. **Status:** accepted residual. **Review:**
   pending.
+
+### L-129
+
+**On Windows, a host killed outright in the first instants of a provider's start leaves that provider suspended for good, and its stage cannot be deleted.**
+
+- **What:** on Windows the process supervisor (`process-wrap` 10's `JobObject`) creates each
+  provider suspended (`CREATE_SUSPENDED`), creates a kill-on-close Job Object, assigns the
+  process to it and only then resumes it. In the few steps between the process's creation and
+  its assignment the provider is in no job. A host killed there (`TerminateProcess`, Task
+  Manager's "End task" or a crash; a power loss ends every process with the
+  machine) leaves a process that never ran and never will: nothing resumes it and nothing is left to
+  close the job, so it stays until the user ends it or the machine restarts. Its executable image
+  stays mapped, so the folder it lives in cannot be deleted.
+- **Evidence:** the flaky kill test of the managed store (#253,
+  `installs_killed_by_the_operating_system_at_spread_moments_are_consistent`, which really kills a
+  host at eight moments of an install). On the maintainer's Windows 11 machine, between 2026-10-02
+  and 2026-10-03, five stray providers (three `whisper-cli.exe --help`, two `ffprobe.exe -version`)
+  were found inside `vsift-p13-install-*\managed\stage-*\runtime.pending` folders of that test, each
+  with a dead parent and a single thread in the state `Wait/Suspended`; every failure of the test
+  had the signature "a stage is left after the rerun and the repair" (one `StaleStages` finding).
+  In CI the same signature (`kill N of 8`, one `StaleStages` after the rerun and the repair) failed `Quality`'s
+  Windows job in **three of the last 100 runs of `ci.yml`** (counted on 2026-10-04: 69 passed, 7 failed, 22
+  cancelled and two not finished; the three are runs
+  [37139519121](https://github.com/smormah/vsift/actions/runs/37139519121) on main,
+  [37158810147](https://github.com/smormah/vsift/actions/runs/37158810147) and
+  [37169068798](https://github.com/smormah/vsift/actions/runs/37169068798) on two pull-request branches).
+  A hosted reproduction (a temporary workflow on a scratch branch, six runs at a time on `windows-latest`) did
+  not fail: **57 runs passed, 0 failed, each taking 12 to 93 s under the load**. Both reproduction runs were
+  cancelled by their time bound before a summary line, so the count is read from the partial log of run
+  [37154374500](https://github.com/smormah/vsift/actions/runs/37154374500). Zero of 57 gives a 95% bound of
+  about 1 in 19, which does not exclude the CI rate, and no stray was seen on a hosted runner: **the cause is shown by
+  the strays on the maintainer's machine and rests on that.**
+- **Impact:** a stray of a few megabytes and no CPU, until restart. The stage folder it holds cannot
+  be removed: `setup repair` names it (`StaleStages`) and `setup remove --stale-stages` keeps it
+  (`storage_failure`) until the process is ended; the next `setup install` is not blocked. Only a
+  **kill that gives VSift no chance to run, inside the window,** does it. A console interruption (Ctrl-C,
+  Ctrl-Break) is handled by VSift, which ends its providers itself; that handling was **not tested at the
+  instant of a provider's start**, so this entry does not claim it is free of the window.
+- **Why:** closing the window needs the provider to be born inside the job
+  (`PROC_THREAD_ATTRIBUTE_JOB_LIST` at creation) or the host itself to run inside a kill-on-close job
+  that its children inherit. `std::process::Command` offers neither on stable and `process-wrap`
+  does not, so either needs `unsafe` (forbidden in VSift crates) or a new dependency, and so an
+  accepted ADR.
+- **Mitigation:** the managed-store kill test ends such a stray (only a process whose command line
+  names the test's own private folder) and prints what it ended; a provider that is not suspended
+  and outlives its host fails the test, so a job that stopped containing providers would still be
+  seen. A user who finds one ends the process (Task Manager: a `whisper-cli.exe`, `ffmpeg.exe` or
+  `ffprobe.exe` started from a `managed\stage-...\runtime.pending` folder of VSift's data folder)
+  and runs `vsift setup remove --stale-stages`. The wording of
+  [`SECURITY.md`](../../SECURITY.md) and the guarantee matrix of the
+  [worker-host runbook](../operations/worker-host.md) says "except a kill in that window".
+- **Next step:** an accepted R0 limitation. The maintainer decides whether R1 closes the window (an
+  ADR for an isolated Windows containment crate or a reviewed dependency).
+- **Owner:** unscheduled. **Issue:** [#253](https://github.com/smormah/vsift/issues/253).
+  **Status:** accepted residual. **Review:** pending.
 
 ## Integrity and durability
 
