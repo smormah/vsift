@@ -6,7 +6,12 @@ VSift runs FFmpeg, FFprobe and whisper.cpp on local media, and on Ubuntu 24.04 `
 install` downloads reviewed tool artifacts after you accept a plan (nothing else is
 downloaded). Every external provider run goes through the bounded, shell-free process
 supervisor of P02, with explicit executable provenance and descendant lifecycle
-containment. This does not make an
+containment (a Windows Job Object, a Unix process group). Containment ends the
+providers when a command is interrupted or fails. It does not cover two cases of a
+host killed outright: on Windows, a kill (not an interruption) in the first instants of
+a provider's start leaves that provider suspended, and it stays until it is ended or
+the machine restarts ([L-129](docs/planning/known-limits.md#l-129)); on Unix, a running
+provider finishes its current unit ([L-055](docs/planning/known-limits.md#l-055)). This does not make an
 ambient executable trusted or turn desktop process containment into a filesystem,
 network, CPU, memory or PID sandbox. The
 [baseline review](docs/planning/baseline-review.md) records remaining hardening gaps;

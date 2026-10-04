@@ -1023,3 +1023,32 @@ re-run on a refreshed build happens on the release candidate (P14 PR 11).
   timely; records published before 2026-06-01 were not read.
 
 Hosted use: about 41 job-minutes (the four runs above).
+
+## 20. PR 7: records kept while the findings were fixed
+
+### 20.1 #253: the managed-store kill test
+
+The kill test of the managed store (`installs_killed_by_the_operating_system_at_spread_moments_are_consistent`) failed
+intermittently with "one stage left after the rerun and the repair". **What the record shows.** In the last 100
+runs of `ci.yml` on 2026-10-04 (69 passed, 7 failed, 22 cancelled, two not finished) the Windows `Quality` job
+failed with that signature three times: runs 37139519121 (main), 37158810147 (#289's branch) and 37169068798 (#299's
+branch). On the maintainer's Windows 11 machine five stray providers were found (a suspended `whisper-cli.exe` or
+`ffprobe.exe`, one thread each, parent dead, inside the test's own `stage-*\runtime.pending` folder). **What it
+does not show.** A hosted reproduction on `windows-latest` (a temporary workflow on a scratch branch, six runs at a
+time) passed 57 times and failed none; both of its runs were cancelled by their time bound before a summary line, so
+the 57 is counted from the partial log of run 37154374500, and zero of 57 has a 95% upper bound of about 1 in 19. No
+stray was seen on a runner. So the cause (a provider created suspended and not yet in its kill-on-close job when the
+host is killed, [L-129](known-limits.md#l-129)) rests on the maintainer's machine, and the fix is a mitigation in the
+test (it ends the stray, prints it, and prints what is left when the test still fails), not a proof that no other
+cause exists.
+
+### 20.2 Skill candidates for the next freeze
+
+The skill (`skills/vsift`) is frozen while a trial batch runs and again at the candidate cut, so a wording change
+that a later finding suggests is **not made then**: it is listed here, one line each with its source, and the
+maintainer decides which go in before the batch-2 freeze (`freeze write`). Nothing below has been changed in the
+skill.
+
+| Candidate wording | Source |
+| --- | --- |
+| On Windows, run `vsift` from PowerShell or Git Bash, never through `cmd.exe`: the `vsift.cmd` file npm writes makes `cmd.exe` read the command line a second time. | #257, [L-109](known-limits.md#l-109) (P14 PR 7) |
