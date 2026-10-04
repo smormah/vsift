@@ -43,7 +43,10 @@ impl FilesystemSessionStore {
     ///
     /// A SHA-256 bucket index caps each scan at 256 markers. The held marker lock
     /// prevents expiry cleanup of a suspended or slow opener across processes.
-    /// An interrupted open remains registered for bounded later cleanup. The
+    /// An open that was interrupted (a crash) or whose removal of its own
+    /// registration failed remains registered for bounded later cleanup; a failed
+    /// open that is still running removes it at once
+    /// ([`Self::abandon_unpublished_open`]). The
     /// marker is staged in `session-index/`, flushed and renamed into its
     /// bucket, so an interrupted registration never leaves a torn one.
     ///

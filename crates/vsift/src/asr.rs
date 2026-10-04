@@ -480,7 +480,7 @@ impl Engine {
         drop(work);
         drop(bound);
         let now = self.now_unix_seconds()?;
-        let status = store.session_status(&request.session)?;
+        let status = crate::sessions::published_status(&store, &request.session)?;
         Ok(RetranscribeOutcome {
             session: SessionSnapshot::observe(&status, now),
             requested,
@@ -503,7 +503,7 @@ impl Engine {
         let revision = store
             .revision(&record.session_id, &commit.revision_id, now)?
             .ok_or(EngineError::Storage(SessionStorageError::IntegrityFailure))?;
-        let status = store.session_status(&record.session_id)?;
+        let status = crate::sessions::published_status(store, &record.session_id)?;
         Ok(RetranscribeOutcome {
             session: SessionSnapshot::observe(&status, now),
             requested,
@@ -747,7 +747,7 @@ pub(crate) fn open_status(
     session: &SessionId,
     now: u64,
 ) -> Result<SessionStatus, EngineError> {
-    let status = store.session_status(session)?;
+    let status = crate::sessions::published_status(store, session)?;
     if status.phase() != SessionPhase::Open || status.lifetime().expired(now) {
         return Err(EngineError::Storage(SessionStorageError::StateConflict));
     }

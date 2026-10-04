@@ -354,6 +354,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and refuses a `-BatchDirectory` that is inside the checkout but outside that tree. New
   `campaign_script` tests (Windows) run the real script against a throwaway repository and fail
   on the old script, including the exact first-run refusal.
+- **A failed open now removes the registration it made, and a session that never published is no longer
+  reported as a storage failure** (P14 PR 7, #277; found by the P14 load campaign: sessions left listed as
+  `initializing` with no kill, and `session status` of one answering `STORAGE_IO` with no remediation).
+  **Cause:** a worker batch opens several sessions at once, and registering a session and creating its first
+  generation each only try the root's initialization lock; a request that met `BUSY` after its registration
+  retried with a new session and left the first registration behind (9 of 40 rounds of 20 requests at
+  concurrency 4 on a hosted Ubuntu runner listed 21 sessions, one `initializing`), and any other failed
+  open (a source that is not media, a copy that does not fit, a cancellation) left one too, for `session clean`
+  to collect a day later. **Fix:** an ingest whose open fails removes its own registration, and the session
+  folder it began, at once, through the routine `session clean` uses (`abandon_unpublished_open`): only a
+  registration whose marker names this operation, only a session that was never published, the same
+  exclusive lock and bounded owned-tree check, no deletion by path; if the removal fails the request still
+  reports its original failure and `session clean` collects the registration as before. A session id that
+  names no published session is now `INVALID_ARGUMENT` with a remediation that says the storage is fine
+  (it was `STORAGE_IO`, or an `INVALID_ARGUMENT` with none). No field or schema changes. Tests: store tests
+  for the removal (own operation removed; another operation's, a published session and an unregistered id
+  are never touched), engine tests (a failed ingest leaves no registration or folder and spares a
+  registration another opener made; a batch with failing lines leaves nothing and keeps the other
+  sessions), a binary test for the typed answer, and the opt-in 40 x 20 x 4 reproduction, which fails on
+  the old code. ADR 0021 has a dated note; the refusal itself stays a known limit, **L-131**.
 
 ## [0.1.0] - 2026-10-01
 

@@ -408,7 +408,7 @@ impl Engine {
         }
         drop(snapshot);
         let newest = committed.ok_or(EngineError::Storage(SessionStorageError::Busy))?;
-        let status = store.session_status(&request.session)?;
+        let status = crate::sessions::published_status(store, &request.session)?;
         Ok(Analysis {
             newest,
             status,

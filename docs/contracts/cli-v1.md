@@ -94,6 +94,11 @@ source bytes, committed generation, `process_crash_consistent` publication (or
 `os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
 Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
 supplied-transcript import is described in the next section.
+A session id that names no published session (never opened, still being opened by another
+command, interrupted while it opened, cleaned or expired) is `INVALID_ARGUMENT` with a
+remediation that says nothing is wrong with the storage, for `session status`, `renew`, `close`
+and every command that takes a session; before P14 PR 7 (#277) it was `STORAGE_IO`, the answer of
+a disk that failed.
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
 days from open. A worker workspace sets its own retention (P11, below). Close and
 cleanup return busy while active work holds the session. Expiry becomes visible at
@@ -149,9 +154,14 @@ media-tool preflight described below. Then the
 source is staged and probed, the cues are aligned, and the source binding and the
 transcript revision are committed in **one** generation. A rejected import therefore
 never leaves an open session. When the rejection comes after staging (the probe or
-the alignment failed), the unactivated registration and its private source copy stay
-in the owned root, listed as `initializing`, until `session clean` removes them as
-abandoned after the idle interval. On success `data.transcript` (schema
+the alignment failed), the engine removes the unactivated registration and its private
+source copy at once, so nothing is listed and nothing is left to clean. Any other failure
+of an `ingest` that was refused after its session was registered (a source that is not
+media, a copy that does not fit, a cancellation) is treated the same way. Only the one
+open that made a registration removes it, and only while its session was never published;
+if the removal itself fails (a busy root), the registration stays listed as `initializing`
+and `session clean` removes it as abandoned after the idle interval, as it also removes the
+registration of a process that was killed while it opened a session. On success `data.transcript` (schema
 [`transcript-revision.schema.json`](../../schemas/v1/transcript-revision.schema.json))
 describes the revision; a plain ingest omits the member, so its output is unchanged.
 The revision is stored as a `transcript_record` session artifact, counted by
@@ -699,9 +709,11 @@ again records and returns it. A workspace keeps at most 4,096 records; records o
 sessions that are gone are pruned first, else `RESOURCE_LIMIT` (L-063).
 
 **Retries and deadline (X-09).** A step that meets contention (`BUSY`: an admission
-unit, a busy session or writer, the same job elsewhere) is tried again after a
+unit, a busy session or writer, the same job elsewhere, the root's lock while another
+request opens a session) is tried again after a
 full-jitter backoff within `--admission-wait-ms` and the deadline; nothing else is
-retried. The deadline is the request's `deadline_ms`, or one day; a step never starts,
+retried. About one request in five of a batch of 20 at concurrency 4 meets the last
+(L-131); a try that failed after it registered a session removes that registration. The deadline is the request's `deadline_ms`, or one day; a step never starts,
 and a retry never waits, with less than one second of it left, and a step still
 running at the deadline is cancelled at its next boundary: `DEADLINE_EXCEEDED` (exit
 5), resumable. Deadlines and waits count per delivery (L-065).

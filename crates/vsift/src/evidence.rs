@@ -710,7 +710,7 @@ impl Engine {
         drop(snapshot);
         let now = self.now_unix_seconds()?;
         let files = delivered_files(&store, session, &extraction.record, now)?;
-        let status = store.session_status(session)?;
+        let status = crate::sessions::published_status(&store, session)?;
         Ok(EvidenceResults {
             session: SessionSnapshot::observe(&status, now),
             record: extraction.record,
@@ -738,7 +738,7 @@ impl Engine {
             })
             .collect();
         for _ in 0..MAX_COMMIT_ATTEMPTS {
-            let status = store.session_status(session)?;
+            let status = crate::sessions::published_status(store, session)?;
             match store.publish_evidence(
                 session,
                 &self.new_operation_id()?,

@@ -221,6 +221,12 @@ pub enum EngineError {
     },
     /// No session of the root holds a job with that identity.
     JobNotFound,
+    /// No published session has this identity: it was never opened, is still
+    /// opening, its opening was interrupted (an abandoned registration,
+    /// collected by `session clean` once it is a day old; a failed opening removes
+    /// its own at once), or it was cleaned already (#277). Nothing is wrong with
+    /// the storage.
+    SessionNotPublished,
     /// A job record or key violated an invariant; an internal fault.
     JobInvariant,
     /// A durable session was required in a worker workspace whose policy is
@@ -374,6 +380,7 @@ impl EngineError {
             | Self::JobNotResumable { .. }
             | Self::JobSessionNotOpen { .. }
             | Self::JobNotFound
+            | Self::SessionNotPublished
             | Self::PlanAcceptance(_)
             | Self::TranscriptUnavailable
             | Self::InvalidTimeRange
@@ -807,6 +814,9 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the job's session is closed or expired")
             }
             Self::JobNotFound => formatter.write_str("no session holds a job with that identity"),
+            Self::SessionNotPublished => {
+                formatter.write_str("no published session has this identity")
+            }
             Self::JobInvariant => formatter.write_str("a job record violated an invariant"),
             Self::WorkspaceNotDurable => {
                 formatter.write_str("the worker workspace's policy is not durable")
@@ -893,6 +903,7 @@ impl Error for EngineError {
             | Self::JobInterrupted { .. }
             | Self::JobSessionNotOpen { .. }
             | Self::JobNotFound
+            | Self::SessionNotPublished
             | Self::JobInvariant
             | Self::WorkspaceNotDurable
             | Self::AdmissionExceedsCapacity { .. }
