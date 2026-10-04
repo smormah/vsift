@@ -503,6 +503,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the old code the first two see no remediation (checked on Windows; the campaign saw the bare
   `STORAGE_IO` on Linux). A Windows account without the privilege to make links prints a skip; a hosted run
   never skips.
+- **`vsift ingest` into a root with too little room is refused at once, and says what happened** (P14 PR 7,
+  #266; found by the P14 malicious-media campaign: a sparse 600 MiB video into a 256 MiB root failed after
+  five seconds with `INTEGRITY_FAILURE`, where `job run` refused at once). The free-space check was made only
+  for a worker workspace, so a desktop root copied until the disk was full; reproduced on a hosted runner (a
+  256 MiB tmpfs): 7.5 s, then `STORAGE_IO` with **no remediation** and a registered, never-activated session
+  left behind. The campaign's `INTEGRITY_FAILURE` came from its container's storage and **was not
+  reproduced**; its cause is not known. Now, on Unix, `ingest` checks the source's size plus a 16 MiB margin
+  against the root's free space before it copies anything (a worker workspace still adds its 1 GiB reserve and
+  still answers `RESOURCE_LIMIT`, unchanged), and a write that runs out of room during the copy (the only
+  check on Windows, which reads no free space, L-061) gives the same typed answer. **The code stays
+  `STORAGE_IO` (exit 7), the CLI path's code:** `RESOURCE_LIMIT`, as `job run` answers, would change a
+  published code, which is not additive within v1 (known limit L-127). The remediation says nothing is
+  damaged and the video is fine, tells the user to free space (or an operator to name a folder on a drive with
+  more room with `--session-root`) and to retry; it does not tell an agent to choose a folder. The desktop
+  check is **best effort** (known limit L-061): a filesystem whose space cannot be read, or that reports no
+  space available at all, is not checked, and the copy's own write failure, which gives the same answer, is
+  the backstop. New typed error `OpenSessionError::SourceNoRoom`, mapped to `STORAGE_IO`; new
+  `SOURCE_NO_ROOM_REMEDIATION`; no field, code or schema change. Tests: the room decision for every case
+  (readable, unreadable, none available; a guarantee and a best effort), the room check on a real root, the
+  mapping of a write that ran out of room, the code table and the remediation text, the CLI's failure writer,
+  and, on Unix, the binary through the real engine (`no_room_cli_contract`: a sparse 4 TiB source is refused
+  before any copy, with the remediation and exit 7; on a machine with that much free space it prints a skip).
 
 ## [0.1.0] - 2026-10-01
 

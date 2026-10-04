@@ -274,7 +274,8 @@ impl FilesystemSessionStore {
     /// on the held root; Windows has no equivalent here and reports
     /// [`FreeSpaceCheck::NotEnforced`] without checking. The check is a
     /// reservation made before the copy, not a quota: a concurrent writer
-    /// can still use the space (known limit).
+    /// can still use the space (known limit). A workspace's reserve is a
+    /// guarantee, so space that cannot be read is an error here.
     ///
     /// # Errors
     ///
@@ -284,7 +285,43 @@ impl FilesystemSessionStore {
         &self,
         incoming_bytes: u64,
     ) -> Result<FreeSpaceCheck, SessionStorageError> {
-        free_space_check(&self.root, incoming_bytes)
+        free_space_check(
+            &self.root,
+            incoming_bytes,
+            FREE_SPACE_RESERVE_BYTES,
+            FreeSpaceStrictness::Guarantee,
+        )
+    }
+
+    /// Requires the root's filesystem to have room for `incoming_bytes` and a
+    /// small margin for the session's own records, **without** the worker
+    /// workspace's reserve: the check of a desktop root, so a copy that cannot
+    /// fit is refused before it starts instead of failing after it has filled
+    /// the disk (#266). Same platform rules and caveats as
+    /// [`Self::ensure_free_space`] (Unix only; a reservation, not a quota).
+    ///
+    /// **Best effort, never a reason to refuse by itself:** a desktop root has
+    /// no guarantee to keep, so a filesystem whose free space cannot be read
+    /// (`fstatvfs` fails) or that reports no available blocks at all (some
+    /// network and user-space filesystems do, whatever they hold) is reported
+    /// as [`FreeSpaceCheck::NotEnforced`], and a copy that really cannot fit
+    /// is then found by its failed write, as before. Without this every
+    /// ingest on such a filesystem would be refused.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionStorageError::CapacityExhausted`] when the space was read
+    /// and is short.
+    pub fn ensure_room_for_copy(
+        &self,
+        incoming_bytes: u64,
+    ) -> Result<FreeSpaceCheck, SessionStorageError> {
+        free_space_check(
+            &self.root,
+            incoming_bytes,
+            COPY_ROOM_MARGIN_BYTES,
+            FreeSpaceStrictness::BestEffort,
+        )
     }
 
     /// The lifetime rules of sessions opened in this root.
@@ -668,18 +705,58 @@ pub enum FreeSpaceCheck {
     NotEnforced,
 }
 
+/// The margin a desktop root keeps beyond a source copy: 16 MiB, room for the
+/// session's index entry, manifests and records.
+pub const COPY_ROOM_MARGIN_BYTES: u64 = 16 * 1024 * 1024;
+
+/// What a free-space check does when the filesystem's space cannot be read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FreeSpaceStrictness {
+    /// A worker workspace's reserve is a guarantee: unreadable space is an error.
+    Guarantee,
+    /// A desktop root's check is a courtesy before a copy: unreadable space is
+    /// not checked, and the copy's own write failure stays the backstop.
+    BestEffort,
+}
+
+/// Decides whether `incoming_bytes` and `keep_free` fit in `available`
+/// bytes, where `None` is a filesystem whose space could not be read. A pure
+/// function, so every branch is tested on every platform.
+#[cfg(any(unix, test))]
+fn decide_room(
+    available: Option<u64>,
+    incoming_bytes: u64,
+    keep_free: u64,
+    strictness: FreeSpaceStrictness,
+) -> Result<FreeSpaceCheck, SessionStorageError> {
+    let Some(available) = available else {
+        return match strictness {
+            FreeSpaceStrictness::Guarantee => Err(SessionStorageError::Io),
+            FreeSpaceStrictness::BestEffort => Ok(FreeSpaceCheck::NotEnforced),
+        };
+    };
+    // Some filesystems report no available blocks whatever they hold; a best
+    // effort check cannot tell that from a full one, and the write decides.
+    if available == 0 && strictness == FreeSpaceStrictness::BestEffort {
+        return Ok(FreeSpaceCheck::NotEnforced);
+    }
+    if available < incoming_bytes.saturating_add(keep_free) {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    Ok(FreeSpaceCheck::Enforced)
+}
+
 #[cfg(unix)]
 fn free_space_check(
     root: &Dir,
     incoming_bytes: u64,
+    keep_free: u64,
+    strictness: FreeSpaceStrictness,
 ) -> Result<FreeSpaceCheck, SessionStorageError> {
-    let statistics = rustix::fs::fstatvfs(root).map_err(|_| SessionStorageError::Io)?;
-    let available = statistics.f_bavail.saturating_mul(statistics.f_frsize);
-    let needed = incoming_bytes.saturating_add(FREE_SPACE_RESERVE_BYTES);
-    if available < needed {
-        return Err(SessionStorageError::CapacityExhausted);
-    }
-    Ok(FreeSpaceCheck::Enforced)
+    let available = rustix::fs::fstatvfs(root)
+        .ok()
+        .map(|statistics| statistics.f_bavail.saturating_mul(statistics.f_frsize));
+    decide_room(available, incoming_bytes, keep_free, strictness)
 }
 
 #[cfg(not(unix))]
@@ -690,6 +767,8 @@ fn free_space_check(
 const fn free_space_check(
     _root: &Dir,
     _incoming_bytes: u64,
+    _keep_free: u64,
+    _strictness: FreeSpaceStrictness,
 ) -> Result<FreeSpaceCheck, SessionStorageError> {
     Ok(FreeSpaceCheck::NotEnforced)
 }
@@ -914,5 +993,68 @@ mod restrict_error_tests {
                 "{other:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod room_tests {
+    use super::{FreeSpaceCheck, FreeSpaceStrictness, SessionStorageError, decide_room};
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+    const BOTH: [FreeSpaceStrictness; 2] = [
+        FreeSpaceStrictness::Guarantee,
+        FreeSpaceStrictness::BestEffort,
+    ];
+
+    #[test]
+    fn enough_room_is_enforced_and_too_little_is_exhausted_for_both() {
+        for strictness in BOTH {
+            assert_eq!(
+                decide_room(Some(10 * GIB), GIB, GIB, strictness),
+                Ok(FreeSpaceCheck::Enforced)
+            );
+            assert_eq!(
+                decide_room(Some(2 * GIB), GIB, GIB, strictness),
+                Ok(FreeSpaceCheck::Enforced),
+                "exactly enough"
+            );
+            assert_eq!(
+                decide_room(Some(2 * GIB - 1), GIB, GIB, strictness),
+                Err(SessionStorageError::CapacityExhausted)
+            );
+        }
+    }
+
+    /// A workspace's reserve is a guarantee: space that cannot be read is an
+    /// error, as it always was.
+    #[test]
+    fn a_guarantee_refuses_space_it_cannot_read_and_a_full_filesystem() {
+        assert_eq!(
+            decide_room(None, 0, GIB, FreeSpaceStrictness::Guarantee),
+            Err(SessionStorageError::Io)
+        );
+        assert_eq!(
+            decide_room(Some(0), 0, GIB, FreeSpaceStrictness::Guarantee),
+            Err(SessionStorageError::CapacityExhausted)
+        );
+    }
+
+    /// A desktop root's check never refuses an ingest because the filesystem
+    /// is unreadable or reports nothing available: the copy's write decides.
+    #[test]
+    fn a_best_effort_check_does_not_refuse_what_it_cannot_measure() {
+        assert_eq!(
+            decide_room(None, GIB, 16 * 1024 * 1024, FreeSpaceStrictness::BestEffort),
+            Ok(FreeSpaceCheck::NotEnforced)
+        );
+        assert_eq!(
+            decide_room(
+                Some(0),
+                GIB,
+                16 * 1024 * 1024,
+                FreeSpaceStrictness::BestEffort
+            ),
+            Ok(FreeSpaceCheck::NotEnforced)
+        );
     }
 }

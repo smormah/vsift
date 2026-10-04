@@ -347,11 +347,12 @@ impl EngineError {
             Self::Storage(error) => storage_failure_code(*error),
             Self::OpenSession(error) => match error {
                 OpenSessionError::InvalidSource => FailureCode::InvalidSource,
-                // A link is a source problem, but the published 0.1.0 code stays
-                // (v1 is additive only): the remediation says what happened (L-127).
-                OpenSessionError::SourceIo | OpenSessionError::SourceIsLink => {
-                    FailureCode::StorageIo
-                }
+                // A link and a root with no room are not storage failures, but the
+                // published codes stay (v1 is additive only): the remediation says
+                // what happened (L-127).
+                OpenSessionError::SourceIo
+                | OpenSessionError::SourceIsLink
+                | OpenSessionError::SourceNoRoom => FailureCode::StorageIo,
                 OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
                 OpenSessionError::Storage(storage) => storage_failure_code(*storage),
                 OpenSessionError::SourceProbe(probe) => probe_failure_code(*probe),
@@ -1548,6 +1549,12 @@ mod tests {
         assert_eq!(
             EngineError::TranscriptSource(super::TranscriptSourceError::SymbolicLink)
                 .failure_code(),
+            FailureCode::StorageIo
+        );
+        // #266: a source that does not fit the root keeps the CLI path's code; its
+        // remediation says what happened (L-127).
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceNoRoom).failure_code(),
             FailureCode::StorageIo
         );
         assert_eq!(

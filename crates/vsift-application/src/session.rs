@@ -163,6 +163,13 @@ pub enum OpenSessionError {
     /// one 0.1.0 gave, with a remediation that says what happened (known limit
     /// L-127: changing a published failure code is not additive within v1).
     SourceIsLink,
+    /// The session root's filesystem has no room for the copy of the source:
+    /// found before the copy from the source's size and the free space, or
+    /// when a write ran out of space (#266). Nothing was activated. The
+    /// published code stays `STORAGE_IO`, what the CLI path gave, with a
+    /// remediation that says what happened (known limit L-127: changing a
+    /// published failure code is not additive within v1).
+    SourceNoRoom,
     /// The clock could not represent the bounded lifetime.
     InvalidClock,
     /// Storage or coordination rejected the operation.
@@ -186,6 +193,9 @@ impl fmt::Display for OpenSessionError {
             Self::SourceIo => formatter.write_str("selected source could not be read"),
             Self::SourceIsLink => {
                 formatter.write_str("selected source is a link, which is not followed")
+            }
+            Self::SourceNoRoom => {
+                formatter.write_str("the session root has no room for a copy of the source")
             }
             Self::InvalidClock => {
                 formatter.write_str("session clock is outside the supported range")

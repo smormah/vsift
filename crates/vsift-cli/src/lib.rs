@@ -51,12 +51,13 @@ use vsift_contract::{
     MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
     NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SOURCE_IS_LINK_REMEDIATION,
-    STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
-    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
-    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
-    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
-    local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
-    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
+    SOURCE_NO_ROOM_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
+    TerminalEventResponse, UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION,
+    UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION,
+    WORKSPACE_NOT_DURABLE_REMEDIATION, WORKSPACE_POLICY_MISMATCH_REMEDIATION,
+    WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
+    managed_lifecycle_remediation, media_tool_verification_summary, non_private_folder_summary,
+    search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -755,6 +756,7 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         | EngineError::TranscriptSource(TranscriptSourceError::SymbolicLink) => {
             SOURCE_IS_LINK_REMEDIATION
         }
+        EngineError::OpenSession(OpenSessionError::SourceNoRoom) => SOURCE_NO_ROOM_REMEDIATION,
         EngineError::WorkspaceNotDurable => WORKSPACE_NOT_DURABLE_REMEDIATION,
         EngineError::AdmissionExceedsCapacity { .. } => ADMISSION_CAPACITY_REMEDIATION,
         EngineError::AdmissionBusy { .. } => ADMISSION_BUSY_REMEDIATION,
@@ -1101,13 +1103,43 @@ where
 
 #[cfg(test)]
 mod tests {
-    use vsift::{EngineError, EnginePorts, JobId};
-    use vsift_contract::{CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION};
+    use vsift::{EngineError, EnginePorts, JobId, OpenSessionError};
+    use vsift_contract::{
+        CommandName, IDEMPOTENCY_CONFLICT_REMEDIATION, JOB_BUSY_REMEDIATION,
+        SOURCE_NO_ROOM_REMEDIATION,
+    };
 
     use super::{
         CommandFailure, Interruption, OutputMode, OutputWriter, ProcessExit, execute_with,
         write_command_failure,
     };
+
+    /// #266: an ingest whose source does not fit the session root's filesystem
+    /// keeps the code the CLI path gave, `STORAGE_IO` (exit 7; changing a
+    /// published code is not additive within v1, known limit L-127), with a
+    /// remediation that says what happened and what to do, and not a bare
+    /// `STORAGE_IO` or an `INTEGRITY_FAILURE`.
+    #[test]
+    fn a_source_that_does_not_fit_the_root_keeps_its_code_and_says_what_to_do()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        let written = write_command_failure(
+            &mut writer,
+            OutputMode::Json,
+            CommandName::Ingest,
+            CommandFailure::from(EngineError::OpenSession(OpenSessionError::SourceNoRoom)),
+        );
+        assert_eq!(written, ProcessExit::StorageOrIo);
+        let value: serde_json::Value = serde_json::from_slice(&stdout)?;
+        assert_eq!(value["error"]["code"], "STORAGE_IO");
+        assert_eq!(
+            value["error"]["remediation"][0]["summary"],
+            SOURCE_NO_ROOM_REMEDIATION
+        );
+        Ok(())
+    }
 
     /// P10 PR 2: a busy job's failure names the job and a retry hint; an
     /// idempotency conflict names the job, has no hint and exits 2.
