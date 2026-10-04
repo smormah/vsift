@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [plain, parallel]
+        mode: [parallel]
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,7 +47,7 @@ jobs:
       - name: Repeat the two tests
         shell: pwsh
         env:
-          RUNS: "1500"
+          RUNS: "6000"
           BUDGET_MINUTES: "55"
           MODE: ${{ matrix.mode }}
         run: |
