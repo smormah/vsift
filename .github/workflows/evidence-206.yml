@@ -1,0 +1,94 @@
+name: Evidence 206 (temporary, this branch only)
+
+# Reproduces #206 (session-root creation, Windows: "session storage root
+# permissions are not private") by repeating the two root-creation tests on a
+# hosted runner, with temporary diagnostics in the product code that record why
+# the validator refused and what the adopting loop saw. Temporary: it triggers
+# only on a push to the branch below, reads the repository, publishes nothing,
+# uses no secret, and is deleted with the branch. Never run on the maintainer's
+# machine.
+
+on:
+  push:
+    branches:
+      - p14-pr7-evidence-206
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evidence-206-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  roots:
+    name: "#206 root creation, windows-2025, ${{ matrix.mode }}"
+    runs-on: windows-2025
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [plain, parallel]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the test binary
+        shell: pwsh
+        run: |
+          cargo test -p vsift-infrastructure --test session_root_provisioning --no-run --locked --message-format=json > build.json
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+      - name: Repeat the two tests
+        shell: pwsh
+        env:
+          RUNS: "1500"
+          BUDGET_MINUTES: "55"
+          MODE: ${{ matrix.mode }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $exe = Get-Content build.json | ForEach-Object { if ($_.StartsWith('{')) { $_ | ConvertFrom-Json } } |
+            Where-Object { $_.executable -and $_.target.name -eq 'session_root_provisioning' } |
+            Select-Object -Last 1 -ExpandProperty executable
+          Write-Host "test binary: $exe"
+          $diagDir = Join-Path $env:RUNNER_TEMP 'diag'
+          New-Item -ItemType Directory -Force $diagDir | Out-Null
+          $stopAt = (Get-Date).AddMinutes([int]$env:BUDGET_MINUTES)
+          $streams = if ($env:MODE -eq 'parallel') { 4 } else { 1 }
+          $perStream = [int]([int]$env:RUNS / $streams)
+          $results = 1..$streams | ForEach-Object -Parallel {
+            $stream = $_
+            $ran = 0; $failed = 0
+            for ($i = 1; $i -le $using:perStream; $i++) {
+              if ((Get-Date) -gt $using:stopAt) { break }
+              foreach ($name in 'concurrent_threads_create_one_root_and_every_one_adopts_it', 'concurrent_processes_create_one_root_and_every_one_adopts_it') {
+                $diag = Join-Path $using:diagDir "s$stream-r$i-$name.log"
+                $env:VSIFT_DIAG_FILE = $diag
+                $text = & $using:exe --exact $name --nocapture 2>&1 | Out-String
+                $ran++
+                if ($LASTEXITCODE -ne 0) {
+                  $failed++
+                  $logText = if (Test-Path $diag) { Get-Content $diag -Raw } else { '(no diagnostics written)' }
+                  "::group::stream $stream repetition $i $name FAILED`n$text`n--- diagnostics ---`n$logText`n::endgroup::"
+                } elseif (-not (Test-Path $diag) -or -not (Select-String -Path $diag -Pattern 'REFUSED|adopt:' -Quiet)) {
+                  Remove-Item $diag -ErrorAction SilentlyContinue
+                }
+              }
+            }
+            "RESULT stream=$stream ran=$ran failed=$failed"
+          } -ThrottleLimit $streams
+          $results | ForEach-Object { Write-Host $_ }
+          # A diagnostics line from a passing run that still saw a refusal is
+          # worth seeing too: the adopting loop recovered.
+          Write-Host "::group::runs that recovered from a refusal"
+          $kept = @(Get-ChildItem $diagDir -ErrorAction SilentlyContinue)
+          Write-Host "kept diagnostics files: $($kept.Count)"
+          $kept | Select-Object -First 25 | ForEach-Object { Write-Host $_.Name; Get-Content $_ -Raw }
+          $refused = @($kept | Where-Object { Select-String -Path $_ -Pattern 'REFUSED' -Quiet })
+          Write-Host "files that saw the validator refuse: $($refused.Count)"
+          Write-Host "::endgroup::"

@@ -132,8 +132,12 @@ impl FilesystemSessionStore {
         if durable && !dir_offers_os_crash_durability(&parent) {
             return Err(SessionStoreOpenError::DurabilityUnavailable);
         }
-        create_private_child_directory(&parent, Path::new(name))
-            .map_err(map_provision_create_error)?;
+        let created = create_private_child_directory(&parent, Path::new(name));
+        crate::session_root::diag206(&format!(
+            "creator: create_dir -> {:?}",
+            created.as_ref().err()
+        ));
+        created.map_err(map_provision_create_error)?;
         let root = parent
             .open_dir_nofollow(Path::new(name))
             .map_err(|_| SessionStoreOpenError::RootUnavailable)?;
@@ -146,7 +150,12 @@ impl FilesystemSessionStore {
         }
         // Made private before anything is written into it, whatever the
         // parent's permissions would have passed on. The held handle pins it.
-        if restrict_new_directory(&canonical_parent.join(name)).is_err() {
+        let restricted = restrict_new_directory(&canonical_parent.join(name));
+        crate::session_root::diag206(&format!(
+            "creator: restrict_new_directory -> {:?}",
+            restricted.as_ref().err()
+        ));
+        if restricted.is_err() {
             drop(root);
             let _ = parent.remove_dir(Path::new(name));
             return Err(SessionStoreOpenError::RootUnavailable);
@@ -763,19 +772,28 @@ pub(super) fn validate_platform_root_permissions(
         helper::{current_user, name_to_sid, sid_to_string},
     };
 
-    let username = current_user().ok_or(SessionStoreOpenError::RootNotPrivate)?;
+    let username = current_user().ok_or_else(|| {
+        crate::session_root::diag206("validate: no current user");
+        SessionStoreOpenError::RootNotPrivate
+    })?;
     let user_sid = name_to_sid(&username, None)
         .ok()
         .and_then(|mut sid| sid_to_string(sid.as_mut_ptr().cast()).ok())
-        .ok_or(SessionStoreOpenError::RootNotPrivate)?;
+        .ok_or_else(|| {
+            crate::session_root::diag206("validate: user sid lookup failed");
+            SessionStoreOpenError::RootNotPrivate
+        })?;
     let path = root_path
         .to_str()
         .ok_or(SessionStoreOpenError::RootNotPrivate)?;
-    let acl =
-        ACL::from_file_path(path, false).map_err(|_| SessionStoreOpenError::RootNotPrivate)?;
-    let entries = acl
-        .all()
-        .map_err(|_| SessionStoreOpenError::RootNotPrivate)?;
+    let acl = ACL::from_file_path(path, false).map_err(|error| {
+        crate::session_root::diag206(&format!("validate: ACL::from_file_path failed: {error:?}"));
+        SessionStoreOpenError::RootNotPrivate
+    })?;
+    let entries = acl.all().map_err(|error| {
+        crate::session_root::diag206(&format!("validate: acl.all failed: {error:?}"));
+        SessionStoreOpenError::RootNotPrivate
+    })?;
     let trusted = [user_sid.as_str(), "S-1-5-18", "S-1-5-32-544"];
     let current_user_allowed = entries.iter().any(|entry| {
         matches!(
@@ -797,6 +815,24 @@ pub(super) fn validate_platform_root_permissions(
             ) && !trusted.contains(&entry.string_sid.as_str()))
     });
     if !current_user_allowed || unsafe_entry {
+        let listed: Vec<String> = entries
+            .iter()
+            .map(|entry| {
+                format!(
+                    "{}:{:?}:flags={:#x}",
+                    entry.string_sid, entry.entry_type, entry.flags
+                )
+            })
+            .collect();
+        let backtrace = std::backtrace::Backtrace::force_capture().to_string();
+        let frames: Vec<&str> = backtrace
+            .lines()
+            .filter(|line| line.contains("vsift") && line.contains("::"))
+            .take(8)
+            .collect();
+        crate::session_root::diag206(&format!(
+            "validate: REFUSED current_user_allowed={current_user_allowed} unsafe_entry={unsafe_entry} entries={listed:?} frames={frames:?}"
+        ));
         return Err(SessionStoreOpenError::RootNotPrivate);
     }
     Ok(())

@@ -36,6 +36,31 @@ const INITIAL_BACKOFF: Duration = Duration::from_millis(2);
 /// Longest pause between validation attempts.
 const MAX_BACKOFF: Duration = Duration::from_millis(50);
 
+/// Temporary diagnostics for #206: appends one line to the file named by
+/// `VSIFT_DIAG_FILE`, with the process id, the thread and a monotonic time.
+pub(crate) fn diag206(text: &str) {
+    use std::io::Write;
+    let Some(path) = env::var_os("VSIFT_DIAG_FILE") else {
+        return;
+    };
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(Instant::now);
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(
+            file,
+            "pid={} thread={:?} t={:?} {}",
+            std::process::id(),
+            std::thread::current().id(),
+            start.elapsed(),
+            text
+        );
+    }
+}
+
 /// Whether opening a session root may create it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionRootProvisioning {
@@ -209,10 +234,19 @@ fn adopt_existing_root(
             Err(error) => return Err(SessionRootError::Store(error)),
         };
         let state = root_provisioning_state(root, SystemTime::now(), PROVISIONING_RECENT);
+        diag206(&format!(
+            "adopt: rejection={rejection:?} state={state:?} elapsed={:?}",
+            started.elapsed()
+        ));
         if state == RootProvisioningState::Settled {
             // The creator may have finished between the failed validation and
             // the probe, so a settled root is validated once more.
-            return FilesystemSessionStore::open_existing(root).map_err(SessionRootError::Store);
+            let again = FilesystemSessionStore::open_existing(root);
+            diag206(&format!(
+                "adopt: settled, second validation {:?}",
+                again.as_ref().err()
+            ));
+            return again.map_err(SessionRootError::Store);
         }
         if started.elapsed() >= wait {
             return Err(match state {
