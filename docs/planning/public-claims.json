@@ -388,7 +388,7 @@
       "text": "Ubuntu 24.04 x64 is supported",
       "requires": ["RQ-01", "RQ-02", "RQ-03", "RQ-04", "RQ-05", "RQ-06", "RQ-11", "RQ-15"],
       "limits": ["L-004", "L-035", "L-037", "L-042", "L-099", "L-111", "L-112", "L-113", "L-115", "L-122"],
-      "note": "The matrix cell; durable sessions on local ext4 with barriers are a separate statement (CL-207)."
+      "note": "The matrix cell; durable sessions on local ext4 with barriers are a separate statement (CL-207). RQ-05 is read under its per-system rule (maintainer's decision of 2026-10-04): on this system the durable stage is covered by RQ-09 and RQ-12 where a hosted disk has no write barriers (L-113)."
     },
     {
       "kind": "claim",
@@ -398,7 +398,7 @@
       "text": "macOS 15 on Apple silicon is supported on hosted-runner evidence only",
       "requires": ["RQ-01", "RQ-02", "RQ-04", "RQ-05"],
       "limits": ["L-004", "L-035", "L-042", "L-098", "L-111", "L-112", "L-114", "L-115"],
-      "note": "PROPOSED WORDING, a choice for the maintainer (P14 PR 9a; decision F left it to PR 9, replacing 'supported for what the hosted run proves'). The cell is the command line, a supplied transcript and local speech recognition with the user's own Homebrew tools, installed by npm, pnpm, Yarn, Bun or the archive, checked on hosted macOS 15 runners only: no managed install, no agent trial, Homebrew's builds not reviewed (L-114), Gatekeeper untried, and no Mac in the project's hands (L-035, L-098). The document using this sentence must say all of that beside it. Stays a qualification target, and this statement stays unused, if the candidate's runs of RQ-01, RQ-02, RQ-04 or RQ-05 do not pass."
+      "note": "WORDING ACCEPTED by the maintainer on 2026-10-04, as proposed in P14 PR 9a (decision F left it to PR 9, replacing 'supported for what the hosted run proves'). RQ-05 is read under its per-system rule, decided the same day. The cell is the command line, a supplied transcript and local speech recognition with the user's own Homebrew tools, installed by npm, pnpm, Yarn, Bun or the archive, checked on hosted macOS 15 runners only: no managed install, no agent trial, Homebrew's builds not reviewed (L-114), Gatekeeper untried, and no Mac in the project's hands (L-035, L-098). The document using this sentence must say all of that beside it. Stays a qualification target, and this statement stays unused, if the candidate's runs of RQ-01, RQ-02, RQ-04 or RQ-05 do not pass."
     },
     {
       "kind": "claim",

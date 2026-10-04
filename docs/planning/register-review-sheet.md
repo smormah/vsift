@@ -3,6 +3,8 @@
 Status: **prepared 2026-10-04 by P14 PR 9a, for the maintainer to decide from in one pass.** This page
 is a decision aid and decides nothing: every "proposed" below is a recommendation with its reason, and
 nothing in the [register](known-limits.md) changes until the maintainer writes a review on the entry.
+Three items the maintainer decided on 2026-10-04 (the macOS wording, the supported-versions policy and how
+RQ-05 can pass) are marked below; **every register review is still `pending`.**
 Source: [P14 plan](p14-qualification.md) section 6 (the thirty entries) and section 10 ("Register and
 readings"), [ADR 0024](../decisions/0024-r0-qualification-and-release-candidate.md) decision H.
 
@@ -82,12 +84,21 @@ pass costs a few minutes.
 | [L-109](known-limits.md#l-109) | npm's and pnpm's `vsift.cmd` lets `cmd.exe` re-read a command line. | SECURITY.md (known issue); install.md section 2; the launcher's README | **Accept** (already an accepted residual) | VSift cannot change a file npm writes; the three safe routes are documented and pinned by a test |
 | [L-111](known-limits.md#l-111) | The upgrade evidence has one published baseline, so 0.1.0 over 0.1.0 shows the procedure, not a newer release reading older data. | install.md section 7 | **Accept as deferred** | The candidate's run from 0.1.0 is the evidence; install.md already says what was run |
 | [L-112](known-limits.md#l-112) | A hosted image with named programs hidden is not a clean machine. | The matrix ("what the hosted evidence is not"); install.md | **Accept** | Real machines are your try-outs (RQ-17) |
-| [L-113](known-limits.md#l-113) | The durable stage of the worker checkpoint cannot run on a hosted runner, so RQ-05 cannot be `passed` as its rule is written. | The matrix (the RQ-05 paragraph); CL-201, CL-202, CL-203 all need RQ-05 | **Decide**, because it blocks every cell | See "The decision that blocks the cells" below |
-| [L-114](known-limits.md#l-114) | macOS is tried with Homebrew's FFmpeg and whisper.cpp, which VSift does not review. | The matrix; CL-203; install.md | **Decide the macOS wording** (the proposal is in the PR and in ADR 0024's PR 9 note) | This entry names PR 9 as its owner. If the candidate's macOS runs fail, the cell stays a qualification target |
-| [L-115](known-limits.md#l-115) | The journeys run later tests against 0.1.0 and do not reach the launcher or the archives. | The matrix | **Accept** | The candidate's tag carries the override, so its journeys use their own tests |
+| [L-113](known-limits.md#l-113) | The durable stage of the worker checkpoint cannot run on a hosted runner, so RQ-05 could not be `passed` under its first rule. | The matrix (the RQ-05 paragraph); CL-201, CL-202, CL-203 all need RQ-05 | **Decided 2026-10-04 (the item below, option b);** accept the entry as a residual | The rule is per system now; see "The decision that blocked the cells" below. The entry's own review is still yours |
+| [L-114](known-limits.md#l-114) | macOS is tried with Homebrew's FFmpeg and whisper.cpp, which VSift does not review. | The matrix; CL-203; install.md | **The wording was decided 2026-10-04** (CL-203 as registered); accept the entry | If the candidate's macOS runs fail, the cell stays a qualification target. The entry's own review is still yours |
+| [L-115](known-limits.md#l-115) | The journeys run later tests against 0.1.0 and do not reach the launcher or the archives; a stage that asserts a fix newer than 0.1.0 is skipped below its first version, visibly. | The matrix | **Accept** | The candidate's tag carries the override, so its journeys use their own tests; the skip rule is in the development guide |
 | [L-122](known-limits.md#l-122) | One FFmpeg record (CVE-2026-38350) is tied to its fix only by elimination. | No sentence of a public document today; RQ-13 cannot be `passed` until you decide (#272) | **Decide** (already on your list) | Accept the tie by elimination as the register entry, or ask upstream which report it describes. A refreshed build changes nothing (L-132) |
 
-## The decision that blocks the cells
+## The decision that blocked the cells (decided 2026-10-04: option b)
+
+**Resolution.** The maintainer chose (b) on 2026-10-04: record that other evidence covers the stage, and word
+RQ-05's pass rule per system. The rule is in the ledger and the plan (section 21). It is no longer unsatisfiable,
+but RQ-05 stays `running` for 0.1.0 for a different reason: the P07 gates on Ubuntu and Windows are recorded only
+as prior evidence, from weekly runs on source at other commits. The cell statements stay unusable until every item
+they need is `passed` for the release candidate's own bytes, which no 0.1.0 result can do. The register reviews below
+are untouched by this decision: all stay `pending`, and they remain the maintainer's to write.
+
+The question as it was put to the maintainer follows, unchanged.
 
 RQ-05's pass rule is "every stage passed". For 0.1.0 every stage that can run did, and P11's
 `p11_durable_workspace` was blocked on every system (L-113): by design off Ubuntu, and on the hosted Ubuntu

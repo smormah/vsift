@@ -39,8 +39,8 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2
-(#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; PR 9 is
-9a (#302) is merged and 9b (#304, the user guide) is open; PRs 10-13 remain; the whole packet is not complete.**
+(#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below), 8 (#252) and 9 (9a #302, 9b #304) are
+merged; PR 9c records the maintainer's decisions of 2026-10-04; PRs 10-13 remain; the whole packet is not complete.**
 What it must show, and what is weaker than it sounds:
 - **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints against it
   on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2 installed it on
@@ -75,16 +75,16 @@ RQ-07 passed (31 fuzz targets, no crash; 19 still growing: L-128); RQ-08 failed 
 passed (found #274, #277, #286); RQ-10 failed (96 hostile inputs, 93 held: #264-#266); RQ-12 passed (runbook
 walked); RQ-13 failed (#272).
 
-## P14 PR 9 in one view (9a #302 merged; 9b #304 open; PR 9 is complete only when 9b merges)
+## P14 PR 9 in one view (9a #302 and 9b #304 merged; 9c records the decisions of 2026-10-04)
 
-**9a:** the support matrix (`support-and-resource-profiles.md`: no cell may say "supported" yet; hosted Windows
-is Server 2025) and the install guide, `SECURITY.md` (a versions table), runbook, skill guide and README facts
-brought to it. The claims check also reads the launcher's messages and the README graphics' text (L-121), and
-each claim lists the register entries it leans on (`limits`). `register-review-sheet.md`: thirty entries,
-seven later, nine readings, every review pending. **9b:** `docs/guide/` (twelve pages, two generated reference
-pages), held to the code by the `Guide` workflow (`tools/guide/`): the reference must equal `--help` and
-`schemas/v1`, and 40 marked commands must print what the pages show: matched on Windows 11 and on Ubuntu 24.04
-with the managed tools, never tried on macOS. The guide names a release, not a candidate (`release.md` 6.3).
+**9a:** the support matrix (`support-and-resource-profiles.md`: no cell may say "supported" yet) and the install
+guide, `SECURITY.md` (a versions table), runbook, skill guide and README facts brought to it. The claims check
+also reads the launcher's messages and the README graphics' text (L-121), and each claim lists the register
+entries it leans on (`limits`). `register-review-sheet.md`: thirty entries, seven later, nine readings, all pending. **Decided 2026-10-04 (9c):** the macOS wording and the versions
+policy as proposed; RQ-05's rule is per system, and RQ-05 is still `running` for 0.1.0 (plan section 21). **9b:**
+`docs/guide/` (twelve pages, two generated reference pages), held to the code by the `Guide` workflow
+(`tools/guide/`): the reference must equal `--help` and `schemas/v1`, and 40 marked commands must print what the
+pages show: matched on Windows 11 and Ubuntu 24.04 (managed tools), never on macOS. It names a release, not a candidate.
 
 ## P14 PR 7 in one view (every finding by outcome; one pull request and one regression test each)
 
@@ -133,7 +133,7 @@ Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-8 and 9a merged (PR 7 = the fixes of the campaigns and batch 1); 9b open; 10-13 remain; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-9 merged (PR 7 = the fixes of the campaigns and batch 1); 9c open; 10-13 remain; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 

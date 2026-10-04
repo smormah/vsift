@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-04 (P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 9c, the maintainer's decisions on the macOS wording and RQ-05's rule: L-113 and L-114 updated; P14, a journeys stage that asserts a later fix is skipped below the first version that has it and never above it: L-115 updated; P14 PR 9a, the claims check reads the text of the README's graphics: L-121 narrowed to the roadmap's rung; L-004, L-035 and L-038 brought up to date, L-114 names the macOS wording; P14 PR 7, a failed open removes its own registration and a session that never published says so: L-131 added, L-127 gains its third case; P14 PR 7, the cold grader's three classifications: L-118 updated; P14 PR 7, a short range's cut final segment: L-130 added and L-124 closed and deleted; P14 PR 7, a source that does not fit the root is refused before the copy and the code stays `STORAGE_IO`: L-127 gains its second case, L-061 updated; P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -1668,9 +1668,10 @@ platform has the release matrix's rules met yet.**
   0024 decision F) ran for 0.1.0 too, in P14 PR 2: the clean installs with four package
   managers, the three archives and the walks of the install, upgrade and uninstall steps
   (RQ-01, RQ-02 and RQ-04 `passed` for 0.1.0, on hosted images that are not clean machines,
-  [L-112](#l-112)). RQ-05 is `running` for 0.1.0 because one stage cannot run on a hosted
-  runner ([L-113](#l-113)), and every cell statement needs it, so no cell can earn its word
-  yet. Linux desktop and other distributions, network filesystems and Windows or macOS
+  [L-112](#l-112)). RQ-05 is `running` for 0.1.0: one stage cannot run on a hosted runner
+  ([L-113](#l-113); its pass rule is per system since 2026-10-04) and the speech gates on
+  Ubuntu and Windows are not counted evidence for the 0.1.0 commit. Every cell statement
+  needs it, so no cell can earn its word yet. Linux desktop and other distributions, network filesystems and Windows or macOS
   worker use are unqualified.
 - **Evidence:** [resource profiles](support-and-resource-profiles.md);
   [P09 record](p09-evidence-navigation.md) residuals;
@@ -2945,19 +2946,26 @@ worker request has never run on the qualified profile.**
   durable profile reads (Linux)"); `crates/vsift-infrastructure/src/durable_profile.rs`;
   [ADR 0020](../decisions/0020-recoverable-jobs-and-durable-publication.md);
   issue [#258](https://github.com/smormah/vsift/issues/258).
-- **Impact:** RQ-05 cannot show that the shipped bytes publish a durable worker request
+- **Impact:** the journeys cannot show that the shipped bytes publish a durable worker request
   (`os_crash_durable`) and replay it on the profile where it is claimed. The product behaved
   as designed (it refuses a host that disables barriers); the gap is in what was proved. The
   P10 and P13 campaigns exercise the durable paths in virtual machines with a real ext4 root,
   with campaign builds (a release cannot carry the fault-injection features), not the
-  published binary.
+  published binary. **Since 2026-10-04 RQ-05's pass rule is per system** (maintainer's
+  decision): the durable stage must pass on Ubuntu 24.04 with local ext4 and write barriers,
+  is covered there by RQ-09 and RQ-12 of the same version where a hosted disk has none (both
+  ran the published 0.1.0 with durable workspaces on an ext4 volume with write barriers, but
+  neither re-runs that stage's script), and on Windows and macOS must show the refusal
+  (`MISSING_CAPABILITY`, nothing created). RQ-05 stays `running` for 0.1.0 for another
+  reason ([plan](p14-qualification.md) section 21).
 - **Why:** a hosted runner's virtual machine disables barriers, and no hosted job can
   change a mount of its own root.
-- **Mitigation:** the stage reports `blocked` with the reason, never `passed`; RQ-05 stays
-  `running` until it runs or the maintainer records what covers it; durable-worker claims
-  lean on RQ-11 and are limited to the profile (L-008).
-- **Next step:** run the stage inside the virtual machine the `P10 durability campaign`
-  boots, with the installed executable, or record that RQ-05 does not cover it (#258).
+- **Mitigation:** the stage reports `blocked` with the reason, never `passed`, and its
+  refusal check holds off the qualified profile; RQ-09 and RQ-12 cover the durable path;
+  durable-worker claims lean on RQ-11 and are limited to the profile (L-008).
+- **Next step:** none required for the rule; running the stage itself inside the virtual
+  machine the `P10 durability campaign` boots, with the installed executable, would close
+  the gap check for check (#258).
 - **Owner:** P14. **Issue:** [#258](https://github.com/smormah/vsift/issues/258).
   **Status:** open. **Review:** pending.
 
@@ -2982,9 +2990,10 @@ worker request has never run on the qualified profile.**
 - **Why:** reviewing and pinning a macOS toolchain is its own work (ADR 0007), outside R0.
 - **Mitigation:** the versions are recorded in every run; the claim is worded as what the
   hosted run proves with the user's tools; no managed install is offered there.
-- **Next step:** P14 PR 9a proposed the matrix wording (statement CL-203 of the claims registry,
-  "supported on hosted-runner evidence only"; ADR 0024's PR 9a note), which the maintainer decides; a
-  reviewed macOS build would need its own review and catalogue entry.
+- **Next step:** the matrix wording is statement CL-203 of the claims registry ("supported on
+  hosted-runner evidence only"), proposed in P14 PR 9a and accepted by the maintainer on
+  2026-10-04 (ADR 0024's PR 9a note); it is usable only when the evidence for the release
+  candidate exists. A reviewed macOS build would need its own review and catalogue entry.
 - **Owner:** P14 (PR 9). **Issue:** [#17](https://github.com/smormah/vsift/issues/17).
   **Status:** deferred. **Review:** pending.
 
