@@ -157,6 +157,9 @@ pub enum OpenSessionError {
     InvalidSource,
     /// Source input could not be read.
     SourceIo,
+    /// The selected source is a symbolic link (or another reparse-point link).
+    /// Links are never followed: the caller names the file itself (#265).
+    SourceIsLink,
     /// The clock could not represent the bounded lifetime.
     InvalidClock,
     /// Storage or coordination rejected the operation.
@@ -178,6 +181,9 @@ impl fmt::Display for OpenSessionError {
         match self {
             Self::InvalidSource => formatter.write_str("selected source is invalid"),
             Self::SourceIo => formatter.write_str("selected source could not be read"),
+            Self::SourceIsLink => {
+                formatter.write_str("selected source is a link, which is not followed")
+            }
             Self::InvalidClock => {
                 formatter.write_str("session clock is outside the supported range")
             }

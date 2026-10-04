@@ -384,6 +384,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   status or schema change; four unit tests). The test now frees the unit only after the stream says
   `draining`, so the waiting step can only be cancelled and the test no longer races its own
   signal. `docs/operations/worker-host.md` says so.
+- **`vsift ingest` of a symbolic link is `INVALID_SOURCE` with a remediation, not `STORAGE_IO`** (P14 PR 7,
+  #265; found by the P14 malicious-media campaign on the published 0.1.0). The source was opened without
+  following links, which fails on a link with a platform error that reached the caller as a storage
+  failure and no remediation, the answer of a disk that failed, and no document said how links are
+  treated. The link is now recognised from its directory entry before anything is opened (and again if the
+  open fails, so a name swapped for a link in between is classified the same way): `INVALID_SOURCE`,
+  exit 3, nothing read or copied, with a remediation that says links are not followed and to name the
+  file the link points to. A supplied transcript that is a link was `STORAGE_IO` too and is now `INVALID_SOURCE`.
+  The worker path is unchanged and answers a link in an input root `path_outside_input_root`
+  (`INVALID_ARGUMENT`): it is a different question, an argument that tries to leave the operator's
+  folder, and `cli-v1.md` now states both. No field or schema changes; the new remediation is fixed
+  text. Tests: the staging of a link and of a dangling link (`a_link_is_refused_as_a_source_and_never_followed`),
+  the engine's code table, the remediation text, and two binary tests (`source_link_cli_contract`:
+  `ingest <link>` and `ingest --transcript <link>`); on the old code both binary tests see `STORAGE_IO`
+  (checked on Windows; the campaign saw it on Linux).
 
 ## [0.1.0] - 2026-10-01
 

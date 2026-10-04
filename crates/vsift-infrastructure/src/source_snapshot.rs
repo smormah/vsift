@@ -545,6 +545,7 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
         SourceError::Storage(storage) => OpenSessionError::Storage(storage),
         SourceError::Cancelled => OpenSessionError::Cancelled,
         SourceError::Io(_) => OpenSessionError::SourceIo,
+        SourceError::SymbolicLink => OpenSessionError::SourceIsLink,
         SourceError::InvalidPath
         | SourceError::NotRegularFile
         | SourceError::TooLarge
@@ -575,12 +576,36 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
     }
     let directory = Dir::open_ambient_dir(canonical_parent, cap_std::ambient_authority())
         .map_err(SourceError::Io)?;
+    // A link is classified from the directory entry before anything is opened,
+    // as the worker's input root does: opening it without following fails with
+    // a platform-specific error that would otherwise reach the caller as a
+    // storage failure (#265). The open below still follows nothing, so a name
+    // swapped for a link in between is not followed either.
+    if directory
+        .symlink_metadata(Path::new(name))
+        .is_ok_and(|entry| entry.file_type().is_symlink())
+    {
+        return Err(SourceError::SymbolicLink);
+    }
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
     let file = directory
         .open_with(Path::new(name), &options)
-        .map_err(SourceError::Io)?;
+        .map_err(|error| {
+            // The swap case: whatever made the open fail, a link is a link.
+            if directory
+                .symlink_metadata(Path::new(name))
+                .is_ok_and(|entry| entry.file_type().is_symlink())
+            {
+                SourceError::SymbolicLink
+            } else {
+                SourceError::Io(error)
+            }
+        })?;
     let metadata = file.metadata().map_err(SourceError::Io)?;
+    if metadata.file_type().is_symlink() {
+        return Err(SourceError::SymbolicLink);
+    }
     if !metadata.is_file() {
         return Err(SourceError::NotRegularFile);
     }
@@ -744,6 +769,9 @@ pub enum SourceError {
     InvalidPath,
     /// Selection did not resolve to a regular file.
     NotRegularFile,
+    /// The selected path is itself a link. Links are never followed, so this is
+    /// refused as a source problem and not as a storage failure (#265).
+    SymbolicLink,
     /// Selected source exceeds the profile maximum.
     TooLarge,
     /// Source read exceeded the stage deadline.
@@ -769,6 +797,7 @@ impl fmt::Display for SourceError {
         match self {
             Self::InvalidPath => formatter.write_str("source path is invalid"),
             Self::NotRegularFile => formatter.write_str("source is not a regular file"),
+            Self::SymbolicLink => formatter.write_str("source is a link, which is not followed"),
             Self::TooLarge => formatter.write_str("source exceeds the byte limit"),
             Self::Deadline => formatter.write_str("source read exceeded the deadline"),
             Self::UnsupportedContainer => {

@@ -346,7 +346,9 @@ impl EngineError {
             Self::SessionRoot(error) => error.failure_code(),
             Self::Storage(error) => storage_failure_code(*error),
             Self::OpenSession(error) => match error {
-                OpenSessionError::InvalidSource => FailureCode::InvalidSource,
+                OpenSessionError::InvalidSource | OpenSessionError::SourceIsLink => {
+                    FailureCode::InvalidSource
+                }
                 OpenSessionError::SourceIo => FailureCode::StorageIo,
                 OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
                 OpenSessionError::Storage(storage) => storage_failure_code(*storage),
@@ -1528,6 +1530,15 @@ mod tests {
         assert_eq!(
             EngineError::OpenSession(OpenSessionError::InvalidClock).failure_code(),
             FailureCode::InvalidArgument
+        );
+        // #265: a link is a source problem, not a storage failure.
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceIsLink).failure_code(),
+            FailureCode::InvalidSource
+        );
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceIo).failure_code(),
+            FailureCode::StorageIo
         );
     }
 
