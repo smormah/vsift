@@ -18,6 +18,13 @@ the contract (see "Human-readable text").
 
 ## Command namespace
 
+Top-level help (`vsift -h` and `vsift --help`) ends with a worked example, "A typical
+investigation": the commands a first investigation runs in order (setup check, ingest with or
+without a supplied transcript, search and transcript reads, candidates, frames, handoff check,
+close), the `--limit` and `--max-frames` ranges, a note that `--session-root` and
+`--host-isolation` are operator options an agent leaves out, and how to read a failure. It is
+help text, not a JSON contract (P14 PR 7); a test parses every command it names.
+
 Global output options are `--json` for one terminal JSON document and
 `--events jsonl` for a JSON Lines stream. They are mutually exclusive.
 `--session-root <absolute-dir>` explicitly selects a private disposable
