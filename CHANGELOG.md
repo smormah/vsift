@@ -395,6 +395,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   test with a 30 s deadline (`a_named_pipe_with_no_writer_is_refused_and_not_waited_for`) and a binary test
   (`fifo_source_cli_contract`, a 30 s deadline on `vsift ingest <pipe>`), both Unix only; on the old code
   both wait until their deadline. `docs/contracts/cli-v1.md` states the source rule.
+- **The weighted-admission test no longer fails on its own time bound** (P14 PR 7, #271; tests and
+  documentation only, no product code). `weighted_admission_never_exceeds_root_capacity` failed 2 of 200
+  repetitions on a hosted Windows runner in the P14 stress campaign: a child process reported "no
+  reservation was ever granted". Reproduced on a hosted runner with eight repetitions sharing the machine
+  (72 of 400 failed; a child had tried 340 to 515 times in its 1.5 s and was refused every time). Admission
+  is a set of non-waiting OS try-locks with no queue (known limit L-060, ADR 0021 section 5a), so nothing
+  promises that a waiter is admitted within a bound: the failed assertion tested a promise no document
+  makes, while the invariant the test exists for (the units held never exceed the capacity) was never
+  violated. The child now keeps trying until its first grant, for at most 60 s (the longest of the 400 hosted runs took 14 s in all), and the capacity and
+  ledger assertions are unchanged; the limits register states that a waiter's wait is bounded only by its
+  own wait and deadline, and L-123 narrows to the root-creation failure (#206).
 
 ## [0.1.0] - 2026-10-01
 

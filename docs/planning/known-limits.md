@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-04 (P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -156,7 +156,7 @@ Each entry has these fields:
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
 | [L-122](#l-122) | One recorded FFmpeg vulnerability (CVE-2026-38350, libswscale) is tied to its fix only by elimination, and the reading proves the source of the shipped build, not its behaviour | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
-| [L-123](#l-123) | Two Windows concurrency failures reproduce on a hosted runner at about one repetition in 200: session-root creation and the weighted-admission grant | integrity/durability | medium | P14 | [#206](https://github.com/smormah/vsift/issues/206), [#271](https://github.com/smormah/vsift/issues/271) | open |
+| [L-123](#l-123) | A Windows concurrency failure reproduces on a hosted runner at about one repetition in 200: session-root creation | integrity/durability | medium | P14 | [#206](https://github.com/smormah/vsift/issues/206) | open |
 | [L-124](#l-124) | Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips | accuracy/ASR | medium | P14 | [#274](https://github.com/smormah/vsift/issues/274), [#277](https://github.com/smormah/vsift/issues/277) | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
@@ -836,8 +836,13 @@ Counts: 1 high, 36 medium, 79 low (116 entries).
   (a recognition of eight threads) can wait behind a stream of light ones, and a
   bounded `AdmissionWait` ends in `BUSY` rather than in a queue position. Requests of
   one batch will be admitted in line order (PR 4); across processes nothing orders them.
+  **Nothing promises that a waiting request is admitted within any bound**: a waiter's wait
+  is bounded only by its own wait and deadline, and a process can fail every try for seconds
+  while others hold the units (a test child that kept trying for 1.5 s was never granted in
+  72 of 400 runs when eight runs shared a hosted Windows runner,
+  [#271](https://github.com/smormah/vsift/issues/271)).
 - **Evidence:** ADR 0021 section 5a; `weighted_admission_never_exceeds_root_capacity`,
-  `admission_wait_is_bounded_then_busy`.
+  `admission_wait_is_bounded_then_busy`; the #271 reproduction (P14 PR 7).
 - **Impact:** under sustained contention a heavy request may be starved until it gives up
   with `BUSY` and a retry hint.
 - **Why:** fairness across workers is the external supervisor's job (architecture and
@@ -3092,16 +3097,18 @@ that week.**
 
 ### L-123
 
-**Two Windows concurrency failures reproduce on a hosted runner at about one repetition in 200: session-root creation and the weighted-admission grant.**
+**A Windows concurrency failure reproduces on a hosted runner at about one repetition in 200: session-root creation.**
 
 - **What:** the P14 stress campaign repeated the tests on hosted Windows Server 2025, Ubuntu 24.04
   and macOS 15. `session_root_provisioning` failed **7 times in 1,500** on Windows (and 2 in 1,500
   with every CPU kept busy) with "session storage root permissions are not private", in the
   threads test as well as the processes test; this is [#206](https://github.com/smormah/vsift/issues/206),
-  now reproduced. `weighted_admission_never_exceeds_root_capacity` failed **2 times in 200**
-  (consecutively) on Windows: a child never received a reservation within its wait
-  ([#271](https://github.com/smormah/vsift/issues/271)). None of the other tests failed on any
-  system, and neither failed on Ubuntu or macOS (0 in 3,000 and 0 in 400). Issue
+  now reproduced. (`weighted_admission_never_exceeds_root_capacity` also failed 2 times in 200 on
+  Windows: a test child never received a reservation within 1.5 s. That was the test's bound,
+  not the product: admission is unfair by design, [L-060](#l-060), and the test now waits up to
+  60 s for a first grant; [#271](https://github.com/smormah/vsift/issues/271).) None of the other
+  tests failed on any system, and the root-creation test did not fail on Ubuntu or macOS (0 in
+  3,000). Issue
   [#128](https://github.com/smormah/vsift/issues/128) (process supervisor, Windows) did **not**
   reproduce: 0 in 3,000 repetitions on each system.
 - **Evidence:** `P14 stress` run 36978939586 (`p14-stress-roots-windows-2025`,
@@ -3109,15 +3116,14 @@ that week.**
   outputs); [`p14-qualification.md`](p14-qualification.md) section 18.
 - **Impact:** a Windows process that opens a session root while another creates it can be refused
   with a typed error (fail closed: nothing wrong is accepted). Whether the refused call works when
-  repeated was not measured. For the admission failure it is not known whether the product or the
-  test's wait is at fault.
+  repeated was not measured.
 - **Why:** not traced. The root's privacy is checked while another creator may still be setting
   its access list, as [#206](https://github.com/smormah/vsift/issues/206) first suspected.
 - **Mitigation:** create the root with one process before starting others (likely, not measured).
-- **Next step:** fix #206 with a regression test that repeats creation on Windows; explain or fix
-  #271; re-run `P14 stress` on the candidate (RQ-08).
-- **Owner:** P14. **Issue:** [#206](https://github.com/smormah/vsift/issues/206),
-  [#271](https://github.com/smormah/vsift/issues/271). **Status:** open. **Review:** pending.
+- **Next step:** fix #206 with a regression test that repeats creation on Windows; re-run
+  `P14 stress` on the candidate (RQ-08).
+- **Owner:** P14. **Issue:** [#206](https://github.com/smormah/vsift/issues/206). **Status:** open.
+  **Review:** pending.
 
 ### L-124
 

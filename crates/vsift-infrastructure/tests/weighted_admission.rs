@@ -37,6 +37,18 @@ const CHILD_SEED: &str = "VSIFT_X07_ADMISSION_SEED";
 const CHILDREN: usize = 5;
 /// How long each child keeps reserving and releasing.
 const CHILD_RUN: Duration = Duration::from_millis(1_500);
+/// The longest a child may go without its first grant before the test calls it
+/// starved. Admission is a set of non-waiting OS try-locks: no queue, no
+/// fairness (known limit L-060), so nothing promises that a waiter is admitted
+/// within a bound of its own. A child that keeps drawing weights while four
+/// others hold the units almost all the time can fail every try for a second
+/// and a half (P14 stress, 2 of 200 repetitions on Windows; 72 of 400 when
+/// eight repetitions shared the runner, #271). The invariant under test is
+/// that the units held never exceed the capacity, and that holds whether or
+/// not a child is lucky, so the first grant is awaited for this long: long
+/// enough for any child to be admitted, short enough to catch a lock that is
+/// lost altogether.
+const FIRST_GRANT_BOUND: Duration = Duration::from_secs(60);
 const OWNED_PREFIX: &str = "vsift-x07-admission-";
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -136,7 +148,7 @@ fn weighted_admission_child() -> TestResult {
     let mut ledger = Ledger::open(&ledger_path)?;
     let started = Instant::now();
     let mut granted = 0_u32;
-    while started.elapsed() < CHILD_RUN {
+    while started.elapsed() < CHILD_RUN || (granted == 0 && started.elapsed() < FIRST_GRANT_BOUND) {
         let index = usize::try_from(schedule.next())? % weights.len();
         let weight = weights[index];
         match store.try_admit(weight) {
@@ -157,7 +169,7 @@ fn weighted_admission_child() -> TestResult {
         }
     }
     if granted == 0 {
-        return Err("no reservation was ever granted".into());
+        return Err(format!("no reservation was granted within {FIRST_GRANT_BOUND:?}").into());
     }
     Ok(())
 }
