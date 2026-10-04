@@ -668,12 +668,14 @@ fn shutdown_stops_a_request(signal: Signal, windows_console: bool) -> TestResult
         let lines = line_reader(&mut child)?;
         let mut seen = wait_for_line(&lines, "\"admission_waiting\"")?;
         signal(&child)?;
-        if drain {
-            seen.extend(wait_for_line(&lines, "\"draining\"")?);
-            drop(permit);
-        } else {
-            drop(permit);
-        }
+        // The unit is freed only after the stop is seen, so the waiting step
+        // can only be cancelled and never admitted: freeing it at once let a
+        // slow signal lose the race, the ingest start and run for 100 ms
+        // before the shutdown reached it, and the request end in a different
+        // (also correct) interleaving than the one this test asserts (#268;
+        // the unit tests of `worker.rs` cover that one).
+        seen.extend(wait_for_line(&lines, "\"draining\"")?);
+        drop(permit);
         let (code, seen) = finish(child, &lines, seen)?;
         let stdout: Vec<u8> = seen.join("\n").into_bytes();
         let events = events(&stdout)?;
