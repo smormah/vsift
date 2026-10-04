@@ -1,7 +1,7 @@
 VSift setup install
-Catalogue: ubuntu-24.04-x86_64-2026-09-22-r2
+Catalogue: ubuntu-24.04-x86_64-2026-10-04-r3
 Source: publisher
-[already_current] ffmpeg_ffprobe n9.0.1-11-ge47273f4d9-20260831
+[already_current] ffmpeg_ffprobe n9.0.2-22-g46d8f462ee-20261003
 [failed] whisper_cli whisper.cpp-v1.9.2-ubuntu-x64: smoke (banner check) provider_failed (missing shared library libgomp.so.1), MISSING_CAPABILITY; stage discarded
 [failed] whisper_model whisper-base-multilingual-80da2d8: blocked
 Next: Components reported activated or already_current are installed. Fix the failure the error names, then run the same setup install again: it continues from the first component not yet installed.

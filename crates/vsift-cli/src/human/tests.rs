@@ -210,7 +210,7 @@ fn setup_install_lists_each_component_and_its_outcome() -> TestResult {
     assert!(
         complete
             .as_str()
-            .contains("[activated] ffmpeg_ffprobe n9.0.1-11-ge47273f4d9-20260831")
+            .contains("[activated] ffmpeg_ffprobe n9.0.2-22-g46d8f462ee-20261003")
     );
 
     let failed_value = example("setup-install.failed.json")?;
@@ -260,7 +260,7 @@ fn setup_lifecycle_results_render() -> TestResult {
             CommandName::SetupList,
             "setup-list.json",
             "setup-list",
-            "  [verified] n9.0.1-11-ge47273f4d9-20260831, selected",
+            "  [verified] n9.0.2-22-g46d8f462ee-20261003, selected",
         ),
         (
             CommandName::SetupRollback,

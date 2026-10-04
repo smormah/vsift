@@ -392,7 +392,7 @@ mod tests {
             );
         }
         for safe_line in [
-            "ffmpeg version n9.0.1-11-ge47273f4d9 Copyright (c) 2000-2026 the FFmpeg developers",
+            "ffmpeg version n9.0.2-22-g46d8f462ee Copyright (c) 2000-2026 the FFmpeg developers",
             "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 and/or later",
         ] {
             assert!(safe_to_echo(safe_line), "{safe_line}");

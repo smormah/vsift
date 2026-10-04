@@ -3,7 +3,7 @@ Managed installation: catalogue_accepted
 Managed folder: present
 ffmpeg_ffprobe: selection verified
   [verified] n8.1-2-g0123456789-20260601, previous
-  [verified] n9.0.1-11-ge47273f4d9-20260831, selected
+  [verified] n9.0.2-22-g46d8f462ee-20261003, selected
 whisper_cli: selection verified
   [verified] whisper.cpp-v1.9.2-ubuntu-x64, selected
 whisper_model: selection verified

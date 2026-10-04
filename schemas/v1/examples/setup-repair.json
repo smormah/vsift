@@ -17,8 +17,8 @@
         "fault": "changed_content",
         "fix": "rollback",
         "kind": "selected_version_unverified",
-        "summary": "The selected ffmpeg_ffprobe version n9.0.1-11-ge47273f4d9-20260831 is missing or does not verify against its manifest, so commands do not use it. Roll back to the verified version selected before it.",
-        "version": "n9.0.1-11-ge47273f4d9-20260831"
+        "summary": "The selected ffmpeg_ffprobe version n9.0.2-22-g46d8f462ee-20261003 is missing or does not verify against its manifest, so commands do not use it. Roll back to the verified version selected before it.",
+        "version": "n9.0.2-22-g46d8f462ee-20261003"
       },
       {
         "command": {

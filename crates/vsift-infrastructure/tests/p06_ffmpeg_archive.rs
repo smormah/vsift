@@ -20,9 +20,9 @@ use vsift_infrastructure::{
 
 use support::PrivateStaging;
 
-const EXPECTED_BYTES: u64 = 113_372_924;
-const EXPECTED_SHA256: &str = "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf";
-const ROOT: &str = "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0";
+const EXPECTED_BYTES: u64 = 137_945_828;
+const EXPECTED_SHA256: &str = "e1097ccc18f89e6723c0e3f31737c11636063f49b22902adaaa68ba414b7ff0e";
+const ROOT: &str = "ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0";
 
 fn selected(
     path: &'static str,
@@ -61,27 +61,27 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
 
     let files = [
         selected(
-            "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/LICENSE.txt",
+            "ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0/LICENSE.txt",
             7_651,
             "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
         )?,
         selected(
-            "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffmpeg",
-            116_038_416,
-            "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+            "ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0/bin/ffmpeg",
+            142_612_616,
+            "d37bafb28c3b738bcaf3aee2a5383820e58f218cae034487ebb4b3cfa6c41e47",
         )?,
         selected(
-            "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffprobe",
-            115_829_520,
-            "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
+            "ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0/bin/ffprobe",
+            142_383_176,
+            "466152cc3d23806e44e77fecdfa42a32c145bb5892dcc63c5504d131c7e35992",
         )?,
     ];
     let staging = PrivateStaging::new("vsift-p06-ffmpeg-stage")?;
     let entries = stage_xz_tar_selected_files(
         File::open(&path)?,
         EXPECTED_BYTES,
-        400_000_000,
-        ArchiveInventoryBounds::new(73, 370_667_773)?,
+        500_000_000,
+        ArchiveInventoryBounds::new(73, 450_447_717)?,
         &[],
         &files,
         staging.directory()?,
@@ -90,7 +90,7 @@ fn pinned_upstream_archive_passes_contained_staging() -> Result<(), Box<dyn Erro
     assert!(entries.iter().all(|entry| entry.path.starts_with(ROOT)));
     assert_eq!(
         entries.iter().map(|entry| entry.bytes).sum::<u64>(),
-        370_667_773
+        450_447_717
     );
     let mut names = std::fs::read_dir(staging.path())?
         .map(|entry| entry.map(|item| item.file_name()))

@@ -6,7 +6,7 @@
       {
         "component": "ffmpeg_ffprobe",
         "previous_version": "n8.1-2-g0123456789-20260601",
-        "selected_version": "n9.0.1-11-ge47273f4d9-20260831",
+        "selected_version": "n9.0.2-22-g46d8f462ee-20261003",
         "selection": "verified",
         "versions": [
           {
@@ -21,7 +21,7 @@
             "previous": false,
             "selected": true,
             "state": "verified",
-            "version": "n9.0.1-11-ge47273f4d9-20260831"
+            "version": "n9.0.2-22-g46d8f462ee-20261003"
           }
         ]
       },

@@ -1,7 +1,7 @@
 VSift setup install
-Catalogue: ubuntu-24.04-x86_64-2026-09-22-r2
+Catalogue: ubuntu-24.04-x86_64-2026-10-04-r3
 Source: publisher
-[activated] ffmpeg_ffprobe n9.0.1-11-ge47273f4d9-20260831
+[activated] ffmpeg_ffprobe n9.0.2-22-g46d8f462ee-20261003
 [activated] whisper_cli whisper.cpp-v1.9.2-ubuntu-x64
 [activated] whisper_model whisper-base-multilingual-80da2d8
 Abandoned stages: removed 1, kept 0

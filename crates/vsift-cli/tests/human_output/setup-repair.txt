@@ -1,7 +1,7 @@
 VSift setup repair (changes nothing)
 Managed installation: catalogue_accepted
 Diagnosis: needs_repair
-[selected_version_unverified] The selected ffmpeg_ffprobe version n9.0.1-11-ge47273f4d9-20260831 is missing or does not verify against its manifest, so commands do not use it. Roll back to the verified version selected before it.
+[selected_version_unverified] The selected ffmpeg_ffprobe version n9.0.2-22-g46d8f462ee-20261003 is missing or does not verify against its manifest, so commands do not use it. Roll back to the verified version selected before it.
   Run: vsift setup rollback ffmpeg_ffprobe
 [removal_interrupted] The removal of the whisper_cli version whisper.cpp-v1.9.1-ubuntu-x64 was interrupted. Remove that version.
   Run: vsift setup remove whisper_cli --version whisper.cpp-v1.9.1-ubuntu-x64

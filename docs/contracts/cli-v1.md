@@ -1505,7 +1505,7 @@ is retained as historical v1 evidence. An abbreviated current response follows.
     "target": "ubuntu_24_04_x86_64",
     "local_asr_model": {"status": "missing", "disposition": "managed_install", "required_authority": "user", "next_step": "Review the exact managed model action, then run setup install with this saved plan and its digest; a model already installed at this version is reported already_current."},
     "managed_install": "catalogue_accepted",
-    "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-10-04-r3",
     "stop_new_plans_at": "2028-08-01T00:00:00Z",
     "plan_digest": "<64 lowercase hex characters>",
     "install_needed": true,

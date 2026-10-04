@@ -156,8 +156,8 @@ fn a_verified_setup_matches_the_frozen_example() -> TestResult {
     };
     let mut report = diagnosis(&DependencyState::Missing, RuntimeReadiness::Ready);
     for (status, detail) in report.dependencies.iter_mut().zip([
-        "ffmpeg version n9.0.1-11-ge47273f4d9-20260831 Copyright (c) 2000-2026 the FFmpeg developers",
-        "ffprobe version n9.0.1-11-ge47273f4d9-20260831 Copyright (c) 2007-2026 the FFmpeg developers",
+        "ffmpeg version n9.0.2-22-g46d8f462ee-20261003 Copyright (c) 2000-2026 the FFmpeg developers",
+        "ffprobe version n9.0.2-22-g46d8f462ee-20261003 Copyright (c) 2007-2026 the FFmpeg developers",
         "whisper.cpp v1.9.2 (reviewed build)",
     ]) {
         status.state = available(detail);

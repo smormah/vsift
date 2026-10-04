@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Hard limit on compressed XZ bytes read from a verified artifact.
-pub const MAX_XZ_ARCHIVE_BYTES: u64 = 134_217_728;
+pub const MAX_XZ_ARCHIVE_BYTES: u64 = 157_286_400;
 const XZ_MEMORY_LIMIT_KIB: u32 = 131_072;
 const INPUT_BUFFER_BYTES: usize = 16 * 1024;
 

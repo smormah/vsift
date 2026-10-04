@@ -22,10 +22,10 @@ use crate::{
     StagedManagedCandidate, StagedManagedPayload,
 };
 
-const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-09-22-r2";
+const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-10-04-r3";
 const STOP_NEW_PLANS_AT: u64 = 1_848_700_800;
 const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
-const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
+const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-03-18-14/ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0.tar.xz";
 const WHISPER_URL: &str = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-ubuntu-x64.tar.gz";
 const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
 const MODEL_BYTES: u64 = 147_951_465;
@@ -42,8 +42,8 @@ const MODEL_Q5_1_SHA256: &str = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23
 const COMPATIBILITY_FIXTURE_BYTES: u64 = 76_500;
 const COMPATIBILITY_FIXTURE_SHA256: &str =
     "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070";
-const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.1-11-ge47273f4d9-20260831";
-const EXPECTED_FFPROBE_VERSION: &str = "ffprobe version n9.0.1-11-ge47273f4d9-20260831";
+const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.2-22-g46d8f462ee-20261003";
+const EXPECTED_FFPROBE_VERSION: &str = "ffprobe version n9.0.2-22-g46d8f462ee-20261003";
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -701,48 +701,48 @@ fn archive_path(path: &str) -> bool {
 
 fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     let integrity = integrity(
-        113_372_924,
-        "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf",
+        137_945_828,
+        "e1097ccc18f89e6723c0e3f31737c11636063f49b22902adaaa68ba414b7ff0e",
     )?;
     validate_source(FFMPEG_URL, PublisherOrigin::GitHubRelease, integrity)?;
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::MediaTools,
-        version: String::from("n9.0.1-11-ge47273f4d9-20260831"),
+        version: String::from("n9.0.2-22-g46d8f462ee-20261003"),
         publisher: String::from("BtbN FFmpeg Builds"),
         source_url: String::from(FFMPEG_URL),
         integrity,
         format: ManagedArtifactFormat::TarXz,
         archive_limits: Some(ReviewedArchiveLimits {
-            max_stream_bytes: 400_000_000,
+            max_stream_bytes: 500_000_000,
             entries: 73,
-            expanded_bytes: 370_667_773,
+            expanded_bytes: 450_447_717,
         }),
         selected_files: vec![
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/LICENSE.txt",
+                "ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0/LICENSE.txt",
                 "LICENSE.txt",
                 7_651,
                 "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
             )?,
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffmpeg",
+                "ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0/bin/ffmpeg",
                 "ffmpeg",
-                116_038_416,
-                "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+                142_612_616,
+                "d37bafb28c3b738bcaf3aee2a5383820e58f218cae034487ebb4b3cfa6c41e47",
             )?,
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffprobe",
+                "ffmpeg-n9.0.2-22-g46d8f462ee-linux64-lgpl-9.0/bin/ffprobe",
                 "ffprobe",
-                115_829_520,
-                "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
+                142_383_176,
+                "466152cc3d23806e44e77fecdfa42a32c145bb5892dcc63c5504d131c7e35992",
             )?,
         ],
         archive_links: Vec::new(),
         runtime_copies: Vec::new(),
         licence: String::from("LGPL version 3 archive notice (publisher-labelled static build)"),
-        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.1/COPYING.LGPLv3"),
+        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.2/COPYING.LGPLv3"),
         source_code_url: String::from(
-            "https://github.com/BtbN/FFmpeg-Builds/tree/8267213e26c1031621e6e1210fe3aa4867214f6a",
+            "https://github.com/BtbN/FFmpeg-Builds/tree/9acad4a9ef1583096af7836cc1e9c8cbcb4d3950",
         ),
         trust_limit: String::from(
             "Third-party static build: the archive LGPLv3 notice and hosted F01 media operations were checked; a complete compiled-component source/licence inventory and legal clearance are not claimed.",
@@ -756,14 +756,14 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
             )?,
             file(
                 "ffmpeg",
-                116_038_416,
-                "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+                142_612_616,
+                "d37bafb28c3b738bcaf3aee2a5383820e58f218cae034487ebb4b3cfa6c41e47",
                 true,
             )?,
             file(
                 "ffprobe",
-                115_829_520,
-                "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
+                142_383_176,
+                "466152cc3d23806e44e77fecdfa42a32c145bb5892dcc63c5504d131c7e35992",
                 true,
             )?,
         ],

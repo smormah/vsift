@@ -20,7 +20,7 @@ use vsift_domain::{FailureCode, ManagedComponent, SharedLibraryName};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-const REVISION: &str = "ubuntu-24.04-x86_64-2026-09-22-r2";
+const REVISION: &str = "ubuntu-24.04-x86_64-2026-10-04-r3";
 
 const SMOKE_REASONS: [CompatibilitySmokeFailureReason; 13] = [
     CompatibilitySmokeFailureReason::MissingExecutable,
@@ -62,7 +62,7 @@ fn component(
     stage: Option<StageDisposal>,
 ) -> ComponentInstallReport {
     let version = match component {
-        ManagedComponent::MediaTools => "n9.0.1-11-ge47273f4d9-20260831",
+        ManagedComponent::MediaTools => "n9.0.2-22-g46d8f462ee-20261003",
         ManagedComponent::WhisperCli => "whisper.cpp-v1.9.2-ubuntu-x64",
         ManagedComponent::WhisperModel => "whisper-base-multilingual-80da2d8",
     };

@@ -2,7 +2,7 @@
   "command": "setup.install",
   "coverage": null,
   "data": {
-    "catalogue_revision": "ubuntu-24.04-x86_64-2026-09-22-r2",
+    "catalogue_revision": "ubuntu-24.04-x86_64-2026-10-04-r3",
     "cleanup": {
       "stale_stages_removed": 0,
       "stale_stages_retained": 0,
@@ -18,7 +18,7 @@
         "stage": null,
         "status": "already_current",
         "step": null,
-        "version": "n9.0.1-11-ge47273f4d9-20260831"
+        "version": "n9.0.2-22-g46d8f462ee-20261003"
       },
       {
         "component": "whisper_cli",
