@@ -577,6 +577,7 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
         .map_err(SourceError::Io)?;
     let mut options = OpenOptions::new();
     options.read(true).follow(FollowSymlinks::No);
+    never_wait_for_a_writer(&mut options);
     let file = directory
         .open_with(Path::new(name), &options)
         .map_err(SourceError::Io)?;
@@ -586,6 +587,25 @@ pub(crate) fn open_source(path: &Path) -> Result<(File, cap_std::fs::Metadata), 
     }
     Ok((file, metadata))
 }
+
+/// Opens without waiting, so that naming a named pipe is a refusal and not a hang.
+///
+/// The file type can only be checked on the opened handle (checking the path
+/// first would leave a window in which the file is swapped for a pipe), and
+/// opening a named pipe for reading blocks until something opens it for
+/// writing, which nothing may ever do (#264). With `O_NONBLOCK` the open of a
+/// pipe returns at once, the handle is then found not to be a regular file
+/// and is dropped; a regular file ignores the flag, so every later read of an
+/// accepted source is unchanged. Windows has no such open.
+#[cfg(unix)]
+fn never_wait_for_a_writer(options: &mut OpenOptions) {
+    use cap_std::fs::OpenOptionsExt as _;
+    let non_blocking = i32::try_from(rustix::fs::OFlags::NONBLOCK.bits()).unwrap_or(0);
+    options.custom_flags(non_blocking);
+}
+
+#[cfg(not(unix))]
+fn never_wait_for_a_writer(_options: &mut OpenOptions) {}
 
 /// Whether a path is on a local drive (Windows) or not a network path
 /// (`//host`, elsewhere).
