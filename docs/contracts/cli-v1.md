@@ -94,6 +94,13 @@ source bytes, committed generation, `process_crash_consistent` publication (or
 `os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
 Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
 supplied-transcript import is described in the next section.
+**A link is never followed.** A source (or a supplied transcript) that is itself a symbolic
+link is `INVALID_SOURCE` (exit 3) and nothing is read or copied; for a source the remediation
+says that links are not followed and to name the file the link points to. Before P14 PR 7
+(#265) it was `STORAGE_IO`, the answer of a disk that failed. A worker request answers a link
+differently on purpose: it names a path inside an operator's `--input-root`, so a link anywhere
+on that path is `path_outside_input_root` (`INVALID_ARGUMENT`), an argument that tries to leave
+the root, not a source that cannot be used.
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
 days from open. A worker workspace sets its own retention (P11, below). Close and
 cleanup return busy while active work holds the session. Expiry becomes visible at

@@ -167,3 +167,60 @@ async fn a_cancelled_copy_stops_and_leaves_no_partial_file() -> TestResult {
     staged.verify()?;
     Ok(())
 }
+
+/// Makes `link` a symbolic link to `target`; `false` when the platform will not
+/// allow it (an unprivileged Windows account), in which case a test that needs
+/// one has nothing to check there.
+fn make_link(target: &std::path::Path, link: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(target, link);
+    #[cfg(windows)]
+    let made = std::os::windows::fs::symlink_file(target, link);
+    made.is_ok()
+}
+
+/// #265: a link named as the source is refused as a source problem, never
+/// followed and never a storage failure, whether it points at a file or at
+/// nothing; the file behind it is not read, and nothing is staged.
+#[tokio::test]
+async fn a_link_is_refused_as_a_source_and_never_followed() -> TestResult {
+    let root = OwnedRoot::create()?;
+    let (store, session_id) = workspace(&root).await?;
+    let target = root.0.join("target.mp4");
+    fs::write(&target, b"\0\0\0\x18ftypisomtarget")?;
+    let link = root.0.join("link.mp4");
+    let dangling = root.0.join("dangling.mp4");
+    if !make_link(&target, &link) || !make_link(&root.0.join("missing.mp4"), &dangling) {
+        return Ok(());
+    }
+
+    for (index, source) in [&link, &dangling].into_iter().enumerate() {
+        let result = SourceSnapshot::stage(
+            &store,
+            &session_id,
+            &OperationId::parse(format!("op_abcdef012345678{index}"))?,
+            source,
+        );
+        assert!(
+            matches!(result, Err(SourceError::SymbolicLink)),
+            "{source:?}: {:?}",
+            result.err()
+        );
+    }
+    let artifacts = root
+        .0
+        .join("workspace/sessions")
+        .join(session_id.as_str())
+        .join("artifacts");
+    assert_eq!(fs::read_dir(artifacts)?.count(), 0, "nothing was staged");
+
+    // The file itself is still accepted: only the link is refused.
+    let staged = SourceSnapshot::stage(
+        &store,
+        &session_id,
+        &OperationId::parse("op_abcdef0123456789")?,
+        &target,
+    )?;
+    staged.verify()?;
+    Ok(())
+}
