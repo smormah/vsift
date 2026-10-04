@@ -400,7 +400,7 @@ qualification record; nothing here is supported before P14.
 | Durable workspace (`os_crash_durable`) | yes: P10 crash campaign, rerun with requests | no: `MISSING_CAPABILITY` | no: `MISSING_CAPABILITY` | no: `MISSING_CAPABILITY` |
 | Survives a VSift crash or kill (`process_crash_consistent`) | yes | yes | yes | yes |
 | `--host-isolation strict-linux` | accepted only when the kernel attests cgroup v2 limits, a read-only root and loopback only; adversarial containment evidence deferred as technical debt (L-068) | same attestation | `ISOLATION_UNAVAILABLE` | `ISOLATION_UNAVAILABLE` |
-| Provider tree stopped when VSift dies | graceful paths reap; a `SIGKILL` of VSift alone leaves the current unit running (L-055), the cgroup kill removes it | same | yes: the Job Object kills the tree | as Linux (process groups) |
+| Provider tree stopped when VSift dies | graceful paths reap; a `SIGKILL` of VSift alone leaves the current unit running (L-055), the cgroup kill removes it | same | yes: the Job Object kills the tree, except a kill in the first instants of a provider's start, which leaves that provider suspended (L-129) | as Linux (process groups) |
 | Graceful shutdown signal | `SIGTERM`/`SIGINT` | same | console Ctrl-Break (or Ctrl-C unless ignored, L-053); a Windows service stop sends no console event | `SIGTERM`/`SIGINT` |
 | Free-space reserve before a copy | yes (1 GiB) | yes | not checked (L-061) | yes |
 | Weighted admission across processes | yes | yes | yes (tested) | yes |
