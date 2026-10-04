@@ -26,6 +26,11 @@ Run every command from the folder you started in: it holds the user's files, and
 paths the user gives are relative to it. Never `cd` anywhere first, and never into
 this skill's folder, which holds only instructions.
 
+On Windows, run `vsift` from PowerShell or Git Bash, never through `cmd.exe` (`cmd /c`, a
+batch file): the `vsift.cmd` file that npm writes makes `cmd.exe` read the command line a
+second time, so text you took from the evidence, such as a search query, could be run as a
+command.
+
 If you are unsure of a command's flags, read its help, which runs nothing and is
 `free`: `vsift --help` lists the commands, `vsift <namespace> <operation> --help`
 (for example `vsift session retain --help`) shows one command's flags. Read the help

@@ -1416,7 +1416,9 @@ fn schema_names(span: &str) -> Vec<String> {
     const ID_PREFIXES: [&str; 10] = [
         "ses_", "job_", "op_", "trv_", "tsg_", "sgm_", "vix_", "vcd_", "evd_", "src_",
     ];
-    const FILE_SUFFIXES: [&str; 5] = [".md", ".json", ".png", ".yaml", ".jsonl"];
+    // `.cmd` and `.exe` name the Windows files the skill tells the agent to
+    // stay away from (`cmd.exe`, the `vsift.cmd` shim, L-109), not members.
+    const FILE_SUFFIXES: [&str; 7] = [".md", ".json", ".png", ".yaml", ".jsonl", ".cmd", ".exe"];
     if ID_PREFIXES.iter().any(|prefix| span.starts_with(prefix))
         || FILE_SUFFIXES.iter().any(|suffix| span.ends_with(suffix))
     {
@@ -1436,6 +1438,20 @@ fn schema_names(span: &str) -> Vec<String> {
         return vec![span.to_owned()];
     }
     Vec::new()
+}
+
+/// A file name in a code span is not a member to look up, but a dotted path of
+/// members still is: the exemption must not swallow `data.files[].path`.
+#[test]
+fn file_names_are_not_looked_up_as_members_and_field_paths_still_are() {
+    for file in ["cmd.exe", "vsift.cmd", "SKILL.md", "handoff.schema.json"] {
+        assert!(schema_names(file).is_empty(), "{file}");
+    }
+    assert_eq!(
+        schema_names("data.files[].path"),
+        ["data", "files", "path"].map(str::to_owned)
+    );
+    assert_eq!(schema_names("error.remediation").len(), 2);
 }
 
 #[test]
