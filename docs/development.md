@@ -570,6 +570,66 @@ cargo run --locked -p vsift-governance -- release-evidence --complete-for 0.2.0-
 - The tool reads files and, for completeness only, runs `git diff` with explicit arguments and
   no shell. It fetches nothing and needs no credentials.
 
+## The user guide and its checks
+
+The R0 user guide is `docs/guide/` ([the plan it follows](planning/user-guide-spec.md)). Two
+checks hold it to the code. Both are plain Node.js 22 (CommonJS, no dependencies, `node:test`)
+in `tools/guide/`, and both run in the `Guide` workflow (`.github/workflows/guide.yml`), which
+needs no secret and publishes nothing.
+
+```console
+node --test "tools/guide/test/*.test.cjs"
+cargo build --locked -p vsift-cli
+node tools/guide/generate-reference.cjs --binary target/debug/vsift --write
+node tools/guide/generate-reference.cjs --binary target/debug/vsift --check
+node tools/guide/check-examples.cjs --binary target/debug/vsift
+```
+
+- **The generated reference** (`docs/guide/reference/commands.md` from `vsift --help` and every
+  sub-command's help, `docs/guide/reference/json.md` from `schemas/v1`). Never edit these two
+  pages by hand: change the code or the schema, run `--write`, commit the result. `--check`
+  fails if the committed pages differ from what the binary and the schemas give, and it also
+  holds the hand-written pages to what they promise: the `<!-- guide-version: X -->` marker
+  equals the binary's version, `troubleshooting.md` has one row per v1 failure code with the
+  exit status the contract's taxonomy gives it, every relative link and anchor leads
+  somewhere, and every page is in the `documents` of the public-claims registry.
+- **The examples** (`check-examples.cjs`). A fenced `console` block that follows a
+  `<!-- check -->` line is run against the real binary: each `$ vsift ...` line is a command,
+  the lines beneath it are what the page shows, and the check fails if the real output is not
+  what the page shows. Variants are `<!-- check: exit 3 -->` (the commands end with that
+  status; the page is showing a failure) and `<!-- check: needs speech -->` (skipped unless a
+  speech recogniser and model are installed). The commands run on the synthetic recordings of
+  `fixtures/corpus/generated/` that the page names, copied into a sandbox of their own for each
+  page, so a page never depends on another page's state and never touches your real VSift
+  folders.
+- **What is compared by kind, not by value.** Session, segment, evidence and candidate
+  identifiers, digests, times of day, file sizes, durations, file paths, the commit in
+  `vsift --version` and, for speech blocks, what the recogniser decides (the words, the spans,
+  the confidence). A line of `...` stands for any number of lines, so a page may trim a long
+  result, and a trimmed result says so. Everything else, including every word of every message,
+  must match exactly. `lib/normalise.cjs` holds the list; adding to it needs a reason, because
+  every mask makes the check weaker.
+- **Placeholders.** `<session>`, `<segment>`, `<frame>`, `<crop>`, `<clip>` and the like stand
+  for the first identifier of that kind an earlier command printed on the same page;
+  `<candidate:3>` picks the third. A placeholder with no value yet fails the check rather than
+  being guessed.
+- **A version bump re-checks the guide.** The guide names a release (`0.2.0`), not a
+  candidate: `0.2.0-rc.1` and `0.2.0` are the same release to these tools, so the stable commit
+  needs no guide change, which matters because it may differ from its accepted candidate only in
+  version-string files and shipped documents ([release process, 6.8](operations/release.md)).
+  In the bump to a new release (before its first candidate is cut), run the examples, run
+  `generate-reference.cjs --write`, and update the `guide-version` marker and the sentence
+  beside it in `docs/guide/index.md`.
+- **Tools and folders.** Everything runs in a throw-away folder (under `--work`, default the
+  system temp folder) with its own `LOCALAPPDATA` and `XDG_DATA_HOME`, so your own VSift
+  setup and sessions are never read or changed. `--install-managed` runs the binary's own
+  `setup plan` and `setup install` into that folder, as the workflow does (Ubuntu 24.04 x64
+  only; it downloads the three reviewed tools from their publishers). Without it, FFmpeg and
+  FFprobe must be on `PATH`. `--whisper <executable> --model <file>` registers your own
+  whisper.cpp and model, and `--require-speech` turns a skipped speech block into a failure.
+  On Windows keep `--work` short (for example `C:\vg`): the media tools fail on paths longer than
+  Windows allows.
+
 ## Documentation
 
 P03's cap-std/cap-fs-ext 4.0.3 storage dependencies and their review are in

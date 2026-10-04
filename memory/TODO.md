@@ -7,8 +7,8 @@ Current-state handoff, rewritten in every change; history: git, `CHANGELOG.md`, 
 **P00-P13 are complete. P14 (R0 qualification, #17) is in progress: decisions A-H confirmed
 2026-10-02.** The plan is 14 pull requests (0-13). **PRs 0 (#250), 1 (#251), 2 (#255), 3 (#254), 4 (#259),
 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; agent-trial batch 1 ran on 2026-10-03.**
-**PR 9 is two pull requests: 9a (#302: support matrix, documents, claims, register review sheet) is open
-and an increment; 9b (user guide and its two checks) follows; PR 9 is complete only when both merge.**
+**PR 9 is two pull requests, both open: 9a (#302: support matrix, documents, claims, register review sheet)
+and 9b (__PR9B__: the user guide and its two checks); PR 9 is complete only when both merge.**
 The packet is not complete. Plan: `docs/planning/p14-qualification.md` (sections 15-21); ADR 0024 stays
 Proposed. **Evidence:** `p14-evidence-ledger.json`, all **for 0.1.0 only**: `passed` RQ-01 to RQ-04, RQ-06,
 RQ-07, RQ-09, RQ-12, RQ-19; **`failed`: RQ-08, RQ-10, RQ-13** (PR 7 fixes them; PR 11 re-runs them on the
@@ -51,12 +51,11 @@ grader questions are ruled (#298). **README graphics:** redraw `roadmap.svg` wit
 
 ## The remaining P14 pull requests (0-8 merged)
 
-**9** 9a (open): matrix, documents, claims enforced, register sheet; 9b: the R0 user guide and its checks;
-**10** candidate `0.2.0-rc.1`; **11** its qualification (batches 2 and 3; `P14 journeys`; re-run RQ-07 to
-RQ-10); **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff. **Before PR 10:** settle the
-allowed-path lists in `candidate.rs`; freeze the skill (candidates: plan 20.2), grader (changed in #298),
-scenarios and settings (`freeze write`). **Before PR 12:** register the two stable checks in `STABLE_CHECKS`
-(`tools/p14-published/lib/verify.cjs`).
+**9** 9a and 9b (open); **10** candidate `0.2.0-rc.1`; **11** its qualification (batches 2 and 3; `P14
+journeys`; re-run RQ-07 to RQ-10); **12** stable `0.2.0`; **13** ledger follow-up, P14 `complete`, handoff.
+**Before PR 10:** settle the allowed-path lists in `candidate.rs`; freeze the skill (candidates: plan 20.2),
+grader (changed in #298), scenarios and settings (`freeze write`); the bump re-runs the guide (`release.md`
+6.3). **Before PR 12:** register the two stable checks in `STABLE_CHECKS` (`tools/p14-published/lib/verify.cjs`).
 
 ## What the maintainer owes, and when
 
@@ -64,10 +63,10 @@ scenarios and settings (`freeze write`). **Before PR 12:** register the two stab
   candidate cut if the cut can wait for the 2026-10-31 build, else after the stable. **Batches 2 and 3**
   run only on the go, on the candidate (`run-campaign.ps1 -Batch N -Client claude|codex -Version <rc>`);
   needs Claude Code 2.1.284 and Docker.
-- **PR 9a:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings), the macOS
-  wording (CL-203, proposed), the `SECURITY.md` versions policy, and how RQ-05 passes (L-113). **PRs 10 and
-  12:** each publish (`release.md` 6.3, 6.7). **PR 11:** the go for batches 2 and 3 (L-095); a Smart App
-  Control try-out on the second Windows 11 machine; no macOS try-out.
+- **PR 9:** one pass over `register-review-sheet.md` (thirty entries, seven later, nine readings), the macOS
+  wording (CL-203, proposed), the `SECURITY.md` versions policy, how RQ-05 passes (L-113), and whether `Guide`
+  becomes a required check. **PRs 10 and 12:** each publish (`release.md` 6.3, 6.7). **PR 11:** the go for
+  batches 2 and 3 (L-095); a Smart App Control try-out on the second Windows 11 machine; no macOS try-out.
 
 ## Open decisions and readings (maintainer)
 

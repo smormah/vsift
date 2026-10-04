@@ -53,7 +53,10 @@ its wording leans on (`limits`), and a claim above the `now` rung that is in use
 `public-claims` while any of those entries is `pending` or `rejected`: the maintainer's one-pass
 review of the register ([`register-review-sheet.md`](register-review-sheet.md)) therefore gates the
 release wording, and the registry scans every public document it lists (the worker runbook, the
-launcher's messages and the support matrix since PR 9a).
+launcher's messages and the support matrix since PR 9a, the user guide since PR 9b). The guide has
+two checks of its own, in the read-only `Guide` workflow: its generated reference pages must equal
+what `vsift --help` and `schemas/v1` give, and its marked examples must equal what the real binary
+prints ([`development.md`](../development.md#the-user-guide-and-its-checks)).
 
 The [R1 industrial capability expansion](r1-industrial-capability-expansion.md)
 reserves R-15..R-20 and P15..P20 without activating them. P15 must create a separate

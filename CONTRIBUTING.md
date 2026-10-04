@@ -16,7 +16,9 @@ Thank you for helping make the evidence in videos accessible to people and their
 
 1. Fork and clone the repository.
 2. Create a focused branch from `main`.
-3. Make one coherent change with tests and documentation.
+3. Make one coherent change with tests and documentation. A change to what a user sees or does
+   also updates the matching page of the [user guide](docs/guide/index.md); its examples and
+   generated reference are checked ([how](docs/development.md#the-user-guide-and-its-checks)).
 4. Run the required checks in [Development](docs/development.md), including
    `cargo run --locked -p vsift-governance -- check`.
 5. Open a pull request using the repository template.

@@ -220,6 +220,7 @@ The roadmap comes from the [delivery ledger](docs/planning/delivery-ledger.json)
 | I want to… | Read |
 |---|---|
 | Install VSift, upgrade or uninstall it | [Installation guide](docs/operations/install.md) |
+| Learn to use it, step by step | [User guide](docs/guide/index.md) · [command reference](docs/guide/reference/commands.md) |
 | Give my agent the skill | [Using the skill](docs/agents/skill.md) |
 | Script against the CLI | [v1 CLI contract](docs/contracts/cli-v1.md) · [JSON schemas](schemas/v1/README.md) |
 | Run it as a supervised worker | [Worker-host runbook](docs/operations/worker-host.md) |

@@ -475,6 +475,15 @@ procedure (6.7), which starts from a published and accepted candidate.
    `CHANGELOG.md`'s release section. A candidate is `X.Y.Z-rc.N` with a positive `N`
    (`0.2.0-rc.1`, then `-rc.2` only if findings need it). Merge the bump to `main`. From
    the first candidate's tag on, only fixes for findings may change the code (6.8).
+
+   **The user guide goes with the first bump to a new release** (`0.1.0` to `0.2.0-rc.1`),
+   and only then. The guide names a release, not a candidate, and its two checks compare
+   the release part of the version (`0.2.0`): so the bump to `0.2.0-rc.1` re-runs the
+   guide's examples, regenerates its two reference pages and moves the version marker in
+   `docs/guide/index.md` (the `Guide` workflow fails the bump until it does; steps in
+   [Development](../development.md#the-user-guide-and-its-checks)), while `-rc.2` and
+   the final `0.2.0` change nothing under `docs/guide/`. That is what keeps the commit that
+   publishes `0.2.0` inside the list of 6.8.
 2. **Create the tag** on the merged commit of `main` and push it:
 
    ```console

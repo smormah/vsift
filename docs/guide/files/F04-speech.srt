@@ -1,0 +1,7 @@
+1
+00:00:00,775 --> 00:00:02,850
+Scroll to order 1017.
+
+2
+00:00:02,975 --> 00:00:06,950
+The status changes from queued to failed, while the header remains fixed.
