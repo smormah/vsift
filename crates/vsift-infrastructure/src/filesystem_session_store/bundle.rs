@@ -23,7 +23,10 @@ use super::{
     publication::evidence_artifact_count,
     read_bounded_manifest,
     reads::{read_evidence_artifact, read_transcript_artifact, read_visual_index_artifact},
-    root::{validate_platform_root_permissions, validate_root_selection, validate_same_object},
+    root::{
+        map_restrict_error, validate_platform_root_permissions, validate_root_selection,
+        validate_same_object,
+    },
     sha256_hex,
     stored::{parse_versioned_json, validate_artifact_record},
 };
@@ -86,10 +89,10 @@ impl FilesystemSessionStore {
             .open_dir_nofollow(Path::new(name))
             .map_err(map_storage_io)?;
         // The export is private whatever the chosen parent would pass on.
-        if restrict_new_directory(&canonical_parent.join(name)).is_err() {
+        if let Err(error) = restrict_new_directory(&canonical_parent.join(name)) {
             drop(bundle);
             let _ = parent.remove_dir(Path::new(name));
-            return Err(SessionStorageError::Io);
+            return Err(map_open_error(map_restrict_error(error)));
         }
         if let Err(error) = validate_platform_root_permissions(output_path, &bundle) {
             drop(bundle);

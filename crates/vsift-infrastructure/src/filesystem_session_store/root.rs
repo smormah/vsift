@@ -23,8 +23,9 @@ use super::{
 };
 use super::{is_storage_failure, map_committed_io};
 use crate::{
-    durable_profile::storage_capabilities, file_lock::HeldFileLock,
-    private_user_root::restrict_new_directory,
+    durable_profile::storage_capabilities,
+    file_lock::HeldFileLock,
+    private_user_root::{PrivateRootError, restrict_new_directory},
 };
 
 impl FilesystemSessionStore {
@@ -146,10 +147,10 @@ impl FilesystemSessionStore {
         }
         // Made private before anything is written into it, whatever the
         // parent's permissions would have passed on. The held handle pins it.
-        if restrict_new_directory(&canonical_parent.join(name)).is_err() {
+        if let Err(error) = restrict_new_directory(&canonical_parent.join(name)) {
             drop(root);
             let _ = parent.remove_dir(Path::new(name));
-            return Err(SessionStoreOpenError::RootUnavailable);
+            return Err(map_restrict_error(error));
         }
 
         // The exclusive directory creation above makes this process the one
@@ -452,6 +453,16 @@ pub(super) fn map_provision_create_error(error: io::Error) -> SessionStoreOpenEr
         SessionStoreOpenError::RootAlreadyExists
     } else {
         SessionStoreOpenError::RootUnavailable
+    }
+}
+
+/// How a failed restriction of a directory this process just created is
+/// reported: a DACL that could not be made private is the private-folder answer
+/// (`RootNotPrivate`, with its remediation), anything else a storage failure.
+pub(super) const fn map_restrict_error(error: PrivateRootError) -> SessionStoreOpenError {
+    match error {
+        PrivateRootError::NotPrivate => SessionStoreOpenError::RootNotPrivate,
+        _ => SessionStoreOpenError::RootUnavailable,
     }
 }
 
@@ -876,4 +887,32 @@ pub(super) fn validate_root_layout(root: &Dir) -> Result<OwnershipMarker, Sessio
             .map_err(|error| layout_error(&error, SessionStoreOpenError::InvalidLayout))?;
     }
     Ok(marker)
+}
+
+#[cfg(test)]
+mod restrict_error_tests {
+    use super::{PrivateRootError, SessionStoreOpenError, map_restrict_error};
+
+    /// A directory that could not be made private keeps the private-folder
+    /// answer (and its remediation); every other failure of the restriction is
+    /// a storage failure.
+    #[test]
+    fn a_dacl_that_could_not_be_made_private_is_the_private_folder_answer() {
+        assert_eq!(
+            map_restrict_error(PrivateRootError::NotPrivate),
+            SessionStoreOpenError::RootNotPrivate
+        );
+        for other in [
+            PrivateRootError::Io,
+            PrivateRootError::UnsafeStorage,
+            PrivateRootError::Unavailable,
+            PrivateRootError::Busy,
+        ] {
+            assert_eq!(
+                map_restrict_error(other),
+                SessionStoreOpenError::RootUnavailable,
+                "{other:?}"
+            );
+        }
+    }
 }
