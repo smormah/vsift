@@ -307,3 +307,41 @@ the plan is made, then every chunk (reused ones included), at most one per secon
 event follows at the count of events before it; its result is unchanged. The records
 of a revision are still read with `transcript get --revision <revision_id> --events
 jsonl`. The rest of this record is unchanged.
+
+## 2026-10-04 note: the one-second end tolerance superseded (P14 PR 7, #274)
+
+The bullet of section 2 that trims "an end up to one second past the audio" and rejects a longer one is
+**superseded**, and so is the sentence of the verification paragraph that took the provider end tolerance from the
+same figure for chunks. The P14 load campaign found that a range cut mid-speech (`transcript retranscribe --from 0
+--to 5000000` on three of the ten synthetic speech clips) failed as `MISSING_CAPABILITY`, `malformed_output`, with a
+remediation to reinstall whisper.cpp. Reproduced here with the reviewed whisper.cpp v1.9.2 and the `base_q5_1`
+model: the recogniser ended the last segment of a 5.001 s chunk at 7.000 s, 6.100 s and 6.000 s on three clips. A
+recogniser's end timestamps are predicted tokens, quantised coarsely on a small model, and are not bounded by the
+audio's length (a segment may end anywhere in the padded 30 s window); a second was a guess from one clip (F01's
+reviewed-build end was 0.585 s past the speech). A long run hid it, because one rejected segment among many is under
+the quarter threshold and is only counted; a short range has one segment, so one rejection is all of them and the
+chunk failed.
+
+**The rule now:** a segment that **starts inside** the chunk's decoded audio and ends past it is cut to the audio end,
+as far as the padded 30 s window the recogniser works in, and counted under the existing `provider_end_trimmed` warning
+with the raw end kept beside it (`end_trimmed`, `provider_end_us`). The window is the sanity bound (a recogniser's ends
+may fall anywhere in it and nowhere beyond it): an end beyond 30 s from the chunk's start is not a time of this audio and
+rejects the segment. The bound is never below one second past the audio, the figure 0.1.0 applied to every chunk, so a revision that
+0.1.0 stored (a full window with an end a few hundred milliseconds past it) still rebuilds. A cut end is the audio's end, not evidence that speech continued there. A segment
+that starts at or after the audio's end, runs backwards or is empty is still rejected and counted, and the quarter
+rule is unchanged for those. Seam stitching is unchanged: a cut final segment of a middle chunk is a cut segment like
+any other (the neighbour that heard the sentence whole supplies it; a multi-chunk test pins no repeat, no gap and no
+step backwards). Field names and shapes of v1 do not change (the schema's description text does); the
+fixture-verification tolerance of section 3 (`setup check`: a segment ends no later than one second after the
+recorded speech) is a different check and is unchanged. The failure code of a chunk whose segments mostly do not fit
+their audio stays `MISSING_CAPABILITY` (changing a published answer is not additive within v1), and it remains the only
+signal of a recogniser answering with garbage for a whole run; its remediation now names the ways a segment is rejected,
+says a range that ends mid-speech can cause it, and tells to retry with a larger range or the whole video, with the
+reinstall step only if the whole video fails the same way. The `setup check` verification of the built-in clip, which has
+no range to widen, keeps the reinstall remediation.
+
+**Rolling back is not safe for a session that holds such a revision.** A trimmed end more than one second past its audio is
+valid only from this version on: 0.1.0's `TranscriptRevision::new` refuses it as `AlignmentMismatch`, a load reports that as
+`INTEGRITY_FAILURE`, and every command that reads the revision fails. The record is not damaged and nothing is migrated; use
+the newer version, or discard the session (sessions are disposable unless persisted). The behaviour is recorded as
+[L-130](../planning/known-limits.md#l-130).

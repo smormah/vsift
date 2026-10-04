@@ -662,7 +662,7 @@ used; no dependency was added to the workspace.
 | --- | --- | --- |
 | RQ-07 fuzzing | **passed**: 31 targets, 3,601 s each, 3.68 billion runs, no crash, timeout or out-of-memory | none; 19 targets were still finding coverage at the end ([L-128](known-limits.md#l-128)) |
 | RQ-08 stress | **failed**: 21 of 24 jobs clean; Windows failed root creation (7 of 1,500, #206 reproduced), loaded root creation (2 of 1,500) and weighted admission (2 of 200) | [#206](https://github.com/smormah/vsift/issues/206), [#271](https://github.com/smormah/vsift/issues/271); #128 not reproduced (L-123, closed in P14 PR 7) |
-| RQ-09 load and soak | **passed**: every gate held for the ladder, the 100-request batch, the cancel, the warm page and the 1,000-request soak with kills; two longer soaks of 12,000 requests are recorded in 18.3 | [#274](https://github.com/smormah/vsift/issues/274) and [#277](https://github.com/smormah/vsift/issues/277) ([L-124](known-limits.md#l-124)); [#286](https://github.com/smormah/vsift/issues/286), the runbook's dedupe window |
+| RQ-09 load and soak | **passed**: every gate held for the ladder, the 100-request batch, the cancel, the warm page and the 1,000-request soak with kills; two longer soaks of 12,000 requests are recorded in 18.3 | [#274](https://github.com/smormah/vsift/issues/274) and [#277](https://github.com/smormah/vsift/issues/277) (#274 fixed in P14 PR 7, [L-130](known-limits.md#l-130) is what remains); [#286](https://github.com/smormah/vsift/issues/286), the runbook's dedupe window |
 | RQ-10 malicious media | **failed**: 93 of 96 generated inputs ended inside their bounds with a typed answer; three CLI cases did not | [#264](https://github.com/smormah/vsift/issues/264), [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) ([L-127](known-limits.md#l-127)) |
 | RQ-12 runbook walk | **passed**: 18 steps, all matched, after ten divergences were fixed in the runbook and the walk's own script | none in the product; the runbook's errors are fixed |
 | RQ-13 scan reading | **failed**: one finding stands, the reviewed FFmpeg snapshot ([p14-scan-reading-2026-10-02.md](p14-scan-reading-2026-10-02.md)) | [#272](https://github.com/smormah/vsift/issues/272) ([L-122](known-limits.md#l-122)) |
@@ -839,8 +839,8 @@ requests was run twice (`phases=soak`, `soak_requests=12000`). Neither is a pass
 
 **Diagnosis phase (not a gate).** Every speech clip's first five seconds were recognised in the worker
 container: seven of ten recognise; **F02, F04 and F05 fail as `MISSING_CAPABILITY` (`malformed_output`)
-although the whole clips recognise** ([#274](https://github.com/smormah/vsift/issues/274),
-[L-124](known-limits.md#l-124)). The campaign's request mix avoids those three clips so the load measures
+although the whole clips recognise** ([#274](https://github.com/smormah/vsift/issues/274), fixed in P14 PR 7;
+[L-130](known-limits.md#l-130) is what remains). The campaign's request mix avoids those three clips so the load measures
 resource behaviour, not that finding. Two early smoke runs also left one or two sessions listed as
 `initializing` **without any kill**, with `session status` answering `STORAGE_IO`
 ([#277](https://github.com/smormah/vsift/issues/277)); it did not recur in the 1,100 requests without kills

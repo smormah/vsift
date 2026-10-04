@@ -504,6 +504,31 @@ segment has `alignment` with its chunk, the chunk's decoded audio range, the pro
 chunk-relative times, whether the end was trimmed, and the recognizer; `cue` is `null`
 and confidence is the mean token probability, `provider_uncalibrated` (example
 [`transcript-get.asr.json`](../../schemas/v1/examples/transcript-get.asr.json)).
+**A trimmed end** (`end_trimmed` true, counted as the warning `provider_end_trimmed`) means
+the recogniser ended a segment that starts inside the chunk's audio **past that audio, as far
+as the padded 30 s window it works in**, and the segment's `end_us` is the audio's end;
+`provider_end_us` keeps the raw end. The cut end is the audio's end, not evidence that speech
+continued there: a recogniser's end timestamps are predicted, not measured, and a range cut
+mid-speech makes it run on (whisper.cpp ended a 5 s cut's last segment at 7 s, #274). Before
+P14 PR 7 only an end up to one second past was trimmed and a longer one rejected the segment,
+which failed a short range as `MISSING_CAPABILITY`. The sanity bound is the window (30 s from
+the chunk's start), or one second past audio that fills it, whichever is later (the second
+0.1.0 allowed every chunk, so every revision it stored still reads): an end beyond it is not
+a time of this audio and rejects the segment, as does a segment that starts at or after the
+audio's end, is empty, or runs backwards (`provider_segments_rejected`). A run whose
+recognised segments mostly do not fit their audio still fails as `MISSING_CAPABILITY` (stage
+`output_validation`, reason `malformed_output`; the published code does not change within v1)
+and it is the only signal of a recogniser answering with garbage for a whole run. Since PR 7
+its remediation names the ways a segment is rejected (empty, backwards, starting at or after
+the audio's end, outside the video), says a range that ends mid-speech can cause it, and
+tells to retry with a larger range or the whole video; it says to reinstall whisper.cpp only
+if the whole video fails the same way.
+**Rolling back.** A revision written with a trimmed end more than one second past its audio
+(possible only from this version on) is read as damaged by 0.1.0: its stored record fails
+`TranscriptRevision::new` with `AlignmentMismatch`, which a load reports as
+`INTEGRITY_FAILURE`, and so does any command that reads that revision. The record is valid
+for this version and nothing is lost; a session that holds one needs this version, or to be
+discarded (sessions are disposable unless the user persisted them).
 Warnings use the envelope's fixed prose and the revision's typed codes; for local-ASR
 codes `first_cue` is the first affected chunk. Segments are read with `transcript get`
 (the new revision is the default). With `--events jsonl`, `transcript retranscribe`

@@ -525,6 +525,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   mapping of a write that ran out of room, the code table and the remediation text, the CLI's failure writer,
   and, on Unix, the binary through the real engine (`no_room_cli_contract`: a sparse 4 TiB source is refused
   before any copy, with the remediation and exit 7; on a machine with that much free space it prints a skip).
+- **A short range cut mid-speech no longer fails as `MISSING_CAPABILITY`** (P14 PR 7, #274; found by
+  the P14 load campaign: `transcript retranscribe --from 0 --to 5000000` failed on three of the ten
+  synthetic speech clips while the whole clips recognised, with a remediation to reinstall whisper.cpp).
+  **Cause, reproduced with the reviewed whisper.cpp v1.9.2 and the `base_q5_1` model:** for a range cut
+  mid-speech the recogniser ended the last segment well past the audio (7.0 s, 7.0 s, 6.1 s and 6.0 s on a
+  5.001 s chunk); VSift trimmed an end up to one second past the audio and rejected a longer one, and a
+  chunk whose segments were mostly rejected failed. A long run hid it (one rejected segment among many is
+  only counted); a short range has one segment. **Fix (decided by the maintainer, ADR 0017 has a dated
+  note that supersedes the one-second tolerance):** a segment that starts inside the chunk's audio and
+  ends past it is cut at the audio's end, as far as the padded 30 s window the recogniser works in, counted
+  as `provider_end_trimmed` with the raw end kept; an end beyond that window (or, for audio that fills it,
+  more than a second past the audio, the bound 0.1.0 applied, so every revision it stored still reads) is not
+  a time of this audio and rejects the segment, as does a segment that starts at or after the audio's end, is
+  empty or runs backwards, and the quarter rule is unchanged for those. A chunk whose segments mostly do not
+  fit their audio keeps the code `MISSING_CAPABILITY` (the published code does not change within v1) and it
+  remains the only signal of a recogniser answering with garbage for a whole run, so its remediation now
+  names the ways a segment is rejected, says a range that ends mid-speech can cause it and asks for a
+  larger range or the whole video first, and says to reinstall whisper.cpp only if the whole video fails the
+  same way (the `setup check` verification of its built-in clip has no range to widen and keeps the
+  reinstall remediation); the `provider_end_trimmed` warning says a cut end is the audio's end, not
+  evidence that speech continued there. No field, shape or code changes (the schema description and
+  `cli-v1.md` do), and the frozen 0.1.0 examples still validate. **Rolling back:** a revision whose cut
+  end lies more than one second past its audio is refused by 0.1.0 (`AlignmentMismatch`, reported as
+  `INTEGRITY_FAILURE`), so a session written by this version with such a revision cannot be read by the
+  published 0.1.0; the record is valid here (`cli-v1.md`, the ADR note and L-130 say so). Tests: the
+  domain's validation (the old tolerance test now asserts the new rule, plus the #274 case at 5.5 s to
+  30 s, the window bound at 30 s and one millisecond past it, the second of slack for a chunk that fills the
+  window, what is still rejected, and the stored-record check), a three-chunk merge with overrunning final
+  segments (no repeat, no gap, no step backwards), the remediation text (the order of the steps, every
+  rejection kind named, the reinstall step conditional, the setup check unchanged), and a new opt-in
+  real-tool stage, `p07_local_asr_cut_range`, over F02 to F05 at 0 to 5 s. The tests fail on the old
+  code. Known limit L-124 (the failure) is closed and deleted; L-130 records the recogniser behaviour that
+  remains and the rollback.
 
 ## [0.1.0] - 2026-10-01
 

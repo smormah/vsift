@@ -34,12 +34,17 @@ pub const SPEECH_SAMPLE_RATE: u32 = 16_000;
 pub const MAX_CHUNK_WINDOW_MICROS: u64 = 30_000_000;
 /// Most chunks one run may plan: four hours of R0 chunks, with headroom.
 pub const MAX_PLANNED_CHUNKS: usize = 1_024;
-/// How far past a chunk's decoded audio a provider end may lie and still be
-/// trimmed to the audio end rather than rejected.
+/// How far past the speech a verified segment's end may lie in the local-ASR
+/// verification (`setup check`), which compares a fixture's segment with the
+/// recorded speech span.
 ///
-/// whisper.cpp rounds segment ends to its 10 ms token grid and may report the
-/// end of its padded 30 s window; a second covers that without accepting text
-/// placed after the audio that produced it.
+/// For a chunk's provider end it is only part of the bound that
+/// [`validate_chunk_output`] applies: the padded window of
+/// [`MAX_CHUNK_WINDOW_MICROS`], or this much past audio that fills it, whichever
+/// is later. Until P14 PR 7 (#274) a second past the decoded audio was the whole
+/// bound, and a range cut mid-speech failed because whisper.cpp's segment ends
+/// are predicted timestamp tokens, quantised coarsely on a small model, and are
+/// not limited by the audio's length. A 5 s cut ended its last segment at 7 s.
 pub const PROVIDER_END_TOLERANCE_MICROS: u64 = 1_000_000;
 /// Most provider segments accepted for one chunk.
 pub const MAX_PROVIDER_SEGMENTS: usize = 256;
@@ -850,6 +855,26 @@ impl ValidatedChunk {
     }
 }
 
+/// The latest chunk-relative time a provider end may name and still be cut to
+/// the audio end, for audio of `decoded` microseconds.
+///
+/// A recogniser's end timestamps are predicted tokens that run on past a short
+/// audio (#274), but they stay inside the padded window it works in, so the
+/// bound is the window ([`MAX_CHUNK_WINDOW_MICROS`], 30 s): an end beyond it is
+/// not a timestamp of this audio at all and the segment is rejected. The bound
+/// is never below [`PROVIDER_END_TOLERANCE_MICROS`] past the audio, which is
+/// what 0.1.0 applied to every chunk, so a stored revision that 0.1.0 accepted
+/// (a full window with an end a few hundred milliseconds past it) is still
+/// valid here.
+const fn provider_end_limit(decoded: u64) -> u64 {
+    let tolerated = decoded.saturating_add(PROVIDER_END_TOLERANCE_MICROS);
+    if tolerated > MAX_CHUNK_WINDOW_MICROS {
+        tolerated
+    } else {
+        MAX_CHUNK_WINDOW_MICROS
+    }
+}
+
 /// Places one provider segment's chunk-relative times on the source timeline.
 ///
 /// This is the single conversion for local ASR, used both when output is
@@ -871,8 +896,11 @@ pub(crate) fn asr_source_range(
         ProviderEndTrim::Unchanged if end <= decoded => {
             audio.start().as_micros().checked_add(end)?
         }
+        // The segment starts inside the audio (checked above), so its end is
+        // cut at the audio end however far past it the provider put it, up to
+        // the bound of `provider_end_limit`.
         ProviderEndTrim::TrimmedToAudioEnd
-            if end > decoded && end - decoded <= PROVIDER_END_TOLERANCE_MICROS =>
+            if end > decoded && end <= provider_end_limit(decoded) =>
         {
             audio.end().as_micros()
         }
@@ -890,13 +918,21 @@ pub(crate) fn asr_source_range(
 /// Structural faults fail the whole chunk: out-of-order segments, a token
 /// probability that is not a finite number in `[0, 1]`, or oversized output.
 /// A segment whose range is empty or reversed, starts at or after the decoded
-/// audio end, ends more than a second past it, or would leave `source`, is
-/// rejected and counted; if more than a quarter of the text segments (or all
-/// of them) are rejected, the chunk fails, because the provider evidently did
-/// not describe this audio. An end within a second past the audio is cut to
-/// the audio end and counted, keeping the raw provider end. Whole-segment
-/// non-speech markers and empty segments are removed and counted. Confidence
-/// is the mean probability of text tokens, `provider_uncalibrated`.
+/// audio end, or would leave `source`, is rejected and counted; if more than a
+/// quarter of the text segments (or all of them) are rejected, the chunk
+/// fails, because the provider evidently did not describe this audio. A
+/// segment that starts inside the audio and **ends past it, as far as the
+/// padded 30 s window the recogniser works in**, is cut to the audio end and
+/// counted, keeping the raw provider end: a recogniser's end timestamps are
+/// predicted, not measured, and a range cut mid-speech makes it run on
+/// (whisper.cpp ended a 5 s cut's last segment at 7 s, #274), so an end past
+/// the audio says nothing about the audio's content, and the cut end is the
+/// audio's end, not evidence that speech continued there. An end beyond that
+/// window (or, for audio that fills it, more than a second past the audio, the
+/// bound 0.1.0 applied) is not a time of this audio and rejects the segment.
+/// Whole-segment non-speech markers and empty segments are removed and
+/// counted. Confidence is the mean probability of text tokens,
+/// `provider_uncalibrated`.
 ///
 /// # Errors
 ///

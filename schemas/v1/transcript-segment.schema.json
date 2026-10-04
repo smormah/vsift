@@ -112,7 +112,7 @@
           }
         },
         {
-          "description": "Recognised locally: the chunk whose decoded audio the recognizer heard, the provider's times relative to that audio's first sample, and the recognizer. start_us = chunk_audio_start_us + provider_start_us; end_us = chunk_audio_start_us + provider_end_us, or chunk_audio_end_us when end_trimmed (the provider reported an end less than one second past the decoded audio).",
+          "description": "Recognised locally: the chunk whose decoded audio the recognizer heard, the provider's times relative to that audio's first sample, and the recognizer. start_us = chunk_audio_start_us + provider_start_us; end_us = chunk_audio_start_us + provider_end_us, or chunk_audio_end_us when end_trimmed (the provider reported an end past the decoded audio, as far as the recognizer's padded 30 s window, for a segment that starts inside it; before P14 PR 7 only an end less than one second past was trimmed. The trimmed end is the audio's end, not evidence that speech continued there).",
           "type": "object",
           "additionalProperties": false,
           "required": [
