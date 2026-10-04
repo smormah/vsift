@@ -335,6 +335,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **The `P14 journeys` workflow and the guard that reads it** (P14; workflow and test only, no product code, nothing
+  published). The guard `tools/p14-published/test/pins.test.cjs` failed two of its tests on `main` and had never run
+  in CI (it runs only in `P14 published artifacts`, whose paths no earlier pull request touched): the journeys
+  workflow had a workflow-wide `contents: read` instead of an empty `permissions: {}` and per-job read scopes, and it
+  used `actions/setup-python`, which the Release workflow does not. The workflow now grants nothing at the top and
+  `contents: read` to each of its three jobs; the pin rule now accepts an action the Release workflow does not use
+  only at the one commit every other workflow pins it to (`setup-python`, as `p07-speech-fixtures.yml`), and a
+  mutated pin fails it.
 - **Three small tool fixes found by P14's batch 1** (P14 PR 7; tooling and tests only, no product
   code). **#282:** `run-campaign.ps1` regenerated the batch summary from the running client's plan
   alone, so the second client replaced the first client's summary with one holding none of its runs;

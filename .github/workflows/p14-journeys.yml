@@ -54,8 +54,8 @@ on:
     # change here means a runner image, a publisher or the published bytes moved.
     - cron: "37 4 * * 3"
 
-permissions:
-  contents: read
+# No workflow-wide scope: each job names the one read scope it uses.
+permissions: {}
 
 concurrency:
   group: p14-journeys-${{ github.ref }}
@@ -70,6 +70,8 @@ jobs:
     name: Resolve the version
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
@@ -98,6 +100,8 @@ jobs:
     needs: resolve
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -205,6 +209,8 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Check out the workflow's own source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

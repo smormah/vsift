@@ -60,12 +60,28 @@ test('the tool pins are the P13 npm qualification\'s, in the Release workflow', 
   }
 });
 
-test('every action is the Release workflow\'s pinned commit', () => {
+test('every action is pinned to the commit the Release workflow, or else every other workflow, uses', () => {
   const release = actions(read('.github/workflows/release.yml'));
+  // An action the Release workflow does not use (actions/setup-python, for the journeys driver) must
+  // be pinned to the one commit that every other workflow of the repository uses for it.
+  const elsewhere = new Map();
+  for (const name of fs.readdirSync(path.join(repository, '.github', 'workflows'))) {
+    if (!/\.yml$/.test(name) || name === 'release.yml' || /^p14-/.test(name)) {
+      continue;
+    }
+    for (const [action, pin] of actions(read(`.github/workflows/${name}`))) {
+      elsewhere.set(action, new Set([...(elsewhere.get(action) ?? []), pin]));
+    }
+  }
   for (const file of workflowFiles) {
     for (const [action, pin] of actions(read(file))) {
-      assert.ok(release.has(action), `${file} uses ${action}, which the Release workflow does not`);
-      assert.equal(pin, release.get(action), `${file}: ${action}`);
+      if (release.has(action)) {
+        assert.equal(pin, release.get(action), `${file}: ${action}`);
+        continue;
+      }
+      const others = elsewhere.get(action);
+      assert.ok(others, `${file} uses ${action}, which neither the Release workflow nor any other workflow does`);
+      assert.deepEqual([...others], [pin], `${file}: ${action} is pinned to ${pin}, the other workflows' pin is ${[...others].join(' or ')}`);
     }
   }
 });
