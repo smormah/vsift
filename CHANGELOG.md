@@ -384,6 +384,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   status or schema change; four unit tests). The test now frees the unit only after the stream says
   `draining`, so the waiting step can only be cancelled and the test no longer races its own
   signal. `docs/operations/worker-host.md` says so.
+- **On Windows, a session root created while another process was creating its parent could be left without an
+  entry for the current user and refused as "session storage root permissions are not private"** (P14 PR 7,
+  #206, found in CI and reproduced by the P14 stress campaign: 7 of 1,500 repetitions on a hosted runner,
+  threads as well as processes). **Cause**, from diagnostics on a hosted `windows-2025` runner (run
+  37166883594): making a new directory private adds an explicit full-control entry for the current user,
+  LocalSystem and Administrators, then removes the inherited copies. When the parent already grants the same
+  three the same inheritable control (the failing runs are the ones where processes also race to create the
+  root's missing parent, so the child was made while its parent's DACL was still being rewritten), the added
+  entries left only inherited ones in the DACL (nothing explicit), and removing the
+  user's inherited copy removed the user's only entry (the first removal also made the others explicit, so
+  nothing else was removed): the root's DACL held LocalSystem and Administrators only, the validator
+  refused it (the creator's own check, and every adopter's), and the creator rolled the root back. It needs
+  the user's inherited entry to come first, so it is rare and a quiet sequence never meets it.
+  **Fix:** the restriction reads the DACL back after each pass and repeats (at most four passes; the first
+  protects the DACL, the second settles it) until it is exactly one explicit entry for each trusted principal
+  and nothing else, and fails with the same typed error if it cannot. The ordering logic is separate from the
+  Windows calls, so a model of the observed behaviour tests it on every platform (one pass loses the user's
+  entry on it, the repeated pass does not, whichever principal comes first and however Windows adds the
+  entry), and a Windows test checks the real DACL of a restricted directory and of its child. No behaviour or
+  contract changes elsewhere. Known limit L-123 is closed and deleted (its admission half was #271); L-005 is
+  updated.
 
 ## [0.1.0] - 2026-10-01
 
