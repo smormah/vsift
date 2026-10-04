@@ -65,6 +65,9 @@ pub struct PrivateMarkers {
     /// Lower-case strings that must not appear (the trial root in both
     /// slash styles, the user name).
     pub strings: Vec<String>,
+    /// The lower-case user names among [`Self::strings`]: the cold grader
+    /// notes a path in a report but fails a user name written outside one.
+    pub user_names: Vec<String>,
 }
 
 /// Every text-safety problem of a final message: the check's report-text
@@ -199,6 +202,7 @@ mod tests {
     fn text_problems_add_the_private_markers() {
         let markers = PrivateMarkers {
             strings: vec!["c:\\vsift-trials".to_owned()],
+            user_names: Vec::new(),
         };
         assert!(text_problems("All fine at 10:32.", &markers).is_empty());
         for bad in [
