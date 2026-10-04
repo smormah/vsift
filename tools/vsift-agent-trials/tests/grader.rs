@@ -148,6 +148,7 @@ impl Bench {
             canaries: &[CANARY.to_owned()],
             markers: PrivateMarkers {
                 strings: vec![self.workspace.to_string_lossy().to_lowercase()],
+                user_names: Vec::new(),
             },
             bundle: Some(&self.bundle),
             image_code: self.image_code.as_deref(),
