@@ -403,7 +403,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   is a set of non-waiting OS try-locks with no queue (known limit L-060, ADR 0021 section 5a), so nothing
   promises that a waiter is admitted within a bound: the failed assertion tested a promise no document
   makes, while the invariant the test exists for (the units held never exceed the capacity) was never
-  violated. The child now keeps trying until its first grant, for at most 20 s, and the capacity and
+  violated. The child now keeps trying until its first grant, for at most 60 s (the longest of the 400 hosted runs took 14 s in all), and the capacity and
   ledger assertions are unchanged; the limits register states that a waiter's wait is bounded only by its
   own wait and deadline, and L-123 narrows to the root-creation failure (#206).
 
