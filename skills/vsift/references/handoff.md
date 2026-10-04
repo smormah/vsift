@@ -173,7 +173,8 @@ the one asked for.
 ## Gaps
 
 Each gap has a `kind`, a `reason` and a `note` of at most 600 characters (or null),
-enough to quote VSift's remediation whole; it may add the `range` it covers and the
+enough to quote most of VSift's remediations whole (not a `STORAGE_IO` one: say what it
+says in your own words); it may add the `range` it covers and the
 failure `code` that caused it. Use the CLI's own reason when there is
 one: `untranscribed_range` (from `coverage.reasons`), a candidate gap reason
 (`not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`,
