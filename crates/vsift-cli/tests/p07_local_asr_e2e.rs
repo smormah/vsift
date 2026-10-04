@@ -106,6 +106,12 @@ impl Drop for OwnedRoot {
 enum StageStop {
     Failed(String),
     Blocked(String),
+    /// The binary under test is a published version older than the first one
+    /// that has the behaviour this stage asserts (see [`skipped`]).
+    Skipped {
+        first_version: &'static str,
+        reason: String,
+    },
 }
 
 impl<E: Error> From<E> for StageStop {
@@ -946,7 +952,34 @@ fn stage(name: &str, started: Instant, result: StageResult) -> Value {
         Err(StageStop::Blocked(remediation)) => json!({
             "name": name, "status": "blocked", "elapsed_ms": elapsed_ms, "remediation": remediation,
         }),
+        Err(StageStop::Skipped {
+            first_version,
+            reason,
+        }) => json!({
+            "name": name, "status": "skipped", "elapsed_ms": elapsed_ms,
+            "first_version": first_version, "reason": reason,
+        }),
     }
+}
+
+/// The first version whose recognition clamps a range cut mid-speech: #274, fixed
+/// after 0.1.0 (P14 PR 7), so the first release candidate is the first that has it.
+const CUT_RANGE_FIRST_VERSION: &str = "0.2.0-rc.1";
+
+/// A stage that asserts a behaviour fixed after the published version under test.
+/// It is skipped, with the reason printed and the first version that has the
+/// behaviour in the report, only for a published binary older than that version;
+/// the journeys driver refuses a skip for any other. A build from source and every
+/// published binary at or above `first_version` run the stage and are held to it.
+fn skipped<T>(first_version: &'static str, found: &str, behaviour: &str) -> Result<T, StageStop> {
+    let reason = format!(
+        "the published vsift {found} predates the fix of {behaviour}, which is first in {first_version}; this stage runs and is required on that version and later and on a build from source"
+    );
+    println!("skipped: {reason}");
+    Err(StageStop::Skipped {
+        first_version,
+        reason,
+    })
 }
 
 fn blocked<T>() -> Result<T, StageStop> {
@@ -1044,7 +1077,14 @@ async fn local_asr_checkpoint() -> TestResult {
 
     let clock = Instant::now();
     let result = match &setup {
-        Some(_) => cut_ranges(&base),
+        Some(_) => match published_binary::predates(CUT_RANGE_FIRST_VERSION)? {
+            Some(found) => skipped(
+                CUT_RANGE_FIRST_VERSION,
+                &found,
+                "#274 (a range cut mid-speech failed as MISSING_CAPABILITY)",
+            ),
+            None => cut_ranges(&base),
+        },
         None => blocked(),
     };
     stages.push(stage("p07_local_asr_cut_range", clock, result));

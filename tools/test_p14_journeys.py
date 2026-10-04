@@ -219,6 +219,46 @@ class ResultsTests(unittest.TestCase):
         self.assertEqual(journeys.classify(101, []), "failed")
         self.assertEqual(journeys.classify(None, self.rows("passed")), "timed_out")
 
+    SKIP = {"name": "p07_local_asr_cut_range", "status": "skipped", "first_version": "0.2.0-rc.1",
+            "reason": "the published vsift 0.1.0 predates the fix of #274"}
+
+    def test_a_stage_that_asserts_a_later_fix_is_skipped_below_its_first_version_only(self) -> None:
+        rows = journeys.stage_rows({"stages": [{"name": "a", "status": "passed"}, self.SKIP]})
+        self.assertEqual(rows[1]["status"], "skipped")
+        self.assertEqual(rows[1]["first_version"], "0.2.0-rc.1")
+        self.assertIn("predates the fix of #274", rows[1]["detail"])
+        self.assertNotIn("first_version", rows[0])
+        # Below the first version the skip is justified and the checkpoint passes.
+        for older in ("0.1.0", "0.2.0-beta.3", "0.2.0-rc.0"):
+            self.assertEqual(journeys.unjustified_skips(rows, older), [], older)
+            self.assertEqual(journeys.judge(0, rows, older), ("passed", None), older)
+        # At the first version or above the stage must run: a skip is a failure, never a pass.
+        for newer in ("0.2.0-rc.1", "0.2.0-rc.2", "0.2.0", "0.2.1", "1.0.0"):
+            status, why = journeys.judge(0, rows, newer)
+            self.assertEqual(status, "failed", newer)
+            self.assertIn("p07_local_asr_cut_range was skipped", why or "")
+        # A skip that names no first version, or a malformed one, is not justified either.
+        for declared in (None, "", "later", "0.2"):
+            stage = {"name": "b", "status": "skipped", "reason": "x"}
+            if declared is not None:
+                stage["first_version"] = declared
+            odd = journeys.stage_rows({"stages": [stage]})
+            self.assertEqual(journeys.judge(0, odd, "0.1.0")[0], "failed", repr(declared))
+        # Only skips are judged: failed and blocked stages keep their meaning.
+        self.assertEqual(journeys.judge(101, self.rows("passed", "failed"), "0.1.0"), ("failed", None))
+        self.assertEqual(journeys.judge(101, self.rows("passed", "blocked"), "0.1.0"), ("blocked", None))
+
+    def test_a_skipped_stage_is_listed_with_its_reason_and_is_not_counted_as_passed(self) -> None:
+        results = self.results("passed")
+        checkpoint = results["checkpoints"][0]  # type: ignore[index]
+        checkpoint["stages"] = journeys.stage_rows({"stages": [
+            {"name": "ok", "status": "passed"}, self.SKIP]})
+        text = journeys.render_results(results)
+        self.assertIn("| 1 of 2 |", text)
+        self.assertIn("p07_local_asr_cut_range", text)
+        self.assertIn("skipped: the published vsift 0.1.0 predates the fix of #274", text)
+        self.assertIn("is skipped only below it", text)
+
     def results(self, status: str) -> dict[str, object]:
         return {
             "format": 1, "system": "ubuntu", "version": "0.1.0", "tag_commit": COMMIT,

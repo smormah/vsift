@@ -426,6 +426,83 @@ pub(crate) fn is_override() -> Result<bool, BinaryError> {
     Ok(matches!(selected()?, Selected::Override { .. }))
 }
 
+/// One dot-separated part of a pre-release, ordered as `SemVer` orders it: a
+/// number sorts below any text, numbers by value, text by its bytes.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum PreReleasePart {
+    Number(u64),
+    Text(String),
+}
+
+/// What decides which of two versions is older, or `None` for text that is not a
+/// version of the form `1.2.3` or `1.2.3-rc.1`. A release sorts after every
+/// pre-release of the same numbers (`0.2.0-rc.1` is older than `0.2.0`).
+fn precedence(version: &str) -> Option<(u64, u64, u64, bool, Vec<PreReleasePart>)> {
+    if !is_version(version) {
+        return None;
+    }
+    let (core, pre_release) = match version.split_once('-') {
+        Some((core, pre_release)) => (core, Some(pre_release)),
+        None => (version, None),
+    };
+    let mut numbers = core.split('.').map(|part| part.parse::<u64>().ok());
+    let major = numbers.next()??;
+    let minor = numbers.next()??;
+    let patch = numbers.next()??;
+    let parts = pre_release
+        .map(|text| {
+            text.split('.')
+                .map(|part| {
+                    part.parse::<u64>().map_or_else(
+                        |_| PreReleasePart::Text(part.to_owned()),
+                        PreReleasePart::Number,
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((major, minor, patch, pre_release.is_none(), parts))
+}
+
+/// Whether `version` is older than `other` by `SemVer` precedence, or `None`
+/// when either is not a version.
+pub(crate) fn is_older(version: &str, other: &str) -> Option<bool> {
+    Some(precedence(version)? < precedence(other)?)
+}
+
+/// The version of the binary under test when it is an installed or published
+/// binary **older than `first_version`**, which is the first version that has a
+/// behaviour fixed after the older one was published; `None` for a binary Cargo
+/// built (a build from source always has the code under test) and for any
+/// published binary at or above `first_version`.
+///
+/// A stage that asserts such a behaviour asks this and, when it gets a version,
+/// reports itself `skipped` with the reason and `first_version`, so the skip is
+/// visible and the driver can check that it was justified. It is never a way to
+/// weaken a stage for a version that has the fix.
+pub(crate) fn override_older_than(
+    selected: &Selected,
+    first_version: &str,
+) -> Result<Option<String>, BinaryError> {
+    let Selected::Override { version_line, .. } = selected else {
+        return Ok(None);
+    };
+    let line = parse_version_output(version_line)?;
+    match is_older(&line.version, first_version) {
+        Some(true) => Ok(Some(line.version)),
+        Some(false) => Ok(None),
+        None => Err(BinaryError::ExpectationMalformed {
+            variable: "the first version that has the behaviour",
+            value: first_version.to_owned(),
+        }),
+    }
+}
+
+/// [`override_older_than`] for the binary this process drives.
+pub(crate) fn predates(first_version: &str) -> Result<Option<String>, BinaryError> {
+    override_older_than(selected()?, first_version)
+}
+
 /// A report entry that names the binary the checkpoint drove: its source, and
 /// for an override its `--version` line and SHA-256, never its path.
 pub(crate) fn report() -> Result<Value, BinaryError> {

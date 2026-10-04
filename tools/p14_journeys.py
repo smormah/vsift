@@ -771,14 +771,21 @@ def new_reports(root: Path, before: set[str]) -> list[Path]:
 
 
 def stage_rows(report: Any) -> list[dict[str, str]]:
-    """The name, status and one line of detail of every stage of a report."""
+    """The name, status and one line of detail of every stage of a report.
+
+    A `skipped` stage also carries `first_version`: the first version that has the behaviour
+    it asserts (see `unjustified_skips`).
+    """
     rows = []
     for stage in report.get("stages", []) if isinstance(report, dict) else []:
         if not isinstance(stage, dict):
             continue
-        detail = stage.get("diagnostic") or stage.get("remediation") or ""
-        rows.append({"name": str(stage.get("name")), "status": str(stage.get("status")),
-                     "detail": str(detail)[:300]})
+        detail = stage.get("diagnostic") or stage.get("remediation") or stage.get("reason") or ""
+        row = {"name": str(stage.get("name")), "status": str(stage.get("status")),
+               "detail": str(detail)[:300]}
+        if stage.get("status") == "skipped":
+            row["first_version"] = str(stage.get("first_version", ""))
+        rows.append(row)
     return rows
 
 
@@ -792,6 +799,39 @@ def classify(code: int | None, rows: list[dict[str, str]]) -> str:
     if "failed" in statuses or not statuses:
         return "failed"
     return "blocked" if "blocked" in statuses else "failed"
+
+
+def unjustified_skips(rows: list[dict[str, str]], version: str) -> list[str]:
+    """What is wrong with each `skipped` stage: the only justification is that the published
+    version under test is older than the first version that has the behaviour the stage asserts.
+
+    A checkpoint's tests come from a later commit than an old published version (L-115), so a
+    stage that asserts a behaviour fixed after that version fails it by design; it declares
+    the first version that has the behaviour and skips below it. A skip at or above that
+    version, or one that declares none, is a hole in the evidence, never a pass.
+    """
+    problems = []
+    for row in rows:
+        if row["status"] != "skipped":
+            continue
+        first = row.get("first_version", "")
+        try:
+            justified = semver_key(version) < semver_key(first)
+        except Failure:
+            justified = False
+        if not justified:
+            problems.append(
+                f"{row['name']} was skipped, but {version} is not older than its declared "
+                f"first version {first or '(none)'}")
+    return problems
+
+
+def judge(code: int | None, rows: list[dict[str, str]], version: str) -> tuple[str, str | None]:
+    """The status of one checkpoint, and why when a skip was not justified."""
+    problems = unjustified_skips(rows, version)
+    if problems:
+        return "failed", "unjustified skip: " + "; ".join(problems)
+    return classify(code, rows), None
 
 
 def command_run(arguments: argparse.Namespace) -> None:
@@ -868,8 +908,11 @@ def command_run(arguments: argparse.Namespace) -> None:
             copy = out / "reports" / f"{checkpoint.key}-{index}.json"
             copy.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(report_path, copy)
-        entry.update(status=classify(exit_code, rows), seconds=round(seconds), stages=rows,
+        status, diagnostic = judge(exit_code, rows, state["version"])
+        entry.update(status=status, seconds=round(seconds), stages=rows,
                      exit_code=exit_code, binary_under_test=binaries[0] if binaries else None)
+        if diagnostic:
+            entry["diagnostic"] = diagnostic
         if not drained:
             entry["lingering_output"] = True
         if entry["status"] != "passed" and not rows:
@@ -888,7 +931,7 @@ def command_run(arguments: argparse.Namespace) -> None:
 # ------------------------------------------------------------------- summarize ----
 
 ICONS = {"passed": "passed", "failed": "**FAILED**", "blocked": "**BLOCKED**",
-         "timed_out": "**TIMED OUT**", "not_run": "not run"}
+         "timed_out": "**TIMED OUT**", "not_run": "not run", "skipped": "skipped"}
 
 
 def render_results(results: dict[str, Any]) -> str:
@@ -925,6 +968,11 @@ def render_results(results: dict[str, Any]) -> str:
         for item in results["checkpoints"]:
             if item["status"] != "passed" and not item.get("stages"):
                 lines.append(f"- `{item['key']}`: {item['status']}: {item.get('diagnostic', 'see the log')}")
+        if any(stage["status"] == "skipped" for _, stage in problems):
+            lines += ["", "A `skipped` stage asserts a behaviour fixed after the version under test: "
+                      "it declares the first version that has the behaviour, is skipped only "
+                      "below it, and runs and is required on that version and every later one "
+                      "(the driver fails a skip that is not below it)."]
     lines += ["", "### Not run here, and why", ""]
     for entry in results["not_run"]:
         lines.append(f"- {entry['name']}: {entry['reason']}")

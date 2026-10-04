@@ -364,6 +364,23 @@ workflow or its tooling, and weekly. `P13 managed smoke` takes the same override
 `published_version` input (or `highest`) and runs weekly too. Each run's job summary says which
 tests ran, which did not and why; a failure is a finding to file before any rerun.
 
+**Tests newer than the binary: a stage that needs a later version.** The tests of a run come from
+the tag when the tag has the override and otherwise from the workflow's ref
+([L-115](planning/known-limits.md#l-115)), so they move on while a published version stays put. A
+published version cannot be held to a behaviour that was fixed after it: the stage
+`p07_local_asr_cut_range` (#274) found that the published 0.1.0 fails a recognition range cut
+mid-speech on all three systems, and would have failed every weekly run while 0.1.0 is the highest
+published version. So a stage that asserts such a behaviour declares the **first version that has
+it** (`published_binary::predates("0.2.0-rc.1")`) and reports itself `skipped`, with the reason and
+`first_version`, only for a published binary older than that. A build from source and every
+published version at or above the first one run the stage and must pass it. The driver lists a
+skipped stage under "Stages that did not pass" with its reason, and **fails the checkpoint** for a
+skip that names no first version or whose version is not strictly older: a skip is never a
+pass and never a way to weaken a stage for a version that has the fix (`unjustified_skips`, tested in
+`tools/test_p14_journeys.py`; the comparison is SemVer's, tested in `e2e_binary_override`). Add a
+gate only for a behaviour fixed after the oldest version the weekly run still resolves, and say
+which issue fixed it.
+
 ## Dependencies
 
 Before adding a crate, review:
