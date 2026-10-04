@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-03 (P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -155,15 +155,16 @@ Each entry has these fields:
 | [L-119](#l-119) | There are two hold-out scenarios, one run per client each, written by the same authors | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-120](#l-120) | Usage figures and the usage-limit reading are the clients', and the harness's parsers have not met a real stream | process/CI | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-121](#l-121) | Text drawn inside the README's SVG graphics is public text the claims check cannot read | process/CI | low | unscheduled | none | open |
-| [L-122](#l-122) | The reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities, and 18 more records give no fix reference | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
+| [L-122](#l-122) | One recorded FFmpeg vulnerability (CVE-2026-38350, libswscale) is tied to its fix only by elimination, and the reading proves the source of the shipped build, not its behaviour | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
 | [L-123](#l-123) | Two Windows concurrency failures reproduce on a hosted runner at about one repetition in 200: session-root creation and the weighted-admission grant | integrity/durability | medium | P14 | [#206](https://github.com/smormah/vsift/issues/206), [#271](https://github.com/smormah/vsift/issues/271) | open |
 | [L-124](#l-124) | Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips | accuracy/ASR | medium | P14 | [#274](https://github.com/smormah/vsift/issues/274), [#277](https://github.com/smormah/vsift/issues/277) | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
 | [L-127](#l-127) | The CLI's ingest treats three kinds of hostile source worse than the worker path does: a named pipe hangs it, a link is refused as a storage failure and a full disk is reported as corruption | security | low | P14 | [#264](https://github.com/smormah/vsift/issues/264), [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) | open |
 | [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, nineteen of 31 targets were still finding coverage at the end, and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
+| [L-132](#l-132) | The reviewed FFmpeg can only follow a month-end build of its publisher, and a new pin does not move existing installs; the refresh candidate of 2026-10-03 is a daily build, needs two reviewed bounds raised and adds three libraries to the recipe | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
 
-Counts: 1 high, 35 medium, 79 low (115 entries).
+Counts: 1 high, 36 medium, 79 low (116 entries).
 
 ## Security
 
@@ -3050,32 +3051,42 @@ that week.**
 
 ### L-122
 
-**The reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities, and 18 more records give no fix reference.**
+**One recorded FFmpeg vulnerability (CVE-2026-38350, libswscale) is tied to its fix only by elimination, and the reading proves the source of the shipped build, not its behaviour.**
 
 - **What:** the managed catalogue installs one reviewed FFmpeg, the BtbN snapshot
-  `n9.0.1-11-ge47273f4d9` of 2026-08-31. Of 47 public records naming FFmpeg (published June to
-  September 2026), 12 are fixed by an older release line and are in the snapshot; **17 have a fix on
-  FFmpeg's `master` that the snapshot does not contain** (1 critical, 13 high, 3 medium); **18 give
-  no fix commit** (14 high, 4 medium). Read against VSift's configuration (the `mov` and
-  `matroska` demuxers, the `file` protocol, decoding after a bounded probe), 12 of the 35 name code
-  VSift cannot start, including the one critical record (a network streaming protocol); 23 do not, and 18 of
-  those are high-severity (the scaler and filters, HEVC, PNG, the MP4 demuxer's IAMF parsing, two
-  decoders a probe may open, and nine records that name no component). Whisper.cpp v1.9.2, the
-  pinned actions and the Rust dependencies gave no finding.
-- **Evidence:** [`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md) (identifiers,
-  severities, components and the method); `P14 scan reading` run 37136669647;
-  [#272](https://github.com/smormah/vsift/issues/272).
-- **Impact:** untrusted media is decoded by an FFmpeg that may carry known bugs. The allow-lists, the
-  byte, time, pixel and stream bounds and, in a worker, the strict-isolation container limit what
-  such a bug could do; none of them removes it. The reading is an assumption about reachability, not
-  a proof, and an ancestry test cannot see a backport under another hash.
-- **Why:** the catalogue is a reviewed snapshot, not a rolling build; refreshing it is a new
-  catalogue revision with its own review.
+  `n9.0.1-11-ge47273f4d9` of 2026-08-31 (month-end, retained two years). Of the 47 public records naming
+  FFmpeg (published June to September 2026), the first reading (2026-10-02) counted 17 as fixed on `master`
+  only and 18 as having no fix reference, which is why the finding opened. Its test could not see a
+  release-branch cherry-pick. The re-read of 2026-10-04 (the addendum of
+  [`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md)) finds **46 of the 47 fixed in the
+  shipped snapshot** (the 17, 17 of the 18 and the older 12; the 28 cherry-picks that stand in for a master
+  fix carry its patch text) and **one not reachable** (CVE-2026-38347, the alpha-blend path VSift never
+  switches on). **One of the 46 is by elimination:** CVE-2026-38350 (High, signed-overflow denial of service in
+  `libswscale`'s output code, which VSift's frame conversion runs) names a fuzzer function that no issue
+  names; the one other `output.c` issue of the same reporter's batch (21586) is the statement that
+  `86ddc8b438` rewrote, and the code is the same in the shipped snapshot, the refresh candidate and
+  `master` (`release/9.0` is the only release branch newer than 8.1). **If the record describes another site,
+  nothing here covers it.** The refresh candidate (`n9.0.2-22`) is no better or worse for any of the 47.
+- **Evidence:** the addendum (identifiers, severities, components, commit hashes, the method, how it can be
+  wrong, and the exposure argument); `tools/p14-campaigns/ffmpeg-ancestry.cjs`;
+  [#272](https://github.com/smormah/vsift/issues/272). Whisper.cpp v1.9.2, the pinned actions and the Rust
+  dependencies gave no finding.
+- **Impact:** untrusted media is decoded by an FFmpeg that may still carry a bug of this class. The allow-lists,
+  the byte, time, pixel and stream bounds and, in a worker, the strict-isolation container limit what such a
+  bug could do; none of them removes it. A cherry-pick line and equal patch text show the fix is in what the
+  snapshot was built from, not that the binary was tested against a reproducer, and the database's
+  records are neither complete nor timely. Eight integer-overflow fixes in `output.c` in five months say
+  the class is not closed by these records.
+- **Why:** nothing public ties the record to a commit by name, and a fix cannot be proved absent from a binary
+  by reading history.
 - **Mitigation:** keep untrusted media in the strict-isolation container
-  ([`worker-host.md`](../operations/worker-host.md)); the maintainer's choice among the proposed
-  dispositions in the reading (refresh the snapshot, read the 18 upstream, or accept the 12 as a
-  residual with a test that FFmpeg never gets another demuxer or protocol).
-- **Next step:** the maintainer decides; a refresh is a catalogue revision and a new RQ-13 reading.
+  ([`worker-host.md`](../operations/worker-host.md)); the allow-lists in
+  `crates/vsift-infrastructure/src/ffmpeg_media.rs` (the `mov` and `matroska` demuxers, the `file`
+  protocol, a decode only of the six video and seven audio codecs it lists); the reading repeated, with the
+  tool, within seven days of the candidate and again before the stable.
+- **Next step:** the maintainer decides: accept the tie by elimination as the register entry for this
+  record, or ask upstream which report it describes. Refreshing the build does not change it
+  ([L-132](#l-132)).
 - **Owner:** P14. **Issue:** [#272](https://github.com/smormah/vsift/issues/272). **Status:**
   open. **Review:** pending.
 
@@ -3271,6 +3282,47 @@ that week.**
 - **Owner:** P14. **Issue:** [#17](https://github.com/smormah/vsift/issues/17). **Status:**
   accepted residual. **Review:** pending.
 
+
+### L-132
+
+**The reviewed FFmpeg can only follow a month-end build of its publisher, and a new pin does not move existing installs: the refresh candidate of 2026-10-03 is a daily build, needs two reviewed bounds raised and adds three libraries to the recipe.**
+
+- **What:** BtbN keeps the last build of each month for two years and only the last 14 daily builds, so a
+  catalogue pin has to be a month-end build; the one pinned (2026-08-31) is kept to about 2028-08-31. The
+  newest build of the catalogue's variant is a daily build (`n9.0.2-22-g46d8f462ee`,
+  `autobuild-2026-10-03-18-14`, deleted about 2026-10-17). It passed every hosted check (the managed smoke,
+  both P06 smokes, P07 local ASR), but it is 22 percent larger (137,945,828 bytes, 450,447,717 expanded), so
+  the tar stream cap (400,000,000) and the XZ compressed-size cap (`MAX_XZ_ARCHIVE_BYTES`, 128 MiB) refuse it, and
+  its recorded configuration gained `--enable-librsvg`, `--enable-lcms2` and `--enable-vapoursynth`. The next
+  month-end build is 2026-10-31. Until then the catalogue stays at revision `ubuntu-24.04-x86_64-2026-09-22-r2`.
+- **Evidence:** [`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md) and
+  [`p06-windows-artifact-candidate.md`](p06-windows-artifact-candidate.md), sections of 2026-10-04 (hashes,
+  inventory, configuration, runs 37164083942, 37164086257, 37164088495 and 37164090634); BtbN's README
+  (retention policy, read 2026-10-04).
+- **Impact:** a fix upstream takes after the next month-end waits for the one after it. The 95 commits
+  between the shipped build and the candidate (17 on the supported path, by file name: hardening such as
+  the `mov` key atom, VP8, VP9, H.264, HEVC and Opus decoder fixes and `libswscale` copies) are not in the
+  shipped build. A daily pin would make every release that names it uninstallable about two weeks later
+  (`DOWNLOAD_FAILED`; installed tools keep working), and the catalogue's stop date cannot honestly be that
+  short.
+- **Why:** direct download from the publisher is the reviewed design (ADR 0014: no mirror; a copy would redistribute an
+  LGPL-3 build); the publisher's retention is not VSift's to change.
+- **Mitigation:** the scan reading repeats at the candidate and the stable; the shipped build already
+  carries the fixes for 46 of the 47 recorded records ([L-122](#l-122)); the strict-isolation container.
+- **Existing installs are not moved.** `setup plan` offers an install only for a tool that is missing, so a
+  managed FFmpeg that verifies stays selected after a new pin; its owner replaces it with `setup remove
+  ffmpeg_ffprobe` and an install. A new pin protects new installs only, which matters if a build ever has to be
+  replaced for a security reason. When a pinned asset disappears, existing installs keep working (local,
+  hash-checked on use, no network needed for `list`, `check`, `rollback`, `remove` or `repair`) and only a
+  fresh `setup install` of a release that names it fails (`DOWNLOAD_FAILED`).
+- **Next step:** re-pin to the 2026-10-31 build once it exists, **before the candidate cut if the cut can wait
+  for it** (a catalogue change makes every crates-scoped evidence item stale), otherwise **after the
+  stable**, not between the two (the timing, the blockers and the existing-install behaviour are in the
+  addendum's "The next pin"); raise the two bounds only as far as that archive needs and review the
+  compiled-component inventory for the added libraries; or the maintainer decides to mirror the build (an
+  ADR superseding ADR 0014's direct-origin rule, with the licence consequences).
+- **Owner:** P14. **Issue:** [#272](https://github.com/smormah/vsift/issues/272). **Status:**
+  open. **Review:** pending.
 
 ## Review workflow
 

@@ -283,6 +283,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `ENEEDAUTH` case (6.5); the README, `SECURITY.md`, `install.md`, the skill guide, the
   spine, verification, the threat model and the work-packets table no longer say that
   nothing is published.
+- **The reviewed FFmpeg finding (#272) re-read, and a refresh candidate reviewed but not pinned** (P14
+  PR 7b; documents and one tool, **no product code, workflow, setting or catalogue entry changed**,
+  nothing published). The first scan reading counted 17 fixes as missing from the shipped BtbN snapshot
+  and 18 more records as having no fix reference; its test (commit ancestry) could not see fixes that
+  FFmpeg's release branch takes as cherry-picks. Matching the `(cherry picked from commit ...)` line too,
+  the shipped snapshot has the fix for all 17 and for 17 of the 18 (46 of the 47 recorded records in
+  all; the 28 cherry-picks carry the patch text of the master commit), one record is not reachable (the
+  alpha-blend path VSift never switches on) and one of the 46 (CVE-2026-38350, High, `libswscale`) is
+  tied to its fix by elimination only. The refresh candidate (`n9.0.2-22`, the release branch's tip of 2026-10-03) fixes
+  no record the shipped build does not. It passed the managed smoke, both P06 smokes and P07 local ASR on
+  hosted runners, from an unmerged evidence branch, but it is a daily build (its publisher keeps those
+  about two weeks), needs the installer's tar and XZ size caps raised and adds three libraries to the
+  recipe, so **the catalogue still pins the 2026-08-31 month-end build** and the rule is written down: a
+  pin is a month-end build. New `tools/p14-campaigns/ffmpeg-ancestry.cjs` (Node.js, no dependency, eight
+  tests with offline fixtures; it also compares each cherry-pick's patch and sees a revert) repeats the
+  reading for the candidate and the stable. Known limit L-122 is narrowed to that one tie and L-132 added; the ledger's RQ-13 stays `failed` with a prior note; the addendum of the scan
+  reading, the two P06 candidate records, the provisioning review, `p14-qualification.md` section 19
+  and ADR 0023 and 0024 have dated notes.
 
 ### Fixed
 

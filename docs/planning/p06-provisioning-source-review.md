@@ -428,3 +428,29 @@ This checkpoint defines authority for the future executor; it does not execute
 candidate code, record a compatibility result, publish a runtime or enable
 `setup install`. The production smoke and its failure cleanup still require
 implementation and D-06 evidence.
+
+## 2026-10-04 refresh of a pinned artifact, and retention (P14 PR 7b)
+
+The maintainer decided on 2026-10-04 to refresh the reviewed FFmpeg (#272). Two rules, which the review
+above implied and this note states:
+
+1. **A pin is a retained build.** BtbN keeps the last build of each month for two years and only the last
+   14 daily builds (its README, read 2026-10-04). A catalogue entry therefore pins a month-end build;
+   `stop_new_plans_at` is set from that build's own retention. A daily build is never pinned, because a
+   release that names it stops being installable when the publisher prunes it, and no honest stop date is
+   two weeks long. There is no mirror: the direct-origin decision of 2026-09-13 (ADR 0014) stands (a copy kept by the
+   project would redistribute an LGPL-3 build, which is a decision with legal weight and its own ADR).
+2. **A refresh is a new catalogue revision with the review above repeated for the new bytes:** provenance
+   (release, build-scripts commit, upstream commit), HTTPS, digest, size, inventory, the recorded
+   configuration compared with the previous one, the two archive bounds, the licence text, the hosted
+   smoke, and the scan reading's ancestry method for the new snapshot
+   (`tools/p14-campaigns/ffmpeg-ancestry.cjs`).
+
+The first refresh candidate (`n9.0.2-22-g46d8f462ee`, a daily build of 2026-10-03) is reviewed, and passed
+every hosted check, in [`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md#2026-10-04-refresh-candidate-n902-22-reviewed-not-accepted)
+and [`p06-windows-artifact-candidate.md`](p06-windows-artifact-candidate.md#2026-10-04-refresh-candidate-n902-22-reviewed-not-accepted);
+it is **not accepted**, because it is a daily build, needs two archive bounds raised and adds three
+libraries to the recipe. The catalogue stays at revision `ubuntu-24.04-x86_64-2026-09-22-r2` until a
+month-end build is reviewed the same way. The re-read of the vulnerability records that prompted the
+refresh found the shipped build already carries the fixes (the addendum of
+[`p14-scan-reading-2026-10-02.md`](p14-scan-reading-2026-10-02.md)).

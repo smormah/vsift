@@ -497,7 +497,7 @@
       "supports": {
         "requirements": ["R-14"],
         "verification": ["R-SEC03"],
-        "limits": ["L-122"]
+        "limits": ["L-122", "L-132"]
       },
       "proves": "The state of what was read on the day: no unresolved high or critical finding in a supported path across Cargo, GitHub alerts, the native tools, the runtime and build, and the SBOM inventory.",
       "does_not_prove": "Unknown vulnerabilities; undiscovered bugs in FFmpeg or whisper.cpp.",
@@ -528,6 +528,31 @@
           "reference": { "type": "record", "path": "docs/planning/p14-qualification.md" },
           "date": "2026-10-02",
           "note": "A read-only gh api reading showed 0 open code-scanning, Dependabot and secret-scanning alerts. Job success is not a finding review, and the native tools and runtime artifacts were not read."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-02.md" },
+          "date": "2026-10-04",
+          "note": "P14 PR 7b, addendum of 2026-10-04: the FFmpeg finding (#272) re-read with a test that also matches release-branch cherry-picks (tools/p14-campaigns/ffmpeg-ancestry.cjs). Of the 35 records the first reading left open, the shipped snapshot (n9.0.1-11) has the fix for 34 (all 17 counted as fixed on master only, 17 of the 18 without a reference; 28 cherry-picks carry the patch text of the master commit) and one is not reachable (CVE-2026-38347); one of the 34, CVE-2026-38350 (High, libswscale), is tied to its fix by elimination only and is the residual of the reading (L-122). The refresh candidate (n9.0.2-22, a daily build) fixes no record the shipped build does not, passed the hosted checks below, and is not accepted: BtbN keeps a daily build about two weeks, so a pin must be a month-end build (L-132). This is not the reading for the candidate. The hostile-media and load campaigns (RQ-09, RQ-10) test published versions from the registry, so their re-run on a refreshed build happens on the release candidate (P14 PR 11)."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 37164083942 },
+          "date": "2026-10-04",
+          "note": "The refresh candidate n9.0.2-22 pinned on the evidence branch p14-pr7b-ffmpeg-candidate-evidence (not merged), source build: the real setup plan, install and check, the kill-and-rerun stage and the pinned smoke passed on Ubuntu 24.04."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P06 Ubuntu candidate smoke", "run_id": 37164086257 },
+          "date": "2026-10-04",
+          "note": "The same candidate: archive layout through the production extractor with the two raised bounds, F01 media operations and model-backed inference passed."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P06 Windows candidate smoke", "run_id": 37164088495 },
+          "date": "2026-10-04",
+          "note": "The Windows twin of the same candidate on Windows Server 2025: hashes, extraction, FFprobe, FFmpeg and whisper.cpp passed."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P07 local ASR", "run_id": 37164090634 },
+          "date": "2026-10-04",
+          "note": "The same candidate through the local-ASR adapter, the CLI checkpoint and the T-04 gates on Ubuntu 24.04 and Windows."
         }
       ],
       "date": "2026-10-02"

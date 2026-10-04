@@ -1085,3 +1085,25 @@ the decisions taken inside this ADR:
 - **Known limits.** L-122, L-123, L-124, L-127 and L-128 (L-121, L-125 and L-126 were taken by other pull requests while this was in progress):
   the FFmpeg snapshot, the two Windows concurrency failures, the five-second recognition range, the
   CLI's handling of a pipe, a link and a full disk, and the depth and gaps of the fuzzing.
+
+## Note, 2026-10-04 (P14 PR 7b: the FFmpeg finding re-read, #272, RQ-13)
+
+The maintainer decided on 2026-10-04 to refresh the reviewed FFmpeg and re-test. Redoing the test first
+changed the picture; **no accepted decision changes** and RQ-13 stays `failed`. The reading is the addendum
+of [`p14-scan-reading-2026-10-02.md`](../planning/p14-scan-reading-2026-10-02.md) and the record is
+[`p14-qualification.md`](../planning/p14-qualification.md) section 19.
+
+- **The first reading's count was a limit of its test.** It treated a fix as missing unless the `master` hash was
+  an ancestor of the snapshot; FFmpeg's release branch takes fixes as cherry-picks with other hashes. Matching the
+  `(cherry picked from commit …)` trailer too, the shipped snapshot has the fix for all 17 records counted as
+  "fixed on master only" and for 17 of the 18 without a reference; one is not reachable, and one of the 46
+  (CVE-2026-38350, High, `libswscale`) is tied to its fix by elimination only. The refresh candidate changes none
+  of the 47. [L-122](../planning/known-limits.md#l-122) is narrowed to that tie.
+- **The refresh is reviewed, not pinned.** The newest build is a daily build (kept about two weeks), needs two
+  reviewed archive bounds raised and adds three libraries to the recipe; the pin has to be a month-end build
+  (the rule is in the ADR 0023 note of the same date). The candidate passed the managed smoke, both P06 smokes
+  and P07 local ASR on hosted runners from a branch that is not merged. [L-132](../planning/known-limits.md#l-132).
+- **The reading repeats.** RQ-13 needs a reading within seven days of the candidate and
+  again before the stable, by the method and tool of the addendum (`tools/p14-campaigns/ffmpeg-ancestry.cjs`,
+  Node.js, no dependency, eight tests with offline fixtures). The hostile-media and load campaigns (PR 4) test **published** versions
+  from the registry, so their re-run on a refreshed build happens on the release candidate (PR 11).
