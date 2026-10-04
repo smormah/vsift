@@ -40,7 +40,7 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2
 (#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; PR 9 is
-open as 9a (#302) and 9b (__PR9B__, the user guide); PRs 10-13 remain; the whole packet is not complete.**
+open as 9a (#302) and 9b (#304, the user guide); PRs 10-13 remain; the whole packet is not complete.**
 What it must show, and what is weaker than it sounds:
 - **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints against it
   on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2 installed it on
@@ -75,7 +75,7 @@ RQ-07 passed (31 fuzz targets, no crash; 19 still growing: L-128); RQ-08 failed 
 passed (found #274, #277, #286); RQ-10 failed (96 hostile inputs, 93 held: #264-#266); RQ-12 passed (runbook
 walked); RQ-13 failed (#272).
 
-## P14 PR 9 in one view (two pull requests, 9a #302 and 9b __PR9B__; complete only when both merge)
+## P14 PR 9 in one view (two pull requests, 9a #302 and 9b #304; complete only when both merge)
 
 **9a:** the support matrix (`support-and-resource-profiles.md`: no cell may say "supported" yet; hosted Windows
 is Server 2025) and the install guide, `SECURITY.md` (a versions table), runbook, skill guide and README facts
