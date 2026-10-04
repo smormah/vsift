@@ -39,8 +39,9 @@ the CLI and write a cited report. P12's named-client trials qualified it:
 
 **P00-P13 are complete. P14, the R0 qualification (#17), is in progress** (started 2026-10-02;
 decisions A-H of ADR 0024 confirmed). Its plan is 14 pull requests (0-13); **PRs 0 (#250), 1 (#251), 2
-(#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; PRs 9-13
-remain; the whole packet is not complete.** What it must show, and what is weaker than it sounds:
+(#255), 3 (#254), 4 (#259), 5 (#276), 6 (#262), 7 (the fixes, below) and 8 (#252) are merged; PR 9a
+(#302) is open, 9b (the user guide) is next; PRs 10-13 remain; the whole packet is not complete.**
+What it must show, and what is weaker than it sounds:
 - **The published 0.1.0 has run on a video, but only that:** PR 3 ran the real-tool checkpoints
   against it on hosted Ubuntu 24.04, Windows and macOS 15 (tests from a later commit, L-115); PR 2
   installed it on hosted runners, not clean machines. Smart App Control and the macOS prompts are
@@ -57,60 +58,60 @@ remain; the whole packet is not complete.** What it must show, and what is weake
 ## P14 PRs 1 to 6 and 8 in one view
 
 **PR 1 (#251):** the evidence ledger (RQ-01..RQ-20) and claims registry (rung `now`), checked on every
-PR (L-101). **PR 2 (#255):** clean install from the real registry (npm, pnpm, Yarn, Bun; three systems),
-the archives, the offline install, upgrade with a frozen v0.1.0 compatibility test and a second verifier
-(RQ-01..04, RQ-19), all `passed` for 0.1.0 only (plan section 15; L-109 to L-112). **PR 8 (#252):** the
-version alone decides the channel (a suffix means `next`, none moves `latest`), guarded by the candidate
-delta and the complete ledger (L-103); no real stable publish yet (L-105). **PR 3 (#254):**
-`VSIFT_E2E_BINARY` makes the real-tool checkpoints drive an installed `vsift`; `P14 journeys` runs them
-against `vsift-cli@<version>` from the registry on three systems, weekly too; on 0.1.0 53 stages passed on
-each (RQ-06 `passed`, RQ-05 `running`: P11's durable stage is blocked, #258).
+PR (L-101). **PR 2 (#255):** clean installs from the real registry (npm, pnpm, Yarn, Bun; three systems),
+the archives, offline install, upgrade and a second verifier (RQ-01..04, RQ-19), `passed` for 0.1.0 only
+(plan section 15; L-109 to L-112). **PR 8 (#252):** the version alone decides the channel (a suffix means
+`next`, none moves `latest`), guarded by the candidate delta and the complete ledger (L-103); no real
+stable publish yet (L-105). **PR 3 (#254):** `P14 journeys` runs the real-tool checkpoints against
+`vsift-cli@<version>` from the registry on three systems, weekly too (`VSIFT_E2E_BINARY`); on 0.1.0 53
+stages passed on each (RQ-06 `passed`, RQ-05 `running`: P11's durable stage is blocked, #258).
 
 **PR 6 (#262; `docs/agents/trials.md`) and batch 1.** `tools/vsift-agent-trials` installs the published
 package, runs a cold agent (**Claude strict**, **Codex realistic**, L-125), keeps hold-outs, freezes inputs
-by digest, captures usage and plans three batches (L-117 to L-120). **Batch 1** (2026-10-03, 0.1.0, 20
-runs, a baseline; `p14-agent-trials/batch-1-reading.md`): skill pilots 4 of 4; cold useful 1 of 6 (Claude)
-and 2 of 6 (Codex); none installed anything; three grader classes **ruled on 2026-10-04 and implemented in
-#298**; batch 2 needs a fresh `freeze write`.
+by digest, captures usage and plans three batches (L-117 to L-120). **Batch 1** (2026-10-03, 0.1.0, 20 runs,
+a baseline): skill pilots 4 of 4; cold useful 1 of 6 (Claude), 2 of 6 (Codex); none installed anything; three
+grader classes **ruled 2026-10-04 and implemented in #298**; batch 2 needs a fresh `freeze write`.
 
-**PR 4 (#259; plan section 18; hosted runners only).** The robustness campaigns on 0.1.0 (`tools/p14-
-campaigns/`): **RQ-07 passed** (31 fuzz targets, 3,601 s each, no crash; 19 still growing: L-128).
-**RQ-08 failed** (Windows #206 7 of 1,500, #271 2 of 200; #128 did not reproduce). **RQ-09 passed** (ladder,
-a 100-request batch, cancel, warm page, a 1,000-request soak with kills; found #274, #277, #286). **RQ-10
-failed** (96 hostile inputs, 93 held: #264-#266). **RQ-12 passed** (runbook walked). **RQ-13 failed** (#272).
+**PR 4 (#259; plan section 18; hosted runners only).** The campaigns on 0.1.0 (`tools/p14-campaigns/`):
+**RQ-07 passed** (31 fuzz targets, no crash; 19 still growing: L-128). **RQ-08 failed** (Windows #206, #271;
+#128 did not reproduce). **RQ-09 passed** (ladder, batch, cancel, a 1,000-request soak with kills; found
+#274, #277, #286). **RQ-10 failed** (96 hostile inputs, 93 held: #264-#266). **RQ-12 passed** (runbook
+walked). **RQ-13 failed** (#272).
+
+## P14 PR 9a in one view (open, #302; an increment: 9b, the user guide, follows)
+
+The support matrix (`support-and-resource-profiles.md`: no cell may say "supported" yet; hosted Windows is
+Server 2025) and the install guide, `SECURITY.md` (a versions table), runbook, skill guide and README facts
+brought to it. The claims check also reads the launcher's messages and the README graphics' text (L-121),
+and each claim lists the register entries it leans on (`limits`). `register-review-sheet.md`: thirty
+entries, seven later, nine readings, every review pending.
 
 ## P14 PR 7 in one view (every finding by outcome; one pull request and one regression test each)
 
-**Rule of 2026-10-04: a published failure code stays (v1 is additive only, L-126); the remediation
-carries the fix and L-127 records what the code only loosely says, for v2.**
+**Rule of 2026-10-04: a published failure code stays (v1 is additive, L-126); the remediation carries the fix (L-127).**
 - **Fixed:** #264 `ingest` of a pipe with no writer no longer waits (#290); #274 a range cut mid-speech keeps
-  its last segment however far the recogniser ran on (#289, L-130, ADR 0017 note); #277 a failed open removes
-  its registration (waiting up to 5 s for a busy root) and an id with no published session says so (#293, L-131); #268 a
-  shutdown that cancels a step carries the remediation (#288); #256 a missing shared library is named (#280);
-  #261 a foreign session root explains itself (#279, L-126); #273, #282, #283, #285 tool fixes (#275, #287).
-- **Answer fixed, code kept (L-127):** #265 a link as the video says links are not followed, `STORAGE_IO`
-  (#295); #266 a source with no room is refused before the copy on Unix, `STORAGE_IO`, best effort (#291,
-  L-061); the not-published answer of #277. `job run` keeps `RESOURCE_LIMIT` for a full workspace.
+  its last segment (#289, L-130, ADR 0017 note); #277 a failed open removes its registration (waiting up to
+  5 s for a busy root) and an id with no published session says so (#293, L-131); #268 a shutdown that
+  cancels a step carries the remediation (#288); #256 a missing shared library is named (#280); #261 a
+  foreign session root explains itself (#279, L-126); #273, #282, #283, #285 tool fixes (#275, #287).
+- **Answer fixed, code kept (L-127):** #265 a link says links are not followed (#295); #266 no room is refused
+  before the copy, best effort on Unix (#291, L-061); #277's not-published answer; the code is `STORAGE_IO`.
 - **Narrowed or mitigated, not proven gone:** #206 a new session root's DACL is read back and repeated (#301):
-  the cause is a hypothesis, a late write is not excluded (L-005; L-123 closed); #253 the kill test ends its
-  own strays (#300): the host-killed-in-the-window case is a known limit (L-129, an ADR for R1).
-- **Test or documents only:** #271 the admission test waits for a first grant (#294; admission is unfair
-  by design, L-060); #286 the dedupe window is stated as it is (#299; an R1 stub is the maintainer's call,
-  L-063); #257 the `vsift.cmd` shim is documented and its safe routes tested (#281, L-109).
+  the cause is a hypothesis (L-005; L-123 closed); #253 the kill test ends its own strays (#300; L-129).
+- **Test or documents only:** #271 the admission test (#294, L-060); #286 the dedupe window is stated (#299,
+  L-063: an R1 stub is the maintainer's call); #257 the `vsift.cmd` shim is documented (#281, L-109).
 - **PR 7b, #272 (not fixed):** the first scan reading missed release-branch cherry-picks; 46 of 47 records
   are fixed in the shipped FFmpeg (L-122). The refresh candidate is a daily build and cannot be pinned; the
   next month-end build is 2026-10-31 (L-132). RQ-13 stays `failed`.
-- **Text and grader:** `vsift --help` carries "A typical investigation" (#297); the cold grader changed (#298).
 - **Weak points that remain:** the codes of L-127; #206's cause is unproven; #253 is random; Windows has
   no free-space check (L-061); a busy lock refused one request in five once (L-131).
 
 ## P13 in one view (complete)
 
 [ADR 0023](../docs/decisions/0023-r0-distribution-managed-installation-and-handoff-check.md) (**Accepted**
-2026-10-01); record `p13-distribution.md`, guide `install.md`, runbook `release.md`. **Delivered:** native
-archives, the npm launcher over three platform packages, managed installation, human output, `handoff
-check`, the 0.1.0 pre-release (`011bc4d`). **Not proved:** Smart App Control, the macOS prompts (L-098);
-power loss beyond Ubuntu 24.04 ext4 (L-037).
+2026-10-01); record `p13-distribution.md`. **Delivered:** native archives, the npm launcher, managed
+installation, human output, `handoff check`, the 0.1.0 pre-release (`011bc4d`). **Not proved:** Smart App
+Control, the macOS prompts (L-098); power loss beyond Ubuntu 24.04 ext4 (L-037).
 
 ## What works (public CLI)
 
@@ -132,19 +133,18 @@ power loss beyond Ubuntu 24.04 ext4 (L-037).
 | P11 | Complete (`40c4038`); SEC-T01 adversarial evidence is technical debt, moved to R1 (#188, L-068) |
 | P12 | Complete (2026-09-30, ADR 0022 Accepted): skill, harness, named-client trials; review tier qualified, compact tier 93% and 100% on the #222 re-run; open: L-095 (#224), #219, #204 (`1284e54`) |
 | P13 | Complete (2026-10-01, ADR 0023 Accepted): distribution, managed install, `handoff check`, human output; 0.1.0 published; release commit `011bc4d` |
-| P14 | **In progress** (started 2026-10-02): PRs 0-8 merged (PR 7 = the fixes of the campaigns and batch 1); 9-13 remain; agent batch 1 ran (baseline) |
+| P14 | **In progress** (started 2026-10-02): PRs 0-8 merged (PR 7 = the fixes of the campaigns and batch 1); 9a open, 9b next; 10-13 remain; agent batch 1 ran (baseline) |
 
 ## Architecture snapshot
 
 `vsift-domain` (values, no I/O) <- `vsift-application` (use cases and ports) <- `vsift-infrastructure`
 (OS, processes, storage, providers, parsers) <- `vsift` (engine) <- `vsift-cli` (parse, present, signals).
 `vsift-contract` sits beside the engine and owns the wire types. The skill only calls the `vsift` binary;
-the trial harness depends only on `vsift` and `vsift-contract`; `tools/` (never shipped) qualifies the
-artifacts; `npm/` is the launcher.
+the trial harness uses only `vsift` and `vsift-contract`; `tools/` (never shipped) qualifies; `npm/` is the launcher.
 
 ## Quality evidence
 
 - **Local gates** (in each PR description): fmt, strict Clippy, workspace tests, warning-denied rustdoc,
-  governance. **CI on every PR:** Quality (three OS), Documentation, Governance, fuzz replay, worker
-  boundary, dependency policy, CodeQL, npm launcher tests; the Release dry run and P14 workflows on their
-  paths. **Required on `main`:** Quality, Documentation, Dependency policy, Analyze Rust, Governance. Squash merges.
+  governance. **CI on every PR:** Quality (three OS), Documentation, Governance, fuzz replay, worker boundary,
+  dependency policy, CodeQL, npm launcher tests; the Release dry run and P14 workflows on their paths.
+  **Required on `main`:** Quality, Documentation, Dependency policy, Analyze Rust, Governance. Squash merges.
