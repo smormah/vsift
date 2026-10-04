@@ -647,8 +647,9 @@ impl Engine {
                     waited = waited.saturating_add(delay);
                     polls = polls.saturating_add(1);
                     if matches!(planned, PlannedStep::Ingest) {
-                        // A failed ingest may have registered its session:
-                        // the next try opens a new one, recorded first.
+                        // A failed ingest may have registered its session (the
+                        // engine removes it when it can, #277): the next try
+                        // opens a new one, recorded first.
                         progress.session =
                             Some(self.new_session_id().map_err(|error| stop(error, waited))?);
                         self.write_record(context, progress, RequestRecordWrite::Accept)

@@ -588,6 +588,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   compares the verdicts with those `main` gave before the change (it passes on both). **Batch 1's records and
   summary are not re-graded** (the baseline is a measurement); `docs/agents/trials.md` and the batch 1 reading
   carry a dated note, and batch 2 needs a fresh `freeze write`.
+- **A failed open now removes the registration it made, and a session that names no published session says so**
+  (P14 PR 7, #277; found by the P14 load campaign: sessions left listed as `initializing` with no kill, and
+  `session status` of one answering `STORAGE_IO` with no remediation). **Cause:** a worker batch opens several
+  sessions at once, and registering a session and creating its first generation each only try the root's
+  initialization lock; a request that met `BUSY` after its registration retried with a new session and left the
+  first registration behind (9 of 40 rounds of 20 requests at concurrency 4 on a hosted Ubuntu runner listed 21
+  sessions, one `initializing`), and any other failed open (a source that is not media, a cancellation, a copy
+  that runs out of room) left one too, for `session clean` to collect a day later. **Fix:** an ingest whose open
+  fails removes its own registration, and the session folder it began, at once (or as soon as a busy root allows,
+  below), through the routine `session clean` uses (`abandon_unpublished_open`): only a registration whose marker names this operation, only a
+  session that was never published, the same exclusive lock and bounded owned-tree check, no deletion by path.
+  Nothing is tried when no registration was made (a refusal at registration). **A busy root is waited for, for up
+  to five seconds** (`EnginePorts::with_failed_open_removal_wait`) and only on this failure path: the root's lock
+  is held for tens of milliseconds by every other opener, five consecutive refusals were common in a batch of two
+  requests at a time on Windows, and a first version that tried eight times gave up on a slow hosted runner and
+  left a registration (the one CI run that asserted it failed). If the wait ends the request still reports its
+  original failure and `session clean` collects the registration as before. **A removal that was cut short** (a
+  Windows scanner or a child holding a file) used to leave the folder renamed into quarantine with its manifest
+  pointer already deleted, which failed every later removal with an integrity failure, so the registration stayed
+  `initializing` for ever; the next removal or `session clean` now finishes it. **Scans, listings and cleans no
+  longer fail when a registration is removed under them:** a marker that vanished between the listing and the read,
+  and on Windows one the remover holds locked (os error 33) or has deleted while a handle is open (os error 5), is
+  not listed that time (it read as an integrity failure); a clean that finds the registration gone does not
+  report it, and one that finds it claimed by another remover skips it as busy. **The codes stay.** A session id
+  that names no published session keeps the code the lookup always gave (`STORAGE_IO` for an id with no folder,
+  `INVALID_ARGUMENT` for a folder with no first generation, `INTEGRITY_FAILURE` for a session that was closed and
+  cleaned, whose lock files remain so its missing folder read as damage); changing a published failure code is
+  not additive within v1 (known limit L-127). What is new is the typed error `SessionNotPublished` and its
+  remediation, which says it is a missing session and not a diagnosis of the storage, and when it would be
+  damage; **`session status`, `renew` and `close` carry it, and no other command is promised to** (`candidates`,
+  `transcript retranscribe` and the others answer the same codes as before). No field or schema changes. Tests:
+  store tests for the removal (own operation removed; another operation's, a published session and an
+  unregistered id never touched; a registration a live opener holds is busy, then removable; a removal cut short
+  after it deleted the manifest is finished by the next one and by `session clean`; a registration gone when a
+  clean claims it is gone, not damage; a marker another remover holds is busy to a second one), the scan (a vanished
+  marker, a locked one, a damaged one still an integrity failure, and a scan aimed at the one bucket whose
+  registrations are being removed, which failed in 6 of 8 runs before os error 5 was handled and in none after),
+  the bounded wait, the engine tests (a failed ingest leaves no registration or folder and spares a registration
+  another opener made; a cancelled ingest leaves nothing; a removal that cannot proceed keeps the original failure
+  and the registration; a batch with failing lines leaves nothing and keeps the other sessions; a closed and
+  cleaned session answers its old code as not published; a folder without its first generation answers
+  `INVALID_ARGUMENT`; failed opens, listings, cleans and a scan side by side: nothing but `BUSY` is ever
+  reported and `session clean` leaves nothing), the binary tests, and the opt-in 40 x 20 x 4 reproduction,
+  which fails on the old code. ADR 0021 has a dated note; the refusal itself stays a known limit, **L-131**.
 
 ## [0.1.0] - 2026-10-01
 

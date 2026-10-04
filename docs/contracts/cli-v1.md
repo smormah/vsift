@@ -125,6 +125,18 @@ Windows, which reads no free space, L-061) gives the same answer. The desktop ch
 filesystem whose space cannot be read, or that reports none available, is not checked (known limit L-061).
 The code stays because changing a published failure code is not additive within v1 (known limit L-127). A
 worker workspace keeps its 1 GiB reserve and its `RESOURCE_LIMIT` answer, unchanged.
+A session id that names no published session (never opened, still being opened by another
+command, interrupted while it opened, closed and cleaned, or whose folder is gone) **keeps the code the
+lookup always gave**: `STORAGE_IO` for an id with no session folder and no lock files,
+`INVALID_ARGUMENT` for a folder that has no first generation yet, and `INTEGRITY_FAILURE` for a session
+that was closed and cleaned (its lock files remain, so its missing folder reads as damage). The codes
+are unchanged because changing a published failure code is not additive within v1 (known limit L-127).
+Since P14 PR 7 (#277), `session status`, `session renew` and `session close` add a remediation that says
+it is a missing session and not a diagnosis of the storage, and when it would be damage (a published
+session whose folder was lost to real damage looks the same). **No other command is promised to carry
+it:** `transcript get`, `search`, `session retain`, `candidates`, `frame`, `crop`, `audio` and `transcript
+retranscribe` answer the same codes as before, and some of them reach the same lookup late and may
+carry the remediation, which is not a contract.
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
 days from open. A worker workspace sets its own retention (P11, below). Close and
 cleanup return busy while active work holds the session. Expiry becomes visible at
@@ -136,7 +148,12 @@ no daemon or secure deletion is promised.
 `next_cursor` continues the scan; repeat until it is null. A page has at most
 256 registrations. An initializing registration is visible as such. A corrupt
 or busy item is reported with an item error and a partial page rather than
-silently omitted or used as deletion authority.
+silently omitted or used as deletion authority. **One exception: a registration
+that is being removed at that moment** (by `session clean`, or by a failed open
+removing its own, #277) **is not an error.** A listing does not show it this time
+if its marker is gone or, on Windows, locked or being deleted; a listing may show
+it as unavailable because it is busy; a clean does not report it at all once it
+is gone and skips it as busy while another remover holds it.
 
 `retain` requires a new absolute output directory and never overwrites one.
 The output is owner-private and stays outside automatic cleanup. Both bundle
@@ -180,9 +197,14 @@ media-tool preflight described below. Then the
 source is staged and probed, the cues are aligned, and the source binding and the
 transcript revision are committed in **one** generation. A rejected import therefore
 never leaves an open session. When the rejection comes after staging (the probe or
-the alignment failed), the unactivated registration and its private source copy stay
-in the owned root, listed as `initializing`, until `session clean` removes them as
-abandoned after the idle interval. On success `data.transcript` (schema
+the alignment failed), the engine removes the unactivated registration and its private
+source copy at once, so nothing is listed and nothing is left to clean. Any other failure
+of an `ingest` that was refused after its session was registered (a source that is not
+media, a copy that does not fit, a cancellation) is treated the same way. Only the one
+open that made a registration removes it, and only while its session was never published;
+if the removal itself fails (a busy root), the registration stays listed as `initializing`
+and `session clean` removes it as abandoned after the idle interval, as it also removes the
+registration of a process that was killed while it opened a session. On success `data.transcript` (schema
 [`transcript-revision.schema.json`](../../schemas/v1/transcript-revision.schema.json))
 describes the revision; a plain ingest omits the member, so its output is unchanged.
 The revision is stored as a `transcript_record` session artifact, counted by
@@ -763,9 +785,13 @@ not `IDEMPOTENCY_CONFLICT`: a supervisor that redelivers after the session was c
 not rely on a replay or a conflict (#286).
 
 **Retries and deadline (X-09).** A step that meets contention (`BUSY`: an admission
-unit, a busy session or writer, the same job elsewhere) is tried again after a
+unit, a busy session or writer, the same job elsewhere, the root's lock while another
+request opens a session) is tried again after a
 full-jitter backoff within `--admission-wait-ms` and the deadline; nothing else is
-retried. The deadline is the request's `deadline_ms`, or one day; a step never starts,
+retried. In the measurements made (Windows 11, a debug build, in process: 21 and 28 percent)
+between one request in five and one in four of a batch of 20 at concurrency 4 met the last
+(L-131); a try that failed after it registered a session removes that registration, waiting up
+to five seconds for a busy root to let it. The deadline is the request's `deadline_ms`, or one day; a step never starts,
 and a retry never waits, with less than one second of it left, and a step still
 running at the deadline is cancelled at its next boundary: `DEADLINE_EXCEEDED` (exit
 5), resumable. Deadlines and waits count per delivery (L-065).
