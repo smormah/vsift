@@ -75,11 +75,23 @@ pub const UNOWNED_SESSION_ROOT_REMEDIATION: &str = "The VSift session_root folde
 /// storage failed. The first sentence is stable and the text names no path.
 pub const SOURCE_IS_LINK_REMEDIATION: &str = "The path you gave is a link, and VSift does not follow links. Nothing was read or copied, and no storage failed (the code is the closest published one). Name the file the link points to and run the command again with that path.";
 
+/// Remediation when the session root's filesystem has no room for a copy of
+/// the source (#266), found before the copy from the source's size and the
+/// free space, or when a write ran out of space.
+///
+/// The code stays `STORAGE_IO`, what the CLI path gave and, within v1, the only
+/// one it may give (changing a published failure code is not additive; known
+/// limit L-127), so this text says what happened: nothing is damaged, the
+/// video is fine, and it is the user's drive (or an operator's choice of
+/// folder) that has to change, not the request. The first sentence is stable.
+/// It never contains a path or a size.
+pub const SOURCE_NO_ROOM_REMEDIATION: &str = "The folder that holds VSift's sessions does not have room for a copy of this video. Nothing was committed, nothing is damaged and the video itself is fine (the code is the closest published one). Report this to the user: freeing space on that drive, or an operator naming a folder on a drive with more room with --session-root, fixes it; do not choose a folder yourself. Then run the command again. The folder is the --session-root directory, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux.";
+
 #[cfg(test)]
 mod tests {
     use super::{
-        PrivateFolder, SOURCE_IS_LINK_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
-        non_private_folder_summary,
+        PrivateFolder, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+        UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary,
     };
 
     #[test]
@@ -92,6 +104,26 @@ mod tests {
         assert!(text.contains("Name the file the link points to"));
         assert!(text.contains("no storage failed"), "{text}");
         assert!(!text.contains("corrupt"), "{text}");
+        assert!(text.len() <= 1024, "{} bytes", text.len());
+        assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+    }
+
+    #[test]
+    fn the_no_room_remediation_is_stable_bounded_and_pathless() {
+        let text = SOURCE_NO_ROOM_REMEDIATION;
+        assert!(
+            text.starts_with(
+                "The folder that holds VSift's sessions does not have room for a copy"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("--session-root"));
+        assert!(text.contains("Report this to the user"));
+        assert!(text.contains("nothing is damaged"), "{text}");
+        assert!(
+            !text.contains("corrupt") && !text.contains("integrity"),
+            "{text}"
+        );
         assert!(text.len() <= 1024, "{} bytes", text.len());
         assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
     }

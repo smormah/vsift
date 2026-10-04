@@ -544,6 +544,16 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
     match error {
         SourceError::Storage(storage) => OpenSessionError::Storage(storage),
         SourceError::Cancelled => OpenSessionError::Cancelled,
+        // A write that ran out of room is the root's filesystem being too
+        // small, not a source that could not be read (#266).
+        SourceError::Io(io)
+            if matches!(
+                io.kind(),
+                std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+            ) =>
+        {
+            OpenSessionError::SourceNoRoom
+        }
         SourceError::Io(_) => OpenSessionError::SourceIo,
         SourceError::SymbolicLink => OpenSessionError::SourceIsLink,
         SourceError::InvalidPath
@@ -859,5 +869,43 @@ impl Error for SourceError {
             Self::Storage(error) => Some(error),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Error as IoError, ErrorKind};
+
+    use vsift_application::OpenSessionError;
+
+    use super::{SourceError, open_session_error};
+
+    /// #266: a write that ran out of room is the session root's filesystem
+    /// being too small (`RESOURCE_LIMIT`), not a source that could not be read
+    /// (`STORAGE_IO`, with no hint what to do).
+    #[test]
+    fn a_write_that_ran_out_of_room_is_not_a_source_that_could_not_be_read() {
+        for kind in [ErrorKind::StorageFull, ErrorKind::QuotaExceeded] {
+            assert_eq!(
+                open_session_error(SourceError::Io(IoError::from(kind))),
+                OpenSessionError::SourceNoRoom,
+                "{kind:?}"
+            );
+        }
+        for kind in [
+            ErrorKind::PermissionDenied,
+            ErrorKind::UnexpectedEof,
+            ErrorKind::Other,
+        ] {
+            assert_eq!(
+                open_session_error(SourceError::Io(IoError::from(kind))),
+                OpenSessionError::SourceIo,
+                "{kind:?}"
+            );
+        }
+        assert_eq!(
+            open_session_error(SourceError::NotRegularFile),
+            OpenSessionError::InvalidSource
+        );
     }
 }

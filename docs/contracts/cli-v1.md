@@ -116,6 +116,15 @@ resolved as the operating system resolves them, so a link in a parent folder is 
 itself must not be a link. A worker request answers a link differently, and unchanged since 0.1.0: it names a
 path inside an operator's `--input-root`, so a link anywhere on that path is `path_outside_input_root`
 (`INVALID_ARGUMENT`).
+**A source that does not fit the session root's filesystem** is refused with `STORAGE_IO` (exit 7),
+the code the CLI path gave, and a remediation that says nothing is damaged, tells the user to free space (or
+an operator to name a folder on a drive with more room with `--session-root`) and to retry (since P14 PR 7,
+#266). On Unix `ingest` checks the source's size (plus a 16 MiB margin for the session's records) against the
+free space before it copies anything; a write that runs out of room during the copy (the only check on
+Windows, which reads no free space, L-061) gives the same answer. The desktop check is best effort: a
+filesystem whose space cannot be read, or that reports none available, is not checked (known limit L-061).
+The code stays because changing a published failure code is not additive within v1 (known limit L-127). A
+worker workspace keeps its 1 GiB reserve and its `RESOURCE_LIMIT` answer, unchanged.
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
 days from open. A worker workspace sets its own retention (P11, below). Close and
 cleanup return busy while active work holds the session. Expiry becomes visible at
@@ -977,7 +986,9 @@ expiry, since the mode names whose rules bound its life; `session renew` extends
 by the retention, and `session clean --expired` removes it once expired, as for any
 session. Before a source is copied into a workspace on Unix, the filesystem must have
 the source's size and a 1 GiB reserve free, else `RESOURCE_LIMIT`; Windows does not
-check (L-061).
+check (L-061). A desktop root (the CLI's default) keeps a 16 MiB margin instead of the
+reserve and answers `STORAGE_IO` with its own remediation (see "A source that does not fit
+the session root's filesystem" under `ingest`).
 
 **Weighted admission (X-07, ADR 0021 section 5a).** Every root (4 units for a desktop
 root) limits the work it runs at once by weight: a visual-candidate window's `FFmpeg`

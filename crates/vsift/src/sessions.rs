@@ -4,8 +4,8 @@
 use std::path::{Path, PathBuf};
 
 use vsift_application::{
-    ForegroundSessionPort, OpenSession, OpenSessionOutcome, OpenSessionRequest,
-    TranscriptImportRequest,
+    ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
+    SessionStorageError, TranscriptImportRequest,
 };
 use vsift_domain::{
     DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
@@ -789,15 +789,30 @@ where
     }
 }
 
-/// Checks a worker workspace's free-space reserve before the source is
-/// copied into it: the source's size (`incoming`, read from its metadata;
-/// the copy itself still refuses a file that grows) and the 1 GiB reserve
-/// must be available. A desktop root is not checked, as before P11.
+/// Checks the room for the source's copy before it starts, so a source that
+/// cannot fit is refused at once and not after it has filled the disk
+/// (#266): the source's size (`incoming`, read from its metadata; the copy
+/// itself still refuses a file that grows) and, in a worker workspace, the
+/// 1 GiB reserve must be available.
+///
+/// A worker workspace keeps its answer exactly as before (`RESOURCE_LIMIT`).
+/// A desktop root, the CLI path, keeps only a small margin for the session's
+/// own records and refuses with [`OpenSessionError::SourceNoRoom`], which has
+/// its own remediation and the CLI path's published code, `STORAGE_IO` (known
+/// limit L-127). The desktop check is best effort (known limit L-061).
 fn free_space_reserve(
     store: &FilesystemSessionStore,
     incoming: u64,
 ) -> Result<FreeSpaceReserveCheck, EngineError> {
     if store.workspace_policy().is_none() {
+        store
+            .ensure_room_for_copy(incoming)
+            .map_err(|error| match error {
+                SessionStorageError::CapacityExhausted => {
+                    EngineError::OpenSession(OpenSessionError::SourceNoRoom)
+                }
+                other => EngineError::Storage(other),
+            })?;
         return Ok(FreeSpaceReserveCheck::NotEnforced);
     }
     Ok(match store.ensure_free_space(incoming)? {
@@ -805,7 +820,6 @@ fn free_space_reserve(
         FreeSpaceCheck::NotEnforced => FreeSpaceReserveCheck::NotEnforced,
     })
 }
-
 /// The durability a new session publishes with: at least what the caller
 /// requires, and in a worker workspace exactly the workspace's policy, which
 /// the caller cannot lower (ADR 0020 D-3, ADR 0021 section 3).

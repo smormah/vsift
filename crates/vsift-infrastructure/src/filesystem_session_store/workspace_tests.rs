@@ -134,6 +134,34 @@ fn a_durable_workspace_fails_closed_off_the_qualified_profile() -> TestResult {
     Ok(())
 }
 
+/// #266: a desktop root is also refused a copy that cannot fit, before it
+/// starts: the source's size plus a small margin must be free, without the
+/// worker workspace's 1 GiB reserve. Windows reports that it did not check.
+#[test]
+fn a_copy_that_cannot_fit_is_refused_before_it_starts_on_unix_only() -> TestResult {
+    let fixture = Fixture::new()?;
+    let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+    let impossible = u64::MAX - super::root::COPY_ROOM_MARGIN_BYTES;
+    if cfg!(unix) {
+        assert_eq!(store.ensure_room_for_copy(0), Ok(FreeSpaceCheck::Enforced));
+        assert_eq!(
+            store.ensure_room_for_copy(impossible),
+            Err(SessionStorageError::CapacityExhausted)
+        );
+        // The reserve is not part of this check: a source that leaves less
+        // than 1 GiB free but fits is allowed here and refused there.
+        const { assert!(super::root::COPY_ROOM_MARGIN_BYTES < FREE_SPACE_RESERVE_BYTES) };
+    } else {
+        for incoming in [0, impossible] {
+            assert_eq!(
+                store.ensure_room_for_copy(incoming),
+                Ok(FreeSpaceCheck::NotEnforced)
+            );
+        }
+    }
+    Ok(())
+}
+
 /// The free-space reserve (P11 PR 2): on Unix a copy that would leave less
 /// than the reserve free is refused as a capacity error before anything is
 /// written; Windows reports that it did not check.
