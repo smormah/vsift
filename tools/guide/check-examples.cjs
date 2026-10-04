@@ -11,7 +11,8 @@
 //
 // Tools: FFmpeg and FFprobe must be on PATH (or managed). `--install-managed` runs the
 // binary's own `setup plan` and `setup install` into a shared state (Ubuntu 24.04 x64 only, a
-// download from the publishers). `--whisper <executable> --model <file>` registers your own
+// download from the publishers; a development build needs VSIFT_DEV_PUBLISHER_NETWORK=allow in the
+// environment, or it fails as "offline" before any connection). `--whisper <executable> --model <file>` registers your own
 // whisper.cpp and model instead. Examples marked `needs speech` run only when local speech
 // recognition is ready; `--require-speech` makes a machine without it a failure (CI).
 // Node.js 22, no dependency.
@@ -81,7 +82,13 @@ function installManaged(binary, sandbox) {
   const planFile = path.join(sandbox.dirs.cwd, 'plan.json');
   fs.writeFileSync(planFile, plan.stdout);
   const install = runProgram(binary, ['setup', 'install', '--plan', planFile, '--accept-plan', digest], sandbox);
-  if (install.status !== 0) throw new Error(`setup install failed: ${install.output}`);
+  if (install.status !== 0) {
+    // A development build resolves no publisher host: its download fails as "offline" at once.
+    const hint = /DOWNLOAD_FAILED/.test(install.output)
+      ? '\nIf this is a development (debug) build, it refuses to resolve publisher hosts; set VSIFT_DEV_PUBLISHER_NETWORK=allow, or use a release build.'
+      : '';
+    throw new Error(`setup install failed: ${install.output}${hint}`);
+  }
   log('managed tools installed');
 }
 

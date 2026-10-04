@@ -624,7 +624,8 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
   system temp folder) with its own `LOCALAPPDATA` and `XDG_DATA_HOME`, so your own VSift
   setup and sessions are never read or changed. `--install-managed` runs the binary's own
   `setup plan` and `setup install` into that folder, as the workflow does (Ubuntu 24.04 x64
-  only; it downloads the three reviewed tools from their publishers). Without it, FFmpeg and
+  only; it downloads the three reviewed tools from their publishers, and a development build refuses to
+  resolve publisher hosts unless `VSIFT_DEV_PUBLISHER_NETWORK=allow` is set, as the workflow does). Without it, FFmpeg and
   FFprobe must be on `PATH`. `--whisper <executable> --model <file>` registers your own
   whisper.cpp and model, and `--require-speech` turns a skipped speech block into a failure.
   On Windows keep `--work` short (for example `C:\vg`): the media tools fail on paths longer than

@@ -102,7 +102,13 @@ jobs:
       - name: Build the command-line tool
         run: cargo build --locked -p vsift-cli
 
+      # A development build resolves no publisher host unless it is told to (P13 PR 4's network guard,
+      # `crates/vsift-infrastructure/src/publisher_artifact_transfer.rs`); this variable is that opt-in, and
+      # only the managed install uses it. Building the release profile instead would take much longer
+      # for the same output.
       - name: Run the examples of every guide page
+        env:
+          VSIFT_DEV_PUBLISHER_NETWORK: allow
         run: >-
           node tools/guide/check-examples.cjs
           --binary target/debug/vsift
