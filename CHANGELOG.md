@@ -471,6 +471,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   exclude the CI rate (a 95% bound of about 1 in 19). The strays were seen on the maintainer's machine, not on
   a runner. "Mitigated" and not "fixed": a `StaleStages` after the repair is also what any file held open
   produces, so the test prints the stages and processes left when it fails, to tell that apart.
+- **The worker's duplicate window is documented as it is** (P14 PR 7, #286; documentation only, no behaviour
+  change). The P14 soak (12,000 requests with an operator's `session clean`) found duplicates that ran again and
+  conflicts that were accepted once a request's session had been cleaned and the workspace held 4,096 records.
+  The code (a record is pruned only when a new operation id arrives at 4,096 records, and then every record whose
+  session is gone) has always behaved so; two documents promised more. `cli-v1.md`'s "a redelivered request
+  therefore commits once" now says while the record is held, which is while its session exists or while fewer
+  than 4,096 records are held, and what happens after; the runbook's retention bullet, which said the retention
+  is the minimum dedupe window, now says it is not (its section 5 had been corrected by the P14 stress campaign).
+  The other statements that said or implied more are corrected too: the runbook's section 4 (replay) and section 5
+  (`One id opens at most one session`), the replay table's `nothing` and `an ended request` rows, and ADR 0021 has a
+  dated note that supersedes the unconditional reading of its section 4. Known limit L-063 records the R1 option (a
+  small ended-request stub kept beyond the session) as a decision for the maintainer.
 
 ## [0.1.0] - 2026-10-01
 
