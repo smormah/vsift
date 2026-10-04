@@ -93,7 +93,11 @@ vsift session clean --expired --json
 source bytes, committed generation, `process_crash_consistent` publication (or
 `os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
 Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
-supplied-transcript import is described in the next section.
+supplied-transcript import is described in the next section. The source must be an
+absolute local path to a regular file. A folder, a named pipe (FIFO) or another special
+file is refused as `INVALID_SOURCE` at once: since P14 PR 7 (#264) the file type is read
+from a handle opened without waiting, so a pipe that nothing writes to is a refusal, not a
+hang (it used to block `ingest` until the process was killed).
 Default sessions expire after 24 idle hours; renewals cannot extend beyond seven
 days from open. A worker workspace sets its own retention (P11, below). Close and
 cleanup return busy while active work holds the session. Expiry becomes visible at
