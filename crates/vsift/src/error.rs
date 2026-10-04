@@ -347,7 +347,11 @@ impl EngineError {
             Self::Storage(error) => storage_failure_code(*error),
             Self::OpenSession(error) => match error {
                 OpenSessionError::InvalidSource => FailureCode::InvalidSource,
-                OpenSessionError::SourceIo => FailureCode::StorageIo,
+                // A link is a source problem, but the published 0.1.0 code stays
+                // (v1 is additive only): the remediation says what happened (L-127).
+                OpenSessionError::SourceIo | OpenSessionError::SourceIsLink => {
+                    FailureCode::StorageIo
+                }
                 OpenSessionError::InvalidClock => FailureCode::InvalidArgument,
                 OpenSessionError::Storage(storage) => storage_failure_code(*storage),
                 OpenSessionError::SourceProbe(probe) => probe_failure_code(*probe),
@@ -367,7 +371,9 @@ impl EngineError {
             Self::ManagedLifecycle(refusal) => refusal.failure_code(),
             Self::ManagedStorageUnavailable
             | Self::WorkingDirectoryUnavailable
-            | Self::TranscriptSource(TranscriptSourceError::Io)
+            | Self::TranscriptSource(
+                TranscriptSourceError::Io | TranscriptSourceError::SymbolicLink,
+            )
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
             | Self::ArtifactDirectoryNotAbsolute
@@ -1087,6 +1093,9 @@ pub enum TranscriptSourceError {
     NotRegularFile,
     /// The file could not be read.
     Io,
+    /// The transcript's own final path component is a link, which is not
+    /// followed (#265); reported as the 0.1.0 code, `STORAGE_IO`.
+    SymbolicLink,
 }
 
 impl fmt::Display for TranscriptSourceError {
@@ -1095,6 +1104,7 @@ impl fmt::Display for TranscriptSourceError {
             Self::InvalidPath => "supplied transcript path is invalid",
             Self::NotRegularFile => "supplied transcript is not a regular file",
             Self::Io => "supplied transcript could not be read",
+            Self::SymbolicLink => "supplied transcript is a link, which is not followed",
         })
     }
 }
@@ -1528,6 +1538,21 @@ mod tests {
         assert_eq!(
             EngineError::OpenSession(OpenSessionError::InvalidClock).failure_code(),
             FailureCode::InvalidArgument
+        );
+        // #265: a link keeps the code 0.1.0 gave it (v1 is additive only); its
+        // remediation says what happened (L-127).
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceIsLink).failure_code(),
+            FailureCode::StorageIo
+        );
+        assert_eq!(
+            EngineError::TranscriptSource(super::TranscriptSourceError::SymbolicLink)
+                .failure_code(),
+            FailureCode::StorageIo
+        );
+        assert_eq!(
+            EngineError::OpenSession(OpenSessionError::SourceIo).failure_code(),
+            FailureCode::StorageIo
         );
     }
 

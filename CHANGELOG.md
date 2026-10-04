@@ -483,6 +483,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (`One id opens at most one session`), the replay table's `nothing` and `an ended request` rows, and ADR 0021 has a
   dated note that supersedes the unconditional reading of its section 4. Known limit L-063 records the R1 option (a
   small ended-request stub kept beyond the session) as a decision for the maintainer.
+- **`vsift ingest` of a symbolic link says what happened** (P14 PR 7, #265; found by the P14
+  malicious-media campaign on the published 0.1.0). The source was opened without following links,
+  which fails on a link with a platform error that reached the caller as `STORAGE_IO` and no
+  remediation, the answer of a disk that failed, and no document said how links are treated. The link
+  is now recognised from its directory entry before anything is opened (and again if the open fails, so
+  a name swapped for a link in between is classified the same way): nothing is read or copied, and the
+  answer carries a remediation that says links are not followed, no storage failed, and to name the file
+  the link points to. **The code stays `STORAGE_IO` (exit 7), the one 0.1.0 gave:** changing a
+  published failure code is not additive within v1, so the answer is fixed with its remediation and the
+  residual is known limit L-127 (revisit in v2). A supplied transcript that is a link gets the same
+  answer. Only the file's own final path component is checked: a link in a parent folder is followed.
+  The worker path is unchanged and answers a link in an input root `path_outside_input_root`
+  (`INVALID_ARGUMENT`); `cli-v1.md` states both. No field, code or schema changes; the remediation is
+  fixed text. Tests: the staging of a link and of a dangling link
+  (`a_link_is_refused_as_a_source_and_never_followed`), a device file and a UNIX socket (pinned, Unix
+  only), the engine's code table, the remediation text, and three binary tests (`source_link_cli_contract`:
+  `ingest <link>`, `ingest --transcript <link>` and a link in a parent folder, which is followed); on
+  the old code the first two see no remediation (checked on Windows; the campaign saw the bare
+  `STORAGE_IO` on Linux). A Windows account without the privilege to make links prints a skip; a hosted run
+  never skips.
 
 ## [0.1.0] - 2026-10-01
 

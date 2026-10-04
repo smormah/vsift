@@ -781,6 +781,7 @@ pub(crate) const fn snapshot_storage_error(error: &SourceError) -> SessionStorag
         | SourceError::TooLarge => SessionStorageError::IntegrityFailure,
         SourceError::InvalidPath
         | SourceError::NotRegularFile
+        | SourceError::SymbolicLink
         | SourceError::Deadline
         | SourceError::ChangedDuringStage
         | SourceError::Cancelled

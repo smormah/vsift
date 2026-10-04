@@ -1,6 +1,6 @@
 # Known limits register
 
-Date: 2026-10-04 (P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
+Date: 2026-10-04 (P14 PR 7, a link as the source keeps its published code and gains a remediation: L-127 rewritten as one entry for the CLI answers whose code only loosely describes the case; P14 PR 7, the dedupe window is stated as it is: L-063 updated; P14 PR 7, the flaky kill test: a provider a killed host leaves suspended, L-129 added and L-055 narrowed; P14 PR 7, session-root creation on Windows is repaired by a DACL read-back and narrowed (#206): L-123 closed and deleted, L-005 updated; P14 PR 7, the admission test no longer fails on its own bound: L-060 states the missing bound and L-123 narrows to #206; P14 PR 7, a named pipe with no writer is refused at once: L-127 narrowed; P14 PR 7b: the FFmpeg finding re-read with a test that sees release-branch cherry-picks, L-122 narrowed from 35 records to one tie by elimination and L-132 added (L-129 to L-131 are P14 PR 7's); 2026-10-03: P14 PR 4: the robustness campaigns, L-122, L-123, L-124, L-127 and L-128 added (L-121, L-125 and L-126 were taken meanwhile by other pull requests); P14 PR 7, a missing shared library is named: L-110 closed; P14 PR 7: a session root VSift did not create now explains itself, L-126 added; P14 PR 7, the realistic cold-agent settings: L-125 added, L-118 re-read; P14 PR 5: L-068 rescheduled to R1 and L-004 re-read, by the maintainer's decision E option 4; 2026-10-02: P14 PR 3, the journeys on the published binary: L-113 to L-116 added, L-035, L-042 and L-099 updated; the README's graphics: L-121 added; P14 PR 6: the trial harness's clean-install and cold-agent modes, hold-outs and usage capture, L-117 to L-120 added; the README front page: L-102 closed, the v0.1.0 release page edited; P14 PR 2: the published-artifact qualification, L-109 to L-112 added; P14 PR 1: the evidence ledger, the claims registry and their checks, L-101 to L-103 added; P14 PR 8, the stable path and `latest`: L-105, L-107 and L-108 added, L-102 narrowed to the published v0.1.0 page, L-103 updated for the delta record, L-097 updated; P14 plan, PR 0: L-042 re-read, the checkpoints' source-built binary noted, L-098 updated with Smart App Control read Off on the maintainer's machine; 2026-10-01: P13 PR 12: the 0.1.0 pre-release was published, so L-036 and L-096 are closed and deleted, L-037 and L-043 re-read at the packet's close, L-097 and L-098 updated, L-100 added; P13 PR 11: documentation and the qualification record, L-098 and L-099 added, L-035, L-036, L-037, L-042 and L-096 updated for the passing power-loss run and the closing sweep; P13 PR 7 follow-up: the power-loss campaign's first run and its verifier fix, L-037 updated; P13 PR 10: attestation and publish wiring, L-036 updated, L-096 and L-097 added; 2026-09-30: P13 PR 7: kill tests of the managed store, directory flushes and its power-loss campaign, L-037 narrowed; the compact re-run #222 met its target: L-085 closed, L-095 added for the review tier's A-09 blurred re-run (#224), L-007 updated; P13 PR 9: npm packages and their qualification, L-091 to L-093 added and L-036 updated; P13 PR 6: managed lifecycle, L-037 narrowed and L-087 measured, L-090 added; P13 PR 4: managed installation; P13 PR 8: release archives, L-089 added and L-036 updated; P00-P13 complete; P12 closed on its final trial round with the compact tier below target, L-085; SEC-T01's adversarial evidence deferred as technical debt, L-068; P13 PR 2b closed L-073 and rewrote L-016 and L-017).
 Status: current-state register. Every entry below is **pending maintainer review**.
 
 ## Purpose and how to use it
@@ -159,7 +159,7 @@ Each entry has these fields:
 | [L-124](#l-124) | Local recognition of a five-second range fails as a missing capability for three of ten valid speech clips | accuracy/ASR | medium | P14 | [#274](https://github.com/smormah/vsift/issues/274), [#277](https://github.com/smormah/vsift/issues/277) | open |
 | [L-125](#l-125) | The realistic cold setting cannot be fenced to the workspace, so Claude Code runs it only on an isolated machine; the two clients' cold baselines are not the same test | process/CI | medium | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-126](#l-126) | A session root VSift did not create is refused with `INTEGRITY_FAILURE`, which says stored data is damaged; only the remediation says what happened | contract/UX | low | unscheduled | none | accepted residual |
-| [L-127](#l-127) | The CLI's ingest treats two kinds of hostile source worse than the worker path does: a link is refused as a storage failure and a full disk is reported as corruption | security | low | P14 | [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) | open |
+| [L-127](#l-127) | Some CLI answers carry a published failure code that only loosely describes the case; the codes stay within v1 and the remediation says what happened | contract/UX | low | P14 | [#265](https://github.com/smormah/vsift/issues/265), [#266](https://github.com/smormah/vsift/issues/266) | open (the link is an accepted residual) |
 | [L-128](#l-128) | The fuzzing is one hour per target on shared hosted CPUs, nineteen of 31 targets were still finding coverage at the end, and three kinds of stored record have no target | security | low | P14 | [#17](https://github.com/smormah/vsift/issues/17) | accepted residual |
 | [L-129](#l-129) | On Windows, a host killed outright in the first instants of a provider's start leaves that provider suspended for good, and its stage cannot be deleted | security | low | unscheduled | [#253](https://github.com/smormah/vsift/issues/253) | accepted residual |
 | [L-132](#l-132) | The reviewed FFmpeg can only follow a month-end build of its publisher, and a new pin does not move existing installs; the refresh candidate of 2026-10-03 is a daily build, needs two reviewed bounds raised and adds three libraries to the recipe | security | medium | P14 | [#272](https://github.com/smormah/vsift/issues/272) | open |
@@ -3268,31 +3268,44 @@ that week.**
 
 ### L-127
 
-**The CLI's ingest treats two kinds of hostile source worse than the worker path does: a link is refused as a storage failure and a full disk is reported as corruption.**
+**Some CLI answers carry a published failure code that only loosely describes the case; the codes stay within v1 and the remediation says what happened.**
 
 - **What:** the P14 malicious-media campaign ran 96 generated inputs through 251 operations of
   the published 0.1.0 in a no-network, read-only-root, memory- and process-bounded container.
-  Every other input was refused or processed inside its bound with a typed code. Two are not:
-  `ingest` of a **symbolic link** answers `STORAGE_IO` instead of `INVALID_SOURCE`, and no
-  document says how links are treated ([#265](https://github.com/smormah/vsift/issues/265));
-  `ingest` of a **600 MiB file into a root of 256 MiB** fails after 5 s as `INTEGRITY_FAILURE`
-  where the job path refuses early as `RESOURCE_LIMIT`
-  ([#266](https://github.com/smormah/vsift/issues/266)). A worker job request refuses both at once
-  with a typed code. (A third, a **named pipe with no writer** that made `ingest` wait for ever,
-  is fixed: [#264](https://github.com/smormah/vsift/issues/264), `CHANGELOG.md`.)
+  Every other input was refused or processed inside its bound with a typed code. The cases below
+  are the ones whose published code says something other than what happened. Each answer's
+  remediation text, which is not part of the code contract, says what did happen.
+  - **A symbolic link as the source, or as a supplied transcript** ([#265](https://github.com/smormah/vsift/issues/265)).
+    The answer is `STORAGE_IO` (exit 7), as in 0.1.0, which gave it with no remediation. Since
+    P14 PR 7 it carries one: the link is not followed, nothing was read or copied, no storage
+    failed, name the file itself. Only the file's own final path component is checked; a link in a
+    parent folder is followed, as the operating system resolves any path. A UNIX socket is in the
+    same position (the open fails, `STORAGE_IO`, the generic storage remediation) and a test pins
+    it. A worker request answers a link in an input root `path_outside_input_root`
+    (`INVALID_ARGUMENT`), a different question that is unchanged.
+  - **`ingest` of a 600 MiB file into a root of 256 MiB** fails after 5 s as `INTEGRITY_FAILURE`,
+    where the job path refuses early as `RESOURCE_LIMIT` ([#266](https://github.com/smormah/vsift/issues/266)).
+    Open; this is a wrong answer, not a loose one, until its fix lands.
+  - (A **named pipe with no writer** that made `ingest` wait for ever is fixed and is not a
+    case of this limit: [#264](https://github.com/smormah/vsift/issues/264), `CHANGELOG.md`.)
 - **Evidence:** `P14 malicious media` run 37136669473 (`hostile-summary.md`);
-  [`p14-qualification.md`](p14-qualification.md) section 18.
-- **Impact:** the two misclassifications send an agent to investigate storage or the source when
-  the cause is the path or the disk's size. Nothing wrong is stored or shown as evidence, and the link's target was
-  never read.
-- **Why:** the CLI path maps a refused link to a storage error and does not apply the free-space
-  check the job path applies (not traced).
-- **Mitigation:** use the worker path for paths you do not control; keep untrusted sources off
-  links.
-- **Next step:** give links one documented answer and share the free-space check; a regression
-  test per case.
+  [`p14-qualification.md`](p14-qualification.md) section 18; the CLI test
+  `source_link_cli_contract` and the staging tests in `p04_source.rs`.
+- **Impact:** a script or an agent that keys on the code alone reads "storage" for a case that is
+  the path it was given. The remediation (and the message) carry the cause. Nothing wrong is
+  stored or shown as evidence, and the link's target was never read.
+- **Why:** changing the code of a published answer is not additive within v1 (the rule of
+  [L-126](#l-126)): `STORAGE_IO` for a link, which 0.1.0 answered, cannot become `INVALID_SOURCE`
+  without breaking a consumer written against 0.1.0. The maintainer decided on 2026-10-04 to keep
+  the published codes and fix the answers with remediation text.
+- **Mitigation:** the remediation text; [`cli-v1.md`](../contracts/cli-v1.md) states the link
+  rule; use the worker path for paths you do not control.
+- **Next step:** at the next major contract version answer a link `INVALID_SOURCE`, and re-read
+  every case of this entry for the code it should have had. This limit is not closed by the
+  fix of any one case.
 - **Owner:** P14. **Issue:** [#265](https://github.com/smormah/vsift/issues/265),
-  [#266](https://github.com/smormah/vsift/issues/266). **Status:** open. **Review:** pending.
+  [#266](https://github.com/smormah/vsift/issues/266). **Status:** open (the link case is an
+  accepted residual until v2). **Review:** pending.
 
 ### L-128
 

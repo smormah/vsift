@@ -223,7 +223,10 @@ pub use setup::{
     ConfiguredModelResponse, ConfiguredSelectionResponse, DependencyLookup, SavedSetupPlan,
     SetupCheckResponse, SetupPlanResponse, explicit_path_option,
 };
-pub use storage::{PrivateFolder, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary};
+pub use storage::{
+    PrivateFolder, SOURCE_IS_LINK_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+    non_private_folder_summary,
+};
 pub use stream::{
     EventKind, EvidenceEventResponse, EvidenceRecordType, EvidenceStream, TranscriptEvidenceStream,
     TranscriptStreamData,
