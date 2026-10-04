@@ -511,7 +511,7 @@ stored file; no injected command ran; the largest memory peak was 809 MiB. Three
 plan's rule (a named pipe hangs `ingest`, a link is refused as `STORAGE_IO`, a full disk is reported as
 `INTEGRITY_FAILURE`; #264 to #266, L-127). **SEC-04, SEC-07, SEC-08, SEC-09 and SEC-20:** a cancel of a 30-minute recognition left no descendant ten seconds later; a soak of 1,000 mixed requests with 5 SIGKILLs of the worker container and 168 redeliveries left every committed session readable, every bundle valid and the workspace cleanable, with coordinator memory at most 14.6 MiB and no growth; 6,700 stress
 repetitions per system found a Windows race in session-root creation (#206 reproduced, 7 of 1,500) and a
-weighted-admission child that was never granted a reservation (#271, 2 of 200), both L-123; the process
+weighted-admission child that was never granted a reservation (#271, 2 of 200), both found by that run (L-123, since closed); the process
 supervisor (#128) did not fail in 3,000 repetitions per system. **SEC-21:** 31 fuzz targets ran an hour each
 (3.68 billion runs) with no crash; three stored-record kinds still have no target (L-128). **R-SEC03:** the
 first scan reading flagged the reviewed FFmpeg snapshot as lacking 17 upstream fixes (#272); its re-read on

@@ -55,7 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   record the first R-SEC03 reading: Cargo, alerts, actions, whisper.cpp, Node.js and the SBOM clean; the
   reviewed FFmpeg snapshot lacks the upstream fixes for 17 recorded vulnerabilities and 18 more give no
   fix reference (#272). **Ledger:** RQ-07, RQ-09 and RQ-12 `passed`; RQ-08, RQ-10 and RQ-13 `failed`
-  with their issues. **Known limits:** L-122 (the FFmpeg snapshot), L-123 (the Windows races), L-124
+  with their issues. **Known limits:** L-122 (the FFmpeg snapshot), L-123 (the Windows races, since closed), L-124
   (a five-second recognition range fails for three clips, #274, #277), L-127 (the CLI and hostile
   sources), L-128 (the depth and gaps of the fuzzing). Results: `docs/planning/p14-qualification.md`
   section 18; how to dispatch each campaign: `docs/development.md`.
@@ -405,7 +405,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   makes, while the invariant the test exists for (the units held never exceed the capacity) was never
   violated. The child now keeps trying until its first grant, for at most 60 s (the longest of the 400 hosted runs took 14 s in all), and the capacity and
   ledger assertions are unchanged; the limits register states that a waiter's wait is bounded only by its
-  own wait and deadline, and L-123 narrows to the root-creation failure (#206).
+  own wait and deadline, and L-123 narrows to the root-creation failure (#206), which the next entry
+  addresses and whose limit it closes.
+- **On Windows, a session root created while another process was creating its parent could be left without an
+  entry for the current user and refused as "session storage root permissions are not private": narrowed**
+  (P14 PR 7, #206, found in CI and reproduced by the P14 stress campaign: 7 of 1,500 repetitions on a
+  hosted runner, threads as well as processes). **What was seen**, from diagnostics on a hosted
+  `windows-2025` runner (runs 37165032188 and 37166883594: 5 failures in each of two parallel runs of 3,000
+  repetitions, none in a sequential run of 3,000): the root's DACL held only LocalSystem and Administrators,
+  and the validator refused it (the creator's own check, and every adopter's), after which the creator rolled
+  the root back. Making a directory private adds an explicit full-control entry for the current user,
+  LocalSystem and Administrators and then removes the inherited copies; in the failing runs the DACL still
+  held **only inherited entries** after the adds, so removing the user's inherited copy removed the user's only
+  entry (that first removal also made the others explicit, so nothing else was removed). **Mechanism: a
+  hypothesis, not shown.** The failing runs are the ones where processes also race to create the root's missing
+  parent, and the library always submits an explicit entry, so the inherited-only state looks like a write from
+  the parent's own restriction landing on the child between the adds and the removals. **Change:** the
+  restriction reads the DACL back after each pass and repeats (at most four passes) until every trusted
+  principal has an explicit allow entry and nothing is inherited or names anyone else, and fails with
+  `NotPrivate` if it cannot; the session-root and export callers now keep the private-folder remediation for
+  that (they reported every failure as a generic storage failure). **What is not excluded:** a write that lands
+  after the final read-back; known limit L-005 says so. The ordering logic is separate from the Windows calls,
+  so a model of the observed behaviour tests it on every platform. On a real Windows directory a test injects
+  the rewrite between the adds and the removals (`icacls /reset`, independent of the code under test): one
+  pass, which is all the old code made, leaves no entry for the user (and the old code returned success), the
+  repeated restriction repairs it in two passes. **Hosted result after the change:** 0 failures in 3,000
+  sequential, 0 in 3,000 parallel and 0 in 6,000 parallel repetitions (runs 37168127630 and 37168936692); these
+  show no failure, not that the repair fired (the injection test shows that). No behaviour or contract change
+  elsewhere. Known limit L-123 is closed and deleted (its admission half was #271); L-005 is updated.
 
 ## [0.1.0] - 2026-10-01
 
