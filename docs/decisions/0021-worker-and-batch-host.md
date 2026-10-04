@@ -595,6 +595,33 @@ container job. The profile stays a qualification target, and the adversarial evi
 [L-068](../planning/known-limits.md#l-068)) moves to R1. Section 10's SEC-T01 amendment of
 2026-09-28 stands for P11; this note adds that P14 does not close it.
 
+## Note, 2026-10-04 (P14 PR 7, #277): a failed open removes the registration it made
+
+Two sentences of section 2's *Ingest* step (PR 3 notes) are superseded; the text above is kept
+as it was written. It says the copy's admission is taken before the session is registered, "so a
+busy root is retried without leaving a registration per try", and that a retry which records a new
+session id leaves "the abandoned registration" to "normal cleanup".
+
+1. **Opens in one workspace contend on the root's initialization lock, and a refusal can come after
+   the registration.** Registering a session and creating its first generation each hold the
+   root-wide initialization lock for a moment, and both only try it. Two requests of a batch that
+   open at the same instant therefore meet `BUSY`: at registration, which leaves nothing, or at the
+   initialization that follows it, which left a registration with no session. The step is retried as
+   section 5 says, and each retry opens a new session. At `--concurrency 4` about one request in
+   five is retried (measured, [L-131](../planning/known-limits.md#l-131)); more admission slots do
+   not change it, because admission is not what is refused. This stays as it is.
+2. **The abandoned registration is no longer left for a cleanup a day later.** An ingest whose open
+   fails after it registered its session removes the registration, and the session folder it began,
+   at once. It uses the store routine `session clean` uses (`abandon_unpublished_open`), under a
+   narrower rule: only the registration whose marker names this very operation, only a session that
+   was never published, the same exclusive lifetime lock and the same bounded, owned-tree-checked
+   removal, and no deletion by path. A busy root is retried a few times within a bound. If the
+   removal still fails the request reports its original failure, unchanged, and the registration is
+   left for `session clean` as before. A retried ingest therefore still opens a new session per try,
+   but the failed tries leave nothing, and one key still ends with one session. The same change makes
+   a registered session that never published answer `INVALID_ARGUMENT` ("not published") to
+   `session status`, `renew` and `close`, not `STORAGE_IO`.
+
 ## Consequences
 
 - The worker request and result are public v1 contracts before any command uses them,

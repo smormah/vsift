@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 
 use vsift_application::{
     ForegroundSessionPort, OpenSession, OpenSessionOutcome, OpenSessionRequest,
-    TranscriptImportRequest,
+    SessionStorageError, TranscriptImportRequest,
 };
 use vsift_domain::{
-    DurabilityRequirement, SessionId, SessionLifetime, SessionPhase, SourceId, StorageGeneration,
-    TranscriptRevision, WorkspacePolicy,
+    DurabilityRequirement, OperationId, SessionId, SessionLifetime, SessionPhase, SourceId,
+    StorageGeneration, TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
@@ -560,8 +560,12 @@ impl Engine {
             }
             None => None,
         };
-        let (session, transcript) = match contained {
-            None => open_session(store, open, import.as_ref(), &request.cancellation).await?,
+        let registered = (
+            open.session_id.clone(),
+            open.initialize_operation_id.clone(),
+        );
+        let opened = match contained {
+            None => open_session(store, open, import.as_ref(), &request.cancellation).await,
             Some((file, admission)) => {
                 open_session(
                     ContainedSourceStore::new(store, file, admission),
@@ -569,7 +573,17 @@ impl Engine {
                     import.as_ref(),
                     &request.cancellation,
                 )
-                .await?
+                .await
+            }
+        };
+        let (session, transcript) = match opened {
+            Ok(opened) => opened,
+            Err(error) => {
+                // The failed open's registration, and the session folder it
+                // began, are removed now rather than left for a day (#277).
+                self.abandon_failed_open(&root, &registered.0, &registered.1)
+                    .await;
+                return Err(error);
             }
         };
         Ok(IngestOutcome {
@@ -577,6 +591,46 @@ impl Engine {
             transcript,
             free_space,
         })
+    }
+
+    /// Removes the registration, and the session folder it began, that one open
+    /// that failed before publishing its first generation created (#277).
+    ///
+    /// A failed open used to leave both for `session clean` to collect a day
+    /// later. Under load that is routine: a worker request that finds the
+    /// root's initialization lock busy after it registered opens a new session
+    /// for its retry and left the failed attempt's registration behind (one
+    /// extra `initializing` session in about one batch of twenty requests at
+    /// concurrency four). The store removes only a
+    /// session that was never published and whose registration names **this**
+    /// operation ([`FilesystemSessionStore::abandon_unpublished_open`]), through
+    /// the routine `session clean` uses. A busy root is retried a few times
+    /// within a bound; any other failure, or a root that cannot be reopened,
+    /// leaves the registration for `session clean` exactly as before, and the
+    /// caller keeps its original failure: this never reports and never masks.
+    async fn abandon_failed_open(
+        &self,
+        root: &Path,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+    ) {
+        const ATTEMPTS: u32 = 8;
+        let Ok(Some(store)) = self.open_session_store(root, SessionRootProvisioning::ExistingOnly)
+        else {
+            return;
+        };
+        let Ok(now) = self.now_unix_seconds() else {
+            return;
+        };
+        for attempt in 1..=ATTEMPTS {
+            match store.abandon_unpublished_open(session_id, operation_id, now) {
+                Err(SessionStorageError::Busy) if attempt < ATTEMPTS => {
+                    tokio::time::sleep(std::time::Duration::from_millis(5 * u64::from(attempt)))
+                        .await;
+                }
+                _ => return,
+            }
+        }
     }
 
     /// Lists one bounded page of the session index.
@@ -627,7 +681,7 @@ impl Engine {
     pub fn session_status(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let status = store.session_status(session_id)?;
+        let status = published_status(&store, session_id)?;
         Ok(SessionSnapshot::observe(&status, now))
     }
 
@@ -639,14 +693,14 @@ impl Engine {
     pub fn renew_session(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let current = store.session_status(session_id)?;
+        let current = published_status(&store, session_id)?;
         store.renew_session(
             session_id,
             &self.new_operation_id()?,
             current.generation(),
             now,
         )?;
-        let status = store.session_status(session_id)?;
+        let status = published_status(&store, session_id)?;
         Ok(SessionSnapshot::observe(&status, now))
     }
 
@@ -658,9 +712,9 @@ impl Engine {
     pub fn close_session(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let current = store.session_status(session_id)?;
+        let current = published_status(&store, session_id)?;
         store.close_session(session_id, &self.new_operation_id()?, current.generation())?;
-        let status = store.session_status(session_id)?;
+        let status = published_status(&store, session_id)?;
         Ok(SessionSnapshot::observe(&status, now))
     }
 
@@ -763,6 +817,33 @@ impl Engine {
     }
 }
 
+/// Reads a session's committed status, telling a session that is not
+/// published from a failing disk (#277).
+///
+/// A session id with no folder in the root (never opened, still opening, its
+/// opening was interrupted and left only its registration, or cleaned
+/// already) used to answer `STORAGE_IO` with no remediation, the answer
+/// of a disk that failed, which sends an agent to retry or to look at its
+/// storage (or a bare `INVALID_ARGUMENT` when the folder existed without a
+/// first generation). It is now [`EngineError::SessionNotPublished`]
+/// (`INVALID_ARGUMENT`) with a remediation. A failure that is not that,
+/// including a real I/O error, is unchanged.
+pub(crate) fn published_status(
+    store: &FilesystemSessionStore,
+    session_id: &SessionId,
+) -> Result<SessionStatus, EngineError> {
+    match store.session_status(session_id) {
+        Ok(status) => Ok(status),
+        Err(error @ (SessionStorageError::Io | SessionStorageError::StateConflict)) => {
+            match store.indexed_session_status(session_id) {
+                Ok(None) => Err(EngineError::SessionNotPublished),
+                Ok(Some(status)) => Ok(status),
+                Err(_) => Err(error.into()),
+            }
+        }
+        Err(other) => Err(other.into()),
+    }
+}
 /// Registers, stages and activates one session through `port`, importing
 /// the supplied transcript in the same generation when there is one.
 async fn open_session<Port>(

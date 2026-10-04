@@ -168,8 +168,8 @@ pub enum OpenSessionError {
     /// An assembled transcript revision violated an invariant (internal fault).
     TranscriptInvalid(TranscriptRevisionError),
     /// The caller cancelled while the source was copied; nothing was
-    /// activated, and the unactivated registration is cleaned like any
-    /// interrupted open.
+    /// activated, and the unactivated registration is removed like that of any
+    /// failed open.
     Cancelled,
 }
 
@@ -214,7 +214,11 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
     /// # Errors
     ///
     /// Unsupported durable requests fail before registering or mutating state.
-    /// Source failure may leave a registered initial session for bounded cleanup.
+    /// A failure after the session was registered leaves the registration, and
+    /// the initial session folder if one was made, for the caller to remove: the
+    /// engine does so at once with
+    /// `FilesystemSessionStore::abandon_unpublished_open` (#277), and a caller
+    /// that cannot leaves them for `session clean` after the idle interval.
     pub async fn execute(
         &self,
         request: OpenSessionRequest,

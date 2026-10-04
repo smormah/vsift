@@ -28,6 +28,7 @@ use vsift::{
     TranscriptImportError, TranscriptProvenance, TranscriptQuery, TranscriptRejection,
     TranscriptSegment, UserConfigurationLocation,
 };
+use vsift_infrastructure::FilesystemSessionStore;
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -283,14 +284,137 @@ async fn an_unusable_probe_leaves_no_open_session() -> TestResult {
         result.map_err(|error| error.failure_code()).map(|_| ()),
         Err(FailureCode::MissingCapability)
     );
+    // The session it began is gone too (#277), not left initializing.
     let listed = harness.engine.list_sessions(None)?;
-    assert!(
-        listed
-            .entries()
-            .iter()
-            .all(|entry| matches!(entry, SessionListEntry::Initializing(_))),
-        "{listed:?}"
+    assert!(listed.entries().is_empty(), "{listed:?}");
+    Ok(())
+}
+
+/// #277: a registration whose opening never finished (a crash leaves one; a
+/// failed open used to) is listed as initializing, and every command that
+/// names it answers `SessionNotPublished` (`INVALID_ARGUMENT`), as does an id
+/// that was never registered: not `STORAGE_IO`, the answer of a disk that
+/// failed. A real I/O failure is not touched by this.
+#[tokio::test]
+async fn a_session_that_never_finished_opening_is_not_published_not_a_disk_failure() -> TestResult {
+    let harness = Harness::new()?;
+    let registered = register_foreign_session(&harness, FOREIGN_SESSION)?;
+
+    let listed = harness.engine.list_sessions(None)?;
+    let [SessionListEntry::Initializing(initializing)] = listed.entries() else {
+        return Err(format!("expected one initializing session: {listed:?}").into());
+    };
+    assert_eq!(initializing, &registered);
+    let never_registered = SessionId::parse("ses_00000000000000000000000000000001")?;
+    for session in [initializing, &never_registered] {
+        let status = harness.engine.session_status(session);
+        assert_eq!(status, Err(EngineError::SessionNotPublished), "{session:?}");
+        assert_eq!(
+            status.map_err(|error| error.failure_code()).map(|_| ()),
+            Err(FailureCode::InvalidArgument)
+        );
+        assert_eq!(
+            harness.engine.renew_session(session).map(|_| ()),
+            Err(EngineError::SessionNotPublished)
+        );
+        assert_eq!(
+            harness.engine.close_session(session).map(|_| ()),
+            Err(EngineError::SessionNotPublished)
+        );
+    }
+    Ok(())
+}
+
+/// A session some other operation registered and has not finished opening.
+const FOREIGN_SESSION: &str = "ses_000000000000000000000000000000ff";
+
+/// Registers `session` as another opener would, in the harness's root, and
+/// lets go of the registration's marker hold as a crashed opener's would be.
+fn register_foreign_session(harness: &Harness, session: &str) -> Result<SessionId, Box<dyn Error>> {
+    let store = FilesystemSessionStore::provision_default(harness.root.path("sessions"))?;
+    let session = SessionId::parse(session)?;
+    let foreign_opener = OperationId::parse("op_000000000000000000000000000000ff")?;
+    drop(store.register_session(&session, &foreign_opener, T0)?);
+    Ok(session)
+}
+
+/// The registration markers under the harness's session root.
+fn registration_markers(harness: &Harness) -> Result<usize, Box<dyn Error>> {
+    let index = harness.root.path("sessions").join("session-index");
+    let mut markers = 0;
+    for bucket in fs::read_dir(index)? {
+        let bucket = bucket?;
+        if bucket.file_type()?.is_dir() {
+            markers += fs::read_dir(bucket.path())?.count();
+        }
+    }
+    Ok(markers)
+}
+
+/// #277: a source that is not media is refused after its session was
+/// registered, and the open that made the registration removes it at once:
+/// nothing is listed (not even as initializing), no registration or session
+/// folder remains, and the next `session clean` has nothing to collect. Before
+/// the fix each failed ingest left one registration for a day.
+#[tokio::test]
+async fn a_failed_ingest_leaves_nothing_behind() -> TestResult {
+    let harness = Harness::new()?;
+    let not_media = harness.sidecar("not-media.mp4", b"plain text, not a video")?;
+    for _ in 0..3 {
+        let failed = harness
+            .engine
+            .ingest(IngestRequest {
+                source: not_media.clone(),
+                transcript: None,
+                cancellation: Cancellation::new(),
+                durability: vsift::DurabilityRequirement::Ephemeral,
+            })
+            .await;
+        assert_eq!(
+            failed.map_err(|error| error.failure_code()).map(|_| ()),
+            Err(FailureCode::InvalidSource)
+        );
+    }
+
+    let listed = harness.engine.list_sessions(None)?;
+    assert!(listed.entries().is_empty(), "{listed:?}");
+    assert_eq!(registration_markers(&harness)?, 0);
+    assert_eq!(
+        fs::read_dir(harness.root.path("sessions").join("sessions"))?.count(),
+        0
     );
+    Ok(())
+}
+
+/// #277: the removal is the failed open's own. Another opener's registration
+/// (a different operation, in the same root, not finished) survives a failed
+/// ingest untouched and is still listed as initializing.
+#[tokio::test]
+async fn a_failed_ingest_never_removes_another_openers_registration() -> TestResult {
+    let harness = Harness::new()?;
+    let foreign = register_foreign_session(&harness, FOREIGN_SESSION)?;
+    let not_media = harness.sidecar("not-media.mp4", b"plain text, not a video")?;
+
+    let failed = harness
+        .engine
+        .ingest(IngestRequest {
+            source: not_media,
+            transcript: None,
+            cancellation: Cancellation::new(),
+            durability: vsift::DurabilityRequirement::Ephemeral,
+        })
+        .await;
+    assert_eq!(
+        failed.map_err(|error| error.failure_code()).map(|_| ()),
+        Err(FailureCode::InvalidSource)
+    );
+
+    let listed = harness.engine.list_sessions(None)?;
+    assert_eq!(
+        listed.entries(),
+        [SessionListEntry::Initializing(foreign)].as_slice()
+    );
+    assert_eq!(registration_markers(&harness)?, 1);
     Ok(())
 }
 

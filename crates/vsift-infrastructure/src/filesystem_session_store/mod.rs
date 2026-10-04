@@ -13,6 +13,8 @@
 //! recoverable jobs with their chunk checkpoints (`jobs`, `job_records`) and
 //! worker request records (`worker_requests`).
 
+#[cfg(test)]
+mod abandon_tests;
 mod bundle;
 mod chain;
 mod cleanup;

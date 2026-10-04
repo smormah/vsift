@@ -50,13 +50,13 @@ use vsift_contract::{
     JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
     MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
     MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
-    TerminalEventResponse, UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION,
-    UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION,
-    WORKSPACE_NOT_DURABLE_REMEDIATION, WORKSPACE_POLICY_MISMATCH_REMEDIATION,
-    WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary, local_asr_verification_summary,
-    managed_lifecycle_remediation, media_tool_verification_summary, non_private_folder_summary,
-    search_query_rejection_summary, transcript_rejection_summary,
+    NO_VIDEO_STREAM_REMEDIATION, OperationResponse, SESSION_NOT_PUBLISHED_REMEDIATION,
+    STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION, TerminalEventResponse, UNKNOWN_JOB_REMEDIATION,
+    UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION, UNPINNED_MODEL_REMEDIATION,
+    VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
+    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
+    local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
+    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -751,6 +751,7 @@ fn worker_remediation(error: &EngineError) -> Option<String> {
         EngineError::SessionRoot(SessionRootError::OwnershipMarkerMissing) => {
             UNOWNED_SESSION_ROOT_REMEDIATION
         }
+        EngineError::SessionNotPublished => SESSION_NOT_PUBLISHED_REMEDIATION,
         EngineError::WorkspaceNotDurable => WORKSPACE_NOT_DURABLE_REMEDIATION,
         EngineError::AdmissionExceedsCapacity { .. } => ADMISSION_CAPACITY_REMEDIATION,
         EngineError::AdmissionBusy { .. } => ADMISSION_BUSY_REMEDIATION,

@@ -169,18 +169,31 @@ impl Layout {
 
     /// The sessions of the workspace that opened.
     fn opened_sessions(engine: &Engine) -> Built<usize> {
+        Ok(Self::session_counts(engine)?.0)
+    }
+
+    /// The registered sessions that never opened (still `initializing`).
+    fn initializing_sessions(engine: &Engine) -> Built<usize> {
+        Ok(Self::session_counts(engine)?.1)
+    }
+
+    /// The sessions of the workspace that opened, and those that did not.
+    fn session_counts(engine: &Engine) -> Built<(usize, usize)> {
         let mut opened = 0;
+        let mut initializing = 0;
         let mut cursor = None;
         loop {
             let page = engine.list_sessions(cursor)?;
-            opened += page
-                .entries()
-                .iter()
-                .filter(|entry| matches!(entry, SessionListEntry::Indexed(_)))
-                .count();
+            for entry in page.entries() {
+                match entry {
+                    SessionListEntry::Indexed(_) => opened += 1,
+                    SessionListEntry::Initializing(_) => initializing += 1,
+                    SessionListEntry::Unavailable { .. } => {}
+                }
+            }
             match page.next_cursor() {
                 Some(next) => cursor = Some(next),
-                None => return Ok(opened),
+                None => return Ok((opened, initializing)),
             }
         }
     }
@@ -655,6 +668,111 @@ async fn two_batches_share_one_workspace() -> TestResult {
         }
     }
     assert_eq!(Layout::opened_sessions(&first_engine)?, 11);
+    Ok(())
+}
+
+/// #277: a request that fails to open (a source that is not media, refused
+/// after its session was registered) leaves nothing behind, at once: no
+/// `initializing` session and no registration or folder. It never touches the
+/// sessions of the requests beside it, which opened and are published.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_request_that_fails_to_open_leaves_nothing_and_touches_no_other_session() -> TestResult {
+    let layout = Layout::new()?;
+    let engine = layout.init(4)?;
+    fs::write(
+        layout.inputs().join("videos/not-media.mp4"),
+        b"plain text, not a video",
+    )?;
+    layout.write_batch(&[
+        close_only(1),
+        close_only(2).replace("videos/talk.mp4", "videos/not-media.mp4"),
+        close_only(3),
+        close_only(4).replace("videos/talk.mp4", "videos/not-media.mp4"),
+    ])?;
+    let (summary, _) = run_collecting(&engine, &layout, 2, bounded(30_000)?).await?;
+    let value = summary_value(&summary?)?;
+    assert_eq!(value["counts"]["complete"], 2, "{value}");
+    assert_eq!(value["counts"]["failed"], 2, "{value}");
+    assert_eq!(item(&value, 2)?["code"], "INVALID_SOURCE", "{value}");
+    assert_eq!(item(&value, 4)?["code"], "INVALID_SOURCE", "{value}");
+
+    assert_eq!(Layout::opened_sessions(&engine)?, 2);
+    assert_eq!(Layout::initializing_sessions(&engine)?, 0);
+    let registrations = layout.workspace().join("session-index");
+    assert_eq!(
+        files_under(&registrations)?,
+        2,
+        "one registration for each session that opened, none for the two that failed"
+    );
+    assert_eq!(
+        fs::read_dir(layout.workspace().join("sessions"))?.count(),
+        2
+    );
+    Ok(())
+}
+
+/// The files, at any depth, under `directory`.
+fn files_under(directory: &std::path::Path) -> Built<usize> {
+    let mut files = 0;
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            files += files_under(&entry.path())?;
+        } else {
+            files += 1;
+        }
+    }
+    Ok(files)
+}
+
+/// How many rounds the opt-in check of #277 runs: the hosted evidence ran 40.
+const ROUNDS_OF_277: u32 = 40;
+
+/// #277, the opt-in reproduction: 20 requests at concurrency 4 in a fresh
+/// workspace, 40 times. Registering a session and creating its first
+/// generation each try the root's initialization lock, so two requests that
+/// open at the same instant meet `BUSY`; one that meets it at the
+/// initialization, after its registration, used to leave that registration
+/// behind and retry with a new session. On the hosted Linux runner about one
+/// round in four then listed 21 sessions, one of them `initializing` until
+/// `session clean` collected it a day later. Now a failed open removes the
+/// registration it made, so every round lists exactly 20 sessions that
+/// opened and none that did not. Opt-in because it runs 800 requests:
+///
+/// `cargo test -p vsift --locked --test engine_batch -- --ignored batches_at_concurrency_four`
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "opt-in: 40 rounds of 20 requests at concurrency 4 (#277)"]
+async fn batches_at_concurrency_four_leave_no_initializing_session() -> TestResult {
+    let mut retried_in_all = 0_usize;
+    for round in 1..=ROUNDS_OF_277 {
+        let layout = Layout::new()?;
+        let engine = layout.init(4)?;
+        let lines: Vec<String> = (1..=20).map(close_only).collect();
+        layout.write_batch(&lines)?;
+        let (summary, events) = run_collecting(&engine, &layout, 4, bounded(30_000)?).await?;
+        let value = summary_value(&summary?)?;
+        assert_eq!(value["counts"]["complete"], 20, "round {round}: {value}");
+        assert_eq!(
+            Layout::session_counts(&engine)?,
+            (20, 0),
+            "round {round}: sessions that opened and sessions left initializing"
+        );
+        // A request whose ingest step waited retried a busy step: the
+        // measured cost of the lock contention (L-131).
+        let mut retried = 0;
+        for line in 1..=20 {
+            let result = result_of(&events, line)?.ok_or("no result")?;
+            if result["steps"][0]["admission_wait_ms"].as_u64() > Some(0) {
+                retried += 1;
+            }
+        }
+        println!("round {round}: {retried} of 20 requests retried a busy step");
+        retried_in_all += retried;
+    }
+    println!(
+        "{retried_in_all} of {} requests retried a busy step",
+        ROUNDS_OF_277 * 20
+    );
     Ok(())
 }
 

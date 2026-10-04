@@ -9,7 +9,7 @@ use vsift_domain::{OperationId, SessionId, SessionLifetime, SessionPhase};
 
 use super::map_committed_io;
 use super::{
-    COORDINATION_DIRECTORY, ChainCheck, CleanOutcome, FilesystemSessionStore,
+    COORDINATION_DIRECTORY, ChainCheck, CleanOutcome, CommittedManifest, FilesystemSessionStore,
     GENERATIONS_DIRECTORY, INITIAL_GENERATION_FILE, INITIALIZATION_LOCK, SESSION_INDEX_DIRECTORY,
     SESSIONS_DIRECTORY, SessionIndexMarker, chain::read_committed_manifest, map_lock_error,
     map_storage_io, open_regular_file, session_bucket, stored::read_versioned_json_file,
@@ -31,7 +31,54 @@ impl FilesystemSessionStore {
         now_unix_seconds: u64,
         dry_run: bool,
     ) -> Result<CleanOutcome, SessionStorageError> {
+        self.clean_session_scoped(session_id, now_unix_seconds, dry_run, None)
+    }
+
+    /// Removes the registration, and the initialized session folder if there is
+    /// one, that one failed open created, **at once**, without waiting for the
+    /// idle interval (#277).
+    ///
+    /// This is [`Self::clean_session`] under a narrower rule, not another
+    /// deleter: the same claim, the same exclusive lifetime lock, the same
+    /// bounded and owned-tree-checked quarantine removal. It removes only what
+    /// `operation_id`, the operation that registered the session, made: the
+    /// registration marker must name that operation, so a marker another open
+    /// wrote is [`CleanOutcome::Ineligible`]. It removes only a session that
+    /// was **never published**: a session whose first generation was activated
+    /// is always [`CleanOutcome::Ineligible`]. A busy session, an unreadable
+    /// marker or any failure is an error and removes nothing; the caller keeps
+    /// its original failure and the registration is left for `session clean`
+    /// after the idle interval, as before.
+    ///
+    /// # Errors
+    ///
+    /// Busy, corrupt, future-version, or inaccessible sessions are never removed.
+    pub fn abandon_unpublished_open(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        now_unix_seconds: u64,
+    ) -> Result<CleanOutcome, SessionStorageError> {
+        self.clean_session_scoped(session_id, now_unix_seconds, false, Some(operation_id))
+    }
+
+    /// [`Self::clean_session`], or with `abandon` the rule of
+    /// [`Self::abandon_unpublished_open`].
+    fn clean_session_scoped(
+        &self,
+        session_id: &SessionId,
+        now_unix_seconds: u64,
+        dry_run: bool,
+        abandon: Option<&OperationId>,
+    ) -> Result<CleanOutcome, SessionStorageError> {
         let index_claim = self.claim_registration(session_id)?;
+        if let Some(operation) = abandon {
+            // Only what this very open registered: its marker names it.
+            match &index_claim {
+                Some((_, _, marker)) if marker.operation_id == operation.as_str() => {}
+                _ => return Ok(CleanOutcome::Ineligible),
+            }
+        }
         self.revalidate_root()?;
         let sessions = self
             .root
@@ -49,8 +96,9 @@ impl FilesystemSessionStore {
             let Some((bucket, _marker_lock, marker)) = index_claim else {
                 return Err(SessionStorageError::IntegrityFailure);
             };
-            if now_unix_seconds.saturating_sub(marker.registered_at_unix_seconds)
-                < SessionLifetime::IDLE_SECONDS
+            if abandon.is_none()
+                && now_unix_seconds.saturating_sub(marker.registered_at_unix_seconds)
+                    < SessionLifetime::IDLE_SECONDS
             {
                 return Ok(CleanOutcome::Ineligible);
             }
@@ -74,28 +122,14 @@ impl FilesystemSessionStore {
         let committed = read_committed_manifest(&session, session_id, ChainCheck::Full)?;
         let eligible = if existing_quarantine {
             true
-        } else if let Some(record) = committed.manifest.lifecycle {
-            let status = record.to_status(session_id.clone(), committed.manifest.generation)?;
-            status.phase() == SessionPhase::Closed || status.lifetime().expired(now_unix_seconds)
         } else {
-            if committed.manifest.generation != 0 {
-                return Err(SessionStorageError::IntegrityFailure);
-            }
-            let generations = session
-                .open_dir_nofollow(GENERATIONS_DIRECTORY)
-                .map_err(map_committed_io)?;
-            let initial = open_regular_file(&generations, INITIAL_GENERATION_FILE, false)
-                .map_err(map_committed_io)?;
-            let modified = initial
-                .metadata()
-                .map_err(map_storage_io)?
-                .modified()
-                .map_err(map_storage_io)?
-                .into_std()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| SessionStorageError::IntegrityFailure)?
-                .as_secs();
-            now_unix_seconds.saturating_sub(modified) >= SessionLifetime::IDLE_SECONDS
+            session_is_eligible(
+                &session,
+                session_id,
+                &committed,
+                now_unix_seconds,
+                abandon.is_some(),
+            )?
         };
         if !eligible {
             return Ok(CleanOutcome::Ineligible);
@@ -184,6 +218,54 @@ impl FilesystemSessionStore {
         )
         .map_err(map_lock_error)
     }
+}
+
+/// Whether a session folder that is not already quarantined may be cleaned
+/// now: a closed or expired published session, or a first generation that was
+/// never published and is either idle for the full interval or, for
+/// `abandon`, the failed open's own (#277). A published session is never
+/// eligible under `abandon`.
+fn session_is_eligible(
+    session: &Dir,
+    session_id: &SessionId,
+    committed: &CommittedManifest,
+    now_unix_seconds: u64,
+    abandon: bool,
+) -> Result<bool, SessionStorageError> {
+    if let Some(record) = &committed.manifest.lifecycle {
+        // A published session is never an abandoned open.
+        if abandon {
+            return Ok(false);
+        }
+        let status = record
+            .clone()
+            .to_status(session_id.clone(), committed.manifest.generation)?;
+        return Ok(
+            status.phase() == SessionPhase::Closed || status.lifetime().expired(now_unix_seconds)
+        );
+    }
+    if committed.manifest.generation != 0 {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    if abandon {
+        // Never published: the open that made it has failed.
+        return Ok(true);
+    }
+    let generations = session
+        .open_dir_nofollow(GENERATIONS_DIRECTORY)
+        .map_err(map_committed_io)?;
+    let initial = open_regular_file(&generations, INITIAL_GENERATION_FILE, false)
+        .map_err(map_committed_io)?;
+    let modified = initial
+        .metadata()
+        .map_err(map_storage_io)?
+        .modified()
+        .map_err(map_storage_io)?
+        .into_std()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| SessionStorageError::IntegrityFailure)?
+        .as_secs();
+    Ok(now_unix_seconds.saturating_sub(modified) >= SessionLifetime::IDLE_SECONDS)
 }
 
 #[derive(Default)]

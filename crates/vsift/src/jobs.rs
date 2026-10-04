@@ -487,6 +487,6 @@ fn session_open(
     session: &SessionId,
     now: u64,
 ) -> Result<bool, EngineError> {
-    let status = store.session_status(session)?;
+    let status = crate::sessions::published_status(store, session)?;
     Ok(status.phase() == SessionPhase::Open && !status.lifetime().expired(now))
 }

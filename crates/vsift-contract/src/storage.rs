@@ -66,9 +66,35 @@ pub fn non_private_folder_summary(folder: PrivateFolder) -> String {
 /// can act on it without parsing free text. It never contains a path.
 pub const UNOWNED_SESSION_ROOT_REMEDIATION: &str = "The VSift session_root folder holds no VSift ownership marker, so VSift did not create it and did not use it. Nothing was changed: VSift never adopts a folder it did not create. It is the disposable-session folder: the directory given with --session-root, or VSift-sessions under LOCALAPPDATA on Windows, Library/Caches on macOS, or the XDG cache directory on Linux. Name a --session-root path that does not exist yet and VSift creates it, private to you; or, if that folder holds nothing you need, delete it yourself and retry.";
 
+/// Remediation when no published session has the given id (#277): it was never
+/// opened, is still being opened by another command, its opening was
+/// interrupted (a crash) and left only a registration, or it was cleaned
+/// already. A failed opening removes its own registration at once.
+///
+/// The code is `INVALID_ARGUMENT`; the answer used to be `STORAGE_IO`, which says
+/// a disk failed. The first sentence is stable and the text names neither a
+/// path nor an id.
+pub const SESSION_NOT_PUBLISHED_REMEDIATION: &str = "No published session has this id. The id may be mistyped, the session may have expired or been cleaned, or its opening may not have finished: a command still running, or one that was interrupted, leaves a registration with no session behind it (session list shows it as initializing), which session clean removes once it is a day old. Nothing is wrong with the storage. Check the id with session list, or open a new session with ingest.";
+
 #[cfg(test)]
 mod tests {
-    use super::{PrivateFolder, UNOWNED_SESSION_ROOT_REMEDIATION, non_private_folder_summary};
+    use super::{
+        PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
+        non_private_folder_summary,
+    };
+
+    #[test]
+    fn the_not_published_remediation_is_stable_bounded_and_says_the_storage_is_fine() {
+        let text = SESSION_NOT_PUBLISHED_REMEDIATION;
+        assert!(
+            text.starts_with("No published session has this id."),
+            "{text}"
+        );
+        assert!(text.contains("Nothing is wrong with the storage"));
+        assert!(text.contains("session list") && text.contains("session clean"));
+        assert!(text.len() <= 1024, "{} bytes", text.len());
+        assert!(!text.contains('\\') && !text.contains(":/"), "{text}");
+    }
 
     #[test]
     fn the_unowned_root_remediation_is_stable_bounded_and_pathless() {
