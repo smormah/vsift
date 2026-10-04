@@ -43,13 +43,16 @@ pub fn private_markers(layout: &TrialLayout, user_names: &[String]) -> PrivateMa
         trial.replace('\\', "/"),
         normalise_path(layout.trial()),
     ];
-    strings.extend(
-        user_names
-            .iter()
-            .filter(|name| name.chars().count() >= 3)
-            .map(|name| name.to_lowercase()),
-    );
-    PrivateMarkers { strings }
+    let names: Vec<String> = user_names
+        .iter()
+        .filter(|name| name.chars().count() >= 3)
+        .map(|name| name.to_lowercase())
+        .collect();
+    strings.extend(names.iter().cloned());
+    PrivateMarkers {
+        strings,
+        user_names: names,
+    }
 }
 
 /// The operating system user names from the environment.

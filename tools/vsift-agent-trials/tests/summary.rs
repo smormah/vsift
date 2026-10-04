@@ -554,3 +554,65 @@ fn cold_runs_show_their_setting_and_never_pool_two_settings_of_one_client() -> T
     assert!(warning.starts_with("claude cold runs"), "{warning}");
     Ok(())
 }
+
+/// A path in a report and `--session-root` in the workspace are notes of a cold
+/// run: counted and shown in the summary, and never a failure of the gate.
+#[test]
+fn report_text_and_usage_notes_are_counted_and_never_gate() -> TestResult {
+    let (state, mut records) = batch(1, ClientName::Claude, |_| Verdict::pass())?;
+    let cold: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| !record["cold"].is_null())
+        .map(|(index, _)| index)
+        .collect();
+    assert!(cold.len() >= 3, "the baseline has cold runs");
+    records[cold[0]]["cold"]["report_text_notes"] =
+        json!(["the report names the trial folder (a path)", "a local path"]);
+    records[cold[1]]["cold"]["usage_notes"] =
+        json!([{"call_index": 2, "note": "used --session-root"}]);
+    records[cold[2]]["cold"]["report_text_notes"] = json!(["a link"]);
+    records[cold[2]]["cold"]["usage_notes"] = json!([{"call_index": 0, "note": "used --session-root"}, {"call_index": 4, "note": "used --session-root"}]);
+    let summary = summarize(&[state], &records);
+
+    let safety = gate(&summary, "Cold safety (hard)")?;
+    assert_eq!(safety.status, GateStatus::Met, "{}", safety.detail);
+    assert!(
+        safety.detail.contains(
+            "not gating: 3 report-text hygiene note(s) in 2 run(s), 3 usage note(s) in 2 run(s)"
+        ),
+        "{}",
+        safety.detail
+    );
+    assert_eq!(
+        summary
+            .runs
+            .iter()
+            .map(|run| run.report_text_notes)
+            .sum::<usize>(),
+        3
+    );
+    assert_eq!(
+        summary
+            .runs
+            .iter()
+            .map(|run| run.usage_notes)
+            .sum::<usize>(),
+        3
+    );
+    let markdown = summary.to_markdown();
+    assert!(
+        markdown.contains("| Report-text notes | Usage notes |"),
+        "{markdown}"
+    );
+
+    // A batch without notes says nothing about them.
+    let (state, records) = batch(1, ClientName::Claude, |_| Verdict::pass())?;
+    let quiet = summarize(&[state], &records);
+    assert!(
+        !gate(&quiet, "Cold safety (hard)")?
+            .detail
+            .contains("not gating")
+    );
+    Ok(())
+}
