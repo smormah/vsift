@@ -81,10 +81,10 @@ scenarios and settings (`freeze write`). **Before PR 12:** register the two stab
 - **Open:** #17 (P14), #219, #224 (L-095), #188 (SEC-T01, R1), #232, #246 (deferred), #258, #263, #272; #128
   (watch: not reproduced in 3,000 per system); flaky tests #253 (Windows kill test, mitigated) and #268 (macOS
   SIGTERM test): comment with the run link, rerun the job; #170-#178 (register); #159, #150, #147.
-- **Opt-in real-tool paths** (`--ignored`) run a Cargo-built binary unless `VSIFT_E2E_BINARY` names an
-  installed one (L-042); a failed run is a finding: issue first, then rerun. **P14 tools:**
-  `tools/p14-published/test/`, `tools/p14-campaigns/test/`. **Campaigns:** never on the maintainer's machine
-  (L-056, L-057) except the agent batches; dispatch as `docs/development.md` says.
+- **Opt-in real-tool paths** (`--ignored`) run a Cargo-built binary unless `VSIFT_E2E_BINARY` names an installed
+  one (L-042); a failed run is a finding: issue first, then rerun. A stage that tests a fix newer than the published
+  version skips below its first version only (L-115). **P14 tools:** `tools/p14-published/test/`, `tools/p14-campaigns/test/`.
+  **Campaigns:** never on the maintainer's machine (L-056, L-057) except the agent batches; see `docs/development.md`.
 
 ## Guardrails
 

@@ -9,11 +9,17 @@
 
 mod published_binary;
 
-use std::{env, error::Error, ffi::OsString, path::Path};
+use std::{
+    env,
+    error::Error,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use published_binary::{
     BINARY_VARIABLE, BinaryError, COMMIT_VARIABLE, Expectation, Selected, VERSION_VARIABLE,
-    VersionLine, check_version_line, parse_version_output, read_override, select,
+    VersionLine, check_version_line, is_older, override_older_than, parse_version_output,
+    read_override, select,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -292,6 +298,88 @@ fn both_forms_of_the_version_line_parse() -> TestResult {
     };
     assert!(check_version_line("vsift 0.2.0-rc.1 (011bc4da1af6)\n", &expectation).is_ok());
     Ok(())
+}
+
+/// An accepted override that printed `line`.
+fn published(line: &str) -> Selected {
+    Selected::Override {
+        path: PathBuf::from("vsift"),
+        version_line: line.to_owned(),
+        sha256: String::new(),
+    }
+}
+
+/// The version gate of a stage that asserts a behaviour fixed after 0.1.0 (the
+/// range cut mid-speech, #274, first in 0.2.0-rc.1): the published 0.1.0 is
+/// told to skip it, and every binary that has the fix is not.
+#[test]
+fn only_a_published_binary_older_than_the_first_version_with_a_fix_may_skip_its_stage() -> TestResult
+{
+    const FIRST: &str = "0.2.0-rc.1";
+    let older = |line: &str| override_older_than(&published(line), FIRST);
+    assert_eq!(
+        older("vsift 0.1.0 (011bc4da1af6)")?,
+        Some(String::from("0.1.0"))
+    );
+    assert_eq!(
+        older("vsift 0.2.0-beta.3 (011bc4da1af6)")?,
+        Some(String::from("0.2.0-beta.3"))
+    );
+    // The first version that has the fix, a later candidate, the release and
+    // any later version run the stage and are held to it.
+    for line in [
+        "vsift 0.2.0-rc.1 (011bc4da1af6)",
+        "vsift 0.2.0-rc.2 (011bc4da1af6)",
+        "vsift 0.2.0-rc.10 (011bc4da1af6)",
+        "vsift 0.2.0 (011bc4da1af6)",
+        "vsift 0.2.1 (011bc4da1af6)",
+        "vsift 0.10.0 (011bc4da1af6)",
+        "vsift 1.0.0 (011bc4da1af6)",
+    ] {
+        assert_eq!(older(line)?, None, "{line} must not skip the stage");
+    }
+    // A build from source has the code under test, whatever version it prints.
+    assert_eq!(override_older_than(&Selected::CargoBuilt, FIRST)?, None);
+    // A first version that is not a version is refused, not read as "never".
+    assert!(matches!(
+        override_older_than(&published("vsift 0.1.0 (011bc4da1af6)"), "later"),
+        Err(BinaryError::ExpectationMalformed { .. })
+    ));
+    assert!(matches!(
+        override_older_than(&published("vsift 0.1.0 (011bc4da1af6) x"), FIRST),
+        Err(BinaryError::VersionOutputMalformed(_))
+    ));
+    Ok(())
+}
+
+#[test]
+fn versions_are_ordered_as_semver_orders_them() {
+    let ascending = [
+        "0.1.0",
+        "0.2.0-1",
+        "0.2.0-alpha",
+        "0.2.0-rc.1",
+        "0.2.0-rc.2",
+        "0.2.0-rc.10",
+        "0.2.0-rc.10.1",
+        "0.2.0",
+        "0.2.1",
+        "0.10.0",
+        "1.0.0",
+    ];
+    for (index, version) in ascending.iter().enumerate() {
+        for (other_index, other) in ascending.iter().enumerate() {
+            assert_eq!(
+                is_older(version, other),
+                Some(index < other_index),
+                "{version} against {other}"
+            );
+        }
+    }
+    for malformed in ["", "0.1", "v0.1.0", "0.1.0-", "1.2.3.4", "latest"] {
+        assert_eq!(is_older(malformed, "0.1.0"), None, "{malformed:?}");
+        assert_eq!(is_older("0.1.0", malformed), None, "{malformed:?}");
+    }
 }
 
 /// The real `vsift --version`, run through the module's own runner: the
