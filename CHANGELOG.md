@@ -301,6 +301,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   reading for the candidate and the stable. Known limit L-122 is narrowed to that one tie and L-132 added; the ledger's RQ-13 stays `failed` with a prior note; the addendum of the scan
   reading, the two P06 candidate records, the provisioning review, `p14-qualification.md` section 19
   and ADR 0023 and 0024 have dated notes.
+- **`vsift --help` now carries a worked example, "A typical investigation", and says that `--session-root` and
+  `--host-isolation` are for operators** (P14 PR 7; help text only, no JSON contract, schema or
+  behaviour changes). Batch 1 of the agent trials (a baseline on the published 0.1.0) showed cold agents
+  (a CLI on `PATH`, no skill) asking for pages larger than an investigation needs and using
+  `--session-root`, which a cold agent could only read as an ordinary global option. The top-level help,
+  in both `-h` and `--help`, now ends with the commands a first investigation runs in order (including
+  `--transcript <file>` and `--transcript-offset <microseconds>` for a supplied SRT or WebVTT file, and
+  `transcript retranscribe` when local speech recognition is set up), the `--limit` and `--max-frames`
+  ranges (1 to 100) with a suggestion to ask for small pages, the operator-only note, and how to read a
+  failure (its code, the `Fix:` and `Run:` lines, `error.remediation`). The two global options' own help
+  lines say they are for operators and that an agent leaves them out. No cap or refusal is added: the CLI
+  accepts what 0.1.0 accepted, and the suggested numbers are the skill's budget profiles, which the
+  CLI does not know. A unit test parses every command the example names (a renamed option fails it until
+  the text is updated), another checks the stated ranges against the parser, another ties the printed defaults and ceilings (20 and 100 a page, 12 and 100 a burst) to the engine's own constants, and a binary test reads
+  both help forms.
 
 ### Fixed
 
