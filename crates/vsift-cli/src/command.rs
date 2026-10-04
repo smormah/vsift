@@ -10,6 +10,58 @@ use vsift::{
 };
 use vsift_contract::CommandName;
 
+/// The top-level help's worked example: what a first investigation runs, in
+/// order, for a reader (often an agent) that has only this help (P14 PR 7).
+///
+/// Help text only, not a JSON contract. Every line that starts with `vsift`
+/// or a step number followed by `vsift` is parsed by a test, so a command,
+/// option or argument renamed in the parser fails that test until this text is
+/// updated. clap does not wrap it (the `wrap_help` feature is off), so the
+/// lines are written at the width they print.
+pub(crate) const TYPICAL_INVESTIGATION_HELP: &str = "\
+A typical investigation (every command takes --json):
+  1. vsift setup check --json
+       What is installed. Report anything missing to the user; never install it yourself.
+  2. vsift ingest <video> --json
+       Copies the video into a private session and prints its id (ses_...). The original
+       file is never changed. If the user gave you a transcript file (.srt or .vtt), add
+         --transcript <file>   (and --transcript-offset <microseconds> if its times are
+                                shifted from the video's)
+       Without one, speech is found only when local speech recognition is set up (setup
+       check says); then run:
+         vsift transcript retranscribe <session> --json
+       It can take minutes. If recognition is not set up there is no speech evidence: say
+       so; do not install anything.
+  3. vsift search <session> --query <words> --limit 20 --json
+     vsift transcript get <session> --from <us> --to <us> --limit 20 --json
+       What was said. Every time is microseconds from the start of the video.
+  4. vsift candidates <session> --from <us> --to <us> --limit 20 --json
+       Moments where the picture changes.
+  5. vsift frame get <session> --at <us> --json
+     vsift frame burst <session> --from <us> --to <us> --max-frames 4 --json
+       Look at specific moments; each frame is an image file to open.
+  6. vsift handoff check --json
+       Only when you were asked for a vsift-handoff report: reads the draft from standard
+       input and lists what to fix before you send it. A plain-text report needs no check
+       (a draft without a vsift-handoff block is reported as missing one).
+  7. vsift session close <session> --json
+       When you are done.
+
+Ask for small pages. --limit takes 1 to 100 (default 20) and --max-frames 1 to 100
+(default 12), more than an investigation needs: reading 20 results at a time and looking
+at a handful of frames keeps it cheap and inside any budget. Ask for more only when the
+user does.
+
+--session-root and --host-isolation are for operators who run VSift as a service for other
+people (a worker host). They are not part of an investigation: leave them out. The default
+private per-user location is the right one; an agent never needs to name, search for or
+create another folder. If the default location cannot be used, the error says why: report it
+to the user instead of choosing a folder.
+
+When a command fails, read its code and remediation (the \"Fix:\" and \"Run:\" lines, or
+error.remediation with --json) and do what they say. A missing tool is the user's to install;
+an installation plan is theirs to accept.";
+
 /// Complete public R0 command parser.
 #[derive(Debug, Parser)]
 #[command(
@@ -18,6 +70,7 @@ use vsift_contract::CommandName;
     // (build.rs, ADR 0023).
     version = env!("VSIFT_VERSION_TEXT"),
     about = "Sift technical video into agent-ready evidence",
+    after_help = TYPICAL_INVESTIGATION_HELP,
     disable_help_subcommand = true
 )]
 pub(crate) struct Cli {
@@ -29,11 +82,13 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_enum)]
     pub events: Option<EventFormat>,
 
-    /// Explicit private disposable-session root; defaults to the per-user cache.
+    /// For operators who run a worker host; an agent leaves it out. Explicit
+    /// private disposable-session root; defaults to the per-user cache.
     #[arg(long, global = true)]
     pub session_root: Option<PathBuf>,
 
-    /// Isolation to run under; strict-linux is attested before any work.
+    /// For operators who run a worker host; an agent leaves it out. Isolation
+    /// to run under; strict-linux is attested before any work.
     #[arg(long, global = true, value_enum, default_value_t)]
     pub host_isolation: HostIsolationArgument,
 
@@ -899,10 +954,10 @@ pub(crate) struct JobIdentityArguments {
 mod tests {
     use std::collections::BTreeSet;
 
-    use clap::CommandFactory;
+    use clap::{CommandFactory, Parser};
     use vsift_contract::CommandName;
 
-    use super::Cli;
+    use super::{Cli, TYPICAL_INVESTIGATION_HELP};
 
     /// Every operation identifier the parser can produce: the command path of
     /// each leaf subcommand joined with `.`, as `CommandName` documents it.
@@ -934,6 +989,199 @@ mod tests {
             .collect();
 
         assert_eq!(published, parsed_operation_identifiers());
+    }
+
+    /// The command lines of [`TYPICAL_INVESTIGATION_HELP`], with each
+    /// placeholder replaced by a value of the right kind.
+    fn help_command_lines() -> Vec<Vec<String>> {
+        const SUBSTITUTIONS: [(&str, &str); 6] = [
+            ("<video>", "video.mp4"),
+            ("<session>", "ses_0123456789abcdef"),
+            ("<us>", "1000"),
+            ("<words>", "error"),
+            ("<file>", "walkthrough.srt"),
+            ("<microseconds>", "500000"),
+        ];
+        TYPICAL_INVESTIGATION_HELP
+            .lines()
+            .map(str::trim)
+            .filter_map(|line| {
+                // A step line is "N. vsift ...", a second command of a step is
+                // "vsift ..."; an option offered inside prose is not a command.
+                let command = match line.split_once(". vsift ") {
+                    Some((step, rest)) if step.chars().all(|c| c.is_ascii_digit()) => {
+                        format!("vsift {rest}")
+                    }
+                    _ => line
+                        .strip_prefix("vsift ")
+                        .map(|rest| format!("vsift {rest}"))?,
+                };
+                Some(
+                    command
+                        .split_whitespace()
+                        .map(|word| {
+                            SUBSTITUTIONS
+                                .iter()
+                                .fold(word.to_owned(), |word, (from, to)| word.replace(from, to))
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    /// The worked example in the top-level help names only commands and options
+    /// the parser accepts, with the arguments it shows.
+    #[test]
+    fn every_command_the_typical_investigation_names_parses() {
+        let lines = help_command_lines();
+        assert!(
+            lines.len() >= 8,
+            "the example lost commands: {} lines found",
+            lines.len()
+        );
+        for line in lines {
+            let parsed = Cli::try_parse_from(&line);
+            assert!(parsed.is_ok(), "{line:?}: {:?}", parsed.err());
+        }
+    }
+
+    /// The example also names the optional transcript options, the retranscribe
+    /// command and the operator-only options; each is real.
+    #[test]
+    fn the_options_the_example_mentions_in_prose_are_real_options() {
+        for line in [
+            [
+                "vsift",
+                "ingest",
+                "video.mp4",
+                "--transcript",
+                "walkthrough.srt",
+                "--transcript-offset",
+                "500000",
+            ]
+            .as_slice(),
+            [
+                "vsift",
+                "transcript",
+                "retranscribe",
+                "ses_0123456789abcdef",
+            ]
+            .as_slice(),
+            [
+                "vsift",
+                "--session-root",
+                "/x",
+                "--host-isolation",
+                "process-only",
+                "session",
+                "list",
+            ]
+            .as_slice(),
+        ] {
+            let parsed = Cli::try_parse_from(line);
+            assert!(parsed.is_ok(), "{line:?}: {:?}", parsed.err());
+        }
+        for needle in [
+            "--transcript <file>",
+            "--transcript-offset <microseconds>",
+            "vsift transcript retranscribe <session> --json",
+            "--session-root and --host-isolation are for operators",
+        ] {
+            assert!(TYPICAL_INVESTIGATION_HELP.contains(needle), "{needle}");
+        }
+    }
+
+    /// The numbers the example states are the parser's own.
+    #[test]
+    fn the_ranges_the_example_states_are_the_parsers_ranges() {
+        let accepts = |arguments: &[&str]| Cli::try_parse_from(arguments).is_ok();
+        let session = "ses_0123456789abcdef";
+        for limit in ["1", "100"] {
+            assert!(accepts(&[
+                "vsift", "search", session, "--query", "x", "--limit", limit
+            ]));
+            assert!(accepts(&[
+                "vsift",
+                "transcript",
+                "get",
+                session,
+                "--from",
+                "0",
+                "--to",
+                "1",
+                "--limit",
+                limit
+            ]));
+            assert!(accepts(&[
+                "vsift",
+                "candidates",
+                session,
+                "--from",
+                "0",
+                "--to",
+                "1",
+                "--limit",
+                limit
+            ]));
+            assert!(accepts(&[
+                "vsift",
+                "frame",
+                "burst",
+                session,
+                "--from",
+                "0",
+                "--to",
+                "1",
+                "--max-frames",
+                limit
+            ]));
+        }
+        for limit in ["0", "101"] {
+            assert!(!accepts(&[
+                "vsift", "search", session, "--query", "x", "--limit", limit
+            ]));
+            assert!(!accepts(&[
+                "vsift",
+                "transcript",
+                "get",
+                session,
+                "--from",
+                "0",
+                "--to",
+                "1",
+                "--limit",
+                limit
+            ]));
+            assert!(!accepts(&[
+                "vsift",
+                "candidates",
+                session,
+                "--from",
+                "0",
+                "--to",
+                "1",
+                "--limit",
+                limit
+            ]));
+            assert!(!accepts(&[
+                "vsift",
+                "frame",
+                "burst",
+                session,
+                "--from",
+                "0",
+                "--to",
+                "1",
+                "--max-frames",
+                limit
+            ]));
+        }
+        assert!(TYPICAL_INVESTIGATION_HELP.contains("--limit takes 1 to 100 (default 20)"));
+        assert!(TYPICAL_INVESTIGATION_HELP.contains(
+            "--max-frames 1 to 100
+(default 12)"
+        ));
     }
 }
 
