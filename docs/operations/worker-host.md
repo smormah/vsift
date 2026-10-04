@@ -95,8 +95,9 @@ vsift --session-root /var/lib/vsift/workspace session init-workspace \
   `CPUQuota=800%` use 8. A request whose work is heavier than the whole capacity fails
   `RESOURCE_LIMIT` before any tool runs. `--concurrency` of a batch may not exceed it.
 - **Retention.** Sessions live the retention after they open or are renewed, at most
-  720 hours in all. It is also the minimum window in which a redelivered request is
-  recognised as a duplicate (section 5).
+  720 hours in all. It is **not** the window in which a redelivered request is recognised
+  as a duplicate: that lasts while the session exists or while the workspace holds fewer
+  than 4,096 request records, whichever is longer (section 5).
 - The policy is immutable: running the same `init-workspace` again answers
   `already_initialized`; another policy is refused. To change it, drain the host and
   create a new workspace.

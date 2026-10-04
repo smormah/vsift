@@ -690,13 +690,21 @@ the workspace under its operation id:
 | a request another process runs now | `BUSY`, exit 4, `retry_after_ms` 2000 | `IDEMPOTENCY_CONFLICT` |
 | an unfinished request (interrupted, cancelled, or failed with `BUSY`, `DEADLINE_EXCEEDED`, `STORAGE_IO` or `CANCELLED`) | continue from the first unfinished step (`attempt` + 1) | `IDEMPOTENCY_CONFLICT` |
 
-A redelivered request therefore commits once: one session per operation id, and every
-delivery after the first recorded result returns exactly that result. Spacing, member
+A redelivered request therefore commits once while its record is held: one session per
+operation id, and every delivery after the first recorded result returns exactly that
+result. **The record is held while its session exists, or while the workspace holds fewer
+than 4,096 records; it is not held for the session's retention** (see the 4,096 limit
+below and the runbook's "Duplicates and operation ids"). Spacing, member
 order and an omitted or `null` deadline do not change the digest. When an ended
 request's result cannot be recorded, its work is committed but the result is not
 acknowledged: `STORAGE_IO` (exit 7) with the result as `data`; delivering the request
-again records and returns it. A workspace keeps at most 4,096 records; records of
-sessions that are gone are pruned first, else `RESOURCE_LIMIT` (L-063).
+again records and returns it. A workspace keeps at most 4,096 records. Only when it holds
+that many and a request with a new operation id arrives, the records whose session no
+longer exists (and that no process holds) are all pruned, and with none to prune the new
+request is `RESOURCE_LIMIT` (L-063). Once a record is pruned, the same id and request runs
+again (a new session, `replayed: false`) and the same id with another request is accepted,
+not `IDEMPOTENCY_CONFLICT`: a supervisor that redelivers after the session was cleaned must
+not rely on a replay or a conflict (#286).
 
 **Retries and deadline (X-09).** A step that meets contention (`BUSY`: an admission
 unit, a busy session or writer, the same job elsewhere) is tried again after a

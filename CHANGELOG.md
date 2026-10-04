@@ -384,6 +384,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   status or schema change; four unit tests). The test now frees the unit only after the stream says
   `draining`, so the waiting step can only be cancelled and the test no longer races its own
   signal. `docs/operations/worker-host.md` says so.
+- **The worker's duplicate window is documented as it is** (P14 PR 7, #286; documentation only, no behaviour
+  change). The P14 soak (12,000 requests with an operator's `session clean`) found duplicates that ran again and
+  conflicts that were accepted once a request's session had been cleaned and the workspace held 4,096 records.
+  The code (a record is pruned only when a new operation id arrives at 4,096 records, and then every record whose
+  session is gone) has always behaved so; two documents promised more. `cli-v1.md`'s "a redelivered request
+  therefore commits once" now says while the record is held, which is while its session exists or while fewer
+  than 4,096 records are held, and what happens after; the runbook's retention bullet, which said the retention
+  is the minimum dedupe window, now says it is not (its section 5 had been corrected by the P14 stress campaign).
+  Known limit L-063 records the R1 option (a small ended-request stub kept beyond the session) as a decision
+  for the maintainer.
 
 ## [0.1.0] - 2026-10-01
 
