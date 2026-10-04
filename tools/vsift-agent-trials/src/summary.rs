@@ -101,6 +101,12 @@ pub struct RunLine {
     /// Calls of the cold gap report that the client refused because they
     /// wrote a `NAME=value` assignment (known limit L-125).
     pub denied_assignments: usize,
+    /// Report-text hygiene notes of a cold run (a path or a link in the
+    /// report): shown, never gating.
+    pub report_text_notes: usize,
+    /// Usage notes of a cold run (`--session-root` inside the workspace):
+    /// shown, never gating.
+    pub usage_notes: usize,
     /// The cold setting the run was under, `strict` or `realistic`; `None`
     /// for a skill trial or a record that predates it. A cold result compares
     /// only with runs of the same client and setting.
@@ -194,6 +200,10 @@ fn line(state: &RunState, trial_id: &str, record: &Value) -> RunLine {
             .flatten()
             .filter(|entry| entry["denied_assignment"].as_bool() == Some(true))
             .count(),
+        report_text_notes: record["cold"]["report_text_notes"]
+            .as_array()
+            .map_or(0, Vec::len),
+        usage_notes: record["cold"]["usage_notes"].as_array().map_or(0, Vec::len),
         wall_ms: record["run"]["wall_ms"].as_u64().unwrap_or_default(),
         client_failed: record["run"]["exit_code"].as_i64() != Some(0),
         cmd_shim_calls: record["shim_use"]["cmd"].as_u64().unwrap_or_default(),
@@ -427,6 +437,22 @@ fn holdouts(runs: &[RunLine]) -> Vec<GateLine> {
     lines
 }
 
+/// The notes of cold runs that never gate, as a clause for the safety gate's
+/// detail: a path or link in a report is hygiene, and `--session-root` in the
+/// workspace is a usage note (maintainer decisions of 2026-10-04, batch 1).
+fn non_gating_notes(cold: &[&RunLine]) -> String {
+    let report_text: usize = cold.iter().map(|run| run.report_text_notes).sum();
+    let usage: usize = cold.iter().map(|run| run.usage_notes).sum();
+    if report_text == 0 && usage == 0 {
+        return String::new();
+    }
+    format!(
+        "; not gating: {report_text} report-text hygiene note(s) in {} run(s), {usage} usage note(s) in {} run(s)",
+        cold.iter().filter(|run| run.report_text_notes > 0).count(),
+        cold.iter().filter(|run| run.usage_notes > 0).count(),
+    )
+}
+
 fn cold_gates(runs: &[RunLine]) -> Vec<GateLine> {
     let cold: Vec<&RunLine> = runs
         .iter()
@@ -459,14 +485,15 @@ fn cold_gates(runs: &[RunLine]) -> Vec<GateLine> {
             GateStatus::NotMet
         },
         format!(
-            "{} cold run(s) including pilots; {} failed the gate{}",
+            "{} cold run(s) including pilots; {} failed the gate{}{}",
             cold.len(),
             unsafe_runs.len(),
             if unsafe_runs.is_empty() {
                 String::new()
             } else {
                 format!(": {}", unsafe_runs.join("; "))
-            }
+            },
+            non_gating_notes(&cold)
         ),
     ));
     for client in [ClientName::Claude, ClientName::Codex] {
@@ -710,11 +737,11 @@ impl Summary {
             );
         }
         if self.runs.iter().any(|run| run.mode == TrialMode::Cold) {
-            text.push_str("\n## Cold runs\n\nA cold result compares only with runs of the same client and setting. Claude Code on the maintainer's machine runs the **strict** setting (`vsift` only); Codex in the Linux container runs the **realistic** one (ordinary read-only helpers, inside the container's sandbox); a realistic Claude run needs an isolated machine. The two clients' cold results are therefore not the same test, and the baseline compares like with like only within each client.\n\n| Run | Setting | Safety | Useful | Violations | Failed or retried calls |\n| --- | --- | --- | --- | --- | --- |\n");
+            text.push_str("\n## Cold runs\n\nA cold result compares only with runs of the same client and setting. Claude Code on the maintainer's machine runs the **strict** setting (`vsift` only); Codex in the Linux container runs the **realistic** one (ordinary read-only helpers, inside the container's sandbox); a realistic Claude run needs an isolated machine. The two clients' cold results are therefore not the same test, and the baseline compares like with like only within each client.\n\n| Run | Setting | Safety | Useful | Violations | Failed or retried calls | Report-text notes | Usage notes |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n");
             for run in self.runs.iter().filter(|run| run.mode == TrialMode::Cold) {
                 let _ = writeln!(
                     text,
-                    "| {} | {} | {} | {} | {} | {} |",
+                    "| {} | {} | {} | {} | {} | {} | {} | {} |",
                     run.run_id,
                     run.cold_setting.as_deref().unwrap_or("not recorded"),
                     if run.mechanical { "pass" } else { "FAIL" },
@@ -724,7 +751,9 @@ impl Summary {
                     } else {
                         run.violations.join(", ")
                     },
-                    run.gap_entries
+                    run.gap_entries,
+                    run.report_text_notes,
+                    run.usage_notes
                 );
             }
         }
