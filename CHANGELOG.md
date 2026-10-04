@@ -384,6 +384,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   status or schema change; four unit tests). The test now frees the unit only after the stream says
   `draining`, so the waiting step can only be cancelled and the test no longer races its own
   signal. `docs/operations/worker-host.md` says so.
+- **The flaky managed-store kill test (#253) is fixed in the test, and the window behind it is a recorded
+  limit** (P14 PR 7; test and documents only, **no product code changed**). The test really kills a host at
+  eight moments of an install and then requires a consistent store, a repair that names the stale stage and a
+  rerun that completes. It failed in about one run in several on Windows with "one stage left after the
+  rerun and the repair". The cause is a product window, found by inspecting the strays it left on the
+  maintainer's machine: on Windows the supervisor creates a provider suspended and assigns it to its
+  kill-on-close job a moment later, and a host killed between the two leaves a provider that never ran, is in no
+  job and stays suspended (five found, each one thread in `Wait/Suspended`); its mapped image keeps the stage
+  from being deleted, so no sweep or repair can remove it. VSift cannot close the window without `unsafe` or a
+  new dependency (the provider must be born inside the job), so it is **known limit L-129**, accepted for R0,
+  with the fix for the maintainer to decide for R1 (an ADR). The test now ends a stray whose command line names
+  its own private folder and **prints what it ended**, and fails when a provider that is not suspended outlives
+  its host; two Windows unit tests make the reaper itself deterministic (a created-suspended process is ended, a
+  running one is not and is reported). `SECURITY.md`, the worker-host runbook's guarantee matrix and L-055 no
+  longer say Windows is unaffected by a hard kill. **What is not shown:** a hosted-runner reproduction (57 runs, six at a time) did not fail, so the strays were seen on the maintainer's machine, not on a runner; the fix removes this cause and the printed failure details name any other.
 
 ## [0.1.0] - 2026-10-01
 

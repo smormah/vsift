@@ -1023,3 +1023,14 @@ re-run on a refreshed build happens on the release candidate (P14 PR 11).
   timely; records published before 2026-06-01 were not read.
 
 Hosted use: about 41 job-minutes (the four runs above).
+## 18. Skill candidates for the next freeze (before the release candidate is cut, PR 10)
+
+The skill (`skills/vsift`) is frozen while a trial batch runs and again at the candidate cut, so a wording change
+that a later finding suggests is **not made then**: it is listed here, one line each with its source, and the
+maintainer decides which go in before the batch-2 freeze (`freeze write`). Nothing below has been changed in the
+skill.
+
+| Candidate wording | Source |
+| --- | --- |
+| On Windows, run `vsift` from PowerShell or Git Bash, never through `cmd.exe`: the `vsift.cmd` file npm writes makes `cmd.exe` read the command line a second time. | #257, [L-109](known-limits.md#l-109) (P14 PR 7) |
+| *To be added from batch 1's cold baseline, once the maintainer has read it:* agents chained commands and wrote a bare `VAR=value` assignment, which the strict Claude setting denies ([L-125](known-limits.md#l-125)); the Codex cold runs asked for more than the evidence limits allow and used the operator-only `--session-root`. These are observations, not yet candidates. | the batch-1 reading (#284) |
