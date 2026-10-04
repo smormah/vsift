@@ -3106,7 +3106,7 @@ that week.**
   now reproduced. (`weighted_admission_never_exceeds_root_capacity` also failed 2 times in 200 on
   Windows: a test child never received a reservation within 1.5 s. That was the test's bound,
   not the product: admission is unfair by design, [L-060](#l-060), and the test now waits up to
-  20 s for a first grant; [#271](https://github.com/smormah/vsift/issues/271).) None of the other
+  60 s for a first grant; [#271](https://github.com/smormah/vsift/issues/271).) None of the other
   tests failed on any system, and the root-creation test did not fail on Ubuntu or macOS (0 in
   3,000). Issue
   [#128](https://github.com/smormah/vsift/issues/128) (process supervisor, Windows) did **not**

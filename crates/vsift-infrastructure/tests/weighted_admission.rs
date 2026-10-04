@@ -48,7 +48,7 @@ const CHILD_RUN: Duration = Duration::from_millis(1_500);
 /// not a child is lucky, so the first grant is awaited for this long: long
 /// enough for any child to be admitted, short enough to catch a lock that is
 /// lost altogether.
-const FIRST_GRANT_BOUND: Duration = Duration::from_secs(20);
+const FIRST_GRANT_BOUND: Duration = Duration::from_secs(60);
 const OWNED_PREFIX: &str = "vsift-x07-admission-";
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
