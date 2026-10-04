@@ -47,7 +47,7 @@ that does not count, what a stable release must repeat or may carry) is in the
 | RQ-02 | Extracted native archive on each target: download from the GitHub release, check the checksum and the attestation, extract, run `--version` and `setup check`, skill byte-identical to the tag's; no Node.js on `PATH` | Hosted, three jobs | Green on the candidate and on the stable | `install.md` section 3 works end to end | The prompts a browser download triggers |
 | RQ-03 | Offline `--artifact-dir` install with the **real reviewed artifacts** under no network | Hosted Ubuntu 24.04, a container with `--network none` after a download step | Components activated, `setup check` ready, tamper case refused | D-07's offline path with real bytes (only stand-ins have run) | A publisher's future file retention (L-099) |
 | RQ-04 | Upgrade from 0.1.0 over the real registry with a session and configuration kept; the candidate accepts every 0.1.0 frozen JSON example and reads a 0.1.0 session; `install.md` section 8's uninstall walked | Hosted, three jobs | Session readable after upgrade; nothing left but what the guide says | The additive-only rule against the one published baseline; the upgrade and uninstall text | Downgrade (not supported, L-044) |
-| RQ-05 | The **published binary** through the supplied-transcript and local-ASR journeys and the P08-P11 checkpoints: Ubuntu 24.04 (managed tools), Windows (pinned tools), macOS 15 (Homebrew tools); tool versions recorded; weekly drift run once stable | Hosted; the tests are compiled from the tag's source and run the installed `vsift` through a binary override | Every stage passed; the P07 ASR gates hold on each OS | The shipped bytes complete the journeys on three systems | Real recordings; other hardware; that Homebrew's builds are reviewed (they are recorded, not endorsed) |
+| RQ-05 | The **published binary** through the supplied-transcript and local-ASR journeys and the P08-P11 checkpoints: Ubuntu 24.04 (managed tools), Windows (pinned tools), macOS 15 (Homebrew tools); tool versions recorded; weekly drift run once stable | Hosted; the tests are compiled from the tag's source and run the installed `vsift` through a binary override | **Per system (maintainer's decision of 2026-10-04, section 21):** every stage that can run there passed; the P07 ASR gates hold on each OS; P11's durable stage passes on Ubuntu 24.04 with local ext4 and write barriers, is covered there by RQ-09 and RQ-12 of the same version where a hosted disk has none (L-113), and on Windows and macOS shows the durable profile refused with `MISSING_CAPABILITY` and nothing created | The shipped bytes complete the journeys on three systems | Real recordings; other hardware; that Homebrew's builds are reviewed (they are recorded, not endorsed) |
 | RQ-06 | The managed install from the publishers re-run on the candidate and then weekly (`P13 managed smoke` and its `install-e2e`, with the installed binary) | Hosted Ubuntu 24.04 | Both jobs green | The publishers' files and redirect hosts still work (L-099) | The files will stay |
 | RQ-07 | Long fuzzing of every target, with a gap review of untrusted-input parsers and new targets where one is missing | Hosted, the `Fuzz` workflow with a raised duration cap | At least 60 minutes per target; no crash, timeout or out-of-memory; a coverage-plateau line per target; every finding minimised into a seed and a regression test | No finding in that time on those inputs | Absence of bugs |
 | RQ-08 | Race and stress repetitions on all three systems: lock stress (Windows added), weighted admission, engine worker and batch, and repeated runs to reproduce #128 and #206 | Hosted | Zero failures in at least 200 repetitions per system; any failure captured and filed first (rule 14) | The locking and admission claims hold on three kernels | Every interleaving |
@@ -305,7 +305,7 @@ Minimum runtimes: Node.js 22, Bun 1.2.
 [`support-and-resource-profiles.md`](support-and-resource-profiles.md) (sections 1 to 5), read against
 the evidence ledger and scanned by the claims check; the table above stays as the plan's draft. Two
 facts the draft left open are now written down there: the hosted Windows evidence runs on Windows
-Server 2025, not Windows 11, and RQ-05 cannot be `passed` as its rule is written (section 21).
+Server 2025, not Windows 11, and RQ-05 could not be `passed` under its first rule (the maintainer replaced it with a per-system rule on 2026-10-04: section 21; the item is still `running` for 0.1.0).
 
 ## 9. Public claims
 
@@ -611,7 +611,8 @@ recorder started directly did write the variable down), and none appeared in `vs
 `p11_durable_workspace` is `blocked` everywhere: off Ubuntu by design, and on the hosted Ubuntu
 runner because its root is mounted `nobarrier` (the durable profile refuses; issue
 [#258](https://github.com/smormah/vsift/issues/258), L-113), so **RQ-05's pass rule "every stage
-passed" is not met and its ledger status is `running`**. The managed-install checkpoints are
+passed" was not met and its ledger status was `running`** (since 2026-10-04 the rule is per system and the
+status still `running`, for a different reason: section 21). The managed-install checkpoints are
 Ubuntu-only (ADR 0023 decision E) and run in `P13 managed smoke`. The T-04 gates run in process
 on macOS only; the weekly `P07 local ASR` workflow runs them on Ubuntu and Windows.
 
@@ -1079,11 +1080,33 @@ published; the one shipped file that changed is the npm launcher's refusal messa
 | Item | Result |
 | --- | --- |
 | The matrix | Written against the ledger: for 0.1.0 on hosted runners, rules 1, 2 and 4 of decision F passed on all three systems (RQ-01, RQ-02, RQ-04) and both journeys of rule 3 ran (RQ-05, `running`); no cell may use the word "supported" yet, and the registry holds each cell's wording (CL-201 to CL-209) for the rung that allows it |
-| The macOS wording | Proposed, not decided: CL-203, "supported on hosted-runner evidence only", beside what it covers and does not (ADR note, decision 1) |
-| What blocks every cell | RQ-05's pass rule ("every stage passed") cannot be met while P11's durable stage is blocked on hosted runners ([L-113](known-limits.md#l-113), #258): the register sheet gives three ways out and recommends recording that RQ-09 and RQ-12 cover it, which changes a pass rule and is the maintainer's |
+| The macOS wording | Proposed in PR 9a and **accepted by the maintainer on 2026-10-04**: CL-203, "supported on hosted-runner evidence only", beside what it covers and does not (ADR note, decision 1) |
+| What blocked every cell | RQ-05's pass rule ("every stage passed") could not be met while P11's durable stage is blocked on hosted runners ([L-113](known-limits.md#l-113), #258). The maintainer decided on 2026-10-04 to record that other evidence covers it and to word the rule per system (below); the rule is no longer unsatisfiable |
 | Documents | `install.md`, `SECURITY.md` (a supported-versions table), the worker runbook, the skill guide, the README (facts and links only) and the launcher's message brought to the matrix; no controlled word outside a registered statement, no banned phrase |
 | Claims | The registry scans the runbook, the launcher, the matrix and the eight README graphics (an SVG is read for its text, title and description); `unscanned_documents` is empty; each claim lists the register entries it leans on (`limits`) and a claim above the `now` rung in use fails while one is pending or rejected. Rung `now` is unchanged |
 | Register | Thirty entries, seven later ones and nine readings on one sheet with proposals; L-004, L-035 and L-038 corrected, L-114 names the wording, L-121 narrowed to the roadmap's rung. **Every review is still `pending`** |
+
+**The maintainer's three decisions on PR 9a's open items (2026-10-04, recorded in PR 9c; accepted as proposed, not
+rewritten).** (1) The macOS wording is the registered CL-203. (2) The supported-versions policy of `SECURITY.md` stands: from
+0.2.0 only the newest `0.2.x` receives security fixes. (3) RQ-05 is resolved by recording that other evidence covers its one
+blocked stage, and its pass rule is now per system: on each system every stage that can run there passes; the P07 ASR
+gates hold on each OS; P11's durable stage must pass on Ubuntu 24.04 with local ext4 and write barriers and, where the
+disk has none (a hosted runner, L-113), is covered there by RQ-09 and RQ-12 of the same version; on Windows and macOS it
+must show the durable profile refused with `MISSING_CAPABILITY` and nothing created. The evidence-items table in section 2 and the item's
+text in the ledger carry the new wording.
+
+*What covers what, for 0.1.0.* The journeys' 53 runnable stages passed on all three systems (runs 36965956708,
+36973367081 and 36998030090). The durable stage was `blocked` on all three: on Windows and macOS its refusal check held, as
+the new rule requires; on the hosted Ubuntu runner (a disk without write barriers) the refusal also held, and the durable
+path itself is covered by RQ-09 (the published 0.1.0 in the hardened container, durable workspaces on an ext4 volume with
+write barriers: the ladder, a 100-request batch, 1,000 mixed requests with kills and redelivery) and RQ-12 (the runbook
+walked step by step on that volume). **What does not cover it:** neither re-runs that stage's own script, so the stage's
+check for check is not repeated on a disk with barriers; and the P07 speech-recognition gates on Ubuntu and Windows are
+recorded only as prior evidence (the weekly `P07 local ASR` runs of 2026-09-28 and 2026-10-04, both systems passed, on
+source at other commits, not the 0.1.0 commit), while macOS's ran inside the journeys run. **So RQ-05 stays `running` for
+0.1.0**, and the rule is satisfiable: a dispatch of the gates at the 0.1.0 commit would close it for 0.1.0, and the
+release candidate's own run (PR 11) must supply everything anyway, because every item is stale for the candidate. Until
+then no cell may use its word.
 
 **Hosted minutes.** None: everything ran locally (Windows 11). **Not done here:** the guide (9b); a rung change; any ledger
 status change (RQ-18 becomes `passed` on the candidate's commit, when the Governance job runs there).

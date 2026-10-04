@@ -161,8 +161,8 @@
         "verification": ["T-04", "V-02", "V-06", "M-05"],
         "limits": ["L-035", "L-042", "L-113", "L-114", "L-115"]
       },
-      "proves": "The shipped bytes complete the supplied-transcript and local-ASR journeys and the checkpoints on three systems with each system's documented tools, and the P07 ASR gates hold on each; hostile paths and a sentinel environment variable go through the installed binary.",
-      "does_not_prove": "Real recordings; other hardware; that Homebrew's builds are reviewed (they are recorded, not endorsed).",
+      "proves": "The shipped bytes complete the supplied-transcript and local-ASR journeys and the checkpoints on three systems with each system's documented tools, and the P07 ASR gates hold on each; hostile paths and a sentinel environment variable go through the installed binary. The pass rule is per system (the maintainer's decision of 2026-10-04): on each system every stage that can run there passed; the P07 ASR gates hold on each operating system; P11's durable-workspace stage must pass only on the qualified profile (Ubuntu 24.04, local ext4 with write barriers), where a hosted runner's disk has none (L-113) and RQ-09 and RQ-12 of the same version cover the durable path instead, and on Windows and macOS it must show the durable profile refused with MISSING_CAPABILITY and nothing created.",
+      "does_not_prove": "Real recordings; other hardware; that Homebrew's builds are reviewed (they are recorded, not endorsed); that the durable stage's own script ran on a disk with write barriers (RQ-09 and RQ-12 ran the durable path there, not that script).",
       "producer": {
         "kind": "workflow",
         "p14_pr": 3,
@@ -179,7 +179,7 @@
         {
           "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 36965956708 },
           "date": "2026-10-02",
-          "note": "The published vsift 0.1.0 (011bc4da1af6), installed from the real npm registry, passed on all three systems: P06, P07 (supplied transcript and local ASR), P08, P09, P10, P11 and the hostile-path and sentinel checks on Ubuntu 24.04 (managed tools installed by the binary's own setup install), Windows (the repository's pinned builds) and macOS 15 arm64 (Homebrew's ffmpeg 9.0.1_1 and whisper-cpp 1.9.2, with the T-04 gates in process: clean WER 4.06%). The tests were compiled from the workflow's ref, not the tag (it predates the override). P11's durable stage was blocked on every system, on Ubuntu because the hosted root is mounted nobarrier (issue 258), so the pass rule 'every stage passed' is not met: this item stays running, for 0.1.0 only, until that stage runs or the maintainer records what covers it."
+          "note": "The published vsift 0.1.0 (011bc4da1af6), installed from the real npm registry, passed on all three systems: P06, P07 (supplied transcript and local ASR), P08, P09, P10, P11 and the hostile-path and sentinel checks on Ubuntu 24.04 (managed tools installed by the binary's own setup install), Windows (the repository's pinned builds) and macOS 15 arm64 (Homebrew's ffmpeg 9.0.1_1 and whisper-cpp 1.9.2, with the T-04 gates in process: clean WER 4.06%). The tests were compiled from the workflow's ref, not the tag (it predates the override). P11's durable stage was blocked on every system, on Ubuntu because the hosted root is mounted nobarrier (issue 258), so the original pass rule 'every stage passed' was not met. On 2026-10-04 the maintainer replaced it with the per-system rule in 'proves' (recorded in the P14 plan, section 21). Read against it, this run meets every clause but one: on Windows and macOS the durable stage's refusal check held (the stage is reported blocked only because it cannot run the durable path there), on Ubuntu RQ-09 and RQ-12 cover the durable path for the same published version, and the stages and the macOS T-04 gates passed. The item stays running, for 0.1.0 only, for the remaining clause: the P07 ASR gates on Ubuntu and Windows are recorded below as prior evidence only (weekly workflow runs on source at other commits, not the 0.1.0 commit), so this item is not counted as passed for 0.1.0; the release candidate's run must supply them."
         },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 journeys", "run_id": 36973367081 },
@@ -208,9 +208,19 @@
           "reference": { "type": "workflow_run", "workflow": "P13 managed smoke", "run_id": 36793180858 },
           "date": "2026-09-30",
           "note": "The managed install and an install-e2e journey on Ubuntu 24.04, from a Cargo-built binary, not the published one."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P07 local ASR", "run_id": 36378214683 },
+          "date": "2026-09-28",
+          "note": "The weekly local-ASR gates on hosted Ubuntu 24.04 and Windows Server 2025 (both jobs passed), in process on source at 6e89bdb, a commit before the 0.1.0 commit; not the published binary."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "P07 local ASR", "run_id": 37164090634 },
+          "date": "2026-10-04",
+          "note": "A dispatch of the same gates on hosted Ubuntu 24.04 and Windows Server 2025 (both jobs passed), in process on source at f4695c3, a commit after the 0.1.0 commit; not the published binary. A dispatch at the 0.1.0 commit would put these two systems' gates among the counted evidence; the release candidate's run must."
         }
       ],
-      "date": "2026-10-02"
+      "date": "2026-10-04"
     },
     {
       "id": "RQ-06",

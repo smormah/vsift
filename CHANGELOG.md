@@ -221,6 +221,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **The maintainer's decisions on PR 9a's three open items (P14 PR 9c, 2026-10-04; documents, claim notes and the evidence
+  ledger's text only; no ledger status changed, nothing published).** The macOS wording (CL-203, "supported on
+  hosted-runner evidence only") and the supported-versions policy of `SECURITY.md` were accepted as proposed. RQ-05's pass
+  rule is now **per system**: on each system every stage that can run there passes, the P07 ASR gates hold on each OS, and
+  P11's durable stage passes on Ubuntu 24.04 with local ext4 and write barriers, is covered by RQ-09 and RQ-12 of the same
+  version where a hosted disk has none ([L-113](docs/planning/known-limits.md#l-113)), and shows the refusal on Windows
+  and macOS. RQ-05 stays `running` for 0.1.0 and the ledger says why (the durable stage's own script did not run on a
+  disk with barriers; the speech gates on Ubuntu and Windows are prior evidence only), and no cell may use its word until
+  the release candidate's own evidence exists. The matrix, the plan, ADR 0024's PR 9 note, the register sheet, L-113,
+  L-114 and the notes of CL-201 to CL-203 say what is true now. Every register review is still `pending`.
 - **The npm launcher's refusal message (P14 PR 9a).** When no native package matches the machine (exit 127) it now
   says "This release is built for:" and lists the three packages, where it said "The supported targets are:". A
   message that ships in the package cannot follow the public-claims ladder, so it names the machines and claims

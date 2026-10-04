@@ -1180,6 +1180,24 @@ published; the one shipped file that changed is the npm launcher's refusal messa
    evidence is the project's development machine (P08, P09 and P11 numbers, the Claude Code trials on a source-built
    binary) and the Smart App Control try-out (RQ-17) when it is made.
 
+**Decided by the maintainer on 2026-10-04 (recorded in P14 PR 9c; the text above is left as it was written).** Items 1, 2
+and 4 were accepted as proposed:
+
+- **Decision 1, the macOS wording:** the registered CL-203 stands, "macOS 15 on Apple silicon is supported on hosted-runner
+  evidence only", always beside what it covers and does not.
+- **Decision 2, the supported-versions table:** the policy of `SECURITY.md` stands: from 0.2.0 only the newest `0.2.x`
+  receives security fixes; candidates and 0.1.0 do not.
+- **Decision 4, RQ-05:** the maintainer chose to record that other evidence covers the blocked stage, and RQ-05's pass rule
+  is now **per system**: on each system every stage that can run there passes; the P07 ASR gates hold on each OS; P11's
+  durable stage passes on Ubuntu 24.04 with local ext4 and write barriers and, where a hosted disk has none (L-113), is
+  covered by RQ-09 and RQ-12 of the same version; on Windows and macOS it shows the durable profile refused with
+  `MISSING_CAPABILITY` and nothing created. The rule is no longer unsatisfiable. **RQ-05 is still `running` for 0.1.0**,
+  and the ledger says why: the stage's own script was not re-run on a disk with barriers (RQ-09 and RQ-12 ran the durable
+  path there, not that script), and the P07 gates on Ubuntu and Windows are only prior evidence, from weekly runs on source
+  at other commits. The cell statements stay unusable until the evidence for the release candidate's own bytes exists:
+  every item is stale for it. Where each part is recorded: the ledger item, plan sections 2 and 21, the matrix, the notes of
+  CL-201 to CL-203, L-113, L-114 and the register sheet. No register review changed: every one is still `pending`.
+
 **What is weaker than it sounds.** The matrix is a reading of results for 0.1.0 on hosted runners; none is a result for the
 candidate, and the staleness rule means none will count for it. The claims check proves that a sentence has recorded
 evidence and a reviewed register, and that banned words are absent; it still cannot see that a sentence is true. SVG

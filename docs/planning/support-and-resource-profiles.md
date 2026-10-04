@@ -56,7 +56,7 @@ below is a result for the release candidate.
 
 **RQ-05, in one paragraph.** Its pass rule is per system (the maintainer's decision of 2026-10-04): on
 each system every stage that can run there must pass; the P07 speech-recognition gates must hold on each
-operating system; and P11's durable-workspace stage, which only the qualified profile (Ubuntu 24.04 with local
+operating system; and P11's durable-workspace stage, which only the durable profile's one host (Ubuntu 24.04 with local
 ext4 and write barriers) can run, must pass there and, everywhere else, must show the refusal (the durable
 profile refused with `MISSING_CAPABILITY` and nothing created). For 0.1.0, 53 stages passed on all three
 systems and that stage was `blocked` on all three: on Windows and macOS because the durable profile exists
