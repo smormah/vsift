@@ -814,6 +814,13 @@ pub(super) fn validate_platform_root_permissions(
                     | AceType::AccessAllowCallbackObject
             ) && !trusted.contains(&entry.string_sid.as_str()))
     });
+    crate::session_root::diag206(&format!(
+        "validate: saw {:?} cua={current_user_allowed} unsafe={unsafe_entry}",
+        entries
+            .iter()
+            .map(|e| format!("{}:{:#x}", e.string_sid, e.flags))
+            .collect::<Vec<_>>()
+    ));
     if !current_user_allowed || unsafe_entry {
         let listed: Vec<String> = entries
             .iter()

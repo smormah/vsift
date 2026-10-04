@@ -259,6 +259,13 @@ pub(crate) fn restrict_new_directory(path: &Path) -> Result<(), PrivateRootError
             .map_err(|_| PrivateRootError::Io)?;
     }
     let entries = acl.all().map_err(|_| PrivateRootError::Io)?;
+    crate::session_root::diag206(&format!(
+        "restrict: after the allows user_sid={user_sid} entries={:?}",
+        entries
+            .iter()
+            .map(|e| format!("{}:{:?}:{:#x}", e.string_sid, e.entry_type, e.flags))
+            .collect::<Vec<_>>()
+    ));
     for entry in entries {
         let flags = if trusted.contains(&entry.string_sid.as_str()) {
             if entry.flags & INHERITED_ACE == 0 {
@@ -273,8 +280,17 @@ pub(crate) fn restrict_new_directory(path: &Path) -> Result<(), PrivateRootError
         // The SID is rebuilt from its string form: `windows-acl` keeps an
         // entry's raw SID in a vector whose length is not set.
         let mut raw = string_to_sid(&entry.string_sid).map_err(|_| PrivateRootError::Io)?;
-        acl.remove_entry(raw.as_mut_ptr().cast(), None, flags)
+        let removed = acl
+            .remove_entry(raw.as_mut_ptr().cast(), None, flags)
             .map_err(|_| PrivateRootError::Io)?;
+        crate::session_root::diag206(&format!(
+            "restrict: removed {removed} of sid={} flags={flags:?}; now {:?}",
+            entry.string_sid,
+            acl.all().map(|now| now
+                .iter()
+                .map(|e| format!("{}:{:#x}", e.string_sid, e.flags))
+                .collect::<Vec<_>>())
+        ));
     }
     Ok(())
 }
